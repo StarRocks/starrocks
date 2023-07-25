@@ -138,16 +138,37 @@ public class MaterializedViewRewriter {
         // because optimizer will match MV's pattern which is subset of query opt tree
         // from top-down iteration.
         if (matchMode == MatchMode.COMPLETE) {
-            if (!isJoinMatch(queryExpression, mvExpression)) {
-                return false;
+            // If all join types are inner/cross, no need check join orders: eg a inner join b or b inner join a.
+            boolean isQueryAllEqualInnerJoin = MvUtils.isAllEqualInnerOrCrossJoin(queryExpression);
+            boolean isMVAllEqualInnerJoin = MvUtils.isAllEqualInnerOrCrossJoin(mvExpression);
+            if (isQueryAllEqualInnerJoin && isMVAllEqualInnerJoin) {
+                // do nothing.
+            } else {
+                // If not all join types are InnerJoin, need to check whether MV's join tables' order
+                // matches Query's join tables' order.
+                // eg. MV   : a left join b inner join c
+                //     Query: b left join a inner join c (cannot rewrite)
+                //     Query: a left join b inner join c (can rewrite)
+                //     Query: c inner join a left join b (can rewrite)
+                // NOTE: Only support all MV's join tables' order exactly match with the query's join tables'
+                // order for now.
+                // Use traverse order to check whether all joins' order and operator are exactly matched.
+                if (!computeCompatibility(queryExpression, mvExpression)) {
+                    return false;
+                }
             }
         } else if (matchMode == MatchMode.VIEW_DELTA) {
+            if (!optimizerContext.getSessionVariable().isEnableMaterializedViewViewDeltaRewrite()) {
+                return false;
+            }
             // only consider query with most common tables to optimize performance
             if (!queryTables.containsAll(materializationContext.getIntersectingTables())) {
                 return false;
             }
             if (!MvUtils.getAllJoinOperators(queryExpression).stream().allMatch(joinOperator ->
                     joinOperator.isLeftOuterJoin() || joinOperator.isInnerJoin())) {
+                logMVRewrite(mvRewriteContext, "MV is not applicable in view delta mode: " +
+                        "only support inner/left outer join type for now");
                 return false;
             }
             List<TableScanDesc> queryTableScanDescs = MvUtils.getTableScanDescs(queryExpression);
@@ -159,6 +180,8 @@ public class MaterializedViewRewriter {
             for (TableScanDesc queryScanDesc : queryTableScanDescs) {
                 if (queryScanDesc.getParentJoinType() != null
                         && !mvTableScanDescs.stream().anyMatch(scanDesc -> scanDesc.isMatch(queryScanDesc))) {
+                    logMVRewrite(mvRewriteContext, "MV is not applicable in view delta mode: " +
+                            "at least one same join type should be existed");
                     return false;
                 }
             }
@@ -167,11 +190,13 @@ public class MaterializedViewRewriter {
         }
 
         if (!isValidPlan(mvExpression)) {
+            logMVRewrite(mvRewriteContext, "MV is not applicable: mv expression is not valid");
             return false;
         }
 
         // If table lists do not intersect, can not be rewritten
         if (Collections.disjoint(queryTables, mvTables)) {
+            logMVRewrite(mvRewriteContext, "MV is not applicable: query tables are disjoint with mvs' tables");
             return false;
         }
         return true;
@@ -182,6 +207,10 @@ public class MaterializedViewRewriter {
         LogicalOperator queryOp = (LogicalOperator) queryExpr.getOp();
         LogicalOperator mvOp = (LogicalOperator) mvExpr.getOp();
         if (!queryOp.getOpType().equals(mvOp.getOpType())) {
+<<<<<<< HEAD
+=======
+            logMVRewrite(mvRewriteContext, "join type is different %s != %s", queryOp.getOpType(), mvOp.getOpType());
+>>>>>>> bdcabb9837 ([BugFix] Fix mv rewrite bug for aggregat with having expr (#27557))
             return false;
         }
         if (queryOp instanceof LogicalJoinOperator) {
@@ -197,7 +226,15 @@ public class MaterializedViewRewriter {
             LogicalJoinOperator mvJoin = (LogicalJoinOperator) mvExpr.getOp();
             JoinOperator mvJoinType = mvJoin.getJoinType();
 
+            // Rewrite non-inner/cross join's on-predicates, all on-predicates should not compensate.
+            // For non-inner/cross join, we must ensure all on-predicates are not compensated, otherwise there may
+            // be some correctness bugs.
             if (!ScalarOperator.isEquivalent(queryJoin.getOnPredicate(), (mvJoin.getOnPredicate()))) {
+<<<<<<< HEAD
+=======
+                logMVRewrite(mvRewriteContext, "join predicate is different %s != %s", queryJoin.getOnPredicate(),
+                        mvJoin.getOnPredicate());
+>>>>>>> bdcabb9837 ([BugFix] Fix mv rewrite bug for aggregat with having expr (#27557))
                 return false;
             }
             if (queryJoinType.equals(mvJoinType)) {
@@ -206,6 +243,11 @@ public class MaterializedViewRewriter {
             }
 
             if (!JOIN_COMPATIBLE_MAP.get(mvJoinType).contains(queryJoinType)) {
+<<<<<<< HEAD
+=======
+                logMVRewrite(mvRewriteContext, "join type is not compatible %s not contains %s", mvJoinType,
+                        queryJoinType);
+>>>>>>> bdcabb9837 ([BugFix] Fix mv rewrite bug for aggregat with having expr (#27557))
                 return false;
             }
 
@@ -217,6 +259,10 @@ public class MaterializedViewRewriter {
             boolean isSupported =
                     isSupportedPredicate(queryOnPredicate, materializationContext.getQueryRefFactory(), joinColumns);
             if (!isSupported) {
+<<<<<<< HEAD
+=======
+                logMVRewrite(mvRewriteContext, "join predicate is not supported %s", queryOnPredicate);
+>>>>>>> bdcabb9837 ([BugFix] Fix mv rewrite bug for aggregat with having expr (#27557))
                 return false;
             }
             // use join columns from query
@@ -231,6 +277,10 @@ public class MaterializedViewRewriter {
             boolean isCompatible =
                     isJoinCompatible(usedColumnsToTable, queryJoinType, mvJoinType, leftColumns, rightColumns, joinColumnRefs);
             if (!isCompatible) {
+<<<<<<< HEAD
+=======
+                logMVRewrite(mvRewriteContext, "join columns not compatible %s != %s", leftColumns, rightColumns);
+>>>>>>> bdcabb9837 ([BugFix] Fix mv rewrite bug for aggregat with having expr (#27557))
                 return false;
             }
             JoinDeriveContext joinDeriveContext = new JoinDeriveContext(queryJoinType, mvJoinType, joinColumnRefs);
@@ -593,9 +643,12 @@ public class MaterializedViewRewriter {
             // construct query based view EC
             final EquivalenceClasses queryBasedViewEqualPredicate =
                     createQueryBasedEquivalenceClasses(columnRewriter, mvEqualPredicate);
+<<<<<<< HEAD
             if (queryBasedViewEqualPredicate == null) {
                 return null;
             }
+=======
+>>>>>>> bdcabb9837 ([BugFix] Fix mv rewrite bug for aggregat with having expr (#27557))
             rewriteContext.setQueryBasedViewEquivalenceClasses(queryBasedViewEqualPredicate);
 
             OptExpression rewrittenExpression = tryRewriteForRelationMapping(rewriteContext, compensationJoinColumns);
@@ -896,26 +949,6 @@ public class MaterializedViewRewriter {
         return columnRef.isPresent() ? columnRef.get() : null;
     }
 
-    private boolean isJoinMatch(OptExpression queryExpression,
-                                OptExpression mvExpression) {
-        boolean isQueryAllEqualInnerJoin = MvUtils.isAllEqualInnerOrCrossJoin(queryExpression);
-        boolean isMVAllEqualInnerJoin = MvUtils.isAllEqualInnerOrCrossJoin(mvExpression);
-        if (isQueryAllEqualInnerJoin && isMVAllEqualInnerJoin) {
-            return true;
-        } else {
-            // If not all join types are InnerJoin, need to check whether MV's join tables' order
-            // matches Query's join tables' order.
-            // eg. MV   : a left join b inner join c
-            //     Query: b left join a inner join c (cannot rewrite)
-            //     Query: a left join b inner join c (can rewrite)
-            //     Query: c inner join a left join b (can rewrite)
-            // NOTE: Only support all MV's join tables' order exactly match with the query's join tables'
-            // order for now.
-            // Use traverse order to check whether all joins' order and operator are exactly matched.
-            return computeCompatibility(queryExpression, mvExpression);
-        }
-    }
-
     private ScalarOperator collectMvPrunePredicate(MaterializationContext mvContext) {
         final OptExpression mvExpression = mvContext.getMvExpression();
         final List<ScalarOperator> conjuncts = MvUtils.getAllPredicates(mvExpression);
@@ -991,6 +1024,11 @@ public class MaterializedViewRewriter {
             final ScalarOperator compensationPredicate = getMVCompensationPredicate(rewriteContext,
                     columnRewriter, mvColumnRefToScalarOp, equalPredicates, otherPredicates);
             if (compensationPredicate == null) {
+<<<<<<< HEAD
+=======
+                logMVRewrite(mvRewriteContext, "Rewrite query failed: success to convert query compensation predicates to MV " +
+                        "but rewrite compensation failed");
+>>>>>>> bdcabb9837 ([BugFix] Fix mv rewrite bug for aggregat with having expr (#27557))
                 return null;
             }
 
@@ -1016,6 +1054,7 @@ public class MaterializedViewRewriter {
         }
     }
 
+<<<<<<< HEAD
     // Rewrite non-inner/cross join's on-predicates, all on-predicates should not compensated.
     // For non inner/cross join, we must ensure all on-predicates are not compensated, otherwise there may
     // be some correctness bugs.
@@ -1092,29 +1131,38 @@ public class MaterializedViewRewriter {
         return ConstantOperator.TRUE;
     }
 
+=======
+>>>>>>> bdcabb9837 ([BugFix] Fix mv rewrite bug for aggregat with having expr (#27557))
     private ScalarOperator getMVCompensationPredicate(RewriteContext rewriteContext,
                                                       ColumnRewriter rewriter,
                                                       Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp,
                                                       ScalarOperator equalPredicates,
                                                       ScalarOperator otherPredicates) {
+        ScalarOperator newEqualPredicates = ConstantOperator.TRUE;
         if (!ConstantOperator.TRUE.equals(equalPredicates)) {
-            equalPredicates = rewriteMVCompensationExpression(rewriteContext, rewriter,
+            newEqualPredicates = rewriteMVCompensationExpression(rewriteContext, rewriter,
                     mvColumnRefToScalarOp, equalPredicates, true);
-            if (equalPredicates == null) {
+            if (newEqualPredicates == null) {
+                logMVRewrite(mvRewriteContext, "Rewrite equal predicates compensation failed: %s", equalPredicates);
                 return null;
             }
         }
 
+        ScalarOperator newOtherPredicates = ConstantOperator.TRUE;
         if (!ConstantOperator.TRUE.equals(otherPredicates)) {
-            otherPredicates = rewriteMVCompensationExpression(rewriteContext, rewriter,
+            newOtherPredicates = rewriteMVCompensationExpression(rewriteContext, rewriter,
                     mvColumnRefToScalarOp, otherPredicates, false);
-            if (otherPredicates == null) {
+            if (newOtherPredicates == null) {
+                logMVRewrite(mvRewriteContext, "Rewrite other predicates compensation failed: %s", otherPredicates);
                 return null;
             }
         }
 
-        ScalarOperator compensationPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(equalPredicates, otherPredicates));
+        ScalarOperator compensationPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(newEqualPredicates,
+                newOtherPredicates));
         if (compensationPredicate == null) {
+            logMVRewrite(mvRewriteContext, "Canonize compensate predicates failed: %s , %s",
+                    equalPredicates, otherPredicates);
             return null;
         }
         return addJoinDerivePredicate(rewriteContext, rewriter, mvColumnRefToScalarOp, compensationPredicate);
@@ -2112,6 +2160,7 @@ public class MaterializedViewRewriter {
             ColumnRewriter columnRewriter,
             RewriteContext rewriteContext,
             Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns) {
+<<<<<<< HEAD
         if (mvRewriteContext.getJoinDeriveContexts().isEmpty()) {
             // decide whether Join onPredicate if it is not join derivability rewrite
             // because for join derivability rewrite, onPredicate must be the same
@@ -2125,6 +2174,8 @@ public class MaterializedViewRewriter {
             }
         }
 
+=======
+>>>>>>> bdcabb9837 ([BugFix] Fix mv rewrite bug for aggregat with having expr (#27557))
         return getCompensationPredicates(columnRewriter,
                 rewriteContext.getQueryEquivalenceClasses(),
                 rewriteContext.getQueryBasedViewEquivalenceClasses(),
@@ -2137,6 +2188,7 @@ public class MaterializedViewRewriter {
             ColumnRewriter columnRewriter,
             RewriteContext rewriteContext,
             Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns) {
+<<<<<<< HEAD
         final List<ScalarOperator> queryJoinOnPredicates = mvRewriteContext.getQueryJoinOnPredicates();
         final List<ScalarOperator> mvJoinOnPredicates = mvRewriteContext.getMvJoinOnPredicates();
         final ScalarOperator queryJoinOnPredicateCompensations =
@@ -2146,6 +2198,8 @@ public class MaterializedViewRewriter {
             return null;
         }
 
+=======
+>>>>>>> bdcabb9837 ([BugFix] Fix mv rewrite bug for aggregat with having expr (#27557))
         return getCompensationPredicates(columnRewriter,
                 rewriteContext.getQueryBasedViewEquivalenceClasses(),
                 rewriteContext.getQueryEquivalenceClasses(),

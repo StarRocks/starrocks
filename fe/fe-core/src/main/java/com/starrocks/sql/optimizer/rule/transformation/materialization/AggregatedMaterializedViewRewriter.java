@@ -29,9 +29,11 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -121,8 +123,21 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         boolean isRollup = isRollupAggregate(mvGroupingKeys, queryGroupingKeys);
 
         // Cannot ROLLUP distinct
+<<<<<<< HEAD
         if (isRollup && mvAggOp.getAggregations().values().stream().anyMatch(callOp -> callOp.isDistinct())) {
             return null;
+=======
+        if (isRollup) {
+            boolean mvHasDistinctAggFunc = 
+                    mvAggOp.getAggregations().values().stream().anyMatch(callOp -> callOp.isDistinct());
+            boolean queryHasDistinctAggFunc = 
+                    queryAggOp.getAggregations().values().stream().anyMatch(callOp -> callOp.isDistinct());
+            if (mvHasDistinctAggFunc && queryHasDistinctAggFunc) {
+                logMVRewrite(mvRewriteContext, "Rollup aggregate cannot contain distinct aggregate functions," +
+                        "mv:%s, query:%s", mvAggOp.getAggregations().values(), queryAggOp.getAggregations().values());
+                return null;
+            }
+>>>>>>> bdcabb9837 ([BugFix] Fix mv rewrite bug for aggregat with having expr (#27557))
         }
 
         // normalize mv's aggs by using query's table ref and query ec
@@ -133,10 +148,10 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 buildEquationRewriter(mvProjection, rewriteContext, false);
 
         if (isRollup) {
-            return rewriteForRollup(queryAggOp, queryGroupingKeys,
-                    columnRewriter,
-                    queryExprToMvExprRewriter, rewriteContext, mvOptExpr);
+            return rewriteForRollup(queryAggOp, queryGroupingKeys, columnRewriter, queryExprToMvExprRewriter,
+                    rewriteContext, mvOptExpr);
         } else {
+<<<<<<< HEAD
             // Add aggregate's predicate compensation here because aggregate predicates should be taken care
             // by self.
             if (queryAggOp.getPredicate() != null) {
@@ -147,6 +162,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 }
                 mvOptExpr = OptExpression.create(new LogicalFilterOperator(rewrittenPred), mvOptExpr);
             }
+=======
+>>>>>>> bdcabb9837 ([BugFix] Fix mv rewrite bug for aggregat with having expr (#27557))
             return rewriteProjection(rewriteContext, queryAggOp, queryExprToMvExprRewriter, mvOptExpr);
         }
     }
@@ -160,6 +177,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
 
         Map<ColumnRefOperator, CallOperator> oldAggregations = queryAggregationOperator.getAggregations();
+
         Map<ColumnRefOperator, ScalarOperator> swappedQueryColumnMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : queryMap.entrySet()) {
             ScalarOperator rewritten = rewriteContext.getQueryColumnRefRewriter().rewrite(entry.getValue().clone());
@@ -171,6 +189,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         AggregateFunctionRewriter aggregateFunctionRewriter = new AggregateFunctionRewriter(rewriteContext.getQueryRefFactory(),
                 oldAggregations);
         ColumnRefSet originalColumnSet = new ColumnRefSet(rewriteContext.getQueryColumnSet());
+
+        // rewrite group by + aggregate functions
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : swappedQueryColumnMap.entrySet()) {
             ScalarOperator scalarOp = entry.getValue();
             ScalarOperator rewritten;
@@ -191,6 +211,37 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         }
         Projection newProjection = new Projection(newQueryProjection);
         mvOptExpr.getOp().setProjection(newProjection);
+
+        // rewrite aggregate having expr: add aggregate's predicate compensation after group by.
+        if (queryAggregationOperator.getPredicate() != null) {
+            // NOTE: If there are having expr in agg, ensure all aggregate functions should put into new projections
+            Map<ColumnRefOperator, ScalarOperator> queryColumnRefToScalarMap = Maps.newHashMap();
+            for (Map.Entry<ColumnRefOperator, CallOperator> entry : oldAggregations.entrySet()) {
+                ScalarOperator scalarOp = entry.getValue();
+                ScalarOperator rewritten = rewriteScalarOperator(entry.getValue(),
+                        queryExprToMvExprRewriter, rewriteContext.getOutputMapping(),
+                        originalColumnSet, aggregateFunctionRewriter);
+                if (rewritten == null) {
+                    logMVRewrite(mvRewriteContext, "Rewrite aggregate with having expr failed: %s", scalarOp.toString());
+                    return null;
+                }
+                queryColumnRefToScalarMap.put(entry.getKey(), rewritten);
+            }
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(queryColumnRefToScalarMap);
+            ScalarOperator aggPredicate = queryAggregationOperator.getPredicate();
+            ScalarOperator rewrittenPred = rewriter.rewrite(aggPredicate);
+            if (rewrittenPred == null) {
+                logMVRewrite(mvRewriteContext, "Rewrite aggregate wth having failed, " +
+                        "cannot compensate aggregate having predicates: %s", queryAggregationOperator.getPredicate().toString());
+                return null;
+            }
+            LogicalScanOperator scanOperator = mvOptExpr.getOp().cast();
+            Operator.Builder builder = OperatorBuilderFactory.build(scanOperator);
+            builder.withOperator(scanOperator);
+            builder.setPredicate(rewrittenPred);
+            mvOptExpr = OptExpression.create(builder.build());
+        }
+
         return mvOptExpr;
     }
 
