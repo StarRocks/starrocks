@@ -281,7 +281,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | ----------------------------------- | -------------- | ------------------------------------------------------------ |
 | run_mode                            | shared_nothing | StarRocks 集群的运行模式。有效值：`shared_data` 和 `shared_nothing` (默认)。`shared_data` 表示在存算分离模式下运行 StarRocks。`shared_nothing` 表示以普通模式运行 StarRocks。<br />**注意**<br />StarRocks 集群不支持存算分离和普通模式混合部署。<br />请勿在集群部署完成后更改 `run_mode`，否则将导致集群无法再次启动。不支持从普通集群转换为存算分离集群，反之亦然。 |
 | cloud_native_meta_port              | 6090           | 云原生元数据服务监听端口。默认值：`6090`。                         |
-| cloud_native_storage_type           | S3             | 您使用的存储类型。在存算分离模式下，StarRocks 支持将数据存储在 HDFS、Azure Blob（公测中，自 v3.1 起支持）、以及兼容 S3 协议的对象存储中（例如 AWS S3、Google GCP、阿里云 OSS 以及 MinIO）。有效值：`S3`（默认）、`AZBLOB` 和 `HDFS`。如果您将此项指定为 `S3`，则必须添加以 `aws_s3` 为前缀的配置项。如果您将此项指定为 `AZBLOB`，则必须添加以 `azure_blob` 为前缀的配置项。如果将此项指定为 `HDFS`，则只需指定 `cloud_native_hdfs_url`。 |
+| cloud_native_storage_type           | S3             | 您使用的存储类型。在存算分离模式下，StarRocks 支持将数据存储在 HDFS <!--、Azure Blob（公测中，自 v3.2 起支持）、-->以及兼容 S3 协议的对象存储中（例如 AWS S3、Google GCP、阿里云 OSS 以及 MinIO）。有效值：`S3`（默认）<!--、`AZBLOB` -->和 `HDFS`。如果您将此项指定为 `S3`，则必须添加以 `aws_s3` 为前缀的配置项。<!--如果您将此项指定为 `AZBLOB`，则必须添加以 `azure_blob` 为前缀的配置项。-->如果将此项指定为 `HDFS`，则只需指定 `cloud_native_hdfs_url`。 |
 | cloud_native_hdfs_url               | N/A            | HDFS 存储的 URL，例如 `hdfs://127.0.0.1:9000/user/xxx/starrocks/`。 |
 | aws_s3_path                         | N/A            | 用于存储数据的 S3 存储空间路径，由 S3 存储桶的名称及其下的子路径（如有）组成，如 `testbucket/subpath`。 |
 | aws_s3_region                       | N/A            | 需访问的 S3 存储空间的地区，如 `us-west-2`。                      |
@@ -292,10 +292,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | aws_s3_secret_key                   | N/A            | 访问 S3 存储空间的 Secret Key。                                 |
 | aws_s3_iam_role_arn                 | N/A            | 有访问 S3 存储空间权限 IAM Role 的 ARN。                         |
 | aws_s3_external_id                  | N/A            | 用于跨 AWS 账户访问 S3 存储空间的外部 ID。                        |
-| azure_blob_path                     | N/A            | 用于存储数据的 Azure Blob Storage 路径，由存 Storage Account 中的容器名称和容器下的子路径（如有）组成，如 `testcontainer/subpath`。 |
+<!--| azure_blob_path                     | N/A            | 用于存储数据的 Azure Blob Storage 路径，由存 Storage Account 中的容器名称和容器下的子路径（如有）组成，如 `testcontainer/subpath`。 |
 | azure_blob_endpoint                 | N/A            | Azure Blob Storage 的链接地址，如 `https://test.blob.core.windows.net`。 |
 | azure_blob_shared_key               | N/A            | 访问 Azure Blob Storage 的 Shared Key。                     |
-| azure_blob_sas_token                | N/A            | 访问 Azure Blob Storage 的共享访问签名（SAS）。                |
+| azure_blob_sas_token                | N/A            | 访问 Azure Blob Storage 的共享访问签名（SAS）。                |-->
 
 #### 其他静态参数
 
