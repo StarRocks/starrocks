@@ -874,7 +874,7 @@ public class Config extends ConfigBase {
      * It should be less than 'max_running_txn_num_per_db'
      */
     @ConfField(mutable = true, aliases = {"async_load_task_pool_size"})
-    public static int max_broker_load_job_concurrency = 2;
+    public static int max_broker_load_job_concurrency = 5;
 
     /**
      * Same meaning as *tablet_create_timeout_second*, but used when delete a tablet.
