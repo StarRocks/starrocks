@@ -28,7 +28,7 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
 | run_mode                            | StarRocks 集群的运行模式。有效值：`shared_data` 和 `shared_nothing` (默认)。`shared_data` 表示在存算分离模式下运行 StarRocks。`shared_nothing` 表示以普通模式运行 StarRocks。<br />**注意**<br />StarRocks 集群不支持存算分离和普通模式混合部署。<br />请勿在集群部署完成后更改 `run_mode`，否则将导致集群无法再次启动。不支持从普通集群转换为存算分离集群，反之亦然。 |
 | cloud_native_meta_port              | 云原生元数据服务监听端口。默认值：`6090`。                   |
 | enable_load_volume_from_conf | 是否允许 StarRocks 使用 FE 配置文件中指定的存储相关属性创建默认存储卷。有效值：`true`（默认）和 `false`。自 v3.1.0 起支持。<ul><li>如果您在创建新的存算分离集群时指定此项为 `true`，StarRocks 将使用 FE 配置文件中存储相关属性创建内置存储卷 `builtin_storage_volume`，并将其设置为默认存储卷。但如果您没有指定存储相关的属性，StarRocks 将无法启动。</li><li>如果您在创建新的存算分离集群时指定此项为 `false`，StarRocks 将直接启动，不会创建内置存储卷。在 StarRocks 中创建任何对象之前，您必须手动创建一个存储卷并将其设置为默认存储卷。详细信息请参见[创建默认存储卷](#创建默认存储卷)。</li></ul>**注意**<br />建议您在升级现有的 v3.0 存算分离集群时，保留此项的默认配置 `true`。如果将此项修改为 `false`，升级前创建的数据库和表将变为只读，您无法向其中导入数据。 |
-| cloud_native_storage_type           | 您使用的存储类型。在存算分离模式下，StarRocks 支持将数据存储在 HDFS、Azure Blob（公测中，自 v3.1 起支持）、以及兼容 S3 协议的对象存储中（例如 AWS S3、Google GCP、阿里云 OSS 以及 MinIO）。有效值：`S3`（默认）、`AZBLOB` 和 `HDFS`。如果您将此项指定为 `S3`，则必须添加以 `aws_s3` 为前缀的配置项。如果您将此项指定为 `AZBLOB`，则必须添加以 `azure_blob` 为前缀的配置项。如果将此项指定为 `HDFS`，则只需指定 `cloud_native_hdfs_url`。 |
+| cloud_native_storage_type           | 您使用的存储类型。在存算分离模式下，StarRocks 支持将数据存储在 HDFS <!--、Azure Blob（公测中，自 v3.2 起支持）、-->以及兼容 S3 协议的对象存储中（例如 AWS S3、Google GCP、阿里云 OSS 以及 MinIO）。有效值：`S3`（默认）<!--、`AZBLOB` -->和 `HDFS`。如果您将此项指定为 `S3`，则必须添加以 `aws_s3` 为前缀的配置项。<!--如果您将此项指定为 `AZBLOB`，则必须添加以 `azure_blob` 为前缀的配置项。-->如果将此项指定为 `HDFS`，则只需指定 `cloud_native_hdfs_url`。 |
 | cloud_native_hdfs_url               | HDFS 存储的 URL，例如 `hdfs://127.0.0.1:9000/user/xxx/starrocks/`。 |
 | aws_s3_path                         | 用于存储数据的 S3 存储空间路径，由 S3 存储桶的名称及其下的子路径（如有）组成，如 `testbucket/subpath`。 |
 | aws_s3_region                       | 需访问的 S3 存储空间的地区，如 `us-west-2`。                 |
@@ -39,10 +39,10 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
 | aws_s3_secret_key                   | 访问 S3 存储空间的 Secret Key。                              |
 | aws_s3_iam_role_arn                 | 有访问 S3 存储空间权限 IAM Role 的 ARN。                      |
 | aws_s3_external_id                  | 用于跨 AWS 账户访问 S3 存储空间的外部 ID。                     |
-| azure_blob_path                     | 用于存储数据的 Azure Blob Storage 路径，由存 Storage Account 中的容器名称和容器下的子路径（如有）组成，如 `testcontainer/subpath`。 |
+<!--| azure_blob_path                     | 用于存储数据的 Azure Blob Storage 路径，由存 Storage Account 中的容器名称和容器下的子路径（如有）组成，如 `testcontainer/subpath`。 |
 | azure_blob_endpoint                 | Azure Blob Storage 的链接地址，如 `https://test.blob.core.windows.net`。 |
 | azure_blob_shared_key               | 访问 Azure Blob Storage 的 Shared Key。                     |
-| azure_blob_sas_token                | 访问 Azure Blob Storage 的共享访问签名（SAS）。                |
+| azure_blob_sas_token                | 访问 Azure Blob Storage 的共享访问签名（SAS）。                |-->
 
 > **注意**
 >
@@ -161,7 +161,7 @@ enable_load_volume_from_conf = false
     aws_s3_external_id = <external_id>
     ```
 
-- 如果您使用 Azure Blob Storage（公测中，自 v3.1 起支持）：
+<!--- 如果您使用 Azure Blob Storage（公测中，自 v3.1 起支持）：
 
   - 如果您使用共享密钥（Shared Key）认证，请添加以下配置项：
 
@@ -197,7 +197,7 @@ enable_load_volume_from_conf = false
 
   > **注意**
   >
-  > 创建 Azure Blob Storage Account 时必须禁用分层命名空间。
+  > 创建 Azure Blob Storage Account 时必须禁用分层命名空间。-->
 
 - 如果您使用 GCP Cloud Storage：
 

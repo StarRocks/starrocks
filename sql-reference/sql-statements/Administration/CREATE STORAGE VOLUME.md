@@ -14,8 +14,8 @@
 
 ```SQL
 CREATE STORAGE VOLUME [IF NOT EXISTS] <storage_volume_name>
-TYPE = { S3 | AZBLOB | HDFS }
-LOCATIONS = ('{ <s3_path> | <azblob_path> | <hdfs_path> }')
+TYPE = { S3 | HDFS }
+LOCATIONS = ('{ <s3_path> | <hdfs_path> }')
 [ COMMENT '<comment_string>' ]
 PROPERTIES
 ("key" = "value",...)
@@ -26,8 +26,8 @@ PROPERTIES
 | **参数**            | **说明**                                                     |
 | ------------------- | ------------------------------------------------------------ |
 | storage_volume_name | 存储卷的名称。请注意，您无法创建名为 `builtin_storage_volume` 的存储卷，因为该名称被用于创建内置存储卷。 |
-| TYPE                | 远程存储系统的类型。有效值：`S3` 、`AZBLOB` 和 `HDFS`。`S3` 代表AWS S3 或与 S3 协议兼容的存储系统。`AZBLOB` 代表 Azure Blob Storage。`HDFS` 代表 HDFS 集群。 |
-| LOCATIONS           | 远程存储系统的位置。格式如下：AWS S3 或与 S3 协议兼容的存储系统：`s3://<s3_path>`。`<s3_path>` 必须为绝对路径，如 `s3://testbucket/subpath`。Azure Blob Storage: `azblob://<azblob_path>`。`<azblob_path>` 必须为绝对路径，如 `azblob://testcontainer/subpath`。HDFS：`hdfs://<ip>:<port>/<hdfs_path>`。`<hdfs_path>` 必须为绝对路径，如 `hdfs://127.0.0.1:9000/user/xxx/starrocks`。 |
+| TYPE                | 远程存储系统的类型。有效值：`S3`<!-- 、`AZBLOB`--> 和 `HDFS`。`S3` 代表AWS S3 或与 S3 协议兼容的存储系统。<!--`AZBLOB` 代表 Azure Blob Storage。-->`HDFS` 代表 HDFS 集群。 |
+| LOCATIONS           | 远程存储系统的位置。格式如下：AWS S3 或与 S3 协议兼容的存储系统：`s3://<s3_path>`。`<s3_path>` 必须为绝对路径，如 `s3://testbucket/subpath`。<!--Azure Blob Storage: `azblob://<azblob_path>`。`<azblob_path>` 必须为绝对路径，如 `azblob://testcontainer/subpath`。-->HDFS：`hdfs://<ip>:<port>/<hdfs_path>`。`<hdfs_path>` 必须为绝对路径，如 `hdfs://127.0.0.1:9000/user/xxx/starrocks`。 |
 | COMMENT             | 存储卷的注释。                                               |
 | PROPERTIES          | `"key" = "value"` 形式的参数对，用以指定访问远程存储系统的属性和认证信息。有关详细信息，请参阅 [PROPERTIES](#properties)。 |
 
@@ -219,7 +219,7 @@ PROPERTIES
   | aws.s3.iam_role_arn                 | 有访问 S3 存储空间权限 IAM Role 的 ARN。                     |
   | aws.s3.external_id                  | 用于跨 AWS 账户访问 S3 存储空间的外部 ID。                   |
 
-- 如果您使用 Azure Blob Storage：
+<!--- 如果您使用 Azure Blob Storage：
 
   - 如果您使用共享密钥（Shared Key）认证，请设置以下 PROPERTIES：
 
@@ -246,7 +246,7 @@ PROPERTIES
   | enabled               | 是否启用当前存储卷。默认值：`false`。已禁用的存储卷无法被引用。 |
   | azure.blob.endpoint   | Azure Blob Storage 的链接地址，如 `https://test.blob.core.windows.net`。 |
   | azure.blob.shared_key | 访问 Azure Blob Storage 的共享密钥（Shared Key）。           |
-  | azure.blob.sas_token  | 访问 Azure Blob Storage 的共享访问签名（SAS）。              |
+  | azure.blob.sas_token  | 访问 Azure Blob Storage 的共享访问签名（SAS）。              |-->
 
 - 如果您使用 HDFS 存储，请设置以下属性：
 
