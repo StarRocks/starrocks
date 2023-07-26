@@ -1390,7 +1390,7 @@ uint64_t MapColumnReader::doSkip(uint64_t numValues, bool isLazyLoad) {
 }
 
 uint64_t MapColumnReader::skip(uint64_t numValues) {
-    doSkip(numValues, false);
+    return doSkip(numValues, false);
 }
 
 void MapColumnReader::lazyLoadSkip(uint64_t numValues) {
