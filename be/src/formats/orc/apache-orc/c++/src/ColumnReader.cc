@@ -1022,6 +1022,8 @@ private:
     void nextInternal(const std::vector<std::unique_ptr<ColumnReader>>& children,
                       const std::vector<uint64_t>& fieldIndex, ColumnVectorBatch& rowBatch, uint64_t numValues,
                       char* notNull);
+
+    bool isAllFieldLazy();
 };
 
 StructColumnReader::StructColumnReader(const Type& type, StripeStreams& stripe) : ColumnReader(type, stripe) {
@@ -1082,6 +1084,10 @@ void StructColumnReader::nextInternal(const std::vector<std::unique_ptr<ColumnRe
                                       uint64_t numValues, char* notNull) {
     if constexpr (!lazyLoad) {
         ColumnReader::next(rowBatch, numValues, notNull);
+    } else {
+        if (isAllFieldLazy()) {
+            ColumnReader::next(rowBatch, numValues, notNull);
+        }
     }
     uint64_t i = 0;
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
@@ -1104,6 +1110,10 @@ void StructColumnReader::nextInternal(const std::vector<std::unique_ptr<ColumnRe
     }
 }
 
+bool StructColumnReader::isAllFieldLazy() {
+    return children.empty();
+}
+
 void StructColumnReader::seekToRowGroup(PositionProviderMap* positions) {
     ColumnReader::seekToRowGroup(positions);
     for (auto& ptr : children) {
@@ -1112,14 +1122,20 @@ void StructColumnReader::seekToRowGroup(PositionProviderMap* positions) {
 }
 
 void StructColumnReader::lazyLoadSeekToRowGroup(PositionProviderMap* positions) {
+    if (isAllFieldLazy()) {
+        ColumnReader::seekToRowGroup(positions);
+    }
     for (auto& ptr : lazyLoadChildren) {
-        ptr->seekToRowGroup(positions);
+        ptr->lazyLoadSeekToRowGroup(positions);
     }
 }
 
 void StructColumnReader::lazyLoadSkip(uint64_t numValues) {
+    if (isAllFieldLazy()) {
+        ColumnReader::skip(numValues);
+    }
     for (auto& ptr : lazyLoadChildren) {
-        ptr->skip(numValues);
+        ptr->lazyLoadSkip(numValues);
     }
 }
 
@@ -1148,8 +1164,13 @@ public:
 
     void seekToRowGroup(PositionProviderMap* positions) override;
 
+    void lazyLoadSeekToRowGroup(PositionProviderMap* positions) override;
+    void lazyLoadSkip(uint64_t numValues) override;
+    void lazyLoadNext(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+    void lazyLoadNextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+
 private:
-    template <bool encoded>
+    template <bool encoded, bool lazyLoad>
     void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull);
 };
 
@@ -1193,15 +1214,46 @@ uint64_t ListColumnReader::skip(uint64_t numValues) {
     return numValues;
 }
 
+void ListColumnReader::lazyLoadSkip(uint64_t numValues) {
+    // duplicate code
+    numValues = ColumnReader::skip(numValues);
+    ColumnReader* childReader = child.get();
+    if (childReader) {
+        const uint64_t BUFFER_SIZE = 1024;
+        int64_t buffer[BUFFER_SIZE];
+        uint64_t childrenElements = 0;
+        uint64_t lengthsRead = 0;
+        while (lengthsRead < numValues) {
+            uint64_t chunk = std::min(numValues - lengthsRead, BUFFER_SIZE);
+            rle->next(buffer, chunk, nullptr);
+            for (size_t i = 0; i < chunk; ++i) {
+                childrenElements += static_cast<size_t>(buffer[i]);
+            }
+            lengthsRead += chunk;
+        }
+        childReader->lazyLoadSkip(childrenElements);
+    } else {
+        rle->skip(numValues);
+    }
+}
+
 void ListColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
-    nextInternal<false>(rowBatch, numValues, notNull);
+    nextInternal<false, false>(rowBatch, numValues, notNull);
+}
+
+void ListColumnReader::lazyLoadNext(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
+    nextInternal<false, true>(rowBatch, numValues, notNull);
 }
 
 void ListColumnReader::nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
-    nextInternal<true>(rowBatch, numValues, notNull);
+    nextInternal<true, false>(rowBatch, numValues, notNull);
 }
 
-template <bool encoded>
+void ListColumnReader::lazyLoadNextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
+    nextInternal<true, true>(rowBatch, numValues, notNull);
+}
+
+template <bool encoded, bool lazyLoad>
 void ListColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
     ColumnReader::next(rowBatch, numValues, notNull);
     auto& listBatch = dynamic_cast<ListVectorBatch&>(rowBatch);
@@ -1229,11 +1281,20 @@ void ListColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numVal
     offsets[numValues] = static_cast<int64_t>(totalChildren);
     ColumnReader* childReader = child.get();
     if (childReader) {
-        if (encoded) {
-            childReader->nextEncoded(*(listBatch.elements.get()), totalChildren, nullptr);
+        if constexpr (lazyLoad) {
+            if (encoded) {
+                childReader->lazyLoadNextEncoded(*(listBatch.elements.get()), totalChildren, nullptr);
+            } else {
+                childReader->lazyLoadNext(*(listBatch.elements.get()), totalChildren, nullptr);
+            }
         } else {
-            childReader->next(*(listBatch.elements.get()), totalChildren, nullptr);
+            if (encoded) {
+                childReader->nextEncoded(*(listBatch.elements.get()), totalChildren, nullptr);
+            } else {
+                childReader->next(*(listBatch.elements.get()), totalChildren, nullptr);
+            }
         }
+
     }
 }
 
@@ -1242,6 +1303,13 @@ void ListColumnReader::seekToRowGroup(PositionProviderMap* positions) {
     rle->seek(positions->at(columnId));
     if (child) {
         child->seekToRowGroup(positions);
+    }
+}
+
+void ListColumnReader::lazyLoadSeekToRowGroup(PositionProviderMap* positions) {
+    // If List support lazy load, here need to check
+    if (child) {
+        child->lazyLoadSeekToRowGroup(positions);
     }
 }
 
@@ -1263,8 +1331,13 @@ public:
 
     void seekToRowGroup(PositionProviderMap* positions) override;
 
+    void lazyLoadSeekToRowGroup(PositionProviderMap* positions) override;
+    void lazyLoadSkip(uint64_t numValues) override;
+    void lazyLoadNext(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+    void lazyLoadNextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+
 private:
-    template <bool encoded>
+    template <bool encoded, bool lazyLoad>
     void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull);
 };
 
@@ -1318,15 +1391,53 @@ uint64_t MapColumnReader::skip(uint64_t numValues) {
     return numValues;
 }
 
+void MapColumnReader::lazyLoadSkip(uint64_t numValues) {
+    // duplicate code
+    numValues = ColumnReader::skip(numValues);
+    ColumnReader* rawKeyReader = keyReader.get();
+    ColumnReader* rawElementReader = elementReader.get();
+    if (rawKeyReader || rawElementReader) {
+        const uint64_t BUFFER_SIZE = 1024;
+        int64_t buffer[BUFFER_SIZE];
+        uint64_t childrenElements = 0;
+        uint64_t lengthsRead = 0;
+        while (lengthsRead < numValues) {
+            uint64_t chunk = std::min(numValues - lengthsRead, BUFFER_SIZE);
+            rle->next(buffer, chunk, nullptr);
+            for (size_t i = 0; i < chunk; ++i) {
+                childrenElements += static_cast<size_t>(buffer[i]);
+            }
+            lengthsRead += chunk;
+        }
+        if (rawKeyReader) {
+            rawKeyReader->lazyLoadSkip(childrenElements);
+        }
+        if (rawElementReader) {
+            rawElementReader->lazyLoadSkip(childrenElements);
+        }
+    } else {
+        rle->skip(numValues);
+    }
+}
+
+
 void MapColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
-    nextInternal<false>(rowBatch, numValues, notNull);
+    nextInternal<false, false>(rowBatch, numValues, notNull);
+}
+
+void MapColumnReader::lazyLoadNext(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
+    nextInternal<false, true>(rowBatch, numValues, notNull);
 }
 
 void MapColumnReader::nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
-    nextInternal<true>(rowBatch, numValues, notNull);
+    nextInternal<true, false>(rowBatch, numValues, notNull);
 }
 
-template <bool encoded>
+void MapColumnReader::lazyLoadNextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
+    nextInternal<true, true>(rowBatch, numValues, notNull);
+}
+
+template <bool encoded, bool lazyLoad>
 void MapColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
     ColumnReader::next(rowBatch, numValues, notNull);
     auto& mapBatch = dynamic_cast<MapVectorBatch&>(rowBatch);
@@ -1354,18 +1465,34 @@ void MapColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValu
     offsets[numValues] = static_cast<int64_t>(totalChildren);
     ColumnReader* rawKeyReader = keyReader.get();
     if (rawKeyReader) {
-        if (encoded) {
-            rawKeyReader->nextEncoded(*(mapBatch.keys.get()), totalChildren, nullptr);
+        if constexpr (lazyLoad) {
+            if (encoded) {
+                rawKeyReader->lazyLoadNextEncoded(*(mapBatch.keys.get()), totalChildren, nullptr);
+            } else {
+                rawKeyReader->lazyLoadNext(*(mapBatch.keys.get()), totalChildren, nullptr);
+            }
         } else {
-            rawKeyReader->next(*(mapBatch.keys.get()), totalChildren, nullptr);
+            if (encoded) {
+                rawKeyReader->nextEncoded(*(mapBatch.keys.get()), totalChildren, nullptr);
+            } else {
+                rawKeyReader->next(*(mapBatch.keys.get()), totalChildren, nullptr);
+            }
         }
     }
     ColumnReader* rawElementReader = elementReader.get();
     if (rawElementReader) {
-        if (encoded) {
-            rawElementReader->nextEncoded(*(mapBatch.elements.get()), totalChildren, nullptr);
+        if constexpr (lazyLoad) {
+            if (encoded) {
+                rawElementReader->lazyLoadNextEncoded(*(mapBatch.elements.get()), totalChildren, nullptr);
+            } else {
+                rawElementReader->lazyLoadNext(*(mapBatch.elements.get()), totalChildren, nullptr);
+            }
         } else {
-            rawElementReader->next(*(mapBatch.elements.get()), totalChildren, nullptr);
+            if (encoded) {
+                rawElementReader->nextEncoded(*(mapBatch.elements.get()), totalChildren, nullptr);
+            } else {
+                rawElementReader->next(*(mapBatch.elements.get()), totalChildren, nullptr);
+            }
         }
     }
 }
@@ -1378,6 +1505,16 @@ void MapColumnReader::seekToRowGroup(PositionProviderMap* positions) {
     }
     if (elementReader) {
         elementReader->seekToRowGroup(positions);
+    }
+}
+
+void MapColumnReader::lazyLoadSeekToRowGroup(PositionProviderMap* positions) {
+    // TODO If map want to support lazy load, here need to check
+    if (keyReader) {
+        keyReader->lazyLoadSeekToRowGroup(positions);
+    }
+    if (elementReader) {
+        elementReader->lazyLoadSeekToRowGroup(positions);
     }
 }
 
