@@ -78,6 +78,34 @@ class CompactionManager;
 class SegmentFlushExecutor;
 class SegmentReplicateExecutor;
 
+struct DeltaColumnGroupKey {
+    int64_t tablet_id;
+    RowsetId rowsetid;
+    uint32_t segment_id;
+
+    DeltaColumnGroupKey() {}
+    DeltaColumnGroupKey(int64_t tid, RowsetId rid, uint32_t sid) : tablet_id(tid), rowsetid(rid), segment_id(sid) {}
+    ~DeltaColumnGroupKey() {}
+
+    bool operator==(const DeltaColumnGroupKey& rhs) const {
+        return tablet_id == rhs.tablet_id && segment_id == rhs.segment_id && rowsetid == rhs.rowsetid;
+    }
+
+    bool operator<(const DeltaColumnGroupKey& rhs) const {
+        if (tablet_id < rhs.tablet_id) {
+            return true;
+        } else if (tablet_id > rhs.tablet_id) {
+            return false;
+        } else if (rowsetid < rhs.rowsetid) {
+            return true;
+        } else if (rowsetid != rhs.rowsetid) {
+            return false;
+        } else {
+            return segment_id < rhs.segment_id;
+        }
+    }
+};
+
 struct AutoIncrementMeta {
     int64_t min;
     int64_t max;
@@ -231,6 +259,18 @@ public:
     void remove_increment_map_by_table_id(int64_t table_id);
 
     bool get_need_write_cluster_id() { return _need_write_cluster_id; }
+
+    size_t delta_column_group_list_memory_usage(const DeltaColumnGroupList& dcgs);
+
+    void search_delta_column_groups_by_version(const DeltaColumnGroupList& all_dcgs, int64_t version,
+                                               DeltaColumnGroupList* dcgs);
+
+    Status get_delta_column_group(KVStore* meta, int64_t tablet_id, RowsetId rowsetid, uint32_t segment_id,
+                                  int64_t version, DeltaColumnGroupList* dcgs);
+
+    void clear_cached_delta_column_group(const std::vector<DeltaColumnGroupKey>& dcg_keys);
+
+    void clear_rowset_delta_column_group_cache(const Rowset& rowset);
 
 protected:
     static StorageEngine* _s_instance;
@@ -394,6 +434,12 @@ private:
     std::mutex _auto_increment_mutex;
 
     bool _need_write_cluster_id = true;
+
+    // Delta Column Group cache, dcg is short for `Delta Column Group`
+    // This cache just used for non-Primary Key table
+    std::mutex _delta_column_group_cache_lock;
+    std::map<DeltaColumnGroupKey, DeltaColumnGroupList> _delta_column_group_cache;
+    std::unique_ptr<MemTracker> _delta_column_group_cache_mem_tracker;
 
     StorageEngine(const StorageEngine&) = delete;
     const StorageEngine& operator=(const StorageEngine&) = delete;

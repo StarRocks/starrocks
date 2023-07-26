@@ -265,6 +265,46 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
                              << ". schema_hash_dir='" << schema_hash_dir;
                 _error_msgs->push_back("load tablet from dir failed.");
             }
+
+            std::string dcgs_snapshot_file = strings::Substitute("$0/$1.dcgs_snapshot", schema_hash_dir, tablet_id);
+            DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
+            bool has_dcgs_snapshot_file = fs::path_exist(dcgs_snapshot_file);
+            if (has_dcgs_snapshot_file) {
+                auto st = DeltaColumnGroupListHelper::parse_snapshot(dcgs_snapshot_file, dcg_snapshot_pb);
+                if (!st.ok()) {
+                    LOG(WARNING) << "Fail to load load dcg snapshot from " << dcgs_snapshot_file;
+                    return st;
+                }
+
+                auto new_tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
+
+                auto data_dir = new_tablet->data_dir();
+                rocksdb::WriteBatch wb;
+                int idx = 0;
+                // dcgs for each segment
+                for (const auto& dcg_list_pb : dcg_snapshot_pb.dcg_lists()) {
+                    DeltaColumnGroupList dcgs;
+                    RETURN_IF_ERROR(
+                            DeltaColumnGroupListSerializer::deserialize_delta_column_group_list(dcg_list_pb, &dcgs));
+
+                    if (dcgs.size() == 0) {
+                        continue;
+                    }
+
+                    RETURN_IF_ERROR(TabletMetaManager::put_delta_column_group(
+                            data_dir, &wb, dcg_snapshot_pb.tablet_id(idx), dcg_snapshot_pb.rowset_id(idx),
+                            dcg_snapshot_pb.segment_id(idx), dcgs));
+                    ++idx;
+                }
+                st = data_dir->get_meta()->write_batch(&wb);
+                if (!st.ok()) {
+                    std::stringstream ss;
+                    ss << "save dcgs meta failed, tablet id: " << tablet_id;
+                    LOG(WARNING) << ss.str();
+                    return Status::InternalError(ss.str());
+                }
+            }
+
         } else if (fs::path_exist(clone_meta_file)) {
             DCHECK(!fs::path_exist(clone_header_file));
             status = tablet_manager->create_tablet_from_meta_snapshot(store, tablet_id, schema_hash, schema_hash_dir);
@@ -632,6 +672,7 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
     do {
         // load src header
         std::string header_file = strings::Substitute("$0/$1.hdr", clone_dir, tablet->tablet_id());
+        std::string dcgs_snapshot_file = strings::Substitute("$0/$1.dcgs_snapshot", clone_dir, tablet->tablet_id());
         TabletMeta cloned_tablet_meta;
         res = cloned_tablet_meta.create_from_file(header_file);
         if (!res.ok()) {
@@ -639,8 +680,22 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
             break;
         }
 
+        DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
+        bool has_dcgs_snapshot_file = fs::path_exist(dcgs_snapshot_file);
+        if (has_dcgs_snapshot_file) {
+            res = DeltaColumnGroupListHelper::parse_snapshot(dcgs_snapshot_file, dcg_snapshot_pb);
+            if (!res.ok()) {
+                LOG(WARNING) << "Fail to load load dcg snapshot from " << dcgs_snapshot_file;
+                break;
+            }
+        }
+
         // remove the cloned meta file
         (void)fs::remove(header_file);
+        // remove the cloned dcgs snapshot file
+        if (has_dcgs_snapshot_file) {
+            (void)fs::remove(dcgs_snapshot_file);
+        }
 
         std::set<std::string> clone_files;
         res = fs::list_dirs_files(clone_dir, nullptr, &clone_files);
@@ -684,15 +739,52 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
         }
         LOG(INFO) << "Linked " << clone_files.size() << " files from " << clone_dir << " to " << tablet_dir;
 
+        std::vector<RowsetMetaSharedPtr> rs_to_clone;
         if (incremental_clone) {
             res = _clone_incremental_data(tablet, cloned_tablet_meta, committed_version);
         } else {
-            res = _clone_full_data(tablet, const_cast<TabletMeta*>(&cloned_tablet_meta));
+            res = _clone_full_data(tablet, const_cast<TabletMeta*>(&cloned_tablet_meta), rs_to_clone);
         }
 
         // if full clone success, need to update cumulative layer point
         if (!incremental_clone && res.ok()) {
             tablet->set_cumulative_layer_point(-1);
+        }
+
+        // recover dcg meta
+        if (has_dcgs_snapshot_file && rs_to_clone.size() != 0) {
+            auto data_dir = tablet->data_dir();
+            rocksdb::WriteBatch wb;
+            for (const auto& rs_meta : rs_to_clone) {
+                int idx = 0;
+                for (const auto& rowset_id : dcg_snapshot_pb.rowset_id()) {
+                    if (rowset_id != rs_meta->rowset_id().to_string()) {
+                        ++idx;
+                        continue;
+                    }
+                    // dcgs for each segment
+                    auto& dcg_list_pb = dcg_snapshot_pb.dcg_lists(idx);
+                    DeltaColumnGroupList dcgs;
+                    RETURN_IF_ERROR(
+                            DeltaColumnGroupListSerializer::deserialize_delta_column_group_list(dcg_list_pb, &dcgs));
+
+                    if (dcgs.size() == 0) {
+                        continue;
+                    }
+
+                    RETURN_IF_ERROR(TabletMetaManager::put_delta_column_group(
+                            data_dir, &wb, dcg_snapshot_pb.tablet_id(idx), dcg_snapshot_pb.rowset_id(idx),
+                            dcg_snapshot_pb.segment_id(idx), dcgs));
+                    ++idx;
+                }
+            }
+            res = data_dir->get_meta()->write_batch(&wb);
+            if (!res.ok()) {
+                std::stringstream ss;
+                ss << "save dcgs meta failed, tablet id: " << tablet->tablet_id();
+                LOG(WARNING) << ss.str();
+                return Status::InternalError(ss.str());
+            }
         }
     } while (false);
 
@@ -742,7 +834,8 @@ Status EngineCloneTask::_clone_incremental_data(Tablet* tablet, const TabletMeta
     return st;
 }
 
-Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tablet_meta) {
+Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tablet_meta,
+                                         std::vector<RowsetMetaSharedPtr>& rs_to_clone) {
     bool bg_worker_stopped = StorageEngine::instance()->bg_worker_stopped();
     if (bg_worker_stopped) {
         return Status::InternalError("Process is going to quit. The clone will stop.");
@@ -810,6 +903,7 @@ Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tabl
                   << "tablet=" << tablet->full_name() << ", version=" << rs_meta->version().first << "-"
                   << rs_meta->version().second;
     }
+    rs_to_clone = rowsets_to_clone;
 
     // clone_data to tablet
     Status st = tablet->revise_tablet_meta(rowsets_to_clone, versions_to_delete);

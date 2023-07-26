@@ -188,11 +188,20 @@ public:
     static Status get_delta_column_group(KVStore* meta, TTabletId tablet_id, uint32_t segment_id, int64_t version,
                                          DeltaColumnGroupList* dcgs);
 
+    static Status get_delta_column_group(KVStore* meta, TTabletId tablet_id, RowsetId rowsetid, uint32_t segment_id,
+                                         int64_t version, DeltaColumnGroupList* dcgs);
+
     static Status scan_delta_column_group(KVStore* meta, TTabletId tablet_id, uint32_t segment_id,
                                           int64_t begin_version, int64_t end_version, DeltaColumnGroupList* dcgs);
 
+    static Status scan_delta_column_group(KVStore* meta, TTabletId tablet_id, RowsetId rowsetid, uint32_t segment_id,
+                                          int64_t begin_version, int64_t end_version, DeltaColumnGroupList* dcgs);
+
     static Status delete_delta_column_group(KVStore* meta, TTabletId tablet_id, uint32_t rowset_id, uint32_t segments);
-    static Status delete_delta_column_group(KVStore* meta, WriteBatch* batch, TabletSegmentId tsid, int64_t version);
+
+    static Status delete_delta_column_group(KVStore* meta, WriteBatch* batch, const TabletSegmentId& tsid,
+                                            int64_t version);
+    static Status delete_delta_column_group(KVStore* meta, TTabletId tablet_id, RowsetId rowsetid, uint32_t segments);
 
     // delete all delete vectors of a tablet not useful anymore for query version < `version`, for example
     // suppose we have delete vectors of version 1, 3, 5, 6, 7, 12, 16
@@ -211,6 +220,13 @@ public:
                                  const DelVector& delvec);
 
     static Status put_delta_column_group(DataDir* store, WriteBatch* batch, TTabletId tablet_id, uint32_t segment_id,
+                                         const DeltaColumnGroupList& dcgs);
+
+    static Status put_delta_column_group(DataDir* store, WriteBatch* batch, TTabletId tablet_id, RowsetId rowsetid,
+                                         uint32_t segment_id, const DeltaColumnGroupList& dcgs);
+
+    static Status put_delta_column_group(DataDir* store, WriteBatch* batch, TTabletId tablet_id,
+                                         const std::string& rowsetid, uint32_t segment_id,
                                          const DeltaColumnGroupList& dcgs);
 
     static Status put_tablet_meta(DataDir* store, WriteBatch* batch, const TabletMetaPB& tablet_meta);
