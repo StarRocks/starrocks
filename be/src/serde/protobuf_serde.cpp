@@ -220,7 +220,7 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
 
     uint32_t version = decode_fixed32_le(cur);
     if (version != 1) {
-        return Status::Corruption("invalid version [" + version + "]");
+        return Status::Corruption(fmt::format("invalid version: {}", version));
     }
     cur += 4;
 
