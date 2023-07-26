@@ -54,9 +54,9 @@ static bool is_repeated(const tparquet::SchemaElement* schema) {
     return schema->__isset.repetition_type && schema->repetition_type == tparquet::FieldRepetitionType::REPEATED;
 }
 
-static bool is_required(const tparquet::SchemaElement* schema) {
-    return schema->__isset.repetition_type && schema->repetition_type == tparquet::FieldRepetitionType::REQUIRED;
-}
+//static bool is_required(const tparquet::SchemaElement* schema) {
+//    return schema->__isset.repetition_type && schema->repetition_type == tparquet::FieldRepetitionType::REQUIRED;
+//}
 
 static bool is_optional(const tparquet::SchemaElement* schema) {
     return schema->__isset.repetition_type && schema->repetition_type == tparquet::FieldRepetitionType::OPTIONAL;
