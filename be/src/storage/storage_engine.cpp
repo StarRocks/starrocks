@@ -646,8 +646,7 @@ size_t StorageEngine::_compaction_check_one_round() {
     return tablets_num_checked;
 }
 
-Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir,
-                                                     std::pair<int32_t, int32_t> tablet_shards_range) {
+Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {
     scoped_refptr<Trace> trace(new Trace);
     MonotonicStopWatch watch;
     watch.start();
@@ -658,8 +657,8 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir,
     });
     ADOPT_TRACE(trace.get());
     TRACE("start to perform cumulative compaction");
-    TabletSharedPtr best_tablet = _tablet_manager->find_best_tablet_to_compaction(CompactionType::CUMULATIVE_COMPACTION,
-                                                                                  data_dir, tablet_shards_range);
+    TabletSharedPtr best_tablet =
+            _tablet_manager->find_best_tablet_to_compaction(CompactionType::CUMULATIVE_COMPACTION, data_dir);
     if (best_tablet == nullptr) {
         return Status::NotFound("there are no suitable tablets");
     }
@@ -690,7 +689,7 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir,
     return Status::OK();
 }
 
-Status StorageEngine::_perform_base_compaction(DataDir* data_dir, std::pair<int32_t, int32_t> tablet_shards_range) {
+Status StorageEngine::_perform_base_compaction(DataDir* data_dir) {
     scoped_refptr<Trace> trace(new Trace);
     MonotonicStopWatch watch;
     watch.start();
@@ -701,8 +700,8 @@ Status StorageEngine::_perform_base_compaction(DataDir* data_dir, std::pair<int3
     });
     ADOPT_TRACE(trace.get());
     TRACE("start to perform base compaction");
-    TabletSharedPtr best_tablet = _tablet_manager->find_best_tablet_to_compaction(CompactionType::BASE_COMPACTION,
-                                                                                  data_dir, tablet_shards_range);
+    TabletSharedPtr best_tablet =
+            _tablet_manager->find_best_tablet_to_compaction(CompactionType::BASE_COMPACTION, data_dir);
     if (best_tablet == nullptr) {
         return Status::NotFound("there are no suitable tablets");
     }

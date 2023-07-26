@@ -226,10 +226,10 @@ private:
     // unused rowset monitor thread
     void* _unused_rowset_monitor_thread_callback(void* arg);
 
-    void* _base_compaction_thread_callback(void* arg, DataDir* data_dir,
-                                           std::pair<int32_t, int32_t> tablet_shards_range);
-    void* _cumulative_compaction_thread_callback(void* arg, DataDir* data_dir,
-                                                 const std::pair<int32_t, int32_t>& tablet_shards_range);
+    // base compaction thread process function
+    void* _base_compaction_thread_callback(void* arg, DataDir* data_dir);
+    // cumulative process function
+    void* _cumulative_compaction_thread_callback(void* arg, DataDir* data_dir);
     // update compaction function
     void* _update_compaction_thread_callback(void* arg, DataDir* data_dir);
     // repair compaction function
@@ -254,8 +254,8 @@ private:
     void* _adjust_pagecache_callback(void* arg);
 
     void _start_clean_fd_cache();
-    Status _perform_cumulative_compaction(DataDir* data_dir, std::pair<int32_t, int32_t> tablet_shards_range);
-    Status _perform_base_compaction(DataDir* data_dir, std::pair<int32_t, int32_t> tablet_shards_range);
+    Status _perform_cumulative_compaction(DataDir* data_dir);
+    Status _perform_base_compaction(DataDir* data_dir);
     Status _perform_update_compaction(DataDir* data_dir);
     Status _start_trash_sweep(double* usage);
     void _start_disk_stat_monitor();
