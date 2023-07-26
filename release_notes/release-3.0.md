@@ -33,7 +33,7 @@
 ### 功能优化
 
 - StarRocks 外表元数据的同步改为数据加载时进行。 [#24739](https://github.com/StarRocks/starrocks/pull/24739)
-- 对于[自动创建分区](../table_design/automatic_partitioning.md)的表，INSERT OVERWRITE 支持指定分区。 [#25005](https://github.com/StarRocks/starrocks/pull/25005)
+- 对于使用[表达式分区](../table_design/expression_partitioning.md)的表，INSERT OVERWRITE 支持指定分区。 [#25005](https://github.com/StarRocks/starrocks/pull/25005)
 - 优化了非分区表增加分区时的报错信息。 [#25266](https://github.com/StarRocks/starrocks/pull/25266)
 
 ### 问题修复
