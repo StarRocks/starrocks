@@ -151,7 +151,7 @@ From outside the Kubernetes cluster, you can access the StarRocks cluster throug
 
     ```YAML
     starRocksFeSpec:
-      image: starrocks/fe-ubuntu:latest
+      image: starrocks/fe-ubuntu:3.0-latest
       replicas: 3
       requests:
         cpu: 4
@@ -180,18 +180,18 @@ From outside the Kubernetes cluster, you can access the StarRocks cluster throug
 
 #### Upgrade BE nodes
 
-Run the following command to specify a new BE image file, such as `starrocks/be-ubuntu:3.0-latest`:
+Run the following command to specify a new BE image file, such as `starrocks/be-ubuntu:latest`:
 
 ```bash
-kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksBeSpec":{"image":"starrocks/be-ubuntu:3.0-latest"}}}'
+kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksBeSpec":{"image":"starrocks/be-ubuntu:latest"}}}'
 ```
 
 #### Upgrade FE nodes
 
-Run the following command to specify a new FE image file, such as `starrocks/fe-ubuntu:3.0-latest`:
+Run the following command to specify a new FE image file, such as `starrocks/fe-ubuntu:latest`:
 
 ```bash
-kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksFeSpec":{"image":"starrocks/fe-ubuntu:3.0-latest"}}}'
+kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksFeSpec":{"image":"starrocks/fe-ubuntu:latest"}}}'
 ```
 
 The upgrade process lasts for a while. You can run the command `kubectl -n starrocks get pods` to view the upgrade progress.
@@ -232,7 +232,7 @@ The following is a [template](https://github.com/StarRocks/starrocks-kubernetes-
 
 ```YAML
   starRocksCnSpec:
-    image: starrocks/cn-ubuntu:latest
+    image: starrocks/cn-ubuntu:3.0-latest
     requests:
       cpu: 4
       memory: 4Gi
