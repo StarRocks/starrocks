@@ -33,9 +33,18 @@ using namespace vectorized;
 
 class OlapScanContext final : public ContextWithDependency {
 public:
+<<<<<<< HEAD
     explicit OlapScanContext(vectorized::OlapScanNode* scan_node, int32_t dop, bool shared_scan,
                              BalancedChunkBuffer& chunk_buffer)
             : _scan_node(scan_node), _chunk_buffer(chunk_buffer), _shared_scan(shared_scan) {}
+=======
+    explicit OlapScanContext(OlapScanNode* scan_node, int64_t scan_table_id, int32_t dop, bool shared_scan,
+                             BalancedChunkBuffer& chunk_buffer)
+            : _scan_node(scan_node),
+              _scan_table_id(scan_table_id),
+              _chunk_buffer(chunk_buffer),
+              _shared_scan(shared_scan) {}
+>>>>>>> 4265212f40 ([BugFix] fix incorrect scan metrics in FE (#27779))
     ~OlapScanContext() override = default;
 
     Status prepare(RuntimeState* state);
@@ -65,8 +74,18 @@ public:
     const std::vector<TabletSharedPtr>& tablets() const { return _tablets; }
     const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets() const { return _tablet_rowsets; };
 
+<<<<<<< HEAD
 private:
     vectorized::OlapScanNode* _scan_node;
+=======
+    const std::vector<ColumnAccessPathPtr>* column_access_paths() const;
+
+    int64_t get_scan_table_id() const { return _scan_table_id; }
+
+private:
+    OlapScanNode* _scan_node;
+    int64_t _scan_table_id;
+>>>>>>> 4265212f40 ([BugFix] fix incorrect scan metrics in FE (#27779))
 
     std::vector<ExprContext*> _conjunct_ctxs;
     vectorized::OlapScanConjunctsManager _conjuncts_manager;
@@ -111,6 +130,8 @@ public:
 
     OlapScanContextPtr get_or_create(int32_t driver_sequence);
 
+    void set_scan_table_id(int64_t scan_table_id) { _scan_table_id = scan_table_id; }
+
 private:
     vectorized::OlapScanNode* const _scan_node;
     const int32_t _dop;
@@ -118,6 +139,7 @@ private:
     const bool _shared_scan;           // Whether the scan operators share a chunk buffer.
     BalancedChunkBuffer _chunk_buffer; // Shared Chunk buffer for all the scan operators.
 
+    int64_t _scan_table_id = -1;
     std::vector<OlapScanContextPtr> _contexts;
 };
 
