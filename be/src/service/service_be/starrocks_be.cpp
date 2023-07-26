@@ -35,6 +35,7 @@
 #include "service/service_be/http_service.h"
 #include "service/service_be/internal_service.h"
 #include "service/service_be/lake_service.h"
+#include "service/staros_worker.h"
 #include "storage/storage_engine.h"
 #include "util/logging.h"
 #include "util/thrift_rpc_helper.h"
