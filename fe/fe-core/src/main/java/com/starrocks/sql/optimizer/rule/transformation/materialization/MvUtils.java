@@ -913,13 +913,15 @@ public class MvUtils {
         return onPredicates;
     }
 
-    public static void collectOnPredicate(OptExpression optExpression, List<ScalarOperator> onPredicates, boolean isOuterAntiJoin) {
+    public static void collectOnPredicate(
+            OptExpression optExpression, List<ScalarOperator> onPredicates, boolean onlyOuterAntiJoin) {
         for (OptExpression child : optExpression.getInputs()) {
-            collectOnPredicate(child, onPredicates, isOuterAntiJoin);
+            collectOnPredicate(child, onPredicates, onlyOuterAntiJoin);
         }
         if (optExpression.getOp() instanceof LogicalJoinOperator) {
             LogicalJoinOperator joinOperator = optExpression.getOp().cast();
-            if (isOuterAntiJoin && !(joinOperator.getJoinType().isOuterJoin() || joinOperator.getJoinType().isAntiJoin())) {
+            if (onlyOuterAntiJoin &&
+                    !(joinOperator.getJoinType().isOuterJoin() || joinOperator.getJoinType().isAntiJoin())) {
                 return;
             }
             onPredicates.addAll(Utils.extractConjuncts(joinOperator.getOnPredicate()));
