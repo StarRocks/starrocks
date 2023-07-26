@@ -70,10 +70,6 @@ Status FileReader::init(HdfsScannerContext* ctx) {
     return Status::OK();
 }
 
-std::shared_ptr<FileMetaData> FileReader::get_file_metadata() {
-    return _file_metadata;
-}
-
 Status FileReader::_parse_footer() {
     std::vector<char> footer_buffer;
     ASSIGN_OR_RETURN(uint32_t footer_read_size, _get_footer_read_size());
