@@ -47,15 +47,11 @@ public class StartSchedulingTest extends SchedulerTestBase {
     @Before
     public void before() {
         originalEnableProfile = connectContext.getSessionVariable().isEnableProfile();
-
-        connectContext.getSessionVariable().setEnableDeliverBatchFragments(false);
     }
 
     @After
     public void after() {
         connectContext.getSessionVariable().setEnableProfile(originalEnableProfile);
-
-        connectContext.getSessionVariable().setEnableDeliverBatchFragments(true);
     }
 
     @Test
