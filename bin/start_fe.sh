@@ -108,11 +108,19 @@ JAVA=$JAVA_HOME/bin/java
 JAVA_VERSION=$(jdk_version)
 final_java_opt=$JAVA_OPTS
 if [[ "$JAVA_VERSION" -gt 8 ]]; then
-    if [ -z "$JAVA_OPTS_FOR_JDK_9" ]; then
-        echo "JAVA_OPTS_FOR_JDK_9 is not set in fe.conf"
+    if [[ "$JAVA_VERSION" -lt 11 ]]; then
+        echo "JDK $JAVA_VERSION is not supported, please use JDK 11 or 17"
         exit -1
     fi
-    final_java_opt=$JAVA_OPTS_FOR_JDK_9
+        
+    if [ -n "$JAVA_OPTS_FOR_JDK_11" ]; then
+        final_java_opt=$JAVA_OPTS_FOR_JDK_11
+    elif [ -n "$JAVA_OPTS_FOR_JDK_9" ]; then 
+        final_java_opt=$JAVA_OPTS_FOR_JDK_9
+    else
+        echo "JAVA_OPTS_FOR_JDK_11 is not set in fe.conf"       
+        exit -1
+    fi
 fi
 
 if [[ "$JAVA_VERSION" -lt 11 ]]; then
