@@ -25,7 +25,7 @@ Status FileMetaData::init(const tparquet::FileMetaData& t_metadata, bool case_se
     RETURN_IF_ERROR(_schema.from_thrift(t_metadata.schema, case_sensitive));
     _num_rows = t_metadata.num_rows;
 
-    _t_metadata = t_metadata;
+    _t_metadata = std::move(t_metadata);
     return Status::OK();
 }
 
