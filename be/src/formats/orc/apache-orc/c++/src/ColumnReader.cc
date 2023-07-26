@@ -1284,7 +1284,6 @@ void ListColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numVal
                 childReader->next(*(listBatch.elements.get()), totalChildren, nullptr);
             }
         }
-
     }
 }
 
@@ -1397,7 +1396,6 @@ uint64_t MapColumnReader::skip(uint64_t numValues) {
 void MapColumnReader::lazyLoadSkip(uint64_t numValues) {
     doSkip(numValues, true);
 }
-
 
 void MapColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
     nextInternal<false, false>(rowBatch, numValues, notNull);
