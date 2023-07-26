@@ -44,6 +44,7 @@ import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -532,9 +533,20 @@ public class SparkLoadPendingTask extends LoadTask {
             throw new LoadException(e.getMessage());
         }
         // add generated column mapping
-        for (ImportColumnDesc columnDesc : Load.getMaterializedShadowColumnDesc(table, db.getFullName(), false)) {
-            copiedColumnExprList.add(columnDesc);
-            exprByName.put(columnDesc.getColumnName(), columnDesc.getExpr());
+        for (ImportColumnDesc generatedColumnDesc : Load.getMaterializedShadowColumnDesc(table, db.getFullName(), false)) {
+            Expr expr = generatedColumnDesc.getExpr();
+            List<SlotRef> slots = Lists.newArrayList();
+            expr.collect(SlotRef.class, slots);
+            for (SlotRef slot : slots) {
+                for (ImportColumnDesc columnDesc : copiedColumnExprList) {
+                    if (!columnDesc.isColumn() && slot.getColumnName().equals(columnDesc.getColumnName())) {
+                        throw new LoadException("generated column can not refenece the column which is the " +
+                                                "result of the expression in spark load");
+                    }
+                }
+            }
+            copiedColumnExprList.add(generatedColumnDesc);
+            exprByName.put(generatedColumnDesc.getColumnName(), generatedColumnDesc.getExpr());
         }
         // add shadow column mapping when schema change
         for (ImportColumnDesc columnDesc : Load.getSchemaChangeShadowColumnDesc(table, exprByName)) {
