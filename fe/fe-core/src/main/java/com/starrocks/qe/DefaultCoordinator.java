@@ -267,9 +267,6 @@ public class DefaultCoordinator extends Coordinator {
     /**
      * Only used for sync stream load profile,
      * so only init relative data structure.
-     * @param jobSpec
-     * @param planner
-     * @param address
      */
     public DefaultCoordinator(JobSpec jobSpec, StreamLoadPlanner planner, TNetworkAddress address) {
         this.connectContext = planner.getConnectContext();
@@ -751,7 +748,7 @@ public class DefaultCoordinator extends Coordinator {
                         } catch (ExecutionException e) {
                             LOG.warn("catch a execute exception", e);
                             code = TStatusCode.THRIFT_RPC_ERROR;
-                        } catch (InterruptedException e) {
+                        } catch (InterruptedException e) { // NOSONAR
                             LOG.warn("catch a interrupt exception", e);
                             code = TStatusCode.INTERNAL_ERROR;
                         } catch (TimeoutException e) {
@@ -1070,7 +1067,7 @@ public class DefaultCoordinator extends Coordinator {
                         } catch (ExecutionException e) {
                             LOG.warn("catch a execute exception", e);
                             code = TStatusCode.THRIFT_RPC_ERROR;
-                        } catch (InterruptedException e) {
+                        } catch (InterruptedException e) { // NOSONAR
                             LOG.warn("catch a interrupt exception", e);
                             code = TStatusCode.INTERNAL_ERROR;
                         } catch (TimeoutException e) {
@@ -1622,7 +1619,7 @@ public class DefaultCoordinator extends Coordinator {
                 if (!profileDoneSignal.await(timeout, TimeUnit.SECONDS)) {
                     LOG.warn("failed to get profile within {} seconds", timeout);
                 }
-            } catch (InterruptedException e) {
+            } catch (InterruptedException e) { // NOSONAR
                 LOG.warn("signal await error", e);
             }
         }
@@ -1660,7 +1657,7 @@ public class DefaultCoordinator extends Coordinator {
             boolean awaitRes = false;
             try {
                 awaitRes = profileDoneSignal.await(waitTime, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
+            } catch (InterruptedException e) { // NOSONAR
                 // Do nothing
             }
             if (awaitRes) {
