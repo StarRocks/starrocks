@@ -126,26 +126,30 @@ public class MaterializedViewAnalyzer {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
     }
 
-    public static List<BaseTableInfo> getBaseTableInfos(Map<TableName, Table> tableNameTableMap) {
+    public static List<BaseTableInfo> getBaseTableInfos(Map<TableName, Table> tableNameTableMap, boolean withCheck) {
         List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
 
         if (tableNameTableMap.isEmpty()) {
             throw new SemanticException("Can not find base table in query statement");
         }
-        tableNameTableMap.forEach((tableNameInfo, table) -> {
-            Preconditions.checkState(table != null, "Materialized view base table is null");
-            if (!isSupportBasedOnTable(table)) {
-                throw new SemanticException("Create materialized view do not support the table type: " +
-                        table.getType());
-            }
-            if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
-                throw new SemanticException(
-                        "Create materialized view from inactive materialized view: " + table.getName());
-            }
-            if (isExternalTableFromResource(table)) {
-                throw new SemanticException(
-                        "Only supports creating materialized views based on the external table " +
-                                "which created by catalog");
+        for (Map.Entry<TableName, Table> entry : tableNameTableMap.entrySet()) {
+            TableName tableNameInfo = entry.getKey();
+            Table table = entry.getValue();
+            if (withCheck) {
+                Preconditions.checkState(table != null, "Materialized view base table is null");
+                if (!isSupportBasedOnTable(table)) {
+                    throw new SemanticException("Create materialized view do not support the table type: " +
+                            table.getType());
+                }
+                if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
+                    throw new SemanticException(
+                            "Create materialized view from inactive materialized view: " + table.getName());
+                }
+                if (isExternalTableFromResource(table)) {
+                    throw new SemanticException(
+                            "Only supports creating materialized views based on the external table " +
+                                    "which created by catalog");
+                }
             }
             Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableNameInfo.getCatalog(),
                     tableNameInfo.getDb());
@@ -156,7 +160,7 @@ public class MaterializedViewAnalyzer {
                 baseTableInfos.add(new BaseTableInfo(tableNameInfo.getCatalog(),
                         tableNameInfo.getDb(), table.getTableIdentifier()));
             }
-        });
+        }
         return baseTableInfos;
     }
 
