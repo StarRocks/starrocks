@@ -163,13 +163,6 @@ public:
         }
         return Status::OK();
     }
-    Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
-        ChunkIterator::init_output_schema(unused_output_column_ids);
-        for (auto& i : _children) {
-            RETURN_IF_ERROR(i->init_output_schema(unused_output_column_ids));
-        }
-        return Status::OK();
-    }
 
 protected:
     Status init();
@@ -189,7 +182,7 @@ inline Status MergeIterator::init() {
     for (size_t i = 0; i < _children.size(); i++) {
         // No need to reserve, because it's already reserved in segment interators.
         // If we reserve here, for small segment files, it will consume large memory then need.
-        _chunk_pool[i] = ChunkHelper::new_chunk(output_schema(), 0);
+        _chunk_pool[i] = ChunkHelper::new_chunk(encoded_schema(), 0);
         RETURN_IF_ERROR(fill(i));
     }
     _inited = true;

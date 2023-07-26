@@ -182,7 +182,6 @@ Status TabletReader::_init_collector_for_pk_index_read() {
     rs_opts.use_page_cache = _reader_params->use_page_cache;
     rs_opts.tablet_schema = &_tablet->tablet_schema();
     rs_opts.global_dictmaps = _reader_params->global_dictmaps;
-    rs_opts.unused_output_column_ids = _reader_params->unused_output_column_ids;
     rs_opts.runtime_range_pruner = _reader_params->runtime_range_pruner;
     // single row fetch, no need to use delvec
     rs_opts.is_primary_keys = false;
@@ -209,7 +208,6 @@ Status TabletReader::_init_collector_for_pk_index_read() {
 
     // other collector setup
     RETURN_IF_ERROR(_collect_iter->init_encoded_schema(*_reader_params->global_dictmaps));
-    RETURN_IF_ERROR(_collect_iter->init_output_schema(*_reader_params->unused_output_column_ids));
 
     return Status::OK();
 }
@@ -254,7 +252,6 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.use_page_cache = params.use_page_cache;
     rs_opts.tablet_schema = &_tablet->tablet_schema();
     rs_opts.global_dictmaps = params.global_dictmaps;
-    rs_opts.unused_output_column_ids = params.unused_output_column_ids;
     rs_opts.runtime_range_pruner = params.runtime_range_pruner;
     rs_opts.column_access_paths = params.column_access_paths;
     if (keys_type == KeysType::PRIMARY_KEYS) {
@@ -432,7 +429,6 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
 
     if (_collect_iter != nullptr) {
         RETURN_IF_ERROR(_collect_iter->init_encoded_schema(*params.global_dictmaps));
-        RETURN_IF_ERROR(_collect_iter->init_output_schema(*params.unused_output_column_ids));
     }
 
     return Status::OK();

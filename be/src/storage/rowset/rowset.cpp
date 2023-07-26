@@ -481,11 +481,6 @@ public:
         return _iter->init_encoded_schema(dict_maps);
     }
 
-    Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
-        ChunkIterator::init_output_schema(unused_output_column_ids);
-        return _iter->init_output_schema(unused_output_column_ids);
-    }
-
 protected:
     Status do_get_next(Chunk* chunk) override { return _iter->get_next(chunk); }
     Status do_get_next(Chunk* chunk, vector<uint32_t>* rowid) override { return _iter->get_next(chunk, rowid); }
@@ -524,7 +519,6 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.reader_type = options.reader_type;
     seg_options.chunk_size = options.chunk_size;
     seg_options.global_dictmaps = options.global_dictmaps;
-    seg_options.unused_output_column_ids = options.unused_output_column_ids;
     seg_options.runtime_range_pruner = options.runtime_range_pruner;
     seg_options.column_access_paths = options.column_access_paths;
     if (options.delete_predicates != nullptr) {

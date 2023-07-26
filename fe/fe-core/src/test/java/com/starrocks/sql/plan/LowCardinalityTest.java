@@ -174,19 +174,6 @@ public class LowCardinalityTest extends PlanTestBase {
     }
 
     @Test
-    public void testOlapScanNodeOutputColumns() throws Exception {
-        connectContext.getSessionVariable().enableTrimOnlyFilteredColumnsInScanStage();
-        String sql =
-                "SELECT C_CITY, S_CITY, year(LO_ORDERDATE) as year, sum(LO_REVENUE) AS revenue FROM lineorder_flat " +
-                        "WHERE C_CITY in ('UNITED KI1', 'UNITED KI5') AND S_CITY in ( 'UNITED KI1', 'UNITED\n" +
-                        "KI5') AND LO_ORDERDATE >= '1997-12-01' AND LO_ORDERDATE <= '1997-12-31' GROUP BY C_CITY, S_CITY, year " +
-                        "ORDER BY year ASC, revenue DESC;";
-        String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
-        connectContext.getSessionVariable().disableTrimOnlyFilteredColumnsInScanStage();
-    }
-
-    @Test
     public void testDecodeNodeRewrite() throws Exception {
         String sql = "select\n" +
                 "            100.00 * sum(case\n" +

@@ -57,7 +57,6 @@ private:
     Status _init_reader_params(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges,
                                const std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns);
     Status _init_scanner_columns(std::vector<uint32_t>& scanner_columns);
-    Status _init_unused_output_columns(const std::vector<std::string>& unused_output_columns);
     Status _init_olap_reader(RuntimeState* state);
     void _init_counter(RuntimeState* state);
     Status _init_global_dicts(TabletReaderParams* params);
@@ -93,11 +92,6 @@ private:
     std::shared_ptr<TabletReader> _reader;
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
     std::shared_ptr<ChunkIterator> _prj_iter;
-
-    std::unordered_set<uint32_t> _unused_output_column_ids;
-
-    // slot descriptors for each one of |output_columns|.
-    std::vector<SlotDescriptor*> _query_slots;
 
     std::vector<ColumnAccessPathPtr> _column_access_paths;
 

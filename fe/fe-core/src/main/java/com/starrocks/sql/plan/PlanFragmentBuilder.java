@@ -40,9 +40,7 @@ import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.JDBCTable;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
@@ -174,7 +172,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
-import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule.DecodeVisitor;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldExpressionCollector;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -399,76 +396,6 @@ public class PlanFragmentBuilder {
             }
             context.recordPlanNodeId2OptExpression(planRoot.getId().asInt(), optExpression);
             return fragment;
-        }
-
-        private void setUnUsedOutputColumns(PhysicalOlapScanOperator node, OlapScanNode scanNode,
-                                            List<ScalarOperator> predicates, OlapTable referenceTable) {
-            if (!ConnectContext.get().getSessionVariable().isEnableFilterUnusedColumnsInScanStage()) {
-                return;
-            }
-
-            // Key columns and value columns cannot be pruned in the non-skip-aggr scan stage.
-            // - All the keys columns must be retained to merge and aggregate rows.
-            // - Value columns can only be used after merging and aggregating.
-            MaterializedIndexMeta materializedIndexMeta =
-                    referenceTable.getIndexMetaByIndexId(node.getSelectedIndexId());
-            if (materializedIndexMeta.getKeysType().isAggregationFamily() && !node.isPreAggregation()) {
-                return;
-            }
-
-            List<ColumnRefOperator> outputColumns = node.getOutputColumns();
-            // if outputColumns is empty, skip this optimization
-            if (outputColumns.isEmpty()) {
-                return;
-            }
-            Set<Integer> outputColumnIds = new HashSet<Integer>();
-            for (ColumnRefOperator colref : outputColumns) {
-                outputColumnIds.add(colref.getId());
-            }
-
-            // NOTE:
-            // - only support push down single predicate(eg, a = xx) to scan node.
-            // - only keys in agg-key model (aggregation/unique_key model) and primary-key model can be included in the unused columns.
-            // - complex pred(eg, a + b = xx) can not be pushed down to scan node yet.
-            // so the columns in complex predicate are useful for the stage after scan.
-            Set<Integer> singlePredColumnIds = new HashSet<Integer>();
-            Set<Integer> complexPredColumnIds = new HashSet<Integer>();
-            Set<String> aggOrPrimaryKeyTableValueColumnNames = new HashSet<String>();
-            if (materializedIndexMeta.getKeysType().isAggregationFamily() ||
-                    materializedIndexMeta.getKeysType() == KeysType.PRIMARY_KEYS) {
-                aggOrPrimaryKeyTableValueColumnNames =
-                        materializedIndexMeta.getSchema().stream()
-                                .filter(col -> !col.isKey())
-                                .map(Column::getName)
-                                .collect(Collectors.toSet());
-            }
-
-            for (ScalarOperator predicate : predicates) {
-                ColumnRefSet usedColumns = predicate.getUsedColumns();
-                if (DecodeVisitor.isSimpleStrictPredicate(predicate)) {
-                    for (int cid : usedColumns.getColumnIds()) {
-                        singlePredColumnIds.add(cid);
-                    }
-                } else {
-                    for (int cid : usedColumns.getColumnIds()) {
-                        complexPredColumnIds.add(cid);
-                    }
-                }
-            }
-
-            Set<Integer> unUsedOutputColumnIds = new HashSet<Integer>();
-            Map<Integer, Integer> dictStringIdToIntIds = node.getDictStringIdToIntIds();
-            for (Integer cid : singlePredColumnIds) {
-                Integer newCid = cid;
-                if (dictStringIdToIntIds.containsKey(cid)) {
-                    newCid = dictStringIdToIntIds.get(cid);
-                }
-                if (!complexPredColumnIds.contains(newCid) && !outputColumnIds.contains(newCid)) {
-                    unUsedOutputColumnIds.add(newCid);
-                }
-            }
-
-            scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds, aggOrPrimaryKeyTableValueColumnNames);
         }
 
         @Override
@@ -777,7 +704,6 @@ public class PlanFragmentBuilder {
             tupleDescriptor.computeMemLayout();
 
             // set unused output columns 
-            setUnUsedOutputColumns(node, scanNode, predicates, referenceTable);
             scanNode.setIsSortedByKeyPerTablet(node.needSortedByKeyPerTablet());
 
             // set isPreAggregation

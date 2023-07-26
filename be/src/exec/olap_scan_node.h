@@ -189,8 +189,6 @@ private:
     std::atomic<int32_t> _running_threads{0};
     std::atomic<int32_t> _closed_scanners{0};
 
-    std::vector<std::string> _unused_output_columns;
-
     // The row sets of tablets will become stale and be deleted, if compaction occurs
     // and these row sets aren't referenced, which will typically happen when the tablets
     // of the left table are compacted at building the right hash table. Therefore, reference

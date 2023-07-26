@@ -1110,7 +1110,7 @@ void SegmentIterator::_switch_context(ScanContext* to) {
         to->_dict_chunk = to->_read_chunk;
     }
 
-    DCHECK_GT(this->output_schema().num_fields(), 0);
+    DCHECK_GT(this->encoded_schema().num_fields(), 0);
 
     if (to->_has_force_dict_encode) {
         // rebuild encoded schema
@@ -1124,11 +1124,11 @@ void SegmentIterator::_switch_context(ScanContext* to) {
         }
         to->_final_chunk = ChunkHelper::new_chunk(this->_encoded_schema, _reserve_chunk_size);
     } else {
-        to->_final_chunk = ChunkHelper::new_chunk(this->output_schema(), _reserve_chunk_size);
+        to->_final_chunk = ChunkHelper::new_chunk(this->encoded_schema(), _reserve_chunk_size);
     }
 
     to->_adapt_global_dict_chunk = to->_has_force_dict_encode
-                                           ? ChunkHelper::new_chunk(this->output_schema(), _reserve_chunk_size)
+                                           ? ChunkHelper::new_chunk(this->encoded_schema(), _reserve_chunk_size)
                                            : to->_final_chunk;
 
     _context = to;
@@ -1272,7 +1272,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
     std::set<ColumnId> delete_pred_columns;
     _opts.delete_predicates.get_column_ids(&delete_pred_columns);
     std::set<ColumnId> output_columns;
-    for (const auto& field : output_schema().fields()) {
+    for (const auto& field : encoded_schema().fields()) {
         output_columns.insert(field->id());
     }
 
@@ -1349,7 +1349,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
     }
 
     // build index map
-    DCHECK_LE(output_schema().num_fields(), _schema.num_fields());
+    DCHECK_LE(encoded_schema().num_fields(), _schema.num_fields());
     // map _read_schema[cid, index] to output_schema[cid index]
     // skip dict_decode column in _read_schema would not be mapping
     std::unordered_map<ColumnId, size_t> read_indexes;
@@ -1361,7 +1361,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
 
     ctx->_read_index_map.resize(read_indexes.size());
     for (size_t i = 0; i < read_indexes.size(); i++) {
-        ctx->_read_index_map[i] = read_indexes[output_schema().field(i)->id()];
+        ctx->_read_index_map[i] = read_indexes[encoded_schema().field(i)->id()];
     }
 
     return Status::OK();

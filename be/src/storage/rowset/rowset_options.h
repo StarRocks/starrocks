@@ -70,7 +70,6 @@ public:
     bool fill_data_cache = true;
 
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
-    const std::unordered_set<uint32_t>* unused_output_column_ids = nullptr;
 
     RowidRangeOptionPtr rowid_range_option = nullptr;
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;

@@ -116,7 +116,6 @@ public class OlapScanNode extends ScanNode {
     // The column names applied dict optimization
     // used for explain
     private final List<String> appliedDictStringColumns = new ArrayList<>();
-    private final List<String> unUsedOutputStringColumns = new ArrayList<>();
     // a bucket seq may map to many tablets, and each tablet has a TScanRangeLocations.
     public ArrayListMultimap<Integer, TScanRangeLocations> bucketSeq2locations = ArrayListMultimap.create();
     public List<Expr> prunedPartitionPredicates = Lists.newArrayList();
@@ -235,19 +234,6 @@ public class OlapScanNode extends ScanNode {
         for (SlotDescriptor slot : desc.getSlots()) {
             if (appliedColumnIds.contains(slot.getId().asInt())) {
                 appliedDictStringColumns.add(slot.getColumn().getName());
-            }
-        }
-    }
-
-    public void setUnUsedOutputStringColumns(Set<Integer> unUsedOutputColumnIds,
-                                             Set<String> aggOrPrimaryKeyTableValueColumnNames) {
-        for (SlotDescriptor slot : desc.getSlots()) {
-            if (!slot.isMaterialized()) {
-                continue;
-            }
-            if (unUsedOutputColumnIds.contains(slot.getId().asInt()) &&
-                    !aggOrPrimaryKeyTableValueColumnNames.contains(slot.getColumn().getName())) {
-                unUsedOutputStringColumns.add(slot.getColumn().getName());
             }
         }
     }
@@ -783,10 +769,6 @@ public class OlapScanNode extends ScanNode {
             }
             msg.lake_scan_node.setDict_string_id_to_int_ids(dictStringIdToIntIds);
 
-            if (!olapTable.hasDelete()) {
-                msg.lake_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
-            }
-
             if (!bucketExprs.isEmpty()) {
                 msg.lake_scan_node.setBucket_exprs(Expr.treesToThrift(bucketExprs));
             }
@@ -813,10 +795,6 @@ public class OlapScanNode extends ScanNode {
                         ConnectContext.get().getSessionVariable().getMaxParallelScanInstanceNum());
             }
             msg.olap_scan_node.setDict_string_id_to_int_ids(dictStringIdToIntIds);
-
-            if (!olapTable.hasDelete()) {
-                msg.olap_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
-            }
             msg.olap_scan_node.setSorted_by_keys_per_tablet(isSortedByKeyPerTablet);
 
             if (!bucketExprs.isEmpty()) {

@@ -134,7 +134,6 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.use_page_cache = params.use_page_cache;
     rs_opts.tablet_schema = _tablet_schema.get();
     rs_opts.global_dictmaps = params.global_dictmaps;
-    rs_opts.unused_output_column_ids = params.unused_output_column_ids;
     rs_opts.runtime_range_pruner = params.runtime_range_pruner;
     rs_opts.fill_data_cache = params.fill_data_cache;
     if (keys_type == KeysType::PRIMARY_KEYS) {
@@ -383,7 +382,6 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
 
     if (_collect_iter != nullptr) {
         RETURN_IF_ERROR(_collect_iter->init_encoded_schema(*params.global_dictmaps));
-        RETURN_IF_ERROR(_collect_iter->init_output_schema(*params.unused_output_column_ids));
     }
 
     return Status::OK();

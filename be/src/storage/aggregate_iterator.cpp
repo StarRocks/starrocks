@@ -70,15 +70,6 @@ public:
         return Status::OK();
     }
 
-    Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
-        ChunkIterator::init_output_schema(unused_output_column_ids);
-        RETURN_IF_ERROR(_child->init_output_schema(unused_output_column_ids));
-        _curr_chunk = ChunkHelper::new_chunk(output_schema(), _chunk_size);
-        _aggregator = std::make_unique<ChunkAggregator>(&output_schema(), _chunk_size, _pre_aggregate_factor / 100,
-                                                        _is_vertical_merge, _is_key);
-        return Status::OK();
-    }
-
 protected:
     Status do_get_next(Chunk* chunk) override { return do_get_next(chunk, nullptr); }
     Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override;

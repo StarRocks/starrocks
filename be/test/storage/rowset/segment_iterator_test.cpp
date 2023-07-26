@@ -154,9 +154,8 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
 
     auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
     chunk_iter->init_encoded_schema(dict_map);
-    chunk_iter->init_output_schema(std::unordered_set<uint32_t>());
 
-    auto res_chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), chunk_size);
+    auto res_chunk = ChunkHelper::new_chunk(chunk_iter->encoded_schema(), chunk_size);
 
     ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
     res_chunk->reset();
@@ -284,9 +283,8 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
 
     auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
     chunk_iter->init_encoded_schema(dict_map);
-    chunk_iter->init_output_schema(std::unordered_set<uint32_t>());
 
-    auto res_chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), chunk_size);
+    auto res_chunk = ChunkHelper::new_chunk(chunk_iter->encoded_schema(), chunk_size);
 
     ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
     res_chunk->reset();

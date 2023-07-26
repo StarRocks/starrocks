@@ -94,29 +94,6 @@ public:
         return Status::OK();
     }
 
-    virtual Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) {
-        if (_is_init_output_schema) {
-            return Status::OK();
-        }
-        for (const auto& field : encoded_schema().fields()) {
-            const auto cid = field->id();
-            if (!unused_output_column_ids.count(cid)) {
-                _output_schema.append(field);
-            }
-        }
-        DCHECK(_output_schema.num_fields() > 0);
-        _is_init_output_schema = true;
-        return Status::OK();
-    }
-
-    const Schema& output_schema() const {
-        if (_is_init_output_schema) {
-            return _output_schema;
-        } else {
-            return encoded_schema();
-        }
-    }
-
     int chunk_size() const { return _chunk_size; }
 
 protected:
@@ -134,8 +111,6 @@ protected:
 
     Schema _schema;
     Schema _encoded_schema;
-    Schema _output_schema;
-    bool _is_init_output_schema = false;
 
     int _chunk_size = DEFAULT_CHUNK_SIZE;
 };

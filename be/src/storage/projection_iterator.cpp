@@ -37,14 +37,6 @@ public:
         return _child->init_encoded_schema(dict_maps);
     }
 
-    Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
-        ChunkIterator::init_output_schema(unused_output_column_ids);
-        RETURN_IF_ERROR(_child->init_output_schema(unused_output_column_ids));
-        _index_map.clear();
-        build_index_map(this->_output_schema, _child->output_schema());
-        return Status::OK();
-    }
-
 protected:
     Status do_get_next(Chunk* chunk) override;
 
@@ -74,8 +66,8 @@ void ProjectionIterator::build_index_map(const Schema& output, const Schema& inp
 
 Status ProjectionIterator::do_get_next(Chunk* chunk) {
     if (_chunk == nullptr) {
-        DCHECK_GT(_child->output_schema().num_fields(), 0);
-        _chunk = ChunkHelper::new_chunk(_child->output_schema(), _chunk_size);
+        DCHECK_GT(_child->encoded_schema().num_fields(), 0);
+        _chunk = ChunkHelper::new_chunk(_child->encoded_schema(), _chunk_size);
     }
     _chunk->reset();
     Status st = _child->get_next(_chunk.get());

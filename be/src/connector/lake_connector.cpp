@@ -52,7 +52,6 @@ public:
 private:
     Status get_tablet(const TInternalScanRange& scan_range);
     Status init_global_dicts(TabletReaderParams* params);
-    Status init_unused_output_columns(const std::vector<std::string>& unused_output_columns);
     Status init_scanner_columns(std::vector<uint32_t>& scanner_columns);
     void decide_chunk_size(bool has_predicate);
     Status init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
@@ -89,13 +88,9 @@ private:
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
     std::shared_ptr<ChunkIterator> _prj_iter;
 
-    std::unordered_set<uint32_t> _unused_output_column_ids;
     // For release memory.
     using PredicatePtr = std::unique_ptr<ColumnPredicate>;
     std::vector<PredicatePtr> _predicate_free_pool;
-
-    // slot descriptors for each one of |output_columns|.
-    std::vector<SlotDescriptor*> _query_slots;
 
     // The following are profile meatures
     int64_t _num_rows_read = 0;
@@ -267,7 +262,7 @@ void LakeDataSource::close(RuntimeState* state) {
 }
 
 Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
-    chunk->reset(ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size(), true));
+    chunk->reset(ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), _runtime_state->chunk_size(), true));
     auto* chunk_ptr = chunk->get();
 
     do {
@@ -276,7 +271,7 @@ Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
 
         TRY_CATCH_ALLOC_SCOPE_START()
 
-        for (auto slot : _query_slots) {
+        for (auto slot : *_slots) {
             size_t column_index = chunk_ptr->schema()->get_field_index_by_name(slot->col_name());
             chunk_ptr->set_slot_id_to_index(slot->id(), column_index);
         }
@@ -330,21 +325,6 @@ Status LakeDataSource::init_global_dicts(TabletReaderParams* params) {
     return Status::OK();
 }
 
-Status LakeDataSource::init_unused_output_columns(const std::vector<std::string>& unused_output_columns) {
-    for (const auto& col_name : unused_output_columns) {
-        int32_t index = _tablet_schema->field_index(col_name);
-        if (index < 0) {
-            std::stringstream ss;
-            ss << "invalid field name: " << col_name;
-            LOG(WARNING) << ss.str();
-            return Status::InternalError(ss.str());
-        }
-        _unused_output_column_ids.insert(index);
-    }
-    _params.unused_output_column_ids = &_unused_output_column_ids;
-    return Status::OK();
-}
-
 Status LakeDataSource::init_scanner_columns(std::vector<uint32_t>& scanner_columns) {
     for (auto slot : *_slots) {
         DCHECK(slot->is_materialized());
@@ -356,9 +336,6 @@ Status LakeDataSource::init_scanner_columns(std::vector<uint32_t>& scanner_colum
             return Status::InternalError(ss.str());
         }
         scanner_columns.push_back(index);
-        if (!_unused_output_column_ids.count(index)) {
-            _query_slots.push_back(slot);
-        }
     }
     // Put key columns before non-key columns, as the `MergeIterator` and `AggregateIterator`
     // required.
@@ -447,7 +424,6 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
 }
 
 Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
-    const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
     // output columns of `this` OlapScanner, i.e, the final output columns of `get_chunk`.
     std::vector<uint32_t> scanner_columns;
     // columns fetched from |_reader|.
@@ -455,7 +431,6 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
 
     RETURN_IF_ERROR(get_tablet(_scan_range));
     RETURN_IF_ERROR(init_global_dicts(&_params));
-    RETURN_IF_ERROR(init_unused_output_columns(thrift_lake_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(init_scanner_columns(scanner_columns));
     RETURN_IF_ERROR(init_reader_params(_scanner_ranges, scanner_columns, reader_columns));
     starrocks::Schema child_schema = ChunkHelper::convert_schema(*_tablet_schema, reader_columns);
@@ -475,7 +450,6 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
 
     DCHECK(_params.global_dictmaps != nullptr);
     RETURN_IF_ERROR(_prj_iter->init_encoded_schema(*_params.global_dictmaps));
-    RETURN_IF_ERROR(_prj_iter->init_output_schema(*_params.unused_output_column_ids));
 
     RETURN_IF_ERROR(_reader->prepare());
     RETURN_IF_ERROR(_reader->open(_params));

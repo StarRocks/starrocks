@@ -37,12 +37,6 @@ public:
         return Status::OK();
     }
 
-    Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
-        ChunkIterator::init_output_schema(unused_output_column_ids);
-        _iter->init_output_schema(unused_output_column_ids);
-        return Status::OK();
-    }
-
 private:
     Status do_get_next(Chunk* chunk) override {
         SCOPED_RAW_TIMER(&_cost);
