@@ -315,7 +315,7 @@ public class AlterJobMgr {
                     if (materializedView.isActive()) {
                         return;
                     }
-                    processChangeMaterializedViewStatus(materializedView, status);
+                    processChangeMaterializedViewStatus(materializedView, status, false);
                     GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .refreshMaterializedView(dbName, materializedView.getName(), true, null,
                                     Constants.TaskRunPriority.NORMAL.value(), true, false);
@@ -326,7 +326,7 @@ public class AlterJobMgr {
                     LOG.warn("Setting the materialized view {}({}) to inactive because " +
                                     "user alter materialized view status to inactive",
                             materializedView.getName(), materializedView.getId());
-                    processChangeMaterializedViewStatus(materializedView, status);
+                    processChangeMaterializedViewStatus(materializedView, status, false);
                 } else {
                     throw new DdlException("Unsupported modification materialized view status:" + status);
                 }
@@ -344,8 +344,12 @@ public class AlterJobMgr {
         }
     }
 
+<<<<<<< HEAD
     private void processChangeMaterializedViewStatus(MaterializedView materializedView, String status) {
 
+=======
+    private void processChangeMaterializedViewStatus(MaterializedView materializedView, String status, boolean isReplay) {
+>>>>>>> fc1d7a6987 ([BugFix] Fix bug replay failed when check base mv active (#27959))
         if (AlterMaterializedViewStmt.ACTIVE.equalsIgnoreCase(status)) {
             String viewDefineSql = materializedView.getViewDefineSql();
             ConnectContext context = new ConnectContext();
@@ -363,15 +367,37 @@ public class AlterJobMgr {
                         "\n\nCause an error: " + e.getMessage());
             }
 
+<<<<<<< HEAD
             Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllConnectorTableAndView(queryStatement);
             List<BaseTableInfo> baseTableInfos = MaterializedViewAnalyzer.getBaseTableInfos(tableNameTableMap);
+=======
+            // Skip checks to maintain eventual consistency when replay
+            List<BaseTableInfo> baseTableInfos = MaterializedViewAnalyzer.getBaseTableInfos(queryStatement, !isReplay);
+>>>>>>> fc1d7a6987 ([BugFix] Fix bug replay failed when check base mv active (#27959))
             materializedView.setBaseTableInfos(baseTableInfos);
             materializedView.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
             GlobalStateMgr.getCurrentState().updateBaseTableRelatedMv(materializedView.getDbId(),
                     materializedView, baseTableInfos);
             materializedView.setActive(true);
         } else if (AlterMaterializedViewStmt.INACTIVE.equalsIgnoreCase(status)) {
+<<<<<<< HEAD
             materializedView.setActive(false);
+=======
+            materializedView.setInactiveAndReason("user use alter materialized view set status to inactive");
+        }
+    }
+
+    public void replayAlterMaterializedViewStatus(AlterMaterializedViewStatusLog log) {
+        long dbId = log.getDbId();
+        long tableId = log.getTableId();
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        db.writeLock();
+        try {
+            MaterializedView mv = (MaterializedView) db.getTable(tableId);
+            processChangeMaterializedViewStatus(mv, log.getStatus(), true);
+        } finally {
+            db.writeUnlock();
+>>>>>>> fc1d7a6987 ([BugFix] Fix bug replay failed when check base mv active (#27959))
         }
     }
 

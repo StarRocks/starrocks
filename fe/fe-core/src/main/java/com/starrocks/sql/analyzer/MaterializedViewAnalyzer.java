@@ -126,6 +126,7 @@ public class MaterializedViewAnalyzer {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
     }
 
+<<<<<<< HEAD
     public static List<BaseTableInfo> getBaseTableInfos(Map<TableName, Table> tableNameTableMap) {
         List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
 
@@ -143,6 +144,41 @@ public class MaterializedViewAnalyzer {
                         "Create materialized view from inactive materialized view: " + table.getName());
             }
             if (isExternalTableFromResource(table)) {
+=======
+    public static List<BaseTableInfo> getBaseTableInfos(QueryStatement queryStatement, boolean withCheck) {
+        List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
+        processBaseTables(queryStatement, baseTableInfos, withCheck);
+        Set<BaseTableInfo> baseTableInfoSet = Sets.newHashSet(baseTableInfos);
+        baseTableInfos.clear();
+        baseTableInfos.addAll(baseTableInfoSet);
+        return baseTableInfos;
+    }
+
+    private static void processBaseTables(QueryStatement queryStatement, List<BaseTableInfo> baseTableInfos,
+                                          boolean withCheck) {
+        Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllConnectorTableAndView(queryStatement);
+        for (Map.Entry<TableName, Table> entry : tableNameTableMap.entrySet()) {
+            TableName tableNameInfo = entry.getKey();
+            Table table = entry.getValue();
+            if (withCheck) {
+                Preconditions.checkState(table != null, "Materialized view base table is null");
+                if (!isSupportBasedOnTable(table)) {
+                    throw new SemanticException("Create/Rebuild materialized view do not support the table type: " +
+                            table.getType(), tableNameInfo.getPos());
+                }
+                if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
+                    throw new SemanticException(
+                            "Create/Rebuild materialized view from inactive materialized view: " + table.getName(),
+                            tableNameInfo.getPos());
+                }
+            }
+
+            if (table.isView()) {
+                continue;
+            }
+
+            if (!FeConstants.isReplayFromQueryDump && isExternalTableFromResource(table)) {
+>>>>>>> fc1d7a6987 ([BugFix] Fix bug replay failed when check base mv active (#27959))
                 throw new SemanticException(
                         "Only supports creating materialized views based on the external table " +
                                 "which created by catalog");
@@ -156,8 +192,14 @@ public class MaterializedViewAnalyzer {
                 baseTableInfos.add(new BaseTableInfo(tableNameInfo.getCatalog(),
                         tableNameInfo.getDb(), table.getTableIdentifier()));
             }
+<<<<<<< HEAD
         });
         return baseTableInfos;
+=======
+            baseTableInfos.add(BaseTableInfo.fromTableName(tableNameInfo, table));
+        }
+        processViews(queryStatement, baseTableInfos, withCheck);
+>>>>>>> fc1d7a6987 ([BugFix] Fix bug replay failed when check base mv active (#27959))
     }
 
     private static boolean isSupportBasedOnTable(Table table) {
@@ -182,6 +224,24 @@ public class MaterializedViewAnalyzer {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private static void processViews(QueryStatement queryStatement, List<BaseTableInfo> baseTableInfos,
+                                     boolean withCheck) {
+        List<ViewRelation> viewRelations = AnalyzerUtils.collectViewRelations(queryStatement);
+        if (viewRelations.isEmpty()) {
+            return;
+        }
+        Set<ViewRelation> viewRelationSet = Sets.newHashSet(viewRelations);
+        for (ViewRelation viewRelation : viewRelationSet) {
+            // base tables of view
+            processBaseTables(viewRelation.getQueryStatement(), baseTableInfos, withCheck);
+
+            // view itself is considered as base-table
+            baseTableInfos.add(BaseTableInfo.fromTableName(viewRelation.getName(), viewRelation.getView()));
+        }
+    }
+>>>>>>> fc1d7a6987 ([BugFix] Fix bug replay failed when check base mv active (#27959))
 
     static class MaterializedViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
 
@@ -252,7 +312,7 @@ public class MaterializedViewAnalyzer {
             if (db == null) {
                 throw new SemanticException("Can not find database:" + statement.getTableName().getDb());
             }
-            List<BaseTableInfo> baseTableInfos = getAndCheckBaseTables(queryStatement);
+            List<BaseTableInfo> baseTableInfos = getBaseTableInfos(queryStatement, true);
             // now do not support empty base tables
             // will be relaxed after test
             if (baseTableInfos.isEmpty()) {
