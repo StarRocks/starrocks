@@ -82,6 +82,7 @@ public class FileTableScanNode extends ScanNode {
             hdfsScanRange.setOffset(blockDesc.getOffset());
             hdfsScanRange.setLength(blockDesc.getLength());
             hdfsScanRange.setFile_length(file.getLength());
+            hdfsScanRange.setModification_time(file.getModificationTime());
             hdfsScanRange.setFile_format(fileTable.getFileFormat().toThrift());
             TScanRange scanRange = new TScanRange();
             scanRange.setHdfs_scan_range(hdfsScanRange);
@@ -192,4 +193,13 @@ public class FileTableScanNode extends ScanNode {
     public boolean canUsePipeLine() {
         return true;
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Override
+    public boolean canUseRuntimeAdaptiveDop() {
+        return true;
+    }
+}
+>>>>>>> c45aff1aa5 ([Enhancement] Encode file modification time to data cache key. (#27755))
