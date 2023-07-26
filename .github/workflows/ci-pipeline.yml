@@ -26,7 +26,7 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
       CODE_PATH: ${{ github.workspace }}
-      BRANCH: ${{steps.branch.outputs.branch}}
+      BRANCH: ${{ github.base_ref }}
     steps:
 
       - name: upload info
@@ -444,7 +444,7 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
       CODE_PATH: ${{ github.workspace }}
-      BRANCH: ${{steps.branch.outputs.branch}}
+      BRANCH: ${{ github.base_ref }}
     steps:
       - name: clean
         run: |
