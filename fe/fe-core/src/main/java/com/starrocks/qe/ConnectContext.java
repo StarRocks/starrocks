@@ -41,6 +41,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SetVar;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
@@ -159,7 +160,7 @@ public class ConnectContext {
     // used to set mysql result package
     protected boolean isLastStmt;
     // set true when user dump query through HTTP
-    protected boolean isQueryDump = false;
+    protected boolean isHTTPQueryDump = false;
 
     protected boolean isStatisticsConnection = false;
 
@@ -169,6 +170,7 @@ public class ConnectContext {
     protected Set<Long> currentSqlDbIds = Sets.newHashSet();
 
     protected PlannerProfile plannerProfile;
+    protected StatementBase.ExplainLevel explainLevel;
 
     protected TWorkGroup resourceGroup;
 
@@ -213,7 +215,6 @@ public class ConnectContext {
         userVariables = new HashMap<>();
         command = MysqlCommand.COM_SLEEP;
         queryDetail = null;
-        dumpInfo = new QueryDumpInfo(sessionVariable);
         plannerProfile = new PlannerProfile();
         plannerProfile.init(this);
 
@@ -223,6 +224,10 @@ public class ConnectContext {
         }
 
         this.sslContext = sslContext;
+
+        if (shouldDumpQuery()) {
+            this.dumpInfo = new QueryDumpInfo(this);
+        }
     }
 
     public long getStmtId() {
@@ -516,12 +521,16 @@ public class ConnectContext {
         this.isLastStmt = isLastStmt;
     }
 
-    public void setIsQueryDump(boolean isQueryDump) {
-        this.isQueryDump = isQueryDump;
+    public void setIsHTTPQueryDump(boolean isHTTPQueryDump) {
+        this.isHTTPQueryDump = isHTTPQueryDump;
     }
 
-    public boolean isQueryDump() {
-        return this.isQueryDump;
+    public boolean isHTTPQueryDump() {
+        return isHTTPQueryDump;
+    }
+
+    public boolean shouldDumpQuery() {
+        return this.isHTTPQueryDump || sessionVariable.getEnableQueryDump();
     }
 
     public DumpInfo getDumpInfo() {
@@ -542,6 +551,14 @@ public class ConnectContext {
 
     public PlannerProfile getPlannerProfile() {
         return plannerProfile;
+    }
+
+    public StatementBase.ExplainLevel getExplainLevel() {
+        return explainLevel;
+    }
+
+    public void setExplainLevel(StatementBase.ExplainLevel explainLevel) {
+        this.explainLevel = explainLevel;
     }
 
     public TWorkGroup getResourceGroup() {

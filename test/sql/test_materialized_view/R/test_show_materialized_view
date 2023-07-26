@@ -1,0 +1,82 @@
+-- name: test_show_materialized_view
+create database test_show_materialized_view;
+-- result:
+-- !result
+use test_show_materialized_view;
+-- result:
+-- !result
+create table user_tags (time date, user_id int, user_name varchar(20), tag_id int) partition by range (time)  (partition p1 values less than MAXVALUE) distributed by hash(time) buckets 3 properties('replication_num' = '1');
+-- result:
+-- !result
+create materialized view user_tags_mv1  distributed by hash(user_id) as select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;
+-- result:
+-- !result
+show create materialized view user_tags_mv1;
+-- result:
+user_tags_mv1	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
+DISTRIBUTED BY HASH(`user_id`)
+REFRESH MANUAL
+PROPERTIES (
+"replication_num" = "1",
+"replicated_storage" = "true",
+"storage_medium" = "HDD"
+)
+AS SELECT `user_tags`.`user_id`, bitmap_union(to_bitmap(`user_tags`.`tag_id`)) AS `bitmap_union(to_bitmap(tag_id))`
+FROM `test_show_materialized_view`.`user_tags`
+GROUP BY `user_tags`.`user_id`;
+-- !result
+show create table user_tags_mv1;
+-- result:
+user_tags_mv1	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
+DISTRIBUTED BY HASH(`user_id`)
+REFRESH MANUAL
+PROPERTIES (
+"replication_num" = "1",
+"replicated_storage" = "true",
+"storage_medium" = "HDD"
+)
+AS SELECT `user_tags`.`user_id`, bitmap_union(to_bitmap(`user_tags`.`tag_id`)) AS `bitmap_union(to_bitmap(tag_id))`
+FROM `test_show_materialized_view`.`user_tags`
+GROUP BY `user_tags`.`user_id`;
+-- !result
+alter materialized view user_tags_mv1 set ("session.query_timeout" = "3600");
+-- result:
+-- !result
+alter materialized view user_tags_mv1 set ("mv_rewrite_staleness_second" = "3600");
+-- result:
+-- !result
+show create materialized view user_tags_mv1;
+-- result:
+user_tags_mv1	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
+DISTRIBUTED BY HASH(`user_id`)
+REFRESH MANUAL
+PROPERTIES (
+"replication_num" = "1",
+"replicated_storage" = "true",
+"mv_rewrite_staleness_second" = "3600",
+"storage_medium" = "HDD",
+"session.query_timeout" = "3600"
+)
+AS SELECT `user_tags`.`user_id`, bitmap_union(to_bitmap(`user_tags`.`tag_id`)) AS `bitmap_union(to_bitmap(tag_id))`
+FROM `test_show_materialized_view`.`user_tags`
+GROUP BY `user_tags`.`user_id`;
+-- !result
+show create table user_tags_mv1;
+-- result:
+user_tags_mv1	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
+DISTRIBUTED BY HASH(`user_id`)
+REFRESH MANUAL
+PROPERTIES (
+"replication_num" = "1",
+"replicated_storage" = "true",
+"mv_rewrite_staleness_second" = "3600",
+"storage_medium" = "HDD",
+"session.query_timeout" = "3600"
+)
+AS SELECT `user_tags`.`user_id`, bitmap_union(to_bitmap(`user_tags`.`tag_id`)) AS `bitmap_union(to_bitmap(tag_id))`
+FROM `test_show_materialized_view`.`user_tags`
+GROUP BY `user_tags`.`user_id`;
+-- !result
+drop database test_show_materialized_view;
+-- result:
+-- !result

@@ -46,6 +46,7 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
+import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
@@ -219,10 +220,10 @@ public class MaterializedViewAnalyzer {
             if (CollectionUtils.isEmpty(selectRelations)) {
                 throw new SemanticException("Materialized view query statement must contain at least one select");
             }
-            for (SelectRelation selectRelation : selectRelations) {
-                // check alias except * and SlotRef
-                validateSelectItem(selectRelation.getSelectList());
-            }
+
+            // analyze query statement, can check whether tables and columns exist in catalog
+            Analyzer.analyze(queryStatement, context);
+            AnalyzerUtils.checkNondeterministicFunction(queryStatement);
 
             // analyze query statement, can check whether tables and columns exist in catalog
             Analyzer.analyze(queryStatement, context);
@@ -243,15 +244,17 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("Can not find base table in query statement");
             }
             statement.setBaseTableInfos(baseTableInfos);
-            Map<Column, Expr> columnExprMap = Maps.newHashMap();
-            Map<TableName, Table> aliasTableMap = getAllBaseTables(queryStatement, context);
 
-            planMVQuery(statement, queryStatement, context);
-
-            // get outputExpressions and convert it to columns which in selectRelation
             // set the columns into createMaterializedViewStatement
-            // record the relationship between columns and outputExpressions for next check
-            genColumnAndSetIntoStmt(statement, selectRelations.get(0), columnExprMap);
+            List<Column> mvColumns = genMaterializedViewColumns(statement);
+            statement.setMvColumnItems(mvColumns);
+
+            Map<TableName, Table> aliasTableMap = getAllBaseTables(queryStatement, context);
+            Map<Column, Expr> columnExprMap = Maps.newHashMap();
+            List<Expr> outputExpressions = queryStatement.getQueryRelation().getOutputExpression();
+            for (int i = 0; i < outputExpressions.size(); ++i) {
+                columnExprMap.put(mvColumns.get(i), outputExpressions.get(i));
+            }
             // some check if partition exp exists
             if (statement.getPartitionExpDesc() != null) {
                 // check partition expression all in column list and
@@ -417,22 +420,34 @@ public class MaterializedViewAnalyzer {
             }
         }
 
-        private void genColumnAndSetIntoStmt(CreateMaterializedViewStatement statement, QueryRelation queryRelation,
-                                             Map<Column, Expr> columnExprMap) {
-            List<Column> mvColumns = Lists.newArrayList();
+        private List<Column> genMaterializedViewColumns(CreateMaterializedViewStatement statement) {
             List<String> columnNames = statement.getQueryStatement().getQueryRelation()
                     .getRelationFields().getAllFields().stream()
                     .map(Field::getName).collect(Collectors.toList());
             Scope queryScope = statement.getQueryStatement().getQueryRelation().getScope();
             List<Field> relationFields = queryScope.getRelationFields().getAllFields();
-            List<Expr> outputExpression = queryRelation.getOutputExpression();
+            List<Column> mvColumns = Lists.newArrayList();
+
             for (int i = 0; i < relationFields.size(); ++i) {
                 Type type = AnalyzerUtils.transformTypeForMv(relationFields.get(i).getType());
                 Column column = new Column(columnNames.get(i), type, relationFields.get(i).isNullable());
                 // set default aggregate type, look comments in class Column
                 column.setAggregationType(AggregateType.NONE, false);
                 mvColumns.add(column);
-                columnExprMap.put(column, outputExpression.get(i));
+            }
+
+            if (statement.getColWithComments() != null) {
+                List<ColWithComment> colWithComments = statement.getColWithComments();
+                if (colWithComments.size() != mvColumns.size()) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_VIEW_WRONG_LIST);
+                }
+                for (int i = 0; i < colWithComments.size(); ++i) {
+                    Column column = mvColumns.get(i);
+                    ColWithComment colWithComment = colWithComments.get(i);
+                    colWithComment.analyze();
+                    column.setName(colWithComment.getColName());
+                    column.setComment(colWithComment.getComment());
+                }
             }
             // set duplicate key
             int theBeginIndexOfValue = 0;
@@ -464,7 +479,7 @@ public class MaterializedViewAnalyzer {
             if (theBeginIndexOfValue == 0) {
                 throw new SemanticException("Data type of first column cannot be " + mvColumns.get(0).getType());
             }
-            statement.setMvColumnItems(mvColumns);
+            return mvColumns;
         }
 
         private void checkExpInColumn(CreateMaterializedViewStatement statement,

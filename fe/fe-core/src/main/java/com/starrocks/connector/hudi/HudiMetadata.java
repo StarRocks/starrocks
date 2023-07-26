@@ -147,8 +147,10 @@ public class HudiMetadata implements ConnectorMetadata {
         }
 
         Preconditions.checkState(columns.size() == statistics.getColumnStatistics().size());
-        for (ColumnRefOperator column : columns) {
-            session.getDumpInfo().addTableStatistics(table, column.getName(), statistics.getColumnStatistic(column));
+        if (session.getDumpInfo() != null) {
+            for (ColumnRefOperator column : columns) {
+                session.getDumpInfo().addTableStatistics(table, column.getName(), statistics.getColumnStatistic(column));
+            }
         }
 
         return statistics;

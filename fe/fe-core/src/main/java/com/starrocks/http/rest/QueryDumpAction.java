@@ -77,7 +77,7 @@ public class QueryDumpAction extends RestBaseAction {
             }
             context.setDatabase(db.getFullName());
         }
-        context.setIsQueryDump(true);
+        context.setIsHTTPQueryDump(true);
 
         String query = request.getContent();
         if (Strings.isNullOrEmpty(query)) {
