@@ -74,11 +74,12 @@ import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.Coordinator;
+import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ColumnSeparator;
@@ -828,6 +829,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     public void prepare() throws UserException {
     }
 
+    private Coordinator.Factory getCoordinatorFactory() {
+        return new DefaultCoordinator.Factory();
+    }
+
     public TExecPlanFragmentParams plan(TUniqueId loadId, long txnId, String label) throws UserException {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
@@ -855,7 +860,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 streamLoadTask.setTUniqueId(loadId);
                 streamLoadManager.addLoadTask(streamLoadTask);
 
-                Coordinator coord = new Coordinator(planner, planParams.getCoord());
+                Coordinator coord =
+                        getCoordinatorFactory().createSyncStreamLoadScheduler(planner, planParams.getCoord());
                 streamLoadTask.setCoordinator(coord);
 
                 QeProcessorImpl.INSTANCE.registerQuery(loadId, coord);

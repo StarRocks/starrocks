@@ -1326,6 +1326,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return queryTimeoutS;
     }
 
+    public void setQueryDeliveryTimeoutS(int queryDeliveryTimeoutS) {
+        this.queryDeliveryTimeoutS = queryDeliveryTimeoutS;
+    }
+
+    public int getQueryDeliveryTimeoutS() {
+        return queryDeliveryTimeoutS;
+    }
+
     public boolean isEnableProfile() {
         return enableProfile;
     }
@@ -1696,6 +1704,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public float getGlobalRuntimeFilterProbeMinSelectivity() {
         return globalRuntimeFilterProbeMinSelectivity;
+    }
+
+    public void setEnableDeliverBatchFragments(boolean enableDeliverBatchFragments) {
+        this.enableDeliverBatchFragments = enableDeliverBatchFragments;
     }
 
     public boolean isEnableDeliverBatchFragments() {

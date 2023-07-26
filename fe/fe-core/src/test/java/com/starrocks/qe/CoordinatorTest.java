@@ -62,7 +62,7 @@ import static com.starrocks.qe.ColocatedBackendSelector.BucketSeqToScanRange;
 
 public class CoordinatorTest extends PlanTestBase {
     ConnectContext ctx;
-    Coordinator coordinator;
+    DefaultCoordinator coordinator;
     CoordinatorPreprocessor coordinatorPreprocessor;
 
     @Before
@@ -71,7 +71,8 @@ public class CoordinatorTest extends PlanTestBase {
         ctx.setExecutionId(new TUniqueId(0xdeadbeef, 0xdeadbeef));
         ConnectContext.threadLocalInfo.set(ctx);
 
-        coordinator = new Coordinator(ctx, Lists.newArrayList(), Lists.newArrayList(), new TDescriptorTable());
+        coordinator = new DefaultCoordinator.Factory().createQueryScheduler(ctx, Lists.newArrayList(), Lists.newArrayList(),
+                new TDescriptorTable());
         coordinatorPreprocessor = coordinator.getPrepareInfo();
     }
 
