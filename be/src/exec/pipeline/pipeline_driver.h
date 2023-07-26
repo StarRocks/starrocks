@@ -472,6 +472,7 @@ protected:
     // Update metrics when the driver yields.
     void _update_driver_acct(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);
     void _update_statistics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);
+    void _update_scan_statistics();
     void _update_overhead_timer();
 
     RuntimeState* _runtime_state = nullptr;
