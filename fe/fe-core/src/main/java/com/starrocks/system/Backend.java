@@ -60,7 +60,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * This class extends the primary identifier of a Backend with ephemeral state,
- * eg usage information, current administrative state etc.
+ * e.g. usage information, current administrative state etc.
  */
 public class Backend extends ComputeNode {
 
@@ -76,8 +76,8 @@ public class Backend extends ComputeNode {
     @SerializedName(value = "d")
     private volatile ConcurrentHashMap<String, DiskInfo> disksRef;
 
-    // This is used for the first time we init pathHashToDishInfo in SystemInfoService.
-    // after init it, this variable is set to true.
+    // This is used for the first time we initiate pathHashToDishInfo in SystemInfoService.
+    // after initiating it, this variable is set to true.
     private boolean initPathInfo = false;
 
     // the max tablet compaction score of this backend.
@@ -414,7 +414,7 @@ public class Backend extends ComputeNode {
      * BackendStatus status = Backend.getBackendStatus();
      * status.newItem = xxx;
      */
-    public class BackendStatus {
+    public static class BackendStatus {
         // this will be output as json, so not using FeConstants.null_string;
         public String lastSuccessReportTabletsTime = "N/A";
     }

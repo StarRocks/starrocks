@@ -216,7 +216,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                                 "Commit failed. txn: %d table: %s tablet: %d quorum: %d<%d errorReplicas: %s commitBackends: %s",
                                 txnState.getTransactionId(), table.getName(), tablet.getId(), successReplicaNum,
                                 quorumReplicaNum,
-                                failedReplicaInfoSB.toString(),
+                                failedReplicaInfoSB,
                                 commitBackends == null ? "" : commitBackends.toString());
                         LOG.warn(msg);
                         throw new TabletQuorumFailedException(msg);
