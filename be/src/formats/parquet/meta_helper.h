@@ -76,13 +76,13 @@ protected:
     }
 
     bool _case_sensitive = false;
-    std::shared_ptr<FileMetaData> _file_metadata;
+    FileMetaData* _file_metadata;
 };
 
 class ParquetMetaHelper : public MetaHelper {
 public:
-    ParquetMetaHelper(std::shared_ptr<FileMetaData> file_metadata, bool case_sensitive) {
-        _file_metadata = std::move(file_metadata);
+    ParquetMetaHelper(FileMetaData* file_metadata, bool case_sensitive) {
+        _file_metadata = file_metadata;
         _case_sensitive = case_sensitive;
     }
     ~ParquetMetaHelper() override = default;
@@ -100,9 +100,9 @@ public:
 
 class IcebergMetaHelper : public MetaHelper {
 public:
-    IcebergMetaHelper(std::shared_ptr<FileMetaData> file_metadata, bool case_sensitive,
+    IcebergMetaHelper(FileMetaData* file_metadata, bool case_sensitive,
                       const TIcebergSchema* t_iceberg_schema) {
-        _file_metadata = std::move(file_metadata);
+        _file_metadata = file_metadata;
         _case_sensitive = case_sensitive;
         _t_iceberg_schema = t_iceberg_schema;
         DCHECK(_t_iceberg_schema != nullptr);
