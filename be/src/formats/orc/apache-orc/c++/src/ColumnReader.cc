@@ -1170,6 +1170,7 @@ public:
     void lazyLoadNextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
 
 private:
+    uint64_t doSkip(uint64_t numValues, bool isLazyLoad);
     template <bool encoded, bool lazyLoad>
     void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull);
 };
@@ -1191,7 +1192,7 @@ ListColumnReader::~ListColumnReader() {
     // PASS
 }
 
-uint64_t ListColumnReader::skip(uint64_t numValues) {
+uint64_t ListColumnReader::doSkip(uint64_t numValues, bool isLazyLoad) {
     numValues = ColumnReader::skip(numValues);
     ColumnReader* childReader = child.get();
     if (childReader) {
@@ -1207,34 +1208,23 @@ uint64_t ListColumnReader::skip(uint64_t numValues) {
             }
             lengthsRead += chunk;
         }
-        childReader->skip(childrenElements);
+        if (isLazyLoad) {
+            childReader->lazyLoadSkip(childrenElements);
+        } else {
+            childReader->skip(childrenElements);
+        }
     } else {
         rle->skip(numValues);
     }
     return numValues;
 }
 
+uint64_t ListColumnReader::skip(uint64_t numValues) {
+    return doSkip(numValues, false);
+}
+
 void ListColumnReader::lazyLoadSkip(uint64_t numValues) {
-    // duplicate code
-    numValues = ColumnReader::skip(numValues);
-    ColumnReader* childReader = child.get();
-    if (childReader) {
-        const uint64_t BUFFER_SIZE = 1024;
-        int64_t buffer[BUFFER_SIZE];
-        uint64_t childrenElements = 0;
-        uint64_t lengthsRead = 0;
-        while (lengthsRead < numValues) {
-            uint64_t chunk = std::min(numValues - lengthsRead, BUFFER_SIZE);
-            rle->next(buffer, chunk, nullptr);
-            for (size_t i = 0; i < chunk; ++i) {
-                childrenElements += static_cast<size_t>(buffer[i]);
-            }
-            lengthsRead += chunk;
-        }
-        childReader->lazyLoadSkip(childrenElements);
-    } else {
-        rle->skip(numValues);
-    }
+    doSkip(numValues, true);
 }
 
 void ListColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
@@ -1337,6 +1327,7 @@ public:
     void lazyLoadNextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
 
 private:
+    uint64_t doSkip(uint64_t numValues, bool isLazyLoad);
     template <bool encoded, bool lazyLoad>
     void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull);
 };
@@ -1362,7 +1353,7 @@ MapColumnReader::~MapColumnReader() {
     // PASS
 }
 
-uint64_t MapColumnReader::skip(uint64_t numValues) {
+uint64_t MapColumnReader::doSkip(uint64_t numValues, bool isLazyLoad) {
     numValues = ColumnReader::skip(numValues);
     ColumnReader* rawKeyReader = keyReader.get();
     ColumnReader* rawElementReader = elementReader.get();
@@ -1380,10 +1371,18 @@ uint64_t MapColumnReader::skip(uint64_t numValues) {
             lengthsRead += chunk;
         }
         if (rawKeyReader) {
-            rawKeyReader->skip(childrenElements);
+            if (isLazyLoad) {
+                rawKeyReader->lazyLoadSkip(childrenElements);
+            } else {
+                rawKeyReader->skip(childrenElements);
+            }
         }
         if (rawElementReader) {
-            rawElementReader->skip(childrenElements);
+            if (isLazyLoad) {
+                rawElementReader->lazyLoadSkip(childrenElements);
+            } else {
+                rawElementReader->skip(childrenElements);
+            }
         }
     } else {
         rle->skip(numValues);
@@ -1391,33 +1390,12 @@ uint64_t MapColumnReader::skip(uint64_t numValues) {
     return numValues;
 }
 
+uint64_t MapColumnReader::skip(uint64_t numValues) {
+    doSkip(numValues, false);
+}
+
 void MapColumnReader::lazyLoadSkip(uint64_t numValues) {
-    // duplicate code
-    numValues = ColumnReader::skip(numValues);
-    ColumnReader* rawKeyReader = keyReader.get();
-    ColumnReader* rawElementReader = elementReader.get();
-    if (rawKeyReader || rawElementReader) {
-        const uint64_t BUFFER_SIZE = 1024;
-        int64_t buffer[BUFFER_SIZE];
-        uint64_t childrenElements = 0;
-        uint64_t lengthsRead = 0;
-        while (lengthsRead < numValues) {
-            uint64_t chunk = std::min(numValues - lengthsRead, BUFFER_SIZE);
-            rle->next(buffer, chunk, nullptr);
-            for (size_t i = 0; i < chunk; ++i) {
-                childrenElements += static_cast<size_t>(buffer[i]);
-            }
-            lengthsRead += chunk;
-        }
-        if (rawKeyReader) {
-            rawKeyReader->lazyLoadSkip(childrenElements);
-        }
-        if (rawElementReader) {
-            rawElementReader->lazyLoadSkip(childrenElements);
-        }
-    } else {
-        rle->skip(numValues);
-    }
+    doSkip(numValues, true);
 }
 
 
