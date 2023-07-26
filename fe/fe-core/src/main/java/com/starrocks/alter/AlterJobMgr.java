@@ -1003,7 +1003,7 @@ public class AlterJobMgr {
         }
     }
 
-    public void processAlterView(AlterViewStmt stmt, ConnectContext ctx) throws UserException {
+    public void processAlterView(AlterViewStmt stmt, ConnectContext ctx) throws DdlException {
         TableName dbTableName = stmt.getTableName();
         String dbName = dbTableName.getDb();
 
