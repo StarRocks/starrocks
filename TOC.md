@@ -39,7 +39,8 @@
     + [主键模型](/table_design/table_types/primary_key_table.md)
   + 数据分布
     + [数据分布](/table_design/Data_distribution.md)
-    + [自动创建分区](/table_design/automatic_partitioning.md)
+    + [表达式分区](/table_design/expression_partitioning.md)
+    + [List 分区](/table_design/list_partitioning.md)
     + [动态分区](/table_design/dynamic_partitioning.md)
     + [临时分区](/table_design/Temporary_partition.md)
   + [数据压缩](/table_design/data_compression.md)
