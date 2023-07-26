@@ -18,6 +18,7 @@ package com.starrocks.qe;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Config;
 import com.starrocks.proto.PPlanFragmentCancelReason;
+import com.starrocks.thrift.TUniqueId;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -30,14 +31,14 @@ import java.util.concurrent.TimeUnit;
 public class CoordinatorMonitorTest {
 
     @Test
-    public void testDeadBackendAndComputeNodeChecker(@Mocked Coordinator coord1,
-                                                     @Mocked Coordinator coord2,
-                                                     @Mocked Coordinator coord3) throws InterruptedException {
+    public void testDeadBackendAndComputeNodeChecker(@Mocked DefaultCoordinator coord1,
+                                                     @Mocked DefaultCoordinator coord2,
+                                                     @Mocked DefaultCoordinator coord3) throws InterruptedException {
         int prevHeartbeatTimeout = Config.heartbeat_timeout_second;
         Config.heartbeat_timeout_second = 1;
 
         try {
-            List<Coordinator> coordinators = ImmutableList.of(coord1, coord2, coord3);
+            List<DefaultCoordinator> coordinators = ImmutableList.of(coord1, coord2, coord3);
 
             final QeProcessor qeProcessor = QeProcessorImpl.INSTANCE;
 
@@ -46,6 +47,24 @@ public class CoordinatorMonitorTest {
                 {
                     qeProcessor.getCoordinators();
                     result = coordinators;
+                }
+
+                {
+                    coord1.getQueryId();
+                    result = new TUniqueId();
+                    minTimes = 0;
+                }
+
+                {
+                    coord2.getQueryId();
+                    result = new TUniqueId();
+                    minTimes = 0;
+                }
+
+                {
+                    coord3.getQueryId();
+                    result = new TUniqueId();
+                    minTimes = 0;
                 }
 
                 {

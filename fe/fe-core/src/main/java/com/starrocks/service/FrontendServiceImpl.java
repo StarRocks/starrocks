@@ -112,11 +112,12 @@ import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
-import com.starrocks.qe.Coordinator;
+import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
@@ -1492,6 +1493,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return result;
     }
 
+    private Coordinator.Factory getCoordinatorFactory() {
+        return new DefaultCoordinator.Factory();
+    }
+
     private TExecPlanFragmentParams streamLoadPutImpl(TStreamLoadPutRequest request) throws UserException {
         String cluster = request.getCluster();
         if (Strings.isNullOrEmpty(cluster)) {
@@ -1535,7 +1540,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
                 streamLoadTask.setTUniqueId(request.getLoadId());
 
-                Coordinator coord = new Coordinator(planner, getClientAddr());
+                Coordinator coord = getCoordinatorFactory().createSyncStreamLoadScheduler(planner, getClientAddr());
                 streamLoadTask.setCoordinator(coord);
 
                 QeProcessorImpl.INSTANCE.registerQuery(streamLoadInfo.getId(), coord);
