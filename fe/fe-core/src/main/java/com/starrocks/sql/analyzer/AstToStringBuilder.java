@@ -328,8 +328,21 @@ public class AstToStringBuilder {
         @Override
         public String visitCreateRoutineLoadStatement(CreateRoutineLoadStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
-            sb.append("CREATE ROUTINE LOAD ").append(stmt.getDBName()).append(".")
-                    .append(stmt.getName()).append(" ON ").append(stmt.getTableName());
+            String dbName;
+            String jobName;
+            if (stmt.getLabelName() != null) {
+                dbName = stmt.getLabelName().getDbName();
+                jobName = stmt.getLabelName().getLabelName();
+            } else {
+                dbName = stmt.getDBName();
+                jobName = stmt.getName();
+            }
+            if (dbName != null) {
+                sb.append("CREATE ROUTINE LOAD ").append(dbName).append(".")
+                    .append(jobName).append(" ON ").append(stmt.getTableName());
+            } else {
+                sb.append("CREATE ROUTINE LOAD ").append(jobName).append(" ON ").append(stmt.getTableName());
+            }
 
             if (stmt.getRoutineLoadDesc() != null) {
                 sb.append(" ").append(stmt.getRoutineLoadDesc()).append(" ");
