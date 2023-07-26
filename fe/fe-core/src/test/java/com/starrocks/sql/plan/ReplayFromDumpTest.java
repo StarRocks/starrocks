@@ -69,7 +69,6 @@ public class ReplayFromDumpTest {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         connectContext.getSessionVariable().setJoinImplementationMode("auto");
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
-        connectContext.getSessionVariable().setEnableMVOptimizerTraceLog(true);
         starRocksAssert = new StarRocksAssert(connectContext);
         FeConstants.runningUnitTest = true;
         FeConstants.showLocalShuffleColumnsInExplain = false;
@@ -145,7 +144,7 @@ public class ReplayFromDumpTest {
         Assert.assertEquals(originCostPlan, replayCostPlan);
     }
 
-    private String getDumpInfoFromFile(String fileName) throws Exception {
+    protected String getDumpInfoFromFile(String fileName) throws Exception {
         String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
         File file = new File(path + "/" + fileName + ".json");
         StringBuilder sb = new StringBuilder();
@@ -166,13 +165,13 @@ public class ReplayFromDumpTest {
         return getCostPlanFragment(dumpJonStr, null);
     }
 
-    private Pair<QueryDumpInfo, String> getCostPlanFragment(String dumpJsonStr, SessionVariable sessionVariable)
+    protected Pair<QueryDumpInfo, String> getCostPlanFragment(String dumpJsonStr, SessionVariable sessionVariable)
             throws Exception {
         return getPlanFragment(dumpJsonStr, sessionVariable, TExplainLevel.COSTS);
     }
 
-    private Pair<QueryDumpInfo, String> getPlanFragment(String dumpJsonStr, SessionVariable sessionVariable,
-                                                        TExplainLevel level) throws Exception {
+    protected Pair<QueryDumpInfo, String> getPlanFragment(String dumpJsonStr, SessionVariable sessionVariable,
+                                                          TExplainLevel level) throws Exception {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpJsonStr);
         if (sessionVariable != null) {
             queryDumpInfo.setSessionVariable(sessionVariable);
@@ -919,5 +918,4 @@ public class ReplayFromDumpTest {
         Assert.assertTrue(replayPair.second.contains("mv2"));
         FeConstants.isReplayFromQueryDump = false;
     }
-
 }
