@@ -1,6 +1,6 @@
 # Expression partitioning (recommended)
 
-Since v3.0, StarRocks supports expression partitioning (previously known as automatic partitioning), which is more flexible and user-friendly. This partitioning method is suitable for most scenarios including querying and managing data based on continuous time ranges or specific categories.
+Since v3.0, StarRocks supports expression partitioning (previously known as automatic partitioning), which is more flexible and user-friendly. This partitioning method is suitable for most scenarios such as querying and managing data based on continuous time ranges or specific categories.
 
 You only need to specify a simple partition expression (either a time function expression or a column expression) at table creation. During data loading, StarRocks will automatically create partitions based on the data and the rule defined in the partition expression. You no longer need to manually create numerous partitions at table creation, nor configure dynamic partition properties.
 
