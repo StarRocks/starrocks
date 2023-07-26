@@ -194,7 +194,8 @@ public class InsertPlanner {
 
             List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
             long tableId = targetTable.getId();
-            for (Column column : targetTable.getFullSchema()) {
+            List<Column> destColumns = buildDestColumns(insertStmt, targetTable);
+            for (Column column : destColumns) {
                 SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(tupleDesc);
                 slotDescriptor.setIsMaterialized(true);
                 slotDescriptor.setType(column.getType());
@@ -247,10 +248,12 @@ public class InsertPlanner {
                     }
 
                 }
-                dataSink = new OlapTableSink(olapTable, tupleDesc, targetPartitionIds,
+                OlapTableSink olapSink = new OlapTableSink(olapTable, tupleDesc, targetPartitionIds,
                         canUsePipeline, olapTable.writeQuorum(),
                         forceReplicatedStorage ? true : olapTable.enableReplicatedStorage(),
                         nullExprInAutoIncrement, enableAutomaticPartition);
+                dataSink = olapSink;
+                olapSink.setPartialUpdateMode(insertStmt.getPartialUpdateMode());
             } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
                 dataSink = new MysqlTableSink((MysqlTable) targetTable);
             } else if (targetTable instanceof IcebergTable) {
@@ -297,6 +300,15 @@ public class InsertPlanner {
                 session.getSessionVariable().setEnablePipelineEngine(true);
             }
         }
+    }
+
+    private List<Column> buildDestColumns(InsertStmt insertStmt, Table table) {
+        // TODO: check file group
+        if (insertStmt.isPartialUpdate()) {
+            throw new UnsupportedOperationException("TODO");
+        }
+
+        return table.getFullSchema();
     }
 
     private void castLiteralToTargetColumnsType(InsertStmt insertStatement) {

@@ -1796,10 +1796,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.explainDesc() != null) {
             queryStatement.setIsExplain(true, getExplainType(context.explainDesc()));
         }
+        String label = null;
+        Map<String, String> properties = Maps.newHashMap();
+        for (StarRocksParser.InsertSpecContext spec : ListUtils.emptyIfNull(context.insertSpec())) {
+            if (spec.LABEL() != null) {
+                label = ((StringLiteral) visit(spec.label)).getStringValue();
+            } else if (spec.properties() != null) {
+                properties = getProperties(spec.properties());
+            }
+        }
 
-        return new InsertStmt(targetTableName, partitionNames,
-                context.label == null ? null : ((Identifier) visit(context.label)).getValue(),
-                getColumnNames(context.columnAliases()), queryStatement, context.OVERWRITE() != null,
+        return new InsertStmt(targetTableName, partitionNames, label,
+                getColumnNames(context.columnAliases()), queryStatement, context.OVERWRITE() != null, properties,
                 createPos(context));
     }
 

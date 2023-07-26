@@ -24,6 +24,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.thrift.TPartialUpdateMode;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -77,18 +78,19 @@ public class InsertStmt extends DmlStmt {
     // this variable can be used to distinguish whether a partition is specified.
     private boolean partitionNotSpecifiedInOverwrite = false;
 
+    // ======================================= properties =============================
+    private Map<String, String> properties;
+    private boolean enablePartialUpdate = false;
+    private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
+
     /**
      * `true` means that it's created by CTAS statement
      */
     private boolean forCTAS = false;
 
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
-                      QueryStatement queryStatement, boolean isOverwrite) {
-        this(tblName, targetPartitionNames, label, cols, queryStatement, isOverwrite, NodePosition.ZERO);
-    }
-
-    public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
-                      QueryStatement queryStatement, boolean isOverwrite, NodePosition pos) {
+                      QueryStatement queryStatement, boolean isOverwrite, Map<String, String> properties,
+                      NodePosition pos) {
         super(pos);
         this.tblName = tblName;
         this.targetPartitionNames = targetPartitionNames;
@@ -210,6 +212,28 @@ public class InsertStmt extends DmlStmt {
 
     public void setPartitionNotSpecifiedInOverwrite(boolean partitionNotSpecifiedInOverwrite) {
         this.partitionNotSpecifiedInOverwrite = partitionNotSpecifiedInOverwrite;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+    // ==================================== Properties ================================ //
+
+    public boolean isPartialUpdate() {
+        return enablePartialUpdate;
+    }
+
+    public void setPartialUpdate(boolean enable) {
+        this.enablePartialUpdate = enable;
+    }
+
+    public TPartialUpdateMode getPartialUpdateMode() {
+        return partialUpdateMode;
+    }
+
+    public void setPartialUpdateMode(TPartialUpdateMode mode) {
+        this.partialUpdateMode = mode;
     }
 
     @Override
