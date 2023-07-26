@@ -65,17 +65,19 @@ void QueryStatistics::clear() {
 }
 
 void QueryStatistics::update_stats_item(int64_t table_id, int64_t scan_rows, int64_t scan_bytes) {
-    auto iter = _stats_items.find(table_id);
-    if (iter == _stats_items.end()) {
-        _stats_items.insert({table_id, std::make_shared<ScanStats>(scan_rows, scan_bytes)});
-    } else {
-        iter->second->scan_rows += scan_rows;
-        iter->second->scan_bytes += scan_bytes;
+    if (table_id > 0 && (scan_rows > 0 || scan_bytes > 0)) {
+        auto iter = _stats_items.find(table_id);
+        if (iter == _stats_items.end()) {
+            _stats_items.insert({table_id, std::make_shared<ScanStats>(scan_rows, scan_bytes)});
+        } else {
+            iter->second->scan_rows += scan_rows;
+            iter->second->scan_bytes += scan_bytes;
+        }
     }
 }
 
 void QueryStatistics::add_stats_item(QueryStatisticsItemPB& stats_item) {
-    if (stats_item.table_id() > 0) {
+    {
         std::lock_guard l(_lock);
         update_stats_item(stats_item.table_id(), stats_item.scan_rows(), stats_item.scan_bytes());
     }
@@ -110,11 +112,15 @@ void QueryStatistics::merge(int sender_id, QueryStatistics& other) {
     other.spill_bytes -= spill_bytes;
 
     {
+        std::unordered_map<int64_t, std::shared_ptr<ScanStats>> other_stats_item;
+        {
+            std::lock_guard l(other._lock);
+            other_stats_item.swap(other._stats_items);
+        }
         std::lock_guard l(_lock);
-        for (const auto& [table_id, stats_item] : other._stats_items) {
+        for (const auto& [table_id, stats_item] : other_stats_item) {
             update_stats_item(table_id, stats_item->scan_rows, stats_item->scan_bytes);
         }
-        other._stats_items.clear();
     }
 }
 

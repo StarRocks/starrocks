@@ -295,7 +295,30 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             // ExchangeSourceOperator and eos is sent exactly-once.
             if (_num_sinkers[instance_id.lo] > 1) {
                 if (request.params->chunks_size() == 0) {
-                    continue;
+                    bool should_skip = true;
+                    // if this request contains query statistics info, we should send it
+                    if (request.params->has_query_statistics()) {
+                        auto& query_statistics = request.params->query_statistics();
+                        if (query_statistics.scan_rows() > 0 || query_statistics.scan_bytes() > 0 ||
+                            query_statistics.cpu_cost_ns() > 0) {
+                            should_skip = false;
+                        }
+                        if (should_skip && query_statistics.stats_items_size() > 0) {
+                            for (int i = 0; i < query_statistics.stats_items_size(); ++i) {
+                                const auto& stats_item = query_statistics.stats_items(i);
+                                if (stats_item.scan_rows() > 0 || stats_item.scan_bytes() > 0) {
+                                    should_skip = false;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!should_skip) {
+                            request.params->set_eos(false);
+                        }
+                    }
+                    if (should_skip) {
+                        continue;
+                    }
                 } else {
                     request.params->set_eos(false);
                 }
