@@ -52,4 +52,9 @@ public class AttachmentRequest {
         TDeserializer deserializer = new TDeserializer();
         deserializer.deserialize(result, serializedResult);
     }
+
+    public void getRequest(TBase request) throws TException {
+        TDeserializer deserializer = new TDeserializer();
+        deserializer.deserialize(request, serializedRequest);
+    }
 }

@@ -701,13 +701,13 @@ public class DefaultCoordinator extends Coordinator {
             emptyDescTable.setIs_cached(true);
             emptyDescTable.setTupleDescriptors(Collections.emptyList());
 
-            List<List<BackendExecState>> twoStageExecutionsToDeploy =
-                    ImmutableList.of(new ArrayList<>(), new ArrayList<>());
             Set<Long> deployedWorkerIds = new HashSet<>();
             for (List<PlanFragment> fragmentGroup : fragmentGroups) {
                 // Divide requests of fragments in the current group to two stages.
                 // - stage 1, the first request to a host, which need send descTable.
                 // - stage 2, the non-first requests to a host, which needn't send descTable.
+                List<List<BackendExecState>> twoStageExecutionsToDeploy =
+                        ImmutableList.of(new ArrayList<>(), new ArrayList<>());
                 for (PlanFragment fragment : fragmentGroup) {
                     int profileFragmentId = fragmentId2fragmentProfileIds.get(fragment.getFragmentId());
                     CoordinatorPreprocessor.FragmentExecParams params =
