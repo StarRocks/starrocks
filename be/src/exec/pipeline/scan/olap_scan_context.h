@@ -26,7 +26,16 @@ using namespace vectorized;
 
 class OlapScanContext final : public ContextWithDependency {
 public:
+<<<<<<< HEAD
     explicit OlapScanContext(vectorized::OlapScanNode* scan_node) : _scan_node(scan_node) {}
+=======
+    explicit OlapScanContext(OlapScanNode* scan_node, int64_t scan_table_id, int32_t dop, bool shared_scan,
+                             BalancedChunkBuffer& chunk_buffer)
+            : _scan_node(scan_node),
+              _scan_table_id(scan_table_id),
+              _chunk_buffer(chunk_buffer),
+              _shared_scan(shared_scan) {}
+>>>>>>> 4265212f40 ([BugFix] fix incorrect scan metrics in FE (#27779))
     ~OlapScanContext() override = default;
 
     Status prepare(RuntimeState* state);
@@ -47,8 +56,18 @@ public:
     const std::vector<TabletSharedPtr>& tablets() const { return _tablets; }
     const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets() const { return _tablet_rowsets; };
 
+<<<<<<< HEAD
 private:
     vectorized::OlapScanNode* _scan_node;
+=======
+    const std::vector<ColumnAccessPathPtr>* column_access_paths() const;
+
+    int64_t get_scan_table_id() const { return _scan_table_id; }
+
+private:
+    OlapScanNode* _scan_node;
+    int64_t _scan_table_id;
+>>>>>>> 4265212f40 ([BugFix] fix incorrect scan metrics in FE (#27779))
 
     std::vector<ExprContext*> _conjunct_ctxs;
     vectorized::OlapScanConjunctsManager _conjuncts_manager;
@@ -68,6 +87,38 @@ private:
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 };
 
+<<<<<<< HEAD
+=======
+// OlapScanContextFactory creates different contexts for each scan operator, if _shared_scan is false.
+// Otherwise, it outputs the same context for each scan operator.
+class OlapScanContextFactory {
+public:
+    OlapScanContextFactory(OlapScanNode* const scan_node, int32_t dop, bool shared_morsel_queue, bool shared_scan,
+                           ChunkBufferLimiterPtr chunk_buffer_limiter)
+            : _scan_node(scan_node),
+              _dop(dop),
+              _shared_morsel_queue(shared_morsel_queue),
+              _shared_scan(shared_scan),
+              _chunk_buffer(shared_scan ? BalanceStrategy::kRoundRobin : BalanceStrategy::kDirect, dop,
+                            std::move(chunk_buffer_limiter)),
+              _contexts(shared_morsel_queue ? 1 : dop) {}
+
+    OlapScanContextPtr get_or_create(int32_t driver_sequence);
+
+    void set_scan_table_id(int64_t scan_table_id) { _scan_table_id = scan_table_id; }
+
+private:
+    OlapScanNode* const _scan_node;
+    const int32_t _dop;
+    const bool _shared_morsel_queue;   // Whether the scan operators share a morsel queue.
+    const bool _shared_scan;           // Whether the scan operators share a chunk buffer.
+    BalancedChunkBuffer _chunk_buffer; // Shared Chunk buffer for all the scan operators.
+
+    int64_t _scan_table_id = -1;
+    std::vector<OlapScanContextPtr> _contexts;
+};
+
+>>>>>>> 4265212f40 ([BugFix] fix incorrect scan metrics in FE (#27779))
 } // namespace pipeline
 
 } // namespace starrocks

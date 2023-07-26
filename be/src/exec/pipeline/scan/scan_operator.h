@@ -59,7 +59,39 @@ public:
 
     void set_query_ctx(const QueryContextPtr& query_ctx);
 
+<<<<<<< HEAD
 private:
+=======
+    virtual int available_pickup_morsel_count() { return _io_tasks_per_scan_operator; }
+    void begin_pull_chunk(const ChunkPtr& res) {
+        _op_pull_chunks += 1;
+        _op_pull_rows += res->num_rows();
+    }
+    void end_pull_chunk(int64_t time) { _op_running_time_ns += time; }
+    virtual void begin_driver_process() {}
+    virtual void end_driver_process(PipelineDriver* driver) {}
+    virtual bool is_running_all_io_tasks() const;
+
+    virtual int64_t get_scan_table_id() const { return -1; }
+
+protected:
+    static constexpr size_t kIOTaskBatchSize = 64;
+
+    // TODO: remove this to the base ScanContext.
+    /// Shared scan
+    virtual void attach_chunk_source(int32_t source_index) = 0;
+    virtual void detach_chunk_source(int32_t source_index) {}
+    virtual bool has_shared_chunk_source() const = 0;
+    virtual ChunkPtr get_chunk_from_buffer() = 0;
+    virtual size_t num_buffered_chunks() const = 0;
+    virtual size_t buffer_size() const = 0;
+    virtual size_t buffer_capacity() const = 0;
+    virtual size_t default_buffer_capacity() const = 0;
+    virtual ChunkBufferTokenPtr pin_chunk(int num_chunks) = 0;
+    virtual bool is_buffer_full() const = 0;
+    virtual void set_buffer_finished() = 0;
+
+>>>>>>> 4265212f40 ([BugFix] fix incorrect scan metrics in FE (#27779))
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
     Status _pickup_morsel(RuntimeState* state, int chunk_source_index);

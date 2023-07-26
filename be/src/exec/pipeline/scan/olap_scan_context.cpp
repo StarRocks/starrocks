@@ -99,4 +99,21 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+/// OlapScanContextFactory.
+OlapScanContextPtr OlapScanContextFactory::get_or_create(int32_t driver_sequence) {
+    DCHECK_LT(driver_sequence, _dop);
+    // ScanOperators sharing one morsel use the same context.
+    int32_t idx = _shared_morsel_queue ? 0 : driver_sequence;
+    DCHECK_LT(idx, _contexts.size());
+
+    if (_contexts[idx] == nullptr) {
+        _contexts[idx] =
+                std::make_shared<OlapScanContext>(_scan_node, _scan_table_id, _dop, _shared_scan, _chunk_buffer);
+    }
+    return _contexts[idx];
+}
+
+>>>>>>> 4265212f40 ([BugFix] fix incorrect scan metrics in FE (#27779))
 } // namespace starrocks::pipeline

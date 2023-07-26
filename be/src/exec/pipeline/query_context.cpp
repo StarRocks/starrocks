@@ -132,9 +132,19 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
     if (_is_result_sink) {
         return query_statistic;
     }
-    query_statistic->add_scan_stats(_delta_scan_rows_num.exchange(0), _delta_scan_bytes.exchange(0));
+
     query_statistic->add_cpu_costs(_delta_cpu_cost_ns.exchange(0));
     query_statistic->add_mem_costs(mem_cost_bytes());
+    {
+        std::lock_guard l(_scan_stats_lock);
+        for (const auto& [table_id, scan_stats] : _scan_stats) {
+            QueryStatisticsItemPB stats_item;
+            stats_item.set_table_id(table_id);
+            stats_item.set_scan_rows(scan_stats->delta_scan_rows_num.exchange(0));
+            stats_item.set_scan_bytes(scan_stats->delta_scan_bytes.exchange(0));
+            query_statistic->add_stats_item(stats_item);
+        }
+    }
     _sub_plan_query_statistics_recvr->aggregate(query_statistic.get());
     return query_statistic;
 }
@@ -142,12 +152,44 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
 std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
     DCHECK(_is_result_sink) << "must be the result sink";
     auto res = std::make_shared<QueryStatistics>();
+<<<<<<< HEAD
     res->add_scan_stats(_total_scan_rows_num, _total_scan_bytes);
     res->add_cpu_costs(_total_cpu_cost_ns);
+=======
+    res->add_cpu_costs(cpu_cost());
+>>>>>>> 4265212f40 ([BugFix] fix incorrect scan metrics in FE (#27779))
     res->add_mem_costs(mem_cost_bytes());
 
+    {
+        std::lock_guard l(_scan_stats_lock);
+        for (const auto& [table_id, scan_stats] : _scan_stats) {
+            QueryStatisticsItemPB stats_item;
+            stats_item.set_table_id(table_id);
+            stats_item.set_scan_rows(scan_stats->total_scan_rows_num);
+            stats_item.set_scan_bytes(scan_stats->total_scan_bytes);
+            res->add_stats_item(stats_item);
+        }
+    }
     _sub_plan_query_statistics_recvr->aggregate(res.get());
     return res;
+}
+
+void QueryContext::update_scan_stats(int64_t table_id, int64_t scan_rows_num, int64_t scan_bytes) {
+    ScanStats* stats = nullptr;
+    {
+        std::lock_guard l(_scan_stats_lock);
+        auto iter = _scan_stats.find(table_id);
+        if (iter == _scan_stats.end()) {
+            _scan_stats.insert({table_id, std::make_shared<ScanStats>()});
+            iter = _scan_stats.find(table_id);
+        }
+        stats = iter->second.get();
+    }
+
+    stats->total_scan_rows_num += scan_rows_num;
+    stats->delta_scan_rows_num += scan_rows_num;
+    stats->total_scan_bytes += scan_bytes;
+    stats->delta_scan_bytes += scan_bytes;
 }
 
 QueryContextManager::QueryContextManager(size_t log2_num_slots)
