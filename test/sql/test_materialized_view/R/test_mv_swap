@@ -1,0 +1,177 @@
+-- name: test_mv_swap
+create database db_test_mv_swap;
+-- result:
+-- !result
+use db_test_mv_swap;
+-- result:
+-- !result
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE jj( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into ss values('2020-01-14', 2);
+-- result:
+-- !result
+insert into ss values('2020-01-14', 3);
+-- result:
+-- !result
+insert into ss values('2020-01-15', 2);
+-- result:
+-- !result
+insert into jj values('2020-01-14', 2);
+-- result:
+-- !result
+insert into jj values('2020-01-14', 3);
+-- result:
+-- !result
+insert into jj values('2020-01-15', 2);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY hash(event_day) AS SELECT event_day, sum(pv) as sum_pv FROM ss GROUP BY event_day;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv1 with sync mode ;
+CREATE MATERIALIZED VIEW mv2 DISTRIBUTED BY hash(event_day) AS SELECT event_day, count(pv) as count_pv FROM ss GROUP BY event_day;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv2 with sync mode ;
+SELECT * FROM mv1 ORDER BY event_day;
+-- result:
+2020-01-14	5
+2020-01-15	2
+-- !result
+SELECT * FROM mv2 ORDER BY event_day;
+-- result:
+2020-01-14	2
+2020-01-15	1
+-- !result
+ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
+-- result:
+-- !result
+SELECT * FROM mv1 ORDER BY event_day;
+-- result:
+2020-01-14	2
+2020-01-15	1
+-- !result
+SELECT * FROM mv2 ORDER BY event_day;
+-- result:
+2020-01-14	5
+2020-01-15	2
+-- !result
+DESC mv1;
+-- result:
+event_day	date	YES	true	None	
+count_pv	bigint	NO	true	None	
+-- !result
+DESC mv2;
+-- result:
+event_day	date	YES	true	None	
+sum_pv	bigint	YES	true	None	
+-- !result
+INSERT INTO ss values('2020-01-15', 2);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv1 with sync mode;
+[UC]REFRESH MATERIALIZED VIEW mv2 with sync mode;
+SELECT * FROM mv1 ORDER BY event_day;
+-- result:
+2020-01-14	2
+2020-01-15	2
+-- !result
+SELECT * FROM mv2 ORDER BY event_day;
+-- result:
+2020-01-14	5
+2020-01-15	4
+-- !result
+ALTER MATERIALIZED VIEW mv1 SWAP WITH ss;
+-- result:
+E: (1064, 'Unexpected exception: Materialized view can only SWAP WITH materialized view')
+-- !result
+ALTER TABLE ss SWAP WITH mv1;
+-- result:
+E: (1064, 'Unexpected exception: Materialized view can only SWAP WITH materialized view')
+-- !result
+ALTER MATERIALIZED VIEW mv1 SWAP WITH mv1;
+-- result:
+E: (1064, 'Unexpected exception: New name conflicts with rollup index name: mv1')
+-- !result
+ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_on_mv_1 REFRESH ASYNC 
+AS SELECT sum(sum_pv) as sum_sum_pv FROM mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_on_mv_2 REFRESH ASYNC 
+AS SELECT sum_sum_pv + 1 FROM mv_on_mv_1;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_on_mv_1 with sync mode;
+[UC]REFRESH MATERIALIZED VIEW mv_on_mv_2 with sync mode;
+ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
+-- result:
+-- !result
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1';
+-- result:
+false	based table mv1 swapped
+-- !result
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2';
+-- result:
+false	base table mv_on_mv_1 inactive
+-- !result
+ALTER MATERIALIZED VIEW mv_on_mv_1 ACTIVE;
+-- result:
+E: (1064, "Unexpected exception: Getting analyzing error. Detail message: Can not active materialized view [mv_on_mv_1] because analyze materialized view define sql: \n\nSELECT sum(`db_test_mv_swap`.`mv1`.`sum_pv`) AS `sum_sum_pv`\nFROM `db_test_mv_swap`.`mv1`\n\nCause an error: Column '`db_test_mv_swap`.`mv1`.`sum_pv`' cannot be resolved.")
+-- !result
+ALTER MATERIALIZED VIEW mv_on_mv_2 ACTIVE;
+-- result:
+E: (1064, 'Unexpected exception: Getting analyzing error from line 2, column 5 to line 2, column 23. Detail message: Create/Rebuild materialized view from inactive materialized view: mv_on_mv_1.')
+-- !result
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1';
+-- result:
+false	based table mv1 swapped
+-- !result
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2';
+-- result:
+false	base table mv_on_mv_1 inactive
+-- !result
+ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
+-- result:
+-- !result
+ALTER MATERIALIZED VIEW mv_on_mv_1 ACTIVE;
+-- result:
+-- !result
+ALTER MATERIALIZED VIEW mv_on_mv_2 ACTIVE;
+-- result:
+-- !result
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1';
+-- result:
+true	
+-- !result
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2';
+-- result:
+true	
+-- !result
+CREATE MATERIALIZED VIEW mv_on_table_1 REFRESH ASYNC 
+AS SELECT ss.event_day, sum(ss.pv) as ss_sum_pv, sum(jj.pv) as jj_sum_pv
+    FROM ss JOIN jj on (ss.event_day = jj.event_day) 
+    GROUP BY ss.event_day;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_on_table_1 with sync mode ;
+ALTER TABLE ss SWAP WITH jj;
+-- result:
+-- !result
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_table_1';
+-- result:
+false	based table jj swapped
+-- !result
+ALTER MATERIALIZED VIEW mv_on_table_1 ACTIVE;
+-- result:
+-- !result
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_table_1';
+-- result:
+true	
+-- !result

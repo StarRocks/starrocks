@@ -1500,7 +1500,12 @@ public class CreateMaterializedViewTest {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
             currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
+<<<<<<< HEAD
             Assert.assertEquals("Create materialized view from inactive materialized view: base_inactive_mv",
+=======
+            Assert.assertEquals("Getting analyzing error at line 3, column 24. Detail message: " +
+                            "Create/Rebuild materialized view from inactive materialized view: base_inactive_mv.",
+>>>>>>> fc1d7a6987 ([BugFix] Fix bug replay failed when check base mv active (#27959))
                     e.getMessage());
         }
     }
