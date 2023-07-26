@@ -151,7 +151,7 @@ From outside the Kubernetes cluster, you can access the StarRocks cluster throug
 
     ```YAML
     starRocksFeSpec:
-        image: fe-ubuntu:latest
+        image: starrocks/fe-ubuntu:latest
         replicas: 3
         requests:
           cpu: 4
