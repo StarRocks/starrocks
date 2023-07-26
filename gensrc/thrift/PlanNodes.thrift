@@ -341,6 +341,9 @@ struct THdfsScanRange {
 
     // paimon predicate info
     15: optional string paimon_predicate_info
+
+    // last modification time of the hdfs file, for data cache
+    16: optional i64 modification_time
 }
 
 struct TBinlogScanRange {

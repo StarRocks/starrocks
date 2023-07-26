@@ -94,6 +94,7 @@ public class FileTableScanNode extends ScanNode {
             hdfsScanRange.setOffset(blockDesc.getOffset());
             hdfsScanRange.setLength(blockDesc.getLength());
             hdfsScanRange.setFile_length(file.getLength());
+            hdfsScanRange.setModification_time(file.getModificationTime());
             hdfsScanRange.setFile_format(fileTable.getFileFormat().toThrift());
             TScanRange scanRange = new TScanRange();
             scanRange.setHdfs_scan_range(hdfsScanRange);
