@@ -14,6 +14,8 @@
 
 package com.starrocks.qe.scheduler;
 
+import com.google.common.collect.ImmutableList;
+import com.starrocks.common.Pair;
 import com.starrocks.common.Reference;
 import com.starrocks.common.UserException;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
@@ -42,6 +44,7 @@ import org.junit.Test;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentSkipListSet;
@@ -257,6 +260,46 @@ public class GetNextTest extends SchedulerTestBase {
         });
         Assert.assertTrue(scheduler.isDone());
         Assert.assertTrue(scheduler.getExecStatus().isCancelled());
+    }
+
+    private static TStatus createTStatus(TStatusCode code, String errorMsg) {
+        return new TStatus(code).setError_msgs(Collections.singletonList(errorMsg));
+    }
+
+    @Test
+    public void testReportErrorAndGetNext() throws Exception {
+        connectContext.getSessionVariable().setEnableProfile(true);
+
+        setBackendService(new MockPBackendService());
+
+        // The first is the report status, and the second is the expected exception message.
+        List<Pair<TStatus, String>> cases = ImmutableList.of(
+                Pair.create(createTStatus(TStatusCode.INTERNAL_ERROR, "mocked error1"), "INTERNAL_ERROR. Detail: mocked error1"),
+                Pair.create(createTStatus(TStatusCode.MEM_LIMIT_EXCEEDED, "mocked error2"),
+                        "INTERNAL_ERROR. Detail: mocked error2"),
+                Pair.create(createTStatus(TStatusCode.INTERNAL_ERROR, ""), "INTERNAL_ERROR")
+        );
+
+        for (Pair<TStatus, String> c : cases) {
+            TStatus status = c.first;
+            String expectedExceptionMsg = c.second;
+
+            String sql = "select count(1) from lineitem";
+            DefaultCoordinator scheduler = startScheduling(sql);
+
+            scheduler.getBackendExecutions().forEach(execution -> {
+                TReportExecStatusParams request = new TReportExecStatusParams(FrontendServiceVersion.V1);
+                request.setBackend_num(execution.getIndexInJob());
+                request.setDone(true);
+                request.setStatus(status);
+                request.setFragment_instance_id(execution.getInstanceId());
+
+                scheduler.updateFragmentExecStatus(request);
+            });
+
+            Assert.assertThrows(expectedExceptionMsg, UserException.class, scheduler::getNext);
+        }
+
     }
 
     private static PFetchDataResult genDataResult(boolean eos, long packetSeq) {

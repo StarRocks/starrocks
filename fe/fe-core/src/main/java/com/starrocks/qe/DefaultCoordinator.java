@@ -35,7 +35,6 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -1371,18 +1370,14 @@ public class DefaultCoordinator extends Coordinator {
         }
 
         if (!copyStatus.ok()) {
-            if (Strings.isNullOrEmpty(copyStatus.getErrorMsg())) {
-                copyStatus.rewriteErrorMsg();
-            }
-
             if (copyStatus.isRemoteFileNotFound()) {
                 throw new RemoteFileNotFoundException(copyStatus.getErrorMsg());
             }
 
             if (copyStatus.isRpcError()) {
-                throw new RpcException("unknown", copyStatus.getErrorMsg());
+                throw new RpcException("unknown", copyStatus.getDetailErrorMsg());
             } else {
-                String errMsg = copyStatus.getErrorMsg();
+                String errMsg = copyStatus.getDetailErrorMsg();
                 LOG.warn("query failed: {}", errMsg);
 
                 // hide host info
@@ -1390,6 +1385,7 @@ public class DefaultCoordinator extends Coordinator {
                 if (hostIndex != -1) {
                     errMsg = errMsg.substring(0, hostIndex);
                 }
+
                 throw new UserException(errMsg);
             }
         }

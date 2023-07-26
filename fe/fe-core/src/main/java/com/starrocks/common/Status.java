@@ -37,6 +37,7 @@ package com.starrocks.common;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.Optional;
 
@@ -134,53 +135,20 @@ public class Status {
         this.errorMsg = msg;
     }
 
-    public void rewriteErrorMsg() {
-        if (ok()) {
-            return;
-        }
-
-        switch (errorCode) {
-            case CANCELLED: {
-                this.errorMsg = "Cancelled";
-                break;
-            }
-            case ANALYSIS_ERROR: {
-                this.errorMsg = "Analysis_error";
-                break;
-            }
-            case NOT_IMPLEMENTED_ERROR: {
-                this.errorMsg = "Not_implemented_error";
-                break;
-            }
-            case RUNTIME_ERROR: {
-                this.errorMsg = "Runtime_error";
-                break;
-            }
-            case MEM_LIMIT_EXCEEDED: {
-                this.errorMsg = "Mem_limit_error";
-                break;
-            }
-            case INTERNAL_ERROR: {
-                this.errorMsg = "Internal_error";
-                break;
-            }
-            case THRIFT_RPC_ERROR: {
-                this.errorMsg = "Thrift_rpc_error";
-                break;
-            }
-            case TIMEOUT: {
-                this.errorMsg = "Timeout";
-                break;
-            }
-            default: {
-                this.errorMsg = "Unknown_error";
-                break;
-            }
-        }
-    }
-
     public String getErrorCodeString() {
         return Optional.ofNullable(getErrorCode()).map(Enum::toString).orElse("UNKNOWN");
+    }
+
+    /**
+     * Return the detail error message combined {@link #errorCode} and {@link #errorMsg}.
+     */
+    public String getDetailErrorMsg() {
+        StringBuilder builder = new StringBuilder(getErrorCodeString());
+        if (!StringUtils.isEmpty(errorMsg)) {
+            builder.append(". Detail: ").append(errorMsg);
+        }
+
+        return builder.toString();
     }
 
     @Override
