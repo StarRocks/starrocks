@@ -12,7 +12,19 @@ public class AlterViewStmt extends BaseViewStmt {
         super(tbl, cols, queryStatement);
     }
 
+<<<<<<< HEAD
     public TableName getTbl() {
+=======
+    public static AlterViewStmt fromReplaceStmt(CreateViewStmt stmt) {
+        AlterViewClause alterViewClause = new AlterViewClause(
+                stmt.getColWithComments(), stmt.getQueryStatement(), NodePosition.ZERO);
+        alterViewClause.setInlineViewDef(stmt.getInlineViewDef());
+        alterViewClause.setColumns(stmt.getColumns());
+        return new AlterViewStmt(stmt.getTableName(), alterViewClause, NodePosition.ZERO);
+    }
+
+    public TableName getTableName() {
+>>>>>>> 6e1d5ec99b ([Feature] support create or replace view (#27768))
         return tableName;
     }
 

@@ -467,7 +467,7 @@ recoverPartitionStatement
 // ------------------------------------------- View Statement ----------------------------------------------------------
 
 createViewStatement
-    : CREATE VIEW (IF NOT EXISTS)? qualifiedName
+    : CREATE (OR REPLACE)? VIEW (IF NOT EXISTS)? qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
         comment? AS queryStatement
     ;
