@@ -151,12 +151,12 @@ From outside the Kubernetes cluster, you can access the StarRocks cluster throug
 
     ```YAML
     starRocksFeSpec:
-        image: starrocks/alpine-fe:2.4.1
-        replicas: 3
-        requests:
+      image: starrocks/fe-ubuntu:latest
+      replicas: 3
+      requests:
         cpu: 4
         memory: 16Gi
-        service:            
+      service:            
         type: LoadBalancer # specified as LoadBalancer
     ```
 
