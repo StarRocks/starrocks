@@ -131,7 +131,7 @@ public class SimpleScheduler {
     @Nullable
     public static TNetworkAddress getComputeNodeHost(ImmutableMap<Long, ComputeNode> computeNodes,
                                                      Reference<Long> computeNodeIdRef) {
-        ComputeNode node = getComputeNode(computeNodes);
+        ComputeNode node = getComputeNode(computeNodes, nextComputeNodeHostId);
         if (node != null) {
             computeNodeIdRef.setRef(node.getId());
             return new TNetworkAddress(node.getHost(), node.getBePort());
@@ -159,7 +159,7 @@ public class SimpleScheduler {
     }
 
     @Nullable
-    public static ComputeNode getComputeNode(ImmutableMap<Long, ComputeNode> nodeMap) {
+    public static ComputeNode getComputeNode(ImmutableMap<Long, ComputeNode> nodeMap, AtomicLong nextComputeNodeHostId) {
         if (nodeMap == null || nodeMap.isEmpty()) {
             return null;
         }

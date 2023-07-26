@@ -84,10 +84,11 @@ public class DefaultWorkerProvider implements WorkerProvider {
         @Override
         public DefaultWorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
                                                              boolean preferComputeNode,
-                                                             int numUsedComputeNodes) {
+                                                             int numUsedComputeNodes,
+                                                             String warehouseName) {
 
             ImmutableMap<Long, ComputeNode> idToComputeNode =
-                    buildComputeNodeInfo(systemInfoService, numUsedComputeNodes);
+                    buildComputeNodeInfo(systemInfoService, numUsedComputeNodes, warehouseName);
             ImmutableMap<Long, ComputeNode> idToBackend;
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                 idToBackend = idToComputeNode;
@@ -274,13 +275,10 @@ public class DefaultWorkerProvider implements WorkerProvider {
     }
 
     private static ImmutableMap<Long, ComputeNode> buildComputeNodeInfo(SystemInfoService systemInfoService,
-                                                                        int numUsedComputeNodes) {
+                                                                        int numUsedComputeNodes,
+                                                                        String warehouseName) {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            String currentWh = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
-            if (ConnectContext.get() != null) {
-                currentWh = ConnectContext.get().getCurrentWarehouse();
-            }
-            return GlobalStateMgr.getCurrentWarehouseMgr().getComputeNodesFromWarehouse(currentWh);
+            return GlobalStateMgr.getCurrentWarehouseMgr().getComputeNodesFromWarehouse(warehouseName);
         }
 
         ImmutableMap<Long, ComputeNode> idToComputeNode

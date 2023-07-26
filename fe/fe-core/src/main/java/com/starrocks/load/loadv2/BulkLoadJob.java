@@ -57,6 +57,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.transaction.TabletCommitInfo;
@@ -102,6 +103,7 @@ public abstract class BulkLoadJob extends LoadJob {
     public static final String LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY = "log.rejected.record.num.session.variable.key";
     public static final String CURRENT_USER_IDENT_KEY = "current.user.ident.key";
     public static final String CURRENT_QUALIFIED_USER_KEY = "current.qualified.user.key";
+    public static final String CURRENT_WAREHOUSE = "current.warehouse";
 
     // only for log replay
     public BulkLoadJob() {
@@ -119,8 +121,10 @@ public abstract class BulkLoadJob extends LoadJob {
             sessionVariables.put(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE, var.getloadTransmissionCompressionType());
             sessionVariables.put(CURRENT_QUALIFIED_USER_KEY, ConnectContext.get().getQualifiedUser());
             sessionVariables.put(CURRENT_USER_IDENT_KEY, ConnectContext.get().getCurrentUserIdentity().toString());
+            sessionVariables.put(CURRENT_WAREHOUSE, ConnectContext.get().getCurrentWarehouse());
         } else {
             sessionVariables.put(SessionVariable.SQL_MODE, String.valueOf(SqlModeHelper.MODE_DEFAULT));
+            sessionVariables.put(CURRENT_WAREHOUSE, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
         }
     }
 
@@ -161,6 +165,12 @@ public abstract class BulkLoadJob extends LoadJob {
                 bulkLoadJob.sessionVariables.put(BulkLoadJob.LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY,
                         Long.toString(bulkLoadJob.logRejectedRecordNum));
             }
+            if (context != null) {
+                bulkLoadJob.sessionVariables.put(BulkLoadJob.CURRENT_WAREHOUSE, context.getCurrentWarehouse());
+            } else {
+                bulkLoadJob.sessionVariables.put(BulkLoadJob.CURRENT_WAREHOUSE, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
             bulkLoadJob.checkAndSetDataSourceInfo(db, stmt.getDataDescriptions());
             return bulkLoadJob;
         } catch (MetaNotFoundException e) {
