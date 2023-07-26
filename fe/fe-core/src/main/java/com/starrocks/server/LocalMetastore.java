@@ -31,8 +31,15 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+<<<<<<< HEAD
 import com.staros.proto.ShardStorageInfo;
 import com.starrocks.analysis.ColumnDef;
+=======
+import com.staros.proto.FilePathInfo;
+import com.starrocks.alter.AlterJobMgr;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
+>>>>>>> 6e1d5ec99b ([Feature] support create or replace view (#27768))
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.StringLiteral;
@@ -4240,12 +4247,16 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         // check if table exists in db
+        boolean existed = false;
         db.readLock();
         try {
             if (db.getTable(tableName) != null) {
+                existed = true;
                 if (stmt.isSetIfNotExists()) {
                     LOG.info("create view[{}] which already exists", tableName);
                     return;
+                } else if (stmt.isReplace()) {
+                    LOG.info("view {} already exists, need to replace it", tableName);
                 } else {
                     ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
                 }
@@ -4254,8 +4265,32 @@ public class LocalMetastore implements ConnectorMetadata {
             db.readUnlock();
         }
 
-        List<Column> columns = stmt.getColumns();
+        if (existed) {
+            // already existed, need to alter the view
+            AlterJobMgr alterJobMgr = GlobalStateMgr.getCurrentState().getAlterJobMgr();
+            try {
+                AlterViewStmt alterViewStmt = AlterViewStmt.fromReplaceStmt(stmt);
+                alterJobMgr.processAlterView(alterViewStmt, ConnectContext.get());
+                LOG.info("replace view {} successfully", tableName);
+            } catch (DdlException e) {
+                LOG.warn("replace view failed due to {}", e.getMessage(), e);
+                throw new DdlException("replace view failed due to " + e.getMessage(), e);
+            }
+        } else {
+            List<Column> columns = stmt.getColumns();
+            long tableId = getNextId();
+            View view = new View(tableId, tableName, columns);
+            view.setComment(stmt.getComment());
+            view.setInlineViewDefWithSqlMode(stmt.getInlineViewDef(),
+                    ConnectContext.get().getSessionVariable().getSqlMode());
+            // init here in case the stmt string from view.toSql() has some syntax error.
+            try {
+                view.init();
+            } catch (UserException e) {
+                throw new DdlException("failed to init view stmt", e);
+            }
 
+<<<<<<< HEAD
         long tableId = getNextId();
         View newView = new View(tableId, tableName, columns);
         newView.setComment(stmt.getComment());
@@ -4289,6 +4324,11 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         LOG.info("successfully create view[" + tableName + "-" + newView.getId() + "]");
+=======
+            onCreate(db, view, "", stmt.isSetIfNotExists());
+            LOG.info("successfully create view[" + tableName + "-" + view.getId() + "]");
+        }
+>>>>>>> 6e1d5ec99b ([Feature] support create or replace view (#27768))
     }
 
     public void replayCreateCluster(Cluster cluster) {
