@@ -261,6 +261,7 @@ int main(int argc, char** argv) {
     // Add logger for thrift internal.
     apache::thrift::GlobalOutput.setOutputFunction(starrocks::thrift_output);
 
+<<<<<<< HEAD
     std::unique_ptr<starrocks::Daemon> daemon(new starrocks::Daemon());
     daemon->init(as_cn, paths);
 
@@ -359,36 +360,17 @@ int main(int argc, char** argv) {
         EXIT_IF_ERROR(cache->init(cache_options));
     }
 
+=======
+>>>>>>> 32397b235f ([Refactor] Adjust the startup and exit sequence of the BE module (#27930))
     // cn need to support all ops for cloudnative table, so just start_be
-    starrocks::start_be();
+    starrocks::start_be(paths, as_cn);
 
     if (starrocks::k_starrocks_exit_quick.load()) {
         LOG(INFO) << "BE is shutting down，will exit quickly";
         exit(0);
     }
 
-    daemon->stop();
-    daemon.reset();
-
-#ifdef USE_STAROS
-    starrocks::shutdown_staros_worker();
-#endif
-
-#if defined(WITH_CACHELIB) || defined(WITH_STARCACHE)
-    if (starrocks::config::block_cache_enable) {
-        starrocks::BlockCache::instance()->shutdown();
-    }
-#endif
-
     Aws::ShutdownAPI(aws_sdk_options);
-
-    heartbeat_thrift_server->stop();
-    heartbeat_thrift_server->join();
-
-    exec_env->stop();
-    engine->stop();
-    delete engine;
-    exec_env->destroy();
 
     return 0;
 }
