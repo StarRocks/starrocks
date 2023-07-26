@@ -18,6 +18,7 @@ package com.starrocks.qe;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Config;
 import com.starrocks.proto.PPlanFragmentCancelReason;
+import com.starrocks.thrift.TUniqueId;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -46,6 +47,24 @@ public class CoordinatorMonitorTest {
                 {
                     qeProcessor.getCoordinators();
                     result = coordinators;
+                }
+
+                {
+                    coord1.getQueryId();
+                    result = new TUniqueId();
+                    minTimes = 0;
+                }
+
+                {
+                    coord2.getQueryId();
+                    result = new TUniqueId();
+                    minTimes = 0;
+                }
+
+                {
+                    coord3.getQueryId();
+                    result = new TUniqueId();
+                    minTimes = 0;
                 }
 
                 {

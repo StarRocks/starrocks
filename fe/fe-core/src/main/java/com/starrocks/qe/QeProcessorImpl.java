@@ -38,6 +38,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.qe.scheduler.ICoordinator;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TNetworkAddress;
@@ -70,7 +71,7 @@ public final class QeProcessorImpl implements QeProcessor {
     }
 
     @Override
-    public Coordinator getCoordinator(TUniqueId queryId) {
+    public ICoordinator getCoordinator(TUniqueId queryId) {
         QueryInfo queryInfo = coordinatorMap.get(queryId);
         if (queryInfo != null) {
             return queryInfo.getCoord();
@@ -79,14 +80,14 @@ public final class QeProcessorImpl implements QeProcessor {
     }
 
     @Override
-    public List<Coordinator> getCoordinators() {
+    public List<ICoordinator> getCoordinators() {
         return coordinatorMap.values().stream()
                 .map(QueryInfo::getCoord)
                 .collect(Collectors.toList());
     }
 
     @Override
-    public void registerQuery(TUniqueId queryId, Coordinator coord) throws UserException {
+    public void registerQuery(TUniqueId queryId, ICoordinator coord) throws UserException {
         registerQuery(queryId, new QueryInfo(coord));
     }
 
@@ -210,19 +211,19 @@ public final class QeProcessorImpl implements QeProcessor {
 
     public static final class QueryInfo {
         private final ConnectContext connectContext;
-        private final Coordinator coord;
+        private final ICoordinator coord;
         private final String sql;
         private final long startExecTime;
 
         private boolean isMVJob = false;
 
         // from Export, Pull load, Insert 
-        public QueryInfo(Coordinator coord) {
+        public QueryInfo(ICoordinator coord) {
             this(null, null, coord);
         }
 
         // from query
-        public QueryInfo(ConnectContext connectContext, String sql, Coordinator coord) {
+        public QueryInfo(ConnectContext connectContext, String sql, ICoordinator coord) {
             this.connectContext = connectContext;
             this.coord = coord;
             this.sql = sql;
@@ -240,7 +241,7 @@ public final class QeProcessorImpl implements QeProcessor {
             return connectContext;
         }
 
-        public Coordinator getCoord() {
+        public ICoordinator getCoord() {
             return coord;
         }
 

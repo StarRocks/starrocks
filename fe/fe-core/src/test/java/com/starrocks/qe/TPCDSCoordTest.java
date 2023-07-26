@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.qe;
 
 import com.starrocks.common.FeConstants;
@@ -88,8 +87,8 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
 
         System.out.println(plan);
         ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(ctx, sql).second;
-        Coordinator coord = new Coordinator(ctx, execPlan.getFragments(), execPlan.getScanNodes(),
-                execPlan.getDescTbl().toThrift());
+        Coordinator coord = new Coordinator.Factory().createQueryScheduler(
+                ctx, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
         coord.prepareExec();
 
         PlanFragmentId topFragmentId = coord.getFragments().get(0).getFragmentId();
@@ -136,8 +135,8 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
         System.out.println(filterLines.size());
         Assert.assertTrue(filterLines.size() == 5);
         ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(ctx, sql).second;
-        Coordinator coord = new Coordinator(ctx, execPlan.getFragments(), execPlan.getScanNodes(),
-                execPlan.getDescTbl().toThrift());
+        Coordinator coord = new Coordinator.Factory().createQueryScheduler(
+                ctx, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
         coord.prepareExec();
 
         int filterId = 2;
