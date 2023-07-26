@@ -63,7 +63,6 @@ namespace starrocks {
 class DescriptorTbl;
 class DataStreamRecvr;
 class RuntimeState;
-class PRowBatch;
 class PUniqueId;
 class PTransmitChunkParams;
 
@@ -98,8 +97,6 @@ public:
                                                   const std::shared_ptr<RuntimeProfile>& profile, bool is_merging,
                                                   std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr,
                                                   bool is_pipeline, int32_t degree_of_parallelism, bool keep_order);
-
-    Status transmit_data(const PTransmitDataParams* request, ::google::protobuf::Closure** done);
 
     Status transmit_chunk(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
     // Closes all receivers registered for fragment_instance_id immediately.

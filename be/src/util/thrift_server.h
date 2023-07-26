@@ -54,18 +54,6 @@ public:
     // An opaque identifier for the current session, which identifies a client connection.
     typedef std::string SessionKey;
 
-    // Interface class for receiving session creation / termination events.
-    class SessionHandlerIf {
-    public:
-        // Called when a session is established (when a client connects).
-        virtual void session_start(const SessionKey& session_key) = 0;
-
-        // Called when a session is terminated (when a client closes the connection).
-        // After this callback returns, the memory session_key references is no longer valid
-        // and clients must not refer to it again.
-        virtual void session_end(const SessionKey& session_key) = 0;
-    };
-
     static const int DEFAULT_WORKER_THREADS = 2;
 
     // There are 3 servers supported by Thrift with different threading models.
@@ -96,24 +84,10 @@ public:
     // Blocks until the server stops and exits its main thread.
     void join();
 
-    // FOR TESTING ONLY; stop the server and block until the server is stopped; use it
-    // only if it is a Threaded server.
-    void stop_for_testing();
-
     // Starts the main server thread. Once this call returns, clients
     // may connect to this server and issue RPCs. May not be called more
     // than once.
     Status start();
-
-    // Sets the session handler which receives events when sessions are created or closed.
-    void set_session_handler(SessionHandlerIf* session) { _session_handler = session; }
-
-    // Returns a unique identifier for the current session. A session is
-    // identified with the lifetime of a socket connection to this server.
-    // It is only safe to call this method during a Thrift processor RPC
-    // implementation. Otherwise, the result of calling this method is undefined.
-    // It is also only safe to reference the returned value during an RPC method.
-    static SessionKey* get_thread_session_key();
 
 private:
     // True if the server has been successfully started, for internal use only
@@ -141,9 +115,6 @@ private:
     // Thrift housekeeping
     std::unique_ptr<apache::thrift::server::TServer> _server;
     std::shared_ptr<apache::thrift::TProcessor> _processor;
-
-    // If not nullptr, called when session events happen. Not owned by us.
-    SessionHandlerIf* _session_handler;
 
     // Protects _session_keys
     std::mutex _session_keys_lock;
