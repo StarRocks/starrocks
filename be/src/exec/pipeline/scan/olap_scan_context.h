@@ -47,8 +47,12 @@ public:
     const std::vector<TabletSharedPtr>& tablets() const { return _tablets; }
     const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets() const { return _tablet_rowsets; };
 
+    int64_t get_scan_table_id() { return _scan_table_id; }
+    void set_scan_table_id(int64_t scan_table_id) { _scan_table_id = scan_table_id; }
+
 private:
     vectorized::OlapScanNode* _scan_node;
+    int64_t _scan_table_id;
 
     std::vector<ExprContext*> _conjunct_ctxs;
     vectorized::OlapScanConjunctsManager _conjuncts_manager;
