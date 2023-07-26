@@ -63,7 +63,7 @@ jobs:
 
       - name: Checkout PR
         run: |
-          /var/lib/ci-tool/bin/checkout.sh check
+          cd /var/lib/ci-tool/ && git pull && ./bin/checkout.sh check
 
       - name: Clean ENV
         if: always()
@@ -465,7 +465,7 @@ jobs:
 
       - name: Checkout PR
         run: |
-          /var/lib/ci-tool/bin/checkout.sh
+          cd /var/lib/ci-tool/ && git pull && ./bin/checkout.sh
 
       - name: UPDATE ECI & RUN UT
         id: run_ut
