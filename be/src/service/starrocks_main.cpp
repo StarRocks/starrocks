@@ -246,133 +246,15 @@ int main(int argc, char** argv) {
     // Add logger for thrift internal.
     apache::thrift::GlobalOutput.setOutputFunction(starrocks::thrift_output);
 
-    std::unique_ptr<starrocks::Daemon> daemon(new starrocks::Daemon());
-    daemon->init(as_cn, paths);
-
-    // init jdbc driver manager
-    EXIT_IF_ERROR(starrocks::JDBCDriverManager::getInstance()->init(std::string(getenv("STARROCKS_HOME")) +
-                                                                    "/lib/jdbc_drivers"));
-
-    if (!starrocks::BackendOptions::init()) {
-        exit(-1);
-    }
-
-    auto* global_env = starrocks::GlobalEnv::GetInstance();
-    EXIT_IF_ERROR(global_env->init());
-
-    auto* exec_env = starrocks::ExecEnv::GetInstance();
-
-    // Init and open storage engine.
-    starrocks::EngineOptions options;
-    options.store_paths = paths;
-    options.backend_uid = starrocks::UniqueId::gen_uid();
-    options.compaction_mem_tracker = global_env->compaction_mem_tracker();
-    options.update_mem_tracker = global_env->update_mem_tracker();
-    options.need_write_cluster_id = !as_cn;
-    starrocks::StorageEngine* engine = nullptr;
-
-    auto st = starrocks::StorageEngine::open(options, &engine);
-    if (!st.ok()) {
-        LOG(FATAL) << "fail to open StorageEngine, res=" << st.get_error_msg();
-        exit(-1);
-    }
-
-    // Init exec env.
-    EXIT_IF_ERROR(exec_env->init(paths, as_cn));
-
-    // Start all background threads of storage engine.
-    // SHOULD be called after exec env is initialized.
-    EXIT_IF_ERROR(engine->start_bg_threads());
-
-    // Begin to start Heartbeat services
-    starrocks::ThriftRpcHelper::setup(exec_env);
-    auto res = starrocks::create_heartbeat_server(exec_env, starrocks::config::heartbeat_service_port,
-                                                  starrocks::config::heartbeat_service_thread_count);
-    CHECK(res.ok()) << res.status();
-    auto heartbeat_thrift_server = std::move(res).value();
-
-    starrocks::Status status = heartbeat_thrift_server->start();
-    if (!status.ok()) {
-        LOG(ERROR) << "StarRocks BE HeartBeat Service did not start correctly. Error=" << status.to_string();
-        starrocks::shutdown_logging();
-        exit(1);
-    }
-
-#ifdef USE_STAROS
-    starrocks::init_staros_worker();
-#endif
-
-#if !defined(WITH_CACHELIB) && !defined(WITH_STARCACHE)
-    if (starrocks::config::block_cache_enable) {
-        starrocks::config::block_cache_enable = false;
-    }
-#endif
-
-    if (starrocks::config::block_cache_enable) {
-        starrocks::BlockCache* cache = starrocks::BlockCache::instance();
-        starrocks::CacheOptions cache_options;
-        cache_options.mem_space_size = starrocks::config::block_cache_mem_size;
-
-        std::vector<std::string> paths;
-        auto parse_res = starrocks::parse_conf_block_cache_paths(starrocks::config::block_cache_disk_path, &paths);
-        if (!parse_res.ok()) {
-            LOG(FATAL) << "parse config block cache disk path failed, path="
-                       << starrocks::config::block_cache_disk_path;
-            exit(-1);
-        }
-        for (auto& p : paths) {
-            cache_options.disk_spaces.push_back(
-                    {.path = p, .size = static_cast<size_t>(starrocks::config::block_cache_disk_size)});
-        }
-
-        // Adjust the default engine based on build switches.
-        if (starrocks::config::block_cache_engine == "") {
-#if defined(WITH_STARCACHE)
-            starrocks::config::block_cache_engine = "starcache";
-#else
-            starrocks::config::block_cache_engine = "cachelib";
-#endif
-        }
-        cache_options.meta_path = starrocks::config::block_cache_meta_path;
-        cache_options.block_size = starrocks::config::block_cache_block_size;
-        cache_options.checksum = starrocks::config::block_cache_checksum_enable;
-        cache_options.max_parcel_memory_mb = starrocks::config::block_cache_max_parcel_memory_mb;
-        cache_options.max_concurrent_inserts = starrocks::config::block_cache_max_concurrent_inserts;
-        cache_options.lru_insertion_point = starrocks::config::block_cache_lru_insertion_point;
-        cache_options.engine = starrocks::config::block_cache_engine;
-        EXIT_IF_ERROR(cache->init(cache_options));
-    }
-
     // cn need to support all ops for cloudnative table, so just start_be
-    starrocks::start_be();
+    starrocks::start_be(paths, as_cn);
 
     if (starrocks::k_starrocks_exit_quick.load()) {
         LOG(INFO) << "BE is shutting down，will exit quickly";
         exit(0);
     }
 
-    daemon->stop();
-    daemon.reset();
-
-#ifdef USE_STAROS
-    starrocks::shutdown_staros_worker();
-#endif
-
-#if defined(WITH_CACHELIB) || defined(WITH_STARCACHE)
-    if (starrocks::config::block_cache_enable) {
-        starrocks::BlockCache::instance()->shutdown();
-    }
-#endif
-
     Aws::ShutdownAPI(aws_sdk_options);
-
-    heartbeat_thrift_server->stop();
-    heartbeat_thrift_server->join();
-
-    exec_env->stop();
-    engine->stop();
-    delete engine;
-    exec_env->destroy();
 
     return 0;
 }
