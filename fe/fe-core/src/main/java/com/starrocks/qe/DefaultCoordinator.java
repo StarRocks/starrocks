@@ -43,6 +43,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MarkedCountDownLatch;
@@ -525,7 +526,7 @@ public class DefaultCoordinator extends Coordinator {
         }
     }
 
-    private void prepareResultSink() throws Exception {
+    private void prepareResultSink() throws AnalysisException {
         PlanFragmentId topId = jobSpec.getFragments().get(0).getFragmentId();
         CoordinatorPreprocessor.FragmentExecParams topParams =
                 coordinatorPreprocessor.getFragmentExecParamsMap().get(topId);
@@ -570,7 +571,7 @@ public class DefaultCoordinator extends Coordinator {
         }
     }
 
-    private void deliverExecFragments() throws Exception {
+    private void deliverExecFragments() throws TException, RpcException, UserException {
         deliverExecFragmentsRequests(coordinatorPreprocessor.isUsePipeline());
     }
 
@@ -913,7 +914,7 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     private void setGlobalRuntimeFilterParams(CoordinatorPreprocessor.FragmentExecParams topParams,
-                                              TNetworkAddress mergeHost)  {
+                                              TNetworkAddress mergeHost) {
 
         Map<Integer, List<TRuntimeFilterProberParams>> broadcastGRFProbersMap = Maps.newHashMap();
         List<RuntimeFilterDescription> broadcastGRFList = Lists.newArrayList();
@@ -1124,7 +1125,7 @@ public class DefaultCoordinator extends Coordinator {
         resultBatch = receiver.getNext(status);
         if (!status.ok()) {
             connectContext.setErrorCodeOnce(status.getErrorCodeString());
-            LOG.warn("get next fail, need cancel. status {}, query id: {}", status.toString(),
+            LOG.warn("get next fail, need cancel. status {}, query id: {}", status,
                     DebugUtil.printId(jobSpec.getQueryId()));
         }
         updateStatus(status, null /* no instance id */);
@@ -1301,7 +1302,7 @@ public class DefaultCoordinator extends Coordinator {
             LOG.debug("profile for query_id={} instance_id={}\n{}",
                     DebugUtil.printId(jobSpec.getQueryId()),
                     DebugUtil.printId(params.getFragment_instance_id()),
-                    builder.toString());
+                    builder);
         }
 
         Status status = new Status(params.status);

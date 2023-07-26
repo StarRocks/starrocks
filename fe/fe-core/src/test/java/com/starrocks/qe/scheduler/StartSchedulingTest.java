@@ -219,7 +219,7 @@ public class StartSchedulingTest extends SchedulerTestBase {
                 public Future<PExecPlanFragmentResult> execPlanFragmentAsync(PExecPlanFragmentRequest request) {
                     return submit(() -> {
                         try {
-                            Thread.sleep(5_000L);
+                            Thread.sleep(5_000L); // NOSONAR
                         } catch (InterruptedException e) {
                             throw new RuntimeException(e);
                         }

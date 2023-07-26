@@ -20,6 +20,7 @@ package com.starrocks.rpc;
 import org.apache.thrift.TBase;
 import org.apache.thrift.TDeserializer;
 import org.apache.thrift.TException;
+import org.apache.thrift.TFieldIdEnum;
 import org.apache.thrift.TSerializer;
 
 // used to compatible with our older thrift protocol
@@ -27,7 +28,7 @@ public class AttachmentRequest {
     protected byte[] serializedRequest;
     protected byte[] serializedResult;
 
-    public void setRequest(TBase request) throws TException {
+    public <T extends TBase<T, F>, F extends TFieldIdEnum> void setRequest(TBase<T, F> request) throws TException {
         TSerializer serializer = new TSerializer();
         serializedRequest = serializer.serialize(request);
     }
@@ -48,12 +49,12 @@ public class AttachmentRequest {
         return serializedResult;
     }
 
-    public void getResult(TBase result) throws TException {
+    public <T extends TBase<T, F>, F extends TFieldIdEnum> void getResult(TBase<T, F> result) throws TException {
         TDeserializer deserializer = new TDeserializer();
         deserializer.deserialize(result, serializedResult);
     }
 
-    public void getRequest(TBase request) throws TException {
+    public <T extends TBase<T, F>, F extends TFieldIdEnum> void getRequest(TBase<T, F> request) throws TException {
         TDeserializer deserializer = new TDeserializer();
         deserializer.deserialize(request, serializedRequest);
     }
