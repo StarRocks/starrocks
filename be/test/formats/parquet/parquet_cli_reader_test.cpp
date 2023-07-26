@@ -68,9 +68,8 @@ TEST_F(ParquetCLIReaderTest, ReadAllParquetFiles) {
     {
         // error format built by hudi
         unsupported_paths_init.emplace("./be/test/exec/test_data/parquet_scanner/hudi_array_map.parquet");
-        // error format build by hudi
-        unsupported_paths_init.emplace(
-                "./be/test/exec/test_data/parquet_scanner/file_reader_test_map_char_key.parquet");
+        // error format built by hudi
+        unsupported_paths_init.emplace("./be/test/exec/test_data/parquet_data/hudi_mor_two_level_nested_array.parquet");
         // empty parquet file
         unsupported_paths_init.emplace("./be/test/formats/parquet/test_data/empty.parquet");
         // parquet column reader: not supported convert from parquet `INT64` to `TIME`

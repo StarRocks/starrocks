@@ -201,7 +201,7 @@ protected:
 
     std::string _file_map_null_path = "./be/test/exec/test_data/parquet_scanner/map_null.parquet";
 
-     std::string _file_array_map_path = "./be/test/exec/test_data/parquet_scanner/hudi_array_map.parquet";
+    std::string _file_array_map_path = "./be/test/exec/test_data/parquet_scanner/hudi_array_map.parquet";
 
     std::string _file_binary_path = "./be/test/exec/test_data/parquet_scanner/file_reader_test_binary.parquet";
 
@@ -1094,7 +1094,6 @@ TEST_F(FileReaderTest, TestReadRequiredArrayColumns) {
     }
 }
 
-// TODO(SmithCruise) Illegal parquet files, not support it anymore
 // when key type is char or varchar, not string
 // the real type is BYTE_ARRAY which is OPTIONAL
 TEST_F(FileReaderTest, TestReadMapCharKeyColumn) {
@@ -1874,19 +1873,19 @@ TEST_F(FileReaderTest, TestReadArrayMap) {
     // Illegal parquet files, not support it anymore
     ASSERT_FALSE(status.ok());
 
-//    ASSERT_TRUE(status.ok()) << status.get_error_msg();
-//    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
-//
-//    auto chunk = std::make_shared<Chunk>();
-//    chunk->append_column(ColumnHelper::create_column(type_string, true), chunk->num_columns());
-//    chunk->append_column(ColumnHelper::create_column(type_array_map, true), chunk->num_columns());
-//
-//    status = file_reader->get_next(&chunk);
-//    ASSERT_TRUE(status.ok());
-//    ASSERT_EQ(2, chunk->num_rows());
-//
-//    EXPECT_EQ("['0', [{'def':11,'abc':10},{'ghi':12},{'jkl':13}]]", chunk->debug_row(0));
-//    EXPECT_EQ("['1', [{'happy new year':11,'hello world':10},{'vary happy':12},{'ok':13}]]", chunk->debug_row(1));
+    //  ASSERT_TRUE(status.ok()) << status.get_error_msg();
+    //  EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    //
+    //  auto chunk = std::make_shared<Chunk>();
+    //  chunk->append_column(ColumnHelper::create_column(type_string, true), chunk->num_columns());
+    //  chunk->append_column(ColumnHelper::create_column(type_array_map, true), chunk->num_columns());
+    //
+    //  status = file_reader->get_next(&chunk);
+    //  ASSERT_TRUE(status.ok());
+    //  ASSERT_EQ(2, chunk->num_rows());
+    //
+    //  EXPECT_EQ("['0', [{'def':11,'abc':10},{'ghi':12},{'jkl':13}]]", chunk->debug_row(0));
+    //  EXPECT_EQ("['1', [{'happy new year':11,'hello world':10},{'vary happy':12},{'ok':13}]]", chunk->debug_row(1));
 }
 
 TEST_F(FileReaderTest, TestStructArrayNull) {
@@ -2181,34 +2180,34 @@ TEST_F(FileReaderTest, TestHudiMORTwoNestedLevelArray) {
     ASSERT_FALSE(status.ok()) << status.get_error_msg();
     // ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
-//    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
-//
-//    auto chunk = std::make_shared<Chunk>();
-//    chunk->append_column(ColumnHelper::create_column(type_string, true), chunk->num_columns());
-//    chunk->append_column(ColumnHelper::create_column(type_array, true), chunk->num_columns());
-//
-//    status = file_reader->get_next(&chunk);
-//    ASSERT_TRUE(status.ok());
-//
-//    chunk->check_or_die();
-//
-//    EXPECT_EQ("['hello', [[10,20,30],[40,50,60,70]]]", chunk->debug_row(0));
-//    EXPECT_EQ("[NULL, [[30,40],[10,20,30]]]", chunk->debug_row(1));
-//    EXPECT_EQ("['hello', NULL]", chunk->debug_row(2));
-//
-//    size_t total_row_nums = 0;
-//    total_row_nums += chunk->num_rows();
-//
-//    {
-//        while (!status.is_end_of_file()) {
-//            chunk->reset();
-//            status = file_reader->get_next(&chunk);
-//            chunk->check_or_die();
-//            total_row_nums += chunk->num_rows();
-//        }
-//    }
-//
-//    EXPECT_EQ(3, total_row_nums);
+    //  EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    //
+    //  auto chunk = std::make_shared<Chunk>();
+    //  chunk->append_column(ColumnHelper::create_column(type_string, true), chunk->num_columns());
+    //  chunk->append_column(ColumnHelper::create_column(type_array, true), chunk->num_columns());
+    //
+    //  status = file_reader->get_next(&chunk);
+    //  ASSERT_TRUE(status.ok());
+    //
+    //  chunk->check_or_die();
+    //
+    //  EXPECT_EQ("['hello', [[10,20,30],[40,50,60,70]]]", chunk->debug_row(0));
+    //  EXPECT_EQ("[NULL, [[30,40],[10,20,30]]]", chunk->debug_row(1));
+    //  EXPECT_EQ("['hello', NULL]", chunk->debug_row(2));
+    //
+    //  size_t total_row_nums = 0;
+    //  total_row_nums += chunk->num_rows();
+    //
+    //  {
+    //      while (!status.is_end_of_file()) {
+    //          chunk->reset();
+    //          status = file_reader->get_next(&chunk);
+    //          chunk->check_or_die();
+    //          total_row_nums += chunk->num_rows();
+    //      }
+    //  }
+    //
+    //  EXPECT_EQ(3, total_row_nums);
 }
 
 TEST_F(FileReaderTest, TestLateMaterializationAboutRequiredComplexType) {

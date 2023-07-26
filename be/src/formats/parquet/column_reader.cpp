@@ -22,8 +22,8 @@
 #include "exec/hdfs_scanner.h"
 #include "formats/parquet/column_converter.h"
 #include "formats/parquet/stored_column_reader.h"
-#include "util/runtime_profile.h"
 #include "gutil/strings/substitute.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 class RandomAccessFile;
@@ -563,7 +563,8 @@ void ColumnReader::get_subfield_pos_with_pruned_type(const ParquetField& field, 
 Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
                             std::unique_ptr<ColumnReader>* output) {
     if (field->type.type != col_type.type) {
-        return Status::InternalError(strings::Substitute("ParquetField's type $0 is different from table's type $1", field->type.type, col_type.type));
+        return Status::InternalError(strings::Substitute("ParquetField's type $0 is different from table's type $1",
+                                                         field->type.type, col_type.type));
     }
     if (field->type.type == LogicalType::TYPE_ARRAY) {
         std::unique_ptr<ColumnReader> child_reader;
@@ -617,7 +618,8 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
 Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
                             const TIcebergSchemaField* iceberg_schema_field, std::unique_ptr<ColumnReader>* output) {
     if (field->type.type != col_type.type) {
-        return Status::InternalError(strings::Substitute("ParquetField's type $0 is different from table's type $1", field->type.type, col_type.type));
+        return Status::InternalError(strings::Substitute("ParquetField's type $0 is different from table's type $1",
+                                                         field->type.type, col_type.type));
     }
     DCHECK(iceberg_schema_field != nullptr);
     if (field->type.type == LogicalType::TYPE_ARRAY) {
