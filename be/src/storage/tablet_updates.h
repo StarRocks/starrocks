@@ -139,8 +139,6 @@ public:
 
     Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time);
 
-    Status save_meta();
-
     // should only called by UpdateManager's apply thread
     void do_apply();
 
@@ -391,7 +389,15 @@ private:
 
     void _set_error(const string& msg);
 
-    Status _load_from_pb(const TabletUpdatesPB& updates);
+    Status _load_meta_and_log(const TabletUpdatesPB& tablet_updates_pb);
+
+    Status _load_pending_rowsets();
+
+    Status _load_rowsets_and_check_consistency(std::set<uint32_t>& unapplied_rowsets);
+
+    Status _purge_versions_to_fix_rowset_missing_inconsistency();
+
+    Status _load_from_pb(const TabletUpdatesPB& tablet_updates_pb);
 
     // thread-safe
     void _remove_unused_rowsets(bool drop_tablet = false);
