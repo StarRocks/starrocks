@@ -4,7 +4,7 @@ When you create a table, you can specify the data distribution method by configu
 
 > **NOTICE**
 >
-> - Since v3.1, you do not need to specify the bucketing key when creating a table or adding partitions. StarRocks supports random bucketing, which randomly distributes data across all buckets. For more information, see [Random bucketing](#random-bucketing-since-v31).
+> - Since v3.1, you do not need to specify the bucketing key in the DISTRIBUTED BY clause when creating a table or adding partitions. StarRocks supports random bucketing, which randomly distributes data across all buckets. For more information, see [Random bucketing](#random-bucketing-since-v31).
 > - Since v2.5.7, you no longer need to manually set the number of buckets when you create a table or add a partition. StarRocks can automatically set the number of buckets (BUCKETS). However, if the performance does not meet your expectations after StarRocks automatically sets the number of buckets and you are familiar with the bucketing mechanism, you can still [manually set the number of buckets](#determine-the-number-of-buckets).
 
 ## Distribution methods
@@ -157,7 +157,7 @@ Partitioning divides a table into multiple segments called partitions based on t
 
 **How to choose partition columns and unit**
 
-- Selecting a suitable partition column can effectively reduce the amount of data scanned during queries. In most business systems, partitioning based on time is commonly chosen to optimize performance issues caused by deleting expired data and facilitate tiered storage of hot and cold data. In this case, you can use expression partitioning and range partitioning to specify a time column as the partition column. Additionally, if the data is frequently queried and managed based on emurated values, you can use expression partitioning and list partitioning to specify a column representing the types as the partition column.
+- Selecting a suitable partition column can effectively reduce the amount of data scanned during queries. In most business systems, partitioning based on time is commonly chosen to optimize performance issues caused by deleting expired data and facilitate tiered storage of hot and cold data. In this case, you can use expression partitioning and range partitioning to specify a time column as the partition column. Additionally, if the data is frequently queried and managed based on emurated values, you can use expression partitioning and list partitioning to specify a column including these values as the partition column.
 - When choosing the partitioning unit, factors such as data volume, query patterns, and data management granularity need to be considered.
   - Example 1: If the monthly data volume of a table is small, partitioning by month can reduce the number of metadata entries compared to partitioning by day, thereby reducing the resource consumption of metadata management and scheduling.
   - Example 2: If the monthly data volume of a table is large and most query conditions are precise to the day, partitioning by day can effectively reduce the amount of data scanned during queries.
@@ -177,7 +177,7 @@ Since v3.1, StarRocks supports random bucketing, which means that you no longer 
 
 > **NOTICE**
 >
-> Since v3.1,  StarRocks's shared-data mode supports the time function expression and does not support the column expression.
+> Since v3.1,  StarRocks's [shared-data mode](../deployment/deploy_shared_data.md) supports the time function expression and does not support the column expression.
 
 Since v3.0, StarRocks supports [expression partitioning](./expression_partitioning.md) (previously known as automatic partitioning) which is more flexible and user-friendly. This partitioning method is suitable for most scenarios including querying and managing data based on continuous date ranges or emurated values.
 

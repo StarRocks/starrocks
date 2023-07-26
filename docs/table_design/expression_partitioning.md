@@ -12,25 +12,24 @@ However, in some special scenarios, such as partitioning historical data into pa
 
 ### Syntax
 
-```bnf
+```sql
 PARTITION BY expression
 ...
 [ PROPERTIES( 'partition_live_number' = 'xxx' ) ]
 
 expression ::=
     { date_trunc ( <time_unit> , <partition_column> ) |
-      time_slice ( <partition_column> , INTERVAL <N> <time_unit> [ , boundary ] ) ) }
+      time_slice ( <partition_column> , INTERVAL <N> <time_unit> [ , boundary ] ) }
 ```
 
 ### Parameters
 
-- `expr`: Currently, only the [date_trunc](../sql-reference/sql-functions/date-time-functions/date_trunc) and [time_slice](../sql-reference/sql-functions/date-time-functions/time_slice) functions are supported. If you use the function `time_slice`, you do not need to pass the `boundary` parameter. It is because in this scenario, the default and valid value for this parameter is `floor`, and the value can not be `ceil`.
-- `time_unit`: the partition granularity, which can be `hour`, `day`, `month` or `year`. The `week` partition granularity is not supported. If the partition granularity is `hour`, the partition column must be of the DATETIME data type and cannot be of the DATE data type.
-- `partition_column_name`: the name of the partition column.
-  - The partition column can only be of the DATE or DATETIME data type. The partition column can be of the DATE or DATETIME data type if the `date_trunc` function is used. The partition column must be of the DATETIME data type  if the `time_slice` function is used. The partition column allows `NULL` values.
-  - If the partition column is of the DATE data type, the supported range is [0000-01-01 ~ 9999-12-31]. If the partition column is of the DATETIME data type, the supported range is [0000-01-01 01:01:01 ~ 9999-12-31 23:59:59].
-  - Currently, you can specify only one partition column and multiple partition columns are not supported.
-- `partition_live_number`: the number of the most recent partitions to be retained. "Recent" refers to that the partitions are sorted in chronological order, **with the current date as a benchmark**, the number of partitions that counted backwards are retained, and the rest of the partitions (partitions created much ealier) are deleted. StarRocks schedules tasks to manage the number of partitions, and the scheduling interval can be configured through the FE dynamic parameter `dynamic_partition_check_interval_seconds`, which defaults to 600 seconds (10 minutes). Suppose that the current date is April 4, 2023, `partition_live_number` is set to `2`, and the partitions include p20230401, p20230402, p20230403, p20230404. The partitions p20230403, p20230404 are retained and other partitions are deleted. If dirty data is loaded, such as data from the future dates April 5 and April 6, partitions include p20230401, p20230402, p20230403, p20230404, p20230405, and p20230406. Then partitions p20230403, p20230404, p20230405, p20230406 are retained and the other partitions are deleted.
+| Parameters              | Required | Description                                                  |
+| ----------------------- | -------- | ------------------------------------------------------------ |
+| `expression`            |     YES     | Currently, only the [date_trunc](../sql-reference/sql-functions/date-time-functions/date_trunc) and [time_slice](../sql-reference/sql-functions/date-time-functions/time_slice) functions are supported. If you use the function `time_slice`, you do not need to pass the `boundary` parameter. It is because in this scenario, the default and valid value for this parameter is `floor`, and the value can not be `ceil`. |
+| `time_unit`             |       YES   | the partition granularity, which can be `hour`, `day`, `month` or `year`. The `week` partition granularity is not supported. If the partition granularity is `hour`, the partition column must be of the DATETIME data type and cannot be of the DATE data type. |
+| `partition_column_name` |     YES     | the name of the partition column.<br><ul><li>The partition column can only be of the DATE or DATETIME data type. The partition column allows `NULL` values.</li><li>The partition column can be of the DATE or DATETIME data type if the `date_trunc` function is used. The partition column must be of the DATETIME data type  if the `time_slice` function is used. </li><li>If the partition column is of the DATE data type, the supported range is [0000-01-01 ~ 9999-12-31]. If the partition column is of the DATETIME data type, the supported range is [0000-01-01 01:01:01 ~ 9999-12-31 23:59:59].</li><li>Currently, you can specify only one partition column and multiple partition columns are not supported.</li></ul> |
+| `partition_live_number` |      NO    | the number of the most recent partitions to be retained. "Recent" refers to that the partitions are sorted in chronological order, **with the current date as a benchmark**, the number of partitions that counted backwards are retained, and the rest of the partitions (partitions created much ealier) are deleted. StarRocks schedules tasks to manage the number of partitions, and the scheduling interval can be configured through the FE dynamic parameter `dynamic_partition_check_interval_seconds`, which defaults to 600 seconds (10 minutes). Suppose that the current date is April 4, 2023, `partition_live_number` is set to `2`, and the partitions include `p20230401`, `p20230402`, `p20230403`, `p20230404`. The partitions `p20230403` and `p20230404` are retained and other partitions are deleted. If dirty data is loaded, such as data from the future dates April 5 and April 6, partitions include `p20230401`, `p20230402`, `p20230403`, `p20230404`, `p20230405`, and `p20230406`. Then partitions `p20230403`, `p20230404`, `p20230405`, `p20230406` are retained and the other partitions are deleted. |
 
 ### Usage notes
 
@@ -115,7 +114,7 @@ However, in some special scenarios, such as  when the table contains a column `c
 
 ### Syntax
 
-```bnf
+```sql
 PARTITION BY expression
 ...
 [ PROPERTIES("partition_live_number" = "xxx") ]
@@ -129,15 +128,10 @@ partition_columns ::=
 
 ### Parameters
 
-- `partition_columns`: the names of partition columns.
-  - The partition column can be of the STRING  (BINARY not supported), DATE or DATETIME, INTEGER, and BOOLEAN data type.  The partition column allows `NULL` values.
-  - Each partition can only contain data with the same value for a partition column. To include data with different values in a partition column in a partition, see [List partitioning](./list_partitioning.md).
-- `partition_live_number`: the number of partitions to be retained. Compare the values of partition columns among partitions, and periodically delete partitions with smaller values while retaining those with larger values.
-  StarRocks schedules tasks to manage the number of partitions, and the scheduling interval can be configured through the FE dynamic parameter `dynamic_partition_check_interval_seconds`, which defaults to 600 seconds (10 minutes).
-
-> **NOTE**
->
-> If the values are of STRING data type, the values of partition columns among partitionsare compared based on their lexicographical order.
+| **Parameters**          | **Required** | **Description**                                                  |
+| ----------------------- | -------- | ------------------------------------------------------------ |
+| `partition_columns`     | YES      | the names of partition columns.<br> <ul><li>The partition column values can be string (BINARY not supported), date or datetime, integer, and boolean values. The partition column allows `NULL` values.</li><li> Each partition can only contain data with the same value for a partition column. To include data with different values in a partition column in a partition, see [List partitioning](./list_partitioning.md).</li></ul> |
+| `partition_live_number` | YES      | the number of partitions to be retained. Compare the values of partition columns among partitions, and periodically delete partitions with smaller values while retaining those with larger values.<br>StarRocks schedules tasks to manage the number of partitions, and the scheduling interval can be configured through the FE dynamic parameter `dynamic_partition_check_interval_seconds`, which defaults to 600 seconds (10 minutes).<br>**NOTE**<br>If the values in the partition column are strings, StarRocks compare the lexicographical order of the partition names, and periodically retains the partitions that come earlier while deleting the partitions that come later. |
 
 ### Usage notes
 
@@ -222,7 +216,7 @@ PROPERTIES(
 
 During data loading, StarRocks will automatically create partitions based on the loaded data and partition rule defined bythe partition expression.
 
-Note that if you use expression partitioning at table creation and need to use [INSERT OVERWRITE](../loading/InsertInto.md#overwrite-data-via-insert-overwrite-select) to overwrite data in a specific partition, whether the partition has been created or not, you currently need to explicitly provide an partition range in `PARTITION()`. This is different from [Range Partitioning](./Data_distribution.md#range-partitioning) or [List Partitioning](./list_partitioning.md), which allow you only to provide the partition name in `PARTITION (partition_name)`.
+Note that if you use expression partitioning at table creation and need to use [INSERT OVERWRITE](../loading/InsertInto.md#overwrite-data-via-insert-overwrite-select) to overwrite data in a specific partition, whether the partition has been created or not, you currently need to explicitly provide an partition range in `PARTITION()`. This is different from [Range Partitioning](./Data_distribution.md#range-partitioning) or [List Partitioning](./list_partitioning.md), which allow you only to provide the partition name in `PARTITION (<partition_name>)`.
 
 If you use a time function expression at table creation and want to overwrite data in a specific partition, you need to provide the starting date or datetime of that partition (the partition granularity configured at table creation). If the partition does not exist, it can be automatically created during data loading.
 
@@ -258,5 +252,5 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 - Since v3.1, StarRocks's shared-data mode supports the time function expression and does not support the column expression.
 - Currently, using CTAS to create a table that use the expression partitioning.
 - Currently, using Spark Load to load data to tables that use the expression partitioning is not supported.
-- When `ALTER TABLE <table_name> DROP PARTITION partition_name` statement is used to delete a partition created by using the column expression, data in the partition is directly removed and can not be recovered.
+- When `ALTER TABLE <table_name> DROP PARTITION <partition_name>` statement is used to delete a partition created by using the column expression, data in the partition is directly removed and can not be recovered.
 - Currently you can not  [backup and restore](../administration/Backup_and_restore.md) partitions created by the expression partitioning.
