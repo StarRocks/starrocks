@@ -81,6 +81,7 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
+      REPO: ${{ github.repository }}
     steps:
       - name: clean
         run: |
