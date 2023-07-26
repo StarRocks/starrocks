@@ -191,10 +191,12 @@ Status SchemaDescriptor::map_to_field(const std::vector<tparquet::SchemaElement>
                 "Key-value map node must have 1 or 2 child elements. Found: $0", key_value_schema->num_children));
     }
 
-    ASSIGN_OR_RETURN(const auto* key_schema, _get_schema_element(t_schemas, pos + 2));
-    if (!is_required(key_schema)) {
-        return Status::InvalidArgument("Map keys must be annotated as required.");
-    }
+    // Compatible with trino, comment below checks
+    // ASSIGN_OR_RETURN(const auto* key_schema, _get_schema_element(t_schemas, pos + 2));
+    // if (!is_required(key_schema)) {
+    //   return Status::InvalidArgument("Map keys must be annotated as required.");
+    // }
+
     // SR doesn't support 1 column maps (i.e. Sets).  The options are to either
     // make the values column nullable, or process the map as a list.  We choose the latter
     // as it is simpler.
