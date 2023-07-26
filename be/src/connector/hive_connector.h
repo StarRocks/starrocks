@@ -87,6 +87,7 @@ private:
     HdfsScanner* _scanner = nullptr;
     bool _use_datacache = false;
     bool _enable_populate_datacache = false;
+    bool _use_file_metacache = false;
 
     // ============ conjuncts =================
     std::vector<ExprContext*> _min_max_conjunct_ctxs;

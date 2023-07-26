@@ -222,6 +222,11 @@ struct TQueryOptions {
 
   104: optional TOverflowMode overflow_mode = TOverflowMode.OUTPUT_NULL;
   105: optional bool use_column_pool = true;
+
+  // Skip the 106:enable_agg_spill_preaggregation
+
+  // Whether use hdfs file metacache
+  107: optional bool enable_hdfs_file_metacache;
 }
 
 
@@ -271,7 +276,7 @@ struct TPlanFragmentExecParams {
   // To enable pass through chunks between sink/exchange if they are in the same process.
   52: optional bool enable_exchange_pass_through
 
-  53: optional map<Types.TPlanNodeId, map<i32, list<TScanRangeParams>>> node_to_per_driver_seq_scan_ranges
+  53: optional map<Types.TPlanNodeId, map<i32, list<TScanRangeParams>>> node_to_per_driver_seq_scan_ranges 
 
   54: optional bool enable_exchange_perf
 

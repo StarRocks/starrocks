@@ -55,6 +55,10 @@ struct HdfsScanStats {
     int64_t page_read_ns = 0;
     // reader init
     int64_t footer_read_ns = 0;
+    int64_t footer_cache_read_ns = 0;
+    int64_t footer_cache_read_count = 0;
+    int64_t footer_cache_write_count = 0;
+    int64_t footer_cache_write_bytes = 0;
     int64_t column_reader_init_ns = 0;
     // dict filter
     int64_t group_chunk_read_ns = 0;
@@ -142,6 +146,7 @@ struct HdfsScannerParams {
     // The file size. -1 means unknown.
     int64_t file_size = -1;
 
+    // The file last modification time
     int64_t modification_time = 0;
 
     const TupleDescriptor* tuple_desc = nullptr;
@@ -185,6 +190,7 @@ struct HdfsScannerParams {
     std::atomic<int32_t>* lazy_column_coalesce_counter;
     bool can_use_any_column = false;
     bool can_use_min_max_count_opt = false;
+    bool use_file_metacache = false;
 };
 
 struct HdfsScannerContext {
@@ -232,6 +238,8 @@ struct HdfsScannerContext {
     bool can_use_any_column = false;
 
     bool can_use_min_max_count_opt = false;
+
+    bool use_file_metacache = false;
 
     std::string timezone;
 

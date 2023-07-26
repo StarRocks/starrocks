@@ -37,12 +37,11 @@ CacheInputStream::CacheInputStream(const std::shared_ptr<SharedBufferedInputStre
           _sb_stream(stream),
           _offset(0),
           _size(size) {
-    // _cache_key = _filename;
-    // use hash(filename) as cache key.
     _cache = BlockCache::instance();
     _block_size = _cache->block_size();
 
     _cache_key.resize(12);
+
     char* data = _cache_key.data();
     uint64_t hash_value = HashUtil::hash64(filename.data(), filename.size(), 0);
     memcpy(data, &hash_value, sizeof(hash_value));
@@ -107,7 +106,7 @@ Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bo
     ReadCacheOptions options;
     {
         SCOPED_RAW_TIMER(&read_cache_ns);
-        res = _cache->read_cache(_cache_key, block_offset, load_size, &block.buffer, &options);
+        res = _cache->read_buffer(_cache_key, block_offset, load_size, &block.buffer, &options);
     }
     if (res.ok()) {
         block.buffer.copy_to(out, size, shift);
@@ -153,7 +152,7 @@ Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bo
     if (_enable_populate_cache && res.is_not_found()) {
         SCOPED_RAW_TIMER(&_stats.write_cache_ns);
         WriteCacheOptions options;
-        Status r = _cache->write_cache(_cache_key, block_offset, load_size, src, &options);
+        Status r = _cache->write_buffer(_cache_key, block_offset, load_size, src, &options);
         if (r.ok()) {
             _stats.write_cache_count += 1;
             _stats.write_cache_bytes += load_size;
@@ -271,7 +270,7 @@ void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int6
         SCOPED_RAW_TIMER(&_stats.write_cache_ns);
         WriteCacheOptions options;
         options.overwrite = false;
-        Status r = cache->write_cache(_cache_key, offset, size, buf, &options);
+        Status r = cache->write_buffer(_cache_key, offset, size, buf, &options);
         if (r.ok()) {
             _stats.write_cache_count += 1;
             _stats.write_cache_bytes += size;

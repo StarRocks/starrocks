@@ -976,7 +976,7 @@ CONF_Int64(datacache_max_concurrent_inserts, "1500000");
 // Once this is reached, cache populcation will be rejected until the flying memory usage gets under the limit.
 CONF_Int64(datacache_max_flying_memory_mb, "256");
 // Whether to use datacache adaptor, which will skip reading cache when disk overload is high.
-CONF_Bool(datacache_adaptor_enable, "true");
+CONF_Bool(datacache_adaptor_enable, "false");
 // A factor to control the io traffic between cache and network. The larger this parameter,
 // the more requests will be sent to the network.
 // Usually there is no need to modify it.
