@@ -182,7 +182,8 @@ public:
     // if the segment is empty, put an empty pointer in list
     // caller is also responsible to call rowset's acquire/release
     StatusOr<std::vector<ChunkIteratorPtr>> get_segment_iterators2(const Schema& schema, KVStore* meta, int64_t version,
-                                                                   OlapReaderStatistics* stats);
+                                                                   OlapReaderStatistics* stats,
+                                                                   KVStore* dcg_meta = nullptr);
 
     // only used for updatable tablets' rowset in column mode partial update
     // simply get iterators to iterate all rows without complex options like predicates
@@ -227,6 +228,8 @@ public:
 
     Status remove_delta_column_group(KVStore* kvstore);
 
+    Status remove_delta_column_group();
+
     // close to clear the resource owned by rowset
     // including: open files, indexes and so on
     // NOTICE: can not call this function in multithreads
@@ -262,14 +265,14 @@ public:
     Status link_files_to(KVStore* kvstore, const std::string& dir, RowsetId new_rowset_id, int64_t version = INT64_MAX);
 
     // copy all files to `dir`
-    Status copy_files_to(const std::string& dir);
+    Status copy_files_to(KVStore* kvstore, const std::string& dir);
 
     static std::string segment_file_path(const std::string& segment_dir, const RowsetId& rowset_id, int segment_id);
     static std::string segment_temp_file_path(const std::string& dir, const RowsetId& rowset_id, int segment_id);
     static std::string segment_del_file_path(const std::string& segment_dir, const RowsetId& rowset_id, int segment_id);
     static std::string segment_upt_file_path(const std::string& segment_dir, const RowsetId& rowset_id, int segment_id);
     static std::string delta_column_group_path(const std::string& dir, const RowsetId& rowset_id, int segment_id,
-                                               int64_t version);
+                                               int64_t version, int idx);
     // return an unique identifier string for this rowset
     std::string unique_id() const { return _rowset_path + "/" + rowset_id().to_string(); }
 

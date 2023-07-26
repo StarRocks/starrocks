@@ -541,6 +541,52 @@ Status ChunkChanger::prepare() {
     return Status::OK();
 }
 
+Status ChunkChanger::append_materialized_columns(ChunkPtr& read_chunk, ChunkPtr& new_chunk,
+                                                 const std::vector<uint32_t>& all_ref_columns_ids,
+                                                 int base_schema_columns) {
+    if (_mc_exprs.size() == 0) {
+        return Status::OK();
+    }
+
+    // init for expression evaluation only
+    DCHECK(all_ref_columns_ids.size() == read_chunk->num_columns());
+    for (size_t i = 0; i < read_chunk->num_columns(); ++i) {
+        read_chunk->set_slot_id_to_index(all_ref_columns_ids[i], i);
+    }
+
+    auto tmp_new_chunk = new_chunk->clone_empty();
+
+    for (auto it : _mc_exprs) {
+        // cid for new partial schema
+        int cid = it.first - base_schema_columns;
+        ASSIGN_OR_RETURN(ColumnPtr tmp, it.second->evaluate(read_chunk.get()));
+        if (tmp->only_null()) {
+            // Only null column maybe lost type info, we append null
+            // for the chunk instead of swapping the tmp column.
+            std::dynamic_pointer_cast<NullableColumn>(tmp_new_chunk->get_column_by_index(cid))->reset_column();
+            std::dynamic_pointer_cast<NullableColumn>(tmp_new_chunk->get_column_by_index(cid))
+                    ->append_nulls(read_chunk->num_rows());
+        } else if (tmp->is_nullable()) {
+            tmp_new_chunk->get_column_by_index(cid).swap(tmp);
+        } else {
+            // materialized column must be a nullable column. If tmp is not nullable column,
+            // it maybe a constant column or some other column type
+            // Unpack normal const column
+            ColumnPtr output_column = ColumnHelper::unpack_and_duplicate_const_column(read_chunk->num_rows(), tmp);
+            std::dynamic_pointer_cast<NullableColumn>(tmp_new_chunk->get_column_by_index(cid))
+                    ->swap_by_data_column(output_column);
+        }
+    }
+
+    // append into the new_chunk
+    new_chunk->append(*tmp_new_chunk.get());
+
+    // reset the slot-index map for compatibility
+    read_chunk->reset_slot_id_to_index();
+
+    return Status::OK();
+}
+
 #undef CONVERT_FROM_TYPE
 #undef TYPE_REINTERPRET_CAST
 #undef ASSIGN_DEFAULT_VALUE
@@ -577,6 +623,7 @@ Status SchemaChangeUtils::parse_request(const TabletSchema& base_schema, const T
                                         bool has_delete_predicates, bool* sc_sorting, bool* sc_directly,
                                         std::unordered_set<int>* materialized_column_idxs) {
     std::map<ColumnId, ColumnId> base_to_new;
+    bool is_modify_materialized_column = false;
     for (int i = 0; i < new_schema.num_columns(); ++i) {
         const TabletColumn& new_column = new_schema.column(i);
         std::string column_name(new_column.name());
@@ -618,6 +665,12 @@ Status SchemaChangeUtils::parse_request(const TabletSchema& base_schema, const T
             column_mapping->ref_column = column_index;
             base_to_new[column_index] = i;
             continue;
+        }
+
+        if (!is_modify_materialized_column) {
+            is_modify_materialized_column =
+                    (materialized_column_idxs != nullptr) &&
+                    (materialized_column_idxs->find(column_index) != materialized_column_idxs->end());
         }
 
         // to handle new added column
@@ -696,7 +749,7 @@ Status SchemaChangeUtils::parse_request(const TabletSchema& base_schema, const T
         } else {
             auto& new_column = new_schema.column(i);
             auto& ref_column = base_schema.column(column_mapping->ref_column);
-            if (new_column.type() != ref_column.type()) {
+            if (new_column.type() != ref_column.type() || is_modify_materialized_column) {
                 *sc_directly = true;
                 return Status::OK();
             } else if (is_decimalv3_field_type(new_column.type()) &&

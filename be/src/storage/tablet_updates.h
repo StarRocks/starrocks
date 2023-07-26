@@ -22,6 +22,7 @@
 
 #include "common/statusor.h"
 #include "gen_cpp/olap_file.pb.h"
+#include "storage/delta_column_group.h"
 #include "storage/edit_version.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_writer.h"
@@ -216,7 +217,8 @@ public:
     void to_updates_pb(TabletUpdatesPB* updates_pb) const;
 
     // Used for schema change, migrate another tablet's version&rowsets to this tablet
-    Status link_from(Tablet* base_tablet, int64_t request_version, std::string err_msg_header = "");
+    Status link_from(Tablet* base_tablet, int64_t request_version, ChunkChanger* chunk_changer,
+                     const std::string& err_msg_header = "");
 
     Status convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
                         ChunkChanger* chunk_changer, std::string err_msg_header = "");
