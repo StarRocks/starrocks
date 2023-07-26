@@ -75,8 +75,7 @@ public:
 
     Status drop_tablets_on_error_root_path(const std::vector<TabletInfo>& tablet_info_vec);
 
-    TabletSharedPtr find_best_tablet_to_compaction(CompactionType compaction_type, DataDir* data_dir,
-                                                   std::pair<int32_t, int32_t> tablet_shards_range);
+    TabletSharedPtr find_best_tablet_to_compaction(CompactionType compaction_type, DataDir* data_dir);
 
     TabletSharedPtr find_best_tablet_to_do_update_compaction(DataDir* data_dir);
 
