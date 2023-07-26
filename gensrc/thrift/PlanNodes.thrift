@@ -299,6 +299,10 @@ struct THdfsScanRange {
     10: optional bool use_hudi_jni_reader;
 
     11: optional list<TIcebergDeleteFile> delete_files;
+
+    // last modification time of the hdfs file, for data cache
+    12: optional i64 modification_time
+
 }
 
 // Specification of an individual data range which is held in its entirety
