@@ -57,10 +57,10 @@ private:
 
     Status _get_next_chunk(JNIEnv* _jni_env, long* chunk_meta);
 
-    template <LogicalType type, typename CppType>
+    template <LogicalType type>
     Status _append_primitive_data(const FillColumnArgs& args);
 
-    template <LogicalType type, typename CppType>
+    template <LogicalType type>
     Status _append_decimal_data(const FillColumnArgs& args);
 
     template <LogicalType type>

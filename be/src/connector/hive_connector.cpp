@@ -523,6 +523,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     RETURN_IF_ERROR(scanner->init(state, scanner_params));
     Status st = scanner->open(state);
     if (!st.ok()) {
+        if (typeid(*scanner) == typeid(JniScanner)) {
+            return st;
+        }
+
         auto msg = fmt::format("file = {}", native_file_path);
 
         // After catching the AWS 404 file not found error and returning it to the FE,
