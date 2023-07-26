@@ -324,10 +324,12 @@ public class MaterializedViewAnalyzer {
             tableNameTableMap.forEach((tableNameInfo, table) -> {
                 Preconditions.checkState(table != null, "Materialized view base table is null");
                 if (!isSupportBasedOnTable(table)) {
-                    throw new SemanticException("Create/Rebuild materialized view do not support the table type: " + table.getType());
+                    throw new SemanticException("Create/Rebuild materialized view do not support the table type: "
+                            + table.getType());
                 }
                 if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
-                    throw new SemanticException("Create/Rebuild materialized view from inactive materialized view: " + table.getName());
+                    throw new SemanticException("Create/Rebuild materialized view from inactive materialized view: "
+                            + table.getName());
                 }
 
                 if (table.isView()) {
