@@ -47,7 +47,7 @@ public:
     };
 
     explicit CacheInputStream(std::shared_ptr<SharedBufferedInputStream> stream, const std::string& filename,
-                              size_t size);
+                              size_t size, int64_t modification_time);
 
     ~CacheInputStream() override;
 

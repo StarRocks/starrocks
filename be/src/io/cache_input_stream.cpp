@@ -26,7 +26,7 @@
 namespace starrocks::io {
 
 CacheInputStream::CacheInputStream(std::shared_ptr<SharedBufferedInputStream> stream, const std::string& filename,
-                                   size_t size)
+                                   size_t size, int64_t modification_time)
         : SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership),
           _filename(filename),
           _sb_stream(stream),
@@ -36,13 +36,21 @@ CacheInputStream::CacheInputStream(std::shared_ptr<SharedBufferedInputStream> st
     // use hash(filename) as cache key.
     _cache = BlockCache::instance();
     _block_size = _cache->block_size();
-
-    _cache_key.resize(16);
+    _cache_key.resize(12);
     char* data = _cache_key.data();
     uint64_t hash_value = HashUtil::hash64(filename.data(), filename.size(), 0);
     memcpy(data, &hash_value, sizeof(hash_value));
-    int64_t file_size = _size;
-    memcpy(data + 8, &file_size, sizeof(file_size));
+    // The modification time is more appropriate to indicate the different file versions.
+    // While some data source, such as Hudi, have no modification time because their files
+    // cannot be overwritten. So, if the modification time is unsupported, we use file size instead.
+    // Also, to reduce memory usage, we only use the high four bytes to represent the second timestamp.
+    if (modification_time > 0) {
+        int32_t mtime_s = (modification_time >> 32) & 0x00000000FFFFFFFF;
+        memcpy(data + 8, &mtime_s, sizeof(mtime_s));
+    } else {
+        int32_t file_size = _size;
+        memcpy(data + 8, &file_size, sizeof(file_size));
+    }
     _buffer.reserve(_block_size);
 }
 
