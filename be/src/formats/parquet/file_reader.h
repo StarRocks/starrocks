@@ -54,8 +54,6 @@ public:
 
     Status get_next(ChunkPtr* chunk);
 
-    std::shared_ptr<FileMetaData> get_file_metadata();
-
 private:
     int _chunk_size;
 
