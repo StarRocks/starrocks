@@ -75,7 +75,7 @@ public:
     FileMetaData() = default;
     ~FileMetaData() = default;
 
-    Status init(const tparquet::FileMetaData& t_metadata, bool case_sensitive);
+    Status init(tparquet::FileMetaData& t_metadata, bool case_sensitive);
 
     uint64_t num_rows() const { return _num_rows; }
 
@@ -86,6 +86,12 @@ public:
     const SchemaDescriptor& schema() const { return _schema; }
 
     const ApplicationVersion& writer_version() const { return _writer_version; }
+
+    size_t estimate_memory() const {
+        // An approximate memory statistics, not accurate
+        size_t version_size = _writer_version.application_.length() + _writer_version.build_.length();
+        return sizeof(tparquet::FileMetaData) + sizeof(uint64_t) + _schema.estimate_memory() + version_size;
+    }
 
 private:
     tparquet::FileMetaData _t_metadata;

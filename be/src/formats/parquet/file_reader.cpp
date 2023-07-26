@@ -33,19 +33,49 @@
 
 namespace starrocks::parquet {
 
-FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
+FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size, int64_t file_mtime,
                        io::SharedBufferedInputStream* sb_stream, const std::set<int64_t>* _need_skip_rowids)
         : _chunk_size(chunk_size),
           _file(file),
           _file_size(file_size),
+          _file_mtime(file_mtime),
           _sb_stream(sb_stream),
           _need_skip_rowids(_need_skip_rowids) {}
 
-FileReader::~FileReader() = default;
+FileReader::~FileReader() {
+    if (!_is_metadata_cached && _file_metadata) {
+        delete _file_metadata;
+    }
+}
+
+void FileReader::_build_metacache_key() {
+    auto& filename = _file->filename();
+    _metacache_key.resize(14);
+    char* data = _metacache_key.data();
+    const std::string footer_suffix = "ft";
+    uint64_t hash_value = HashUtil::hash64(filename.data(), filename.size(), 0);
+    memcpy(data, &hash_value, sizeof(hash_value));
+    memcpy(data + 8, footer_suffix.data(), footer_suffix.length());
+    // The modification time is more appropriate to indicate the different file versions.
+    // While some data source, such as Hudi, have no modification time because their files
+    // cannot be overwritten. So, if the modification time is unsupported, we use file size instead.
+    // Also, to reduce memory usage, we only use the high four bytes to represent the second timestamp.
+    if (_file_mtime > 0) {
+        uint32_t mtime_s = (_file_mtime >> 9) & 0x00000000FFFFFFFF;
+        memcpy(data + 10, &mtime_s, sizeof(mtime_s));
+    } else {
+        uint32_t size = _file_size;
+        memcpy(data + 10, &size, sizeof(size));
+    }
+}
 
 Status FileReader::init(HdfsScannerContext* ctx) {
     _scanner_ctx = ctx;
-    RETURN_IF_ERROR(_parse_footer());
+    if (ctx->use_file_metacache && config::block_cache_enable) {
+        _build_metacache_key();
+        _cache = BlockCache::instance();
+    }
+    RETURN_IF_ERROR(_get_footer());
 
     if (_scanner_ctx->iceberg_schema != nullptr && _file_metadata->schema().exist_filed_id()) {
         // If we want read this parquet file with iceberg schema,
@@ -70,7 +100,11 @@ Status FileReader::init(HdfsScannerContext* ctx) {
     return Status::OK();
 }
 
-Status FileReader::_parse_footer() {
+FileMetaData* FileReader::get_file_metadata() {
+    return _file_metadata;
+}
+
+Status FileReader::_parse_footer(FileMetaData** file_metadata, size_t* metadata_size) {
     std::vector<char> footer_buffer;
     ASSIGN_OR_RETURN(uint32_t footer_read_size, _get_footer_read_size());
     footer_buffer.resize(footer_read_size);
@@ -101,8 +135,43 @@ Status FileReader::_parse_footer() {
     RETURN_IF_ERROR(deserialize_thrift_msg(reinterpret_cast<const uint8*>(footer_buffer.data()) + footer_buffer.size() -
                                                    PARQUET_FOOTER_SIZE - metadata_length,
                                            &metadata_length, TProtocolType::COMPACT, &t_metadata));
-    _file_metadata.reset(new FileMetaData());
-    RETURN_IF_ERROR(_file_metadata->init(t_metadata, _scanner_ctx->case_sensitive));
+    *file_metadata = new FileMetaData();
+    *metadata_size = metadata_length;
+    RETURN_IF_ERROR((*file_metadata)->init(t_metadata, _scanner_ctx->case_sensitive));
+    return Status::OK();
+}
+
+Status FileReader::_get_footer() {
+    _is_metadata_cached = false;
+    if (!_cache) {
+        size_t metadata_size = 0;
+        return _parse_footer(&_file_metadata, &metadata_size);
+    }
+
+    {
+        SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_cache_read_ns);
+        Status st = _cache->read_object(_metacache_key, &_cache_handle);
+        if (st.ok()) {
+            _file_metadata = (FileMetaData*)_cache_handle.ptr();
+            _scanner_ctx->stats->footer_cache_read_count += 1;
+            _is_metadata_cached = true;
+            return st;
+        }
+    }
+
+    size_t metadata_size = 0;
+    FileMetaData* file_metadata = nullptr;
+    RETURN_IF_ERROR(_parse_footer(&file_metadata, &metadata_size));
+    size_t metadata_space = metadata_size + 8 + file_metadata->estimate_memory();
+
+    auto deleter = [file_metadata]() { delete file_metadata; };
+    Status st = _cache->write_object(_metacache_key, file_metadata, metadata_space, deleter, &_cache_handle);
+    if (st.ok()) {
+        _scanner_ctx->stats->footer_cache_write_bytes += metadata_space;
+        _scanner_ctx->stats->footer_cache_write_count += 1;
+        _is_metadata_cached = true;
+    }
+    _file_metadata = file_metadata;
     return Status::OK();
 }
 
@@ -439,7 +508,7 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.sb_stream = nullptr;
     _group_reader_param.chunk_size = _chunk_size;
     _group_reader_param.file = _file;
-    _group_reader_param.file_metadata = _file_metadata.get();
+    _group_reader_param.file_metadata = _file_metadata;
     _group_reader_param.case_sensitive = fd_scanner_ctx.case_sensitive;
 
     int64_t row_group_first_row = 0;
