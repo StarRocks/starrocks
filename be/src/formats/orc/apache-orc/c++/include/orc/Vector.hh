@@ -207,6 +207,7 @@ struct StructVectorBatch : public ColumnVectorBatch {
     void filter(uint8_t* f_data, uint32_t f_size, uint32_t true_size) override;
     void filterOnFields(uint8_t* f_data, uint32_t f_size, uint32_t true_size, const std::vector<int>& fields,
                         bool onLazyLoad) override;
+
 private:
     bool alreadyFilteredByActiveColumn = false;
 };
