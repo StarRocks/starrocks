@@ -24,7 +24,7 @@ class HdfsScannerContext;
 
 namespace starrocks::parquet {
 
-constexpr static const uint64_t FOOTER_BUFFER_SIZE = 16 * 1024;
+constexpr static const uint64_t FOOTER_BUFFER_SIZE = 64 * 1024;
 constexpr static const char* PARQUET_MAGIC_NUMBER = "PAR1";
 
 class FileMetaData;
