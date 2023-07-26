@@ -525,9 +525,9 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 " where t0.v1 = 1" +
                 " group by v1, test_all_type.t1d";
         String plan1 = getFragmentPlan(query1);
-        PlanTestBase.assertContains(plan1, "1:Project\n" +
+        PlanTestBase.assertContains(plan1, "  1:Project\n" +
                 "  |  <slot 1> : 16: v1\n" +
-                "  |  <slot 7> : 16: v1\n" +
+                "  |  <slot 7> : clone(16: v1)\n" +
                 "  |  <slot 14> : 18: total_sum\n" +
                 "  |  <slot 15> : 19: total_num\n" +
                 "  |  \n" +
@@ -545,7 +545,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
         String plan2 = getFragmentPlan(query2);
         PlanTestBase.assertContains(plan2, "1:Project\n" +
                 "  |  <slot 1> : 16: v1\n" +
-                "  |  <slot 7> : 16: v1\n" +
+                "  |  <slot 7> : clone(16: v1)\n" +
                 "  |  <slot 14> : 18: total_sum\n" +
                 "  |  <slot 15> : 19: total_num\n" +
                 "  |  \n" +
@@ -561,7 +561,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
         String plan3 = getFragmentPlan(query3);
         PlanTestBase.assertContains(plan3, "1:Project\n" +
                 "  |  <slot 1> : 16: v1\n" +
-                "  |  <slot 7> : 16: v1\n" +
+                "  |  <slot 7> : clone(16: v1)\n" +
                 "  |  <slot 14> : 18: total_sum\n" +
                 "  |  <slot 15> : 19: total_num\n" +
                 "  |  \n" +

@@ -361,9 +361,9 @@ public class ConstantExpressionTest extends PlanTestBase {
 
             sql = "SELECT percentile_approx(2.25, 0), percentile_approx(2.25, 0.)";
             plan = getFragmentPlan(sql);
-            assertContains(plan, "  2:Project\n" +
+            assertContains(plan, "2:Project\n" +
                     "  |  <slot 2> : 2: percentile_approx\n" +
-                    "  |  <slot 3> : 2: percentile_approx\n" +
+                    "  |  <slot 3> : clone(2: percentile_approx)\n" +
                     "  |  \n" +
                     "  1:AGGREGATE (update finalize)\n" +
                     "  |  output: percentile_approx(2.25, 0.0)\n" +
@@ -372,11 +372,11 @@ public class ConstantExpressionTest extends PlanTestBase {
             sql = "SELECT COUNT(CASE WHEN 1 THEN 1 END), COUNT(CASE WHEN TRUE THEN 1 END), " +
                     "COUNT(CASE WHEN 1.0 THEN 1 END), COUNT(CASE WHEN CAST(1 AS LARGEINT) THEN 1 END)";
             plan = getFragmentPlan(sql);
-            assertContains(plan, "  2:Project\n" +
+            assertContains(plan, "2:Project\n" +
                     "  |  <slot 2> : 2: count\n" +
-                    "  |  <slot 3> : 2: count\n" +
-                    "  |  <slot 4> : 2: count\n" +
-                    "  |  <slot 5> : 2: count\n" +
+                    "  |  <slot 3> : clone(2: count)\n" +
+                    "  |  <slot 4> : clone(2: count)\n" +
+                    "  |  <slot 5> : clone(2: count)\n" +
                     "  |  \n" +
                     "  1:AGGREGATE (update finalize)\n" +
                     "  |  output: count(1)\n" +

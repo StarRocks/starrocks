@@ -494,7 +494,7 @@ public class AggregateTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  2:Project\n" +
                 "  |  <slot 13> : 13: bitmap_union_count\n" +
-                "  |  <slot 14> : 13: bitmap_union_count\n" +
+                "  |  <slot 14> : clone(13: bitmap_union_count)\n" +
                 "  |  \n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: bitmap_union_count(5: b1)");
@@ -1753,13 +1753,13 @@ public class AggregateTest extends PlanTestBase {
 
         sql = "select sum(t1c + 1), sum(t1c + 1 + 2), sum(t1d + 1 + 3) from test_all_type";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+        assertContains(plan, "2:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(11: expr), sum(18: add + 2), sum(4: t1d + 1 + 3)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  1:Project\n" +
                 "  |  <slot 4> : 4: t1d\n" +
-                "  |  <slot 11> : 18: add\n" +
+                "  |  <slot 11> : clone(18: add)\n" +
                 "  |  <slot 18> : 18: add\n" +
                 "  |  common expressions:\n" +
                 "  |  <slot 17> : CAST(3: t1c AS BIGINT)\n" +
