@@ -68,10 +68,6 @@ jobs:
       - name: Clean ENV
         if: always()
         run: |
-          if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
-              cd ci-tool && source lib/init.sh
-              ./bin/elastic-cluster.sh --delete
-          fi
           rm -rf ${{ github.workspace }}/*
 
   be-checker:
