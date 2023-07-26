@@ -308,7 +308,7 @@ public class Backend extends ComputeNode {
         out.writeInt(getHttpPort());
         out.writeInt(getBeRpcPort());
         out.writeBoolean(getIsAlive().get());
-        out.writeBoolean(getIsDecommissioned().get());
+        out.writeBoolean(isDecommissioned());
         out.writeLong(getLastUpdateMs());
 
         out.writeLong(getLastStartTime());
