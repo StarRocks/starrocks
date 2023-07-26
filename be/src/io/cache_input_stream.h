@@ -35,7 +35,7 @@ public:
     };
 
     explicit CacheInputStream(const std::shared_ptr<SeekableInputStream>& stream, const std::string& filename,
-                              size_t size);
+                              size_t size, int64_t modification_time);
 
     ~CacheInputStream() override = default;
 

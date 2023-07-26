@@ -119,6 +119,7 @@ public class RemoteScanRangeLocations {
         hdfsScanRange.setLength(length);
         hdfsScanRange.setPartition_id(partitionId);
         hdfsScanRange.setFile_length(fileDesc.getLength());
+        hdfsScanRange.setModification_time(fileDesc.getModificationTime());
         hdfsScanRange.setFile_format(partition.getFormat().toThrift());
         if (isTextFormat(hdfsScanRange.getFile_format())) {
             hdfsScanRange.setText_file_desc(fileDesc.getTextFileFormatDesc().toThrift());
