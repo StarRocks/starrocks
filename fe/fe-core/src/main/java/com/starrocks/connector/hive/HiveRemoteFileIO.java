@@ -92,7 +92,8 @@ public class HiveRemoteFileIO implements RemoteFileIO {
                 BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
                 List<RemoteFileBlockDesc> fileBlockDescs = getRemoteFileBlockDesc(blockLocations);
                 fileDescs.add(new RemoteFileDesc(fileName, "", locatedFileStatus.getLen(),
-                        ImmutableList.copyOf(fileBlockDescs), ImmutableList.of()));
+                              locatedFileStatus.getModificationTime(), ImmutableList.copyOf(fileBlockDescs),
+                              ImmutableList.of()));
             }
         } catch (Exception e) {
             LOG.error("Failed to get hive remote file's metadata on path: {}", path, e);
