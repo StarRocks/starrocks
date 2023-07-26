@@ -44,11 +44,8 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.staros.proto.FilePathInfo;
-<<<<<<< HEAD
-import com.starrocks.analysis.ColumnDef;
-=======
 import com.starrocks.alter.AlterJobMgr;
->>>>>>> 6e1d5ec99b ([Feature] support create or replace view (#27768))
+import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
@@ -4568,45 +4565,29 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new DdlException("failed to init view stmt", e);
             }
 
-<<<<<<< HEAD
-        long tableId = getNextId();
-        View newView = new View(tableId, tableName, columns);
-        newView.setComment(stmt.getComment());
-        newView.setInlineViewDefWithSqlMode(stmt.getInlineViewDef(),
-                ConnectContext.get().getSessionVariable().getSqlMode());
-        // init here in case the stmt string from view.toSql() has some syntax error.
-        try {
-            newView.init();
-        } catch (UserException e) {
-            throw new DdlException("failed to init view stmt", e);
-        }
-
-        // check database exists again, because database can be dropped when creating table
-        if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
-        }
-        try {
-            if (getDb(db.getId()) == null) {
-                throw new DdlException("database has been dropped when creating view");
+            // check database exists again, because database can be dropped when creating table
+            if (!tryLock(false)) {
+                throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
             }
-            if (!db.createTableWithLock(newView, false)) {
-                if (!stmt.isSetIfNotExists()) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
-                } else {
-                    LOG.info("create table[{}] which already exists", tableName);
-                    return;
+            try {
+                if (getDb(db.getId()) == null) {
+                    throw new DdlException("database has been dropped when creating view");
                 }
+                if (!db.createTableWithLock(view, false)) {
+                    if (!stmt.isSetIfNotExists()) {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName,
+                                "table already exists");
+                    } else {
+                        LOG.info("create table[{}] which already exists", tableName);
+                        return;
+                    }
+                }
+            } finally {
+                unlock();
             }
-        } finally {
-            unlock();
-        }
 
-        LOG.info("successfully create view[" + tableName + "-" + newView.getId() + "]");
-=======
-            onCreate(db, view, "", stmt.isSetIfNotExists());
             LOG.info("successfully create view[" + tableName + "-" + view.getId() + "]");
         }
->>>>>>> 6e1d5ec99b ([Feature] support create or replace view (#27768))
     }
 
     public void replayCreateCluster(Cluster cluster) {

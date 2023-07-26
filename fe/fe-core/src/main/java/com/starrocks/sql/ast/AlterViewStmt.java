@@ -28,10 +28,10 @@ public class AlterViewStmt extends DdlStmt {
 
     public static AlterViewStmt fromReplaceStmt(CreateViewStmt stmt) {
         AlterViewClause alterViewClause = new AlterViewClause(
-                stmt.getColWithComments(), stmt.getQueryStatement(), NodePosition.ZERO);
+                stmt.getColWithComments(), stmt.getQueryStatement());
         alterViewClause.setInlineViewDef(stmt.getInlineViewDef());
         alterViewClause.setColumns(stmt.getColumns());
-        return new AlterViewStmt(stmt.getTableName(), alterViewClause, NodePosition.ZERO);
+        return new AlterViewStmt(stmt.getTableName(), alterViewClause);
     }
 
     public TableName getTableName() {
