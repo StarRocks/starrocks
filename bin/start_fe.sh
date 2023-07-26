@@ -115,6 +115,7 @@ if [[ "$JAVA_VERSION" -gt 8 ]]; then
         
     if [ -n "$JAVA_OPTS_FOR_JDK_11" ]; then
         final_java_opt=$JAVA_OPTS_FOR_JDK_11
+    # for config compatibility
     elif [ -n "$JAVA_OPTS_FOR_JDK_9" ]; then 
         final_java_opt=$JAVA_OPTS_FOR_JDK_9
     else
