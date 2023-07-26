@@ -151,7 +151,7 @@ The partitioning method divides a table into multiple partitions. Partitioning p
 
 | Partitioning method                   | Scenarios                                                    | Methods to create partitions               |
 | ------------------------------------- | ------------------------------------------------------------ | ------------------------------------------ |
-| Expression partitioning (recommended) | Previously known as automatic partitioning. This partitioning method is more flexible and user-friendly. It is suitable for most scenarios including querying and managing data based on continuous date ranges or emurated values. | Automatically created during data loading. |
+| Expression partitioning (recommended) | Previously known as automatic partitioning. This partitioning method is more flexible and user-friendly. It is suitable for most scenarios including querying and managing data based on continuous date ranges or emurated values. | Automatically created during data loading |
 | Range partitioning                    | The typical scenario is to store simple and ordered data that is often queried and managed based on continuous date/numeric ranges. For instance, in some special cases, historical data needs to be partitioned by month, while recent data needs to be partitioned by day. | Created manually, dynamically, or in batch |
 | List partitioning                     | A typical scenario is to query and manage data based on emurated values, where a partition needs to include data with different values for each partition column. For example, if you frequently query and manage data based on country and city, you can use this method and select `city` as the partition column. So a partition can contain data for multiple cities belonging to one country. | Created manually                           |
 
@@ -223,8 +223,6 @@ DISTRIBUTED BY HASH(site_id);
 ```
 
 **Create multiple partitions at a time**
-
-Partition a table by specifying START, END, and EVERY. You can  by using this method. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
 
 Multiple partitions can be created at a time at and after table creation. You can specify the start and end time for all the partitions created at a time in `START()` and `END()` and the partition increment value in `EVERY()`. However, note that the range of partitions includes the start time but does not include the end time. The naming for partitions is the same as that of dynamic partitioning.
 
