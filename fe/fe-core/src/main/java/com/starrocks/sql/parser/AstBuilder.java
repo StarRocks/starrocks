@@ -919,8 +919,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             colWithComments = visit(context.columnNameWithComment(), ColWithComment.class);
         }
         if (context.IF() != null && context.REPLACE() != null) {
-            throw new ParsingException(PARSER_ERROR_MSG.conflictedOptions("if not exists", "or replace"),
-                    createPos(context));
+            throw new ParsingException("conflicted option IF NOT EXISTS and OR REPLACE");
         }
         return new CreateViewStmt(
                 context.IF() != null,

@@ -89,9 +89,6 @@ public class CreateViewTest {
             Assert.assertTrue(column.isAllowNull());
         }
     }
-<<<<<<< HEAD
-}
-=======
 
     @Test
     public void createReplace() throws Exception {
@@ -129,4 +126,3 @@ public class CreateViewTest {
         Assert.assertNotNull(view.getColumn("site_id"));
     }
 }
->>>>>>> 6e1d5ec99b ([Feature] support create or replace view (#27768))
