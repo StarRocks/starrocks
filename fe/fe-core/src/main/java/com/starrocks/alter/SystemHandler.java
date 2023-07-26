@@ -25,6 +25,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -222,7 +223,7 @@ public class SystemHandler extends AlterHandler {
             }
             if (backend.isDecommissioned()) {
                 // already under decommission, ignore it
-                LOG.info(backend.getAddress() + " has already been decommissioned and will be ignored.");
+                LOG.info(backend.getHost() + " has already been decommissioned and will be ignored.");
                 continue;
             }
             needCapacity += backend.getDataUsedCapacityB();
@@ -253,8 +254,8 @@ public class SystemHandler extends AlterHandler {
                     if (table instanceof OlapTable) {
                         OlapTable olapTable = (OlapTable) table;
                         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-                        for (long partitionId : olapTable.getAllPartitionIds()) {
-                            short replicationNum = partitionInfo.getReplicationNum(partitionId);
+                        for (Partition partition : olapTable.getAllPartitions()) {
+                            short replicationNum = partitionInfo.getReplicationNum(partition.getId());
                             if (replicationNum > maxReplicationNum) {
                                 maxReplicationNum = replicationNum;
                                 if (infoService.getAvailableBackendIds().size() - decommissionBackends.size() <

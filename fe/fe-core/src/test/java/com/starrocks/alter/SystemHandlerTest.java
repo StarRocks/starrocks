@@ -23,12 +23,15 @@ import com.starrocks.system.Backend;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.rules.ExpectedException;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class SystemHandlerTest {
 
     private SystemHandler systemHandler;
@@ -76,7 +79,7 @@ public class SystemHandlerTest {
 
     @Test
     public void testDecommissionBackendsReplicasRequirement() throws UserException {
-        List<String> hostAndPorts = Lists.newArrayList("host1:123");
+        List<String> hostAndPorts = Lists.newArrayList("host1:123", "host2:123");
         DecommissionBackendClause decommissionBackendClause = new DecommissionBackendClause(hostAndPorts);
         Analyzer.analyze(new AlterSystemStmt(decommissionBackendClause), new ConnectContext());
 
