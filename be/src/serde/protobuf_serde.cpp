@@ -270,11 +270,10 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
         for (int i = 0; i < columns.size(); ++i) {
             size_t col_size = columns[i]->size();
             if (col_size != rows) {
-                SlotId slot_id = get_slot_id_by_index(_meta.slot_id_to_index, i);
-                return Status::Corruption(
-                        fmt::format("deserialize chunk data failed. column slot id: {}, column row count: {}, expected "
-                                    "row count: {}",
-                                    slot_id, col_size, rows));
+                return Status::Corruption(fmt::format(
+                        "deserialize chunk data failed. extra column index: {}, column row count: {}, expected "
+                        "row count: {}",
+                        i, col_size, rows));
             }
         }
         chunk_extra_data = std::make_shared<ChunkExtraColumnsData>(_meta.extra_data_metas, std::move(extra_columns));
