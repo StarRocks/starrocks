@@ -899,6 +899,7 @@ TEST_F(ParquetSchemaTest, InvalidMap4) {
     ASSERT_FALSE(st.ok());
 }
 
+// But we still need to support an invalid map which map's key is optional, just make compatible with Trino
 TEST_F(ParquetSchemaTest, InvalidMap5) {
     std::vector<SchemaElement> t_schemas;
 
@@ -950,7 +951,7 @@ TEST_F(ParquetSchemaTest, InvalidMap5) {
 
     SchemaDescriptor desc;
     auto st = desc.from_thrift(t_schemas, true);
-    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.ok());
 }
 
 TEST_F(ParquetSchemaTest, InvalidMap6) {
