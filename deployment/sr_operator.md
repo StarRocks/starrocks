@@ -150,14 +150,14 @@ starrockscluster-sample-fe-2          1/1     Running   0          22h
 1. 执行命令 `kubectl -n starrocks edit src starrockscluster-sample` 更新 StarRocks 集群配置文件，修改 `starRocksFeSpec` 的 Service 类型为 `LoadBalancer`。
 
     ```YAML
-      starRocksFeSpec:
-        image: starrocks/alpine-fe:2.4.1
-        replicas: 3
-        requests:
-          cpu: 4
-          memory: 16Gi
-        service:            
-          type: LoadBalancer ##指定为 LoadBalancer
+    starRocksFeSpec:
+      image: starrocks/fe-ubuntu:latest
+      replicas: 3
+      requests:
+        cpu: 4
+        memory: 16Gi
+      service:            
+        type: LoadBalancer # 指定为 LoadBalancer
     ```
 
 2. 查询 FE Service 向外部暴露的 IP 地址 `EXTERNAL-IP` 和端口 `PORT(S)`。
