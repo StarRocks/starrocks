@@ -58,6 +58,21 @@ public:
 
     void set_query_ctx(const QueryContextPtr& query_ctx);
 
+<<<<<<< HEAD
+=======
+    virtual int available_pickup_morsel_count() { return _io_tasks_per_scan_operator; }
+    void begin_pull_chunk(const ChunkPtr& res) {
+        _op_pull_chunks += 1;
+        _op_pull_rows += res->num_rows();
+    }
+    void end_pull_chunk(int64_t time) { _op_running_time_ns += time; }
+    virtual void begin_driver_process() {}
+    virtual void end_driver_process(PipelineDriver* driver) {}
+    virtual bool is_running_all_io_tasks() const;
+
+    virtual int64_t get_scan_table_id() const { return -1; }
+
+>>>>>>> 4265212f40 ([BugFix] fix incorrect scan metrics in FE (#27779))
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
 
