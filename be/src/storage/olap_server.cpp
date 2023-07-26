@@ -79,7 +79,7 @@ Status StorageEngine::start_bg_threads() {
     for (auto& tmp_store : _store_map) {
         data_dirs.push_back(tmp_store.second);
     }
-    const auto data_dir_num = static_cast<int32_t>(data_dirs.size());
+    int32_t data_dir_num = data_dirs.size();
 
     if (!config::enable_event_based_compaction_framework) {
         // base and cumulative compaction threads
@@ -99,46 +99,20 @@ Status StorageEngine::start_bg_threads() {
         vectorized::Compaction::init(max_compaction_concurrency);
 
         _base_compaction_threads.reserve(base_compaction_num_threads);
-        // The config::tablet_map_shard_size is preferably a multiple of `base_compaction_num_threads_per_disk`,
-        // otherwise the compaction thread will be distributed unevenly.
-        int32_t base_step = config::tablet_map_shard_size / base_compaction_num_threads_per_disk +
-                            (config::tablet_map_shard_size % base_compaction_num_threads_per_disk != 0);
-        for (int32_t i = 0; i < base_compaction_num_threads_per_disk; i++) {
-            std::pair<int32_t, int32_t> tablet_shards_range;
-            if (config::tablet_map_shard_size >= base_compaction_num_threads_per_disk) {
-                tablet_shards_range.first = std::min(config::tablet_map_shard_size, base_step * i);
-                tablet_shards_range.second = std::min(config::tablet_map_shard_size, base_step * (i + 1));
-            } else {
-                tablet_shards_range.first = 0;
-                tablet_shards_range.second = config::tablet_map_shard_size;
-            }
-            for (int32_t j = 0; j < data_dir_num; j++) {
-                _base_compaction_threads.emplace_back([this, data_dirs, j, tablet_shards_range] {
-                    _base_compaction_thread_callback(nullptr, data_dirs[j], tablet_shards_range);
-                });
-                Thread::set_thread_name(_base_compaction_threads.back(), "base_compact");
-            }
+        for (uint32_t i = 0; i < base_compaction_num_threads; ++i) {
+            _base_compaction_threads.emplace_back([this, data_dir_num, data_dirs, i] {
+                _base_compaction_thread_callback(nullptr, data_dirs[i % data_dir_num]);
+            });
+            Thread::set_thread_name(_base_compaction_threads.back(), "base_compact");
         }
         LOG(INFO) << "base compaction threads started. number: " << base_compaction_num_threads;
 
         _cumulative_compaction_threads.reserve(cumulative_compaction_num_threads);
-        int32_t cumulative_step = config::tablet_map_shard_size / cumulative_compaction_num_threads_per_disk +
-                                  (config::tablet_map_shard_size % cumulative_compaction_num_threads_per_disk != 0);
-        for (int32_t i = 0; i < cumulative_compaction_num_threads_per_disk; i++) {
-            std::pair<int32_t, int32_t> tablet_shards_range;
-            if (config::tablet_map_shard_size >= cumulative_compaction_num_threads_per_disk) {
-                tablet_shards_range.first = std::min(config::tablet_map_shard_size, cumulative_step * i);
-                tablet_shards_range.second = std::min(config::tablet_map_shard_size, cumulative_step * (i + 1));
-            } else {
-                tablet_shards_range.first = 0;
-                tablet_shards_range.second = config::tablet_map_shard_size;
-            }
-            for (int32_t j = 0; j < data_dir_num; j++) {
-                _cumulative_compaction_threads.emplace_back([this, data_dirs, j, tablet_shards_range] {
-                    _cumulative_compaction_thread_callback(nullptr, data_dirs[j], tablet_shards_range);
-                });
-                Thread::set_thread_name(_cumulative_compaction_threads.back(), "cumulat_compact");
-            }
+        for (uint32_t i = 0; i < cumulative_compaction_num_threads; ++i) {
+            _cumulative_compaction_threads.emplace_back([this, data_dir_num, data_dirs, i] {
+                _cumulative_compaction_thread_callback(nullptr, data_dirs[i % data_dir_num]);
+            });
+            Thread::set_thread_name(_cumulative_compaction_threads.back(), "cumulat_compact");
         }
         LOG(INFO) << "cumulative compaction threads started. number: " << cumulative_compaction_num_threads;
     } else {
@@ -215,8 +189,7 @@ void* StorageEngine::_fd_cache_clean_callback(void* arg) {
     return nullptr;
 }
 
-void* StorageEngine::_base_compaction_thread_callback(void* arg, DataDir* data_dir,
-                                                      std::pair<int32_t, int32_t> tablet_shards) {
+void* StorageEngine::_base_compaction_thread_callback(void* arg, DataDir* data_dir) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
@@ -226,7 +199,7 @@ void* StorageEngine::_base_compaction_thread_callback(void* arg, DataDir* data_d
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         // must be here, because this thread is start on start and
         if (!data_dir->reach_capacity_limit(0)) {
-            status = _perform_base_compaction(data_dir, tablet_shards);
+            status = _perform_base_compaction(data_dir);
         } else {
             status = Status::InternalError("data dir out of capacity");
         }
@@ -357,8 +330,7 @@ void* StorageEngine::_disk_stat_monitor_thread_callback(void* arg) {
     return nullptr;
 }
 
-void* StorageEngine::_cumulative_compaction_thread_callback(void* arg, DataDir* data_dir,
-                                                            const std::pair<int32_t, int32_t>& tablet_shards_range) {
+void* StorageEngine::_cumulative_compaction_thread_callback(void* arg, DataDir* data_dir) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
@@ -368,7 +340,7 @@ void* StorageEngine::_cumulative_compaction_thread_callback(void* arg, DataDir* 
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         // must be here, because this thread is start on start and
         if (!data_dir->reach_capacity_limit(0)) {
-            status = _perform_cumulative_compaction(data_dir, tablet_shards_range);
+            status = _perform_cumulative_compaction(data_dir);
         } else {
             status = Status::InternalError("data dir out of capacity");
         }
