@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <memory>
 
+#include "block_cache/block_cache.h"
 #include "column/chunk.h"
 #include "common/status.h"
 #include "formats/parquet/group_reader.h"
@@ -45,7 +46,7 @@ class FileMetaData;
 
 class FileReader {
 public:
-    FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
+    FileReader(int chunk_size, RandomAccessFile* file, size_t file_size, int64_t file_mtime,
                io::SharedBufferedInputStream* sb_stream = nullptr,
                const std::set<int64_t>* _need_skip_rowids = nullptr);
     ~FileReader();
@@ -54,11 +55,18 @@ public:
 
     Status get_next(ChunkPtr* chunk);
 
+    FileMetaData* get_file_metadata();
+
 private:
     int _chunk_size;
 
+    // get footer of parquet file from cache or parquet file
+    Status _get_footer();
+
+    void _build_metacache_key();
+
     // parse footer of parquet file
-    Status _parse_footer();
+    Status _parse_footer(FileMetaData** file_metadata, size_t* metadata_size);
 
     void _prepare_read_columns();
 
@@ -103,8 +111,8 @@ private:
 
     RandomAccessFile* _file = nullptr;
     uint64_t _file_size = 0;
+    int64_t _file_mtime = 0;
 
-    std::shared_ptr<FileMetaData> _file_metadata;
     std::vector<std::shared_ptr<GroupReader>> _row_group_readers;
     size_t _cur_row_group_idx = 0;
     size_t _row_group_size = 0;
@@ -112,6 +120,12 @@ private:
     size_t _total_row_count = 0;
     size_t _scan_row_count = 0;
     bool _no_materialized_column_scan = false;
+
+    BlockCache* _cache = nullptr;
+    FileMetaData* _file_metadata = nullptr;
+    bool _is_metadata_cached = false;
+    std::string _metacache_key;
+    CacheHandle _cache_handle;
 
     // not exist column conjuncts eval false, file can be skipped
     bool _is_file_filtered = false;
