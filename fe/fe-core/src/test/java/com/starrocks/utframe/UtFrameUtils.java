@@ -63,7 +63,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.Coordinator;
+import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.CatalogMgr;
@@ -458,10 +458,10 @@ public class UtFrameUtils {
                         execPlan));
     }
 
-    public static Coordinator startScheduling(ConnectContext connectContext, String originStmt) throws Exception {
+    public static DefaultCoordinator startScheduling(ConnectContext connectContext, String originStmt) throws Exception {
         return buildPlan(connectContext, originStmt,
                 (context, statementBase, execPlan) -> {
-                    Coordinator scheduler = createScheduler(context, statementBase, execPlan);
+                    DefaultCoordinator scheduler = createScheduler(context, statementBase, execPlan);
 
                     scheduler.startScheduling();
 
@@ -469,23 +469,23 @@ public class UtFrameUtils {
                 });
     }
 
-    public static Coordinator getScheduler(ConnectContext connectContext, String originStmt) throws Exception {
+    public static DefaultCoordinator getScheduler(ConnectContext connectContext, String originStmt) throws Exception {
         return buildPlan(connectContext, originStmt, UtFrameUtils::createScheduler);
     }
 
-    private static Coordinator createScheduler(ConnectContext context, StatementBase statementBase, ExecPlan execPlan) {
+    private static DefaultCoordinator createScheduler(ConnectContext context, StatementBase statementBase, ExecPlan execPlan) {
         context.setExecutionId(new TUniqueId(1, 2));
-        Coordinator scheduler;
+        DefaultCoordinator scheduler;
         if (statementBase instanceof DmlStmt) {
             if (statementBase instanceof InsertStmt) {
-                scheduler = new Coordinator.Factory().createInsertScheduler(context,
+                scheduler = new DefaultCoordinator.Factory().createInsertScheduler(context,
                         execPlan.getFragments(), execPlan.getScanNodes(),
                         execPlan.getDescTbl().toThrift());
             } else {
                 throw new RuntimeException("can only handle insert DML");
             }
         } else {
-            scheduler = new Coordinator.Factory().createQueryScheduler(context,
+            scheduler = new DefaultCoordinator.Factory().createQueryScheduler(context,
                     execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
         }
 

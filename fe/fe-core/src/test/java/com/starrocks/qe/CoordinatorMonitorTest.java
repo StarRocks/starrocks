@@ -31,14 +31,14 @@ import java.util.concurrent.TimeUnit;
 public class CoordinatorMonitorTest {
 
     @Test
-    public void testDeadBackendAndComputeNodeChecker(@Mocked Coordinator coord1,
-                                                     @Mocked Coordinator coord2,
-                                                     @Mocked Coordinator coord3) throws InterruptedException {
+    public void testDeadBackendAndComputeNodeChecker(@Mocked DefaultCoordinator coord1,
+                                                     @Mocked DefaultCoordinator coord2,
+                                                     @Mocked DefaultCoordinator coord3) throws InterruptedException {
         int prevHeartbeatTimeout = Config.heartbeat_timeout_second;
         Config.heartbeat_timeout_second = 1;
 
         try {
-            List<Coordinator> coordinators = ImmutableList.of(coord1, coord2, coord3);
+            List<DefaultCoordinator> coordinators = ImmutableList.of(coord1, coord2, coord3);
 
             final QeProcessor qeProcessor = QeProcessorImpl.INSTANCE;
 

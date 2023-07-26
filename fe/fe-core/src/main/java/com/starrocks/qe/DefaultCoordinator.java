@@ -69,7 +69,7 @@ import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.qe.QueryStatisticsItem.FragmentInstanceInfo;
-import com.starrocks.qe.scheduler.ICoordinator;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.RpcException;
@@ -127,8 +127,8 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-public class Coordinator extends ICoordinator {
-    private static final Logger LOG = LogManager.getLogger(Coordinator.class);
+public class DefaultCoordinator extends Coordinator {
+    private static final Logger LOG = LogManager.getLogger(DefaultCoordinator.class);
     private static final int DEFAULT_PROFILE_TIMEOUT_SECOND = 2;
 
     // Overall status of the entire query; set to the first reported fragment error
@@ -188,53 +188,53 @@ public class Coordinator extends ICoordinator {
     private Supplier<RuntimeProfile> topProfileSupplier;
     private final AtomicLong lastRuntimeProfileUpdateTime = new AtomicLong(0L);
 
-    public static class Factory implements ICoordinator.Factory {
+    public static class Factory implements Coordinator.Factory {
 
         @Override
-        public Coordinator createQueryScheduler(ConnectContext context, List<PlanFragment> fragments,
-                                                List<ScanNode> scanNodes,
-                                                TDescriptorTable descTable) {
+        public DefaultCoordinator createQueryScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                       List<ScanNode> scanNodes,
+                                                       TDescriptorTable descTable) {
             JobSpec jobSpec =
                     JobSpec.Factory.fromQuerySpec(context, fragments, scanNodes, descTable, TQueryType.SELECT);
-            return new Coordinator(context, jobSpec, context.getSessionVariable().isEnableProfile());
+            return new DefaultCoordinator(context, jobSpec, context.getSessionVariable().isEnableProfile());
         }
 
         @Override
-        public Coordinator createInsertScheduler(ConnectContext context, List<PlanFragment> fragments,
-                                                 List<ScanNode> scanNodes,
-                                                 TDescriptorTable descTable) {
+        public DefaultCoordinator createInsertScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                        List<ScanNode> scanNodes,
+                                                        TDescriptorTable descTable) {
             JobSpec jobSpec = JobSpec.Factory.fromQuerySpec(context, fragments, scanNodes, descTable, TQueryType.LOAD);
-            return new Coordinator(context, jobSpec, context.getSessionVariable().isEnableProfile());
+            return new DefaultCoordinator(context, jobSpec, context.getSessionVariable().isEnableProfile());
         }
 
         @Override
-        public Coordinator createBrokerLoadScheduler(LoadPlanner loadPlanner) {
+        public DefaultCoordinator createBrokerLoadScheduler(LoadPlanner loadPlanner) {
             ConnectContext context = loadPlanner.getContext();
             JobSpec jobSpec = JobSpec.Factory.fromBrokerLoadJobSpec(loadPlanner);
 
-            return new Coordinator(context, jobSpec, true);
+            return new DefaultCoordinator(context, jobSpec, true);
         }
 
         @Override
-        public Coordinator createStreamLoadScheduler(LoadPlanner loadPlanner) {
+        public DefaultCoordinator createStreamLoadScheduler(LoadPlanner loadPlanner) {
             ConnectContext context = loadPlanner.getContext();
             JobSpec jobSpec = JobSpec.Factory.fromStreamLoadJobSpec(loadPlanner);
 
-            return new Coordinator(context, jobSpec, true);
+            return new DefaultCoordinator(context, jobSpec, true);
         }
 
         @Override
-        public Coordinator createSyncStreamLoadScheduler(StreamLoadPlanner planner, TNetworkAddress address) {
+        public DefaultCoordinator createSyncStreamLoadScheduler(StreamLoadPlanner planner, TNetworkAddress address) {
             JobSpec jobSpec = JobSpec.Factory.fromSyncStreamLoadSpec(planner);
-            return new Coordinator(jobSpec, planner, address);
+            return new DefaultCoordinator(jobSpec, planner, address);
         }
 
         @Override
-        public Coordinator createBrokerExportScheduler(Long jobId, TUniqueId queryId, DescriptorTable descTable,
-                                                       List<PlanFragment> fragments, List<ScanNode> scanNodes,
-                                                       String timezone,
-                                                       long startTime, Map<String, String> sessionVariables,
-                                                       long execMemLimit) {
+        public DefaultCoordinator createBrokerExportScheduler(Long jobId, TUniqueId queryId, DescriptorTable descTable,
+                                                              List<PlanFragment> fragments, List<ScanNode> scanNodes,
+                                                              String timezone,
+                                                              long startTime, Map<String, String> sessionVariables,
+                                                              long execMemLimit) {
             ConnectContext context = new ConnectContext();
             context.setQualifiedUser(AuthenticationMgr.ROOT_USER);
             context.setCurrentUserIdentity(UserIdentity.ROOT);
@@ -246,21 +246,21 @@ public class Coordinator extends ICoordinator {
                     fragments, scanNodes, timezone,
                     startTime, sessionVariables, execMemLimit);
 
-            return new Coordinator(context, jobSpec, true);
+            return new DefaultCoordinator(context, jobSpec, true);
         }
 
         @Override
-        public Coordinator createNonPipelineBrokerLoadScheduler(Long jobId, TUniqueId queryId,
-                                                                DescriptorTable descTable,
-                                                                List<PlanFragment> fragments, List<ScanNode> scanNodes,
-                                                                String timezone,
-                                                                long startTime, Map<String, String> sessionVariables,
-                                                                ConnectContext context, long execMemLimit) {
+        public DefaultCoordinator createNonPipelineBrokerLoadScheduler(Long jobId, TUniqueId queryId,
+                                                                       DescriptorTable descTable,
+                                                                       List<PlanFragment> fragments, List<ScanNode> scanNodes,
+                                                                       String timezone,
+                                                                       long startTime, Map<String, String> sessionVariables,
+                                                                       ConnectContext context, long execMemLimit) {
             JobSpec jobSpec = JobSpec.Factory.fromNonPipelineBrokerLoadJobSpec(context, jobId, queryId, descTable,
                     fragments, scanNodes, timezone,
                     startTime, sessionVariables, execMemLimit);
 
-            return new Coordinator(context, jobSpec, true);
+            return new DefaultCoordinator(context, jobSpec, true);
         }
     }
 
@@ -271,7 +271,7 @@ public class Coordinator extends ICoordinator {
      * @param planner
      * @param address
      */
-    public Coordinator(JobSpec jobSpec, StreamLoadPlanner planner, TNetworkAddress address) {
+    public DefaultCoordinator(JobSpec jobSpec, StreamLoadPlanner planner, TNetworkAddress address) {
         this.connectContext = planner.getConnectContext();
         this.jobSpec = jobSpec;
 
@@ -298,7 +298,7 @@ public class Coordinator extends ICoordinator {
         this.needReport = true;
     }
 
-    Coordinator(ConnectContext context, JobSpec jobSpec, boolean needReport) {
+    DefaultCoordinator(ConnectContext context, JobSpec jobSpec, boolean needReport) {
         this.connectContext = context;
         this.jobSpec = jobSpec;
         this.returnedAllResults = false;

@@ -51,11 +51,11 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.FailMsg;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.Coordinator;
+import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.scheduler.ICoordinator;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TLoadJobType;
@@ -164,13 +164,13 @@ public class LoadLoadingTask extends LoadTask {
         executeOnce();
     }
 
-    private ICoordinator.Factory getCoordinatorFactory() {
-        return new Coordinator.Factory();
+    private Coordinator.Factory getCoordinatorFactory() {
+        return new DefaultCoordinator.Factory();
     }
 
     private void executeOnce() throws Exception {
         // New one query id,
-        ICoordinator curCoordinator;
+        Coordinator curCoordinator;
         if (!Config.enable_pipeline_load) {
             curCoordinator = getCoordinatorFactory().createNonPipelineBrokerLoadScheduler(
                     callback.getCallbackId(), loadId,
@@ -249,7 +249,7 @@ public class LoadLoadingTask extends LoadTask {
         }
     }
 
-    private void actualExecute(ICoordinator curCoordinator) throws Exception {
+    private void actualExecute(Coordinator curCoordinator) throws Exception {
         int waitSecond = (int) (getLeftTimeMs() / 1000);
         if (waitSecond <= 0) {
             throw new LoadException("Load timeout. Increase the timeout and retry");

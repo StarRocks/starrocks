@@ -19,7 +19,7 @@ import com.google.common.collect.Queues;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.proto.PPlanFragmentCancelReason;
-import com.starrocks.qe.scheduler.ICoordinator;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -87,8 +87,8 @@ public class CoordinatorMonitor {
                     deadBackendIDs.add(backendID);
                 }
 
-                final List<ICoordinator> coordinators = QeProcessorImpl.INSTANCE.getCoordinators();
-                for (ICoordinator coord : coordinators) {
+                final List<Coordinator> coordinators = QeProcessorImpl.INSTANCE.getCoordinators();
+                for (Coordinator coord : coordinators) {
                     boolean isUsingDeadBackend = deadBackendIDs.stream().anyMatch(coord::isUsingBackend);
                     if (isUsingDeadBackend) {
                         if (LOG.isWarnEnabled()) {

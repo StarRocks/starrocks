@@ -50,7 +50,7 @@ import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportFailMsg;
 import com.starrocks.load.ExportJob;
 import com.starrocks.qe.QeProcessorImpl;
-import com.starrocks.qe.scheduler.ICoordinator;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
@@ -110,11 +110,11 @@ public class ExportExportingTask extends PriorityLeaderTask {
         }
 
         // sub tasks execute in parallel
-        List<ICoordinator> coords = job.getCoordList();
+        List<Coordinator> coords = job.getCoordList();
         int coordSize = coords.size();
         List<ExportExportingSubTask> subTasks = Lists.newArrayList();
         for (int i = 0; i < coordSize; i++) {
-            ICoordinator coord = coords.get(i);
+            Coordinator coord = coords.get(i);
             ExportExportingSubTask subTask = new ExportExportingSubTask(coord, i, coordSize, job);
             subTasks.add(subTask);
             subTasksDoneSignal.addMark(i, -1);
@@ -292,12 +292,12 @@ public class ExportExportingTask extends PriorityLeaderTask {
     }
 
     private class ExportExportingSubTask extends PriorityLeaderTask {
-        private ICoordinator coord;
+        private Coordinator coord;
         private final int taskIdx;
         private final int coordSize;
         private final ExportJob exportJob;
 
-        public ExportExportingSubTask(ICoordinator coord, int taskIdx, int coordSize, ExportJob exportJob) {
+        public ExportExportingSubTask(Coordinator coord, int taskIdx, int coordSize, ExportJob exportJob) {
             this.coord = coord;
             this.taskIdx = taskIdx;
             this.coordSize = coordSize;
@@ -349,7 +349,7 @@ public class ExportExportingTask extends PriorityLeaderTask {
                     String errorMsg = coord.getExecStatus().getErrorMsg();
                     if (exportJob.needResetCoord()) {
                         try {
-                            ICoordinator newCoord = exportJob.resetCoord(taskIdx, newQueryId);
+                            Coordinator newCoord = exportJob.resetCoord(taskIdx, newQueryId);
                             coord = newCoord;
                         } catch (UserException e) {
                             // still use old coord if there are any problems when reseting Coord
@@ -379,7 +379,7 @@ public class ExportExportingTask extends PriorityLeaderTask {
             }
         }
 
-        private void execOneCoord(ICoordinator coord) throws Exception {
+        private void execOneCoord(Coordinator coord) throws Exception {
             TUniqueId queryId = coord.getQueryId();
             QeProcessorImpl.INSTANCE.registerQuery(queryId, coord);
             try {
@@ -389,7 +389,7 @@ public class ExportExportingTask extends PriorityLeaderTask {
             }
         }
 
-        private void actualExecCoord(ICoordinator coord) throws Exception {
+        private void actualExecCoord(Coordinator coord) throws Exception {
             int leftTimeSecond = getLeftTimeSecond();
             if (leftTimeSecond <= 0) {
                 throw new UserException("timeout");
@@ -419,7 +419,7 @@ public class ExportExportingTask extends PriorityLeaderTask {
             LOG.info("export sub task finish. task idx: {}, task query id: {}", taskIdx, getQueryId());
         }
 
-        private void onSubTaskFailed(ICoordinator coordinator, String failMsg) {
+        private void onSubTaskFailed(Coordinator coordinator, String failMsg) {
             Status coordStatus = coordinator.getExecStatus();
             String taskFailMsg = "export job fail. query id: " + DebugUtil.printId(coordinator.getQueryId())
                     + ", fail msg: ";

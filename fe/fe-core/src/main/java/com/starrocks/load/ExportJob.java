@@ -80,8 +80,8 @@ import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.proto.UnlockTabletMetadataRequest;
-import com.starrocks.qe.Coordinator;
-import com.starrocks.qe.scheduler.ICoordinator;
+import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
@@ -131,7 +131,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
     private final Set<String> exportedTempFiles = Sets.newConcurrentHashSet();
     private Set<String> exportedFiles = Sets.newConcurrentHashSet();
     private final Analyzer analyzer;
-    private final List<ICoordinator> coordList = Lists.newArrayList();
+    private final List<Coordinator> coordList = Lists.newArrayList();
     private final AtomicInteger nextId = new AtomicInteger(0);
     // backedn_address => snapshot path
     private List<Pair<TNetworkAddress, String>> snapshotPaths = Lists.newArrayList();
@@ -432,8 +432,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
         return outputExprs;
     }
 
-    private ICoordinator.Factory getCoordinatorFactory() {
-        return new Coordinator.Factory();
+    private Coordinator.Factory getCoordinatorFactory() {
+        return new DefaultCoordinator.Factory();
     }
 
     private void genCoordinators(ExportStmt stmt, List<PlanFragment> fragments, List<ScanNode> nodes) {
@@ -442,7 +442,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
             PlanFragment fragment = fragments.get(i);
             ScanNode scanNode = nodes.get(i);
             TUniqueId queryId = new TUniqueId(uuid.getMostSignificantBits() + i, uuid.getLeastSignificantBits());
-            ICoordinator coord = getCoordinatorFactory().createBrokerExportScheduler(
+            Coordinator coord = getCoordinatorFactory().createBrokerExportScheduler(
                     id, queryId, desc, Lists.newArrayList(fragment), Lists.newArrayList(scanNode),
                     TimeUtils.DEFAULT_TIME_ZONE, stmt.getExportStartTime(), Maps.newHashMap(), getMemLimit());
             this.coordList.add(coord);
@@ -459,8 +459,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
     // Also, if the version has been compacted in one BE's tablet, coord will return 
     // 'version already been compacted' error msg, find a new replica may be able to 
     // alleviate this problem.
-    public ICoordinator resetCoord(int taskIndex, TUniqueId newQueryId) throws UserException {
-        ICoordinator coord = coordList.get(taskIndex);
+    public Coordinator resetCoord(int taskIndex, TUniqueId newQueryId) throws UserException {
+        Coordinator coord = coordList.get(taskIndex);
         OlapScanNode olapScanNode = (OlapScanNode) coord.getScanNodes().get(0);
         List<TScanRangeLocations> locations = olapScanNode.getScanRangeLocations(0);
         if (locations.size() == 0) {
@@ -486,7 +486,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         OlapScanNode newTaskScanNode = genOlapScanNodeByLocation(newLocations);
         PlanFragment newFragment = genPlanFragment(exportTable.getType(), newTaskScanNode, taskIndex);
 
-        ICoordinator newCoord = getCoordinatorFactory().createBrokerExportScheduler(
+        Coordinator newCoord = getCoordinatorFactory().createBrokerExportScheduler(
                 id, newQueryId, desc, Lists.newArrayList(newFragment), Lists.newArrayList(newTaskScanNode),
                 TimeUtils.DEFAULT_TIME_ZONE, coord.getStartTimeMs(), Maps.newHashMap(), getMemLimit());
         this.coordList.set(taskIndex, newCoord);
@@ -646,7 +646,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         this.doExportingThread = isExportingThread;
     }
 
-    public List<ICoordinator> getCoordList() {
+    public List<Coordinator> getCoordList() {
         return coordList;
     }
 
@@ -799,7 +799,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
             }
 
             // cancel all running coordinators
-            for (ICoordinator coord : coordList) {
+            for (Coordinator coord : coordList) {
                 coord.cancel();
             }
 

@@ -18,7 +18,7 @@ import com.starrocks.common.Reference;
 import com.starrocks.common.UserException;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.StatusPB;
-import com.starrocks.qe.Coordinator;
+import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.rpc.PExecPlanFragmentRequest;
 import com.starrocks.rpc.RpcException;
@@ -63,7 +63,7 @@ public class StartSchedulingTest extends SchedulerTestBase {
         setBackendService(new MockPBackendService());
 
         String sql = "select count(1) from lineitem";
-        Coordinator scheduler = startScheduling(sql);
+        DefaultCoordinator scheduler = startScheduling(sql);
 
         Assert.assertTrue(scheduler.getExecStatus().ok());
     }
@@ -113,7 +113,7 @@ public class StartSchedulingTest extends SchedulerTestBase {
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> !SimpleScheduler.isInBlacklist(backend3.getId()));
 
         deployFuture.setRef(mockFutureWithException(new InterruptedException("test interrupted exception")));
-        Coordinator scheduler = getScheduler(sql);
+        DefaultCoordinator scheduler = getScheduler(sql);
         Assert.assertThrows("test interrupted exception", UserException.class, () -> scheduler.startScheduling());
 
         // The deployed executions haven't reported.
@@ -181,7 +181,7 @@ public class StartSchedulingTest extends SchedulerTestBase {
             });
 
             String sql = "select count(1) from lineitem t1 JOIN [shuffle] lineitem t2 using(l_orderkey)";
-            Coordinator scheduler = getScheduler(sql);
+            DefaultCoordinator scheduler = getScheduler(sql);
             Assert.assertThrows("deploy query timeout", UserException.class, () -> scheduler.startScheduling());
         } finally {
             connectContext.getSessionVariable().setQueryDeliveryTimeoutS(prevQueryDeliveryTimeoutSecond);

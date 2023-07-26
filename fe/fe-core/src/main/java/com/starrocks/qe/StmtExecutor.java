@@ -99,7 +99,7 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.qe.QueryState.MysqlStateType;
-import com.starrocks.qe.scheduler.ICoordinator;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -209,7 +209,7 @@ public class StmtExecutor {
     private final OriginStatement originStmt;
     private StatementBase parsedStmt;
     private RuntimeProfile profile;
-    private ICoordinator coord = null;
+    private Coordinator coord = null;
     private LeaderOpExecutor leaderOpExecutor = null;
     private RedirectStatus redirectStatus = null;
     private final boolean isProxy;
@@ -245,7 +245,7 @@ public class StmtExecutor {
         this.isProxy = false;
     }
 
-    public ICoordinator getCoordinator() {
+    public Coordinator getCoordinator() {
         return this.coord;
     }
 
@@ -795,7 +795,7 @@ public class StmtExecutor {
                     sub.cancel();
                 }
             }
-            ICoordinator coordRef = coord;
+            Coordinator coordRef = coord;
             if (coordRef != null) {
                 coordRef.cancel();
             }
@@ -838,8 +838,8 @@ public class StmtExecutor {
         context.getState().setOk();
     }
 
-    private ICoordinator.Factory getCoordinatorFactory() {
-        return new Coordinator.Factory();
+    private Coordinator.Factory getCoordinatorFactory() {
+        return new DefaultCoordinator.Factory();
     }
 
     // Process a select statement.

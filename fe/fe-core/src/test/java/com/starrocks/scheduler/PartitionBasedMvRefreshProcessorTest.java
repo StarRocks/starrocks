@@ -36,7 +36,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.Coordinator;
+import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -1291,7 +1291,7 @@ public class PartitionBasedMvRefreshProcessorTest {
                         false, "UTC", 10, System.currentTimeMillis(),
                         false, connectContext, null, 10,
                         10, null, null, null, 1);
-                Coordinator coordinator = new Coordinator.Factory().createBrokerLoadScheduler(loadPlanner);
+                DefaultCoordinator coordinator = new DefaultCoordinator.Factory().createBrokerLoadScheduler(loadPlanner);
                 QeProcessorImpl.INSTANCE.registerQuery(connectContext.getExecutionId(), coordinator);
             }
         };

@@ -87,7 +87,7 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
 
         System.out.println(plan);
         ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(ctx, sql).second;
-        Coordinator coord = new Coordinator.Factory().createQueryScheduler(
+        DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(
                 ctx, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
         coord.prepareExec();
 
@@ -135,7 +135,7 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
         System.out.println(filterLines.size());
         Assert.assertTrue(filterLines.size() == 5);
         ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(ctx, sql).second;
-        Coordinator coord = new Coordinator.Factory().createQueryScheduler(
+        DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(
                 ctx, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
         coord.prepareExec();
 

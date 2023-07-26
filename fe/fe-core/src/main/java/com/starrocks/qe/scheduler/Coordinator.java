@@ -39,35 +39,35 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 
-public abstract class ICoordinator {
+public abstract class Coordinator {
     public interface Factory {
-        ICoordinator createQueryScheduler(ConnectContext context,
+        Coordinator createQueryScheduler(ConnectContext context,
+                                         List<PlanFragment> fragments,
+                                         List<ScanNode> scanNodes,
+                                         TDescriptorTable descTable);
+
+        Coordinator createInsertScheduler(ConnectContext context,
                                           List<PlanFragment> fragments,
                                           List<ScanNode> scanNodes,
                                           TDescriptorTable descTable);
 
-        ICoordinator createInsertScheduler(ConnectContext context,
-                                           List<PlanFragment> fragments,
-                                           List<ScanNode> scanNodes,
-                                           TDescriptorTable descTable);
+        Coordinator createBrokerLoadScheduler(LoadPlanner loadPlanner);
 
-        ICoordinator createBrokerLoadScheduler(LoadPlanner loadPlanner);
+        Coordinator createStreamLoadScheduler(LoadPlanner loadPlanner);
 
-        ICoordinator createStreamLoadScheduler(LoadPlanner loadPlanner);
+        Coordinator createSyncStreamLoadScheduler(StreamLoadPlanner planner, TNetworkAddress address);
 
-        ICoordinator createSyncStreamLoadScheduler(StreamLoadPlanner planner, TNetworkAddress address);
+        Coordinator createNonPipelineBrokerLoadScheduler(Long jobId, TUniqueId queryId, DescriptorTable descTable,
+                                                         List<PlanFragment> fragments,
+                                                         List<ScanNode> scanNodes, String timezone, long startTime,
+                                                         Map<String, String> sessionVariables,
+                                                         ConnectContext context, long execMemLimit);
 
-        ICoordinator createNonPipelineBrokerLoadScheduler(Long jobId, TUniqueId queryId, DescriptorTable descTable,
-                                                          List<PlanFragment> fragments,
-                                                          List<ScanNode> scanNodes, String timezone, long startTime,
-                                                          Map<String, String> sessionVariables,
-                                                          ConnectContext context, long execMemLimit);
-
-        ICoordinator createBrokerExportScheduler(Long jobId, TUniqueId queryId, DescriptorTable descTable,
-                                                 List<PlanFragment> fragments,
-                                                 List<ScanNode> scanNodes, String timezone, long startTime,
-                                                 Map<String, String> sessionVariables,
-                                                 long execMemLimit);
+        Coordinator createBrokerExportScheduler(Long jobId, TUniqueId queryId, DescriptorTable descTable,
+                                                List<PlanFragment> fragments,
+                                                List<ScanNode> scanNodes, String timezone, long startTime,
+                                                Map<String, String> sessionVariables,
+                                                long execMemLimit);
     }
 
     // ------------------------------------------------------------------------------------

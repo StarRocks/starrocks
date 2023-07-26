@@ -21,7 +21,7 @@ import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.StatusPB;
-import com.starrocks.qe.Coordinator;
+import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.rpc.PFetchDataRequest;
@@ -85,7 +85,7 @@ public class GetNextTest extends SchedulerTestBase {
         });
 
         String sql = "select count(1) from lineitem";
-        Coordinator scheduler = startScheduling(sql);
+        DefaultCoordinator scheduler = startScheduling(sql);
 
         RowBatch batch;
         for (int i = 0; i < NUM_PACKAGES; i++) {
@@ -114,7 +114,7 @@ public class GetNextTest extends SchedulerTestBase {
         });
 
         String sql = "select count(1) from lineitem";
-        Coordinator scheduler = startScheduling(sql);
+        DefaultCoordinator scheduler = startScheduling(sql);
 
         RowBatch batch = scheduler.getNext();
         Assert.assertNotNull(batch.getBatch());
@@ -133,7 +133,7 @@ public class GetNextTest extends SchedulerTestBase {
         });
 
         String sql = "select count(1) from lineitem";
-        Coordinator scheduler = startScheduling(sql);
+        DefaultCoordinator scheduler = startScheduling(sql);
 
         Assert.assertThrows("rpc failed: test runtime exception", RpcException.class, scheduler::getNext);
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() ->
@@ -157,7 +157,7 @@ public class GetNextTest extends SchedulerTestBase {
         });
 
         String sql = "select count(1) from lineitem";
-        Coordinator scheduler;
+        DefaultCoordinator scheduler;
 
         fetchDataResultStatusCode.setRef(TStatusCode.INTERNAL_ERROR);
         scheduler = startScheduling(sql);
@@ -196,7 +196,7 @@ public class GetNextTest extends SchedulerTestBase {
         });
 
         String sql = "select count(1) from lineitem limit 2";
-        Coordinator scheduler = startScheduling(sql);
+        DefaultCoordinator scheduler = startScheduling(sql);
 
         RowBatch batch;
 
@@ -236,7 +236,7 @@ public class GetNextTest extends SchedulerTestBase {
         setBackendService(new MockPBackendService());
 
         String sql = "select count(1) from lineitem";
-        Coordinator scheduler = startScheduling(sql);
+        DefaultCoordinator scheduler = startScheduling(sql);
 
         scheduler.cancel();
 

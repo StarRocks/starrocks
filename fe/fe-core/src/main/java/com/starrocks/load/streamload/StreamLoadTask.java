@@ -39,9 +39,9 @@ import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.qe.Coordinator;
+import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
-import com.starrocks.qe.scheduler.ICoordinator;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.LoadPlanner;
@@ -154,7 +154,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     private List<State> channels;
     private StreamLoadParam streamLoadParam;
     private StreamLoadInfo streamLoadInfo;
-    private ICoordinator coord;
+    private Coordinator coord;
     private Map<Integer, TNetworkAddress> channelIdToBEHTTPAddress;
     private Map<Integer, TNetworkAddress> channelIdToBEHTTPPort;
     private OlapTable table;
@@ -729,8 +729,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         }
     }
 
-    private ICoordinator.Factory getCoordinatorFactory() {
-        return new Coordinator.Factory();
+    private Coordinator.Factory getCoordinatorFactory() {
+        return new DefaultCoordinator.Factory();
     }
 
     public void unprotectedExecute(HttpHeaders headers) throws UserException {
@@ -1300,7 +1300,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     }
 
     // for sync stream load
-    public void setCoordinator(ICoordinator coord) {
+    public void setCoordinator(Coordinator coord) {
         this.coord = coord;
     }
 

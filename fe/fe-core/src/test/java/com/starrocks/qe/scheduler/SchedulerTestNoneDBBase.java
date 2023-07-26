@@ -17,7 +17,7 @@ package com.starrocks.qe.scheduler;
 import com.starrocks.catalog.CatalogIdGenerator;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.qe.Coordinator;
+import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.PBackendService;
 import com.starrocks.sql.plan.PlanTestNoneDBBase;
@@ -88,11 +88,11 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
         makeQueryRandomStable();
     }
 
-    public Coordinator startScheduling(String sql) throws Exception {
+    public DefaultCoordinator startScheduling(String sql) throws Exception {
         return UtFrameUtils.startScheduling(connectContext, sql);
     }
 
-    public Coordinator getScheduler(String sql) throws Exception {
+    public DefaultCoordinator getScheduler(String sql) throws Exception {
         return UtFrameUtils.getScheduler(connectContext, sql);
     }
 

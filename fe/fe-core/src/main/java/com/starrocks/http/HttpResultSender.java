@@ -34,7 +34,7 @@ package com.starrocks.http;
 import com.google.gson.JsonObject;
 import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.ShowResultSet;
-import com.starrocks.qe.scheduler.ICoordinator;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TResultBatch;
 import io.netty.buffer.ByteBuf;
@@ -67,7 +67,7 @@ public class HttpResultSender {
     }
 
     // for select
-    public RowBatch sendQueryResult(ICoordinator coord, ExecPlan execPlan) throws Exception {
+    public RowBatch sendQueryResult(Coordinator coord, ExecPlan execPlan) throws Exception {
         RowBatch batch;
         ChannelHandlerContext nettyChannel = context.getNettyChannel();
         sendHeader(nettyChannel);

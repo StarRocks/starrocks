@@ -25,7 +25,7 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.Coordinator;
+import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.sql.LoadPlanner;
@@ -57,7 +57,7 @@ public class JobSpecTest extends SchedulerTestBase {
     private static final TWorkGroup QUERY_RESOURCE_GROUP = new TWorkGroup();
     private static final TWorkGroup LOAD_RESOURCE_GROUP = new TWorkGroup();
 
-    private static final Coordinator.Factory COORDINATOR_FACTORY = new Coordinator.Factory();
+    private static final DefaultCoordinator.Factory COORDINATOR_FACTORY = new DefaultCoordinator.Factory();
 
     static {
         QUERY_RESOURCE_GROUP.setId(0L);
@@ -107,7 +107,7 @@ public class JobSpecTest extends SchedulerTestBase {
         List<PlanFragment> fragments = execPlan.getFragments();
         List<ScanNode> scanNodes = execPlan.getScanNodes();
 
-        Coordinator coordinator = COORDINATOR_FACTORY.createQueryScheduler(
+        DefaultCoordinator coordinator = COORDINATOR_FACTORY.createQueryScheduler(
                 connectContext, fragments, scanNodes, descTable.toThrift());
         JobSpec jobSpec = coordinator.getJobSpec();
 
@@ -174,7 +174,7 @@ public class JobSpecTest extends SchedulerTestBase {
                 timeout, startTime, false, connectContext, sessionVariables, loadMemLimit, execMemLimit,
                 null, null, null, 0);
 
-        Coordinator coordinator = COORDINATOR_FACTORY.createBrokerLoadScheduler(loadPlanner);
+        DefaultCoordinator coordinator = COORDINATOR_FACTORY.createBrokerLoadScheduler(loadPlanner);
         JobSpec jobSpec = coordinator.getJobSpec();
 
         // Check created jobSpec.
@@ -243,7 +243,7 @@ public class JobSpecTest extends SchedulerTestBase {
                 timeout, startTime, false, connectContext, sessionVariables, loadMemLimit, execMemLimit,
                 null, null, null, 0);
 
-        Coordinator coordinator = COORDINATOR_FACTORY.createStreamLoadScheduler(loadPlanner);
+        DefaultCoordinator coordinator = COORDINATOR_FACTORY.createStreamLoadScheduler(loadPlanner);
         JobSpec jobSpec = coordinator.getJobSpec();
 
         // Check created jobSpec.
@@ -310,7 +310,7 @@ public class JobSpecTest extends SchedulerTestBase {
         Map<String, String> sessionVariables = ImmutableMap.of();
         long execMemLimit = 4L;
 
-        Coordinator coordinator = COORDINATOR_FACTORY.createNonPipelineBrokerLoadScheduler(
+        DefaultCoordinator coordinator = COORDINATOR_FACTORY.createNonPipelineBrokerLoadScheduler(
                 loadJobId, queryId, descTable, fragments, scanNodes, timezone, startTime,
                 sessionVariables,
                 connectContext,
@@ -362,7 +362,7 @@ public class JobSpecTest extends SchedulerTestBase {
         Map<String, String> sessionVariables = ImmutableMap.of();
         long execMemLimit = 4L;
 
-        Coordinator coordinator = COORDINATOR_FACTORY.createBrokerExportScheduler(
+        DefaultCoordinator coordinator = COORDINATOR_FACTORY.createBrokerExportScheduler(
                 loadJobId, queryId, descTable, fragments, scanNodes, timezone, startTime,
                 sessionVariables,
                 execMemLimit);
@@ -406,7 +406,7 @@ public class JobSpecTest extends SchedulerTestBase {
             }
         };
 
-        Coordinator coordinator = COORDINATOR_FACTORY.createSyncStreamLoadScheduler(planner, new TNetworkAddress());
+        DefaultCoordinator coordinator = COORDINATOR_FACTORY.createSyncStreamLoadScheduler(planner, new TNetworkAddress());
         JobSpec jobSpec = coordinator.getJobSpec();
 
         // Check created jobSpec.
