@@ -198,8 +198,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      */
     public static final String ENABLE_LOCAL_SHUFFLE_AGG = "enable_local_shuffle_agg";
 
-    public static final String ENABLE_DELIVER_BATCH_FRAGMENTS = "enable_deliver_batch_fragments";
-
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
 
@@ -499,16 +497,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = LOG_REJECTED_RECORD_NUM)
     private long logRejectedRecordNum = 0;
-
-    /**
-     * If enable this variable (only take effect for pipeline), it will deliver fragment instances
-     * to BE in batch and concurrently.
-     * - Uses `exec_batch_plan_fragments` instead of `exec_plan_fragment` RPC API, which all the instances
-     * of a fragment to the same destination host are delivered in the same request.
-     * - Send different fragments concurrently according to topological order of the fragment tree
-     */
-    @VariableMgr.VarAttr(name = ENABLE_DELIVER_BATCH_FRAGMENTS)
-    private boolean enableDeliverBatchFragments = true;
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
@@ -1704,14 +1692,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public float getGlobalRuntimeFilterProbeMinSelectivity() {
         return globalRuntimeFilterProbeMinSelectivity;
-    }
-
-    public void setEnableDeliverBatchFragments(boolean enableDeliverBatchFragments) {
-        this.enableDeliverBatchFragments = enableDeliverBatchFragments;
-    }
-
-    public boolean isEnableDeliverBatchFragments() {
-        return enableDeliverBatchFragments;
     }
 
     public boolean isMVPlanner() {

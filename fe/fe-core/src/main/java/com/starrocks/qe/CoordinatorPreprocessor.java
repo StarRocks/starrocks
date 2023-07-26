@@ -1189,6 +1189,7 @@ public class CoordinatorPreprocessor {
 
         TUniqueId instanceId;
         final Long workerId;
+
         Map<Integer, List<TScanRangeParams>> perNodeScanRanges = Maps.newHashMap();
         Map<Integer, Map<Integer, List<TScanRangeParams>>> nodeToPerDriverSeqScanRanges = Maps.newHashMap();
 
@@ -1252,6 +1253,26 @@ public class CoordinatorPreprocessor {
 
         public Long getWorkerId() {
             return workerId;
+        }
+
+        public int getTableSinkDop() {
+            PlanFragment fragment = fragment();
+            if (!fragment.forceSetTableSinkDop()) {
+                return getPipelineDop(); // instance dop.
+            }
+
+            DataSink dataSink = fragment.getSink();
+            int fragmentDop = fragment.getPipelineDop();
+            if (!(dataSink instanceof IcebergTableSink)) {
+                return fragmentDop;
+            } else {
+                int sessionVarSinkDop = ConnectContext.get().getSessionVariable().getPipelineSinkDop();
+                if (sessionVarSinkDop > 0) {
+                    return Math.min(fragmentDop, sessionVarSinkDop);
+                } else {
+                    return Math.min(fragmentDop, IcebergTableSink.ICEBERG_SINK_MAX_DOP);
+                }
+            }
         }
     }
 
@@ -1378,8 +1399,7 @@ public class CoordinatorPreprocessor {
          */
         private void toThriftForUniqueParams(TExecPlanFragmentParams uniqueParams, int fragmentIndex,
                                              FInstanceExecParam instanceExecParam, boolean enablePipelineEngine,
-                                             int accTabletSinkDop, int curTableSinkDop)
-                throws Exception {
+                                             int accTabletSinkDop, int curTableSinkDop) {
             // if pipeline is enable and current fragment contain olap table sink, in fe we will
             // calculate the number of all tablet sinks in advance and assign them to each fragment instance
             boolean enablePipelineTableSinkDop = enablePipelineEngine &&
@@ -1481,10 +1501,10 @@ public class CoordinatorPreprocessor {
 
         public List<TExecPlanFragmentParams> toThrift(Set<TUniqueId> inFlightInstanceIds,
                                                       TDescriptorTable descTable,
-                                                      boolean enablePipelineEngine, int accTabletSinkDop,
+                                                      boolean enablePipelineEngine,
+                                                      int accTabletSinkDop,
                                                       int tableSinkTotalDop,
-                                                      boolean isEnableStreamPipeline) throws Exception {
-            boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
+                                                      boolean isEnableStreamPipeline) {
             setBucketSeqToInstanceForRuntimeFilters();
 
             List<TExecPlanFragmentParams> paramsList = Lists.newArrayList();
@@ -1493,23 +1513,7 @@ public class CoordinatorPreprocessor {
                 if (!inFlightInstanceIds.contains(instanceExecParam.instanceId)) {
                     continue;
                 }
-                int curTableSinkDop = 0;
-                if (forceSetTableSinkDop) {
-                    DataSink dataSink = fragment.getSink();
-                    int dop = fragment.getPipelineDop();
-                    if (!(dataSink instanceof IcebergTableSink)) {
-                        curTableSinkDop = dop;
-                    } else {
-                        int sessionVarSinkDop = ConnectContext.get().getSessionVariable().getPipelineSinkDop();
-                        if (sessionVarSinkDop > 0) {
-                            curTableSinkDop = Math.min(dop, sessionVarSinkDop);
-                        } else {
-                            curTableSinkDop = Math.min(dop, IcebergTableSink.ICEBERG_SINK_MAX_DOP);
-                        }
-                    }
-                } else {
-                    curTableSinkDop = instanceExecParam.getPipelineDop();
-                }
+                int curTableSinkDop = instanceExecParam.getTableSinkDop();
                 TExecPlanFragmentParams params = new TExecPlanFragmentParams();
 
                 toThriftForCommonParams(params, instanceExecParam.getWorkerId(), descTable, enablePipelineEngine,
@@ -1521,58 +1525,6 @@ public class CoordinatorPreprocessor {
                 accTabletSinkDop += curTableSinkDop;
             }
             return paramsList;
-        }
-
-        TExecBatchPlanFragmentsParams toThriftInBatch(
-                Set<TUniqueId> inFlightInstanceIds, long workerId, TDescriptorTable descTable,
-                boolean enablePipelineEngine, int accTabletSinkDop,
-                int tableSinkTotalDop) throws Exception {
-
-            boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
-
-            setBucketSeqToInstanceForRuntimeFilters();
-
-            TExecPlanFragmentParams commonParams = new TExecPlanFragmentParams();
-            toThriftForCommonParams(commonParams, workerId, descTable, enablePipelineEngine, tableSinkTotalDop, false);
-            fillRequiredFieldsToThrift(commonParams);
-
-            List<TExecPlanFragmentParams> uniqueParamsList = Lists.newArrayList();
-            for (int i = 0; i < instanceExecParams.size(); ++i) {
-                final FInstanceExecParam instanceExecParam = instanceExecParams.get(i);
-                if (!inFlightInstanceIds.contains(instanceExecParam.instanceId)) {
-                    continue;
-                }
-                int curTableSinkDop = 0;
-                if (forceSetTableSinkDop) {
-                    DataSink dataSink = fragment.getSink();
-                    int dop = fragment.getPipelineDop();
-                    if (!(dataSink instanceof IcebergTableSink)) {
-                        curTableSinkDop = dop;
-                    } else {
-                        int sessionVarSinkDop = ConnectContext.get().getSessionVariable().getPipelineSinkDop();
-                        if (sessionVarSinkDop > 0) {
-                            curTableSinkDop = Math.min(dop, sessionVarSinkDop);
-                        } else {
-                            curTableSinkDop = Math.min(dop, IcebergTableSink.ICEBERG_SINK_MAX_DOP);
-                        }
-                    }
-                } else {
-                    curTableSinkDop = instanceExecParam.getPipelineDop();
-                }
-
-                TExecPlanFragmentParams uniqueParams = new TExecPlanFragmentParams();
-                toThriftForUniqueParams(uniqueParams, i, instanceExecParam, enablePipelineEngine,
-                        accTabletSinkDop, curTableSinkDop);
-                fillRequiredFieldsToThrift(uniqueParams);
-
-                uniqueParamsList.add(uniqueParams);
-                accTabletSinkDop += curTableSinkDop;
-            }
-
-            TExecBatchPlanFragmentsParams request = new TExecBatchPlanFragmentsParams();
-            request.setCommon_param(commonParams);
-            request.setUnique_param_per_instance(uniqueParamsList);
-            return request;
         }
 
         // Append range information
