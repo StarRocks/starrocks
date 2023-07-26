@@ -408,10 +408,6 @@ public class ComputeNode implements IComputable, Writable {
         this.isAlive = isAlive;
     }
 
-    public AtomicBoolean getIsDecommissioned() {
-        return isDecommissioned;
-    }
-
     public void setDecommissionType(int decommissionType) {
         this.decommissionType = decommissionType;
     }
