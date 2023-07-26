@@ -126,7 +126,7 @@ public class HttpResultSender {
                     coord.cancel();
                     return;
                 }
-                Thread.sleep(10);
+                Thread.yield();
             }
             // only flush once
             if (row != resultBatch.getRows().get(rowsSize - 1)) {

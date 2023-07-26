@@ -685,6 +685,12 @@ public class Config extends ConfigBase {
     public static int max_mysql_service_task_threads_num = 4096;
 
     /**
+     * max num of thread to handle task for http sql.
+     */
+    @ConfField
+    public static int max_http_sql_service_task_threads_num = 4096;
+
+    /**
      * modifies the version string returned by following situations:
      * select version();
      * handshake packet version.
