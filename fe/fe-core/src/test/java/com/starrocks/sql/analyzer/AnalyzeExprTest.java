@@ -115,6 +115,7 @@ public class AnalyzeExprTest {
         analyzeSuccess("select array_map(x -> x is null,[null]),array_map(x -> x is null,null)");
         analyzeSuccess("select array_map((x,y) -> x + y, [], [])");
         analyzeSuccess("select array_map((x,y) -> x, [], [])");
+        analyzeSuccess("select array_map((x,y) -> x is null and y is not null, [[1]], [null])");
         analyzeSuccess("select array_map([1], x -> x)");
         analyzeSuccess("select array_map([1], x -> x + v1) from t0");
         analyzeSuccess("select transform([1], x -> x)");
@@ -129,6 +130,8 @@ public class AnalyzeExprTest {
         analyzeSuccess("select v1, v2, count(v1) over (partition by array_sum(array_map(x->x+1, [1])) order by v2) from tarray");
         analyzeSuccess("with x2 as (select array_map((ss) -> ss * v1, v3) from tarray) select * from x2;");
         analyzeSuccess("select array_map(array_map(x2->x2+1,[1,2,3]),array_map(x1->x1+2,[1,2,3]),(x,y)->(x+y))");
+        analyzeSuccess("select array_map((x,y,z) -> x is null and y is not null or z is not null, [[1]], [null],['abc'])");
+
 
         analyzeFail("select array_map(x,y -> x + y, [], [])"); // should be (x,y)
         analyzeFail("select array_map((x,y,z) -> x + y, [], [])");
@@ -164,6 +167,8 @@ public class AnalyzeExprTest {
         analyzeSuccess("select array_filter(x -> x is null,[null]),array_map(x -> x is null,null)");
         analyzeSuccess("select array_filter((x,y) -> x + y, [], [])");
         analyzeSuccess("select array_filter((x,y) -> x, [], [])");
+        analyzeSuccess("select array_filter((x,y) -> x is null and y is not null, [[1]], [null])");
+        analyzeSuccess("select array_filter((x,y,z) -> x is null and y is not null or z is not null, [[1]], [null],['abc'])");
 
         analyzeFail("select array_filter(x,y -> x + y, [], [])"); // should be (x,y)
         analyzeFail("select array_filter((x,y,z) -> x + y, [], [])");
