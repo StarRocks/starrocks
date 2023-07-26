@@ -101,9 +101,6 @@ StorageEngine* init_storage_engine(GlobalEnv* global_env, std::vector<StorePath>
 
     EXIT_IF_ERROR(StorageEngine::open(options, &engine));
 
-    // Start all background threads of storage engine.
-    // SHOULD be called after exec env is initialized.
-    EXIT_IF_ERROR(engine->start_bg_threads());
     return engine;
 }
 
@@ -135,6 +132,11 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     auto* exec_env = ExecEnv::GetInstance();
     EXIT_IF_ERROR(exec_env->init(paths, as_cn));
     LOG(INFO) << "BE start step " << start_step++ << ": exec engine init successfully";
+
+    // Start all background threads of storage engine.
+    // SHOULD be called after exec env is initialized.
+    EXIT_IF_ERROR(storage_engine->start_bg_threads());
+    LOG(INFO) << "BE start step " << start_step++ << ": storage engine start bg threads successfully";
 
 #ifdef USE_STAROS
     init_staros_worker();
