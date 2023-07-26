@@ -34,7 +34,12 @@ public:
         int64_t write_cache_fail_bytes = 0;
     };
 
+<<<<<<< HEAD
     explicit CacheInputStream(std::shared_ptr<SeekableInputStream> stream, const std::string& filename, size_t size);
+=======
+    explicit CacheInputStream(const std::shared_ptr<SeekableInputStream>& stream, const std::string& filename,
+                              size_t size, int64_t modification_time);
+>>>>>>> c45aff1aa5 ([Enhancement] Encode file modification time to data cache key. (#27755))
 
     ~CacheInputStream() override = default;
 

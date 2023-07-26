@@ -327,6 +327,21 @@ struct THdfsScanRange {
 
     // number of lines at the start of the file to skip
     12: optional i64 skip_header
+<<<<<<< HEAD
+=======
+
+    // whether to use JNI scanner to read data of paimon table
+    13: optional bool use_paimon_jni_reader
+
+    // paimon split info
+    14: optional string paimon_split_info
+
+    // paimon predicate info
+    15: optional string paimon_predicate_info
+
+    // last modification time of the hdfs file, for data cache
+    16: optional i64 modification_time
+>>>>>>> c45aff1aa5 ([Enhancement] Encode file modification time to data cache key. (#27755))
 }
 
 struct TBinlogScanRange {
