@@ -270,7 +270,7 @@ public class DefaultCoordinator extends Coordinator {
 
         TUniqueId queryId = jobSpec.getQueryId();
 
-        LOG.info("Execution Profile " + DebugUtil.printId(queryId));
+        LOG.info("Execution Profile: {}", DebugUtil.printId(queryId));
         queryProfile = new RuntimeProfile("Execution");
 
         fragmentProfiles = new ArrayList<>();
@@ -686,7 +686,7 @@ public class DefaultCoordinator extends Coordinator {
     /**
      * Deliver multiple fragments concurrently according to the topological order.
      */
-    private void deliverExecFragmentsRequests(boolean enablePipelineEngine) throws Exception {
+    private void deliverExecFragmentsRequests(boolean enablePipelineEngine) throws RpcException, UserException, TException {
         TQueryOptions queryOptions = jobSpec.getQueryOptions();
         long queryDeliveryTimeoutMs = Math.min(queryOptions.query_timeout, queryOptions.query_delivery_timeout) * 1000L;
         List<List<PlanFragment>> fragmentGroups = computeTopologicalOrderFragments();
@@ -753,7 +753,7 @@ public class DefaultCoordinator extends Coordinator {
                                 .sum();
                     }
                     Preconditions.checkState(tableSinkTotalDop >= 0,
-                            "tableSinkTotalDop = " + tableSinkTotalDop + " should be >= 0");
+                            "tableSinkTotalDop = %d should be >= 0", tableSinkTotalDop);
 
                     for (int stageIndex = 0; stageIndex < twoStageInstancesToDeploy.size(); stageIndex++) {
                         List<CoordinatorPreprocessor.FInstanceExecParam> stageInstances =
@@ -913,8 +913,7 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     private void setGlobalRuntimeFilterParams(CoordinatorPreprocessor.FragmentExecParams topParams,
-                                              TNetworkAddress mergeHost)
-            throws Exception {
+                                              TNetworkAddress mergeHost)  {
 
         Map<Integer, List<TRuntimeFilterProberParams>> broadcastGRFProbersMap = Maps.newHashMap();
         List<RuntimeFilterDescription> broadcastGRFList = Lists.newArrayList();

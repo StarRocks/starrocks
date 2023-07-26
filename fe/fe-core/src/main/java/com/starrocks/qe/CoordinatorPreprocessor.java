@@ -1465,39 +1465,6 @@ public class CoordinatorPreprocessor {
             }
         }
 
-        /**
-         * Fill required fields of thrift params with meaningless values.
-         *
-         * @param params The thrift params need to be filled required fields.
-         */
-        private void fillRequiredFieldsToThrift(TExecPlanFragmentParams params) {
-            TPlanFragmentExecParams fragmentExecParams = params.getParams();
-
-            if (!fragmentExecParams.isSetFragment_instance_id()) {
-                fragmentExecParams.setFragment_instance_id(new TUniqueId(0, 0));
-            }
-
-            if (!fragmentExecParams.isSetInstances_number()) {
-                fragmentExecParams.setInstances_number(0);
-            }
-
-            if (!fragmentExecParams.isSetSender_id()) {
-                fragmentExecParams.setSender_id(0);
-            }
-
-            if (!fragmentExecParams.isSetPer_node_scan_ranges()) {
-                fragmentExecParams.setPer_node_scan_ranges(Maps.newHashMap());
-            }
-
-            if (!fragmentExecParams.isSetPer_exch_num_senders()) {
-                fragmentExecParams.setPer_exch_num_senders(Maps.newHashMap());
-            }
-
-            if (!fragmentExecParams.isSetQuery_id()) {
-                fragmentExecParams.setQuery_id(new TUniqueId(0, 0));
-            }
-        }
-
         public List<TExecPlanFragmentParams> toThrift(Set<TUniqueId> inFlightInstanceIds,
                                                       TDescriptorTable descTable,
                                                       boolean enablePipelineEngine,
