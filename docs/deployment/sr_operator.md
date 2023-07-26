@@ -154,10 +154,10 @@ From outside the Kubernetes cluster, you can access the StarRocks cluster throug
         image: fe-ubuntu:latest
         replicas: 3
         requests:
-         cpu: 4
-         memory: 16Gi
+          cpu: 4
+          memory: 16Gi
         service:            
-         type: LoadBalancer # specified as LoadBalancer
+          type: LoadBalancer # specified as LoadBalancer
     ```
 
 2. Obtain the IP address `EXTERNAL-IP` and port `PORT(S)` that the FE Service exposes to the outside.
