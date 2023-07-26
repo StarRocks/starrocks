@@ -104,6 +104,11 @@ public class Partition extends MetaObject implements Writable {
     private long visibleVersion;
     @SerializedName(value = "visibleVersionTime")
     private long visibleVersionTime;
+    /**
+     * ID of the transaction that has committed current visible version.
+     * Just for tracing the txn log, no need to persist.
+     */
+    private long visibleTxnId = -1;
     @SerializedName(value = "nextVersion")
     private long nextVersion;
     @SerializedName(value = "distributionInfo")
@@ -202,6 +207,10 @@ public class Partition extends MetaObject implements Writable {
         this.setVisibleVersion(visibleVersion, visibleVersionTime);
     }
 
+    public void updateVisibleVersion(long visibleVersion, long visibleVersionTime, long visibleTxnId) {
+        setVisibleVersion(visibleVersion, visibleVersionTime, visibleTxnId);
+    }
+
     public long getVisibleVersion() {
         return visibleVersion;
     }
@@ -221,6 +230,15 @@ public class Partition extends MetaObject implements Writable {
         this.visibleVersionTime = visibleVersionTime;
     }
 
+    public void setVisibleVersion(long visibleVersion, long visibleVersionTime, long visibleTxnId) {
+        this.visibleVersion = visibleVersion;
+        this.visibleVersionTime = visibleVersionTime;
+        this.visibleTxnId = visibleTxnId;
+    }
+
+    public long getVisibleTxnId() {
+        return visibleTxnId;
+    }
 
     public PartitionState getState() {
         return this.state;
