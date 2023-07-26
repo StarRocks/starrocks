@@ -722,7 +722,7 @@ public class TabletScheduler extends MasterDaemon {
             // once we take the tablet out of priority queue, priority is meaningless.
             tabletCtx.setTablet(tablet);
             tabletCtx.setVersionInfo(partition.getVisibleVersion(),
-                    partition.getCommittedVersion());
+                    partition.getCommittedVersion(), partition.getVisibleTxnId());
             tabletCtx.setSchemaHash(tbl.getSchemaHashByIndexId(idx.getId()));
             tabletCtx.setStorageMedium(dataProperty.getStorageMedium());
 
@@ -862,8 +862,17 @@ public class TabletScheduler extends MasterDaemon {
             throw new SchedException(Status.UNRECOVERABLE, "cluster does not exist");
         }
 
-        tabletCtx.chooseDestReplicaForVersionIncomplete(backendsWorkingSlots);
+        boolean needFurtherRepair = tabletCtx.chooseDestReplicaForVersionIncomplete(backendsWorkingSlots);
         tabletCtx.chooseSrcReplicaForVersionIncomplete(backendsWorkingSlots);
+
+        LOG.info("Adding VERSION_INCOMPLETE clone task, replica on backend {} chosen, needFurtherRepair: {}," +
+                        " partition visible version: {}, visibleTxnId: {}, tablet: {}, all version infos: {}",
+                tabletCtx.getDestBackendId(),
+                needFurtherRepair,
+                tabletCtx.getVisibleVersion(),
+                tabletCtx.getVisibleTxnId(),
+                tabletCtx.getTabletId(),
+                tabletCtx.getTablet().getReplicaInfos());
 
         // create clone task
         batchTask.addTask(tabletCtx.createCloneReplicaAndTask());
