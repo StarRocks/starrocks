@@ -1,4 +1,4 @@
-# FILES()
+# FILES
 
 ## 功能
 
@@ -6,7 +6,7 @@
 
 目前 FILES() 函数支持以下数据源和文件格式：
 
-- **数据源****：**
+- **数据源：**
   - AWS S3
   - HDFS
 - **文件格式：**
@@ -33,7 +33,7 @@ FILES("key" = "value"...)
 | hadoop.security.authentication | 用于指定待访问 HDFS 集群的认证方式。有效值：`simple` 和 `kerberos`。默认值：`simple`。`simple` 表示简单认证，即无认证。`kerberos` 表示 Kerberos 认证。 |
 | username                       | 用于访问 HDFS 集群中 NameNode 节点的用户名。                 |
 | password                       | 用于访问 HDFS 集群中 NameNode 节点的密码。                   |
-| kerberos_principal             | 用于指定 Kerberos 的用户或服务 (Principal)。每个 Principal 在 HDFS 集群内唯一，由如下三部分组成：`username` 或 `servicename`：HDFS 集群中用户或服务的名称。`instance`：HDFS 集群要认证的节点所在服务器的名称，用来保证用户或服务全局唯一。比如，HDFS 集群中有多个 DataNode 节点，各节点需要各自独立认证。`realm`：域，必须全大写。示例：`nn/zelda1@ZELDA.COM`。 |
+| kerberos_principal             | 用于指定 Kerberos 的用户或服务 (Principal)。每个 Principal 在 HDFS 集群内唯一，由如下三部分组成：<ul><li>`username` 或 `servicename`：HDFS 集群中用户或服务的名称。</li><li>`instance`：HDFS 集群要认证的节点所在服务器的名称，用来保证用户或服务全局唯一。比如，HDFS 集群中有多个 DataNode 节点，各节点需要各自独立认证。</li><li>`realm`：域，必须全大写。</li></ul>示例：`nn/zelda1@ZELDA.COM`。 |
 | kerberos_keytab                | 用于指定 Kerberos 的 Key Table（简称为“keytab”）文件的路径。 |
 | kerberos_keytab_content        | 用于指定 Kerberos 中 keytab 文件的内容经过 Base64 编码之后的内容。该参数与 `kerberos_keytab` 参数二选一配置。 |
 
