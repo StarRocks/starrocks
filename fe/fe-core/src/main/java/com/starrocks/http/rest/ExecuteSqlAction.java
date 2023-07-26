@@ -95,9 +95,10 @@ public class ExecuteSqlAction extends RestBaseAction {
     }
 
     public static void registerAction(ActionController controller) throws IllegalArgException {
-        controller.registerHandler(HttpMethod.POST, "/api/v2/{" + CATALOG_KEY + "}/{" + DB_KEY + "}/sql",
+        controller.registerHandler(HttpMethod.POST,
+                "/api/v1/catalogs/{" + CATALOG_KEY + "}/databases/{" + DB_KEY + "}/sql",
                 new ExecuteSqlAction(controller));
-        controller.registerHandler(HttpMethod.POST, "/api/v2/{" + CATALOG_KEY + "}/sql",
+        controller.registerHandler(HttpMethod.POST, "/api/v1/catalogs/{" + CATALOG_KEY + "}/sql",
                 new ExecuteSqlAction(controller));
     }
 
@@ -142,6 +143,9 @@ public class ExecuteSqlAction extends RestBaseAction {
                 context.setInitialized(true);
             }
 
+            // store context in current thread, Executor rely on this thread local variable
+            context.setThreadLocalInfo();
+
             // process this request
             HttpConnectProcessor connectProcessor = new HttpConnectProcessor(context);
             try {
@@ -166,6 +170,10 @@ public class ExecuteSqlAction extends RestBaseAction {
                 writeResponse(request, response, HttpResponseStatus.NOT_FOUND);
             }
         }
+        // for other rest api, HttpServerHanler.channelReadComplete will flush the buffer
+        // but for http sql, when channelReadComplete is invoked, query just sent to thread pool
+        // so at the end of query processing, we have to flush explicitly
+        request.getContext().flush();
 
     }
 

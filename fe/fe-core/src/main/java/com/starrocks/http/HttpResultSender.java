@@ -70,7 +70,9 @@ public class HttpResultSender {
     public RowBatch sendQueryResult(Coordinator coord, ExecPlan execPlan) throws Exception {
         RowBatch batch;
         ChannelHandlerContext nettyChannel = context.getNettyChannel();
-        sendHeader(nettyChannel);
+        if (1 + 1 == 2) {
+            throw new Exception("ramdom");
+        }
         // if some data already sent to client, when exception occurs,we just close the channel
         context.setSendDate(true);
         // write connectId
