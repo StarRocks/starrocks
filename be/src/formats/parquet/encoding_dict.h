@@ -131,7 +131,10 @@ public:
         data_column->resize_uninitialized(cur_size + count);
         T* __restrict__ data = data_column->get_data().data() + cur_size;
 
-        _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), data, count);
+        auto ret = _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), data, count);
+        if (UNLIKELY(ret <= 0)) {
+            return Status::InternalError("DictDecoder GetBatchWithDict failed");
+        }
 
         return Status::OK();
     }
@@ -306,8 +309,8 @@ public:
         case VALUE: {
             raw::stl_vector_resize_uninitialized(&_slices, count);
             auto ret = _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), _slices.data(), count);
-            if (UNLIKELY(ret == -1)) {
-                return Status::InternalError("DictDecoder append strings to column failed");
+            if (UNLIKELY(ret <= 0)) {
+                return Status::InternalError("DictDecoder GetBatchWithDict failed");
             }
             ret = dst->append_strings_overflow(_slices, _max_value_length);
             if (UNLIKELY(!ret)) {
