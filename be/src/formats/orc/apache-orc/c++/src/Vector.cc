@@ -300,8 +300,12 @@ void StructVectorBatch::filter(uint8_t* f_data, uint32_t f_size, uint32_t true_s
 void StructVectorBatch::filterOnFields(uint8_t* f_data, uint32_t f_size, uint32_t true_size,
                                        const std::vector<int>& positions, bool onLazyLoad) {
     if (!onLazyLoad) {
+        alreadyFilteredByActiveColumn = true;
         ColumnVectorBatch::filter(f_data, f_size, true_size);
     } else {
+        if (!alreadyFilteredByActiveColumn) {
+            throw orc::ParseError("We have to filter active column first");
+        }
         numElements = true_size;
     }
     for (int p : positions) {

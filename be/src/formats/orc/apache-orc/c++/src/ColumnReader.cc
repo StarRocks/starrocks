@@ -1023,7 +1023,7 @@ private:
                       const std::vector<uint64_t>& fieldIndex, ColumnVectorBatch& rowBatch, uint64_t numValues,
                       char* notNull);
 
-    bool isAllFieldLazy();
+    bool isAllFieldsLazy();
 };
 
 StructColumnReader::StructColumnReader(const Type& type, StripeStreams& stripe) : ColumnReader(type, stripe) {
@@ -1085,7 +1085,7 @@ void StructColumnReader::nextInternal(const std::vector<std::unique_ptr<ColumnRe
     if constexpr (!lazyLoad) {
         ColumnReader::next(rowBatch, numValues, notNull);
     } else {
-        if (isAllFieldLazy()) {
+        if (isAllFieldsLazy()) {
             ColumnReader::next(rowBatch, numValues, notNull);
         }
     }
@@ -1110,7 +1110,7 @@ void StructColumnReader::nextInternal(const std::vector<std::unique_ptr<ColumnRe
     }
 }
 
-bool StructColumnReader::isAllFieldLazy() {
+bool StructColumnReader::isAllFieldsLazy() {
     return children.empty();
 }
 
@@ -1122,7 +1122,7 @@ void StructColumnReader::seekToRowGroup(PositionProviderMap* positions) {
 }
 
 void StructColumnReader::lazyLoadSeekToRowGroup(PositionProviderMap* positions) {
-    if (isAllFieldLazy()) {
+    if (isAllFieldsLazy()) {
         ColumnReader::seekToRowGroup(positions);
     }
     for (auto& ptr : lazyLoadChildren) {
@@ -1131,7 +1131,7 @@ void StructColumnReader::lazyLoadSeekToRowGroup(PositionProviderMap* positions) 
 }
 
 void StructColumnReader::lazyLoadSkip(uint64_t numValues) {
-    if (isAllFieldLazy()) {
+    if (isAllFieldsLazy()) {
         ColumnReader::skip(numValues);
     }
     for (auto& ptr : lazyLoadChildren) {
@@ -1296,7 +1296,6 @@ void ListColumnReader::seekToRowGroup(PositionProviderMap* positions) {
 }
 
 void ListColumnReader::lazyLoadSeekToRowGroup(PositionProviderMap* positions) {
-    // If List support lazy load, here need to check
     if (child) {
         child->lazyLoadSeekToRowGroup(positions);
     }
@@ -1485,7 +1484,7 @@ void MapColumnReader::seekToRowGroup(PositionProviderMap* positions) {
 }
 
 void MapColumnReader::lazyLoadSeekToRowGroup(PositionProviderMap* positions) {
-    // TODO If map want to support lazy load, here need to check
+    // TODO If struct/map want to support lazy load, here need to handle null carefully
     if (keyReader) {
         keyReader->lazyLoadSeekToRowGroup(positions);
     }
