@@ -296,7 +296,6 @@ TEST(OrcLazyLoadTest, TestWithSearchArgument) {
     }
 }
 
-
 TEST(OrcLazyLoadTest, TestStructLazyLoad) {
     MemoryOutputStream buffer(1024000);
     size_t batchSize = 1024;
@@ -367,7 +366,6 @@ TEST(OrcLazyLoadTest, TestStructLazyLoad) {
         ORC_UNIQUE_PTR<orc::RowReader> rr = reader->createRowReader(options);
 
         ORC_UNIQUE_PTR<orc::ColumnVectorBatch> rowBatch = rr->createRowBatch(batchSize);
-
 
         size_t rowIndex = 0;
         for (size_t k = 0; k < batchNum; k++) {
@@ -502,7 +500,7 @@ TEST(OrcLazyLoadTest, TestArrayStructLazyLoad) {
         c1_element->hasNulls = true;
         c1_element->numElements = 8;
         c1_element->notNull.resize(8);
-        for(size_t i = 0; i < 8; i++) {
+        for (size_t i = 0; i < 8; i++) {
             c1_element->notNull[i] = 1;
         }
         c1_element->notNull[4] = 0;
@@ -512,7 +510,7 @@ TEST(OrcLazyLoadTest, TestArrayStructLazyLoad) {
         c1_1->hasNulls = true;
         c1_1->data.resize(8);
         c1_1->notNull.resize(8);
-        for(size_t i = 0; i < 8; i++) {
+        for (size_t i = 0; i < 8; i++) {
             c1_1->data[i] = 100 + i;
             c1_1->notNull[i] = 1;
         }
@@ -622,7 +620,6 @@ TEST(OrcLazyLoadTest, TestArrayStructLazyLoad) {
             EXPECT_EQ(1, c0->notNull[1]);
             EXPECT_EQ(1, c0->notNull[2]);
 
-
             // check lazy
             // skip to line #3
             rr->lazyLoadSeekTo(pos.row_in_stripe);
@@ -669,7 +666,6 @@ TEST(OrcLazyLoadTest, TestArrayStructLazyLoad) {
             // make sure lazy column didn't load now
             c1 = dynamic_cast<orc::ListVectorBatch*>(root->fields[1]);
             EXPECT_EQ(0, c1->numElements);
-
         }
         {
             ORC_UNIQUE_PTR<orc::ColumnVectorBatch> rowBatch = rr->createRowBatch(3);
@@ -724,7 +720,6 @@ TEST(OrcLazyLoadTest, TestArrayStructLazyLoad) {
         EXPECT_EQ(0, c0->data[0]);
         EXPECT_EQ(5, c0->data[4]);
 
-
         // check c1_1
         EXPECT_EQ(8, c1_1->numElements);
         EXPECT_TRUE(c1_1->hasNulls);
@@ -736,10 +731,7 @@ TEST(OrcLazyLoadTest, TestArrayStructLazyLoad) {
                 EXPECT_EQ(100 + i, c1_1->data[i]);
             }
         }
-
     }
 }
-
-
 
 } // namespace starrocks
