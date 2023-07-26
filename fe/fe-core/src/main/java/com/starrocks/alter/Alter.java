@@ -871,13 +871,8 @@ public class Alter {
         db.createTable(origTable);
     }
 
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/alter/Alter.java
-    public void processAlterView(AlterViewStmt stmt, ConnectContext ctx) throws UserException {
-        TableName dbTableName = stmt.getTbl();
-=======
     public void processAlterView(AlterViewStmt stmt, ConnectContext ctx) throws DdlException {
         TableName dbTableName = stmt.getTableName();
->>>>>>> 6e1d5ec99b ([Feature] support create or replace view (#27768)):fe/fe-core/src/main/java/com/starrocks/alter/AlterJobMgr.java
         String dbName = dbTableName.getDb();
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
