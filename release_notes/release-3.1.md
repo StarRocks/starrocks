@@ -48,7 +48,7 @@
 
 - 支持访问 Parquet 格式的 Iceberg v2 数据表。
 <!--- 【公测中】支持写出数据到 Parquet 格式的 Iceberg 表。-->
-- 【公测中】支持通过外部 [Elasticsearch catalog](../data_source/catalog/elasticsearch_catalog.md）访问 Elasticsearch，简化外表创建等过程。
+- 【公测中】支持通过外部 [Elasticsearch catalog](../data_source/catalog/elasticsearch_catalog.md) 访问 Elasticsearch，简化外表创建等过程。
 - 【公测中】支持 [Paimon catalog](../data_source/catalog/paimon_catalog.md)，让用户也能用 StarRocks 对流式数据进行湖分析。
 
 #### 存储、导入与查询
