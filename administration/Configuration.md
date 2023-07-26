@@ -155,15 +155,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |consistency_check_start_time|23|FE 发起副本一致性检测的起始时间。|
 |consistency_check_end_time|4|FE 发起副本一致性检测的终止时间。|
 |check_consistency_default_timeout_second|600|副本一致性检测的超时时间，单位为秒。|
-|tablet_sched_max_scheduling_tablets|2000|如果正在调度的 tablet 数量超过该值，跳过 tablet 均衡和修复检查。|
-|tablet_sched_disable_balance|FALSE|是否禁用 Tablet 均衡调度。|
-|tablet_sched_disable_colocate_balance|FALSE|禁用 Colocate Table 的副本均衡。|
-|tablet_sched_max_balancing_tablets|100|如果正在均衡的 tablet 数量超过该值，跳过 tablet 重新均衡。|
-|tablet_sched_balance_load_disk_safe_threshold|0.5|disk_and_tablet 策略有效。如果所有 BE 的磁盘使用率低于 50%，认为磁盘使用均衡。|
-|tablet_sched_balance_load_score_threshold|0.1|对于 be_load_score 策略，负载比平均负载低 10% 的 BE 处于低负载状态，比平均负载高 10% 的 BE 处于高负载状态。<br/>对于 disk_and_tablet 策略，如果最大和最小 BE 磁盘使用率之差高于 10%，认为磁盘使用不均衡，会触发 tablet 重新均衡。|
-|tablet_sched_repair_delay_factor_second|60|FE 控制进行副本修复的间隔，单位为秒。|
-|tablet_sched_min_clone_task_timeout_sec|3 \* 60|克隆 Tablet 的最小超时时间，单位为秒。|
-|tablet_sched_max_clone_task_timeout_sec|2 \* 60 \* 60|克隆 Tablet 的最大超时时间，单位为秒。|
+|max_scheduling_tablets|10000|如果正在调度的 tablet 数量超过该值，跳过 tablet 均衡和修复检查。|
+|disable_balance|FALSE|是否禁用 Tablet 均衡调度。|
+|disable_colocate_balance|FALSE|禁用 Colocate Table 的副本均衡。|
+|max_balancing_tablets|500|如果正在均衡的 tablet 数量超过该值，跳过 tablet 重新均衡。|
+|balance_load_disk_safe_threshold|0.5|disk_and_tablet 策略有效。如果所有 BE 的磁盘使用率低于 50%，认为磁盘使用均衡。|
+|balance_load_score_threshold|0.1|对于 be_load_score 策略，负载比平均负载低 10% 的 BE 处于低负载状态，比平均负载高 10% 的 BE 处于高负载状态。<br/>对于 disk_and_tablet 策略，如果最大和最小 BE 磁盘使用率之差高于 10%，认为磁盘使用不均衡，会触发 tablet 重新均衡。|
+|tablet_repair_delay_factor_second|60|FE 控制进行副本修复的间隔，单位为秒。|
+|min_clone_task_timeout_sec|3 \* 60|克隆 Tablet 的最小超时时间，单位为秒。|
+|max_clone_task_timeout_sec|2 \* 60 \* 60|克隆 Tablet 的最大超时时间，单位为秒。|
 
 #### 其他动态参数
 
