@@ -11,7 +11,7 @@
 ### 功能优化
 
 - 如果查询的字段不包含在物化视图的 output 列但是包含在其谓词条件中，仍可使用该物化视图进行查询改写。[#23028](https://github.com/StarRocks/starrocks/issues/23028)
-- [切换至 Trino 语法](../reference/System_variable.md) `set sql_dialect = 'trino';`，查询时表别名大小写不敏感，支持函数 json_array。[#26094](https://github.com/StarRocks/starrocks/pull/26094) [#25282](https://github.com/StarRocks/starrocks/pull/25282)
+- [切换至 Trino 语法](../reference/System_variable.md) `set sql_dialect = 'trino';`，查询时表别名大小写不敏感。[#26094](https://github.com/StarRocks/starrocks/pull/26094) [#25282](https://github.com/StarRocks/starrocks/pull/25282)
 - `Information_schema.tables_config` 表中增加了 `table_id` 字段。您可以基于 `table_id` 字段关联数据库 `Information_schema` 中的表 `tables_config` 和 `be_tablets`，来查询 tablet 所属数据库和表名称。[#24061](https://github.com/StarRocks/starrocks/pull/24061)
 
 ### 问题修复
