@@ -199,9 +199,18 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                     }
 
                     if (successReplicaNum < quorumReplicaNum) {
+<<<<<<< HEAD
                         String msg = String.format("Commit failed. txn: %d table: %s tablet: %d quorum: %d<%d errorReplicas: %s",
                                 txnState.getTransactionId(), table.getName(), tablet.getId(), successReplicaNum, quorumReplicaNum,
                                 failedReplicaInfoSB.toString());
+=======
+                        String msg = String.format(
+                                "Commit failed. txn: %d table: %s tablet: %d quorum: %d<%d errorReplicas: %s commitBackends: %s",
+                                txnState.getTransactionId(), table.getName(), tablet.getId(), successReplicaNum,
+                                quorumReplicaNum,
+                                failedReplicaInfoSB,
+                                commitBackends == null ? "" : commitBackends.toString());
+>>>>>>> 94993ec514 ([Enhancement] Log version info when adding clone task for VERSION_INCOMPLETE (#27924))
                         LOG.warn(msg);
                         throw new TabletQuorumFailedException(msg);
                     }

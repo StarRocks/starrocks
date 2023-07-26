@@ -33,16 +33,16 @@ public class CloneTask extends AgentTask {
     public static final int VERSION_1 = 1;
     public static final int VERSION_2 = 2;
 
-    private int schemaHash;
-    private List<TBackend> srcBackends;
-    private TStorageMedium storageMedium;
+    private final int schemaHash;
+    private final List<TBackend> srcBackends;
+    private final TStorageMedium storageMedium;
 
-    private long visibleVersion;
+    private final long visibleVersion;
 
     private long srcPathHash = -1;
     private long destPathHash = -1;
 
-    private int timeoutS;
+    private final int timeoutS;
 
     private int taskVersion = VERSION_1;
 
