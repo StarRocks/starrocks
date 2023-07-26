@@ -1073,7 +1073,7 @@ public class SystemInfoService implements GsonPostProcessable {
         memoryBe.setDecommissionType(be.getDecommissionType());
     }
 
-    private long getClusterAvailableCapacityB() {
+    public long getClusterAvailableCapacityB() {
         List<Backend> clusterBackends = getBackends();
         long capacity = 0L;
         for (Backend backend : clusterBackends) {
