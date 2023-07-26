@@ -13,6 +13,7 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../data-manipulatio
   ```SQL
   CREATE TABLE [IF NOT EXISTS] [database.]table_name
   [(column_name [, column_name2, ...]]
+  [key_desc]
   [COMMENT "table comment"]
   [partition_desc]
   [distribution_desc]
@@ -39,6 +40,7 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../data-manipulatio
 | **Parameter**     | **Required** | **Description**                                              |
 | ----------------- | ------------ | ------------------------------------------------------------ |
 | column_name       | Yes          | The name of a column in the new table. You do not need to specify the data type for the column. StarRocks automatically specifies an appropriate data type for the column . StarRocks converts FLOAT and DOUBLE data into DECIMAL(38,9) data. StarRocks also converts CHAR, VARCHAR, and STRING data into VARCHAR(65533) data. |
+| key_desc          | No           | The model of the new table. Default is a Duplicate Key table, You can specify as Primary Key table. |
 | COMMENT           | No           | The comment of the new table.                                |
 | partition_desc    | No           | The partitioning method of the new table. If you do not specify this parameter, by default, the new table has no partition. For more information about partitioning, see CREATE TABLE. |
 | distribution_desc | No           | The bucketing method of the new table. If you do not specify this parameter, the bucket column defaults to the column with the highest cardinality collected by the cost-based optimizer (CBO). The number of buckets defaults to 10. If the CBO does not collect information about the cardinality, the bucket column defaults to the first column in the new table. For more information about bucketing, see CREATE TABLE. |
@@ -50,7 +52,7 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../data-manipulatio
 - The CTAS statement can only create a new table that meets the following requirements:
   - `ENGINE` is `OLAP`.
 
-  - The table is a Duplicate Key table.
+  - The table default is a Duplicate Key table, You can specify as Primary Key table.
 
   - The sort keys are the first three columns, and the storage space of the data types of these three columns does not exceed 36 bytes.
 
@@ -109,7 +111,22 @@ SELECT * FROM employee_new;
 +------------+
 ```
 
-Example 4: Synchronously query four tables, including `lineorder`, `customer`, `supplier`, and `part` and create a new table `lineorder_flat` based on the query result, and then insert the query result to the new table. Additionally, specify the partitioning method and bucketing method for the new table.
+Example 4: Use CTAS to create a table, use the PK model, and configure the number of replicate to 1. When using the Primary Key model, it should be noted that because the Primary key model has a primary key, the data in the actual table may be smaller than the query result.
+
+```SQL
+CREATE TABLE employee_new
+PRIMARY KEY(order_id)
+PROPERTIES(
+    "replication_num" = "1"
+)
+AS SELECT
+    order_list.order_id,
+    sum(goods.price) as total
+FROM order_list INNER JOIN goods ON goods.item_id1 = order_list.item_id2
+GROUP BY order_id;
+```
+
+Example 5: Synchronously query four tables, including `lineorder`, `customer`, `supplier`, and `part` and create a new table `lineorder_flat` based on the query result, and then insert the query result to the new table. Additionally, specify the partitioning method and bucketing method for the new table.
 
 ```SQL
 CREATE TABLE lineorder_flat
@@ -161,7 +178,7 @@ INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY
 INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY;
 ```
 
-Example 5: Asynchronously query the table `order_detail` and create a new table `order_statistics` based on the query result, and then insert the query result into the new table.
+Example 6: Asynchronously query the table `order_detail` and create a new table `order_statistics` based on the query result, and then insert the query result into the new table.
 
 ```Plain%20Text
 SUBMIT TASK AS CREATE TABLE order_statistics AS SELECT COUNT(*) as count FROM order_detail;
