@@ -58,6 +58,8 @@ public:
 
     void set_query_ctx(const QueryContextPtr& query_ctx);
 
+    virtual int64_t get_scan_table_id() const { return -1; }
+
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
 
