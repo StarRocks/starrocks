@@ -1,4 +1,4 @@
-# FILES()
+# FILES
 
 ## Description
 
