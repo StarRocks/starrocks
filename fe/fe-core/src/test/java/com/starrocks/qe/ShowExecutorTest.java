@@ -225,6 +225,10 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = baseTableInfo;
 
+                mv.getBaseSchema();
+                minTimes = 0;
+                result = Lists.newArrayList(column1, column2);
+
                 mv.getType();
                 minTimes = 0;
                 result = TableType.MATERIALIZED_VIEW;
@@ -1017,7 +1021,7 @@ public class ShowExecutorTest {
     }
 
     private void verifyShowMaterializedViewResult(ShowResultSet resultSet) throws AnalysisException, DdlException {
-        String expectedSqlText = "CREATE MATERIALIZED VIEW `testMv`\n" +
+        String expectedSqlText = "CREATE MATERIALIZED VIEW `testMv` (`col1`, `col2`)\n" +
                 "COMMENT \"TEST MATERIALIZED VIEW\"\n" +
                 "PARTITION BY (`col1`)\n" +
                 "DISTRIBUTED BY HASH(`col1`) BUCKETS 10 \n" +

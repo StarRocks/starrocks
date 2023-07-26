@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.sql.analyzer.FeNameFormat;
 
 public class ColWithComment implements ParseNode {
     private final String colName;
@@ -33,5 +34,9 @@ public class ColWithComment implements ParseNode {
 
     public String getComment() {
         return comment;
+    }
+
+    public void analyze() {
+        FeNameFormat.checkColumnName(colName);
     }
 }

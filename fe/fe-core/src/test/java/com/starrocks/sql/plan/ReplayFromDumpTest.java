@@ -135,7 +135,7 @@ public class ReplayFromDumpTest {
         Assert.assertEquals(originCostPlan, replayCostPlan);
     }
 
-    private String getDumpInfoFromFile(String fileName) throws Exception {
+    protected String getDumpInfoFromFile(String fileName) throws Exception {
         String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
         File file = new File(path + "/" + fileName + ".json");
         StringBuilder sb = new StringBuilder();
@@ -156,13 +156,13 @@ public class ReplayFromDumpTest {
         return getCostPlanFragment(dumpJonStr, null);
     }
 
-    private Pair<QueryDumpInfo, String> getCostPlanFragment(String dumpJsonStr, SessionVariable sessionVariable)
+    protected Pair<QueryDumpInfo, String> getCostPlanFragment(String dumpJsonStr, SessionVariable sessionVariable)
             throws Exception {
         return getPlanFragment(dumpJsonStr, sessionVariable, TExplainLevel.COSTS);
     }
 
-    private Pair<QueryDumpInfo, String> getPlanFragment(String dumpJsonStr, SessionVariable sessionVariable,
-                                                        TExplainLevel level) throws Exception {
+    protected Pair<QueryDumpInfo, String> getPlanFragment(String dumpJsonStr, SessionVariable sessionVariable,
+                                                          TExplainLevel level) throws Exception {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpJsonStr);
         if (sessionVariable != null) {
             queryDumpInfo.setSessionVariable(sessionVariable);
@@ -209,7 +209,6 @@ public class ReplayFromDumpTest {
         sessionVariable.setNewPlanerAggStage(2);
         Pair<QueryDumpInfo, String> replayPair =
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/join_eliminate_nulls"), sessionVariable);
-        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("11:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  other join predicates: CASE 174: type WHEN '1' THEN concat('ocms_', 90: name) = 'ocms_fengyang56' " +
@@ -219,6 +218,7 @@ public class ReplayFromDumpTest {
                 "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
                 "  |  equal join conjunct: [tid, BIGINT, true] = [5: customer_id, BIGINT, true]\n" +
                 "  |  output columns: 3, 90"));
+        sessionVariable.setNewPlanerAggStage(0);
     }
 
     @Test
@@ -852,5 +852,4 @@ public class ReplayFromDumpTest {
                 "  |  output columns: 50\n" +
                 "  |  cardinality: 5"));
     }
-
 }

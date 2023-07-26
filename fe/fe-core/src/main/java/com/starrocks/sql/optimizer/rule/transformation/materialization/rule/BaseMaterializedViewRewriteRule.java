@@ -40,6 +40,8 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.Predicate
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
+
 public abstract class BaseMaterializedViewRewriteRule extends TransformationRule {
 
     protected BaseMaterializedViewRewriteRule(RuleType type, Pattern pattern) {
@@ -89,6 +91,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         final ScalarOperator queryPartitionPredicate =
                 MvUtils.compensatePartitionPredicate(queryExpression, queryColumnRefFactory);
         if (queryPartitionPredicate == null) {
+            logMVRewrite(context, this, "Query partition compensate from partition prune failed.");
             return Lists.newArrayList();
         }
         ScalarOperator queryPredicate = MvUtils.rewriteOptExprCompoundPredicate(queryExpression, queryColumnRefRewriter);
@@ -100,8 +103,8 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         onPredicates = onPredicates.stream().map(MvUtils::canonizePredicate).collect(Collectors.toList());
         List<Table> queryTables = MvUtils.getAllTables(queryExpression);
         for (MaterializationContext mvContext : mvCandidateContexts) {
-            MvRewriteContext mvRewriteContext = new MvRewriteContext(
-                    mvContext, queryTables, queryExpression, queryColumnRefRewriter, queryPredicateSplit, onPredicates);
+            MvRewriteContext mvRewriteContext = new MvRewriteContext(mvContext, queryTables, queryExpression,
+                    queryColumnRefRewriter, queryPredicateSplit, onPredicates, this);
             MaterializedViewRewriter mvRewriter = getMaterializedViewRewrite(mvRewriteContext);
             OptExpression candidate = mvRewriter.rewrite();
             if (candidate == null) {

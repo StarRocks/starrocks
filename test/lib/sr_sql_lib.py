@@ -822,6 +822,44 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_true(load_finished, "show bitmap_index timeout")
 
+    def wait_materialized_view_finish(self, check_count=60):
+        """
+        wait materialized view job finish and return status
+        """
+        status = ""
+        show_sql = "SHOW ALTER MATERIALIZED VIEW"
+        count = 0
+        while count < check_count:
+            res = self.execute_sql(show_sql, True)
+            status = res["result"][-1][8]
+            if status != "FINISHED":
+                time.sleep(5)
+            else:
+                # sleep another 5s to avoid FE's async action.
+                time.sleep(5)
+                break
+            count += 1
+        tools.assert_equal("FINISHED", status, "wait alter table finish error")
+
+    def check_hit_materialized_view(self, query, mv_name):
+        """
+        assert mv_name is hit in query
+        """
+        time.sleep(1)
+        sql = "explain %s" % (query)
+        res = self.execute_sql(sql, True)
+        print(res)
+        tools.assert_true(str(res["result"]).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
+
+    def check_no_hit_materialized_view(self, query, mv_name):
+        """
+        assert mv_name is hit in query
+        """
+        time.sleep(1)
+        sql = "explain %s" % (query)
+        res = self.execute_sql(sql, True)
+        tools.assert_false(str(res["result"]).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
+
     def wait_alter_table_finish(self, alter_type="COLUMN"):
         """
         wait alter table job finish and return status

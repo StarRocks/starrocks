@@ -13,7 +13,7 @@ create materialized view user_tags_mv1  distributed by hash(user_id) as select u
 -- !result
 show create materialized view user_tags_mv1;
 -- result:
-user_tags_mv1	CREATE MATERIALIZED VIEW `user_tags_mv1` (user_id, bitmap_union(to_bitmap(tag_id)))
+user_tags_mv1	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
 DISTRIBUTED BY HASH(`user_id`)
 REFRESH MANUAL
 PROPERTIES (
@@ -27,7 +27,7 @@ GROUP BY `user_tags`.`user_id`;
 -- !result
 show create table user_tags_mv1;
 -- result:
-user_tags_mv1	CREATE MATERIALIZED VIEW `user_tags_mv1` (user_id, bitmap_union(to_bitmap(tag_id)))
+user_tags_mv1	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
 DISTRIBUTED BY HASH(`user_id`)
 REFRESH MANUAL
 PROPERTIES (
@@ -47,7 +47,7 @@ alter materialized view user_tags_mv1 set ("mv_rewrite_staleness_second" = "3600
 -- !result
 show create materialized view user_tags_mv1;
 -- result:
-user_tags_mv1	CREATE MATERIALIZED VIEW `user_tags_mv1` (user_id, bitmap_union(to_bitmap(tag_id)))
+user_tags_mv1	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
 DISTRIBUTED BY HASH(`user_id`)
 REFRESH MANUAL
 PROPERTIES (
@@ -63,7 +63,7 @@ GROUP BY `user_tags`.`user_id`;
 -- !result
 show create table user_tags_mv1;
 -- result:
-user_tags_mv1	CREATE MATERIALIZED VIEW `user_tags_mv1` (user_id, bitmap_union(to_bitmap(tag_id)))
+user_tags_mv1	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
 DISTRIBUTED BY HASH(`user_id`)
 REFRESH MANUAL
 PROPERTIES (

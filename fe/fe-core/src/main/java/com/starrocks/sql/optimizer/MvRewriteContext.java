@@ -20,8 +20,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.mv.JoinDeriveContext;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 
 import java.util.List;
@@ -37,10 +37,6 @@ public class MvRewriteContext {
     private final ReplaceColumnRefRewriter queryColumnRefRewriter;
     private final PredicateSplit queryPredicateSplit;
 
-    private List<ScalarOperator> queryJoinOnPredicates;
-
-    private List<ScalarOperator> mvJoinOnPredicates;
-
     // mv's partition and distribution related conjunct predicate,
     // used to prune partitions and buckets of scan mv operator after rewrite
     private ScalarOperator mvPruneConjunct;
@@ -50,13 +46,15 @@ public class MvRewriteContext {
 
     private List<JoinDeriveContext> joinDeriveContexts;
 
-    public MvRewriteContext(
-            MaterializationContext materializationContext,
-            List<Table> queryTables,
-            OptExpression queryExpression,
-            ReplaceColumnRefRewriter queryColumnRefRewriter,
-            PredicateSplit queryPredicateSplit,
-            List<ScalarOperator> onPredicates) {
+    private final Rule rule;
+
+    public MvRewriteContext(MaterializationContext materializationContext,
+                            List<Table> queryTables,
+                            OptExpression queryExpression,
+                            ReplaceColumnRefRewriter queryColumnRefRewriter,
+                            PredicateSplit queryPredicateSplit,
+                            List<ScalarOperator> onPredicates,
+                            Rule rule) {
         this.materializationContext = materializationContext;
         this.queryTables = queryTables;
         this.queryExpression = queryExpression;
@@ -64,6 +62,7 @@ public class MvRewriteContext {
         this.queryPredicateSplit = queryPredicateSplit;
         this.onPredicates = onPredicates;
         this.joinDeriveContexts = Lists.newArrayList();
+        this.rule = rule;
     }
 
     public MaterializationContext getMaterializationContext() {
@@ -90,21 +89,6 @@ public class MvRewriteContext {
         return mvPruneConjunct;
     }
 
-    public List<ScalarOperator> getQueryJoinOnPredicates() {
-        if (queryJoinOnPredicates == null) {
-            queryJoinOnPredicates = MvUtils.getJoinOnPredicates(queryExpression);
-        }
-        return queryJoinOnPredicates;
-    }
-
-    public List<ScalarOperator> getMvJoinOnPredicates() {
-        if (mvJoinOnPredicates == null) {
-            mvJoinOnPredicates = MvUtils.getJoinOnPredicates(materializationContext.getMvExpression());
-
-        }
-        return mvJoinOnPredicates;
-    }
-
     public void setMvPruneConjunct(ScalarOperator mvPruneConjunct) {
         this.mvPruneConjunct = mvPruneConjunct;
     }
@@ -127,5 +111,9 @@ public class MvRewriteContext {
 
     public void setEnforcedColumns(List<ColumnRefOperator> enforcedColumns) {
         this.enforcedColumns = enforcedColumns;
+    }
+
+    public Rule getRule() {
+        return rule;
     }
 }
