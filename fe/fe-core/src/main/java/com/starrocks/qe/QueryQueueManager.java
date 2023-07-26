@@ -38,9 +38,43 @@ import java.util.concurrent.TimeoutException;
 public class QueryQueueManager {
     private static final Logger LOG = LogManager.getLogger(QueryQueueManager.class);
 
+<<<<<<< HEAD
     private static final String PENDING_TIMEOUT_ERROR_MSG_FORMAT =
             "Failed to allocate resource to query: pending timeout [%d], " +
                     "you could modify the session variable [%s] to pending more time";
+=======
+    private static class PendingQueryInfo {
+        private final DefaultCoordinator coordinator;
+        private final ConnectContext connectCtx;
+        private final ReentrantLock lock;
+        private final Condition condition;
+        private boolean isCancelled = false;
+
+        private PendingQueryInfo(ConnectContext connectCtx, ReentrantLock lock, DefaultCoordinator coordinator) {
+            Preconditions.checkState(connectCtx != null);
+            this.coordinator = coordinator;
+            this.connectCtx = connectCtx;
+            this.lock = lock;
+            this.condition = this.lock.newCondition();
+        }
+
+        public boolean await(long timeout, TimeUnit unit) throws InterruptedException {
+            Preconditions.checkState(lock.isHeldByCurrentThread());
+            return condition.await(timeout, unit);
+        }
+
+        public void signalAfterLock() {
+            Preconditions.checkState(lock.isHeldByCurrentThread());
+            condition.signal();
+        }
+
+        public void cancelAfterLock() {
+            Preconditions.checkState(lock.isHeldByCurrentThread());
+            isCancelled = true;
+            signalAfterLock();
+        }
+    }
+>>>>>>> 6f2053c37f ([Refactor] Extract JobSpec (#27847))
 
     private static class SingletonHolder {
         private static final QueryQueueManager INSTANCE = new QueryQueueManager();
@@ -50,8 +84,56 @@ public class QueryQueueManager {
         return QueryQueueManager.SingletonHolder.INSTANCE;
     }
 
+<<<<<<< HEAD
     public void maybeWait(ConnectContext context, Coordinator coord) throws UserException, InterruptedException {
         if (!needCheckQueue(coord) || !isEnableQueue(coord)) {
+=======
+    private static final long CHECK_INTERVAL_MS = 1000L;
+
+    private final ReentrantLock lock = new ReentrantLock();
+    private final Map<ConnectContext, PendingQueryInfo> pendingQueryInfoMap = new ConcurrentHashMap<>();
+
+    public void cancelQuery(ConnectContext connectCtx) {
+        if (connectCtx == null) {
+            return;
+        }
+
+        try {
+            lock.lock();
+
+            PendingQueryInfo queryInfo = pendingQueryInfoMap.get(connectCtx);
+            if (queryInfo != null) {
+                queryInfo.cancelAfterLock();
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public void updateResourceUsage(long backendId, int numRunningQueries, long memLimitBytes, long memUsedBytes,
+                                    int cpuUsedPermille) {
+        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(backendId);
+        if (node == null) {
+            LOG.warn("backend or computed node doesn't exist. id: {}", backendId);
+            return;
+        }
+
+        try {
+            lock.lock();
+
+            node.updateResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
+            maybeNotifyAfterLock();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public void maybeWait(ConnectContext connectCtx, DefaultCoordinator coord) throws UserException, InterruptedException {
+        if (!needCheckQueue(coord)) {
+            return;
+        }
+        if (!enableCheckQueue(coord) || canRunMore()) {
+>>>>>>> 6f2053c37f ([Refactor] Extract JobSpec (#27847))
             return;
         }
 
@@ -114,6 +196,10 @@ public class QueryQueueManager {
             return GlobalVariable.isEnableQueryQueueStatistic();
         }
 
+<<<<<<< HEAD
+=======
+    public boolean enableCheckQueue(DefaultCoordinator coord) {
+>>>>>>> 6f2053c37f ([Refactor] Extract JobSpec (#27847))
         if (coord.isLoadType()) {
             return GlobalVariable.isEnableQueryQueueLoad();
         }
@@ -121,11 +207,15 @@ public class QueryQueueManager {
         return GlobalVariable.isEnableQueryQueueSelect();
     }
 
+<<<<<<< HEAD
     public boolean needCheckQueue(Coordinator coord) {
         if (!coord.isNeedQueued()) {
             return false;
         }
 
+=======
+    public boolean needCheckQueue(DefaultCoordinator coord) {
+>>>>>>> 6f2053c37f ([Refactor] Extract JobSpec (#27847))
         // The queries only using schema meta will never been queued, because a MySQL client will
         // query schema meta after the connection is established.
         List<ScanNode> scanNodes = coord.getScanNodes();

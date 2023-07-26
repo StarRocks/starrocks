@@ -56,7 +56,13 @@ import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
+<<<<<<< HEAD
 import com.starrocks.planner.UnionNode;
+=======
+import com.starrocks.qe.scheduler.DefaultWorkerProvider;
+import com.starrocks.qe.scheduler.WorkerProvider;
+import com.starrocks.qe.scheduler.dag.JobSpec;
+>>>>>>> 6f2053c37f ([Refactor] Extract JobSpec (#27847))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
@@ -75,13 +81,11 @@ import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TFunctionVersion;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TInternalScanRange;
-import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanFragmentDestination;
 import com.starrocks.thrift.TPlanFragmentExecParams;
 import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
-import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TRuntimeFilterParams;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
@@ -114,14 +118,15 @@ import java.util.stream.Collectors;
 public class CoordinatorPreprocessor {
     private static final Logger LOG = LogManager.getLogger(CoordinatorPreprocessor.class);
     private static final String LOCAL_IP = FrontendOptions.getLocalHostAddress();
-    private static final int BUCKET_ABSENT = 2147483647;
+    public static final int BUCKET_ABSENT = 2147483647;
+
     static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final Random random = new Random();
 
     private TNetworkAddress coordAddress;
-    private TUniqueId queryId;
     private final ConnectContext connectContext;
+<<<<<<< HEAD
     private final TQueryGlobals queryGlobals;
     private final TQueryOptions queryOptions;
 
@@ -131,6 +136,9 @@ public class CoordinatorPreprocessor {
     // when use compute node, usedComputeNode is true,
     // if hasComputeNode but preferComputeNode is false and no hdfsScanNode, usedComputeNode still false
     private boolean usedComputeNode = false;
+=======
+    private final JobSpec jobSpec;
+>>>>>>> 6f2053c37f ([Refactor] Extract JobSpec (#27847))
 
     private final Set<Integer> colocateFragmentIds = new HashSet<>();
     private final Set<Integer> replicateFragmentIds = new HashSet<>();
@@ -139,12 +147,9 @@ public class CoordinatorPreprocessor {
     private final Set<Integer> rightOrFullBucketShuffleFragmentIds = new HashSet<>();
     private final Set<TUniqueId> instanceIds = Sets.newHashSet();
 
-    private final TDescriptorTable descriptorTable;
-    private final List<PlanFragment> fragments;
-    private final List<ScanNode> scanNodes;
-
     // populated in computeFragmentExecParams()
     private final Map<PlanFragmentId, FragmentExecParams> fragmentExecParamsMap = Maps.newHashMap();
+<<<<<<< HEAD
     private final Map<PlanFragmentId, Map<Integer, TNetworkAddress>> fragmentIdToSeqToAddressMap = Maps.newHashMap();
     // fragment_id -> < bucket_seq -> < scannode_id -> scan_range_params >>
     private final Map<PlanFragmentId, BucketSeqToScanRange> fragmentIdBucketSeqToScanRangeMap = Maps.newHashMap();
@@ -152,6 +157,9 @@ public class CoordinatorPreprocessor {
     private final Map<PlanFragmentId, Integer> fragmentIdToBucketNumMap = Maps.newHashMap();
     // fragment_id -> < be_id -> bucket_count >
     private final Map<PlanFragmentId, Map<Long, Integer>> fragmentIdToBackendIdBucketCountMap = Maps.newHashMap();
+=======
+
+>>>>>>> 6f2053c37f ([Refactor] Extract JobSpec (#27847))
     private final Map<PlanFragmentId, List<Integer>> fragmentIdToSeqToInstanceMap = Maps.newHashMap();
 
     // used only by channel stream load, records the mapping from channel id to target BE's address
@@ -169,6 +177,7 @@ public class CoordinatorPreprocessor {
     private final Set<Long> usedBackendIDs = Sets.newConcurrentHashSet();
     private final Map<TNetworkAddress, Long> addressToBackendID = Maps.newHashMap();
 
+<<<<<<< HEAD
     // Resource group
     private final TWorkGroup resourceGroup;
 
@@ -183,6 +192,11 @@ public class CoordinatorPreprocessor {
         this.queryGlobals = queryGlobals;
         this.queryOptions = queryOptions;
         this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
+=======
+    public CoordinatorPreprocessor(ConnectContext context, JobSpec jobSpec) {
+        this.connectContext = Preconditions.checkNotNull(context);
+        this.jobSpec = jobSpec;
+>>>>>>> 6f2053c37f ([Refactor] Extract JobSpec (#27847))
 
         // prepare workgroup
         resourceGroup = prepareResourceGroup(connectContext,
@@ -192,15 +206,8 @@ public class CoordinatorPreprocessor {
 
     @VisibleForTesting
     CoordinatorPreprocessor(List<PlanFragment> fragments, List<ScanNode> scanNodes) {
-        this.scanNodes = scanNodes;
         this.connectContext = StatisticUtils.buildConnectContext();
-        this.queryId = connectContext.getExecutionId();
-        this.queryGlobals =
-                genQueryGlobals(System.currentTimeMillis(), connectContext.getSessionVariable().getTimeZone());
-        this.queryOptions = connectContext.getSessionVariable().toThrift();
-        this.usePipeline = true;
-        this.descriptorTable = null;
-        this.fragments = fragments;
+        this.jobSpec = JobSpec.Factory.mockJobSpec(connectContext, fragments, scanNodes);
 
         this.idToComputeNode = buildComputeNodeInfo();
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
@@ -245,11 +252,7 @@ public class CoordinatorPreprocessor {
     }
 
     public TUniqueId getQueryId() {
-        return queryId;
-    }
-
-    public void setQueryId(TUniqueId queryId) {
-        this.queryId = queryId;
+        return jobSpec.getQueryId();
     }
 
     public ConnectContext getConnectContext() {
@@ -257,15 +260,7 @@ public class CoordinatorPreprocessor {
     }
 
     public boolean isUsePipeline() {
-        return usePipeline;
-    }
-
-    public TQueryGlobals getQueryGlobals() {
-        return queryGlobals;
-    }
-
-    public TQueryOptions getQueryOptions() {
-        return queryOptions;
+        return jobSpec.isEnablePipeline();
     }
 
     public Set<Integer> getColocateFragmentIds() {
@@ -293,15 +288,15 @@ public class CoordinatorPreprocessor {
     }
 
     public TDescriptorTable getDescriptorTable() {
-        return descriptorTable;
+        return jobSpec.getDescTable();
     }
 
     public List<PlanFragment> getFragments() {
-        return fragments;
+        return jobSpec.getFragments();
     }
 
     public List<ScanNode> getScanNodes() {
-        return scanNodes;
+        return jobSpec.getScanNodes();
     }
 
     public Map<PlanFragmentId, FragmentExecParams> getFragmentExecParamsMap() {
@@ -373,7 +368,7 @@ public class CoordinatorPreprocessor {
     }
 
     public TWorkGroup getResourceGroup() {
-        return resourceGroup;
+        return jobSpec.getResourceGroup();
     }
 
     public Map<TNetworkAddress, Integer> getHostToNumbers() {
@@ -381,7 +376,7 @@ public class CoordinatorPreprocessor {
     }
 
     public boolean isLoadType() {
-        return queryOptions.getQuery_type() == TQueryType.LOAD;
+        return jobSpec.isLoadType();
     }
 
     public void prepareExec() throws Exception {
@@ -398,6 +393,7 @@ public class CoordinatorPreprocessor {
     /**
      * Reset state of all the fragments set in Coordinator, when retrying the same query with the fragments.
      */
+<<<<<<< HEAD
     private void resetFragmentState() {
         for (PlanFragment fragment : fragments) {
             if (fragment instanceof MultiCastPlanFragment) {
@@ -407,11 +403,19 @@ public class CoordinatorPreprocessor {
                 }
             }
         }
+=======
+    private void resetExec() {
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(),
+                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes());
+
+        jobSpec.getFragments().forEach(PlanFragment::reset);
+>>>>>>> 6f2053c37f ([Refactor] Extract JobSpec (#27847))
     }
 
     @VisibleForTesting
     void prepareFragments() {
-        for (PlanFragment fragment : fragments) {
+        for (PlanFragment fragment : jobSpec.getFragments()) {
             fragmentExecParamsMap.put(fragment.getFragmentId(), new FragmentExecParams(fragment));
         }
 
@@ -475,7 +479,7 @@ public class CoordinatorPreprocessor {
             // TODO(zc): add a switch to close this function
             StringBuilder sb = new StringBuilder();
             int idx = 0;
-            sb.append("query id=").append(DebugUtil.printId(queryId)).append(",");
+            sb.append("query id=").append(DebugUtil.printId(jobSpec.getQueryId())).append(",");
             sb.append("fragment=[");
             for (Map.Entry<PlanFragmentId, FragmentExecParams> entry : fragmentExecParamsMap.entrySet()) {
                 if (idx++ != 0) {
@@ -497,20 +501,6 @@ public class CoordinatorPreprocessor {
         }
         usedBackendIDs.add(backendID);
         addressToBackendID.put(addr, backendID);
-    }
-
-    /**
-     * Whether it can use pipeline engine.
-     *
-     * @param connectContext It is null for broker broker export.
-     * @param fragments      All the fragments need to execute.
-     * @return true if enabling pipeline in the session variable and all the fragments can use pipeline,
-     * otherwise false.
-     */
-    private boolean canUsePipeline(ConnectContext connectContext, List<PlanFragment> fragments) {
-        return connectContext != null &&
-                connectContext.getSessionVariable().isEnablePipelineEngine() &&
-                fragments.stream().allMatch(PlanFragment::canUsePipeline);
     }
 
     /**
@@ -548,13 +538,13 @@ public class CoordinatorPreprocessor {
         // compute hosts of producer fragment before those of consumer fragment(s),
         // the latter might inherit the set of hosts from the former
         // compute hosts *bottom up*.
-        boolean isGatherOutput = fragments.get(0).getDataPartition() == DataPartition.UNPARTITIONED;
+        boolean isGatherOutput = jobSpec.getFragments().get(0).getDataPartition() == DataPartition.UNPARTITIONED;
 
-        for (int i = fragments.size() - 1; i >= 0; --i) {
-            PlanFragment fragment = fragments.get(i);
+        for (int i = jobSpec.getFragments().size() - 1; i >= 0; --i) {
+            PlanFragment fragment = jobSpec.getFragments().get(i);
             FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
 
-            boolean dopAdaptionEnabled = usePipeline &&
+            boolean dopAdaptionEnabled = jobSpec.isEnablePipeline() &&
                     connectContext.getSessionVariable().isEnablePipelineAdaptiveDop();
 
             // If left child is MultiCastDataFragment(only support left now), will keep same instance with child.
@@ -703,12 +693,19 @@ public class CoordinatorPreprocessor {
             boolean hasBucketShuffle = isBucketShuffleJoin(fragment.getFragmentId().asInt());
 
             if (hasColocate || hasBucketShuffle) {
+<<<<<<< HEAD
                 computeColocatedJoinInstanceParam(fragmentIdToSeqToAddressMap.get(fragment.getFragmentId()),
                         fragmentIdBucketSeqToScanRangeMap.get(fragment.getFragmentId()),
                         parallelExecInstanceNum, pipelineDop, usePipeline, params);
                 computeBucketSeq2InstanceOrdinal(params, fragmentIdToBucketNumMap.get(fragment.getFragmentId()));
+=======
+                computeColocatedJoinInstanceParam(colocatedAssignment.getSeqToWorkerId(),
+                        colocatedAssignment.getSeqToScanRange(),
+                        parallelExecInstanceNum, pipelineDop, jobSpec.isEnablePipeline(), params);
+                computeBucketSeq2InstanceOrdinal(params, colocatedAssignment.getBucketNum());
+>>>>>>> 6f2053c37f ([Refactor] Extract JobSpec (#27847))
             } else {
-                boolean assignScanRangesPerDriverSeq = usePipeline &&
+                boolean assignScanRangesPerDriverSeq = jobSpec.isEnablePipeline() &&
                         (fragment.isAssignScanRangesPerDriverSeq() || fragment.isForceAssignScanRangesPerDriverSeq());
                 for (Map.Entry<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> tNetworkAddressMapEntry :
                         fragmentExecParamsMap.get(fragment.getFragmentId()).scanRangeAssignment.entrySet()) {
@@ -766,7 +763,7 @@ public class CoordinatorPreprocessor {
                                     scanRangesPerDriverSeq.put(driverSeq, Lists.newArrayList());
                                 }
                             }
-                            if (this.queryOptions.getLoad_job_type() == TLoadJobType.STREAM_LOAD) {
+                            if (jobSpec.isStreamLoad()) {
                                 for (TScanRangeParams scanRange : scanRangeParams) {
                                     int channelId = scanRange.scan_range.broker_scan_range.channel_id;
                                     TNetworkAddress beHttpAddress = bePortToBeWebServerPort.get(key);
@@ -1079,7 +1076,7 @@ public class CoordinatorPreprocessor {
         SessionVariable sv = connectContext.getSessionVariable();
 
         // set scan ranges/locations for scan nodes
-        for (ScanNode scanNode : scanNodes) {
+        for (ScanNode scanNode : jobSpec.getScanNodes()) {
             // the parameters of getScanRangeLocations may ignore, It dosn't take effect
             List<TScanRangeLocations> locations = scanNode.getScanRangeLocations(0);
             if (locations == null) {
@@ -1149,6 +1146,7 @@ public class CoordinatorPreprocessor {
                         ErrorType.INTERNAL_ERROR);
             }
 
+            TUniqueId queryId = jobSpec.getQueryId();
             for (int j = 0; j < params.instanceExecParams.size(); ++j) {
                 // we add instance_num to query_id.lo to create a
                 // globally-unique instance id
@@ -1333,8 +1331,13 @@ public class CoordinatorPreprocessor {
 
     // Compute the fragment instance numbers in every BE for one query
     private void computeBeInstanceNumbers() {
+<<<<<<< HEAD
         hostToNumbers.clear();
         for (PlanFragment fragment : fragments) {
+=======
+        workerIdToNumInstances.clear();
+        for (PlanFragment fragment : jobSpec.getFragments()) {
+>>>>>>> 6f2053c37f ([Refactor] Extract JobSpec (#27847))
             FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
             for (final FInstanceExecParam instance : params.instanceExecParams) {
                 Integer number = hostToNumbers.getOrDefault(instance.host, 0);
@@ -1386,14 +1389,14 @@ public class CoordinatorPreprocessor {
     }
 
     public Map<Integer, TNetworkAddress> getChannelIdToBEHTTPMap() {
-        if (this.queryOptions.getLoad_job_type() == TLoadJobType.STREAM_LOAD) {
+        if (jobSpec.isStreamLoad()) {
             return channelIdToBEHTTP;
         }
         return null;
     }
 
     public Map<Integer, TNetworkAddress> getChannelIdToBEPortMap() {
-        if (this.queryOptions.getLoad_job_type() == TLoadJobType.STREAM_LOAD) {
+        if (jobSpec.isStreamLoad()) {
             return channelIdToBEPort;
         }
         return null;
@@ -1448,6 +1451,7 @@ public class CoordinatorPreprocessor {
     public static class FInstanceExecParam {
         static final int ABSENT_PIPELINE_DOP = -1;
         static final int ABSENT_DRIVER_SEQUENCE = -1;
+        private static final int ABSENT_BACKEND_NUM = -1;
 
         TUniqueId instanceId;
         TNetworkAddress host;
@@ -1458,7 +1462,7 @@ public class CoordinatorPreprocessor {
 
         Map<Integer, Integer> bucketSeqToDriverSeq = Maps.newHashMap();
 
-        int backendNum;
+        int backendNum = ABSENT_BACKEND_NUM;
 
         FragmentExecParams fragmentExecParams;
 
@@ -1582,8 +1586,13 @@ public class CoordinatorPreprocessor {
 
             commonParams.setParams(new TPlanFragmentExecParams());
             commonParams.params.setUse_vectorized(true);
+<<<<<<< HEAD
             commonParams.params.setQuery_id(queryId);
             commonParams.params.setInstances_number(hostToNumbers.get(destHost));
+=======
+            commonParams.params.setQuery_id(jobSpec.getQueryId());
+            commonParams.params.setInstances_number(workerIdToNumInstances.get(workerId));
+>>>>>>> 6f2053c37f ([Refactor] Extract JobSpec (#27847))
             commonParams.params.setDestinations(destinations);
             if (enablePipelineTableSinkDop) {
                 commonParams.params.setNum_senders(tableSinkTotalDop);
@@ -1598,11 +1607,11 @@ public class CoordinatorPreprocessor {
             commonParams.params.setSend_query_statistics_with_every_batch(
                     fragment.isTransferQueryStatisticsWithEveryBatch());
 
-            commonParams.setQuery_globals(queryGlobals);
+            commonParams.setQuery_globals(jobSpec.getQueryGlobals());
             if (isEnablePipelineEngine) {
-                commonParams.setQuery_options(new TQueryOptions(queryOptions));
+                commonParams.setQuery_options(new TQueryOptions(jobSpec.getQueryOptions()));
             } else {
-                commonParams.setQuery_options(queryOptions);
+                commonParams.setQuery_options(jobSpec.getQueryOptions());
             }
             // For broker load, the ConnectContext.get() is null
             if (connectContext != null) {
@@ -1616,8 +1625,8 @@ public class CoordinatorPreprocessor {
                     commonParams.params.setEnable_exchange_perf(sessionVariable.isEnableExchangePerf());
 
                     commonParams.setEnable_resource_group(true);
-                    if (resourceGroup != null) {
-                        commonParams.setWorkgroup(resourceGroup);
+                    if (jobSpec.getResourceGroup() != null) {
+                        commonParams.setWorkgroup(jobSpec.getResourceGroup());
                     }
                     if (fragment.isUseRuntimeAdaptiveDop()) {
                         commonParams.setAdaptive_dop_param(new TAdaptiveDopParam());
