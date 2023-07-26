@@ -48,6 +48,8 @@ public:
     void do_close(RuntimeState* state) override;
     ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) override;
 
+    int64_t get_scan_table_id() const override;
+
 private:
     OlapScanContextPtr _ctx;
 };

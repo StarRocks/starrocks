@@ -59,6 +59,8 @@ public:
 
     void set_query_ctx(const QueryContextPtr& query_ctx);
 
+    virtual int64_t get_scan_table_id() const { return -1; }
+
 private:
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
