@@ -443,102 +443,6 @@ TEST(OrcLazyLoadTest, TestStructLazyLoad) {
     }
 }
 
-
-TEST(OrcLazyLoadTest, TestSimple) {
-    MemoryOutputStream buffer(1024000);
-    // Write data demo:
-    // {c0: 0, c1: [{c1_1: 100}, {c1_1: 101}]}
-    // {c0: 1, c1: null}
-    // {c0: 2, c1: [{c1_1: 102}]}
-    // {c0: 3, c1: [{c1_1: 103}, null, {c1_1: null}, {c1_1: 106}]}
-    // {c0: 4, c1: null}
-    // {c0: 5, c1: [{c1_1: 107}]}
-    // {null}
-
-    // prepare data.
-    {
-        orc::WriterOptions writerOptions;
-//        writerOptions.setStripeSize(100);
-//        writerOptions.setRowIndexStride(0);
-        ORC_UNIQUE_PTR<orc::Type> schema(orc::Type::buildTypeFromString("struct<c0:array<int>>"));
-        ORC_UNIQUE_PTR<orc::Writer> writer = createWriter(*schema, &buffer, writerOptions);
-
-        ORC_UNIQUE_PTR<orc::ColumnVectorBatch> rowBatch = writer->createRowBatch(4);
-        auto* root = dynamic_cast<orc::StructVectorBatch*>(rowBatch.get());
-        auto* listBatch = dynamic_cast<orc::ListVectorBatch*>(root->fields[0]);
-        auto* intBatch = dynamic_cast<orc::LongVectorBatch*>(listBatch->elements.get());
-
-        int64_t* offsets = listBatch->offsets.data();
-        offsets[0] = 0;
-        offsets[1] = 2;
-        offsets[2] = 2;
-        offsets[3] = 4;
-        offsets[4] = 6;
-
-        intBatch->resize(6);
-
-        for (size_t i = 0; i < 6; i++) {
-            intBatch->notNull[i] = i;
-        }
-
-        for (size_t i = 1; i < 7; i++) {
-            intBatch->data[i - 1] = i;
-        }
-
-        root->numElements = 4;
-        listBatch->notNull[1] = 0;
-        listBatch->hasNulls = true;
-        listBatch->numElements = 4;
-
-
-        writer->add(*rowBatch);
-        writer->close();
-    }
-
-    // read all
-    {
-        orc::ReaderOptions readerOptions;
-        ORC_UNIQUE_PTR<orc::InputStream> inputStream(new MemoryInputStream(buffer.getData(), buffer.getLength()));
-        ORC_UNIQUE_PTR<orc::Reader> reader = createReader(std::move(inputStream), readerOptions);
-
-        orc::RowReaderOptions options;
-        std::list<std::string> includeColumns = {"c0"};
-        options.include(includeColumns);
-        ORC_UNIQUE_PTR<orc::RowReader> rr = reader->createRowReader(options);
-
-        ORC_UNIQUE_PTR<orc::ColumnVectorBatch> rowBatch = rr->createRowBatch(10);
-
-        orc::RowReader::ReadPosition pos;
-        ASSERT_TRUE(rr->next(*rowBatch, &pos));
-
-        auto* root = dynamic_cast<orc::StructVectorBatch*>(rowBatch.get());
-        auto* c0 = dynamic_cast<orc::ListVectorBatch*>(root->fields[0]);
-        auto* c0_element = dynamic_cast<orc::LongVectorBatch*>(c0->elements.get());
-
-        EXPECT_EQ(4, c0->numElements);
-        for(size_t i = 0; i < c0->numElements; i++) {
-            std::cout << ((c0->notNull[i] == 1) ? "true" : "false") << std::endl;
-        }
-
-        std::cout << "===" << std::endl;
-        for (size_t i = 1; i <= c0->numElements; i++) {
-            std::cout << c0->offsets[i - 1] << "~" << c0->offsets[i] << std::endl;
-        }
-
-//        EXPECT_EQ(7, c1->numElements);
-//        for (size_t i = 1; i <= c1->numElements; i++) {
-//            std::cout << c1->offsets[i - 1] << "~" << c1->offsets[i] << std::endl;
-//        }
-//
-//        std::cout << "===" << std::endl;
-//
-//        EXPECT_EQ(8, c1_1->numElements);
-//        for(size_t i = 0; i < c1_1->numElements; i++) {
-//            std::cout << ((c1_1->notNull[i] == 1) ? "true" : "false") << "--" << c1_1->data[i] << std::endl;
-//        }
-    }
-}
-
 TEST(OrcLazyLoadTest, TestArrayStructLazyLoad) {
     MemoryOutputStream buffer(1024000);
     // Write data demo:
@@ -796,8 +700,42 @@ TEST(OrcLazyLoadTest, TestArrayStructLazyLoad) {
         auto* c1_element = dynamic_cast<orc::StructVectorBatch*>(c1->elements.get());
         auto* c1_1 = dynamic_cast<orc::LongVectorBatch*>(c1_element->fields[0]);
 
-//        root->filterOnFields();
+        EXPECT_EQ(7, root->numElements);
 
+        std::vector<uint8_t> filter;
+        filter.resize(7, 1);
+        filter[1] = 0;
+
+        std::vector<int> fields{0, 1};
+        root->filterOnFields(filter.data(), 7, 6, {0}, false);
+        root->filterOnFields(filter.data(), 7, 6, {1}, true);
+
+        // check root
+        EXPECT_TRUE(root->hasNulls);
+        EXPECT_EQ(6, root->numElements);
+        for (size_t i = 0; i < root->numElements - 1; i++) {
+            EXPECT_EQ(1, root->notNull[i]);
+        }
+        EXPECT_EQ(0, root->notNull[root->numElements - 1]);
+
+        // check c0
+        EXPECT_TRUE(c0->hasNulls);
+        EXPECT_EQ(6, c0->numElements);
+        EXPECT_EQ(0, c0->data[0]);
+        EXPECT_EQ(5, c0->data[4]);
+
+
+        // check c1_1
+        EXPECT_EQ(8, c1_1->numElements);
+        EXPECT_TRUE(c1_1->hasNulls);
+        for (size_t i = 0; i < c1_1->numElements; i++) {
+            if (i == 4 || i == 5) {
+                EXPECT_EQ(0, c1_1->notNull[i]);
+            } else {
+                EXPECT_EQ(1, c1_1->notNull[i]);
+                EXPECT_EQ(100 + i, c1_1->data[i]);
+            }
+        }
 
     }
 }
