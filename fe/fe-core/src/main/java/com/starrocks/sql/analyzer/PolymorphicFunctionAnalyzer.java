@@ -16,18 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.AnyArrayType;
-import com.starrocks.catalog.AnyElementType;
-import com.starrocks.catalog.AnyMapType;
-import com.starrocks.catalog.AnyStructType;
-import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.Function;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.ScalarFunction;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.TableFunction;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -153,8 +142,8 @@ public class PolymorphicFunctionAnalyzer {
         }
     }
 
-    // map_apply(lambda of function, map) -> return type of lambda
-    private static class MapApplyDeduce implements java.util.function.Function<Type[], Type> {
+    // map_apply/array_map(lambda of function, map/array) -> return type of lambda
+    private static class LambdaDeduce implements java.util.function.Function<Type[], Type> {
         @Override
         public Type apply(Type[] types) {
             // fake return type, the real return type is from the right part lambda expression of lambda functions.
@@ -171,11 +160,12 @@ public class PolymorphicFunctionAnalyzer {
 
     private static final ImmutableMap<String, java.util.function.Function<Type[], Type>> DEDUCE_RETURN_TYPE_FUNCTIONS
             = ImmutableMap.<String, java.util.function.Function<Type[], Type>>builder()
-            .put("map_keys", new MapKeysDeduce())
-            .put("map_values", new MapValuesDeduce())
-            .put("map_from_arrays", new MapFromArraysDeduce())
-            .put("row", new RowDeduce())
-            .put("map_apply", new MapApplyDeduce())
+            .put(FunctionSet.MAP_KEYS, new MapKeysDeduce())
+            .put(FunctionSet.MAP_VALUES, new MapValuesDeduce())
+            .put(FunctionSet.MAP_FROM_ARRAYS, new MapFromArraysDeduce())
+            .put(FunctionSet.ROW, new RowDeduce())
+            .put(FunctionSet.MAP_APPLY, new LambdaDeduce())
+            .put(FunctionSet.ARRAY_MAP, new LambdaDeduce())
             .build();
 
     private static Function resolveByDeducingReturnType(Function fn, Type[] inputArgTypes) {
@@ -249,7 +239,7 @@ public class PolymorphicFunctionAnalyzer {
                 return resolvedFunction;
             }
         }
-        // TODO: refactor resolve arg types, some from L254, others from L262.
+        // deduce by special function
         resolvedFunction = resolveByDeducingReturnType(fn, paramTypes);
         if (resolvedFunction != null) {
             return resolvedFunction;
