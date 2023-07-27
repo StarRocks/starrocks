@@ -1500,7 +1500,7 @@ public class CreateMaterializedViewTest {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
             currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
-            Assert.assertEquals("Create materialized view from inactive materialized view: base_inactive_mv",
+            Assert.assertEquals("Create/Rebuild materialized view from inactive materialized view: base_inactive_mv",
                     e.getMessage());
         }
     }
