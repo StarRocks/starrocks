@@ -1921,6 +1921,8 @@ public class OlapTable extends Table {
                     for (Tablet tablet : mIndex.getTablets()) {
                         LocalTablet localTablet = (LocalTablet) tablet;
                         if (tabletScheduler.containsTablet(tablet.getId())) {
+                            LOG.info("table {} is not stable because tablet {} is being scheduled. replicas: {}",
+                                    id, tablet.getId(), localTablet.getImmutableReplicas());
                             return localTablet.getId();
                         }
 
