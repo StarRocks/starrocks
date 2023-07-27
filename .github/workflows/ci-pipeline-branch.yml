@@ -17,16 +17,14 @@ concurrency:
 jobs:
 
   sync-checker:
-    runs-on: ubuntu-latest
-    if: >
-      !contains(github.event.pull_request.title, '(sync #') &&
-      !contains(github.event.pull_request.labels.*.name, 'sync') &&
-      (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
+    runs-on: [ self-hosted, normal ]
     name: RUN CHECKER
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    outputs:
+      PASS: ${{ steps.check.outputs.pass }}
+      THIRDPARTY: ${{ steps.thirdparty-checker.outputs.thirdparty }}
     steps:
-      - run: echo "success"
-      - run: |
-          echo "${{ github.head_ref }}"
       - name: upload info
         env:
           PR_NUMBER: ${{ github.event.number }}
@@ -34,12 +32,14 @@ jobs:
           echo $PR_NUMBER > pr_num.txt
           GITHUB_SHA=$(cat $GITHUB_EVENT_PATH | jq -r .pull_request.head.sha)
           echo ${GITHUB_SHA} > head_sha.txt
+
       - name: Upload the PR number
         uses: actions/upload-artifact@v2
         with:
           name: pr_num
           path: ./pr_num.txt
           retention-days: 1
+
       - name: Upload the PR HEAD REF
         uses: actions/upload-artifact@v2
         with:
@@ -47,10 +47,29 @@ jobs:
           path: ./head_sha.txt
           retention-days: 1
 
+      - name: Check
+        id: check
+        if: >
+          !contains(github.event.pull_request.title, '(sync #') &&
+          !contains(github.event.pull_request.labels.*.name, 'sync') &&
+          (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
+        run: |
+          echo "pass=true" >> $GITHUB_OUTPUT
+
+      - uses: dorny/paths-filter@v2
+        id: thirdparty-checker
+        if: always()
+        with:
+          filters: |
+            thirdparty:
+            - 'thirdparty/**'
+            - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+
   be-checker:
     runs-on: ubuntu-latest
     needs: sync-checker
     name: BE FILTER
+    if: needs.sync-checker.outputs.PASS == 'true' || needs.sync-checker.outputs.THIRDPARTY == 'true'
     outputs:
       output1: ${{ steps.be-changes-info.outputs.be }}
       output2: ${{ steps.be-changes-info.outputs.thirdparty }}
@@ -215,6 +234,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: sync-checker
     name: FE FILTER
+    if: needs.sync-checker.outputs.PASS == 'true' || needs.sync-checker.outputs.THIRDPARTY == 'true'
     outputs:
       output1: ${{ steps.fe-changes-info.outputs.fe }}
     steps:

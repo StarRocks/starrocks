@@ -13,6 +13,7 @@ jobs:
     if: >
       ${{ github.event.pull_request.merged == true }} && 
       github.base_ref == 'main' && 
+      github.repository == 'StarRocks/starrocks' &&
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport') && (
       contains(github.event.pull_request.labels.*.name, '3.1') ||
@@ -105,3 +106,40 @@ jobs:
         if: always()
         run: |
           rm -rf ${{ github.workspace }}/*
+<<<<<<< HEAD
+=======
+
+  close_msg:
+    runs-on: self-hosted
+    if: >
+      github.event.pull_request.merged == true && 
+      github.base_ref == 'main' &&
+      github.repository == 'StarRocks/starrocks'
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    steps:
+      - name: commit_sha
+        id: commit_sha
+        run: |
+          set -x
+          commit_sha=`curl -L \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{ github.repository }}/pulls/${PR_NUMBER} 2>/dev/null \
+            | jq .merge_commit_sha`
+          commit_sha=$(echo ${commit_sha//\"})
+          echo "commit_sha=${commit_sha}" >> $GITHUB_OUTPUT
+
+      - name: update merged coverage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/upload_cov_after_merge.sh --pr ${PR_NUMBER} --commit ${{ steps.commit_sha.outputs.commit_sha }}
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
+>>>>>>> 21ffb7595f ([Tool] Update thirdparty for sync pr (#28099))
