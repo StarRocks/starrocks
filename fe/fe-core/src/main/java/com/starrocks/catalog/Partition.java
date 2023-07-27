@@ -189,7 +189,8 @@ public class Partition extends MetaObject implements Writable {
     }
 
     public void updateVisibleVersion(long visibleVersion, long visibleVersionTime, long visibleTxnId) {
-        setVisibleVersion(visibleVersion, visibleVersionTime, visibleTxnId);
+        updateVisibleVersion(visibleVersion, visibleVersionTime);
+        this.visibleTxnId = visibleTxnId;
     }
 
     public long getVisibleVersion() {
