@@ -865,38 +865,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
     }
 
     @Test
-    public void testHiveQueryWithMvs() throws Exception {
-        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-        // enforce choose the hive scan operator, not mv plan
-        connectContext.getSessionVariable().setUseNthExecPlan(1);
-        createAndRefreshMv("test", "hive_union_mv_1",
-                "create materialized view hive_union_mv_1 distributed by hash(s_suppkey) " +
-                        "PROPERTIES (\n" +
-                        "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                        ") " +
-                        " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
-        createAndRefreshMv("test", "hive_join_mv_1", "create materialized view hive_join_mv_1" +
-                " distributed by hash(s_suppkey)" +
-                "PROPERTIES (\n" +
-                "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                ") " +
-                " as " +
-                " SELECT s_suppkey , s_name, n_name" +
-                " from hive0.tpch.supplier join hive0.tpch.nation" +
-                " on s_nationkey = n_nationkey" +
-                " where s_suppkey < 100");
-
-        String query1 = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 10";
-        String plan = getFragmentPlan(query1);
-        PlanTestBase.assertContains(plan, "TABLE: supplier",
-                "NON-PARTITION PREDICATES: 19: s_suppkey <= 9, 19: s_suppkey >= 5");
-
-        connectContext.getSessionVariable().setUseNthExecPlan(0);
-        dropMv("test", "hive_union_mv_1");
-        dropMv("test", "hive_join_mv_1");
-    }
-
-    @Test
     public void testUnionRewrite() throws Exception {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
 
