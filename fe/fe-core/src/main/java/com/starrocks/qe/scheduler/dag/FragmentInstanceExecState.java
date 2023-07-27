@@ -52,12 +52,12 @@ import java.util.concurrent.TimeoutException;
  * CREATED ────► DEPLOYING ────► EXECUTING ───► FINISHED
  *                  │                │
  *                  │                │
- *                  │                ▼
- *                  ├──────────► CANCELLING
  *                  │                │
- *                  │                │
- *                  ▼                │
- *               FAILED ◄────────────┘
+ *                  ├─► CANCELLING ◄─┤
+ *                  │       │        │
+ *                  │       │        │
+ *                  │       ▼        │
+ *                  └───► FAILED ◄───┘
  * }
  * </pre>
  * <p>
