@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "common/s3_uri.h"
-
 #include <gtest/gtest.h>
 
+#include "common/s3_uri.h"
 #include "testutil/parallel_test.h"
 
 namespace starrocks {
