@@ -45,7 +45,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
- * Maintain the execution state of a fragment instance.
+ * Maintain the single execution of a fragment instance.
  * Executions begin in the state CREATED and transition between states following this diagram:
  *
  * <pre>{@code
@@ -64,8 +64,8 @@ import java.util.concurrent.TimeoutException;
  * All the methods are thead-safe.
  * The {@link #state} and {@link #profile} are protected by {@code synchronized(this)}.
  */
-public class ExecutionFragmentInstance {
-    private static final Logger LOG = LogManager.getLogger(ExecutionFragmentInstance.class);
+public class FragmentInstanceExecState {
+    private static final Logger LOG = LogManager.getLogger(FragmentInstanceExecState.class);
 
     private State state = State.CREATED;
 
@@ -90,16 +90,16 @@ public class ExecutionFragmentInstance {
     /**
      * Create a fake backendExecState, only user for stream load profile.
      */
-    public static ExecutionFragmentInstance createFakeExecution(TUniqueId fragmentInstanceId,
+    public static FragmentInstanceExecState createFakeExecution(TUniqueId fragmentInstanceId,
                                                                 TNetworkAddress address) {
         String name = "Instance " + DebugUtil.printId(fragmentInstanceId);
         RuntimeProfile profile = new RuntimeProfile(name);
         profile.addInfoString("Address", String.format("%s:%s", address.hostname, address.port));
 
-        return new ExecutionFragmentInstance(null, null, fragmentInstanceId, 0, null, 0, profile, null, null, -1);
+        return new FragmentInstanceExecState(null, null, fragmentInstanceId, 0, null, 0, profile, null, null, -1);
     }
 
-    public static ExecutionFragmentInstance createExecution(JobSpec jobSpec,
+    public static FragmentInstanceExecState createExecution(JobSpec jobSpec,
                                                             PlanFragmentId fragmentId,
                                                             TExecPlanFragmentParams request,
                                                             int profileFragmentId,
@@ -109,7 +109,7 @@ public class ExecutionFragmentInstance {
         RuntimeProfile profile = new RuntimeProfile(name);
         profile.addInfoString("Address", String.format("%s:%s", address.hostname, address.port));
 
-        return new ExecutionFragmentInstance(jobSpec,
+        return new FragmentInstanceExecState(jobSpec,
                 fragmentId, request.params.getFragment_instance_id(), request.getBackend_num(),
                 request,
                 profileFragmentId, profile,
@@ -117,7 +117,7 @@ public class ExecutionFragmentInstance {
 
     }
 
-    private ExecutionFragmentInstance(JobSpec jobSpec,
+    private FragmentInstanceExecState(JobSpec jobSpec,
                                       PlanFragmentId fragmentId,
                                       TUniqueId instanceId,
                                       int indexInJob,

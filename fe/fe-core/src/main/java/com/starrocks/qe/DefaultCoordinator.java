@@ -68,7 +68,7 @@ import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.qe.QueryStatisticsItem.FragmentInstanceInfo;
 import com.starrocks.qe.scheduler.Coordinator;
-import com.starrocks.qe.scheduler.dag.ExecutionFragmentInstance;
+import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
@@ -119,7 +119,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import static com.starrocks.qe.scheduler.dag.ExecutionFragmentInstance.DeploymentResult;
+import static com.starrocks.qe.scheduler.dag.FragmentInstanceExecState.DeploymentResult;
 
 public class DefaultCoordinator extends Coordinator {
     private static final Logger LOG = LogManager.getLogger(DefaultCoordinator.class);
@@ -143,11 +143,11 @@ public class DefaultCoordinator extends Coordinator {
     private List<RuntimeProfile> fragmentProfiles;
     private final Map<PlanFragmentId, Integer> fragmentId2fragmentProfileIds = Maps.newHashMap();
     // backend execute state
-    private final ConcurrentNavigableMap<Integer, ExecutionFragmentInstance> indexInJobToExecution =
+    private final ConcurrentNavigableMap<Integer, FragmentInstanceExecState> indexInJobToExecution =
             new ConcurrentSkipListMap<>();
     // backend which state need to be checked when joining this coordinator.
     // It is supposed to be the subset of backendExecStates.
-    private final List<ExecutionFragmentInstance> needCheckBackendExecStates = Lists.newArrayList();
+    private final List<FragmentInstanceExecState> needCheckBackendExecStates = Lists.newArrayList();
     private ResultReceiver receiver;
     // number of instances of this query, equals to
     // number of backends executing plan fragments on behalf of this query;
@@ -279,8 +279,8 @@ public class DefaultCoordinator extends Coordinator {
         profileDoneSignal = new MarkedCountDownLatch<>(1);
         profileDoneSignal.addMark(queryId, -1L /* value is meaningless */);
 
-        ExecutionFragmentInstance execution = ExecutionFragmentInstance.createFakeExecution(queryId, address);
-        indexInJobToExecution.put(0, execution);
+        FragmentInstanceExecState execState = FragmentInstanceExecState.createFakeExecution(queryId, address);
+        indexInJobToExecution.put(0, execState);
 
         attachInstanceProfileToFragmentProfile();
 
@@ -422,7 +422,7 @@ public class DefaultCoordinator extends Coordinator {
         lock.unlock();
     }
 
-    public Collection<ExecutionFragmentInstance> getBackendExecutions() {
+    public Collection<FragmentInstanceExecState> getBackendExecutions() {
         return indexInJobToExecution.values();
     }
 
@@ -434,7 +434,7 @@ public class DefaultCoordinator extends Coordinator {
         return coordinatorPreprocessor.getInstanceIds();
     }
 
-    // Initiate asynchronous execution of query. Returns as soon as all plan fragments
+    // Initiate asynchronous execState of query. Returns as soon as all plan fragments
     // have started executing at their respective backends.
     // 'Request' must contain at least a coordinator plan fragment (ie, can't
     // be for a query like 'SELECT 1').
@@ -517,8 +517,8 @@ public class DefaultCoordinator extends Coordinator {
         }
 
         // to keep things simple, make async Cancel() calls wait until plan fragment
-        // execution has been initiated, otherwise we might try to cancel fragment
-        // execution at backends where it hasn't even started
+        // execState has been initiated, otherwise we might try to cancel fragment
+        // execState at backends where it hasn't even started
         profileDoneSignal = new MarkedCountDownLatch<>(coordinatorPreprocessor.getInstanceIds().size());
         for (TUniqueId instanceId : coordinatorPreprocessor.getInstanceIds()) {
             profileDoneSignal.addMark(instanceId, -1L /* value is meaningless */);
@@ -574,7 +574,7 @@ public class DefaultCoordinator extends Coordinator {
         deliverExecFragmentsRequests(coordinatorPreprocessor.isUsePipeline());
     }
 
-    private void handleErrorExecution(ExecutionFragmentInstance errorExecution, DeploymentResult errorRes)
+    private void handleErrorExecution(FragmentInstanceExecState errorExecution, DeploymentResult errorRes)
             throws UserException, RpcException {
         if (errorExecution != null) {
             cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
@@ -705,7 +705,7 @@ public class DefaultCoordinator extends Coordinator {
                 // Divide requests of fragments in the current group to two stages.
                 // - stage 1, the first request to a host, which need send descTable.
                 // - stage 2, the non-first requests to a host, which needn't send descTable.
-                List<List<ExecutionFragmentInstance>> twoStageExecutionsToDeploy =
+                List<List<FragmentInstanceExecState>> twoStageExecutionsToDeploy =
                         ImmutableList.of(new ArrayList<>(), new ArrayList<>());
                 for (PlanFragment fragment : fragmentGroup) {
                     int profileFragmentId = fragmentId2fragmentProfileIds.get(fragment.getFragmentId());
@@ -790,7 +790,7 @@ public class DefaultCoordinator extends Coordinator {
                             // TODO: pool of pre-formatted BackendExecStates?
                             Long workerId = instanceId2WorkerId.get(tRequest.params.fragment_instance_id);
                             ComputeNode worker = coordinatorPreprocessor.getWorkerProvider().getWorkerById(workerId);
-                            ExecutionFragmentInstance execState = ExecutionFragmentInstance.createExecution(
+                            FragmentInstanceExecState execState = FragmentInstanceExecState.createExecution(
                                     jobSpec,
                                     fragment.getFragmentId(),
                                     tRequest,
@@ -810,13 +810,13 @@ public class DefaultCoordinator extends Coordinator {
                     }
                 }
 
-                for (List<ExecutionFragmentInstance> stageExecutions : twoStageExecutionsToDeploy) {
-                    stageExecutions.forEach(ExecutionFragmentInstance::deployAsync);
+                for (List<FragmentInstanceExecState> stageExecutions : twoStageExecutionsToDeploy) {
+                    stageExecutions.forEach(FragmentInstanceExecState::deployAsync);
 
                     DeploymentResult firstErrResult = null;
-                    ExecutionFragmentInstance firstErrExecution = null;
-                    for (ExecutionFragmentInstance execution : stageExecutions) {
-                        DeploymentResult res = execution.waitForDeploymentCompletion(queryDeliveryTimeoutMs);
+                    FragmentInstanceExecState firstErrExecution = null;
+                    for (FragmentInstanceExecState execState : stageExecutions) {
+                        DeploymentResult res = execState.waitForDeploymentCompletion(queryDeliveryTimeoutMs);
                         if (TStatusCode.OK == res.getStatusCode()) {
                             continue;
                         }
@@ -831,7 +831,7 @@ public class DefaultCoordinator extends Coordinator {
                         // causing the instances to become stale and only able to be released after a timeout.
                         if (firstErrResult == null) {
                             firstErrResult = res;
-                            firstErrExecution = execution;
+                            firstErrExecution = execState;
                         }
                         if (res.getStatusCode() == TStatusCode.TIMEOUT) {
                             break;
@@ -1153,7 +1153,7 @@ public class DefaultCoordinator extends Coordinator {
         return resultBatch;
     }
 
-    // Cancel execution of query. This includes the execution of the local plan
+    // Cancel execState of query. This includes the execState of the local plan
     // fragment,
     // if any, as well as all plan fragments on remote nodes.
     @Override
@@ -1167,7 +1167,7 @@ public class DefaultCoordinator extends Coordinator {
                 queryStatus.setStatus(Status.CANCELLED);
                 queryStatus.setErrorMsg(message);
             }
-            LOG.warn("cancel execution of query, this is outside invoke");
+            LOG.warn("cancel execState of query, this is outside invoke");
             cancelInternal(reason);
         } finally {
             try {
@@ -1204,13 +1204,13 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     private void cancelRemoteFragmentsAsync(PPlanFragmentCancelReason cancelReason) {
-        for (ExecutionFragmentInstance execution : indexInJobToExecution.values()) {
-            // If the execution fails to be cancelled, and it has been finished or not been deployed,
-            // count down the profileDoneSignal of this execution immediately,
-            // because the profile report will not arrive anymore for the finished or non-deployed execution.
-            if (!execution.cancelFragmentInstance(cancelReason) &&
-                    (!execution.hasBeenDeployed() || execution.isFinished())) {
-                profileDoneSignal.markedCountDown(execution.getInstanceId(), -1L);
+        for (FragmentInstanceExecState execState : indexInJobToExecution.values()) {
+            // If the execState fails to be cancelled, and it has been finished or not been deployed,
+            // count down the profileDoneSignal of this execState immediately,
+            // because the profile report will not arrive anymore for the finished or non-deployed execState.
+            if (!execState.cancelFragmentInstance(cancelReason) &&
+                    (!execState.hasBeenDeployed() || execState.isFinished())) {
+                profileDoneSignal.markedCountDown(execState.getInstanceId(), -1L);
             }
         }
 
@@ -1222,7 +1222,7 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public void updateFragmentExecStatus(TReportExecStatusParams params) {
-        ExecutionFragmentInstance execState = indexInJobToExecution.get(params.backend_num);
+        FragmentInstanceExecState execState = indexInJobToExecution.get(params.backend_num);
         if (execState == null) {
             LOG.warn("unknown backend number: {}, valid backend numbers: {}", params.backend_num,
                     indexInJobToExecution.keySet());
@@ -1243,7 +1243,7 @@ public class DefaultCoordinator extends Coordinator {
         // which leads to inconsistency.
         //
         // So the profile update strategy looks like this: During a short time interval, each instance will report
-        // its execution information. However, when receiving the information reported by the first instance of the
+        // its execState information. However, when receiving the information reported by the first instance of the
         // current batch, the previous reported state will be synchronized to the profile manager.
         if (!execState.isFinished()) {
             long now = System.currentTimeMillis();
@@ -1355,7 +1355,7 @@ public class DefaultCoordinator extends Coordinator {
                 } else {
                     timeout = DEFAULT_PROFILE_TIMEOUT_SECOND;
                 }
-                // Waiting for other fragment instances to finish execution
+                // Waiting for other fragment instances to finish execState
                 // Ideally, it should wait indefinitely, but out of defense, set timeout
                 if (!profileDoneSignal.await(timeout, TimeUnit.SECONDS)) {
                     LOG.warn("failed to get profile within {} seconds", timeout);
@@ -1638,10 +1638,10 @@ public class DefaultCoordinator extends Coordinator {
      */
     @Override
     public boolean checkBackendState() {
-        for (ExecutionFragmentInstance execution : needCheckBackendExecStates) {
-            if (!execution.isBackendStateHealthy()) {
+        for (FragmentInstanceExecState execState : needCheckBackendExecStates) {
+            if (!execState.isBackendStateHealthy()) {
                 queryStatus = new Status(TStatusCode.INTERNAL_ERROR,
-                        "backend " + execution.getWorker().getId() + " is down");
+                        "backend " + execState.getWorker().getId() + " is down");
                 return false;
             }
         }
@@ -1663,11 +1663,11 @@ public class DefaultCoordinator extends Coordinator {
     public List<QueryStatisticsItem.FragmentInstanceInfo> getFragmentInstanceInfos() {
         final List<QueryStatisticsItem.FragmentInstanceInfo> result = Lists.newArrayList();
         for (PlanFragment fragment : jobSpec.getFragments()) {
-            for (ExecutionFragmentInstance execution : indexInJobToExecution.values()) {
-                if (fragment.getFragmentId() != execution.getFragmentId()) {
+            for (FragmentInstanceExecState execState : indexInJobToExecution.values()) {
+                if (fragment.getFragmentId() != execState.getFragmentId()) {
                     continue;
                 }
-                final FragmentInstanceInfo info = execution.buildFragmentInstanceInfo();
+                final FragmentInstanceInfo info = execState.buildFragmentInstanceInfo();
                 result.add(info);
             }
         }
@@ -1675,11 +1675,11 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     private void attachInstanceProfileToFragmentProfile() {
-        for (ExecutionFragmentInstance execution : indexInJobToExecution.values()) {
-            if (!execution.computeTimeInProfile(fragmentProfiles.size())) {
+        for (FragmentInstanceExecState execState : indexInJobToExecution.values()) {
+            if (!execState.computeTimeInProfile(fragmentProfiles.size())) {
                 return;
             }
-            fragmentProfiles.get(execution.getProfileFragmentId()).addChild(execution.getProfile());
+            fragmentProfiles.get(execState.getProfileFragmentId()).addChild(execState.getProfile());
         }
     }
 
