@@ -1015,8 +1015,13 @@ public class ShowExecutorTest {
                 properties.put("type", "hive");
                 properties.put("aws.s3.access_key", "iam_user_access_key");
                 properties.put("aws.s3.secret_key", "iam_user_secret_key");
+<<<<<<< HEAD
                 Catalog catalog = new Catalog(1, "test_hive", properties, "hive_test");
                 return catalog;
+=======
+                properties.put("password", "password");
+                return new Catalog(1, "test_hive", properties, "hive_test");
+>>>>>>> d1b75dd161 ([BugFix] Not showing password on show create JDBC catalog (#28059))
             }
         };
         ShowCreateExternalCatalogStmt stmt = new ShowCreateExternalCatalogStmt("test_hive");
