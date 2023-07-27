@@ -422,7 +422,7 @@ public class DefaultCoordinator extends Coordinator {
         lock.unlock();
     }
 
-    public Collection<FragmentInstanceExecState> getExecutionStates() {
+    public Collection<FragmentInstanceExecState> getExecStates() {
         return indexInJobToExecState.values();
     }
 

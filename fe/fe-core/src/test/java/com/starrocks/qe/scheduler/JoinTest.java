@@ -128,7 +128,7 @@ public class JoinTest extends SchedulerTestBase {
 
             scheduler.updateFragmentExecStatus(request);
         });
-        for (FragmentInstanceExecState execution : scheduler.getExecutionStates()) {
+        for (FragmentInstanceExecState execution : scheduler.getExecStates()) {
             Assert.assertFalse(execution.isFinished());
         }
         Assert.assertFalse(joinFinished.get());
@@ -144,7 +144,7 @@ public class JoinTest extends SchedulerTestBase {
         final List<TSinkCommitInfo> sinkCommitInfos = Lists.newArrayList();
         for (int i = 0; i < 2; i++) {
             final int finalIndex = i;
-            scheduler.getExecutionStates().forEach(execution -> {
+            scheduler.getExecStates().forEach(execution -> {
                 int indexInJob = execution.getIndexInJob();
 
                 TReportExecStatusParams request = new TReportExecStatusParams(FrontendServiceVersion.V1);
@@ -199,7 +199,7 @@ public class JoinTest extends SchedulerTestBase {
                 scheduler.updateFragmentExecStatus(request);
             });
         }
-        for (FragmentInstanceExecState execution : scheduler.getExecutionStates()) {
+        for (FragmentInstanceExecState execution : scheduler.getExecStates()) {
             Assert.assertTrue(execution.isFinished());
         }
 

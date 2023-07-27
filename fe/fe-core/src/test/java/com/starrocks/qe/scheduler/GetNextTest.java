@@ -219,7 +219,7 @@ public class GetNextTest extends SchedulerTestBase {
         Assert.assertTrue(scheduler.getExecStatus().ok());
 
         // Receive cancelled report.
-        scheduler.getExecutionStates().forEach(execution -> {
+        scheduler.getExecStates().forEach(execution -> {
             TReportExecStatusParams request = new TReportExecStatusParams(FrontendServiceVersion.V1);
             request.setBackend_num(execution.getIndexInJob());
             request.setDone(true);
@@ -250,7 +250,7 @@ public class GetNextTest extends SchedulerTestBase {
         Assert.assertTrue(scheduler.getExecStatus().isCancelled());
 
         // Receive execution reports.
-        scheduler.getExecutionStates().forEach(execution -> {
+        scheduler.getExecStates().forEach(execution -> {
             TReportExecStatusParams request = new TReportExecStatusParams(FrontendServiceVersion.V1);
             request.setBackend_num(execution.getIndexInJob());
             request.setDone(true);

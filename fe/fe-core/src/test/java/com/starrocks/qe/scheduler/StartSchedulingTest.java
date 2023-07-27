@@ -196,7 +196,7 @@ public class StartSchedulingTest extends SchedulerTestBase {
         // Shouldn't deploy the rest instances, when the previous instance deployment failed.
         Assert.assertTrue(scheduler.getIndexesInJob().size() < scheduler.getInstanceIds().size());
         // Receive execution reports.
-        scheduler.getExecutionStates().forEach(execution -> {
+        scheduler.getExecStates().forEach(execution -> {
             TReportExecStatusParams request = new TReportExecStatusParams(FrontendServiceVersion.V1);
             request.setBackend_num(execution.getIndexInJob());
             request.setDone(true);
@@ -312,12 +312,12 @@ public class StartSchedulingTest extends SchedulerTestBase {
         Assert.assertTrue(scheduler.getExecStatus().ok());
 
         // All the instances should be deployed.
-        Assert.assertEquals(scheduler.getInstanceIds().size(), scheduler.getExecutionStates().size());
+        Assert.assertEquals(scheduler.getInstanceIds().size(), scheduler.getExecStates().size());
 
         scheduler.cancel();
         Assert.assertEquals(numSuccessCancelledInstances, successCancelledInstanceIds.size());
         // Receive execution reports from the successfully cancelled instances.
-        scheduler.getExecutionStates().forEach(execution -> {
+        scheduler.getExecStates().forEach(execution -> {
             if (successCancelledInstanceIds.contains(execution.getInstanceId())) {
                 TReportExecStatusParams request = new TReportExecStatusParams(FrontendServiceVersion.V1);
                 request.setBackend_num(execution.getIndexInJob());
