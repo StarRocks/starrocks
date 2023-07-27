@@ -231,6 +231,15 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
+        case 13: {
+            // properties
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(13);
+                const std::string* str = &task_run_info.properties;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+        }
         default:
             break;
         }
