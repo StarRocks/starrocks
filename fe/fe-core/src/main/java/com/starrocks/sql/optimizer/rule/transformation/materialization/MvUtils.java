@@ -430,6 +430,8 @@ public class MvUtils {
         return new ReplaceColumnRefRewriter(mvLineage, true);
     }
 
+    // pushdown predicates are excluded when calculating comppensation predicates,
+    // because they are derived from equivalence class, the original predicates have be considered
     private static void collectValidPredicates(List<ScalarOperator> conjuncts, List<ScalarOperator> predicates) {
         conjuncts.stream().filter(x -> !x.isRedundant() && !x.isPushdown()).forEach(predicates::add);
     }

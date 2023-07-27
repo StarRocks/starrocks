@@ -297,14 +297,16 @@ public class MaterializedViewRewriter {
     }
 
     private boolean checkJoinMatch(JoinOperator joinOperator, OptExpression queryExpr, OptExpression mvExpr) {
-        // for left outer join, we should make sure the predicates of right child should be equivalent
         if (joinOperator.isInnerJoin() || joinOperator.isCrossJoin() || joinOperator.isSemiJoin()) {
             return true;
         } else if (joinOperator.isLeftOuterJoin() || joinOperator.isLeftAntiJoin()) {
+            // for left outer/anti join, we should make sure the predicates of right child should be equivalent
             return checkJoinChildPredicate(queryExpr, mvExpr, 1);
         } else if (joinOperator.isRightOuterJoin() || joinOperator.isRightAntiJoin()) {
+            // for right outer/anti join, we should make sure the predicates of left child should be equivalent
             return checkJoinChildPredicate(queryExpr, mvExpr, 0);
         } else if (joinOperator.isFullOuterJoin()) {
+            // for full outer join, we should make sure the predicates of both children should be equivalent
             return checkJoinChildPredicate(queryExpr, mvExpr, 0) && checkJoinChildPredicate(queryExpr, mvExpr, 1);
         }
         return false;
@@ -375,6 +377,7 @@ public class MaterializedViewRewriter {
                     rightColumnRefSet.get().getColumnRefOperators(materializationContext.getQueryRefFactory());
             joinColumnRefs.set(1, rightJoinColumnRefs);
             if (queryJoinType.isInnerJoin()) {
+                // for inner join, we should add the join columns into equivalence
                 compensatedEquivalenceColumns.addAll(joinColumnPairs);
             }
         } else if (mvJoinType.isRightOuterJoin() && (queryJoinType.isInnerJoin() || queryJoinType.isRightAntiJoin())) {
@@ -387,6 +390,7 @@ public class MaterializedViewRewriter {
                     leftColumnRefSet.get().getColumnRefOperators(materializationContext.getQueryRefFactory());
             joinColumnRefs.set(0, leftJoinColumnRefs);
             if (queryJoinType.isInnerJoin()) {
+                // for inner join, we should add the join columns into equivalence
                 compensatedEquivalenceColumns.addAll(joinColumnPairs);
             }
         } else if (mvJoinType.isFullOuterJoin() && queryJoinType.isLeftOuterJoin()) {
@@ -446,6 +450,7 @@ public class MaterializedViewRewriter {
             List<ColumnRefOperator> rightJoinColumnRefs =
                     rightColumnRefSet.get().getColumnRefOperators(materializationContext.getQueryRefFactory());
             joinColumnRefs.set(1, rightJoinColumnRefs);
+            // for inner join, we should add the join columns into equivalence
             compensatedEquivalenceColumns.addAll(joinColumnPairs);
         }
         return isCompatible;

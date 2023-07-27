@@ -65,10 +65,9 @@ public class TableScanDesc {
     public JoinOperator getJoinType() {
         if (joinOptExpression == null) {
             return null;
-        } else {
-            LogicalJoinOperator joinOperator = joinOptExpression.getOp().cast();
-            return joinOperator.getJoinType();
         }
+        LogicalJoinOperator joinOperator = joinOptExpression.getOp().cast();
+        return joinOperator.getJoinType();
     }
 
     public boolean isMatch(TableScanDesc other) {
@@ -84,7 +83,7 @@ public class TableScanDesc {
         JoinOperator otherJoinOperator = other.getJoinType();
         if (joinOperator == null && otherJoinOperator == null) {
             return true;
-        } else if (joinOperator == null || joinOperator == null) {
+        } else if (joinOperator == null || otherJoinOperator == null) {
             return false;
         }
         if (joinOperator.isInnerJoin()) {
