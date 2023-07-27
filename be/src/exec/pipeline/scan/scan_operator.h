@@ -86,6 +86,8 @@ public:
     virtual void end_driver_process(PipelineDriver* driver) {}
     virtual bool is_running_all_io_tasks() const;
 
+    virtual int64_t get_scan_table_id() const { return -1; }
+
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
 
