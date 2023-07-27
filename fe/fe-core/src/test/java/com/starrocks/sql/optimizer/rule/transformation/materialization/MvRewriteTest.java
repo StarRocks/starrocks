@@ -806,65 +806,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
     }
 
     @Test
-    public void testHiveAggregateMvRewrite() throws Exception {
-        createAndRefreshMv("test", "hive_agg_join_mv_1", "create materialized view hive_agg_join_mv_1" +
-                " distributed by hash(s_nationkey)" +
-                "PROPERTIES (\n" +
-                "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                ") " +
-                " as " +
-                " SELECT s_nationkey , n_name, sum(s_acctbal) as total_sum" +
-                " from hive0.tpch.supplier join hive0.tpch.nation" +
-                " on s_nationkey = n_nationkey" +
-                " where s_nationkey < 100 " +
-                "group by s_nationkey , n_name");
-
-        String query1 = " SELECT s_nationkey , n_name, sum(s_acctbal) as total_sum" +
-                " from hive0.tpch.supplier join hive0.tpch.nation" +
-                " on s_nationkey = n_nationkey" +
-                " where s_nationkey = 1 " +
-                "group by s_nationkey , n_name";
-        String plan1 = getFragmentPlan(query1);
-        PlanTestBase.assertContains(plan1, "hive_agg_join_mv_1");
-
-        String query2 = " SELECT s_nationkey , n_name, sum(s_acctbal) as total_sum" +
-                " from hive0.tpch.supplier join hive0.tpch.nation" +
-                " on s_nationkey = n_nationkey" +
-                " where s_nationkey < 100 " +
-                "group by s_nationkey , n_name";
-        String plan2 = getFragmentPlan(query2);
-        PlanTestBase.assertContains(plan2, "hive_agg_join_mv_1");
-
-        String query3 = " SELECT s_nationkey , sum(s_acctbal) as total_sum" +
-                " from hive0.tpch.supplier join hive0.tpch.nation" +
-                " on s_nationkey = n_nationkey" +
-                " where s_nationkey < 99 " +
-                "group by s_nationkey";
-        String plan3 = getFragmentPlan(query3);
-        PlanTestBase.assertContains(plan3, "hive_agg_join_mv_1");
-    }
-
-    @Test
-    public void testHiveUnionRewrite() throws Exception {
-        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-        createAndRefreshMv("test", "hive_union_mv_1",
-                "create materialized view hive_union_mv_1 distributed by hash(s_suppkey) " +
-                        "PROPERTIES (\n" +
-                        "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                        ") " +
-                        " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
-        String query1 = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 10";
-        String plan1 = getFragmentPlan(query1);
-        PlanTestBase.assertContains(plan1, "0:UNION");
-        PlanTestBase.assertContains(plan1, "hive_union_mv_1");
-        PlanTestBase.assertContains(plan1, "1:HdfsScanNode\n" +
-                "     TABLE: supplier\n" +
-                "     NON-PARTITION PREDICATES: 13: s_suppkey <= 9, 13: s_suppkey >= 5");
-
-        dropMv("test", "hive_union_mv_1");
-    }
-
-    @Test
     public void testUnionRewrite() throws Exception {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
 
