@@ -1,10 +1,10 @@
 # Data distribution
 
-Configuring appropriate partitioning and bucketing at table creation data can help to achieve even data distribution and improve query performance. Even data distribution means dividing the data into subsets according to certain rules and distributing them evenly across different nodes. It can also reduce the data scanned and make full use of the concurrency of the cluster during queries, thereby improving query performance.
+Configuring appropriate partitioning and bucketing at table creation can help to achieve even data distribution. Even data distribution means dividing the data into subsets according to certain rules and distributing them evenly across different nodes. It can also reduce the amount of data scanned and make full use of the cluster's capability in processing concurrent queries, thereby improving query performance.
 
 > **NOTE**
 >
-> - Since v3.1, you can not specify the bucketing key in the DISTRIBUTED BY clause when creating a table or adding a partition. StarRocks supports random bucketing, which randomly distributes data across all buckets. For more information, see [Random bucketing](#random-bucketing-since-v31).
+> - Since v3.1, you you do not need to specify the bucketing key in the DISTRIBUTED BY clause when creating a table or adding a partition. StarRocks supports random bucketing, which randomly distributes data across all buckets. For more information, see [Random bucketing](#random-bucketing-since-v31).
 > - Since v2.5.7, you no longer need to manually set the number of buckets when you create a table or add a partition. StarRocks can automatically set the number of buckets (BUCKETS). However, if the performance does not meet your expectations after StarRocks automatically sets the number of buckets and you are familiar with the bucketing mechanism, you can still [manually set the number of buckets](#determine-the-number-of-buckets).
 
 ## Distribution methods
@@ -30,7 +30,7 @@ StarRocks supports both seperate and composite use of data distribution methods.
 >
 > In addition to the general distribution methods, StarRocks also supports Random distribution to simplify bucketing configuration.
 
-Also, StarRocks distributes data by implementing the two level partitioning + bucketing method.
+Also, StarRocks distributes data by implementing the two-level partitioning + bucketing method.
 
 - The first level is partitioning: Data within a table can be partitioned. The partitioning method can be range partitioning or list partitioning. Or you can choose not to use partitioning (the entire table is regarded as one partition).
 - The second level is bucketing: Data in a partition needs to be further distributed into smaller bucktes. The bucketing method can be hash or random bucketing.
@@ -38,11 +38,11 @@ Also, StarRocks distributes data by implementing the two level partitioning + bu
 | **Distribution method**   | **Partitioning and bucketing method**                        | **Description**                                              |
 | ------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
 | Random distribution       | Random bucketing                                             | The entire table is considered a partition. Data in the table is randomly distributed into different buckets. This is the default data distribution method. |
-| Hash distribution         | Hash bucketing                                               | The entire table is considered a partition. The data in the table is distributed to the corresponding bucket, which is based on the hash value of the data's bucketing key by using a hashing function. |
-| Range+Random distribution | <ol><li>Expression partitioning or range partitioning </li><li>Random bucketing </li></ol> | <ol><li>The data of the table is partitioned based on the ranges of values in the partitioning columns. </li><li>The data in a partition is randomly distributed across different buckets. </li></ol> |
-| Range+Hash distribution   | <ol><li>Expression partitioning or range partitioning</li><li>Hash bucketing </li></ol> | <ol><li>The data of the table is partitioned based on the ranges of values in the partitioning column.</li><li>The data in a partition is distributed to the corresponding bucket, which is based on the hash value of the data's bucketing key by using a hashing function.</li></ol> |
-| List+Hash distribution    | <ol><li>Expression partitioning or List partitioning</li><li>Hash bucketing </li></ol> | <ol><li>The data in the table is partitioned based on the values in the partitioning column.</li><li>The data in a partition is distributed to the corresponding bucket, which is based on the hash value of the data's bucketing key by using a hashing function.</li></ol> |
-| List+Random distribution  | <ol><li>Expression partitioning or List partitioning</li><li>Random bucketing </li></ol> | <ol><li>The data in the table is partitioned based on the values in the partitioning column.</li><li>The data in a partition is randomly distributed across different buckets.</li></ol> |
+| Hash distribution         | Hash bucketing                                               | The entire table is considered a partition. The data in the table is distributed to the corresponding bucket, which is based on the hash value of the data's bucketing key by using a hash function. |
+| Range+Random distribution | <ol><li>Expression partitioning or range partitioning </li><li>Random bucketing </li></ol> | <ol><li>The data in the table is partitioned based on the ranges of values in the partitioning columns. </li><li>The data in the partition is randomly distributed across different buckets. </li></ol> |
+| Range+Hash distribution   | <ol><li>Expression partitioning or range partitioning</li><li>Hash bucketing </li></ol> | <ol><li>The data in the table is partitioned based on the ranges of values in the partitioning columns.</li><li>The data in the partition is distributed to the corresponding bucket, which is based on the hash value of the data's bucketing key by using a hash function.</li></ol> |
+| List+Hash distribution    | <ol><li>Expression partitioning or List partitioning</li><li>Hash bucketing </li></ol> | <ol><li>The data in the table is partitioned based on the values in the partitioning columns.</li><li>The data in the partition is distributed to the corresponding bucket, which is based on the hash value of the data's bucketing key by using a hash function.</li></ol> |
+| List+Random distribution  | <ol><li>Expression partitioning or List partitioning</li><li>Random bucketing </li></ol> | <ol><li>The data in the table is partitioned based on the values in the partitioning column.</li><li>The data in athe partition is randomly distributed across different buckets.</li></ol> |
 
 - **Random distribution**
 
@@ -57,7 +57,7 @@ Also, StarRocks distributes data by implementing the two level partitioning + bu
       user_name VARCHAR(32) DEFAULT ''
   )
   DUPLICATE KEY (event_day,site_id,pv);
-  -- Because the partitioning and bucketing methods are not configured, Random distribution is used by default (currently only support Deplicate Key tables).
+  -- Because the partitioning and bucketing methods are not configured, random distribution is used by default (currently only support Deplicate Key tables).
   ```
 
 - **Hash distribution**
@@ -89,7 +89,7 @@ Also, StarRocks distributes data by implementing the two level partitioning + bu
   -- Use expression partitioning as the partitioning method and configure a time function expression.
   -- You can also use range partitioning.
   PARTITION BY date_trunc('day', event_day);
-  -- Because the bucketing method is not configured, Random bucketing is used by default (currently only support Deplicate Key tables).
+  -- Because the bucketing method is not configured, random bucketing is used by default.
   ```
 
 - **Range+Hash distribution**
@@ -121,10 +121,10 @@ Also, StarRocks distributes data by implementing the two level partitioning + bu
       dt date not null
   )
   DUPLICATE KEY(id)
-  -- Use expression partitioning as the partitioning method and specify the partition column.
+  -- Use expression partitioning as the partitioning method and specify the partitioning column.
   -- You can also use list partitioning.
   PARTITION BY (city);
-  -- Because the bucketing method is not configured, Random bucketing is used by default (currently only support Deplicate Key tables).
+  -- Because the bucketing method is not configured, random bucketing is used by default (currently only support Deplicate Key tables).
   ```
 
 - **List+Hash distribution**
@@ -138,7 +138,7 @@ Also, StarRocks distributes data by implementing the two level partitioning + bu
       dt date not null
   )
   DUPLICATE KEY(id)
-  -- Use expression partitioning as the partitioning method and specify the partition column.
+  -- Use expression partitioning as the partitioning method and specify the partitioning column.
   -- You can also use list partitioning.
   PARTITION BY (city)
   -- Use hash bucketing as the bucketing method and must specify the bucketing key.
@@ -147,18 +147,18 @@ Also, StarRocks distributes data by implementing the two level partitioning + bu
 
 #### Partitioning
 
-The partitioning method divides a table into multiple partitions. Partitioning primarily is used to split a table into different management units based on the partition key. You can set a storage strategy for each partition, including the number of bucketes, the strategy of storing hot and cold data, storage medium, and the number of replicas. StarRocks allows you to use multiple storage mediums within a cluster. For example, you can store the latest data on solid-state drives (SSD) to improve query performance, and historical data on SATA hard drives to reduce storage costs.
+The partitioning method divides a table into multiple partitions. Partitioning primarily is used to split a table into different management granularity based on the partition key. You can set a storage strategy for each partition, including the number of bucketes, the strategy of storing hot and cold data, storage medium, and the number of replicas. StarRocks allows you to use multiple storage mediums within a cluster. For example, you can store the latest data on solid-state drives (SSD) to improve query performance, and historical data on SATA hard drives to reduce storage costs.
 
 | Partitioning method                   | Scenarios                                                    | Methods to create partitions               |
 | ------------------------------------- | ------------------------------------------------------------ | ------------------------------------------ |
 | Expression partitioning (recommended) | Previously known as automatic partitioning. This partitioning method is more flexible and user-friendly. It is suitable for most scenarios including querying and managing data based on continuous date ranges or emurated values. | Automatically created during data loading |
 | Range partitioning                    | The typical scenario is to store simple and ordered data that is often queried and managed based on continuous date/numeric ranges. For instance, in some special cases, historical data needs to be partitioned by month, while recent data needs to be partitioned by day. | Created manually, dynamically, or in batch |
-| List partitioning                     | A typical scenario is to query and manage data based on emurated values, where a partition needs to include data with different values for each partition column. For example, if you frequently query and manage data based on country and city, you can use this method and select `city` as the partition column. So a partition can contain data for multiple cities belonging to one country. | Created manually                           |
+| List partitioning                     | A typical scenario is to query and manage data based on emurated values, where a partition needs to include data with different values for each partitioning column. For example, if you frequently query and manage data based on country and city, you can use this method and select `city` as the partitioning column. So a partition can contain data for multiple cities belonging to one country. | Created manually                           |
 
-**How to choose partition columns and unit**
+**How to choose partitioning columns and granularity**
 
-- Selecting a appropriate partition column can effectively reduce the amount of data scanned during queries. In most business systems, partitioning based on time is commonly chosen to optimize performance issues caused by deleting expired data and facilitate management of tiered storage of hot and cold data. In this case, you can use expression partitioning and range partitioning and specify a time column as the partition column. Additionally, if the data is frequently queried and managed based on emurated values, you can use expression partitioning and list partitioning and specify a column including these values as the partition column.
-- When choosing the partitioning unit, you need to be consider factors such as data volume, query patterns, and data management granularity.
+- Selecting a appropriate partitioning column can effectively reduce the amount of data scanned during queries. In most business systems, partitioning based on time is commonly chosen to optimize performance issues caused by deleting expired data and facilitate management of tiered storage of hot and cold data. In this case, you can use expression partitioning and range partitioning and specify a time column as the partitioning column. Additionally, if the data is frequently queried and managed based on emurated values, you can use expression partitioning and list partitioning and specify a column including these values as the partitioning column.
+- When choosing the partitioning granularity, you need to be consider factors such as data volume, query patterns, and data management granularity.
   - Example 1: If the volume of data per month in a table is small, partitioning by month can reduce the number of metadata entries compared to partitioning by day, thereby reducing the resource consumption of metadata management and scheduling.
   - Example 2: If the monthly data volume of a table is large and most query conditions are precise to the day, partitioning by day can effectively reduce the amount of data scanned during queries.
   - Example 3: If the data needs to expire on a daily basis, partitioning by day can be used.
@@ -203,7 +203,7 @@ Different from the automatic partition creation ability provided by the expressi
 
 **Manually create partitions**
 
-Using a suitable partition key can effectively reduce the amount of data scanned during queries. Currently, only date and integer data types are supported as partition columns. In business scenarios, partition keys are typically chosen from a data management perspective. Common partition columns include dates and regions.
+Using a suitable partition key can effectively reduce the amount of data scanned during queries. Currently, only date and integer data types are supported as partitioning columns. In business scenarios, partition keys are typically chosen from a data management perspective. Common partitioning columns include dates and regions.
 
 ```SQL
 CREATE TABLE site_access(
@@ -228,7 +228,7 @@ Multiple partitions can be created at a time at and after table creation. You ca
 
 - **Partition a table on a date-type column (DATE and DATETIME) at the table creation**
 
-  When the partition column is of date type, during table creation, you can use `START` and `END` to specify the start date and end date for all the partitions created at a time, and `EVERY` to specify the partition increment value. The `EVERY` uses the `INTERVAL` keyword to indicate the date interval, and currently supports date intervals to be `HOUR` (since version 3.0), `DAY`, `WEEK`, `MONTH`, and `YEAR`.
+  When the partitioning column is of date type, during table creation, you can use `START` and `END` to specify the start date and end date for all the partitions created at a time, and `EVERY` to specify the partition increment value. The `EVERY` uses the `INTERVAL` keyword to indicate the date interval, and currently supports date intervals to be `HOUR` (since version 3.0), `DAY`, `WEEK`, `MONTH`, and `YEAR`.
 
   In the following example, the date range of all the partitions created at a time starts from 2021-01-01 and ends on 2021-01-04, with an increment value of one day:
 
@@ -303,7 +303,7 @@ Multiple partitions can be created at a time at and after table creation. You ca
 
 - **Partition a table on an integer type column at the table creation**
 
-  When the data type of the partition column is INT, you specify the range of partitions in  `START` and `END` and define the incremental value in `EVERY`. Example:
+  When the data type of the partitioning column is INT, you specify the range of partitions in  `START` and `END` and define the incremental value in `EVERY`. Example:
 
   > **NOTE**
   >
@@ -354,7 +354,7 @@ ADD PARTITIONS START ("2021-01-04") END ("2021-01-06") EVERY (INTERVAL 1 DAY);
 
 #### List partitioning (since v3.1)
 
-[List Partitioning](./list_partitioning.md) is suitable for accelerating queries and efficiently managing data based on emurated values. It is especially useful for scenarios where a partition needs to include data with different values in a partition column. For example, if you frequently query and manage data based on countries and cities, you can use this partitioning method and select the `city` column as the partition column. In this case, one partition can contain data of various cities belonging to one country.
+[List Partitioning](./list_partitioning.md) is suitable for accelerating queries and efficiently managing data based on emurated values. It is especially useful for scenarios where a partition needs to include data with different values in a partitioning column. For example, if you frequently query and manage data based on countries and cities, you can use this partitioning method and select the `city` column as the partitioning column. In this case, one partition can contain data of various cities belonging to one country.
 
 StarRocks stores data in the corresponding partitions based on the explicit mapping of the predefined list of values for each partition.
 
@@ -552,7 +552,7 @@ Buckets reflect how data files are organized in StarRocks.
 
   - Method 2: manually set the number of buckets
 
-    StarRocks 2.4 and later versions support using multiple threads to scan a tablet in parallel during a query, thereby reducing the dependency of scanning performance on the tablet count. We recommend that each tablet contain about 10 GB of raw data. If you intend to manually set the number of buckets, you can estimatethe the amount of data in each partition of a table and then decide the number of tablets. To enable parallel scanning on tablets, make sure the `enable_tablet_internal_parallel` parameter is set to `TRUE` globally for the entire system (`SET GLOBAL enable_tablet_internal_parallel = true;`).
+    StarRocks 2.4 and later versions support using multiple threads to scan a tablet in parallel during a query, thereby reducing the dependency of scanning performance on the tablet count. We recommend that each tablet contain about 10 GB of raw data. If you intend to manually set the number of buckets, you can estimate the amount of data in each partition of a table and then decide the number of tablets. To enable parallel scanning on tablets, make sure the `enable_tablet_internal_parallel` parameter is set to `TRUE` globally for the entire system (`SET GLOBAL enable_tablet_internal_parallel = true;`).
 
     ```SQL
     CREATE TABLE site_access (
