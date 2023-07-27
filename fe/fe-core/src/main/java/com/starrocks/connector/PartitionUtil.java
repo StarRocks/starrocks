@@ -111,11 +111,19 @@ public class PartitionUtil {
             if (((NullablePartitionKey) partitionKey).nullPartitionValue().equals(rawValue)) {
                 exprValue = NullLiteral.create(type);
             } else {
-                exprValue = LiteralExpr.create(rawValue, type);
+                exprValue = createLiteralExpr(rawValue, type, tableType);
             }
             partitionKey.pushColumn(exprValue, type.getPrimitiveType());
         }
         return partitionKey;
+    }
+
+    private static LiteralExpr createLiteralExpr(String rawValue, Type type, Table.TableType tableType) throws AnalysisException {
+        LiteralExpr exprValue = LiteralExpr.create(rawValue, type);
+        if (type.isDatetime() && tableType == Table.TableType.HIVE) {
+            ((DateLiteral) exprValue).setHiveFormat(true);
+        }
+        return exprValue;
     }
 
     public static List<String> toPartitionValues(String partitionName) {
