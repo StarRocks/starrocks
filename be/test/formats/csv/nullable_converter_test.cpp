@@ -52,13 +52,11 @@ TEST_F(NullableConverterTest, test_read_quoted_string) {
     EXPECT_TRUE(conv->read_quoted_string(col.get(), "1", Converter::Options()));
     EXPECT_TRUE(conv->read_quoted_string(col.get(), "-1", Converter::Options()));
     EXPECT_TRUE(conv->read_quoted_string(col.get(), "null", Converter::Options()));
-    EXPECT_TRUE(conv->read_quoted_string(col.get(), "\N", Converter::Options()));
 
     EXPECT_EQ(3, col->size());
     EXPECT_EQ(1, col->get(0).get_int32());
     EXPECT_EQ(-1, col->get(1).get_int32());
     EXPECT_TRUE(col->get(2).is_null());
-    EXPECT_TRUE(col->get(3).is_null());
 }
 
 // NOLINTNEXTLINE
@@ -113,6 +111,39 @@ TEST_F(NullableConverterTest, test_write_string) {
     ASSERT_TRUE(conv->write_quoted_string(&buff, *col, 1, Converter::Options()).ok());
     ASSERT_TRUE(buff.finalize().ok());
     ASSERT_EQ("\\N10null10", buff.as_string());
+}
+
+TEST_F(NullableConverterTest, test_read_array) {
+
+    auto type_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+    auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
+    type_array.children.push_back(type_int);
+    auto col = ColumnHelper::create_column(type_array, /*nullable*/ true);
+
+    auto conv = csv::get_converter(type_array, true);
+
+    EXPECT_TRUE(conv->read_quoted_string(col.get(), "[1]", Converter::Options()));
+    EXPECT_TRUE(conv->read_quoted_string(col.get(), "[1,2]", Converter::Options()));
+    EXPECT_TRUE(conv->read_quoted_string(col.get(), "[1,2,null]", Converter::Options()));
+    EXPECT_TRUE(conv->read_quoted_string(col.get(), "[1,2,\\N]", Converter::Options()));
+
+    EXPECT_EQ(4, col->size());
+    //[1]
+    EXPECT_EQ(1, col->get(0).get_array().at(0).get_int32());
+
+    //[1,2]
+    EXPECT_EQ(1, col->get(1).get_array().at(0).get_int32());
+    EXPECT_EQ(2, col->get(1).get_array().at(1).get_int32());
+
+    //[1,2,null]
+    EXPECT_EQ(1, col->get(2).get_array().at(0).get_int32());
+    EXPECT_EQ(2, col->get(2).get_array().at(1).get_int32());
+    EXPECT_TRUE(col->get(2).get_array().at(2).is_null());
+
+    //[1,2,\\N]
+    EXPECT_EQ(1, col->get(3).get_array().at(0).get_int32());
+    EXPECT_EQ(2, col->get(3).get_array().at(1).get_int32());
+    EXPECT_TRUE(col->get(3).get_array().at(2).is_null());
 }
 
 } // namespace starrocks::csv
