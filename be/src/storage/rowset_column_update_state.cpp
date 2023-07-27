@@ -73,6 +73,16 @@ void RowsetColumnUpdateState::_check_if_preload_column_mode_update_data(Rowset* 
     }
 }
 
+void RowsetColumnUpdateState::_release_upserts(uint32_t idx) {
+    if (idx >= _upserts.size()) {
+        return;
+    }
+    if (_upserts[idx] != nullptr) {
+        _memory_usage -= _upserts[idx]->memory_usage();
+        _upserts[idx].reset();
+    }
+}
+
 Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, uint32_t idx) {
     RowsetReleaseGuard guard(rowset->shared_from_this());
     if (_upserts.size() == 0) {
@@ -175,13 +185,9 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, uint32_t idx) {
 Status RowsetColumnUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
     auto span = Tracer::Instance().start_trace_txn_tablet("rowset_column_update_state_load", rowset->txn_id(),
                                                           tablet->tablet_id());
-
-    for (size_t i = 0; i < rowset->num_update_files(); i++) {
-        RETURN_IF_ERROR(_load_upserts(rowset, i));
-    }
-
-    for (size_t i = 0; i < rowset->num_update_files(); i++) {
-        RETURN_IF_ERROR(_prepare_partial_update_states(tablet, rowset, i, true));
+    if (rowset->num_update_files() > 0) {
+        RETURN_IF_ERROR(_load_upserts(rowset, 0));
+        RETURN_IF_ERROR(_prepare_partial_update_states(tablet, rowset, 0, true));
     }
 
     return Status::OK();
@@ -278,6 +284,7 @@ Status RowsetColumnUpdateState::_finalize_partial_update_state(Tablet* tablet, R
     }
     RETURN_IF_ERROR(_init_rowset_seg_id(tablet));
     for (uint32_t i = 0; i < rowset->num_update_files(); i++) {
+        RETURN_IF_ERROR(_load_upserts(rowset, i));
         // check and resolve conflict
         if (_partial_update_states.size() == 0 || !_partial_update_states[i].inited) {
             RETURN_IF_ERROR(_prepare_partial_update_states(tablet, rowset, i, false));
@@ -286,6 +293,7 @@ Status RowsetColumnUpdateState::_finalize_partial_update_state(Tablet* tablet, R
             RETURN_IF_ERROR(_check_and_resolve_conflict(tablet, rowset->rowset_meta()->get_rowset_seg_id(), i,
                                                         latest_applied_version, index));
         }
+        _release_upserts(i);
     }
 
     return Status::OK();
