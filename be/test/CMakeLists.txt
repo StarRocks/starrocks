@@ -21,7 +21,7 @@ set(EXEC_FILES
         ./common/config_test.cpp
         ./common/status_test.cpp
         ./common/tracer_test.cpp
-        ./common/s3_uri_test.cpp
+        ./common/uri_test.cpp
         ./fs/fs_broker_test.cpp
         ./fs/fs_posix_test.cpp
         ./fs/fs_memory_test.cpp
