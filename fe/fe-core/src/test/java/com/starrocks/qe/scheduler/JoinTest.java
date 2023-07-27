@@ -128,7 +128,7 @@ public class JoinTest extends SchedulerTestBase {
 
             scheduler.updateFragmentExecStatus(request);
         });
-        for (DefaultCoordinator.BackendExecState execution : scheduler.getBackendExecutions()) {
+        for (DefaultCoordinator.ExecutionFragmentInstance execution : scheduler.getBackendExecutions()) {
             Assert.assertFalse(execution.isFinished());
         }
         Assert.assertFalse(joinFinished.get());
@@ -199,7 +199,7 @@ public class JoinTest extends SchedulerTestBase {
                 scheduler.updateFragmentExecStatus(request);
             });
         }
-        for (DefaultCoordinator.BackendExecState execution : scheduler.getBackendExecutions()) {
+        for (DefaultCoordinator.ExecutionFragmentInstance execution : scheduler.getBackendExecutions()) {
             Assert.assertTrue(execution.isFinished());
         }
 
