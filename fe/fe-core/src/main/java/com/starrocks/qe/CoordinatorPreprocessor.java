@@ -340,6 +340,7 @@ public class CoordinatorPreprocessor {
         return bePortToBeWebServerPort;
     }
 
+<<<<<<< HEAD
     public ImmutableMap<Long, ComputeNode> getIdToBackend() {
         return idToBackend;
     }
@@ -370,6 +371,15 @@ public class CoordinatorPreprocessor {
 
     public Map<TNetworkAddress, Long> getAddressToBackendID() {
         return addressToBackendID;
+=======
+    public TNetworkAddress getAddress(long workerId) {
+        ComputeNode worker = workerProvider.getWorkerById(workerId);
+        return worker.getAddress();
+    }
+
+    public WorkerProvider getWorkerProvider() {
+        return workerProvider;
+>>>>>>> 65d705b4e4 ([BugFix] Runtime fiter should use Brpc port not thrift port (#28029))
     }
 
     public TWorkGroup getResourceGroup() {
@@ -1891,7 +1901,11 @@ public class CoordinatorPreprocessor {
                         scanRangeAssignment.get(address);
                 sb.append("{");
                 sb.append("id=").append(DebugUtil.printId(instanceExecParams.get(i).instanceId));
+<<<<<<< HEAD
                 sb.append(",host=").append(instanceExecParams.get(i).host);
+=======
+                sb.append(",host=").append(getAddress(instanceExecParam.getWorkerId()));
+>>>>>>> 65d705b4e4 ([BugFix] Runtime fiter should use Brpc port not thrift port (#28029))
                 if (scanRanges == null) {
                     sb.append("}");
                     continue;
@@ -1919,6 +1933,7 @@ public class CoordinatorPreprocessor {
             return sb.toString();
         }
     }
+<<<<<<< HEAD
 
     private class NormalBackendSelector implements BackendSelector {
         private final ScanNode scanNode;
@@ -2187,4 +2202,6 @@ public class CoordinatorPreprocessor {
         }
     }
 
+=======
+>>>>>>> 65d705b4e4 ([BugFix] Runtime fiter should use Brpc port not thrift port (#28029))
 }

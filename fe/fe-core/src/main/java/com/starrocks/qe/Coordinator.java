@@ -1265,7 +1265,11 @@ public class Coordinator {
                 for (final CoordinatorPreprocessor.FInstanceExecParam instance : params.instanceExecParams) {
                     TRuntimeFilterProberParams probeParam = new TRuntimeFilterProberParams();
                     probeParam.setFragment_instance_id(instance.instanceId);
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/qe/Coordinator.java
                     probeParam.setFragment_instance_address(SystemInfoService.toBrpcHost(instance.host));
+=======
+                    probeParam.setFragment_instance_address(coordinatorPreprocessor.getBrpcAddress(instance.getWorkerId()));
+>>>>>>> 65d705b4e4 ([BugFix] Runtime fiter should use Brpc port not thrift port (#28029)):fe/fe-core/src/main/java/com/starrocks/qe/DefaultCoordinator.java
                     probeParamList.add(probeParam);
                 }
                 if (coordinatorPreprocessor.isUsePipeline() && kv.getValue().isBroadcastJoin() &&
