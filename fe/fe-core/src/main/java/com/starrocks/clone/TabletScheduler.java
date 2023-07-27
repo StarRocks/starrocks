@@ -1676,6 +1676,16 @@ public class TabletScheduler extends FrontendDaemon {
         return collectTabletCtx(tabletCtxs);
     }
 
+    public List<List<String>> getAllTabletsInfo() {
+        List<List<String>> result = Lists.newArrayList();
+        allTabletIds.forEach(t -> {
+            List<String> r = Lists.newArrayList();
+            r.add(String.valueOf(t));
+            result.add(r);
+        });
+        return result;
+    }
+
     private List<List<String>> collectTabletCtx(List<TabletSchedCtx> tabletCtxs) {
         List<List<String>> result = Lists.newArrayList();
         tabletCtxs.stream().forEach(t -> {

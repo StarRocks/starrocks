@@ -1815,12 +1815,25 @@ public class OlapTable extends Table {
         for (Partition partition : idToPartition.values()) {
             long visibleVersion = partition.getVisibleVersion();
             short replicationNum = partitionInfo.getReplicationNum(partition.getId());
+<<<<<<< HEAD
             for (MaterializedIndex mIndex : partition.getMaterializedIndices(IndexExtState.ALL)) {
                 for (Tablet tablet : mIndex.getTablets()) {
                     LocalTablet localTablet = (LocalTablet) tablet;
                     if (tabletScheduler.containsTablet(tablet.getId())) {
                         return localTablet.getId();
                     }
+=======
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                long visibleVersion = physicalPartition.getVisibleVersion();
+                for (MaterializedIndex mIndex : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
+                    for (Tablet tablet : mIndex.getTablets()) {
+                        LocalTablet localTablet = (LocalTablet) tablet;
+                        if (tabletScheduler.containsTablet(tablet.getId())) {
+                            LOG.info("table {} is not stable because tablet {} is being scheduled. replicas: {}",
+                                    id, tablet.getId(), localTablet.getImmutableReplicas());
+                            return localTablet.getId();
+                        }
+>>>>>>> a12d1ea38 ([Enhancement] add show proc /cluster_balance/all_tablets (#28001))
 
                     Pair<TabletStatus, TabletSchedCtx.Priority> statusPair = localTablet.getHealthStatusWithPriority(
                             infoService, visibleVersion, replicationNum,
