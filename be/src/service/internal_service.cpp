@@ -792,12 +792,13 @@ void PInternalServiceImplBase<T>::_get_file_schema(google::protobuf::RpcControll
         return;
     }
 
+    RuntimeState state{};
+    RuntimeProfile profile{"dummy_profile", false};
+    ScannerCounter counter{};
     std::unique_ptr<FileScanner> p_scanner;
+
     auto tp = scan_range.ranges[0].format_type;
     {
-        RuntimeState state{};
-        RuntimeProfile profile{"dummy_profile", false};
-        ScannerCounter counter{};
         switch (tp) {
         case TFileFormatType::FORMAT_PARQUET:
             p_scanner = std::make_unique<ParquetScanner>(&state, &profile, scan_range, &counter, true);
