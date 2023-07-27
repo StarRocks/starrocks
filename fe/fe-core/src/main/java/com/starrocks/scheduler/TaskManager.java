@@ -446,8 +446,9 @@ public class TaskManager {
             initialDelay = 0;
         }
         // this operation should only run in master
+        ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), true, task.getProperties());
         ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
-                        executeTask(task.getName()), initialDelay,
+                        executeTask(task.getName(), option), initialDelay,
                 TimeUtils.convertTimeUnitValueToSecond(schedule.getPeriod(), schedule.getTimeUnit()),
                 TimeUnit.SECONDS);
         periodFutureMap.put(task.getId(), future);
