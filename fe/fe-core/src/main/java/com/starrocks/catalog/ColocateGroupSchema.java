@@ -99,19 +99,19 @@ public class ColocateGroupSchema implements Writable {
             // buckets num
             if (info.getBucketNum() != bucketsNum) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_COLOCATE_TABLE_MUST_HAS_SAME_BUCKET_NUM, bucketsNum,
-                        groupId.toString());
+                        groupId.toString(), info.toString());
             }
             // distribution col size
             if (info.getDistributionColumns().size() != distributionColTypes.size()) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_COLOCATE_TABLE_MUST_HAS_SAME_DISTRIBUTION_COLUMN_SIZE,
-                        distributionColTypes.size(), groupId.toString());
+                        distributionColTypes.size(), groupId.toString(), info.toString());
             }
             // distribution col type
             for (int i = 0; i < distributionColTypes.size(); i++) {
                 Type targetColType = distributionColTypes.get(i);
                 if (!targetColType.equals(info.getDistributionColumns().get(i).getType())) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_COLOCATE_TABLE_MUST_HAS_SAME_DISTRIBUTION_COLUMN_TYPE,
-                            groupId.toString(), info.getDistributionColumns().get(i).getName(), targetColType);
+                            groupId.toString(), info.getDistributionColumns().get(i).getName(), targetColType, info.toString());
                 }
             }
         }
@@ -122,7 +122,7 @@ public class ColocateGroupSchema implements Writable {
             if (repNum != replicationNum) {
                 ErrorReport
                         .reportDdlException(ErrorCode.ERR_COLOCATE_TABLE_MUST_HAS_SAME_REPLICATION_NUM,
-                                replicationNum, groupId.toString());
+                                replicationNum, groupId.toString(), partitionInfo.toString());
             }
         }
     }
@@ -130,7 +130,7 @@ public class ColocateGroupSchema implements Writable {
     public void checkReplicationNum(short repNum) throws DdlException {
         if (repNum != replicationNum) {
             ErrorReport.reportDdlException(ErrorCode.ERR_COLOCATE_TABLE_MUST_HAS_SAME_REPLICATION_NUM,
-                    replicationNum, groupId.toString());
+                    replicationNum, groupId.toString(), String.valueOf(repNum));
         }
     }
 
