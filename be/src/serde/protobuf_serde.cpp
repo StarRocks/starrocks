@@ -202,6 +202,15 @@ StatusOr<vectorized::Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor&
     return chunk;
 }
 
+static SlotId get_slot_id_by_index(const Chunk::SlotHashMap& slot_id_to_index, int target_index) {
+    for (const auto& [slot_id, index] : slot_id_to_index) {
+        if (index == target_index) {
+            return slot_id;
+        }
+    }
+    return -1;
+}
+
 StatusOr<vectorized::Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, int64_t* deserialized_bytes) {
     using ColumnHelper = vectorized::ColumnHelper;
     using Chunk = vectorized::Chunk;
@@ -234,11 +243,17 @@ StatusOr<vectorized::Chunk> ProtobufChunkDeserializer::deserialize(std::string_v
         }
     }
 
-    for (auto& col : columns) {
-        if (col->size() != rows) {
-            return Status::Corruption(fmt::format("mismatched row count: {} vs {}", col->size(), rows));
+    for (int i = 0; i < columns.size(); ++i) {
+        size_t col_num_rows = columns[i]->size();
+        if (col_num_rows != rows) {
+            SlotId slot_id = get_slot_id_by_index(_meta.slot_id_to_index, i);
+            return Status::Corruption(
+                    fmt::format("Internal error. Detail: deserialize chunk data failed. column slot id: {}, column row "
+                                "count: {}, expected row count: {}. There is probably a bug here.",
+                                slot_id, col_num_rows, rows));
         }
     }
+
     if (deserialized_bytes != nullptr) *deserialized_bytes = cur - reinterpret_cast<const uint8_t*>(buff.data());
     return Chunk(std::move(columns), _meta.slot_id_to_index, _meta.tuple_id_to_index);
 }
