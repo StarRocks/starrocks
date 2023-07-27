@@ -187,13 +187,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      # TODO
       - name: Update Image
         id: update-image
         run: |
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
-            echo "TBD..."
-            exit 1
             rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
             ./bin/run-pr-update-image.sh
           fi
