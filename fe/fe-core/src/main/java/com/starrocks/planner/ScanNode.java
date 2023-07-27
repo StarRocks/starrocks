@@ -88,6 +88,10 @@ public abstract class ScanNode extends PlanNode {
         return canUseMinMaxCountOpt;
     }
 
+    public String getTableName() {
+        return desc.getTable().getName();
+    }
+
     /**
      * cast expr to SlotDescriptor type
      */

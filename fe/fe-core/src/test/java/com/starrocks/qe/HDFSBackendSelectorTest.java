@@ -16,7 +16,14 @@ package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.common.util.ConsistentHashRing;
+import com.starrocks.common.util.HashRing;
 import com.starrocks.planner.HdfsScanNode;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.scheduler.DefaultWorkerProvider;
+import com.starrocks.sql.PlannerProfile;
+>>>>>>> 278478b09 ([Enhancement] Use consistent hash as hdfs backend selector default strategy (#27985))
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TNetworkAddress;
@@ -25,6 +32,8 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
@@ -41,6 +50,8 @@ public class HDFSBackendSelectorTest {
     private HdfsScanNode hdfsScanNode;
     @Mocked
     private HiveTable hiveTable;
+    @Mocked
+    private ConnectContext context;
     final int scanNodeId = 0;
     final int computeNodePort = 9030;
     final String hostFormat = "Host%02d";
@@ -96,12 +107,28 @@ public class HDFSBackendSelectorTest {
 
     @Test
     public void testHdfsScanNodeHashRing() throws Exception {
+        new MockUp<PlannerProfile>() {
+            @Mock
+            public void addCustomProperties(String name, String value) {
+            }
+        };
+        SessionVariable sessionVariable = new SessionVariable();
         new Expectations() {
             {
                 hdfsScanNode.getId();
                 result = scanNodeId;
+
+                hdfsScanNode.getTableName();
+                result = "hive_tbl";
+
                 hiveTable.getTableLocation();
                 result = "hdfs://dfs00/dataset/";
+
+                ConnectContext.get();
+                result = context;
+
+                context.getSessionVariable();
+                result = sessionVariable;
             }
         };
 
@@ -127,6 +154,52 @@ public class HDFSBackendSelectorTest {
             System.out.printf("%s -> %d bytes\n", entry.getKey(), entry.getValue());
             Assert.assertTrue(Math.abs(entry.getValue() - avg) < variance);
         }
+    }
+
+    @Test
+    public void testHashRingAlgorithm() {
+        SessionVariable sessionVariable = new SessionVariable();
+        new Expectations() {
+            {
+                ConnectContext.get();
+                result = context;
+
+                context.getSessionVariable();
+                result = sessionVariable;
+            }
+        };
+
+        int scanRangeNumber = 100;
+        int scanRangeSize = 10000;
+        int hostNumber = 3;
+        List<TScanRangeLocations> locations = createScanRanges(scanRangeNumber, scanRangeSize);
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        ImmutableMap<Long, ComputeNode> computeNodes = createComputeNodes(hostNumber);
+        DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
+                ImmutableMap.of(),
+                computeNodes,
+                ImmutableMap.of(),
+                computeNodes,
+                true
+        );
+        HDFSBackendSelector selector =
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider, false, false);
+        HashRing hashRing = selector.makeHashRing();
+        Assert.assertTrue(hashRing.policy().equals("ConsistentHash"));
+        ConsistentHashRing consistentHashRing = (ConsistentHashRing) hashRing;
+        Assert.assertTrue(consistentHashRing.getVirtualNumber() ==
+                HDFSBackendSelector.CONSISTENT_HASH_RING_VIRTUAL_NUMBER);
+
+        sessionVariable.setHdfsBackendSelectorHashAlgorithm("rendezvous");
+        hashRing = selector.makeHashRing();
+        Assert.assertTrue(hashRing.policy().equals("RendezvousHash"));
+
+        sessionVariable.setHdfsBackendSelectorHashAlgorithm("consistent");
+        sessionVariable.setConsistentHashVirtualNodeNum(64);
+        hashRing = selector.makeHashRing();
+        Assert.assertTrue(hashRing.policy().equals("ConsistentHash"));
+        consistentHashRing = (ConsistentHashRing) hashRing;
+        Assert.assertTrue(consistentHashRing.getVirtualNumber() == 64);
     }
 
     @Test
