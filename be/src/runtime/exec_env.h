@@ -249,9 +249,7 @@ public:
 
     // using template to simplify client cache management
     template <typename T>
-    ClientCache<T>* get_client_cache() {
-        return nullptr;
-    }
+    ClientCache<T>* get_client_cache();
 
     PriorityThreadPool* thread_pool() { return _thread_pool; }
     workgroup::ScanExecutor* scan_executor() { return _scan_executor; }
