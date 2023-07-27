@@ -40,7 +40,7 @@
     + [Primary Key table](./table_design/table_types/primary_key_table.md)
   + Data distribution
     + [Data distribution](./table_design/Data_distribution.md)
-    + [Expression partitioning (recommended)](./table_design/automatic_partitioning.md)
+    + [Expression partitioning (recommended)](./table_design/expression_partitioning.md)
     + [List partitioning](./table_design/list_partitioning.md)
     + [Dynamic partitioning](./table_design/dynamic_partitioning.md)
     + [Temporary partition](./table_design/Temporary_partition.md)
