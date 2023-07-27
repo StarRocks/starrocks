@@ -89,7 +89,7 @@ Bytes released to the OS take up virtual address space but no physical memory.
 
 StarRocks BE 中的内存分为以下几类。
 
-| 标识 | <div style="width:112px">Metric 名称 </div>  | <div style="width:168px">说明 </div> | <div style="width:112px">BE 相关配置 </div>|
+| <div style="width:84px">标识 </div> | <div style="width:112px">Metric 名称 </div>  | <div style="width:168px">说明 </div> | <div style="width:112px">BE 相关配置 </div>|
 | --- | --- | --- | --- |
 | process | starrocks_be_process_mem_bytes | BE 进程实际使用的内存（不包含预留的空闲内存）。| mem_limit |
 | query_pool | starrocks_be_query_mem_bytes | BE 查询层使用总内存。 | |
