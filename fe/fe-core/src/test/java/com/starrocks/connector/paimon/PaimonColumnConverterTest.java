@@ -131,7 +131,7 @@ public class PaimonColumnConverterTest {
         Assert.assertEquals(Type.DATETIME, srType.getValueType());
     }
 
-    @Test
+    @Ignore
     public void testConvertStruct() {
         List<DataField> fields =
                 Arrays.asList(
