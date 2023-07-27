@@ -186,7 +186,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             tables.put(identifier, table);
             return table;
 
-        } catch (StarRocksConnectorException e) {
+        } catch (StarRocksConnectorException | NoSuchTableException e) {
             LOG.error("Failed to get iceberg table {}", identifier, e);
             return null;
         }
