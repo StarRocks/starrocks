@@ -55,7 +55,6 @@ import com.starrocks.sql.optimizer.rule.transformation.SeparateProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.CboTablePruneRule;
-import com.starrocks.sql.optimizer.rule.transformation.pruner.PrimaryKeyUpdateTableRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.RboTablePruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.UniquenessBasedTablePruneRule;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
@@ -268,8 +267,13 @@ public class Optimizer {
             tree = new ReorderJoinRule().rewrite(tree, context);
             tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
             deriveLogicalProperty(tree);
-            tree = new PrimaryKeyUpdateTableRule().rewrite(tree, rootTaskContext);
-            deriveLogicalProperty(tree);
+            // TODO(by satanson): bucket shuffle join interpolation in PK table's update query can adjust layout
+            //  of the data ingested by OlapTableSink and eliminate race introduced by multiple concurrent write
+            //  operations on the same tablets, pruning this bucket shuffle join make update statement performance
+            //  regression, so we can turn on this rule after we put an bucket-shuffle exchange in front of
+            //  OlapTableSink in future, at present we turn off this rule.
+            // tree = new PrimaryKeyUpdateTableRule().rewrite(tree, rootTaskContext);
+            // deriveLogicalProperty(tree);
             tree = new RboTablePruneRule().rewrite(tree, rootTaskContext);
             ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
             rootTaskContext.setRequiredColumns(requiredColumns.clone());
