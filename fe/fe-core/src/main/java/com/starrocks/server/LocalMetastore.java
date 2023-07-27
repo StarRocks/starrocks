@@ -4683,27 +4683,49 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
+    // For code reuse
+    public static int getDatabaseSavedJsonNum(Database database) {
+        return 2 + database.getTableNumber() * getTableSavedJsonNum();
+    }
+
+    // For code reuse
+    public static void saveDatabase(SRMetaBlockWriter writer, Database database)
+            throws IOException, SRMetaBlockException {
+        writer.writeJson(database);
+        writer.writeJson(database.getTables().size());
+        List<Table> tables = database.getTables();
+        for (Table table : tables) {
+            saveTable(writer, table);
+        }
+    }
+
+    // For code reuse
+    public static int getTableSavedJsonNum() {
+        return 1;
+    }
+
+    // For code reuse
+    public static void saveTable(SRMetaBlockWriter writer, Table table)
+            throws IOException, SRMetaBlockException {
+        writer.writeJson(table);
+    }
+
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
         // Don't write system db meta
         Map<Long, Database> idToDbNormal =
                 idToDb.entrySet().stream().filter(entry -> entry.getKey() > NEXT_ID_INIT_VALUE)
                         .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-        int totalTableNum = 0;
+        int totalDbJsonNum = 0;
         for (Database database : idToDbNormal.values()) {
-            totalTableNum += database.getTableNumber();
+            totalDbJsonNum += getDatabaseSavedJsonNum(database);
         }
-        int cnt = 1 + idToDbNormal.size() + idToDbNormal.size() /* record database table size */ + totalTableNum + 1;
+        int cnt = 1 + totalDbJsonNum + 1;
 
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.LOCAL_META_STORE, cnt);
 
         writer.writeJson(idToDbNormal.size());
         for (Database database : idToDbNormal.values()) {
-            writer.writeJson(database);
-            writer.writeJson(database.getTables().size());
-            List<Table> tables = database.getTables();
-            for (Table table : tables) {
-                writer.writeJson(table);
-            }
+            saveDatabase(writer, database);
         }
 
         AutoIncrementInfo info = new AutoIncrementInfo(tableIdToIncrementId);
@@ -4712,20 +4734,34 @@ public class LocalMetastore implements ConnectorMetadata {
         writer.close();
     }
 
+    // For code reuse
+    public static Database loadDatabase(SRMetaBlockReader reader)
+            throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        Database database = reader.readJson(Database.class);
+        int tableSize = reader.readInt();
+        for (int j = 0; j < tableSize; ++j) {
+            Table table = loadTable(reader);
+            database.registerTableUnlocked(table);
+        }
+        return database;
+    }
+
+    // For code reuse
+    public static Table loadTable(SRMetaBlockReader reader)
+            throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        Table table = reader.readJson(Table.class);
+        table.onReload();
+        return table;
+    }
+
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         int dbSize = reader.readJson(int.class);
         for (int i = 0; i < dbSize; ++i) {
-            Database db = reader.readJson(Database.class);
-            int tableSize = reader.readInt();
-            for (int j = 0; j < tableSize; ++j) {
-                Table table = reader.readJson(Table.class);
-                db.registerTableUnlocked(table);
-            }
+            Database db = loadDatabase(reader);
 
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-            db.getTables().forEach(Table::onReload);
         }
 
         // put built-in database into local metastore
