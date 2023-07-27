@@ -389,6 +389,33 @@ public class FunctionSet {
     public static final String ARRAY_MAP = "array_map";
     public static final String TRANSFORM = "transform";
 
+<<<<<<< HEAD
+=======
+    // map functions:
+    public static final String MAP = "map";
+    public static final String MAP_APPLY = "map_apply";
+    public static final String MAP_FILTER = "map_filter";
+
+    public static final String DISTINCT_MAP_KEYS = "distinct_map_keys";
+    public static final String MAP_VALUES = "map_values";
+
+    public static final String MAP_CONCAT= "map_concat";
+
+    public static final String MAP_FROM_ARRAYS = "map_from_arrays";
+    public static final String MAP_KEYS = "map_keys";
+    public static final String MAP_SIZE = "map_size";
+    public static final String TRANSFORM_VALUES = "transform_values";
+    public static final String TRANSFORM_KEYS = "transform_keys";
+
+    public static final String ELEMENT_AT = "element_at";
+
+    public static final String CARDINALITY = "cardinality";
+    // Struct functions:
+    public static final String ROW = "row";
+    public static final String STRUCT = "struct";
+    public static final String NAMED_STRUCT = "named_struct";
+
+>>>>>>> 993f401f15 ([BugFix] fix deduce array_map error (#27963))
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(
             new FunctionName(JSON_QUERY), new Type[]{Type.JSON, Type.VARCHAR}, Type.JSON, false);
