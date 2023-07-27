@@ -1217,7 +1217,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                         return Sets.newHashSet();
                     case CHECKED: {
                         if (!supportPartialPartitionQueryRewriteForExternalTable(table)) {
-                            continue;
+                            return Sets.newHashSet();
                         }
                         break;
                     }
