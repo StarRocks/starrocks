@@ -153,8 +153,8 @@ public class PolymorphicFunctionAnalyzer {
         }
     }
 
-    // map_apply(lambda of function, map) -> return type of lambda
-    private static class MapApplyDeduce implements java.util.function.Function<Type[], Type> {
+    // map_apply/array_map(lambda of function, map/array) -> return type of lambda
+    private static class LambdaDeduce implements java.util.function.Function<Type[], Type> {
         @Override
         public Type apply(Type[] types) {
             // fake return type, the real return type is from the right part lambda expression of lambda functions.
@@ -162,6 +162,26 @@ public class PolymorphicFunctionAnalyzer {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private static class DistinctMapKeysDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            return types[0];
+        }
+    }
+
+    private static class IfDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            Type commonType = TypeManager.getCommonSuperType(types[1], types[2]);
+            types[1] = commonType;
+            types[2] = commonType;
+            return commonType;
+        }
+    }
+
+>>>>>>> 993f401f15 ([BugFix] fix deduce array_map error (#27963))
     private static class RowDeduce implements java.util.function.Function<Type[], Type> {
         @Override
         public Type apply(Type[] types) {
@@ -169,13 +189,40 @@ public class PolymorphicFunctionAnalyzer {
         }
     }
 
+    private static class CommonDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            Type commonType = TypeManager.getCommonSuperType(Arrays.asList(types));
+            Arrays.fill(types, commonType);
+            return commonType;
+        }
+    }
+
     private static final ImmutableMap<String, java.util.function.Function<Type[], Type>> DEDUCE_RETURN_TYPE_FUNCTIONS
             = ImmutableMap.<String, java.util.function.Function<Type[], Type>>builder()
+<<<<<<< HEAD
             .put("map_keys", new MapKeysDeduce())
             .put("map_values", new MapValuesDeduce())
             .put("map_from_arrays", new MapFromArraysDeduce())
             .put("row", new RowDeduce())
             .put("map_apply", new MapApplyDeduce())
+=======
+            .put(FunctionSet.MAP_KEYS, new MapKeysDeduce())
+            .put(FunctionSet.MAP_VALUES, new MapValuesDeduce())
+            .put(FunctionSet.MAP_FROM_ARRAYS, new MapFromArraysDeduce())
+            .put(FunctionSet.ROW, new RowDeduce())
+            .put(FunctionSet.MAP_APPLY, new LambdaDeduce())
+            .put(FunctionSet.ARRAY_MAP, new LambdaDeduce())
+            .put(FunctionSet.MAP_FILTER, new MapFilterDeduce())
+            .put(FunctionSet.DISTINCT_MAP_KEYS, new DistinctMapKeysDeduce())
+            .put(FunctionSet.MAP_CONCAT, new CommonDeduce())
+            .put(FunctionSet.IF, new IfDeduce())
+            .put(FunctionSet.IFNULL, new CommonDeduce())
+            .put(FunctionSet.NULLIF, new CommonDeduce())
+            .put(FunctionSet.COALESCE, new CommonDeduce())
+            // it's mock, need handle it in expressionAnalyzer
+            .put(FunctionSet.NAMED_STRUCT, new RowDeduce())
+>>>>>>> 993f401f15 ([BugFix] fix deduce array_map error (#27963))
             .build();
 
     private static Function resolveByDeducingReturnType(Function fn, Type[] inputArgTypes) {
@@ -249,7 +296,11 @@ public class PolymorphicFunctionAnalyzer {
                 return resolvedFunction;
             }
         }
+<<<<<<< HEAD
         // TODO: refactor resolve arg types, some from L254, others from L262.
+=======
+        // deduce by special function
+>>>>>>> 993f401f15 ([BugFix] fix deduce array_map error (#27963))
         resolvedFunction = resolveByDeducingReturnType(fn, paramTypes);
         if (resolvedFunction != null) {
             return resolvedFunction;
