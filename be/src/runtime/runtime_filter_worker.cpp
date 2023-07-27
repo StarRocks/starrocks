@@ -45,6 +45,7 @@ static void send_rpc_runtime_filter(doris::PBackendService_Stub* stub, RuntimeFi
                                     int timeout_ms, const PTransmitRuntimeFilterParams& request) {
     if (rpc_closure->seq != 0) {
         brpc::Join(rpc_closure->cntl.call_id());
+        WARN_IF_RPC_ERROR(rpc_closure->cntl);
     }
     rpc_closure->ref();
     rpc_closure->cntl.Reset();
@@ -704,6 +705,7 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_relay(PTransmitRunti
             {request.query_id(), request.filter_id(), first_dest.address.hostname, "DELIVER_BROADCAST_RF_RELAY"});
     send_rpc_runtime_filter(stub, rpc_closure, timeout_ms, request);
     brpc::Join(rpc_closure->cntl.call_id());
+    WARN_IF_RPC_ERROR(rpc_closure->cntl);
     rpc_closure->unref();
 }
 
@@ -740,6 +742,7 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_passthrough(
 
         for (auto& rpc_closure : rpc_closures) {
             brpc::Join(rpc_closure->cntl.call_id());
+            WARN_IF_RPC_ERROR(rpc_closure->cntl);
             rpc_closure->unref();
             delete rpc_closure;
         }
