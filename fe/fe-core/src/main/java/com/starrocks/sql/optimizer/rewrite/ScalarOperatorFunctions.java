@@ -57,7 +57,7 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
-import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.connector.hive.Partition;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
@@ -1129,8 +1129,10 @@ public class ScalarOperatorFunctions {
         Map<String, PartitionInfo> info = PartitionUtil.getPartitionNameWithPartitionInfo(table);
         JsonObject obj = new JsonObject();
         for (Map.Entry<String, PartitionInfo> entry : MapUtils.emptyIfNull(info).entrySet()) {
-            String value = GsonUtils.GSON.toJson(entry.getValue());
-            obj.add(entry.getKey(), new JsonPrimitive(value));
+            if (entry.getValue() instanceof Partition) {
+                Partition part = (Partition) entry.getValue();
+                obj.add(entry.getKey(), part.toJson());
+            }
         }
         String json = obj.toString();
         return ConstantOperator.createVarchar(json);
