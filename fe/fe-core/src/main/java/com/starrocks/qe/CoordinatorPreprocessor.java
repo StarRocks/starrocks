@@ -245,6 +245,11 @@ public class CoordinatorPreprocessor {
         return workerProvider.getWorkerById(workerId).getBrpcAddress();
     }
 
+    public TNetworkAddress getAddress(long workerId) {
+        ComputeNode worker = workerProvider.getWorkerById(workerId);
+        return worker.getAddress();
+    }
+
     public WorkerProvider getWorkerProvider() {
         return workerProvider;
     }
@@ -1623,7 +1628,7 @@ public class CoordinatorPreprocessor {
                         scanRangeAssignment.get(instanceExecParam.getWorkerId());
                 sb.append("{");
                 sb.append("id=").append(DebugUtil.printId(instanceExecParams.get(i).instanceId));
-                sb.append(",host=").append(getAddressByWorkerId(instanceExecParam.getWorkerId()));
+                sb.append(",host=").append(getAddress(instanceExecParam.getWorkerId()));
                 if (scanRanges == null) {
                     sb.append("}");
                     continue;
@@ -1650,10 +1655,5 @@ public class CoordinatorPreprocessor {
             appendTo(sb);
             return sb.toString();
         }
-    }
-
-    public TNetworkAddress getAddressByWorkerId(long workerId) {
-        ComputeNode worker = workerProvider.getWorkerById(workerId);
-        return worker.getAddress();
     }
 }
