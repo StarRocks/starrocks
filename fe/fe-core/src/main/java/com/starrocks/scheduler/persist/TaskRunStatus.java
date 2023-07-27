@@ -21,6 +21,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
+import org.apache.commons.collections.MapUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -257,6 +258,13 @@ public class TaskRunStatus implements Writable {
 
     public Map<String, String> getProperties() {
         return properties;
+    }
+
+    public String getPropertiesJson() {
+        if (MapUtils.isEmpty(properties)) {
+            return null;
+        }
+        return GsonUtils.GSON.toJson(properties);
     }
 
     public void setProperties(Map<String, String> properties) {
