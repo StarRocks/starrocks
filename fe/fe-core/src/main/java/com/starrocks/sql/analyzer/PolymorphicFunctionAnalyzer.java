@@ -16,7 +16,19 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.*;
+import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.catalog.AnyArrayType;
+import com.starrocks.catalog.AnyElementType;
+import com.starrocks.catalog.AnyMapType;
+import com.starrocks.catalog.AnyStructType;
+import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.MapType;
+import com.starrocks.catalog.ScalarFunction;
+import com.starrocks.catalog.StructType;
+import com.starrocks.catalog.TableFunction;
+import com.starrocks.catalog.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
