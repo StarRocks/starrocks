@@ -315,7 +315,7 @@ public class AlterJobMgr {
                     if (materializedView.isActive()) {
                         return;
                     }
-                    processChangeMaterializedViewStatus(materializedView, status);
+                    processChangeMaterializedViewStatus(materializedView, status, false);
                     GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .refreshMaterializedView(dbName, materializedView.getName(), true, null,
                                     Constants.TaskRunPriority.NORMAL.value(), true, false);
@@ -326,7 +326,7 @@ public class AlterJobMgr {
                     LOG.warn("Setting the materialized view {}({}) to inactive because " +
                                     "user alter materialized view status to inactive",
                             materializedView.getName(), materializedView.getId());
-                    processChangeMaterializedViewStatus(materializedView, status);
+                    processChangeMaterializedViewStatus(materializedView, status, false);
                 } else {
                     throw new DdlException("Unsupported modification materialized view status:" + status);
                 }
@@ -344,7 +344,7 @@ public class AlterJobMgr {
         }
     }
 
-    private void processChangeMaterializedViewStatus(MaterializedView materializedView, String status) {
+    private void processChangeMaterializedViewStatus(MaterializedView materializedView, String status, boolean isReplay) {
 
         if (AlterMaterializedViewStmt.ACTIVE.equalsIgnoreCase(status)) {
             String viewDefineSql = materializedView.getViewDefineSql();
@@ -364,7 +364,7 @@ public class AlterJobMgr {
             }
 
             Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllConnectorTableAndView(queryStatement);
-            List<BaseTableInfo> baseTableInfos = MaterializedViewAnalyzer.getBaseTableInfos(tableNameTableMap);
+            List<BaseTableInfo> baseTableInfos = MaterializedViewAnalyzer.getBaseTableInfos(tableNameTableMap, !isReplay);
             materializedView.setBaseTableInfos(baseTableInfos);
             materializedView.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
             GlobalStateMgr.getCurrentState().updateBaseTableRelatedMv(materializedView.getDbId(),
@@ -646,7 +646,7 @@ public class AlterJobMgr {
         db.writeLock();
         try {
             MaterializedView mv = (MaterializedView) db.getTable(tableId);
-            processChangeMaterializedViewStatus(mv, log.getStatus());
+            processChangeMaterializedViewStatus(mv, log.getStatus(), true);
         } finally {
             db.writeUnlock();
         }
