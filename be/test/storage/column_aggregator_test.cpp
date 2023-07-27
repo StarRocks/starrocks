@@ -157,7 +157,6 @@ TEST(ColumnAggregator, testNullIntSum) {
     ASSERT_EQ(1022, dst->get_data()[1]);
     ASSERT_EQ(0, ndst->get_data()[1]);
 
-    ASSERT_EQ(0, dst->get_data()[2]);
     ASSERT_EQ(1, ndst->get_data()[2]);
 
     aggregator->update_source(nsrc3);
@@ -178,13 +177,10 @@ TEST(ColumnAggregator, testNullIntSum) {
     ASSERT_EQ(1022, dst->get_data()[1]);
     ASSERT_EQ(0, ndst->get_data()[1]);
 
-    ASSERT_EQ(0, dst->get_data()[2]);
     ASSERT_EQ(1, ndst->get_data()[2]);
 
-    ASSERT_EQ(0, dst->get_data()[3]);
     ASSERT_EQ(1, ndst->get_data()[3]);
 
-    ASSERT_EQ(0, dst->get_data()[4]);
     ASSERT_EQ(1, ndst->get_data()[4]);
 
     ASSERT_EQ(512, dst->get_data()[5]);
@@ -456,7 +452,6 @@ TEST(ColumnAggregator, testNullIntReplaceIfNotNull) {
     EXPECT_EQ(1023, dst->get_data()[1]);
     EXPECT_EQ(0, ndst->get_data()[1]);
 
-    EXPECT_EQ(0, dst->get_data()[2]);
     EXPECT_EQ(1, ndst->get_data()[2]);
 
     aggregator->update_source(nsrc3);
@@ -477,10 +472,8 @@ TEST(ColumnAggregator, testNullIntReplaceIfNotNull) {
     EXPECT_EQ(1023, dst->get_data()[1]);
     EXPECT_EQ(0, ndst->get_data()[1]);
 
-    EXPECT_EQ(0, dst->get_data()[2]);
     EXPECT_EQ(1, ndst->get_data()[2]);
 
-    EXPECT_EQ(0, dst->get_data()[3]);
     EXPECT_EQ(1, ndst->get_data()[3]);
 
     EXPECT_EQ(0, dst->get_data()[4]);

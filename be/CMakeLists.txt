@@ -166,6 +166,14 @@ endif()
 include_directories(${Boost_INCLUDE_DIRS})
 message(STATUS ${Boost_LIBRARIES})
 
+add_subdirectory(${SRC_DIR}/thirdparty/libdeflate)
+include_directories(libdeflate)
+set(libdeflate_DIR ${BUILD_DIR}/src/thirdparty/libdeflate)
+message(STATUS "Using libdeflate Dir: ${libdeflate_DIR}")
+if(NOT TARGET libdeflate::libdeflate_static)
+    find_package(libdeflate CONFIG REQUIRED)
+endif()
+
 set(GPERFTOOLS_HOME "${THIRDPARTY_DIR}/gperftools")
 
 # Set all libraries
@@ -790,6 +798,7 @@ set(STARROCKS_DEPENDENCIES
     avro
     serdes
     fiu
+    libdeflate::libdeflate_static
     ${WL_END_GROUP}
 )
 
