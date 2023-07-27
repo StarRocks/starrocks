@@ -20,6 +20,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.connector.ColumnTypeConverter;
 import org.apache.paimon.types.ArrayType;
 import org.apache.paimon.types.BigIntType;
+import org.apache.paimon.types.BinaryType;
 import org.apache.paimon.types.BooleanType;
 import org.apache.paimon.types.CharType;
 import org.apache.paimon.types.DataField;
@@ -134,7 +135,7 @@ public class PaimonColumnConverterTest {
     public void testConvertStruct() {
         List<DataField> fields =
                 Arrays.asList(
-                        new DataField(0, "f0", new TinyIntType()),
+                        new DataField(0, "f0", new BinaryType()),
                         new DataField(1, "f1", new BigIntType()),
                         new DataField(2, "f2", new FloatType()));
         RowType paimonType = new RowType(fields);
@@ -142,7 +143,7 @@ public class PaimonColumnConverterTest {
         Assert.assertTrue(result instanceof StructType);
         StructType srType = (StructType) result;
         Assert.assertEquals(3, srType.getFields().size());
-        Assert.assertEquals(Type.TINYINT, srType.getField("f0").getType());
+        Assert.assertEquals(Type.VARBINARY, srType.getField("f0").getType());
         Assert.assertEquals(Type.BIGINT, srType.getField("f1").getType());
         Assert.assertEquals(Type.FLOAT, srType.getField("f2").getType());
     }

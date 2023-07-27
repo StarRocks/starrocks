@@ -392,7 +392,7 @@ Status JniScanner::_fill_column(FillColumnArgs* pargs) {
         RETURN_IF_ERROR((_append_string_data<TYPE_VARCHAR>(args)));
     } else if (column_type == LogicalType::TYPE_CHAR) {
         RETURN_IF_ERROR((_append_string_data<TYPE_CHAR>(args)));
-    } else if (column_type == LogicalType::TYPE_BINARY) {
+    } else if (column_type == LogicalType::TYPE_VARBINARY) {
         RETURN_IF_ERROR((_append_string_data<TYPE_VARBINARY>(args)));
     } else if (column_type == LogicalType::TYPE_DATE) {
         RETURN_IF_ERROR((_append_date_data(args)));
