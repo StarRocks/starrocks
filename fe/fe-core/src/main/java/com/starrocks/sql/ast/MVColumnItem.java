@@ -87,9 +87,10 @@ public class MVColumnItem {
         this.defineExpr = defineExpr;
     }
 
-    public MVColumnItem(String name, Type type, Expr defineExpr, List<String> baseColumnNames) {
+    public MVColumnItem(String name, Type type, boolean isAllowNull, Expr defineExpr, List<String> baseColumnNames) {
         this.name = name;
         this.type = type;
+        this.isAllowNull = isAllowNull;
         this.defineExpr = defineExpr;
         this.baseColumnNames = baseColumnNames;
     }

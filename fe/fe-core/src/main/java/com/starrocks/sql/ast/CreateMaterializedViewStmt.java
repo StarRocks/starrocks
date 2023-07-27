@@ -131,6 +131,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
      * This order of mvColumnItemList is meaningful.
      */
     private List<MVColumnItem> mvColumnItemList = Lists.newArrayList();
+    MVColumnItem whereClauseItem;
     private String baseIndexName;
     private String dbName;
     private KeysType mvKeysType = KeysType.DUP_KEYS;
@@ -413,7 +414,8 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                     columnName = Strings.isNullOrEmpty(alias) ? MVUtils.getMVColumnName(selectListItemExpr.toSql(),
                             baseColumnNames) : MVUtils.getMVColumnName(alias);
                 }
-                mvColumnItem = new MVColumnItem(columnName, type, selectListItemExpr, baseColumnNames);
+                mvColumnItem = new MVColumnItem(columnName, type, selectListItemExpr.isNullable(),
+                        selectListItemExpr, baseColumnNames);
                 if (meetAggregate) {
                     throw new SemanticException("Any single column should be before agg column. " +
                             "Column %s at wrong location", columnName);
