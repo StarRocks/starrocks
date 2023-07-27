@@ -20,7 +20,7 @@
 
 namespace starrocks {
 
-PARALLEL_TEST(S3URITest, virtual_host_url) {
+PARALLEL_TEST(URITest, virtual_host_url) {
     S3URI uri;
     ASSERT_TRUE(uri.parse("https://mybucket.s3.us-west-2.amazonaws.com/puppy.png"));
     EXPECT_EQ("https", uri.scheme());
@@ -30,7 +30,7 @@ PARALLEL_TEST(S3URITest, virtual_host_url) {
     EXPECT_EQ("s3.us-west-2.amazonaws.com", uri.endpoint());
 }
 
-PARALLEL_TEST(S3URITest, path_style_url) {
+PARALLEL_TEST(URITest, path_style_url) {
     S3URI uri;
     ASSERT_TRUE(uri.parse("https://s3.us-west-2.amazonaws.com/mybucket/puppy.jpg"));
     EXPECT_EQ("https", uri.scheme());
@@ -40,7 +40,7 @@ PARALLEL_TEST(S3URITest, path_style_url) {
     EXPECT_EQ("s3.us-west-2.amazonaws.com", uri.endpoint());
 }
 
-PARALLEL_TEST(S3URITest, s3_scheme) {
+PARALLEL_TEST(URITest, s3_scheme) {
     {
         S3URI uri;
         ASSERT_TRUE(uri.parse("s3://mybucket/puppy.jpg"));
@@ -79,7 +79,7 @@ PARALLEL_TEST(S3URITest, s3_scheme) {
     }
 }
 
-PARALLEL_TEST(S3URITest, virtual_host_non_s3_url) {
+PARALLEL_TEST(URITest, virtual_host_non_s3_url) {
     S3URI uri;
     ASSERT_TRUE(uri.parse("https://examplebucket.oss-cn-hangzhou.aliyuncs.com/exampledir/example.txt"));
     EXPECT_EQ("https", uri.scheme());
@@ -89,7 +89,7 @@ PARALLEL_TEST(S3URITest, virtual_host_non_s3_url) {
     EXPECT_EQ("oss-cn-hangzhou.aliyuncs.com", uri.endpoint());
 }
 
-PARALLEL_TEST(S3URITest, with_query_and_fragment) {
+PARALLEL_TEST(URITest, with_query_and_fragment) {
     S3URI uri;
     ASSERT_TRUE(uri.parse("https://examplebucket.oss-cn-hangzhou.aliyuncs.com/exampledir/example.txt?a=b#xyz"));
     EXPECT_EQ("https", uri.scheme());
@@ -99,17 +99,17 @@ PARALLEL_TEST(S3URITest, with_query_and_fragment) {
     EXPECT_EQ("oss-cn-hangzhou.aliyuncs.com", uri.endpoint());
 }
 
-PARALLEL_TEST(S3URITest, empty) {
+PARALLEL_TEST(URITest, empty) {
     S3URI uri;
     ASSERT_FALSE(uri.parse(""));
 }
 
-PARALLEL_TEST(S3URITest, missing_scheme) {
+PARALLEL_TEST(URITest, missing_scheme) {
     S3URI uri;
     ASSERT_FALSE(uri.parse("/bucket/puppy.jpg"));
 }
 
-PARALLEL_TEST(S3URITest, oss_bucket) {
+PARALLEL_TEST(URITest, oss_bucket) {
     S3URI uri;
     ASSERT_TRUE(uri.parse("oss://sr-test/dataset/smith/foo.parquet"));
     EXPECT_EQ("oss", uri.scheme());
@@ -117,6 +117,27 @@ PARALLEL_TEST(S3URITest, oss_bucket) {
     EXPECT_EQ("sr-test", uri.bucket());
     EXPECT_EQ("dataset/smith/foo.parquet", uri.key());
     EXPECT_EQ("", uri.endpoint());
+}
+
+TEST(URITest, s3_complex_path) {
+    {
+        S3URI uri;
+        ASSERT_TRUE(uri.parse("s3://smith-us-west-2/134f/hello/event_date=2023-07-24\\ 23%3A00%3A00/foo.parquet"));
+        EXPECT_EQ("s3", uri.scheme());
+        EXPECT_EQ("", uri.region());
+        EXPECT_EQ("smith-us-west-2", uri.bucket());
+        EXPECT_EQ("134f/hello/event_date=2023-07-24\\ 23%3A00%3A00/foo.parquet", uri.key());
+        EXPECT_EQ("", uri.endpoint());
+    }
+    {
+        S3URI uri;
+        ASSERT_TRUE(uri.parse("s3://smith-us-west-2/134f/hello/event_date=2023-07-24\\%2023%3A00%3A00/foo.parquet"));
+        EXPECT_EQ("s3", uri.scheme());
+        EXPECT_EQ("", uri.region());
+        EXPECT_EQ("smith-us-west-2", uri.bucket());
+        EXPECT_EQ("134f/hello/event_date=2023-07-24\\%2023%3A00%3A00/foo.parquet", uri.key());
+        EXPECT_EQ("", uri.endpoint());
+    }
 }
 
 } // namespace starrocks
