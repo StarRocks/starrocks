@@ -1164,8 +1164,7 @@ public class DefaultCoordinator extends Coordinator {
                 for (final CoordinatorPreprocessor.FInstanceExecParam instance : params.instanceExecParams) {
                     TRuntimeFilterProberParams probeParam = new TRuntimeFilterProberParams();
                     probeParam.setFragment_instance_id(instance.instanceId);
-                    probeParam.setFragment_instance_address(
-                            coordinatorPreprocessor.getAddressByWorkerId(instance.getWorkerId()));
+                    probeParam.setFragment_instance_address(coordinatorPreprocessor.getBrpcAddress(instance.getWorkerId()));
                     probeParamList.add(probeParam);
                 }
                 if (coordinatorPreprocessor.isUsePipeline() && kv.getValue().isBroadcastJoin() &&
