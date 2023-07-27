@@ -201,6 +201,15 @@ public class PolymorphicFunctionAnalyzer {
         }
     }
 
+    private static class CommonDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            Type commonType = TypeManager.getCommonSuperType(Arrays.asList(types));
+            Arrays.fill(types, commonType);
+            return commonType;
+        }
+    }
+
     private static final ImmutableMap<String, java.util.function.Function<Type[], Type>> DEDUCE_RETURN_TYPE_FUNCTIONS
             = ImmutableMap.<String, java.util.function.Function<Type[], Type>>builder()
             .put(FunctionSet.MAP_KEYS, new MapKeysDeduce())
@@ -211,7 +220,11 @@ public class PolymorphicFunctionAnalyzer {
             .put(FunctionSet.ARRAY_MAP, new LambdaDeduce())
             .put(FunctionSet.MAP_FILTER, new MapFilterDeduce())
             .put(FunctionSet.DISTINCT_MAP_KEYS, new DistinctMapKeysDeduce())
+            .put(FunctionSet.MAP_CONCAT, new CommonDeduce())
             .put(FunctionSet.IF, new IfDeduce())
+            .put(FunctionSet.IFNULL, new CommonDeduce())
+            .put(FunctionSet.NULLIF, new CommonDeduce())
+            .put(FunctionSet.COALESCE, new CommonDeduce())
             // it's mock, need handle it in expressionAnalyzer
             .put(FunctionSet.NAMED_STRUCT, new RowDeduce())
             .build();
