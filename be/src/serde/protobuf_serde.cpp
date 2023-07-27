@@ -217,7 +217,42 @@ StatusOr<vectorized::Chunk> ProtobufChunkDeserializer::deserialize(std::string_v
     uint32_t rows = decode_fixed32_le(cur);
     cur += 4;
 
+<<<<<<< HEAD
     std::vector<vectorized::ColumnPtr> columns;
+=======
+    auto chunk = ChunkHelper::new_chunk(schema, rows);
+    for (auto& column : chunk->columns()) {
+        cur = ColumnArraySerde::deserialize(cur, column.get());
+    }
+    return Chunk(std::move(*chunk));
+}
+
+static SlotId get_slot_id_by_index(const Chunk::SlotHashMap& slot_id_to_index, int target_index) {
+    for (const auto& [slot_id, index] : slot_id_to_index) {
+        if (index == target_index) {
+            return slot_id;
+        }
+    }
+    return -1;
+}
+
+StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, int64_t* deserialized_bytes) {
+    using ColumnHelper = ColumnHelper;
+    using Chunk = Chunk;
+
+    auto* cur = reinterpret_cast<const uint8_t*>(buff.data());
+
+    uint32_t version = decode_fixed32_le(cur);
+    if (version != 1) {
+        return Status::Corruption(fmt::format("invalid version: {}", version));
+    }
+    cur += 4;
+
+    uint32_t rows = decode_fixed32_le(cur);
+    cur += 4;
+
+    std::vector<ColumnPtr> columns;
+>>>>>>> feb34d54dc ([Enhancement] Make "mismatched row count" more clear (#27969))
     columns.resize(_meta.slot_id_to_index.size() + _meta.tuple_id_to_index.size());
     for (size_t i = 0, sz = _meta.is_nulls.size(); i < sz; ++i) {
         columns[i] = ColumnHelper::create_column(_meta.types[i], _meta.is_nulls[i], _meta.is_consts[i], rows);
@@ -234,11 +269,46 @@ StatusOr<vectorized::Chunk> ProtobufChunkDeserializer::deserialize(std::string_v
         }
     }
 
-    for (auto& col : columns) {
-        if (col->size() != rows) {
-            return Status::Corruption(fmt::format("mismatched row count: {} vs {}", col->size(), rows));
+    for (int i = 0; i < columns.size(); ++i) {
+        size_t col_size = columns[i]->size();
+        if (col_size != rows) {
+            SlotId slot_id = get_slot_id_by_index(_meta.slot_id_to_index, i);
+            return Status::Corruption(
+                    fmt::format("Internal error. Detail: deserialize chunk data failed. column slot id: {}, column row "
+                                "count: {}, expected row count: {}. There is probably a bug here.",
+                                slot_id, col_size, rows));
         }
     }
+<<<<<<< HEAD
+=======
+
+    // deserialize extra data
+    ChunkExtraDataPtr chunk_extra_data;
+    if (!_meta.extra_data_metas.empty()) {
+        std::vector<ColumnPtr> extra_columns;
+        extra_columns.resize(_meta.extra_data_metas.size());
+        for (size_t i = 0, sz = _meta.extra_data_metas.size(); i < sz; ++i) {
+            auto extra_meta = _meta.extra_data_metas[i];
+            extra_columns[i] =
+                    ColumnHelper::create_column(extra_meta.type, extra_meta.is_null, extra_meta.is_const, rows);
+        }
+        for (auto& column : extra_columns) {
+            cur = ColumnArraySerde::deserialize(cur, column.get());
+        }
+        for (int i = 0; i < columns.size(); ++i) {
+            size_t col_size = columns[i]->size();
+            if (col_size != rows) {
+                return Status::Corruption(
+                        fmt::format("Internal error. Detail: deserialize chunk data failed. extra column index: {}, "
+                                    "column row count: {}, expected "
+                                    "row count: {}. There is probably a bug here.",
+                                    i, col_size, rows));
+            }
+        }
+        chunk_extra_data = std::make_shared<ChunkExtraColumnsData>(_meta.extra_data_metas, std::move(extra_columns));
+    }
+
+>>>>>>> feb34d54dc ([Enhancement] Make "mismatched row count" more clear (#27969))
     if (deserialized_bytes != nullptr) *deserialized_bytes = cur - reinterpret_cast<const uint8_t*>(buff.data());
     return Chunk(std::move(columns), _meta.slot_id_to_index, _meta.tuple_id_to_index);
 }
