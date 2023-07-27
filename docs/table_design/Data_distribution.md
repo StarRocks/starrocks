@@ -46,7 +46,7 @@ Also, StarRocks distributes data by implementing the two-level partitioning + bu
 
 - **Random distribution**
 
-  If you do not configure partitioning and bucketing methods at table creation, random distribution is used by default.
+  If you do not configure partitioning and bucketing methods at table creation, random distribution is used by default (currently only support Duplicate Key tables).
 
   ```SQL
   CREATE TABLE site_access1 (
@@ -57,7 +57,7 @@ Also, StarRocks distributes data by implementing the two-level partitioning + bu
       user_name VARCHAR(32) DEFAULT ''
   )
   DUPLICATE KEY (event_day,site_id,pv);
-  -- Because the partitioning and bucketing methods are not configured, random distribution is used by default (currently only support Deplicate Key tables).
+  -- Because the partitioning and bucketing methods are not configured, random distribution is used by default.
   ```
 
 - **Hash distribution**
@@ -75,7 +75,7 @@ Also, StarRocks distributes data by implementing the two-level partitioning + bu
   DISTRIBUTED BY HASH(event_day,site_id); 
   ```
 
-- **Range+Random distribution**
+- **Range+Random distribution** (currently only support Duplicate Key tables)
 
   ```SQL
   CREATE TABLE site_access3 (
@@ -110,7 +110,7 @@ Also, StarRocks distributes data by implementing the two-level partitioning + bu
   DISTRIBUTED BY HASH(event_day, site_id);
   ```
 
-- **List+Random distribution**
+- **List+Random distribution** (currently only support Duplicate Key tables)
 
   ```SQL
   CREATE TABLE t_recharge_detail1 (
@@ -124,7 +124,7 @@ Also, StarRocks distributes data by implementing the two-level partitioning + bu
   -- Use expression partitioning as the partitioning method and specify the partitioning column.
   -- You can also use list partitioning.
   PARTITION BY (city);
-  -- Because the bucketing method is not configured, random bucketing is used by default (currently only support Deplicate Key tables).
+  -- Because the bucketing method is not configured, random bucketing is used by default.
   ```
 
 - **List+Hash distribution**
