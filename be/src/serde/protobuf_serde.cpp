@@ -268,8 +268,8 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
         for (auto& column : extra_columns) {
             cur = ColumnArraySerde::deserialize(cur, column.get());
         }
-        for (int i = 0; i < columns.size(); ++i) {
-            size_t col_size = columns[i]->size();
+        for (int i = 0; i < extra_columns.size(); ++i) {
+            size_t col_size = extra_columns[i]->size();
             if (col_size != rows) {
                 return Status::Corruption(
                         fmt::format("Internal error. Detail: deserialize chunk data failed. extra column index: {}, "
