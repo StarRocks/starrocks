@@ -236,13 +236,17 @@ public enum ErrorCode {
     ERR_COLOCATE_TABLE_MUST_BE_OLAP_TABLE(5063, new byte[] {'4', '2', '0', '0', '0'},
             "Colocate table '%s' must be OLAP table"),
     ERR_COLOCATE_TABLE_MUST_HAS_SAME_REPLICATION_NUM(5063, new byte[] {'4', '2', '0', '0', '0'},
-            "Colocate tables must have same replication num: %s, with group %s"),
+            "Colocate tables must have same replication num: %s, with group %s," +
+                    " partition info %s"),
     ERR_COLOCATE_TABLE_MUST_HAS_SAME_BUCKET_NUM(5063, new byte[] {'4', '2', '0', '0', '0'},
-            "Colocate tables must have same bucket num: %s, with group %s"),
+            "Colocate tables must have same bucket num: %s, with group %s," +
+                    " current info %s"),
     ERR_COLOCATE_TABLE_MUST_HAS_SAME_DISTRIBUTION_COLUMN_SIZE(5063, new byte[] {'4', '2', '0', '0', '0'},
-            "Colocate tables distribution columns size must be the same : %s, with group %s"),
+            "Colocate tables distribution columns size must be the same : %s, with group %s," +
+                    " current info %s"),
     ERR_COLOCATE_TABLE_MUST_HAS_SAME_DISTRIBUTION_COLUMN_TYPE(5063, new byte[] {'4', '2', '0', '0', '0'},
-            "Colocate tables distribution columns must have the same data type with group %s, current col: %s, should be: %s"),
+            "Colocate tables distribution columns must have the same data type with group %s," +
+                    " current col: %s, should be: %s, current info %s"),
     ERR_COLOCATE_NOT_COLOCATE_TABLE(5064, new byte[] {'4', '2', '0', '0', '0'},
             "Table %s is not a colocated table"),
     ERR_INVALID_OPERATION(5065, new byte[] {'4', '2', '0', '0', '0'}, "Operation %s is invalid"),
