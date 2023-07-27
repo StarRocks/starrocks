@@ -202,7 +202,7 @@ StatusOr<vectorized::Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor&
     return chunk;
 }
 
-static SlotId get_slot_id_by_index(const Chunk::SlotHashMap& slot_id_to_index, int target_index) {
+static SlotId get_slot_id_by_index(const vectorized::Chunk::SlotHashMap& slot_id_to_index, int target_index) {
     for (const auto& [slot_id, index] : slot_id_to_index) {
         if (index == target_index) {
             return slot_id;
