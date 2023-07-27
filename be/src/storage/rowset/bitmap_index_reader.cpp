@@ -49,18 +49,18 @@ namespace starrocks {
 using Roaring = roaring::Roaring;
 
 BitmapIndexReader::BitmapIndexReader() {
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->bitmap_index_mem_tracker(), sizeof(BitmapIndexReader));
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(), sizeof(BitmapIndexReader));
 }
 
 BitmapIndexReader::~BitmapIndexReader() {
-    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->bitmap_index_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(), _mem_usage());
 }
 
 StatusOr<bool> BitmapIndexReader::load(const IndexReadOptions& opts, const BitmapIndexPB& meta) {
     return success_once(_load_once, [&]() {
         Status st = _do_load(opts, meta);
         if (st.ok()) {
-            MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->bitmap_index_mem_tracker(),
+            MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(),
                                      _mem_usage() - sizeof(BitmapIndexReader));
         } else {
             _reset();
@@ -131,9 +131,9 @@ Status BitmapIndexIterator::read_union_bitmap(rowid_t from, rowid_t to, Roaring*
     return Status::OK();
 }
 
-Status BitmapIndexIterator::read_union_bitmap(const SparseRange& range, Roaring* result) {
+Status BitmapIndexIterator::read_union_bitmap(const SparseRange<>& range, Roaring* result) {
     for (size_t i = 0; i < range.size(); i++) { // NOLINT
-        const Range& r = range[i];
+        const Range<>& r = range[i];
         RETURN_IF_ERROR(read_union_bitmap(r.begin(), r.end(), result));
     }
     return Status::OK();

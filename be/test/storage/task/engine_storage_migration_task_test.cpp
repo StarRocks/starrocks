@@ -370,9 +370,10 @@ int main(int argc, char** argv) {
                 s.to_string().c_str());
         return -1;
     }
+    auto* global_env = starrocks::GlobalEnv::GetInstance();
+    global_env->init();
     auto* exec_env = starrocks::ExecEnv::GetInstance();
-    exec_env->init_mem_tracker();
-    starrocks::ExecEnv::init(exec_env, paths);
+    exec_env->init(paths);
     int r = RUN_ALL_TESTS();
 
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
@@ -384,7 +385,8 @@ int main(int argc, char** argv) {
     delete engine;
     // destroy exec env
     starrocks::tls_thread_status.set_mem_tracker(nullptr);
-    starrocks::ExecEnv::destroy(exec_env);
+    exec_env->destroy();
+    global_env->stop();
 
     return r;
 }

@@ -56,6 +56,8 @@ public:
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
+    void update_metrics(RuntimeState* state) override { _merge_chunk_source_profiles(state); }
+
     void set_scan_executor(workgroup::ScanExecutor* scan_executor) { _scan_executor = scan_executor; }
 
     void set_workgroup(workgroup::WorkGroupPtr wg) { _workgroup = std::move(wg); }
@@ -77,7 +79,7 @@ public:
     void set_query_ctx(const QueryContextPtr& query_ctx);
 
     virtual int available_pickup_morsel_count() { return _io_tasks_per_scan_operator; }
-    void begin_pull_chunk(ChunkPtr res) {
+    void begin_pull_chunk(const ChunkPtr& res) {
         _op_pull_chunks += 1;
         _op_pull_rows += res->num_rows();
     }
@@ -85,6 +87,8 @@ public:
     virtual void begin_driver_process() {}
     virtual void end_driver_process(PipelineDriver* driver) {}
     virtual bool is_running_all_io_tasks() const;
+
+    virtual int64_t get_scan_table_id() const { return -1; }
 
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;

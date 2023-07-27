@@ -92,11 +92,17 @@ public:
 
     int64_t total_row_size() { return _rowset_meta_pb->total_row_size(); }
 
+    void set_total_row_size(int64_t total_size) { _rowset_meta_pb->set_total_row_size(total_size); }
+
     int64_t total_update_row_size() { return _rowset_meta_pb->total_update_row_size(); }
 
     size_t total_disk_size() const { return _rowset_meta_pb->total_disk_size(); }
 
+    void set_total_disk_size(size_t disk_size) { _rowset_meta_pb->set_total_disk_size(disk_size); }
+
     size_t data_disk_size() const { return _rowset_meta_pb->data_disk_size(); }
+
+    void set_data_disk_size(size_t data_size) { _rowset_meta_pb->set_data_disk_size(data_size); }
 
     size_t index_disk_size() const { return _rowset_meta_pb->index_disk_size(); }
 
@@ -198,6 +204,12 @@ public:
     uint32_t get_num_update_files() const { return _rowset_meta_pb->num_update_files(); }
 
     const RowsetMetaPB& get_meta_pb() const { return *_rowset_meta_pb; }
+
+    void set_partial_schema_change(bool partial_schema_change) {
+        _rowset_meta_pb->set_partial_schema_change(partial_schema_change);
+    }
+
+    bool partial_schema_change() { return _rowset_meta_pb->partial_schema_change(); }
 
 private:
     bool _deserialize_from_pb(std::string_view value) {

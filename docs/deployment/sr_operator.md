@@ -151,12 +151,12 @@ From outside the Kubernetes cluster, you can access the StarRocks cluster throug
 
     ```YAML
     starRocksFeSpec:
-        image: starrocks/alpine-fe:2.4.1
-        replicas: 3
-        requests:
+      image: starrocks/fe-ubuntu:3.0-latest
+      replicas: 3
+      requests:
         cpu: 4
         memory: 16Gi
-        service:            
+      service:            
         type: LoadBalancer # specified as LoadBalancer
     ```
 
@@ -180,18 +180,18 @@ From outside the Kubernetes cluster, you can access the StarRocks cluster throug
 
 #### Upgrade BE nodes
 
-Run the following command to specify a new BE image file, such as `starrocks/be-ubuntu:2.5.0-fix-uid`:
+Run the following command to specify a new BE image file, such as `starrocks/be-ubuntu:latest`:
 
 ```bash
-kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksBeSpec":{"image":"starrocks/be-ubuntu:2.5.0-fix-uid"}}}'
+kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksBeSpec":{"image":"starrocks/be-ubuntu:latest"}}}'
 ```
 
 #### Upgrade FE nodes
 
-Run the following command to specify a new FE image file, such as `starrocks/fe-ubuntu:2.5.0-fix-uid`:
+Run the following command to specify a new FE image file, such as `starrocks/fe-ubuntu:latest`:
 
 ```bash
-kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksFeSpec":{"image":"starrocks/fe-ubuntu:2.5.0-fix-uid"}}}'
+kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksFeSpec":{"image":"starrocks/fe-ubuntu:latest"}}}'
 ```
 
 The upgrade process lasts for a while. You can run the command `kubectl -n starrocks get pods` to view the upgrade progress.
@@ -232,42 +232,41 @@ The following is a [template](https://github.com/StarRocks/starrocks-kubernetes-
 
 ```YAML
   starRocksCnSpec:
-    image: starrocks/centos-cn:2.4.1
+    image: starrocks/cn-ubuntu:3.0-latest
     requests:
       cpu: 4
       memory: 4Gi
     autoScalingPolicy: # Automatic scaling policy of the CN cluster.
-          maxReplicas: 10 # The maximum number of CNs is set to 10.
-          minReplicas: 1 # The minimum number of CNs is set to 1.
-          hpaPolicy:
-            metrics: # Resource metrics
-              - type: Resource
-                resource: 
-                  name: memory # The average memory usage of CNs is specified as a resource metric.
-                  target:
-                    averageUtilization: 30 
-                    # The elastic scaling threshold is 30%.
-                    # When the average memory utilization of CNs exceeds 30%, the number of CNs increases for scale-out.
-                    # When the average memory utilization of CNs is below 30%, the number of CNs decreases for scale-in.
-                    type: Utilization
-              - type: Resource
-                resource: 
-                  name: cpu # The average CPU utilization of CNs is specified as a resource metric.
-                  target:
-                    averageUtilization: 60
-                    # The elastic scaling threshold is 60%.
-                    # When the average CPU utilization of CNs exceeds 60%, the number of CNs increases for scale-out.
-                    # When the average CPU utilization of CNs is below 60%, the number of CNs decreases for scale-in.
-                    type: Utilization
-            behavior: #  The scaling behavior is customized according to business scenarios, helping you achieve rapid or slow scaling or disable scaling.
-              scaleUp:
-                policies:
-                  - type: Pods
-                    value: 1
-                    periodSeconds: 10
-              scaleDown:
-                selectPolicy: Disabled
-  
+      maxReplicas: 10 # The maximum number of CNs is set to 10.
+      minReplicas: 1 # The minimum number of CNs is set to 1.
+      hpaPolicy:
+        metrics: # Resource metrics
+          - type: Resource
+            resource: 
+              name: memory # The average memory usage of CNs is specified as a resource metric.
+              target:
+                averageUtilization: 30 
+                # The elastic scaling threshold is 30%.
+                # When the average memory utilization of CNs exceeds 30%, the number of CNs increases for scale-out.
+                # When the average memory utilization of CNs is below 30%, the number of CNs decreases for scale-in.
+                type: Utilization
+          - type: Resource
+            resource: 
+              name: cpu # The average CPU utilization of CNs is specified as a resource metric.
+              target:
+                averageUtilization: 60
+                # The elastic scaling threshold is 60%.
+                # When the average CPU utilization of CNs exceeds 60%, the number of CNs increases for scale-out.
+                # When the average CPU utilization of CNs is below 60%, the number of CNs decreases for scale-in.
+                type: Utilization
+        behavior: #  The scaling behavior is customized according to business scenarios, helping you achieve rapid or slow scaling or disable scaling.
+          scaleUp:
+            policies:
+              - type: Pods
+                value: 1
+                periodSeconds: 10
+          scaleDown:
+            selectPolicy: Disabled
 ```
 
 The following table describes a few important fields:
@@ -292,3 +291,11 @@ minReplicas: 1 # The minimum number of CNs is set to 1.
     target:
       averageUtilization: 60
 ```
+
+## FAQ
+
+**Issue description:** When a custom resource StarRocksCluster is installed using `kubectl apply -f xxx`, an error is returned `The CustomResourceDefinition 'starrocksclusters.starrocks.com' is invalid: metadata.annotations: Too long: must have at most 262144 bytes`. 
+
+**Cause analysis:** Whenever `kubectl apply -f xxx` is used to create or update resources, a metadata annotation `kubectl.kubernetes.io/last-applied-configuration` is added. This metadata annotation is in JSON format and records the *last-applied-configuration*. `kubectl apply -f xxx`" is suitable for most cases, but in rare situations , such as when the configuration file for the custom resource is too large, it may cause the size of the metadata annotation to exceed the limit.
+
+**Solution:** If you install the custom resource StarRocksCluster for the first time, it is recommended to use `kubectl create -f xxx`. If the custom resource StarRocksCluster is already installed in the environment, and you need to update its configuration, it is recommended to use `kubectl replace -f xxx`.

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableList;
@@ -39,7 +38,6 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TDescriptorTable;
-import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
@@ -60,9 +58,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.starrocks.qe.ColocatedBackendSelector.BucketSeqToScanRange;
+
 public class CoordinatorTest extends PlanTestBase {
     ConnectContext ctx;
-    Coordinator coordinator;
+    DefaultCoordinator coordinator;
     CoordinatorPreprocessor coordinatorPreprocessor;
 
     @Before
@@ -71,7 +71,8 @@ public class CoordinatorTest extends PlanTestBase {
         ctx.setExecutionId(new TUniqueId(0xdeadbeef, 0xdeadbeef));
         ConnectContext.threadLocalInfo.set(ctx);
 
-        coordinator = new Coordinator(ctx, Lists.newArrayList(), Lists.newArrayList(), new TDescriptorTable());
+        coordinator = new DefaultCoordinator.Factory().createQueryScheduler(ctx, Lists.newArrayList(), Lists.newArrayList(),
+                new TDescriptorTable());
         coordinatorPreprocessor = coordinator.getPrepareInfo();
     }
 
@@ -88,11 +89,11 @@ public class CoordinatorTest extends PlanTestBase {
         PlanFragment fragment = genFragment();
         CoordinatorPreprocessor.FragmentExecParams params = coordinatorPreprocessor.new FragmentExecParams(fragment);
         CoordinatorPreprocessor.FInstanceExecParam instance0 =
-                new CoordinatorPreprocessor.FInstanceExecParam(null, null, 0, params);
+                new CoordinatorPreprocessor.FInstanceExecParam(null, null, params);
         CoordinatorPreprocessor.FInstanceExecParam instance1 =
-                new CoordinatorPreprocessor.FInstanceExecParam(null, null, 1, params);
+                new CoordinatorPreprocessor.FInstanceExecParam(null, null, params);
         CoordinatorPreprocessor.FInstanceExecParam instance2 =
-                new CoordinatorPreprocessor.FInstanceExecParam(null, null, 2, params);
+                new CoordinatorPreprocessor.FInstanceExecParam(null, null, params);
         instance0.bucketSeqToDriverSeq = ImmutableMap.of(2, -1, 0, -1);
         instance1.bucketSeqToDriverSeq = ImmutableMap.of(1, -1, 4, -1);
         instance2.bucketSeqToDriverSeq = ImmutableMap.of(3, -1, 5, -1);
@@ -128,30 +129,30 @@ public class CoordinatorTest extends PlanTestBase {
     }
 
     private void testComputeColocatedJoinInstanceParamHelper(int scanId,
-                                                             Map<Integer, TNetworkAddress> bucketSeqToAddress,
+                                                             Map<Integer, Long> bucketSeqToWorkerId,
                                                              int parallelExecInstanceNum,
                                                              int pipelineDop, boolean enablePipeline,
                                                              int expectedInstances,
-                                                             List<TNetworkAddress> expectedParamAddresses,
+                                                             List<Long> expectedParamAddresses,
                                                              List<Integer> expectedPipelineDops,
                                                              List<Map<Integer, Integer>> expectedBucketSeqToDriverSeqs,
                                                              List<Integer> expectedNumScanRangesList,
                                                              List<Map<Integer, Integer>> expectedDriverSeq2NumScanRangesList) {
-        CoordinatorPreprocessor.FragmentExecParams params = coordinatorPreprocessor.new FragmentExecParams(genFragment());
-        CoordinatorPreprocessor.BucketSeqToScanRange bucketSeqToScanRange =
-                new CoordinatorPreprocessor.BucketSeqToScanRange();
-        for (Integer bucketSeq : bucketSeqToAddress.keySet()) {
+        CoordinatorPreprocessor.FragmentExecParams params =
+                coordinatorPreprocessor.new FragmentExecParams(genFragment());
+        BucketSeqToScanRange bucketSeqToScanRange = new BucketSeqToScanRange();
+        for (Integer bucketSeq : bucketSeqToWorkerId.keySet()) {
             bucketSeqToScanRange.put(bucketSeq, createScanId2scanRanges(scanId, 1));
         }
 
-        coordinatorPreprocessor.computeColocatedJoinInstanceParam(bucketSeqToAddress, bucketSeqToScanRange,
+        coordinatorPreprocessor.computeColocatedJoinInstanceParam(bucketSeqToWorkerId, bucketSeqToScanRange,
                 parallelExecInstanceNum, pipelineDop, enablePipeline, params);
-        params.instanceExecParams.sort(Comparator.comparing(param -> param.host));
+        params.instanceExecParams.sort(Comparator.comparing(CoordinatorPreprocessor.FInstanceExecParam::getWorkerId));
 
         Assert.assertEquals(expectedInstances, params.instanceExecParams.size());
         for (int i = 0; i < expectedInstances; ++i) {
             CoordinatorPreprocessor.FInstanceExecParam param = params.instanceExecParams.get(i);
-            Assert.assertEquals(expectedParamAddresses.get(i), param.host);
+            Assert.assertEquals(expectedParamAddresses.get(i), param.getWorkerId());
             Assert.assertEquals(expectedPipelineDops.get(i).intValue(), param.getPipelineDop());
 
             Map<Integer, Integer> bucketSeqToDriverSeq = param.getBucketSeqToDriverSeq();
@@ -190,10 +191,10 @@ public class CoordinatorTest extends PlanTestBase {
         // - addr1: 11, 12, 13, 14, 15.
         // - addr2: 21, 22, 23.
         // - addr3: 31, 32
-        TNetworkAddress addr1 = new TNetworkAddress("host1", 8000);
-        TNetworkAddress addr2 = new TNetworkAddress("host2", 8000);
-        TNetworkAddress addr3 = new TNetworkAddress("host3", 8000);
-        Map<Integer, TNetworkAddress> bucketSeqToAddress = ImmutableMap.<Integer, TNetworkAddress>builder()
+        Long addr1 = 1L;
+        Long addr2 = 2L;
+        Long addr3 = 3L;
+        Map<Integer, Long> bucketSeqToWorkerId = ImmutableMap.<Integer, Long>builder()
                 .put(11, addr1).put(12, addr1).put(13, addr1).put(14, addr1).put(15, addr1)
                 .put(21, addr2).put(22, addr2).put(23, addr2)
                 .put(32, addr3).put(31, addr3)
@@ -215,7 +216,7 @@ public class CoordinatorTest extends PlanTestBase {
         //          - DriverSequence#0: 32.
         //          - DriverSequence#1: 31.
         int expectedInstances = 3;
-        List<TNetworkAddress> expectedParamAddresses = ImmutableList.of(addr1, addr2, addr3);
+        List<Long> expectedParamAddresses = ImmutableList.of(addr1, addr2, addr3);
         List<Map<Integer, Integer>> expectedBucketSeqToDriverSeqs = ImmutableList.of(
                 ImmutableMap.of(11, 0, 12, 1, 13, 2, 14, 0, 15, 1),
                 ImmutableMap.of(21, 0, 22, 1, 23, 2),
@@ -228,7 +229,7 @@ public class CoordinatorTest extends PlanTestBase {
                 ImmutableMap.of(0, 1, 1, 1, 2, 1),
                 ImmutableMap.of(0, 1, 1, 1)
         );
-        testComputeColocatedJoinInstanceParamHelper(scanId, bucketSeqToAddress, 1, 3, true,
+        testComputeColocatedJoinInstanceParamHelper(scanId, bucketSeqToWorkerId, 1, 3, true,
                 expectedInstances, expectedParamAddresses, expectedPipelineDops, expectedBucketSeqToDriverSeqs,
                 expectedNumScanRangesList, expectedDriverSeq2NumScanRangesList);
 
@@ -277,7 +278,7 @@ public class CoordinatorTest extends PlanTestBase {
                 ImmutableMap.of(0, 1),
                 ImmutableMap.of(0, 1)
         );
-        testComputeColocatedJoinInstanceParamHelper(scanId, bucketSeqToAddress, 3, 2, true,
+        testComputeColocatedJoinInstanceParamHelper(scanId, bucketSeqToWorkerId, 3, 2, true,
                 expectedInstances, expectedParamAddresses, expectedPipelineDops, expectedBucketSeqToDriverSeqs,
                 expectedNumScanRangesList, expectedDriverSeq2NumScanRangesList);
 
@@ -323,7 +324,7 @@ public class CoordinatorTest extends PlanTestBase {
                 ImmutableMap.of(0, 1),
                 ImmutableMap.of(0, 1)
         );
-        testComputeColocatedJoinInstanceParamHelper(scanId, bucketSeqToAddress, 3, 1, true,
+        testComputeColocatedJoinInstanceParamHelper(scanId, bucketSeqToWorkerId, 3, 1, true,
                 expectedInstances, expectedParamAddresses, expectedPipelineDops, expectedBucketSeqToDriverSeqs,
                 expectedNumScanRangesList, expectedDriverSeq2NumScanRangesList);
 
@@ -352,7 +353,7 @@ public class CoordinatorTest extends PlanTestBase {
                 ImmutableMap.of(31, -1)
         );
         expectedDriverSeq2NumScanRangesList = null;
-        testComputeColocatedJoinInstanceParamHelper(scanId, bucketSeqToAddress, 3, 1, false,
+        testComputeColocatedJoinInstanceParamHelper(scanId, bucketSeqToWorkerId, 3, 1, false,
                 expectedInstances, expectedParamAddresses, expectedPipelineDops, expectedBucketSeqToDriverSeqs,
                 expectedNumScanRangesList, expectedDriverSeq2NumScanRangesList);
 
@@ -386,7 +387,7 @@ public class CoordinatorTest extends PlanTestBase {
                 ImmutableMap.of(0, 1, 1, 0, 2, 0),
                 ImmutableMap.of(0, 1, 1, 0)
         );
-        testComputeColocatedJoinInstanceParamHelper(scanId, bucketSeqToAddress, 1, 3, true,
+        testComputeColocatedJoinInstanceParamHelper(scanId, bucketSeqToWorkerId, 1, 3, true,
                 expectedInstances, expectedParamAddresses, expectedPipelineDops, expectedBucketSeqToDriverSeqs,
                 expectedNumScanRangesList, expectedDriverSeq2NumScanRangesList);
 
@@ -396,7 +397,7 @@ public class CoordinatorTest extends PlanTestBase {
         // - addr2: 21, 22, 23.
         // - addr3: 31
         scanId = 1;
-        bucketSeqToAddress = ImmutableMap.<Integer, TNetworkAddress>builder()
+        bucketSeqToWorkerId = ImmutableMap.<Integer, Long>builder()
                 .put(11, addr1).put(12, addr1).put(13, addr1).put(14, addr1).put(15, addr1)
                 .put(21, addr2).put(22, addr2).put(23, addr2)
                 .put(31, addr3)
@@ -417,7 +418,7 @@ public class CoordinatorTest extends PlanTestBase {
         expectedPipelineDops = ImmutableList.of(-1, -1, -1);
         expectedNumScanRangesList = ImmutableList.of(5, 3, 1);
         expectedDriverSeq2NumScanRangesList = null;
-        testComputeColocatedJoinInstanceParamHelper(scanId, bucketSeqToAddress, 1, 3, true,
+        testComputeColocatedJoinInstanceParamHelper(scanId, bucketSeqToWorkerId, 1, 3, true,
                 expectedInstances, expectedParamAddresses, expectedPipelineDops, expectedBucketSeqToDriverSeqs,
                 expectedNumScanRangesList, expectedDriverSeq2NumScanRangesList);
 
@@ -460,9 +461,9 @@ public class CoordinatorTest extends PlanTestBase {
                 prepare.getFragmentScanRangeAssignment(fragmentId);
         Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackends().get(0);
         Assert.assertFalse(scanRangeMap.isEmpty());
-        TNetworkAddress expectedAddress = backend.getAddress();
-        Assert.assertTrue(scanRangeMap.containsKey(expectedAddress));
-        Map<Integer, List<TScanRangeParams>> rangesPerNode = scanRangeMap.get(expectedAddress);
+        Long expectedWorkerId = backend.getId();
+        Assert.assertTrue(scanRangeMap.containsKey(expectedWorkerId));
+        Map<Integer, List<TScanRangeParams>> rangesPerNode = scanRangeMap.get(expectedWorkerId);
         Assert.assertTrue(rangesPerNode.containsKey(planNodeId.asInt()));
         List<TScanRangeParams> ranges = rangesPerNode.get(planNodeId.asInt());
         List<Long> tabletIds =

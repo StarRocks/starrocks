@@ -55,6 +55,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
+#include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "util/unaligned_access.h"
 
@@ -267,6 +268,140 @@ Status LinkedSchemaChange::process(TabletReader* reader, RowsetWriter* new_rowse
                      << ", version=" << new_rowset_writer->version();
         return status;
     }
+    return Status::OK();
+}
+
+Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* new_tablet, const Tablet* base_tablet,
+                                                                const RowsetSharedPtr& src_rowset, RowsetId rid,
+                                                                int64_t version, ChunkChanger* chunk_changer,
+                                                                DeltaColumnGroupList& dcgs,
+                                                                std::vector<int> last_dcg_counts) {
+    // This function is just used for adding generated column if src_rowset
+    // contain some segment files
+    bool no_segment_file = (last_dcg_counts.size() == 0);
+    if (chunk_changer->get_mc_exprs()->size() == 0 || no_segment_file) {
+        return Status::OK();
+    }
+
+    // Get read schema chunk and new partial schema(schema with new added generated column only) chunk
+    std::vector<uint32_t> new_columns_ids;
+    std::vector<uint32_t> all_ref_columns_ids;
+    std::set<uint32_t> s_ref_columns_ids;
+    for (const auto& iter : *chunk_changer->get_mc_exprs()) {
+        new_columns_ids.emplace_back(iter.first);
+        // get read schema only through associated column in all generate columns' expr
+        Expr* root = (iter.second)->root();
+        std::vector<SlotId> slot_ids;
+        root->get_slot_ids(&slot_ids);
+
+        s_ref_columns_ids.insert(slot_ids.begin(), slot_ids.end());
+    }
+    all_ref_columns_ids.resize(s_ref_columns_ids.size());
+    all_ref_columns_ids.assign(s_ref_columns_ids.begin(), s_ref_columns_ids.end());
+    std::sort(all_ref_columns_ids.begin(), all_ref_columns_ids.end());
+    std::sort(new_columns_ids.begin(), new_columns_ids.end());
+
+    // If all expression is constant, all_ref_columns_ids will be empty.
+    // we just append 0 into it to construct the read schema for simplicity.
+    if (all_ref_columns_ids.size() == 0) {
+        all_ref_columns_ids.emplace_back(0);
+    }
+
+    Schema read_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema(), all_ref_columns_ids);
+    ChunkPtr read_chunk = ChunkHelper::new_chunk(read_schema, config::vector_chunk_size);
+
+    Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema(), new_columns_ids);
+    ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
+
+    OlapReaderStatistics stats;
+    RowsetReleaseGuard guard(src_rowset->shared_from_this());
+    auto res = src_rowset->get_segment_iterators2(read_schema, nullptr, version, &stats,
+                                                  base_tablet->data_dir()->get_meta());
+    if (!res.ok()) {
+        return res.status();
+    }
+
+    auto seg_iterators = res.value();
+
+    // Fetch the new columns value into the new_chunk
+    for (int idx = 0; idx < seg_iterators.size(); ++idx) {
+        auto seg_iterator = seg_iterators[idx];
+        if (seg_iterator.get() == nullptr) {
+            std::stringstream ss;
+            ss << "Failed to get segment iterator, segment id: " << idx;
+            LOG(WARNING) << ss.str();
+            continue;
+        }
+
+        new_chunk->reset();
+
+        while (true) {
+            read_chunk->reset();
+            Status status = seg_iterator->get_next(read_chunk.get());
+            if (!status.ok()) {
+                if (status.is_end_of_file()) {
+                    break;
+                } else {
+                    std::stringstream ss;
+                    ss << "segment iterator failed to get next chunk, status is:" << status.to_string();
+                    LOG(WARNING) << ss.str();
+                    return Status::InternalError(ss.str());
+                }
+            }
+            status = chunk_changer->append_materialized_columns(read_chunk, new_chunk, all_ref_columns_ids,
+                                                                base_tablet->tablet_schema().num_columns());
+            if (!status.ok()) {
+                LOG(WARNING) << "failed to append materialized columns";
+                return Status::InternalError("failed to append materialized columns");
+            }
+        }
+
+        // Write cols file with current new_chunk
+        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(new_tablet->schema_hash_path()));
+        const std::string path = Rowset::delta_column_group_path(new_tablet->schema_hash_path(), rid, idx, version,
+                                                                 last_dcg_counts[idx]);
+        // must record unique column id in delta column group
+        std::vector<uint32_t> unique_column_ids;
+        for (const auto& iter : *chunk_changer->get_mc_exprs()) {
+            ColumnUID unique_id = new_tablet->tablet_schema().column(iter.first).unique_id();
+            unique_column_ids.emplace_back(unique_id);
+        }
+        std::sort(unique_column_ids.begin(), unique_column_ids.end());
+        auto cols_file_schema = TabletSchema::create_with_uid(new_tablet->tablet_schema(), unique_column_ids);
+
+        (void)fs->delete_file(path); // delete .cols if already exist
+        WritableFileOptions opts{.sync_on_close = true};
+        ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(opts, path));
+        SegmentWriterOptions writer_options;
+        auto segment_writer =
+                std::make_unique<SegmentWriter>(std::move(wfile), idx, cols_file_schema.get(), writer_options);
+        RETURN_IF_ERROR(segment_writer->init(false));
+
+        uint64_t segment_file_size = 0;
+        uint64_t index_size = 0;
+        uint64_t footer_position = 0;
+        RETURN_IF_ERROR(segment_writer->append_chunk(*new_chunk));
+        RETURN_IF_ERROR(segment_writer->finalize(&segment_file_size, &index_size, &footer_position));
+
+        // abort schema change if cols file' size is larger than max_segment_file_size
+        // It is nearly impossible happen unless the expression result of the generated column
+        // is extremely large or there are too many generated column to added.
+        if (UNLIKELY(segment_file_size > config::max_segment_file_size)) {
+            (void)fs->delete_file(path);
+            std::stringstream ss;
+            ss << "cols file' size is larger than max_segment_file_size: " << config::max_segment_file_size;
+            LOG(WARNING) << ss.str();
+            return Status::InternalError(ss.str());
+        }
+
+        // Get DeltaColumnGroup for current cols file
+        auto dcg = std::make_shared<DeltaColumnGroup>();
+        std::vector<std::vector<uint32_t>> dcg_column_ids{unique_column_ids};
+        std::vector<std::string> dcg_column_files{file_name(segment_writer->segment_path())};
+        dcg->init(version, dcg_column_ids, dcg_column_files);
+        dcgs.emplace_back(dcg);
+    }
+
     return Status::OK();
 }
 
@@ -578,13 +713,11 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
         return status;
     }
 
-    if (request.materialized_column_req.mc_exprs.size() != 0) {
+    if (request.__isset.materialized_column_req && request.materialized_column_req.mc_exprs.size() != 0) {
         // Currently, a schema change task for materialized column is just
         // ADD/DROP/MODIFY a single materialized column, so it is impossible
         // that sc_sorting == true, for materialized column can not be a KEY.
         DCHECK_EQ(sc_params.sc_sorting, false);
-
-        sc_params.sc_directly = true;
 
         sc_params.chunk_changer->init_runtime_state(request.materialized_column_req.query_options,
                                                     request.materialized_column_req.query_globals);
@@ -623,7 +756,8 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
             status = new_tablet->updates()->reorder_from(base_tablet, request.alter_version,
                                                          sc_params.chunk_changer.get(), _alter_msg_header);
         } else {
-            status = new_tablet->updates()->link_from(base_tablet.get(), request.alter_version, _alter_msg_header);
+            status = new_tablet->updates()->link_from(base_tablet.get(), request.alter_version,
+                                                      sc_params.chunk_changer.get(), _alter_msg_header);
         }
         if (!status.ok()) {
             LOG(WARNING) << _alter_msg_header << "schema change new tablet load snapshot error: " << status.to_string();
@@ -829,6 +963,8 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
     sc_procedure->set_alter_msg_header(_alter_msg_header);
 
     Status status;
+    std::vector<std::vector<DeltaColumnGroupList>> all_historical_dcgs;
+    std::vector<RowsetId> new_rowset_ids;
 
     for (int i = 0; i < sc_params.rowset_readers.size(); ++i) {
         VLOG(3) << "begin to convert a history rowset. version=" << sc_params.rowsets_to_change[i]->version();
@@ -896,8 +1032,81 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
                     << ", version=" << sc_params.version.first << "-" << sc_params.version.second;
         }
 
+        std::vector<DeltaColumnGroupList> historical_dcgs;
+        historical_dcgs.resize(sc_params.rowsets_to_change[i]->num_segments());
+        for (uint32_t j = 0; j < sc_params.rowsets_to_change[i]->num_segments(); j++) {
+            int64_t tablet_id = sc_params.rowsets_to_change[i]->rowset_meta()->tablet_id();
+            RowsetId rowsetid = sc_params.rowsets_to_change[i]->rowset_meta()->rowset_id();
+            RETURN_IF_ERROR(TabletMetaManager::get_delta_column_group(new_tablet->data_dir()->get_meta(), tablet_id,
+                                                                      rowsetid, j, INT64_MAX, &historical_dcgs[j]));
+        }
+        if (!sc_params.sc_sorting && !sc_params.sc_directly && chunk_changer->get_mc_exprs()->size() != 0) {
+            // new added dcgs info for every segment in rowset.
+            DeltaColumnGroupList dcgs;
+            std::vector<int> last_dcg_counts;
+            for (uint32_t j = 0; j < sc_params.rowsets_to_change[i]->num_segments(); j++) {
+                // check the lastest historical_dcgs version if it is equal to schema change version
+                // of the rowset. If it is, we should merge the dcg info.
+                last_dcg_counts.emplace_back((historical_dcgs[j].size() != 0 &&
+                                              historical_dcgs[j].front()->version() == sc_params.version.second)
+                                                     ? historical_dcgs[j].front()->relative_column_files().size()
+                                                     : 0);
+            }
+
+            RETURN_IF_ERROR(LinkedSchemaChange::generate_delta_column_group_and_cols(
+                    new_tablet.get(), base_tablet.get(), sc_params.rowsets_to_change[i], (*new_rowset)->rowset_id(),
+                    sc_params.version.second, chunk_changer, dcgs, last_dcg_counts));
+
+            // merge dcg info if necessary
+            if (dcgs.size() != 0) {
+                if (dcgs.size() != sc_params.rowsets_to_change[i]->num_segments()) {
+                    std::stringstream ss;
+                    ss << "The size of dcgs and segment file in src rowset is different, "
+                       << "base tablet id: " << base_tablet->tablet_id() << " "
+                       << "new tablet id: " << new_tablet->tablet_id();
+                    LOG(WARNING) << ss.str();
+                    return Status::InternalError(ss.str());
+                }
+                for (uint32_t j = 0; j < dcgs.size(); j++) {
+                    if (dcgs[j]->merge_into_by_version(historical_dcgs[j], new_tablet->schema_hash_path(),
+                                                       (*new_rowset)->rowset_id(), j) == 0) {
+                        // In this case, historical_dcgs[j] contain no suitable dcg:
+                        // 1. no version of dcg in historical_dcgs[j] satisfy the src rowset version.
+                        // 2. historical_dcgs[j] is empty
+                        // So nothing can be merged, and we should just insert the dcgs[j] into historical_dcgs
+                        historical_dcgs[j].insert(historical_dcgs[j].begin(), dcgs[j]); /* reverse order by version */
+                    }
+                }
+                (*new_rowset)->rowset_meta()->set_partial_schema_change(true);
+            }
+        }
+        all_historical_dcgs.emplace_back(historical_dcgs);
+        new_rowset_ids.emplace_back((*new_rowset)->rowset_meta()->rowset_id());
+
         VLOG(10) << "succeed to convert a history version."
                  << " version=" << sc_params.version.first << "-" << sc_params.version.second;
+    }
+
+    auto data_dir = sc_params.new_tablet->data_dir();
+    rocksdb::WriteBatch wb;
+    RETURN_IF_ERROR(TabletMetaManager::clear_delta_column_group(data_dir, &wb, sc_params.new_tablet->tablet_id()));
+
+    // for sorting and directly mode, cols files has been compacted even they exist before schema change.
+    if (!sc_params.sc_sorting && !sc_params.sc_directly) {
+        for (int i = 0; i < sc_params.rowsets_to_change.size(); ++i) {
+            for (uint32_t j = 0; j < sc_params.rowsets_to_change[i]->num_segments(); j++) {
+                RETURN_IF_ERROR(
+                        TabletMetaManager::put_delta_column_group(data_dir, &wb, sc_params.new_tablet->tablet_id(),
+                                                                  new_rowset_ids[i], j, all_historical_dcgs[i][j]));
+            }
+        }
+    }
+
+    status = sc_params.new_tablet->data_dir()->get_meta()->write_batch(&wb);
+    if (!status.ok()) {
+        LOG(WARNING) << "Fail to delete old dcg and write new dcg" << sc_params.new_tablet->tablet_id() << ": "
+                     << status;
+        return Status::InternalError("Fail to delete old dcg and write new dcg");
     }
 
     if (status.ok()) {

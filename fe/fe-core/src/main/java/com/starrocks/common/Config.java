@@ -889,7 +889,7 @@ public class Config extends ConfigBase {
      * It should be less than 'max_running_txn_num_per_db'
      */
     @ConfField(mutable = true, aliases = {"async_load_task_pool_size"})
-    public static int max_broker_load_job_concurrency = 2;
+    public static int max_broker_load_job_concurrency = 5;
 
     /**
      * Same meaning as *tablet_create_timeout_second*, but used when delete a tablet.
@@ -1000,6 +1000,8 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long check_consistency_default_timeout_second = 600; // 10 min
+    @ConfField(mutable = true)
+    public static long consistency_tablet_meta_check_interval_ms = 2 * 3600 * 1000L; // every 2 hours
 
     // Configurations for query engine
     /**
@@ -1068,6 +1070,10 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int max_create_table_timeout_second = 600;
+
+    @ConfField(mutable = true, comment = "The maximum number of replicas to create serially." +
+            "If actual replica count exceeds this, replicas will be created concurrently.")
+    public static int create_table_max_serial_replicas = 128;
 
     // Configurations for backup and restore
     /**
@@ -1154,7 +1160,7 @@ public class Config extends ConfigBase {
     // if the number of scheduled tablets in TabletScheduler exceed max_scheduling_tablets
     // skip checking.
     @ConfField(mutable = true, aliases = {"max_scheduling_tablets"})
-    public static int tablet_sched_max_scheduling_tablets = 2000;
+    public static int tablet_sched_max_scheduling_tablets = 10000;
 
     /**
      * if set to true, TabletScheduler will not do balance.
@@ -1226,7 +1232,7 @@ public class Config extends ConfigBase {
     // if the number of balancing tablets in TabletScheduler exceed max_balancing_tablets,
     // no more balance check
     @ConfField(mutable = true, aliases = {"max_balancing_tablets"})
-    public static int tablet_sched_max_balancing_tablets = 100;
+    public static int tablet_sched_max_balancing_tablets = 500;
 
     /**
      * When create a table(or partition), you can specify its storage medium(HDD or SSD).
@@ -2017,10 +2023,10 @@ public class Config extends ConfigBase {
     public static long shard_group_clean_threshold_sec = 3600L;
 
     /**
-     * ShardDeleter run interval in seconds
+     * fe sync with star mgr meta interval in seconds
      */
     @ConfField
-    public static long shard_deleter_run_interval_sec = 600L;
+    public static long star_mgr_meta_sync_interval_sec = 600L;
 
     // ***********************************************************
     // * BEGIN: Cloud native meta server related configurations
@@ -2030,6 +2036,11 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int cloud_native_meta_port = 6090;
+    /**
+     *  Whether volume can be created from conf. If it is enabled, a builtin storage volume may be created.
+     */
+    @ConfField
+    public static boolean enable_load_volume_from_conf = true;
     // remote storage related configuration
     @ConfField(comment = "storage type for cloud native table. Available options: \"S3\", \"HDFS\", \"AZBLOB\". case-insensitive")
     public static String cloud_native_storage_type = "S3";

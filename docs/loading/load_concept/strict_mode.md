@@ -31,7 +31,7 @@ If strict mode is disabled, StarRocks loads all the four rows.
 
 If strict mode is enabled, StarRocks loads only the rows that hold `\N` or `1` and filters out the rows that hold `abc` or `2000`. The rows filtered out are counted against the maximum percentage of rows that can be filtered out due to inadequate data quality as specified by the `max_filter_ratio` parameter.
 
-**Final loaded data with strict mode disabled**
+### Final loaded data with strict mode disabled
 
 | Source column value | Column value upon conversion to TINYINT | Load result when destination column allows NULL values | Load result when destination column does not allow NULL values |
 | ------------------- | --------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------ |
@@ -40,7 +40,7 @@ If strict mode is enabled, StarRocks loads only the rows that hold `\N` or `1` a
 | 2000                | NULL                                    | The value `NULL` is loaded.                            | An error is reported.                                        |
 | 1                   | 1                                       | The value `1` is loaded.                               | The value `1` is loaded.                                     |
 
-**Final loaded data with strict mode enabled**
+### Final loaded data with strict mode enabled
 
 | Source column value | Column value upon conversion to TINYINT | Load result when destination column allows NULL values       | Load result when destination column does not allow NULL values |
 | ------------------- | --------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
@@ -51,9 +51,9 @@ If strict mode is enabled, StarRocks loads only the rows that hold `\N` or `1` a
 
 ## Set strict mode
 
-If you run a [Stream Load](../../loading/StreamLoad.md), [Broker Load](../../loading/BrokerLoad.md), [Routine Load](../../loading/RoutineLoad.md), or [Spark Load](../../loading/SparkLoad.md) job to load data, use the `strict_mode` parameter to set strict mode for the load job. Valid values are `true` and `false`. The default value is `false`. The value `true` enables strict mode, and the value `false` disables strict mode.
+If you run a [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md), or [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md) job to load data, use the `strict_mode` parameter to set strict mode for the load job. Valid values are `true` and `false`. The default value is `false`. The value `true` enables strict mode, and the value `false` disables strict mode.
 
-If you execute [INSERT](../../loading/InsertInto.md) to load data, use the `enable_insert_strict` session variable to set strict mode. Valid values are `true` and `false`. The default value is `true`. The value `true` enables strict mode, and the value `false` disables strict mode.
+If you execute [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) to load data, use the `enable_insert_strict` session variable to set strict mode. Valid values are `true` and `false`. The default value is `true`. The value `true` enables strict mode, and the value `false` disables strict mode.
 
 Examples are as follows:
 

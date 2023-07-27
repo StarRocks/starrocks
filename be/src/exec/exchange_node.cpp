@@ -110,9 +110,9 @@ Status ExchangeNode::collect_query_statistics(QueryStatistics* statistics) {
     return Status::OK();
 }
 
-Status ExchangeNode::close(RuntimeState* state) {
+void ExchangeNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
     if (_is_merging) {
         _sort_exec_exprs.close(state);
@@ -121,7 +121,7 @@ Status ExchangeNode::close(RuntimeState* state) {
         _stream_recvr->close();
     }
     // _stream_recvr.reset();
-    return ExecNode::close(state);
+    ExecNode::close(state);
 }
 
 Status ExchangeNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {

@@ -123,6 +123,14 @@ public class MetadataMgrTest {
     }
 
     @Test
+    public void testGetTableWithDefaultCatalog() {
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        Assert.assertTrue(metadataMgr.getOptionalMetadata("").isPresent());
+        com.starrocks.catalog.Table internalTable = metadataMgr.getTable("default_catalog", "db1", "tbl1");
+        Assert.assertEquals(internalTable.getName(), "tbl1");
+    }
+
+    @Test
     public void testGetTable(@Mocked HiveMetaStoreClient metaStoreThriftClient) throws TException {
         List<FieldSchema> partKeys = Lists.newArrayList(new FieldSchema("col1", "BIGINT", ""));
         List<FieldSchema> unPartKeys = Lists.newArrayList(new FieldSchema("col2", "INT", ""));

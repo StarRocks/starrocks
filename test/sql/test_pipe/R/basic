@@ -23,7 +23,7 @@ create table t1 (id int, name string) duplicate key(id) properties('replication_
 -- !result
 create pipe p1 as 
     insert into t1 
-    select * from table('path' = 'fake://file.parquet', 'format'='parquet');
+    select * from files('path' = 'fake://file.parquet', 'format'='parquet');
 -- result:
 -- !result
 [UC]show pipes;
@@ -33,7 +33,7 @@ create pipe p1 as
 [UC]desc pipe p1;
 -- result:
 269428	269437	p1	FILE	db_7bed7a380f2a11eeabf0c9d28a9636a8.t1	FILE_SOURCE(path=fake://file.parquet)	insert into t1 
-    select * from table('path' = 'fake://file.parquet', 'format'='parquet');
+    select * from files('path' = 'fake://file.parquet', 'format'='parquet');
 -- !result
 alter pipe p1 pause;
 -- result:

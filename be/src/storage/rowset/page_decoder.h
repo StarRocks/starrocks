@@ -98,7 +98,7 @@ public:
         return Status::NotSupported("vectorized not supported yet");
     }
 
-    virtual Status next_batch(const SparseRange& range, Column* column) {
+    virtual Status next_batch(const SparseRange<>& range, Column* column) {
         return Status::NotSupported("PageDecoder Not Support");
     }
 
@@ -119,7 +119,7 @@ public:
         return Status::NotSupported("next_dict_codes() not supported");
     }
 
-    virtual Status next_dict_codes(const SparseRange& range, Column* dst) {
+    virtual Status next_dict_codes(const SparseRange<>& range, Column* dst) {
         return Status::NotSupported("next_dict_codes() not supported");
     }
 

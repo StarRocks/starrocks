@@ -21,8 +21,10 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.Repository;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -306,11 +308,18 @@ public class BackupRestoreAnalyzer {
             }
         }
 
+
+        if (tbl instanceof OlapTable) {
+            PartitionInfo partitionInfo = ((OlapTable) tbl).getPartitionInfo();
+            if (partitionInfo instanceof ListPartitionInfo) {
+                throw new SemanticException("List partition table does not support backup/restore job");
+            }
+        }
+
         if (partitionNames != null) {
             if (!tbl.isOlapOrCloudNativeTable()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName.getTbl());
             }
-
             OlapTable olapTbl = (OlapTable) tbl;
             for (String partName : tableRef.getPartitionNames().getPartitionNames()) {
                 Partition partition = olapTbl.getPartition(partName);

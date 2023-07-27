@@ -69,7 +69,6 @@ public class ReplayFromDumpTest {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         connectContext.getSessionVariable().setJoinImplementationMode("auto");
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
-        connectContext.getSessionVariable().setEnableMVOptimizerTraceLog(true);
         starRocksAssert = new StarRocksAssert(connectContext);
         FeConstants.runningUnitTest = true;
         FeConstants.showLocalShuffleColumnsInExplain = false;
@@ -145,7 +144,7 @@ public class ReplayFromDumpTest {
         Assert.assertEquals(originCostPlan, replayCostPlan);
     }
 
-    private String getDumpInfoFromFile(String fileName) throws Exception {
+    protected String getDumpInfoFromFile(String fileName) throws Exception {
         String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
         File file = new File(path + "/" + fileName + ".json");
         StringBuilder sb = new StringBuilder();
@@ -166,13 +165,13 @@ public class ReplayFromDumpTest {
         return getCostPlanFragment(dumpJonStr, null);
     }
 
-    private Pair<QueryDumpInfo, String> getCostPlanFragment(String dumpJsonStr, SessionVariable sessionVariable)
+    protected Pair<QueryDumpInfo, String> getCostPlanFragment(String dumpJsonStr, SessionVariable sessionVariable)
             throws Exception {
         return getPlanFragment(dumpJsonStr, sessionVariable, TExplainLevel.COSTS);
     }
 
-    private Pair<QueryDumpInfo, String> getPlanFragment(String dumpJsonStr, SessionVariable sessionVariable,
-                                                        TExplainLevel level) throws Exception {
+    protected Pair<QueryDumpInfo, String> getPlanFragment(String dumpJsonStr, SessionVariable sessionVariable,
+                                                          TExplainLevel level) throws Exception {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpJsonStr);
         if (sessionVariable != null) {
             queryDumpInfo.setSessionVariable(sessionVariable);
@@ -498,21 +497,11 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_count_distinct"), null, TExplainLevel.NORMAL);
         String plan = replayPair.second;
-        Assert.assertTrue(plan, plan.contains("36:AGGREGATE (update finalize)\n" +
+        Assert.assertTrue(plan, plan.contains("34:AGGREGATE (update finalize)\n" +
                 "  |  output: multi_distinct_count(6: order_id), multi_distinct_count(11: delivery_phone)," +
                 " multi_distinct_count(128: case), max(103: count)\n" +
                 "  |  group by: 40: city, 116: division_en, 104: department, 106: category, 126: concat, " +
                 "127: concat, 9: upc, 108: upc_desc"));
-    }
-
-    @Test
-    public void testJoinWithPipelineDop() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/join_pipeline_dop"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("25:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (PARTITIONED)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 5: ss_customer_sk = 52: c_customer_sk"));
     }
 
     @Test
@@ -530,15 +519,15 @@ public class ReplayFromDumpTest {
 
     @Test
     public void testCountDistinctWithLimit() throws Exception {
-        // check use two stage agg
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/count_distinct_limit"), null, TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("1:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
-                "  |  output: multi_distinct_count(5: lo_suppkey)"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("3:AGGREGATE (merge finalize)\n" +
-                "  |  output: multi_distinct_count(18: count)\n" +
-                "  |  group by: 10: lo_extendedprice, 13: lo_revenue"));
+                "  |  group by: 5: lo_suppkey, 10: lo_extendedprice, 13: lo_revenue"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("4:AGGREGATE (update finalize)\n" +
+                "  |  output: count(5: lo_suppkey)\n" +
+                "  |  group by: 10: lo_extendedprice, 13: lo_revenue\n" +
+                "  |  limit: 1"));
     }
 
     @Test
@@ -875,58 +864,5 @@ public class ReplayFromDumpTest {
         OptExpression expression = result.second.getPhysicalPlan().inputAt(1);
         Assert.assertEquals(new CTEProperty(1), expression.getLogicalProperty().getUsedCTEs());
         Assert.assertEquals(4, result.second.getCteProduceFragments().size());
-    }
-
-    @Test
-    public void testMV_JoinAgg1() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
-        String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/join_agg1");
-        // Table and mv have no stats, mv rewrite is ok.
-        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, null);
-        Assert.assertTrue(replayPair.second.contains("table: mv1, rollup: mv1"));
-        FeConstants.isReplayFromQueryDump = false;
-    }
-
-    @Test
-    public void testMV_JoinAgg2() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
-        String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/join_agg2");
-        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, connectContext.getSessionVariable());
-        // TODO: If table and mv have stats, query cannot be rewritten for now.
-        Assert.assertFalse(replayPair.second.contains("table: mv1, rollup: mv1"));
-        FeConstants.isReplayFromQueryDump = false;
-    }
-
-    @Test
-    public void testMV_JoinAgg3() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
-        // Table and mv have no stats, mv rewrite is ok.
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/join_agg3"),
-                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("line_order_flat_mv"));
-        FeConstants.isReplayFromQueryDump = false;
-    }
-
-    @Test
-    public void testMV_JoinAgg4() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
-        // TODO: If table and mv have stats, query cannot be rewritten for now.
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/join_agg4"),
-                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertFalse(replayPair.second.contains("line_order_flat_mv"));
-        FeConstants.isReplayFromQueryDump = false;
-    }
-
-    @Test
-    public void testMV_MVOnMV1() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
-        // TODO: If table and mv have stats, query cannot be rewritten for now.
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_on_mv1"),
-                        null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("mv2"));
-        FeConstants.isReplayFromQueryDump = false;
     }
 }

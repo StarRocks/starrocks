@@ -22,6 +22,7 @@
 #include "runtime/current_thread.h"
 #include "util/debug/query_trace.h"
 #include "util/defer_op.h"
+#include "util/failpoint/fail_point.h"
 #include "util/stack_util.h"
 #include "util/starrocks_metrics.h"
 
@@ -43,6 +44,10 @@ GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_
 }
 
 GlobalDriverExecutor::~GlobalDriverExecutor() {
+    close();
+}
+
+void GlobalDriverExecutor::close() {
     _driver_queue->close();
 }
 
@@ -114,6 +119,9 @@ void GlobalDriverExecutor::_worker_thread() {
         auto* runtime_state = runtime_state_ptr.get();
         {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
+#if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
+            FAIL_POINT_SCOPE(mem_alloc_error);
+#endif
             if (fragment_ctx->is_canceled()) {
                 driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {
@@ -168,7 +176,7 @@ void GlobalDriverExecutor::_worker_thread() {
                 continue;
             }
 
-            driver->report_exec_state();
+            driver->report_exec_state_if_necessary();
 
             auto driver_state = maybe_state.value();
             switch (driver_state) {
@@ -274,6 +282,16 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
     auto* profile = fragment_ctx->runtime_state()->runtime_profile();
     if (attach_profile) {
         profile = _build_merged_instance_profile(query_ctx, fragment_ctx);
+
+        // Add counters for query level memory and cpu usage, these two metrics will be specially handled at the frontend
+        auto* query_peak_memory = profile->add_counter(
+                "QueryPeakMemoryUsage", TUnit::BYTES,
+                RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
+        query_peak_memory->set(query_ctx->mem_cost_bytes());
+        auto* query_cumulative_cpu = profile->add_counter(
+                "QueryCumulativeCpuTime", TUnit::TIME_NS,
+                RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::SKIP_FIRST_MERGE));
+        query_cumulative_cpu->set(query_ctx->cpu_cost());
     }
 
     auto params = ExecStateReporter::create_report_exec_status_params(query_ctx, fragment_ctx, profile, status, done);

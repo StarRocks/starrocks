@@ -14,12 +14,14 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -126,7 +128,7 @@ public class MvRewritePreprocessor {
                         HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) baseTableDistributionInfo;
                         Set<String> distributedColumns =
                                 hashDistributionInfo.getDistributionColumns().stream().map(Column::getName)
-                                .collect(Collectors.toSet());
+                                        .collect(Collectors.toSet());
                         // NOTE: SyncMV's column may not be equal to base table's exactly.
                         List<Column> newDistributionColumns = Lists.newArrayList();
                         for (Column mvColumn : indexMeta.getSchema()) {
@@ -171,7 +173,7 @@ public class MvRewritePreprocessor {
 
     private void prepareRelatedMVs(Set<Table> queryTables, Set<MaterializedView> relatedMvs) {
         String queryExcludingMVNames = connectContext.getSessionVariable().getQueryExcludingMVNames();
-        String queryIncludingMVNames = connectContext.getSessionVariable().getQueryincludingMVNames();
+        String queryIncludingMVNames = connectContext.getSessionVariable().getQueryIncludingMVNames();
         if (!Strings.isNullOrEmpty(queryExcludingMVNames) || !Strings.isNullOrEmpty(queryIncludingMVNames)) {
             Set<String> queryExcludingMVNamesSet = Sets.newHashSet(queryExcludingMVNames.split(","));
             Set<String> queryIncludingMVNamesSet = Sets.newHashSet(queryIncludingMVNames.split(","));
@@ -209,7 +211,7 @@ public class MvRewritePreprocessor {
 
     private void preprocessMv(MaterializedView mv, Set<Table> queryTables, Set<ColumnRefOperator> originQueryColumns) {
         if (!mv.isActive()) {
-            logMVPrepare(connectContext, "MV is not active: %s", mv.getName());
+            logMVPrepare(connectContext, mv, "MV is not active: %s", mv.getName());
             return;
         }
 
@@ -232,7 +234,7 @@ public class MvRewritePreprocessor {
             mv.setPlanContext(mvRewriteContextCache);
         }
         if (!mvRewriteContextCache.isValidMvPlan()) {
-            logMVPrepare(connectContext, "MV plan is not valid: %s, plan:\n %s",
+            logMVPrepare(connectContext, mv, "MV plan is not valid: %s, plan:\n %s",
                     mv.getName(), mvRewriteContextCache.getLogicalPlan().explain());
             return;
         }
@@ -241,16 +243,26 @@ public class MvRewritePreprocessor {
         PartitionInfo partitionInfo = mv.getPartitionInfo();
         if (partitionInfo instanceof SinglePartitionInfo) {
             if (!partitionNamesToRefresh.isEmpty()) {
-                logMVPrepare(connectContext, "MV %s is outdated, partitionNamesToRefresh:%s",
-                        mv.getName(), partitionNamesToRefresh);
+                StringBuilder sb = new StringBuilder();
+                for (BaseTableInfo base : mv.getBaseTableInfos()) {
+                    String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(base.getTable()));
+                    sb.append(String.format("base table %s version: %s; ", base, versionInfo));
+                }
+                LOG.info("[MV PREPARE] MV {} is outdated, stale partitions {}, detailed version info: {}",
+                        mv.getName(), partitionNamesToRefresh, sb.toString());
                 return;
             }
-        } else if (!mv.getPartitionNames().isEmpty() &&
-                partitionNamesToRefresh.containsAll(mv.getPartitionNames())) {
+        } else if (!mv.getPartitionNames().isEmpty() && partitionNamesToRefresh.containsAll(mv.getPartitionNames())) {
             // if the mv is partitioned, and all partitions need refresh,
             // then it can not be a candidate
-            logMVPrepare(connectContext, "Partitioned MV %s is outdated and all its partitions need to be " +
-                            "refreshed: %s", mv.getName(), partitionNamesToRefresh);
+
+            StringBuilder sb = new StringBuilder();
+            for (BaseTableInfo base : mv.getBaseTableInfos()) {
+                String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(base.getTable()));
+                sb.append(String.format("base table %s version: %s; ", base, versionInfo));
+            }
+            LOG.info("[MV PREPARE] MV {} is outdated and all its partitions need to be " +
+                    "refreshed: {}, detailed info: {}", mv.getName(), partitionNamesToRefresh, sb.toString());
             return;
         }
 
@@ -261,7 +273,7 @@ public class MvRewritePreprocessor {
             // when should calculate the latest partition range predicates for partition-by base table
             mvPartialPartitionPredicates = getMvPartialPartitionPredicates(mv, mvPlan, partitionNamesToRefresh);
             if (mvPartialPartitionPredicates == null) {
-                logMVPrepare(connectContext, "Partitioned MV %s is outdated which contains some partitions " +
+                logMVPrepare(connectContext, mv, "Partitioned MV %s is outdated which contains some partitions " +
                         "to be refreshed:%s", mv.getName(), partitionNamesToRefresh);
                 return;
             }
@@ -302,7 +314,7 @@ public class MvRewritePreprocessor {
         }
         materializationContext.setOutputMapping(outputMapping);
         context.addCandidateMvs(materializationContext);
-        logMVPrepare(connectContext, "Add MV %s as a candidate", mv.getName());
+        logMVPrepare(connectContext, mv, "Prepare MV %s success", mv.getName());
     }
 
     /**
@@ -323,7 +335,7 @@ public class MvRewritePreprocessor {
         int relationId = columnRefFactory.getNextRelationId();
 
         // first add base schema to avoid replaced in full schema.
-        Set<String>  columnNames = Sets.newHashSet();
+        Set<String> columnNames = Sets.newHashSet();
         for (Column column : mv.getBaseSchema()) {
             ColumnRefOperator columnRef = columnRefFactory.create(column.getName(),
                     column.getType(),

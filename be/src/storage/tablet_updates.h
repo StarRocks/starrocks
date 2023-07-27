@@ -22,6 +22,7 @@
 
 #include "common/statusor.h"
 #include "gen_cpp/olap_file.pb.h"
+#include "storage/delta_column_group.h"
 #include "storage/edit_version.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_writer.h"
@@ -139,8 +140,6 @@ public:
 
     Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time);
 
-    Status save_meta();
-
     // should only called by UpdateManager's apply thread
     void do_apply();
 
@@ -216,7 +215,8 @@ public:
     void to_updates_pb(TabletUpdatesPB* updates_pb) const;
 
     // Used for schema change, migrate another tablet's version&rowsets to this tablet
-    Status link_from(Tablet* base_tablet, int64_t request_version, const std::string& err_msg_header = "");
+    Status link_from(Tablet* base_tablet, int64_t request_version, ChunkChanger* chunk_changer,
+                     const std::string& err_msg_header = "");
 
     Status convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
                         ChunkChanger* chunk_changer, const std::string& err_msg_header = "");
@@ -329,6 +329,7 @@ private:
         size_t num_rows = 0;
         size_t num_dels = 0;
         size_t byte_size = 0;
+        size_t row_size = 0;
         int64_t compaction_score = 0;
         bool partial_update_by_column = false;
         std::string to_string() const;
@@ -390,7 +391,15 @@ private:
 
     void _set_error(const string& msg);
 
-    Status _load_from_pb(const TabletUpdatesPB& updates);
+    Status _load_meta_and_log(const TabletUpdatesPB& tablet_updates_pb);
+
+    Status _load_pending_rowsets();
+
+    Status _load_rowsets_and_check_consistency(std::set<uint32_t>& unapplied_rowsets);
+
+    Status _purge_versions_to_fix_rowset_missing_inconsistency();
+
+    Status _load_from_pb(const TabletUpdatesPB& tablet_updates_pb);
 
     // thread-safe
     void _remove_unused_rowsets(bool drop_tablet = false);

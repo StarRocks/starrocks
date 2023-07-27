@@ -51,6 +51,7 @@ import com.starrocks.http.meta.ColocateMetaService;
 import com.starrocks.http.meta.GlobalDictMetaService;
 import com.starrocks.http.meta.MetaService.CheckAction;
 import com.starrocks.http.meta.MetaService.DumpAction;
+import com.starrocks.http.meta.MetaService.DumpStarMgrAction;
 import com.starrocks.http.meta.MetaService.ImageAction;
 import com.starrocks.http.meta.MetaService.InfoAction;
 import com.starrocks.http.meta.MetaService.JournalIdAction;
@@ -61,6 +62,7 @@ import com.starrocks.http.rest.BootstrapFinishAction;
 import com.starrocks.http.rest.CancelStreamLoad;
 import com.starrocks.http.rest.CheckDecommissionAction;
 import com.starrocks.http.rest.ConnectionAction;
+import com.starrocks.http.rest.ExecuteSqlAction;
 import com.starrocks.http.rest.GetDdlStmtAction;
 import com.starrocks.http.rest.GetLoadInfoAction;
 import com.starrocks.http.rest.GetLogFileAction;
@@ -86,6 +88,7 @@ import com.starrocks.http.rest.TableQueryPlanAction;
 import com.starrocks.http.rest.TableRowCountAction;
 import com.starrocks.http.rest.TableSchemaAction;
 import com.starrocks.http.rest.TransactionLoadAction;
+import com.starrocks.http.rest.WarehouseAction;
 import com.starrocks.leader.MetaHelper;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
@@ -143,6 +146,7 @@ public class HttpServer {
         StorageTypeCheckAction.registerAction(controller);
         CancelStreamLoad.registerAction(controller);
         GetStreamLoadState.registerAction(controller);
+        WarehouseAction.registerAction(controller);
 
         // add web action
         IndexAction.registerAction(controller);
@@ -181,6 +185,7 @@ public class HttpServer {
         QueryDumpAction.registerAction(controller);
         // for stop FE
         StopFeAction.registerAction(controller);
+        ExecuteSqlAction.registerAction(controller);
 
         // meta service action
         File imageDir = MetaHelper.getLeaderImageDir();
@@ -191,6 +196,7 @@ public class HttpServer {
         JournalIdAction.registerAction(controller, imageDir);
         CheckAction.registerAction(controller, imageDir);
         DumpAction.registerAction(controller, imageDir);
+        DumpStarMgrAction.registerAction(controller, imageDir);
         RoleAction.registerAction(controller, imageDir);
 
         // external usage

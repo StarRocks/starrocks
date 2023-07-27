@@ -37,7 +37,18 @@ Status LocalDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, Del
 }
 
 Status LocalDeltaColumnGroupLoader::load(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList* pdcgs) {
+    if (_meta == nullptr) {
+        return Status::OK();
+    }
     return StorageEngine::instance()->update_manager()->get_delta_column_group(_meta, tsid, version, pdcgs);
+}
+
+Status LocalDeltaColumnGroupLoader::load(int64_t tablet_id, RowsetId rowsetid, uint32_t segment_id, int64_t version,
+                                         DeltaColumnGroupList* pdcgs) {
+    if (_meta == nullptr) {
+        return Status::OK();
+    }
+    return StorageEngine::instance()->get_delta_column_group(_meta, tablet_id, rowsetid, segment_id, INT64_MAX, pdcgs);
 }
 
 UpdateManager::UpdateManager(MemTracker* mem_tracker)
@@ -115,26 +126,6 @@ Status UpdateManager::set_del_vec_in_meta(KVStore* meta, const TabletSegmentId& 
     return TabletMetaManager::set_del_vector(meta, tsid.tablet_id, tsid.segment_id, delvec);
 }
 
-// calc the total memory usage of delta column group list, can be optimazed later if need.
-static size_t delta_column_group_list_memory_usage(const DeltaColumnGroupList& dcgs) {
-    size_t res = 0;
-    for (const auto& dcg : dcgs) {
-        res += dcg->memory_usage();
-    }
-    return res;
-}
-
-// Search delta column group from `all_dcgs` which version isn't larger than `version`.
-// Using it because we record all version dcgs in cache
-static void search_delta_column_groups_by_version(const DeltaColumnGroupList& all_dcgs, int64_t version,
-                                                  DeltaColumnGroupList* dcgs) {
-    for (const auto& dcg : all_dcgs) {
-        if (dcg->version() <= version) {
-            dcgs->push_back(dcg);
-        }
-    }
-}
-
 Status UpdateManager::get_delta_column_group(KVStore* meta, const TabletSegmentId& tsid, int64_t version,
                                              DeltaColumnGroupList* dcgs) {
     StarRocksMetrics::instance()->delta_column_group_get_total.increment(1);
@@ -143,7 +134,7 @@ Status UpdateManager::get_delta_column_group(KVStore* meta, const TabletSegmentI
         std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
         auto itr = _delta_column_group_cache.find(tsid);
         if (itr != _delta_column_group_cache.end()) {
-            search_delta_column_groups_by_version(itr->second, version, dcgs);
+            StorageEngine::instance()->search_delta_column_groups_by_version(itr->second, version, dcgs);
             StarRocksMetrics::instance()->delta_column_group_get_hit_cache.increment(1);
             return Status::OK();
         }
@@ -152,14 +143,15 @@ Status UpdateManager::get_delta_column_group(KVStore* meta, const TabletSegmentI
     DeltaColumnGroupList new_dcgs;
     RETURN_IF_ERROR(
             TabletMetaManager::get_delta_column_group(meta, tsid.tablet_id, tsid.segment_id, INT64_MAX, &new_dcgs));
-    search_delta_column_groups_by_version(new_dcgs, version, dcgs);
+    StorageEngine::instance()->search_delta_column_groups_by_version(new_dcgs, version, dcgs);
     {
         // fill delta column group cache
         std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
         bool ok = _delta_column_group_cache.insert({tsid, new_dcgs}).second;
         if (ok) {
             // insert success
-            _delta_column_group_cache_mem_tracker->consume(delta_column_group_list_memory_usage(new_dcgs));
+            _delta_column_group_cache_mem_tracker->consume(
+                    StorageEngine::instance()->delta_column_group_list_memory_usage(new_dcgs));
         }
     }
     return Status::OK();
@@ -279,7 +271,8 @@ void UpdateManager::clear_cached_delta_column_group(const std::vector<TabletSegm
     for (const auto& tsid : tsids) {
         auto itr = _delta_column_group_cache.find(tsid);
         if (itr != _delta_column_group_cache.end()) {
-            _delta_column_group_cache_mem_tracker->release(delta_column_group_list_memory_usage(itr->second));
+            _delta_column_group_cache_mem_tracker->release(
+                    StorageEngine::instance()->delta_column_group_list_memory_usage(itr->second));
             _delta_column_group_cache.erase(itr);
         }
     }
@@ -317,7 +310,7 @@ bool UpdateManager::get_cached_delta_column_group(const TabletSegmentId& tsid, i
     std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
     auto itr = _delta_column_group_cache.find(tsid);
     if (itr != _delta_column_group_cache.end()) {
-        search_delta_column_groups_by_version(itr->second, version, dcgs);
+        StorageEngine::instance()->search_delta_column_groups_by_version(itr->second, version, dcgs);
         // hit cache
         return true;
     }
@@ -343,10 +336,12 @@ Status UpdateManager::set_cached_delta_column_group(KVStore* meta, const TabletS
     std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
     auto itr = _delta_column_group_cache.find(tsid);
     if (itr != _delta_column_group_cache.end()) {
-        _delta_column_group_cache_mem_tracker->release(delta_column_group_list_memory_usage(itr->second));
+        _delta_column_group_cache_mem_tracker->release(
+                StorageEngine::instance()->delta_column_group_list_memory_usage(itr->second));
     }
     _delta_column_group_cache[tsid] = new_dcgs;
-    _delta_column_group_cache_mem_tracker->consume(delta_column_group_list_memory_usage(new_dcgs));
+    _delta_column_group_cache_mem_tracker->consume(
+            StorageEngine::instance()->delta_column_group_list_memory_usage(new_dcgs));
     return Status::OK();
 }
 

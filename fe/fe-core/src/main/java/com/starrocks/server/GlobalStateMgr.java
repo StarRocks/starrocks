@@ -116,6 +116,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
@@ -155,8 +156,8 @@ import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
-import com.starrocks.lake.ShardDeleter;
 import com.starrocks.lake.ShardManager;
+import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
@@ -218,8 +219,8 @@ import com.starrocks.persist.metablock.SRMetaBlockLoader;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
@@ -231,6 +232,7 @@ import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
+import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
@@ -302,6 +304,7 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.WarehouseInfo;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -500,7 +503,7 @@ public class GlobalStateMgr {
 
     private StarOSAgent starOSAgent;
 
-    private ShardDeleter shardDeleter;
+    private StarMgrMetaSyncer starMgrMetaSyncer;
 
     private MetadataMgr metadataMgr;
     private CatalogMgr catalogMgr;
@@ -747,7 +750,7 @@ public class GlobalStateMgr {
         this.shardManager = new ShardManager();
         this.compactionMgr = new CompactionMgr();
         this.configRefreshDaemon = new ConfigRefreshDaemon();
-        this.shardDeleter = new ShardDeleter();
+        this.starMgrMetaSyncer = new StarMgrMetaSyncer();
 
         this.binlogManager = new BinlogManager();
         this.pipeManager = new PipeManager();
@@ -990,6 +993,10 @@ public class GlobalStateMgr {
 
     public WarehouseManager getWarehouseMgr() {
         return warehouseMgr;
+    }
+
+    public List<WarehouseInfo> getWarehouseInfosFromOtherFEs() {
+        return nodeMgr.getWarehouseInfosFromOtherFEs();
     }
 
     public StorageVolumeMgr getStorageVolumeMgr() {
@@ -1299,7 +1306,7 @@ public class GlobalStateMgr {
             throw t;
         }
 
-        createOrUpdateBuiltinStorageVolume();
+        createBuiltinStorageVolume();
     }
 
     // start all daemon threads only running on Master
@@ -1375,7 +1382,7 @@ public class GlobalStateMgr {
         taskRunStateSynchronizer.start();
 
         if (RunMode.allowCreateLakeTable()) {
-            shardDeleter.start();
+            starMgrMetaSyncer.start();
             autovacuumDaemon.start();
         }
 
@@ -3496,9 +3503,13 @@ public class GlobalStateMgr {
         if (!catalogMgr.catalogExists(newCatalogName)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
         }
-        if (!CatalogMgr.isInternalCatalog(newCatalogName) &&
-                !PrivilegeActions.checkAnyActionOnOrInCatalog(ctx, newCatalogName)) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+        if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
+            try {
+                PrivilegeChecker.checkAnyActionOnOrInCatalog(ctx.getCurrentUserIdentity(),
+                        ctx.getCurrentRoleIds(), newCatalogName);
+            } catch (AccessDeniedException e) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+            }
         }
         ctx.setCurrentCatalog(newCatalogName);
         ctx.setDatabase("");
@@ -3523,9 +3534,13 @@ public class GlobalStateMgr {
             if (!catalogMgr.catalogExists(newCatalogName)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
             }
-            if (!CatalogMgr.isInternalCatalog(newCatalogName) &&
-                    !PrivilegeActions.checkAnyActionOnOrInCatalog(ctx, newCatalogName)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+            if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
+                try {
+                    PrivilegeChecker.checkAnyActionOnOrInCatalog(ctx.getCurrentUserIdentity(),
+                            ctx.getCurrentRoleIds(), newCatalogName);
+                } catch (AccessDeniedException e) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+                }
             }
             ctx.setCurrentCatalog(newCatalogName);
             dbName = parts[1];
@@ -3538,7 +3553,10 @@ public class GlobalStateMgr {
 
         // Here we check the request permission that sent by the mysql client or jdbc.
         // So we didn't check UseDbStmt permission in PrivilegeCheckerV2.
-        if (!PrivilegeActions.checkAnyActionOnOrInDb(ctx, ctx.getCurrentCatalog(), dbName)) {
+        try {
+            PrivilegeChecker.checkAnyActionOnOrInDb(ctx.getCurrentUserIdentity(),
+                    ctx.getCurrentRoleIds(), ctx.getCurrentCatalog(), dbName);
+        } catch (AccessDeniedException e) {
             ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
                     ctx.getQualifiedUser(), dbName);
         }
@@ -4031,12 +4049,15 @@ public class GlobalStateMgr {
         return metaContext;
     }
 
-    public void createOrUpdateBuiltinStorageVolume() {
+    public void createBuiltinStorageVolume() {
         try {
-            String builtinStorageVolumeId = storageVolumeMgr.createOrUpdateBuiltinStorageVolume();
+            String builtinStorageVolumeId = storageVolumeMgr.createBuiltinStorageVolume();
             if (!builtinStorageVolumeId.isEmpty()) {
                 authorizationMgr.grantStorageVolumeUsageToPublicRole(builtinStorageVolumeId);
             }
+        } catch (InvalidConfException e) {
+            LOG.fatal(e.getMessage());
+            System.exit(-1);
         } catch (DdlException | AlreadyExistsException e) {
             LOG.warn("Failed to create or update builtin storage volume", e);
         } catch (PrivilegeException e) {

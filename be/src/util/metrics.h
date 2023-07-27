@@ -351,7 +351,7 @@ public:
     bool register_metric(const std::string& name, const MetricLabels& labels, Metric* metric);
     // Now this function is not used frequently, so this is a little time consuming
     void deregister_metric(Metric* metric) {
-        std::shared_lock lock(_mutex);
+        std::shared_lock lock(_collector_mutex);
         _deregister_locked(metric);
     }
     Metric* get_metric(const std::string& name) const { return get_metric(name, MetricLabels::EmptyLabels); }
@@ -362,19 +362,20 @@ public:
     void deregister_hook(const std::string& name);
 
     void collect(MetricsVisitor* visitor) {
-        std::shared_lock lock(_mutex);
         if (!config::enable_metric_calculator) {
             // Before we collect, need to call hooks
+            std::shared_lock lock(_hooks_mutex);
             unprotected_trigger_hook();
         }
 
+        std::shared_lock lock(_collector_mutex);
         for (auto& it : _collectors) {
             it.second->collect(_name, it.first, visitor);
         }
     }
 
     void trigger_hook() {
-        std::shared_lock lock(_mutex);
+        std::shared_lock lock(_hooks_mutex);
         unprotected_trigger_hook();
     }
 
@@ -391,7 +392,8 @@ private:
     const std::string _name;
 
     // mutable SpinLock _lock;
-    mutable std::shared_mutex _mutex;
+    mutable std::shared_mutex _collector_mutex;
+    mutable std::shared_mutex _hooks_mutex;
     std::map<std::string, MetricCollector*> _collectors;
     std::map<std::string, std::function<void()>> _hooks;
 };
@@ -403,22 +405,6 @@ using DoubleCounter = LockCounter<double>;
 using IntGauge = AtomicGauge<int64_t>;
 using UIntGauge = AtomicGauge<uint64_t>;
 using DoubleGauge = LockGauge<double>;
-
-class TcmallocMetric final : public UIntGauge {
-public:
-    TcmallocMetric(std::string tcmalloc_var) : UIntGauge(MetricUnit::BYTES), _tcmalloc_var(std::move(tcmalloc_var)) {}
-
-    uint64_t value() const override {
-        uint64_t val = 0;
-#if !defined(ADDRESS_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(USE_JEMALLOC)
-        MallocExtension::instance()->GetNumericProperty(_tcmalloc_var.c_str(), reinterpret_cast<size_t*>(&val));
-#endif
-        return val;
-    }
-
-private:
-    const std::string _tcmalloc_var;
-};
 
 } // namespace starrocks
 
@@ -443,6 +429,3 @@ private:
 
 #define METRIC_DEFINE_DOUBLE_GAUGE(metric_name, unit) \
     starrocks::DoubleGauge metric_name { unit }
-
-#define METRIC_DEFINE_TCMALLOC_GAUGE(metric_name, tcmalloc_var) \
-    starrocks::TcmallocMetric metric_name { tcmalloc_var }

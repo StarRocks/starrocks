@@ -79,7 +79,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, con
             int code = _column_iterators[cid]->dict_lookup(value.get_slice());
             if (code < 0) {
                 // predicate always false, clear scan range, this will make `get_next` return EOF directly.
-                _scan_range = _scan_range.intersection(SparseRange());
+                _scan_range = _scan_range.intersection(SparseRange<>());
                 continue;
             }
             auto ptr = new_column_eq_predicate(get_type_info(kDictCodeType), cid, std::to_string(code));
@@ -115,7 +115,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, con
             }
             if (codewords.empty()) {
                 // predicate always false, clear scan range.
-                _scan_range = _scan_range.intersection(SparseRange());
+                _scan_range = _scan_range.intersection(SparseRange<>());
                 continue;
             }
             std::vector<std::string> str_codewords;
@@ -177,7 +177,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, con
                 auto ptr = new_column_in_predicate(get_type_info(kDictCodeType), cid, str_codewords);
                 i = pool->add(ptr);
             } else {
-                _scan_range = _scan_range.intersection(SparseRange());
+                _scan_range = _scan_range.intersection(SparseRange<>());
                 continue;
             }
         }
@@ -205,7 +205,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, con
                 auto ptr = new_column_in_predicate(get_type_info(kDictCodeType), cid, str_codewords);
                 i = pool->add(ptr);
             } else {
-                _scan_range = _scan_range.intersection(SparseRange());
+                _scan_range = _scan_range.intersection(SparseRange<>());
                 continue;
             }
         }
@@ -226,7 +226,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, con
             ASSIGN_OR_RETURN(bool non_empty,
                              _rewrite_expr_predicate(pool, pred, dict_column, code_column, field->is_nullable(), &ptr));
             if (!non_empty) {
-                _scan_range = _scan_range.intersection(SparseRange());
+                _scan_range = _scan_range.intersection(SparseRange<>());
             } else {
                 i = pool->add(ptr);
             }
@@ -310,7 +310,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool
         RETURN_IF_ERROR(pred->evaluate(raw_dict_column.get(), selection.data(), 0, value_size));
     } else {
         auto dict_column = raw_dict_column->clone_empty();
-        SparseRange range(0, value_size);
+        SparseRange<> range(0, value_size);
         auto iter = range.new_iterator();
         auto selection_cursor = selection.data();
         while (iter.has_more()) {

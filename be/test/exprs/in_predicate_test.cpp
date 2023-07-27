@@ -25,17 +25,6 @@
 
 namespace starrocks {
 
-class FakeConstExpr : public starrocks::Expr {
-public:
-    explicit FakeConstExpr(const TExprNode& dummy) : Expr(dummy) {}
-
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return _column; }
-
-    Expr* clone(ObjectPool*) const override { return nullptr; }
-
-    ColumnPtr _column;
-};
-
 class VectorizedInPredicateTest : public ::testing::Test {
 public:
     void SetUp() override {
@@ -124,7 +113,7 @@ TEST_F(VectorizedInPredicateTest, sliceInTrue) {
 
         {
             ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
-            ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
             ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
             ASSERT_TRUE(ptr->is_numeric());
 
@@ -168,7 +157,7 @@ TEST_F(VectorizedInPredicateTest, dateInFalse) {
 
         {
             ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
-            ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
             ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
             ASSERT_TRUE(ptr->is_numeric());
 
@@ -212,7 +201,7 @@ TEST_F(VectorizedInPredicateTest, intNotInTrue) {
 
         {
             ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
-            ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
             ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
             ASSERT_TRUE(ptr->is_numeric());
 
@@ -255,7 +244,7 @@ TEST_F(VectorizedInPredicateTest, nullSliceIn) {
 
         {
             ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
-            ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
             ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
             ASSERT_TRUE(ptr->is_nullable());
 
@@ -309,7 +298,7 @@ TEST_F(VectorizedInPredicateTest, sliceNotInNull) {
 
         {
             ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
-            ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
             ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
             ASSERT_TRUE(ptr->is_nullable());
 
@@ -351,7 +340,7 @@ TEST_F(VectorizedInPredicateTest, inConstPred) {
 
         {
             ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
-            ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
             ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
             ASSERT_TRUE(ptr->size() == 5);
         }
@@ -392,7 +381,7 @@ TEST_F(VectorizedInPredicateTest, inArray) {
 
         {
             ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
-            ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
             ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
             ASSERT_TRUE(ptr->is_nullable());
             auto data = down_cast<NullableColumn*>(ptr.get())->data_column();
@@ -439,7 +428,7 @@ TEST_F(VectorizedInPredicateTest, inArrayConstAll) {
 
         {
             ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
-            ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
             ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
             ASSERT_TRUE(ptr->is_constant());
             auto v = down_cast<BooleanColumn*>(down_cast<ConstColumn*>(ptr.get())->data_column().get());
@@ -481,6 +470,8 @@ TEST_F(VectorizedInPredicateTest, inArrayConstAllNULL) {
 
         {
             ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
+            ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+            // corner test
             ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
             ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
             ASSERT_TRUE(ptr->only_null());

@@ -74,14 +74,21 @@ HttpServiceBE::HttpServiceBE(ExecEnv* env, int port, int num_threads)
           _http_concurrent_limiter(new ConcurrentLimiter(config::be_http_num_workers - 1)) {}
 
 HttpServiceBE::~HttpServiceBE() {
-    _ev_http_server->stop();
     _ev_http_server.reset();
     _web_page_handler.reset();
     STLDeleteElements(&_http_handlers);
 }
 
+void HttpServiceBE::stop() {
+    _ev_http_server->stop();
+}
+
+void HttpServiceBE::join() {
+    _ev_http_server->join();
+}
+
 Status HttpServiceBE::start() {
-    add_default_path_handlers(_web_page_handler.get(), _env->process_mem_tracker());
+    add_default_path_handlers(_web_page_handler.get(), GlobalEnv::GetInstance()->process_mem_tracker());
 
     // register load
     auto* stream_load_action = new StreamLoadAction(_env, _http_concurrent_limiter.get());

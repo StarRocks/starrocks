@@ -120,7 +120,7 @@ struct HdfsScannerParams {
 
     // all conjuncts except `conjunct_ctxs_by_slot`
     std::vector<ExprContext*> conjunct_ctxs;
-    std::unordered_set<SlotId> conjunct_slots;
+    std::unordered_set<SlotId> slots_in_conjunct;
     bool eval_conjunct_ctxs = true;
 
     // conjunct ctxs grouped by slot.
@@ -132,6 +132,8 @@ struct HdfsScannerParams {
     std::string path;
     // The file size. -1 means unknown.
     int64_t file_size = -1;
+
+    int64_t modification_time = 0;
 
     const TupleDescriptor* tuple_desc = nullptr;
 
@@ -172,6 +174,8 @@ struct HdfsScannerParams {
     bool enable_populate_block_cache = false;
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
+    bool can_use_any_column = false;
+    bool can_use_min_max_count_opt = false;
 };
 
 struct HdfsScannerContext {
@@ -211,7 +215,13 @@ struct HdfsScannerContext {
     // runtime filters.
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
 
+    std::vector<std::string>* hive_column_names = nullptr;
+
     bool case_sensitive = false;
+
+    bool can_use_any_column = false;
+
+    bool can_use_min_max_count_opt = false;
 
     std::string timezone;
 
@@ -221,10 +231,10 @@ struct HdfsScannerContext {
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
 
-    // set column names from file.
+    // update materialized column against data file.
     // and to update not_existed slots and conjuncts.
     // and to update `conjunct_ctxs_by_slot` field.
-    void set_columns_from_file(const std::unordered_set<std::string>& names);
+    void update_materialized_columns(const std::unordered_set<std::string>& names);
     // "not existed columns" are materialized columns not found in file
     // this usually happens when use changes schema. for example
     // user create table with 3 fields A, B, C, and there is one file F1

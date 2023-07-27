@@ -180,7 +180,7 @@ void RuntimeState::init_mem_trackers(const TUniqueId& query_id, MemTracker* pare
     mem_tracker_counter->set(bytes_limit);
 
     if (parent == nullptr) {
-        parent = _exec_env->query_pool_mem_tracker();
+        parent = GlobalEnv::GetInstance()->query_pool_mem_tracker();
     }
 
     _query_mem_tracker =

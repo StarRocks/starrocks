@@ -1136,8 +1136,8 @@ TEST_F(OrcChunkReaderTest, TestReadBinaryColumn) {
         EXPECT_FALSE(nulls[0]);
         EXPECT_EQ(vo[0], 0);
         EXPECT_EQ(vo[1], 2);
-        EXPECT_EQ(vb[0], u'\n');
-        EXPECT_EQ(vb[1], u'\274');
+        EXPECT_EQ((int)vb[0], 10);
+        EXPECT_EQ((int)vb[1], 188);
     }
 }
 
@@ -2117,7 +2117,7 @@ TEST_F(OrcChunkReaderTest, get_file_schema) {
               {"col_char", TYPE_CHAR},
               {"col_varchar", TYPE_VARCHAR},
               {"col_binary", TYPE_VARBINARY},
-              {"col_decimal", TYPE_DECIMAL64},
+              {"col_decimal", TYPE_DECIMAL128},
               {"col_timestamp", TYPE_DATETIME},
               {"col_date", TYPE_DATE}}}};
 

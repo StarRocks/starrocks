@@ -749,10 +749,6 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    public R visitSetWarehouseStatement(SetWarehouseStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
     // ---------------------------------------- Storage Volume Statement ----------------------------------------------------
 
     public R visitCreateStorageVolumeStatement(CreateStorageVolumeStmt statement, C context) {
@@ -814,6 +810,11 @@ public abstract class AstVisitor<R, C> {
 
     public R visitDescPipeStatement(DescPipeStmt statement, C context) {
         return visitNode(statement, context);
+    }
+
+    // ---------------------------------------- FailPoint Statement ----------------------------------------------------
+    public R visitUpdateFailPointStatusStatement(UpdateFailPointStatusStatement statement, C context) {
+        return visitStatement(statement, context);
     }
 
     // ------------------------------------------- Unsupported statement ---------------------------------------------------------

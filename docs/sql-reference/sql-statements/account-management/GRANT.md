@@ -13,118 +13,132 @@ Grants roles to users or other roles.
 ```SQL
 # System
 
-GRANT  
+GRANT
     { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | ALL [PRIVILEGES]} 
     ON SYSTEM
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 
-# resource group
+# Resource group
 
-GRANT  
+GRANT
     { ALTER | DROP | ALL [PRIVILEGES] } 
     ON { RESOURCE GROUP <resource_name> [, < resource_name >,...] ｜ ALL RESOURCE GROUPS} 
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 
-# resource
+# Resource
 
-GRANT 
+GRANT
     { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
     ON { RESOURCE <resource_name> [, < resource_name >,...] ｜ ALL RESOURCES} 
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 
-# global udf
+# Global UDF
 
-GRANT { 
+GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
     ON { GLOBAL FUNCTION <function_name> [, < function_name >,...]    
        | ALL GLOBAL FUNCTIONS }
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 
-# internal catalog
+# Internal catalog
 
-GRANT 
+GRANT
     { USAGE | CREATE DATABASE | ALL [PRIVILEGES]} 
     ON CATALOG default_catalog
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 
-# external catalog
+# External catalog
 
-GRANT  
+GRANT
    { USAGE | DROP | ALL [PRIVILEGES] } 
    ON { CATALOG <catalog_name> [, <catalog_name>,...] | ALL CATALOGS}
-   TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+   TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 
 # Database
 
-GRANT 
+GRANT
     { ALTER | DROP | CREATE TABLE | CREATE VIEW | CREATE FUNCTION | CREATE MATERIALIZED VIEW | ALL [PRIVILEGES] } 
     ON { DATABASE <database_name> [, <database_name>,...] | ALL DATABASES }
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ] ;
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
   
 * You must first run SET CATALOG before you run this command.
 
 # Table
 
-GRANT  
+GRANT
     { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]} 
     ON { TABLE <table_name> [, < table_name >,...]
-       | ALL TABLES IN 
-           { { DATABASE <database_name> [,<database_name>,...] } | ALL DATABASES }
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+       | ALL TABLES} IN 
+           { DATABASE <database_name> | ALL DATABASES }
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 
 * You must first run SET CATALOG before you run this command. 
 * You can also use db.tbl to represent a table.
-GRANT <priv> ON TABLE db.tbl TO {ROLE <rolename> | USER <username>};
+GRANT <priv> ON TABLE db.tbl TO {ROLE <rolename> | USER <username>}
 
 # View
 
 GRANT  
     { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
     ON { VIEW <view_name> [, < view_name >,...]
-       ｜ ALL VIEWS IN 
-           { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+       ｜ ALL VIEWS} IN 
+           {  DATABASE <database_name> | ALL DATABASES }
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
     
 * You must first run SET CATALOG before you run this command. 
 * You can also use db.view to represent a view.
-GRANT <priv> ON VIEW db.view TO {ROLE <rolename> | USER <username>};
+GRANT <priv> ON VIEW db.view TO {ROLE <rolename> | USER <username>}
 
-# materialized view
+# Materialized view
 
-GRANT { 
+GRANT
     { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
-       ｜ ALL MATERIALIZED VIEWS IN 
-           { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+       ｜ ALL MATERIALIZED VIEWS} IN 
+           { DATABASE <database_name> | ALL DATABASES }
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
     
 * You must first run SET CATALOG before you run this command. 
 * You can also use db.mv to represent an mv.
-GRANT <priv> ON MATERIALIZED_VIEW db.mv TO {ROLE <rolename> | USER <username>};
+GRANT <priv> ON MATERIALIZED_VIEW db.mv TO {ROLE <rolename> | USER <username>}
 
-# function
+# Function
 
-GRANT { 
+GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
     ON { FUNCTION <function_name> [, < function_name >,...]
-       ｜ ALL FUNCTIONS IN 
-           { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+       ｜ ALL FUNCTIONS} IN 
+           {  DATABASE <database_name>  | ALL DATABASES }
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
     
 * You must first run SET CATALOG before you run this command. 
 * You can also use db.function to represent a function.
-GRANT <priv> ON FUNCTION db.function TO {ROLE <rolename> | USER <username>};
+GRANT <priv> ON FUNCTION db.function TO {ROLE <rolename> | USER <username>}
 
-# user
+# User
 
-GRANT IMPERSONATE ON USER <user_identity> TO USER <user_identity> [ WITH GRANT OPTION ];
+GRANT IMPERSONATE
+ON USER <user_identity>
+TO USER <user_identity> [ WITH GRANT OPTION ]
+
+# Storage volume
+
+GRANT
+    CREATE STORAGE VOLUME 
+    ON SYSTEM
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+
+GRANT  
+    { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
+    ON { STORAGE VOLUME < name > [, < name >,...] ｜ ALL STORAGE VOLUME} 
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
 ### Grant roles  to roles or users
 
 ```SQL
-GRANT <role_name> [,<role_name>, ...] TO ROLE <role_name>;
-GRANT <role_name> [,<role_name>, ...] TO USER <user_identity>;
+GRANT <role_name> [,<role_name>, ...] TO ROLE <role_name>
+GRANT <role_name> [,<role_name>, ...] TO USER <user_identity>
 ```
 
 ## References

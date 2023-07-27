@@ -18,12 +18,12 @@ import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.AlreadyExistsException;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.InvalidConfException;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
-import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -47,7 +47,7 @@ import java.util.Set;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public abstract class StorageVolumeMgr implements GsonPostProcessable {
+public abstract class StorageVolumeMgr {
     private static final String ENABLED = "enabled";
 
     public static final String DEFAULT = "default";
@@ -108,22 +108,28 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         }
     }
 
-    public void removeStorageVolume(DropStorageVolumeStmt stmt) throws DdlException, AnalysisException {
+    public void removeStorageVolume(DropStorageVolumeStmt stmt) throws DdlException, MetaNotFoundException {
         removeStorageVolume(stmt.getName());
     }
 
-    public void removeStorageVolume(String name) throws DdlException {
+    public void removeStorageVolume(String name) throws DdlException, MetaNotFoundException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             StorageVolume sv = getStorageVolumeByName(name);
-            Preconditions.checkState(sv != null,
-                    "Storage volume '%s' does not exist", name);
+            if (sv == null) {
+                throw new MetaNotFoundException(String.format("Storage volume '%s' does not exist", name));
+            }
             Preconditions.checkState(!defaultStorageVolumeId.equals(sv.getId()),
                     "default storage volume can not be removed");
-            Set<Long> dbs = storageVolumeToDbs.get(sv.getId());
-            Set<Long> tables = storageVolumeToTables.get(sv.getId());
-            Preconditions.checkState(dbs == null && tables == null,
+            Set<Long> dbs = storageVolumeToDbs.getOrDefault(sv.getId(), new HashSet<>());
+            Set<Long> tables = storageVolumeToTables.getOrDefault(sv.getId(), new HashSet<>());
+            if (name.equals(BUILTIN_STORAGE_VOLUME)) {
+                List<List<Long>> bindings = getBindingsOfBuiltinStorageVolume();
+                dbs.addAll(bindings.get(0));
+                tables.addAll(bindings.get(1));
+            }
+            Preconditions.checkState(dbs.isEmpty() && tables.isEmpty(),
                     "Storage volume '%s' is referenced by dbs or tables, dbs: %s, tables: %s",
-                    name, dbs != null ? dbs.toString() : "[]", tables != null ? tables.toString() : "[]");
+                    name, dbs.toString(), tables.toString());
             removeInternalNoLock(sv);
         }
     }
@@ -163,15 +169,15 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         }
     }
 
-    public void setDefaultStorageVolume(SetDefaultStorageVolumeStmt stmt) throws AnalysisException {
+    public void setDefaultStorageVolume(SetDefaultStorageVolumeStmt stmt) {
         setDefaultStorageVolume(stmt.getName());
     }
 
-    public void setDefaultStorageVolume(String svKey) {
+    public void setDefaultStorageVolume(String svName) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            StorageVolume sv = getStorageVolumeByName(svKey);
-            Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", svKey);
-            Preconditions.checkState(sv.getEnabled(), "Storage volume '%s' is disabled", svKey);
+            StorageVolume sv = getStorageVolumeByName(svName);
+            Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", svName);
+            Preconditions.checkState(sv.getEnabled(), "Storage volume '%s' is disabled", svName);
             SetDefaultStorageVolumeLog log = new SetDefaultStorageVolumeLog(sv.getId());
             GlobalStateMgr.getCurrentState().getEditLog().logSetDefaultStorageVolume(log);
             this.defaultStorageVolumeId = sv.getId();
@@ -182,9 +188,9 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         return defaultStorageVolumeId;
     }
 
-    public boolean exists(String svKey) throws DdlException {
+    public boolean exists(String svName) throws DdlException {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-            StorageVolume sv = getStorageVolumeByName(svKey);
+            StorageVolume sv = getStorageVolumeByName(svName);
             return sv != null;
         }
     }
@@ -262,16 +268,12 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         this.storageVolumeToDbs = data.storageVolumeToDbs;
         this.storageVolumeToTables = data.storageVolumeToTables;
         this.defaultStorageVolumeId = data.defaultStorageVolumeId;
-    }
 
-    @Override
-    public void gsonPostProcess() throws IOException {
         for (Map.Entry<String, Set<Long>> entry : storageVolumeToDbs.entrySet()) {
             for (Long dbId : entry.getValue()) {
                 dbToStorageVolume.put(dbId, entry.getKey());
             }
         }
-
         for (Map.Entry<String, Set<Long>> entry : storageVolumeToTables.entrySet()) {
             for (Long tableId : entry.getValue()) {
                 tableToStorageVolume.put(tableId, entry.getKey());
@@ -279,9 +281,9 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         }
     }
 
-    public abstract StorageVolume getStorageVolumeByName(String svKey);
+    public abstract StorageVolume getStorageVolumeByName(String svName);
 
-    public abstract StorageVolume getStorageVolume(String storageVolumeId);
+    public abstract StorageVolume getStorageVolume(String svId);
 
     public abstract List<String> listStorageVolumeNames() throws DdlException;
 
@@ -293,17 +295,21 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
 
     protected abstract void removeInternalNoLock(StorageVolume sv) throws DdlException;
 
-    public abstract boolean bindDbToStorageVolume(String svKey, long dbId) throws DdlException;
+    public abstract boolean bindDbToStorageVolume(String svName, long dbId) throws DdlException;
 
     public abstract void replayBindDbToStorageVolume(String svId, long dbId);
 
     public abstract void unbindDbToStorageVolume(long dbId);
 
-    public abstract boolean bindTableToStorageVolume(String svKey, long dbId, long tableId) throws DdlException;
+    public abstract boolean bindTableToStorageVolume(String svName, long dbId, long tableId) throws DdlException;
 
     public abstract void replayBindTableToStorageVolume(String svId, long tableId);
 
     public abstract void unbindTableToStorageVolume(long tableId);
 
-    public abstract String createOrUpdateBuiltinStorageVolume() throws DdlException, AlreadyExistsException;
+    public abstract String createBuiltinStorageVolume() throws DdlException, AlreadyExistsException;
+
+    public abstract void validateStorageVolumeConfig() throws InvalidConfException;
+
+    protected abstract List<List<Long>> getBindingsOfBuiltinStorageVolume();
 }

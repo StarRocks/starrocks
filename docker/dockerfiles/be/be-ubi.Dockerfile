@@ -33,13 +33,24 @@ RUN yum install -y java-1.8.0-openjdk-devel tzdata openssl curl vim ca-certifica
     yum remove -y mysql57-community-release-el7
 ENV JAVA_HOME=/usr/lib/jvm/java-openjdk
 
+RUN touch /.dockerenv
+
 WORKDIR $STARROCKS_ROOT
 
+# Run as starrocks user
+ARG USER=starrocks
+ARG GROUP=starrocks
+RUN groupadd --gid 1000 $GROUP && useradd --no-create-home --uid 1000 --gid 1000 \
+             --shell /usr/sbin/nologin $USER && \
+    chown -R $USER:$GROUP $STARROCKS_ROOT
+ENV USER $USER
+USER $USER
+
 # Copy all artifacts to the runtime container image
-COPY --from=artifacts /release/be_artifacts/ $STARROCKS_ROOT/
+COPY --from=artifacts --chown=starrocks:starrocks /release/be_artifacts/ $STARROCKS_ROOT/
 
 # Copy be k8s scripts to the runtime container image
-COPY docker/dockerfiles/be/*.sh $STARROCKS_ROOT/
+COPY --chown=starrocks:starrocks docker/dockerfiles/be/*.sh $STARROCKS_ROOT/
 
 # Create directory for BE storage, create cn symbolic link to be
-RUN touch /.dockerenv && mkdir -p $STARROCKS_ROOT/be/storage && ln -sfT be $STARROCKS_ROOT/cn
+RUN mkdir -p $STARROCKS_ROOT/be/storage && ln -sfT be $STARROCKS_ROOT/cn

@@ -100,7 +100,7 @@ private:
     // 1. conjuncts that column is not exist in file, are used to filter file in file reader.
     // 2. conjuncts that column is materialized, are evaled in group reader.
     std::unordered_map<SlotId, std::vector<ExprContext*>> _conjunct_ctxs_by_slot;
-    std::unordered_set<SlotId> _conjunct_slots;
+    std::unordered_set<SlotId> _slots_in_conjunct;
 
     // partition conjuncts of each partition slot.
     std::vector<ExprContext*> _partition_conjunct_ctxs;
@@ -127,6 +127,8 @@ private:
 
     std::vector<std::string> _hive_column_names;
     bool _case_sensitive = false;
+    bool _can_use_any_column = false;
+    bool _can_use_min_max_count_opt = false;
     const HiveTableDescriptor* _hive_table = nullptr;
 
     // ======================================

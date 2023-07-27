@@ -456,7 +456,7 @@ public class OffHeapColumnVector {
             case STRING:
             case DATE:
             case DECIMAL:
-                appendString(o.getString());
+                appendString(o.getString(typeValue));
                 break;
             case DATETIME:
             case DATETIME_MICROS:

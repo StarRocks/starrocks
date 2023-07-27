@@ -37,8 +37,7 @@ constexpr static const LogicalType kDictCodeFieldType = TYPE_INT;
 GroupReader::GroupReader(GroupReaderParam& param, int row_group_number, const std::set<int64_t>* need_skip_rowids,
                          int64_t row_group_first_row)
         : _row_group_first_row(row_group_first_row), _need_skip_rowids(need_skip_rowids), _param(param) {
-    _row_group_metadata =
-            std::make_shared<tparquet::RowGroup>(param.file_metadata->t_metadata().row_groups[row_group_number]);
+    _row_group_metadata = &_param.file_metadata->t_metadata().row_groups[row_group_number];
 }
 
 Status GroupReader::init() {
@@ -190,7 +189,7 @@ Status GroupReader::_init_column_readers() {
     opts.chunk_size = _param.chunk_size;
     opts.stats = _param.stats;
     opts.file = _param.file;
-    opts.row_group_meta = _row_group_metadata.get();
+    opts.row_group_meta = _row_group_metadata;
     opts.context = _obj_pool.add(new ColumnReaderContext);
     for (const auto& column : _param.read_cols) {
         RETURN_IF_ERROR(_create_column_reader(column));
@@ -321,10 +320,8 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
             _collect_field_io_range(field.children[subfield_pos[i]], col_type.children[i], active, ranges, end_offset);
         }
     } else if (field.type.type == LogicalType::TYPE_MAP) {
-        // ParquetFiled Map -> Map<Struct<key,value>>
-        DCHECK(field.children[0].type.type == TYPE_STRUCT);
         auto index = 0;
-        for (auto& child : field.children[0].children) {
+        for (auto& child : field.children) {
             if ((!col_type.children[index].is_unknown_type())) {
                 _collect_field_io_range(child, col_type.children[index], active, ranges, end_offset);
             }

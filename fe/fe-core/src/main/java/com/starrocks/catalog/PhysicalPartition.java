@@ -34,8 +34,11 @@ public interface PhysicalPartition {
     // version interface
 
     public void updateVersionForRestore(long visibleVersion);
+
     public void updateVisibleVersion(long visibleVersion);
+
     public void updateVisibleVersion(long visibleVersion, long visibleVersionTime);
+    public void updateVisibleVersion(long visibleVersion, long visibleVersionTime, long visibleTxnId);
     public long getVisibleVersion();
     public long getVisibleVersionTime();
     public void setVisibleVersion(long visibleVersion, long visibleVersionTime);

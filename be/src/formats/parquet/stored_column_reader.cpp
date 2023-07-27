@@ -52,8 +52,8 @@ protected:
     bool page_selected(size_t num_values) override;
 
 private:
-    // Try to deocde enough levels in levels buffer, except there is no enough levels in current
-    void _decode_levels(size_t num_levels);
+    // Try to decode enough levels in levels buffer, if there are no enough levels, will throw InternalError msg.
+    Status _decode_levels(size_t num_levels);
 
     void _delimit_rows(size_t* num_rows, size_t* num_levels_parsed);
 
@@ -111,8 +111,21 @@ public:
         *num_levels = _levels_parsed;
     }
 
+    void append_default_levels(size_t row_nums) {
+        if (_need_parse_levels) {
+            size_t new_capacity = _levels_parsed + row_nums;
+            if (new_capacity > _levels_capacity) {
+                _def_levels.resize(new_capacity);
+                _levels_capacity = new_capacity;
+            }
+            memset(&_def_levels[_levels_parsed], 0x0, row_nums * sizeof(level_t));
+            _levels_parsed += row_nums;
+            _levels_decoded = _levels_parsed;
+        }
+    }
+
 private:
-    void _decode_levels(size_t num_levels);
+    Status _decode_levels(size_t num_levels);
     Status _read_records_only(size_t* num_records, ColumnContentType content_type, Column* dst);
     Status _read_records_and_levels(size_t* num_records, ColumnContentType content_type, Column* dst);
 
@@ -157,8 +170,6 @@ public:
     }
 
 private:
-    // TODO(zc): No need copy
-    const tparquet::ColumnChunk _chunk_metadata;
     const ParquetField* _field = nullptr;
 };
 
@@ -206,7 +217,7 @@ Status RepeatedStoredColumnReader::do_read_records(size_t* num_records, ColumnCo
         DCHECK_GT(_num_values_left_in_cur_page, 0);
 
         size_t records_to_read = *num_records - records_read;
-        _decode_levels(records_to_read);
+        RETURN_IF_ERROR(_decode_levels(records_to_read));
 
         size_t num_parsed_levels = 0;
         _delimit_rows(&records_to_read, &num_parsed_levels);
@@ -289,11 +300,11 @@ void RepeatedStoredColumnReader::_delimit_rows(size_t* num_rows, size_t* num_lev
     *num_levels_parsed = levels_pos - _levels_parsed;
 }
 
-void RepeatedStoredColumnReader::_decode_levels(size_t num_levels) {
+Status RepeatedStoredColumnReader::_decode_levels(size_t num_levels) {
     constexpr size_t min_level_batch_size = 4096;
     size_t levels_remaining = _levels_decoded - _levels_parsed;
     if (num_levels <= levels_remaining) {
-        return;
+        return Status::OK();
     }
     size_t levels_to_decode = std::max(min_level_batch_size, num_levels - levels_remaining);
     levels_to_decode = std::min(levels_to_decode, _num_values_left_in_cur_page - levels_remaining);
@@ -308,10 +319,18 @@ void RepeatedStoredColumnReader::_decode_levels(size_t num_levels) {
     }
 
     size_t res_def = _reader->decode_def_levels(levels_to_decode, &_def_levels[_levels_decoded]);
+    if (UNLIKELY(res_def != levels_to_decode)) {
+        return Status::InternalError(
+                fmt::format("def levels need to parsed: {}, def levels parsed: {}", levels_to_decode, res_def));
+    }
     size_t res_rep = _reader->decode_rep_levels(levels_to_decode, &_rep_levels[_levels_decoded]);
-    DCHECK_EQ(res_def, res_rep);
+    if (UNLIKELY(res_rep != levels_to_decode)) {
+        return Status::InternalError(
+                fmt::format("rep levels need to parsed: {}, rep levels parsed: {}", levels_to_decode, res_rep));
+    }
 
     _levels_decoded += levels_to_decode;
+    return Status::OK();
 }
 
 void OptionalStoredColumnReader::reset() {
@@ -357,7 +376,7 @@ Status OptionalStoredColumnReader::_read_records_and_levels(size_t* num_records,
 
         {
             SCOPED_RAW_TIMER(&_opts.stats->level_decode_ns);
-            _decode_levels(records_to_read);
+            RETURN_IF_ERROR(_decode_levels(records_to_read));
         }
 
         {
@@ -432,7 +451,11 @@ Status OptionalStoredColumnReader::_read_records_only(size_t* num_records, Colum
 
                     _levels_capacity = new_capacity;
                 }
-                _reader->decode_def_levels(records_to_read, &_def_levels[0]);
+                size_t res_def = _reader->decode_def_levels(records_to_read, &_def_levels[0]);
+                if (UNLIKELY(res_def != records_to_read)) {
+                    return Status::InternalError(fmt::format("def levels need to parsed: {}, def levels parsed: {}",
+                                                             records_to_read, res_def));
+                }
             }
 
             SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
@@ -461,11 +484,11 @@ Status OptionalStoredColumnReader::_read_records_only(size_t* num_records, Colum
     return Status::OK();
 }
 
-void OptionalStoredColumnReader::_decode_levels(size_t num_levels) {
+Status OptionalStoredColumnReader::_decode_levels(size_t num_levels) {
     constexpr size_t min_level_batch_size = 4096;
     size_t levels_remaining = _levels_decoded - _levels_parsed;
     if (num_levels <= levels_remaining) {
-        return;
+        return Status::OK();
     }
     size_t levels_to_decode = std::max(min_level_batch_size, num_levels - levels_remaining);
     levels_to_decode = std::min(levels_to_decode, _num_values_left_in_cur_page - levels_remaining);
@@ -478,9 +501,14 @@ void OptionalStoredColumnReader::_decode_levels(size_t num_levels) {
         _levels_capacity = new_capacity;
     }
 
-    _reader->decode_def_levels(levels_to_decode, &_def_levels[_levels_decoded]);
+    size_t res_def = _reader->decode_def_levels(levels_to_decode, &_def_levels[_levels_decoded]);
+    if (UNLIKELY(res_def != levels_to_decode)) {
+        return Status::InternalError(
+                fmt::format("def levels need to parsed: {}, def levels parsed: {}", levels_to_decode, res_def));
+    }
 
     _levels_decoded += levels_to_decode;
+    return Status::OK();
 }
 
 Status RequiredStoredColumnReader::do_read_records(size_t* num_records, ColumnContentType content_type, Column* dst) {
@@ -545,6 +573,7 @@ Status StoredColumnReader::next_page(size_t records_to_read, ColumnContentType c
     }
     if (_opts.context->filter) {
         dst->append_default(records_to_skip);
+        append_default_levels(records_to_skip);
         *records_read = records_to_skip;
     }
     return Status::OK();

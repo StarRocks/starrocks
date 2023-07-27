@@ -46,7 +46,7 @@ import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
+import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
@@ -58,6 +58,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.LOW_AGGREGATE_EFFECT_COEFFICIENT;
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.MEDIUM_AGGREGATE_EFFECT_COEFFICIENT;
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.SMALL_SCALE_ROWS_LIMIT;
 
 public class SplitAggregateRule extends TransformationRule {
     private SplitAggregateRule() {
@@ -152,49 +155,47 @@ public class SplitAggregateRule extends TransformationRule {
         }
     }
 
-    // True means good cases for two phase agg. It requires both group by keys and distinct cols are
-    // low cardinality which helps deduplication in the local stage.
-    private boolean hasAggregateEffect(OptExpression input, List<ColumnRefOperator> distinctColumns) {
-        Statistics statistics = input.getGroupExpression().getGroup().getStatistics();
-        Statistics inputStatistics = input.getGroupExpression().getInputs().get(0).getStatistics();
+    private boolean isTwoStageMoreEfficient(OptExpression input, List<ColumnRefOperator> distinctColumns) {
+        LogicalAggregationOperator aggOp = input.getOp().cast();
+        Statistics inputStatistics = input.getGroupExpression().inputAt(0).getStatistics();
         Collection<ColumnStatistic> inputsColumnStatistics = inputStatistics.getColumnStatistics().values();
-
-        if (inputsColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown)) {
+        if (inputsColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown) || !aggOp.hasLimit()) {
             return false;
         }
-        double inputRowCount = Math.max(1, inputStatistics.getOutputRowCount());
-        double rowCount = Math.max(1, statistics.getOutputRowCount());
 
-        if (CollectionUtils.isNotEmpty(distinctColumns)) {
-            for (ColumnRefOperator distinctCol : distinctColumns) {
-                double ndv = inputStatistics.getColumnStatistic(distinctCol).getDistinctValuesCount();
-                rowCount = rowCount > ndv ? rowCount : ndv;
-            }
-        }
+        double inputRowCount = inputStatistics.getOutputRowCount();
+        double aggOutputRow = StatisticsCalculator.computeGroupByStatistics(aggOp.getGroupingKeys(), inputStatistics,
+                Maps.newHashMap());
 
+        double distinctOutputRow = StatisticsCalculator.computeGroupByStatistics(distinctColumns, inputStatistics,
+                Maps.newHashMap());
 
-        if (rowCount * StatisticsEstimateCoefficient.LOW_AGGREGATE_EFFECT_COEFFICIENT < inputRowCount) {
-            return true;
-        }
-        return false;
+        // both group by key and distinct key cannot with high cardinality
+        return aggOutputRow * MEDIUM_AGGREGATE_EFFECT_COEFFICIENT < inputRowCount
+                && distinctOutputRow * LOW_AGGREGATE_EFFECT_COEFFICIENT < inputRowCount
+                && aggOutputRow > aggOp.getLimit();
     }
 
 
-    // True means good cases for parallel deduplication. It requires group by keys have a relatively high
-    // cardinality (number of distinct value > 1000) to distribute data across multiple cores which helps
-    // parallel deduplication in the distinct global stage.
-    private boolean isSuitableForParallelDeduplication(OptExpression input) {
-        Statistics statistics = input.getGroupExpression().getGroup().getStatistics();
-        Statistics inputStatistics = input.getGroupExpression().getInputs().get(0).getStatistics();
+    private boolean isThreeStageMoreEfficient(OptExpression input, List<ColumnRefOperator> groupKeys) {
+        Statistics inputStatistics = input.getGroupExpression().inputAt(0).getStatistics();
         Collection<ColumnStatistic> inputsColumnStatistics = inputStatistics.getColumnStatistics().values();
-
         if (inputsColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown)) {
-            // split agg into more phase if no statistic info available
-            return false;
+            return true;
         }
-        double inputRowCount = Math.max(1, inputStatistics.getOutputRowCount());
-        double rowCount = Math.max(1, statistics.getOutputRowCount());
-        return inputRowCount / StatisticsEstimateCoefficient.LOW_AGGREGATE_EFFECT_COEFFICIENT < rowCount;
+
+        LogicalAggregationOperator aggOp = input.getOp().cast();
+
+        double inputRowCount = inputStatistics.getOutputRowCount();
+        double aggOutputRow = StatisticsCalculator.computeGroupByStatistics(aggOp.getGroupingKeys(), inputStatistics,
+                Maps.newHashMap());
+
+        double distinctOutputRow = StatisticsCalculator.computeGroupByStatistics(groupKeys, inputStatistics,
+                Maps.newHashMap());
+
+        return inputRowCount < SMALL_SCALE_ROWS_LIMIT
+                || aggOutputRow > LOW_AGGREGATE_EFFECT_COEFFICIENT
+                || distinctOutputRow * MEDIUM_AGGREGATE_EFFECT_COEFFICIENT < inputRowCount;
     }
 
     @Override
@@ -281,7 +282,7 @@ public class SplitAggregateRule extends TransformationRule {
 
         return CollectionUtils.isNotEmpty(operator.getGroupingKeys())
                 && aggMode == AUTO_MODE
-                && hasAggregateEffect(input, distinctColumns);
+                && isTwoStageMoreEfficient(input, distinctColumns);
     }
 
     private boolean canGenerateTwoStageAggregate(LogicalAggregationOperator operator,
@@ -371,7 +372,7 @@ public class SplitAggregateRule extends TransformationRule {
         List<ColumnRefOperator> partitionByCols;
 
         boolean shouldFurtherSplit = false;
-        if (isSuitableForParallelDeduplication(input)
+        if (isThreeStageMoreEfficient(input, distinctGlobal.getGroupingKeys())
                 || oldAgg.getGroupingKeys().containsAll(distinctGlobal.getGroupingKeys())) {
             partitionByCols = oldAgg.getGroupingKeys();
         } else {

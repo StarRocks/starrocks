@@ -35,6 +35,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.mysql.MysqlChannel;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.qe.ConnectContext;
@@ -57,7 +58,7 @@ import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.AnalyzeStatus;
@@ -87,6 +88,8 @@ public class PrivilegeCheckerTest {
 
     private static AuthorizationMgr authorizationManager;
 
+    private static ConnectContext connectContext;
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
@@ -113,7 +116,10 @@ public class PrivilegeCheckerTest {
         String createTblStmtStr3 = "create table db1.tbl2(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
                 +
                 "AGGREGATE KEY(k1, k2, k3, k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
-        starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
+
+        connectContext = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+        starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("db1");
         starRocksAssert.withDatabase("db2");
         starRocksAssert.withDatabase("db3");
@@ -278,7 +284,7 @@ public class PrivilegeCheckerTest {
         try {
             PrivilegeChecker.check(statement, ctx);
             Assert.fail();
-        } catch (SemanticException e) {
+        } catch (AccessDeniedException e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
@@ -296,7 +302,7 @@ public class PrivilegeCheckerTest {
         try {
             PrivilegeChecker.check(statement, starRocksAssert.getCtx());
             Assert.fail();
-        } catch (SemanticException e) {
+        } catch (AccessDeniedException e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
@@ -312,7 +318,7 @@ public class PrivilegeCheckerTest {
         try {
             PrivilegeChecker.check(statement, ctx);
             Assert.fail();
-        } catch (SemanticException e) {
+        } catch (AccessDeniedException e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
@@ -346,7 +352,7 @@ public class PrivilegeCheckerTest {
         try {
             PrivilegeChecker.check(statement, starRocksAssert.getCtx());
             Assert.fail();
-        } catch (SemanticException e) {
+        } catch (AccessDeniedException e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
@@ -364,7 +370,7 @@ public class PrivilegeCheckerTest {
             // user 'test' not has GRANT/NODE privilege
             PrivilegeChecker.check(statement, starRocksAssert.getCtx());
             Assert.fail();
-        } catch (SemanticException e) {
+        } catch (AccessDeniedException e) {
             System.out.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
@@ -378,10 +384,10 @@ public class PrivilegeCheckerTest {
         try {
             PrivilegeChecker.check(statement, ctx);
             Assert.fail();
-        } catch (SemanticException e) {
+        } catch (AccessDeniedException e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
             Assert.assertTrue(e.getMessage().contains(
-                    "USAGE denied to user 'test'@'localhost' for resoure '[my_spark]'"
+                    "USAGE denied to user 'test'@'localhost' for resource '[my_spark]'"
             ));
         }
         ctxToRoot();
@@ -409,34 +415,33 @@ public class PrivilegeCheckerTest {
         try {
             PrivilegeChecker.check(
                     UtFrameUtils.parseStmtWithNewParser("use 'catalog test_ex_catalog'", ctx), ctx);
-        } catch (SemanticException e) {
-            Assert.assertTrue(e.getMessage().contains(
-                    "Access denied for user 'test' to catalog"));
+        } catch (AccessDeniedException e) {
+            Assert.assertTrue(e.getMessage().contains("Access denied;"));
         }
         verifyGrantRevoke(
                 "use 'catalog test_ex_catalog'",
                 "grant USAGE on catalog test_ex_catalog to test",
                 "revoke USAGE on catalog test_ex_catalog from test",
-                "Access denied for user 'test' to catalog");
+                "Access denied;");
         verifyGrantRevoke(
                 "use 'catalog test_ex_catalog'",
                 "grant DROP on catalog test_ex_catalog to test",
                 "revoke DROP on catalog test_ex_catalog from test",
-                "Access denied for user 'test' to catalog");
+                "Access denied; you need (at least one of) the ANY IN CATALOG");
 
         // check create external catalog: CREATE EXTERNAL CATALOG on system object
         verifyGrantRevoke(
                 "create external catalog test_ex_catalog2 properties (\"type\"=\"iceberg\")",
                 "grant CREATE EXTERNAL CATALOG on system to test",
                 "revoke CREATE EXTERNAL CATALOG on system from test",
-                "Access denied for user 'test' to catalog");
+                "Access denied; you need (at least one of) the CREATE EXTERNAL CATALOG privilege(s)");
 
         // check drop external catalog: DROP on catalog
         verifyGrantRevoke(
                 "drop catalog test_ex_catalog",
                 "grant DROP on catalog test_ex_catalog to test",
                 "revoke DROP on catalog test_ex_catalog from test",
-                "Access denied for user 'test' to catalog");
+                "Access denied; you need (at least one of) the DROP privilege(s)");
 
         // check show catalogs only show catalog where the user has any privilege on
         starRocksAssert.withCatalog("create external catalog test_ex_catalog3 properties (\"type\"=\"iceberg\")");
@@ -449,6 +454,33 @@ public class PrivilegeCheckerTest {
         System.out.println(res.getResultRows());
         Assert.assertEquals(2, res.getResultRows().size());
         Assert.assertEquals("test_ex_catalog3", res.getResultRows().get(1).get(0));
+    }
+
+    @Test
+    public void testSelectCatalogTable() throws Exception {
+        ctxToTestUser();
+        try {
+            StmtExecutor stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "select * from hive0.tpch.region");
+            stmtExecutor.execute();
+        } catch (AccessDeniedException e) {
+            Assert.assertTrue(e.getMessage().contains("Access denied;"));
+        }
+
+        ctxToRoot();
+        StmtExecutor stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "set catalog hive0");
+        stmtExecutor.execute();
+        grantRevokeSqlAsRoot("grant SELECT on tpch.region to test");
+        ctxToTestUser();
+        try {
+            stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "select * from hive0.tpch.region");
+            stmtExecutor.execute();
+        } catch (AccessDeniedException e) {
+            Assert.assertFalse(e.getMessage().contains("Access denied;"));
+        }
+        ctxToRoot();
+        grantRevokeSqlAsRoot("revoke SELECT on tpch.region from test");
+        stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "set catalog default_catalog");
+        stmtExecutor.execute();
     }
 
     @Test
@@ -477,14 +509,8 @@ public class PrivilegeCheckerTest {
                 "drop resource group rg3",
                 "grant DROP on resource group rg3 to test",
                 "revoke DROP on resource group rg3 from test",
-                "Access denied; you need (at least one of) the DROP privilege(s) for this operation");
-
-        // test drop resource group
-        verifyGrantRevoke(
-                "drop resource group rg3",
-                "grant DROP on resource group rg3 to test",
-                "revoke DROP on resource group rg3 from test",
-                "Access denied; you need (at least one of) the DROP privilege(s) for this operation");
+                "Access denied; you need (at least one of) the DROP privilege(s) on RESOURCE GROUP rg3 " +
+                        "for this operation");
 
         String sql = "" +
                 "ALTER RESOURCE GROUP rg3 \n" +
@@ -495,7 +521,7 @@ public class PrivilegeCheckerTest {
                 sql,
                 "grant ALTER on resource group rg3 to test",
                 "revoke ALTER on resource group rg3 from test",
-                "Access denied; you need (at least one of) the ALTER privilege(s) for this operation");
+                "Access denied; you need (at least one of) the ALTER privilege(s)");
 
         // test create resource group
         String createRg4Sql = "create resource group rg4\n" +
@@ -512,14 +538,14 @@ public class PrivilegeCheckerTest {
                 createRg4Sql,
                 "grant create resource group on system to test",
                 "revoke create resource group on system from test",
-                "Access denied; you need (at least one of) the CREATE RESOURCE GROUP privilege(s) for this operation");
+                "Access denied; you need (at least one of) the CREATE RESOURCE GROUP privilege(s)");
 
         // test grant/revoke on all resource groups
         verifyGrantRevoke(
                 sql,
                 "grant ALTER on all resource groups to test",
                 "revoke ALTER on all resource groups from test",
-                "Access denied; you need (at least one of) the ALTER privilege(s) for this operation");
+                "Access denied; you need (at least one of) the ALTER privilege(s)");
     }
 
     @Test
@@ -529,7 +555,7 @@ public class PrivilegeCheckerTest {
                 "analyze table db1.tbl1",
                 "grant SELECT,INSERT on db1.tbl1 to test",
                 "revoke SELECT,INSERT on db1.tbl1 from test",
-                "SELECT command denied to user 'test'");
+                "Access denied; you need (at least one of) the SELECT privilege(s) on TABLE tbl1 for this operation");
 
         // check create analyze all: need SELECT + INSERT on all tables in all databases
         verifyMultiGrantRevoke(
@@ -546,7 +572,7 @@ public class PrivilegeCheckerTest {
                         "revoke SELECT,INSERT on db2.tbl1 from test",
                         "revoke SELECT,INSERT on db3.tbl1 from test"
                 ),
-                "SELECT command denied to user 'test'");
+                "Access denied; you need (at least one of) the SELECT privilege(s)");
 
         // check create analyze database xxx: need SELECT + INSERT on all tables in the database
         verifyMultiGrantRevoke(
@@ -559,7 +585,7 @@ public class PrivilegeCheckerTest {
                         "revoke SELECT,INSERT on db1.tbl1 from test",
                         "revoke SELECT,INSERT on db1.tbl2 from test"
                 ),
-                "SELECT command denied to user 'test'");
+                "Access denied; you need (at least one of) the SELECT privilege(s)");
 
         // check create analyze table xxx: need SELECT + INSERT on the table
         verifyMultiGrantRevoke(
@@ -570,21 +596,21 @@ public class PrivilegeCheckerTest {
                 Arrays.asList(
                         "revoke SELECT,INSERT on db1.tbl1 from test"
                 ),
-                "SELECT command denied to user 'test'");
+                "Access denied; you need (at least one of) the SELECT privilege(s)");
 
         // check drop stats xxx: SELECT + INSERT on table
         verifyGrantRevoke(
                 "drop stats db1.tbl1",
                 "grant SELECT,INSERT on db1.tbl1 to test",
                 "revoke SELECT,INSERT on db1.tbl1 from test",
-                "SELECT command denied to user 'test'");
+                "Access denied; you need (at least one of) the SELECT privilege(s)");
 
         // check analyze table xxx drop histogram on xxx_col: SELECT + INSERT on table
         verifyGrantRevoke(
                 "analyze table db1.tbl1 drop histogram on k1",
                 "grant SELECT,INSERT on db1.tbl1 to test",
                 "revoke SELECT,INSERT on db1.tbl1 from test",
-                "SELECT command denied to user 'test'");
+                "Access denied; you need (at least one of) the SELECT privilege(s)");
     }
 
     @Test
@@ -609,13 +635,13 @@ public class PrivilegeCheckerTest {
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl2 to test");
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db3.tbl1 to test");
         try {
-            PrivilegeChecker.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
-        } catch (SemanticException e) {
+            new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+        } catch (AccessDeniedException e) {
             System.out.println(e.getMessage());
-            Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action on default_catalog.db2.tbl1"));
+            Assert.assertTrue(e.getMessage().contains("Access denied;"));
         }
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db2.tbl1 to test");
-        PrivilegeChecker.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+        new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl2 from test");
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db2.tbl1 from test");
@@ -635,12 +661,12 @@ public class PrivilegeCheckerTest {
         analyzeManager.addAnalyzeJob(analyzeJob);
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
         try {
-            PrivilegeChecker.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
-        } catch (SemanticException e) {
-            Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action on default_catalog.db1.tbl2"));
+            new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+        } catch (AccessDeniedException e) {
+            Assert.assertTrue(e.getMessage().contains("Access denied;"));
         }
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl2 to test");
-        PrivilegeChecker.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+        new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl2 from test");
 
@@ -657,12 +683,12 @@ public class PrivilegeCheckerTest {
         analyzeJob.setId(4);
         analyzeManager.addAnalyzeJob(analyzeJob);
         try {
-            PrivilegeChecker.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
-        } catch (SemanticException e) {
-            Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action on default_catalog.db1.tbl1"));
+            new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+        } catch (AccessDeniedException e) {
+            Assert.assertTrue(e.getMessage().contains("Access denied;"));
         }
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
-        PrivilegeChecker.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+        new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
 
         Database db2 = globalStateMgr.getDb("db2");
@@ -705,13 +731,13 @@ public class PrivilegeCheckerTest {
 
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
         analyzeManager.addAnalyzeStatus(analyzeStatus);
-        PrivilegeChecker.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeStatus.getId());
+        new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, analyzeStatus.getId());
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
 
         try {
-            PrivilegeChecker.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeStatus.getId());
-        } catch (SemanticException e) {
-            Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action"));
+            new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, analyzeStatus.getId());
+        } catch (AccessDeniedException e) {
+            Assert.assertTrue(e.getMessage().contains("Access denied;"));
         }
 
         BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db1.getId(), tbl1.getId(), null,
@@ -767,27 +793,28 @@ public class PrivilegeCheckerTest {
                 "select * from db1.tbl1",
                 "grant select on db1.tbl1 to test",
                 "revoke select on db1.tbl1 from test",
-                "SELECT command denied to user 'test'");
+                "Access denied; you need (at least one of) the SELECT privilege(s) on TABLE tbl1 for this operation");
         verifyGrantRevoke(
                 "insert into db1.tbl1 values ('2020-03-23', 'petals', 'on', 'a', 99);",
                 "grant insert on db1.tbl1 to test",
                 "revoke insert on db1.tbl1 from test",
-                "INSERT command denied to user 'test'");
+                "Access denied; you need (at least one of) the INSERT privilege(s) on TABLE tbl1 for this operation");
         verifyGrantRevoke(
                 "delete from db1.tbl1 where k3 = 1",
                 "grant delete on db1.tbl1 to test",
                 "revoke delete on db1.tbl1 from test",
-                "DELETE command denied to user 'test'");
+                "Access denied; you need (at least one of) the DELETE privilege(s) on TABLE tbl1 for this operation");
         verifyGrantRevoke(
                 "update db1.tbl1 set k4 = 2 where k3 = 1",
                 "grant update on db1.tbl1 to test",
                 "revoke update on db1.tbl1 from test",
-                "UPDATE command denied to user 'test'");
+                "Access denied; you need (at least one of) the UPDATE privilege(s) on TABLE tbl1 for this operation");
         verifyGrantRevoke(
                 "select k1, k2 from db3.mv1",
                 "grant select on materialized view db3.mv1 to test",
                 "revoke select on materialized view db3.mv1 from test",
-                "SELECT command denied to user 'test'@'localhost' for materialized view 'db3.mv1'");
+                "Access denied; you need (at least one of) the SELECT privilege(s) on MATERIALIZED VIEW mv1 " +
+                        "for this operation");
     }
 
     @Test
@@ -798,12 +825,12 @@ public class PrivilegeCheckerTest {
                 createTableSql,
                 "grant create table on database db1 to test",
                 "revoke create table on database db1 from test",
-                "Access denied for user 'test' to database 'db1'");
+                "Access denied; you need (at least one of) the CREATE TABLE");
         verifyGrantRevoke(
                 "drop table db1.tbl1",
                 "grant drop on db1.tbl1 to test",
                 "revoke drop on db1.tbl1 from test",
-                "DROP command denied to user 'test'");
+                "Access denied; you need (at least one of) the DROP privilege(s) on TABLE tbl1 for this operation");
 
         // check CTAS: create table on db and SELECT on source table
         String createTableAsSql = "create table db1.ctas_t1 as select k1,k2 from db1.tbl1;";
@@ -817,7 +844,8 @@ public class PrivilegeCheckerTest {
                         "revoke create table on database db1 from test",
                         "revoke select on table db1.tbl1 from test"
                 ),
-                "Access denied for user 'test' to database 'db1'");
+                "Access denied; you need (at least one of) the CREATE TABLE privilege(s) on DATABASE db1 " +
+                        "for this operation");
         // check CTAS: don't need 'INSERT' priv for InsertStmt created by CTAS statement
         ConnectContext ctx = starRocksAssert.getCtx();
         CreateTableAsSelectStmt createTableAsSelectStmt = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(
@@ -838,7 +866,8 @@ public class PrivilegeCheckerTest {
                         "revoke create table on database db1 from test",
                         "revoke select on table db1.tbl1 from test"
                 ),
-                "Access denied for user 'test' to database 'db1'");
+                "Access denied; you need (at least one of) the CREATE TABLE privilege(s) on DATABASE db1 " +
+                        "for this operation");
 
         // check recover table: create table on db and DROP on dropped table
         verifyMultiGrantRevoke(
@@ -851,28 +880,29 @@ public class PrivilegeCheckerTest {
                         "revoke create table on database db1 from test",
                         "revoke drop on table db1.tbl1 from test"
                 ),
-                "Access denied for user 'test' to database 'db1'");
+                "Access denied; you need (at least one of) the CREATE TABLE privilege(s) on DATABASE db1 for " +
+                        "this operation");
 
         // check refresh external table: ALTER
         verifyGrantRevoke(
                 "refresh external table db1.tbl1",
                 "grant ALTER on db1.tbl1 to test",
                 "revoke ALTER on db1.tbl1 from test",
-                "ALTER command denied to user 'test'");
+                "Access denied; you need (at least one of) the ALTER privilege(s) on TABLE tbl1 for this operation");
 
         // check alter table: ALTER
         verifyGrantRevoke(
                 "alter table db1.tbl1 drop partition p1",
                 "grant ALTER on db1.tbl1 to test",
                 "revoke ALTER on db1.tbl1 from test",
-                "ALTER command denied to user 'test'");
+                "Access denied; you need (at least one of) the ALTER privilege(s) on TABLE tbl1 for this operation");
 
         // check cancel alter table: ALTER
         verifyGrantRevoke(
                 "cancel alter table rollup from db1.tbl1 (1, 2, 3)",
                 "grant ALTER on db1.tbl1 to test",
                 "revoke ALTER on db1.tbl1 from test",
-                "ALTER command denied to user 'test'");
+                "Access denied; you need (at least one of) the ALTER privilege(s) on TABLE tbl1 for this operation");
 
         List<String> sqls = Arrays.asList(
                 "desc db1.tbl1",
@@ -886,12 +916,12 @@ public class PrivilegeCheckerTest {
                     sql,
                     "grant SELECT on db1.tbl1 to test",
                     "revoke SELECT on db1.tbl1 from test",
-                    "Access denied for user 'test' to table");
+                    "Access denied; you need (at least one of) the ANY privilege(s) on TABLE tbl1");
             verifyGrantRevoke(
                     sql,
                     "grant DELETE on db1.tbl1 to test",
                     "revoke DELETE on db1.tbl1 from test",
-                    "Access denied for user 'test' to table");
+                    "Access denied;");
         }
 
         // check show table status: only return table user has any privilege on
@@ -917,7 +947,7 @@ public class PrivilegeCheckerTest {
                         "revoke INSERT on table db1.tbl1 from test",
                         "revoke ALTER on table db1.tbl1 from test"
                 ),
-                "INSERT command denied to user 'test'@'localhost' for table 'db1.tbl1'");
+                "Access denied;");
 
         // check CTAS: create table on db and SELECT on source table
         List<String> submitTaskSqls = Arrays.asList(
@@ -936,7 +966,7 @@ public class PrivilegeCheckerTest {
                             "revoke create table on database db1 from test",
                             "revoke select on table db1.tbl1 from test"
                     ),
-                    "Access denied for user 'test' to database 'db1'");
+                    "Access denied;");
         }
 
         // check drop non-existed table
@@ -986,7 +1016,7 @@ public class PrivilegeCheckerTest {
                 createResourceStmt,
                 "grant create resource on system to test",
                 "revoke create resource on system from test",
-                "Access denied; you need (at least one of) the CREATE RESOURCE privilege(s) for this operation");
+                "Access denied; you need (at least one of) the CREATE RESOURCE privilege(s)");
         starRocksAssert.withResource(createResourceStmt);
         starRocksAssert.withResource(createResourceStmt1);
 
@@ -994,20 +1024,20 @@ public class PrivilegeCheckerTest {
                 "alter RESOURCE hive0 SET PROPERTIES (\"hive.metastore.uris\" = \"thrift://10.10.44.91:9083\");",
                 "grant alter on resource 'hive0' to test",
                 "revoke alter on resource 'hive0' from test",
-                "Access denied; you need (at least one of) the ALTER privilege(s) for this operation");
+                "Access denied; you need (at least one of) the ALTER privilege(s)");
 
         verifyGrantRevoke(
                 "drop resource hive0;",
                 "grant drop on resource hive0 to test",
                 "revoke drop on resource hive0 from test",
-                "Access denied; you need (at least one of) the DROP privilege(s) for this operation");
+                "Access denied; you need (at least one of) the DROP privilege(s)");
 
         // on all
         verifyGrantRevoke(
                 "drop resource hive0;",
                 "grant drop on all resources to test",
                 "revoke drop on all resources from test",
-                "Access denied; you need (at least one of) the DROP privilege(s) for this operation");
+                "Access denied; you need (at least one of) the DROP privilege(s)");
 
         // check show resources only show resource the user has any privilege on
         grantRevokeSqlAsRoot("grant alter on resource 'hive1' to test");
@@ -1092,7 +1122,8 @@ public class PrivilegeCheckerTest {
                 createViewStmt,
                 grantCreateViewStmt,
                 revokeCreateViewStmt,
-                "Access denied for user 'test' to database 'db1'");
+                "Access denied; you need (at least one of) the CREATE VIEW privilege(s) on " +
+                        "DATABASE db1 for this operation");
 
         // revoke select on base table, grant create_viw on database to user
         String revokeBaseTableSql = "revoke select on db1.tbl1 from test";
@@ -1104,7 +1135,7 @@ public class PrivilegeCheckerTest {
                 createViewStmt,
                 grantBaseTableSql,
                 revokeBaseTableSql,
-                "SELECT command denied to user 'test'");
+                "Access denied; you need (at least one of) the SELECT privilege(s) on TABLE tbl1 for this operation");
 
         // create the view
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createViewStmt, ctx), ctx);
@@ -1121,7 +1152,7 @@ public class PrivilegeCheckerTest {
                 alterViewSql,
                 grantAlterSql,
                 revokeAlterSql,
-                "ALTER command denied to user 'test'");
+                "Access denied; you need (at least one of) the ALTER privilege(s) on VIEW view1 for this operation");
 
         // revoke select on base table, grant alter on view to user
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
@@ -1132,7 +1163,7 @@ public class PrivilegeCheckerTest {
                 alterViewSql,
                 grantBaseTableSql,
                 revokeBaseTableSql,
-                "SELECT command denied to user 'test'");
+                "Access denied;");
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 revokeAlterSql, ctx), ctx);
@@ -1144,21 +1175,21 @@ public class PrivilegeCheckerTest {
                 selectViewSql,
                 "grant select on view db1.view1 to test",
                 "revoke select on view db1.view1 from test",
-                "Access denied for user 'test' to table 'db1.view1' when checking privilege");
+                "Access denied;");
 
         // drop view
         verifyGrantRevoke(
                 "drop view db1.view1",
                 "grant drop on view db1.view1 to test",
                 "revoke drop on view db1.view1 from test",
-                "DROP command denied to user 'test'");
+                "Access denied;");
     }
 
     @Test
     public void testPluginStmts() throws Exception {
         String grantSql = "grant plugin on system to test";
         String revokeSql = "revoke plugin on system from test";
-        String err = "Access denied; you need (at least one of) the PLUGIN privilege(s) for this operation";
+        String err = "Access denied; you need (at least one of) the PLUGIN privilege(s) on SYSTEM for this operation";
 
         String sql = "INSTALL PLUGIN FROM \"/home/users/starrocks/auditdemo.zip\"";
         verifyGrantRevoke(sql, grantSql, revokeSql, err);
@@ -1186,12 +1217,12 @@ public class PrivilegeCheckerTest {
                 createFileSql,
                 "grant file on system to test",
                 "revoke file on system from test",
-                "Access denied; you need (at least one of) the FILE privilege(s) for this operation");
+                "Access denied; you need (at least one of) the FILE privilege(s) on SYSTEM for this operation");
         verifyGrantRevoke(
                 dropFileSql,
                 "grant file on system to test",
                 "revoke file on system from test",
-                "Access denied; you need (at least one of) the FILE privilege(s) for this operation");
+                "Access denied; you need (at least one of) the FILE privilege(s) on SYSTEM for this operation");
 
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         String revokeSelectTableSql = "revoke select on db1.tbl1 from test";
@@ -1200,7 +1231,7 @@ public class PrivilegeCheckerTest {
                 "grant file on system to test", ctx), ctx);
 
         // check any action in table
-        String dbDeniedError = "Access denied for user 'test' to database 'db1'";
+        String dbDeniedError = "Access denied;";
         verifyGrantRevoke(createFileSql, grantSelectTableSql, revokeSelectTableSql, dbDeniedError);
         verifyGrantRevoke(dropFileSql, grantSelectTableSql, revokeSelectTableSql, dbDeniedError);
         verifyGrantRevoke("show file from db1", grantSelectTableSql, revokeSelectTableSql, dbDeniedError);
@@ -1217,7 +1248,7 @@ public class PrivilegeCheckerTest {
     public void testBlackListStmts() throws Exception {
         String grantSql = "grant blacklist on system to test";
         String revokeSql = "revoke blacklist on system from test";
-        String err = "Access denied; you need (at least one of) the BLACKLIST privilege(s) for this operation";
+        String err = "Access denied; you need (at least one of) the BLACKLIST privilege(s) on SYSTEM for this operation";
 
         String sql = "ADD SQLBLACKLIST \"select count\\\\(\\\\*\\\\) from .+\";";
         verifyGrantRevoke(sql, grantSql, revokeSql, err);
@@ -1233,7 +1264,7 @@ public class PrivilegeCheckerTest {
     public void testRoleUserStmts() throws Exception {
         String grantSql = "grant user_admin to test";
         String revokeSql = "revoke user_admin from test";
-        String err = "Access denied; you need (at least one of) the GRANT privilege(s) for this operation";
+        String err = "Access denied; you need (at least one of) the GRANT privilege(s) on SYSTEM for this operation";
         String sql;
 
         sql = "grant test_role to test";
@@ -1268,7 +1299,7 @@ public class PrivilegeCheckerTest {
     public void testShowPrivsForOther() throws Exception {
         String grantSql = "grant user_admin to test";
         String revokeSql = "revoke user_admin from test";
-        String err = "Access denied; you need (at least one of) the GRANT privilege(s) for this operation";
+        String err = "Access denied; you need (at least one of) the GRANT privilege(s) on SYSTEM for this operation";
         String sql;
 
         ConnectContext ctx = starRocksAssert.getCtx();
@@ -1304,7 +1335,7 @@ public class PrivilegeCheckerTest {
                 "SET global enable_cbo = true",
                 "grant OPERATE on system to test",
                 "revoke OPERATE on system from test",
-                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+                "Access denied; you need (at least one of) the OPERATE privilege(s) on SYSTEM for this operation");
     }
 
     @Test
@@ -1313,7 +1344,8 @@ public class PrivilegeCheckerTest {
                 "EXECUTE AS test2 WITH NO REVERT",
                 "grant impersonate on user test2 to test",
                 "revoke impersonate on user test2 from test",
-                "Access denied; you need (at least one of) the IMPERSONATE privilege(s) for this operation");
+                "Access denied; you need (at least one of) the IMPERSONATE privilege(s) on " +
+                        "USER test2 for this operation");
     }
 
     // Temporarily switch to root and grant privileges to a user, then switch to normal user context
@@ -1342,17 +1374,17 @@ public class PrivilegeCheckerTest {
                     stmt,
                     "grant DROP on database " + testDbName + " to test",
                     "revoke DROP on database " + testDbName + " from test",
-                    "Access denied for user 'test' to database '" + testDbName + "'");
+                    "Access denied");
             verifyGrantRevoke(
                     stmt,
                     "grant CREATE FUNCTION on database " + testDbName + " to test",
                     "revoke CREATE FUNCTION on database " + testDbName + " from test",
-                    "Access denied for user 'test' to database '" + testDbName + "'");
+                    "Access denied");
             verifyGrantRevoke(
                     stmt,
                     "grant ALTER on database " + testDbName + " to test",
                     "revoke ALTER on database " + testDbName + " from test",
-                    "Access denied for user 'test' to database '" + testDbName + "'");
+                    "Access denied");
         }
 
         // Test `use database` : check any privilege on tables in db
@@ -1360,7 +1392,7 @@ public class PrivilegeCheckerTest {
                 "use " + testDbName + ";",
                 "grant select on " + testDbName + ".tbl1 to test",
                 "revoke select on " + testDbName + ".tbl1 from test",
-                "Access denied for user 'test' to database '" + testDbName + "'");
+                "Access denied");
 
         // Test `use database` : check any privilege on any function in db
         Database db1 = GlobalStateMgr.getCurrentState().getDb("db1");
@@ -1375,7 +1407,7 @@ public class PrivilegeCheckerTest {
                 "use db1",
                 "grant drop on FUNCTION db1.MY_UDF_JSON_GET(string, string) to test",
                 "revoke drop on FUNCTION db1.MY_UDF_JSON_GET(string, string) from test",
-                "Access denied for user 'test' to database 'db1'");
+                "Access denied");
 
         // Test `recover database xxx`: check DROP on db and CREATE DATABASE on internal catalog
         verifyMultiGrantRevoke(
@@ -1385,7 +1417,7 @@ public class PrivilegeCheckerTest {
                 Arrays.asList(
                         "revoke CREATE DATABASE on catalog default_catalog from test;"
                 ),
-                "Access denied for user 'test' to catalog 'default_catalog'");
+                "Access denied; you need (at least one of) the CREATE DATABASE privilege(s) ");
         grantRevokeSqlAsRoot("grant DROP on database " + testDbName + " to test");
         try {
             verifyMultiGrantRevoke(
@@ -1395,9 +1427,9 @@ public class PrivilegeCheckerTest {
                     Arrays.asList(
                             "revoke DROP on database " + testDbName + " from test",
                             "revoke CREATE DATABASE on catalog default_catalog from test;"),
-                    "Access denied for user 'test' to catalog 'default_catalog'");
-        } catch (SemanticException e) {
-            Assert.assertTrue(e.getMessage().contains("Access denied for user 'test' to catalog 'default_catalog'"));
+                    "Access denied");
+        } catch (AccessDeniedException e) {
+            Assert.assertTrue(e.getMessage().contains("Access denied"));
         } finally {
             grantRevokeSqlAsRoot("revoke DROP on database " + testDbName + " from test");
         }
@@ -1407,43 +1439,43 @@ public class PrivilegeCheckerTest {
                 "alter database " + testDbName + " set data quota 10T;",
                 "grant ALTER on database " + testDbName + " to test",
                 "revoke ALTER on database " + testDbName + " from test",
-                "Access denied for user 'test' to database '" + testDbName + "'");
+                "Access denied");
         verifyGrantRevoke(
                 "alter database " + testDbName + " set replica quota 102400;",
                 "grant ALTER on database " + testDbName + " to test",
                 "revoke ALTER on database " + testDbName + " from test",
-                "Access denied for user 'test' to database '" + testDbName + "'");
+                "Access denied");
 
         // Test `drop database xxx...`: check DROP on db
         verifyGrantRevoke(
                 "drop database " + testDbName + ";",
                 "grant DROP on database " + testDbName + " to test",
                 "revoke DROP on database " + testDbName + " from test",
-                "Access denied for user 'test' to database '" + testDbName + "'");
+                "Access denied");
         verifyGrantRevoke(
                 "drop database if exists " + testDbName + " force;",
                 "grant DROP on database " + testDbName + " to test",
                 "revoke DROP on database " + testDbName + " from test",
-                "Access denied for user 'test' to database '" + testDbName + "'");
+                "Access denied");
 
         // Test `alter database xxx rename xxx_new`: check ALTER on db
         verifyGrantRevoke(
                 "alter database " + testDbName + " rename new_db_name;",
                 "grant ALTER on database " + testDbName + " to test",
                 "revoke ALTER on database " + testDbName + " from test",
-                "Access denied for user 'test' to database '" + testDbName + "'");
+                "Access denied");
 
         // Test `create database`: check CREATE DATABASE on catalog
         verifyGrantRevoke(
                 "create database db8;",
                 "grant CREATE DATABASE on catalog default_catalog to test",
                 "revoke CREATE DATABASE on catalog default_catalog from test",
-                "Access denied for user 'test' to catalog 'default_catalog'");
+                "Access denied");
         verifyGrantRevoke(
                 "create database if not exists db8;",
                 "grant CREATE DATABASE on catalog default_catalog to test",
                 "revoke CREATE DATABASE on catalog default_catalog from test",
-                "Access denied for user 'test' to catalog 'default_catalog'");
+                "Access denied");
 
         // check drop non-existed database
         ConnectContext ctx = starRocksAssert.getCtx();
@@ -1460,41 +1492,41 @@ public class PrivilegeCheckerTest {
                 "show backends",
                 "grant OPERATE on system to test",
                 "revoke OPERATE on system from test",
-                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+                "Access denied;");
 
         verifyNODEAndGRANT(
                 "show backends",
-                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+                "Access denied;");
 
         verifyGrantRevoke(
                 "show frontends",
                 "grant OPERATE on system to test",
                 "revoke OPERATE on system from test",
-                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+                "Access denied;");
 
         verifyNODEAndGRANT(
                 "show frontends",
-                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+                "Access denied;");
 
         verifyGrantRevoke(
                 "show broker",
                 "grant OPERATE on system to test",
                 "revoke OPERATE on system from test",
-                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+                "Access denied;");
 
         verifyNODEAndGRANT(
                 "show broker",
-                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+                "Access denied;");
 
         verifyGrantRevoke(
                 "show compute nodes",
                 "grant OPERATE on system to test",
                 "revoke OPERATE on system from test",
-                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+                "Access denied;");
 
         verifyNODEAndGRANT(
                 "show compute nodes",
-                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+                "Access denied;");
 
     }
 
@@ -1504,7 +1536,7 @@ public class PrivilegeCheckerTest {
                 "show tablet from example_db.example_table",
                 "grant OPERATE on system to test",
                 "revoke OPERATE on system from test",
-                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+                "Access denied;");
     }
 
     @Test
@@ -1522,7 +1554,7 @@ public class PrivilegeCheckerTest {
                 "admin set frontend config (\"key\" = \"value\");",
                 "grant OPERATE on system to test",
                 "revoke OPERATE on system from test",
-                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+                "Access denied;");
 
         // AdminSetReplicaStatusStmt
         verifyGrantRevoke(
@@ -1530,60 +1562,60 @@ public class PrivilegeCheckerTest {
                         "\"backend_id\" = \"10001\", \"status\" = \"bad\");",
                 "grant OPERATE on system to test",
                 "revoke OPERATE on system from test",
-                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+                "Access denied;");
 
         // AdminShowConfigStmt
         verifyGrantRevoke(
                 "ADMIN SHOW FRONTEND CONFIG;",
                 "grant OPERATE on system to test",
                 "revoke OPERATE on system from test",
-                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+                "Access denied;");
 
         // AdminShowReplicaDistributionStatement
         verifyGrantRevoke(
                 "ADMIN SHOW REPLICA DISTRIBUTION FROM example_db.example_table PARTITION(p1, p2);",
                 "grant OPERATE on system to test",
                 "revoke OPERATE on system from test",
-                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+                "Access denied;");
 
         // AdminShowReplicaStatusStatement
         verifyGrantRevoke(
                 "ADMIN SHOW REPLICA STATUS FROM example_db.example_table;",
                 "grant OPERATE on system to test",
                 "revoke OPERATE on system from test",
-                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+                "Access denied;");
 
         // AdminRepairTableStatement
         verifyGrantRevoke(
                 "ADMIN REPAIR TABLE example_db.example_table PARTITION(p1);",
                 "grant OPERATE on system to test",
                 "revoke OPERATE on system from test",
-                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+                "Access denied;");
 
         // AdminCancelRepairTableStatement
         verifyGrantRevoke(
                 "ADMIN CANCEL REPAIR TABLE example_db.example_table PARTITION(p1);",
                 "grant OPERATE on system to test",
                 "revoke OPERATE on system from test",
-                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+                "Access denied;");
 
         // AdminCheckTabletsStatement
         verifyGrantRevoke(
                 "ADMIN CHECK TABLET (1, 2) PROPERTIES (\"type\" = \"CONSISTENCY\");",
                 "grant OPERATE on system to test",
                 "revoke OPERATE on system from test",
-                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+                "Access denied;");
     }
 
     @Test
     public void testAlterSystemStmt() throws Exception {
         // AlterSystemStmt
         verifyNODEAndGRANT("ALTER SYSTEM ADD FOLLOWER \"127.0.0.1:9010\";",
-                "Access denied; you need (at least one of) the NODE privilege(s) for this operation");
+                "Access denied; you need (at least one of) the NODE privilege(s) on SYSTEM for this operation");
 
         // CancelAlterSystemStmt
         verifyNODEAndGRANT("CANCEL DECOMMISSION BACKEND \"127.0.0.1:9010\", \"127.0.0.1:9011\";",
-                "Access denied; you need (at least one of) the NODE privilege(s) for this operation");
+                "Access denied; you need (at least one of) the NODE privilege(s) on SYSTEM for this operation");
     }
 
     @Test
@@ -1651,7 +1683,7 @@ public class PrivilegeCheckerTest {
         Assert.assertTrue(ctx.getState().isError());
         System.out.println(ctx.getState().getErrorMessage());
         Assert.assertTrue(ctx.getState().getErrorMessage().contains(
-                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation"));
+                "Access denied;"));
 
 
         // can kill other user's connection/query after privilege granted
@@ -1673,13 +1705,13 @@ public class PrivilegeCheckerTest {
                 "show proc '/backends'",
                 "grant OPERATE on system to test",
                 "revoke OPERATE on system from test",
-                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+                "Access denied;");
     }
 
     @Test
     public void testSetStmt() throws Exception {
         String sql = "SET PASSWORD FOR 'jack'@'192.%' = PASSWORD('123456');";
-        String expectError = "Access denied; you need (at least one of) the GRANT privilege(s) for this operation";
+        String expectError = "Access denied; you need (at least one of) the GRANT privilege(s) on SYSTEM for this operation";
         verifyNODEAndGRANT(sql, expectError);
 
         ctxToTestUser();
@@ -1704,7 +1736,7 @@ public class PrivilegeCheckerTest {
                 createSql,
                 "grant insert on db1.tbl1 to test",
                 "revoke insert on db1.tbl1 from test",
-                "INSERT command denied to user 'test'@'localhost' for table 'tbl1'");
+                "Access denied; you need (at least one of) the INSERT privilege(s) on TABLE tbl1 for this operation");
 
         // ALTER ROUTINE LOAD STMT
         new MockUp<KafkaUtil>() {
@@ -1732,28 +1764,28 @@ public class PrivilegeCheckerTest {
                 "ALTER ROUTINE LOAD FOR db1.job_name1 PROPERTIES ( 'desired_concurrent_number' = '1');",
                 "grant insert on db1.tbl1 to test",
                 "revoke insert on db1.tbl1 from test",
-                "INSERT command denied to user 'test'@'localhost' for table 'tbl1'");
+                "Access denied; you need (at least one of) the INSERT privilege(s) on TABLE tbl1 for this operation");
 
         // STOP ROUTINE LOAD STMT
         verifyGrantRevoke(
                 "STOP ROUTINE LOAD FOR db1.job_name1;",
                 "grant insert on db1.tbl1 to test",
                 "revoke insert on db1.tbl1 from test",
-                "INSERT command denied to user 'test'@'localhost' for table 'tbl1'");
+                "Access denied; you need (at least one of) the INSERT privilege(s) on TABLE tbl1 for this operation");
 
         // RESUME ROUTINE LOAD STMT
         verifyGrantRevoke(
                 "RESUME ROUTINE LOAD FOR db1.job_name1;",
                 "grant insert on db1.tbl1 to test",
                 "revoke insert on db1.tbl1 from test",
-                "INSERT command denied to user 'test'@'localhost' for table 'tbl1'");
+                "Access denied; you need (at least one of) the INSERT privilege(s) on TABLE tbl1 for this operation");
 
         // PAUSE ROUTINE LOAD STMT
         verifyGrantRevoke(
                 "PAUSE ROUTINE LOAD FOR db1.job_name1;",
                 "grant insert on db1.tbl1 to test",
                 "revoke insert on db1.tbl1 from test",
-                "INSERT command denied to user 'test'@'localhost' for table 'tbl1'");
+                "Access denied; you need (at least one of) the INSERT privilege(s) on TABLE tbl1 for this operation");
 
         // SHOW ROUTINE LOAD stmt;
         String showRoutineLoadSql = "SHOW ROUTINE LOAD FOR db1.job_name1;";
@@ -1850,10 +1882,10 @@ public class PrivilegeCheckerTest {
         try {
             PrivilegeChecker.check(statement, ctx);
             Assert.fail();
-        } catch (SemanticException e) {
+        } catch (AccessDeniedException e) {
             System.out.println(e.getMessage() + ", sql: " + createSql);
             Assert.assertTrue(e.getMessage().contains(
-                    "Access denied; you need (at least one of) the USAGE privilege(s) for this operation"
+                    "Access denied; you need (at least one of) the USAGE privilege(s) on RESOURCE my_spark for this operation"
             ));
         }
         // create load & check table privilege
@@ -1964,7 +1996,7 @@ public class PrivilegeCheckerTest {
         // CANCEL EXPORT STMT
         String queryId = set.getResultRows().get(0).get(1);
         String cancelExportSql = "CANCEL EXPORT from db1 WHERE queryid = '" + queryId + "';";
-        String expectError = "Access denied; you need (at least one of) the EXPORT privilege(s) for this operation";
+        String expectError = "Access denied; you need (at least one of) the EXPORT privilege(s)";
         verifyGrantRevoke(
                 cancelExportSql,
                 "grant export on db1.tbl1 to test",
@@ -1979,7 +2011,7 @@ public class PrivilegeCheckerTest {
         String createExportSql = "EXPORT TABLE db1.tbl1 " +
                 "TO 'hdfs://hdfs_host:port/a/b/c/' " +
                 "WITH BROKER 'broker0'";
-        String expectError = "Access denied; you need (at least one of) the EXPORT privilege(s) for this operation";
+        String expectError = "Access denied; you need (at least one of) the EXPORT privilege(s) on TABLE tbl1 for this operation";
         verifyGrantRevoke(
                 createExportSql,
                 "grant export on db1.tbl1 to test",
@@ -1990,7 +2022,7 @@ public class PrivilegeCheckerTest {
     @Test
     public void testRepositoryStmt() throws Exception {
         mockBroker();
-        String expectError = "Access denied; you need (at least one of) the REPOSITORY privilege(s) for this operation";
+        String expectError = "Access denied; you need (at least one of) the REPOSITORY privilege(s) on SYSTEM for this operation";
 
         String createRepoSql = "CREATE REPOSITORY `oss_repo` WITH BROKER `broker0` " +
                 "ON LOCATION 'oss://starRocks_backup' PROPERTIES ( " +
@@ -2024,7 +2056,7 @@ public class PrivilegeCheckerTest {
     @Test
     public void testBackupStmt() throws Exception {
         mockRepository();
-        String expectError = "Access denied; you need (at least one of) the REPOSITORY privilege(s) for this operation";
+        String expectError = "Access denied; you need (at least one of) the REPOSITORY privilege(s) on SYSTEM for this operation";
         String createBackupSql = "BACKUP SNAPSHOT db1.backup_name1 " +
                 "TO example_repo " +
                 "ON (tbl1) " +
@@ -2037,7 +2069,7 @@ public class PrivilegeCheckerTest {
         try {
             PrivilegeChecker.check(statement, starRocksAssert.getCtx());
             Assert.fail();
-        } catch (SemanticException e) {
+        } catch (AccessDeniedException e) {
             System.out.println(e.getMessage() + ", sql: " + createBackupSql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
@@ -2046,11 +2078,11 @@ public class PrivilegeCheckerTest {
         grantOrRevoke("grant repository on system to test");
         // check EXPORT privilege
         ctxToTestUser();
-        expectError = "EXPORT command denied to user 'test'@'localhost' for table 'tbl1'";
+        expectError = "Access denied; you need (at least one of) the EXPORT privilege(s) on TABLE tbl1 for this operation";
         try {
             PrivilegeChecker.check(statement, starRocksAssert.getCtx());
             Assert.fail();
-        } catch (SemanticException e) {
+        } catch (AccessDeniedException e) {
             System.out.println(e.getMessage() + ", sql: " + createBackupSql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
@@ -2092,7 +2124,7 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testShowBackupStmtInChecker() throws Exception {
-        String expectError = "Access denied; you need (at least one of) the REPOSITORY privilege(s) for this operation";
+        String expectError = "Access denied; you need (at least one of) the REPOSITORY";
         verifyGrantRevoke(
                 "SHOW BACKUP FROM db1;",
                 "grant repository on system to test",
@@ -2110,7 +2142,7 @@ public class PrivilegeCheckerTest {
         verifyGrantRevoke(cancelBackupSql,
                 "grant export on db2.tbl1 to test",
                 "revoke export on db2.tbl1 from test",
-                "EXPORT command denied to user 'test'@'localhost' for table 'tbl1'");
+                "Access denied; you need (at least one of) the EXPORT privilege(s) on TABLE tbl1 for this operation");
         ctxToRoot();
         grantOrRevoke("revoke repository on system from test");
     }
@@ -2126,22 +2158,23 @@ public class PrivilegeCheckerTest {
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser(restoreSql, starRocksAssert.getCtx());
 
         ctxToTestUser();
-        String expectError = "Access denied; you need (at least one of) the REPOSITORY privilege(s) for this operation";
+        String expectError = "Access denied; you need (at least one of) the REPOSITORY privilege(s) on SYSTEM for this operation";
         try {
             PrivilegeChecker.check(statement, starRocksAssert.getCtx());
             Assert.fail();
-        } catch (SemanticException e) {
+        } catch (AccessDeniedException e) {
             System.out.println(e.getMessage() + ", sql: " + restoreSql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
         ctxToRoot();
         grantOrRevoke("grant repository on system to test");
         ctxToTestUser();
-        expectError = "Access denied for user 'test' to database 'db1'";
+        expectError = "Access denied; you need (at least one of) the CREATE TABLE privilege(s) on DATABASE db1 " +
+                "for this operation";
         try {
             PrivilegeChecker.check(statement, starRocksAssert.getCtx());
             Assert.fail();
-        } catch (SemanticException e) {
+        } catch (AccessDeniedException e) {
             System.out.println(e.getMessage() + ", sql: " + restoreSql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
@@ -2151,7 +2184,7 @@ public class PrivilegeCheckerTest {
         verifyGrantRevoke(restoreSql,
                 "grant SELECT,INSERT on db1.tbl1 to test",
                 "revoke SELECT,INSERT on db1.tbl1 from test",
-                "INSERT command denied to user 'test'@'localhost' for table 'tbl1'");
+                "Access denied; you need (at least one of) the INSERT privilege(s)");
         // revoke
         ctxToRoot();
         grantOrRevoke("revoke repository on system from test");
@@ -2170,8 +2203,8 @@ public class PrivilegeCheckerTest {
                 ") " +
                 "as select k1, db1.tbl1.k2 from db1.tbl1;";
 
-        String expectError = "Access denied; you need (at least one of) the " +
-                "CREATE MATERIALIZED VIEW privilege(s) for this operation";
+        String expectError = "Access denied; you need (at least one of) the CREATE MATERIALIZED VIEW privilege(s) " +
+                "on DATABASE db1 for this operation";
         verifyGrantRevoke(
                 createSql,
                 "grant create materialized view on DATABASE db1 to test",
@@ -2195,8 +2228,8 @@ public class PrivilegeCheckerTest {
                 "alter materialized view db1.mv1 rename mv2;",
                 "grant alter on materialized view db1.mv1 to test",
                 "revoke alter on materialized view db1.mv1 from test",
-                "Access denied; you need (at least one of) the ALTER " +
-                        "MATERIALIZED VIEW privilege(s) for this operation");
+                "Access denied; you need (at least one of) the ALTER privilege(s) on " +
+                        "MATERIALIZED VIEW mv1 for this operation");
         ctxToRoot();
         starRocksAssert.dropMaterializedView("db1.mv1");
         ctxToTestUser();
@@ -2219,12 +2252,14 @@ public class PrivilegeCheckerTest {
                 "REFRESH MATERIALIZED VIEW db1.mv2;",
                 "grant refresh on materialized view db1.mv2 to test",
                 "revoke refresh on materialized view db1.mv2 from test",
-                "Access denied; you need (at least one of) the REFRESH MATERIALIZED VIEW privilege(s) for this operation");
+                "Access denied; you need (at least one of) the REFRESH privilege(s) on MATERIALIZED VIEW mv2 " +
+                        "for this operation");
         verifyGrantRevoke(
                 "CANCEL REFRESH MATERIALIZED VIEW db1.mv2;",
                 "grant refresh on materialized view db1.mv2 to test",
                 "revoke refresh on materialized view db1.mv2 from test",
-                "Access denied; you need (at least one of) the REFRESH MATERIALIZED VIEW privilege(s) for this operation");
+                "Access denied; you need (at least one of) the REFRESH privilege(s) on MATERIALIZED VIEW mv2 " +
+                        "for this operation");
 
         ctxToRoot();
         starRocksAssert.dropMaterializedView("db1.mv2");
@@ -2286,9 +2321,10 @@ public class PrivilegeCheckerTest {
         ctxToTestUser();
         try {
             GlobalStateMgr.getCurrentState().dropMaterializedView(statement);
-        } catch (SemanticException e) {
+        } catch (AccessDeniedException e) {
+            System.out.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains(
-                    "Access denied; you need (at least one of) the DROP MATERIALIZED VIEW privilege(s)"));
+                    "Access denied; you need (at least one of) the DROP privilege(s)"));
         }
 
         grantRevokeSqlAsRoot("grant drop on materialized view db1.mv4 to test");
@@ -2311,7 +2347,7 @@ public class PrivilegeCheckerTest {
                 "'symbol' = 'com.starrocks.udf.sample.UDFSplit', 'object_file' = 'test' " +
                 ")";
         String expectError = "Access denied; you need (at least one of) the " +
-                "CREATE FUNCTION privilege(s) for this operation";
+                "CREATE FUNCTION privilege(s)";
         verifyGrantRevoke(
                 createSql,
                 "grant CREATE FUNCTION on DATABASE db1 to test",
@@ -2332,8 +2368,8 @@ public class PrivilegeCheckerTest {
                 "properties ( " +
                 "'symbol' = 'com.starrocks.udf.sample.UDFSplit', 'object_file' = 'test' " +
                 ")";
-        String expectError = "Access denied; you need (at least one of) the " +
-                "CREATE GLOBAL FUNCTION privilege(s) for this operation";
+        String expectError = "Access denied; you need (at least one of) the CREATE GLOBAL FUNCTION privilege(s) " +
+                "on SYSTEM for this operation";
         verifyGrantRevoke(
                 createSql,
                 "grant CREATE GLOBAL FUNCTION on system to test",
@@ -2356,13 +2392,15 @@ public class PrivilegeCheckerTest {
                 "DROP FUNCTION db1.MY_UDF_JSON_GET(string, string);",
                 "grant drop on ALL FUNCTIONS in database db1 to test",
                 "revoke drop on ALL FUNCTIONS in database db1 from test",
-                "Access denied; you need (at least one of) the DROP FUNCTION privilege(s) for this operation");
+                "Access denied; you need (at least one of) the DROP privilege(s) on FUNCTION " +
+                        "my_udf_json_get(VARCHAR,VARCHAR)");
 
         verifyGrantRevoke(
                 "DROP FUNCTION db1.MY_UDF_JSON_GET(string, string);",
                 "grant drop on FUNCTION db1.MY_UDF_JSON_GET(string, string) to test",
                 "revoke drop on FUNCTION db1.MY_UDF_JSON_GET(string, string) from test",
-                "Access denied; you need (at least one of) the DROP FUNCTION privilege(s) for this operation");
+                "Access denied; you need (at least one of) the DROP privilege(s) on FUNCTION " +
+                        "my_udf_json_get(VARCHAR,VARCHAR) for this operation");
 
         // add test for drop non-existed function
         ctxToTestUser();
@@ -2380,8 +2418,7 @@ public class PrivilegeCheckerTest {
             UtFrameUtils.parseStmtWithNewParser("select db1.MY_UDF_JSON_GET('a', 'b')",
                     starRocksAssert.getCtx());
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains(
-                    "Access denied. Found UDF: db1.my_udf_json_get and need the USAGE privilege for FUNCTION"));
+            Assert.assertTrue(e.getMessage().contains("Access denied; you need (at least one of)"));
         }
         grantRevokeSqlAsRoot("grant USAGE on FUNCTION db1.MY_UDF_JSON_GET(string, string) to test");
         // parse success after grant usage
@@ -2396,7 +2433,7 @@ public class PrivilegeCheckerTest {
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains(
-                    "SELECT command denied to user 'test'@'localhost' for table 'db1.tbl1'"));
+                    "Access denied; you need (at least one of) the SELECT privilege(s) on TABLE tbl1 for this operation"));
         }
         grantRevokeSqlAsRoot("revoke USAGE on FUNCTION db1.MY_UDF_JSON_GET(string, string) from test");
         Config.enable_udf = false;
@@ -2418,13 +2455,15 @@ public class PrivilegeCheckerTest {
                 "drop global function my_udf_json_get (string, string);",
                 "grant drop on ALL GLOBAL FUNCTIONS to test",
                 "revoke drop on ALL GLOBAL FUNCTIONS from test",
-                "Access denied; you need (at least one of) the DROP GLOBAL FUNCTION privilege(s) for this operation");
+                "Access denied; you need (at least one of) the DROP privilege(s) on GLOBAL FUNCTION " +
+                        "my_udf_json_get(VARCHAR,VARCHAR) for this operation");
 
         verifyGrantRevoke(
                 "drop global function my_udf_json_get (string, string);",
                 "grant drop on GLOBAL FUNCTION my_udf_json_get(string,string) to test",
                 "revoke drop on GLOBAL FUNCTION my_udf_json_get(string,string) from test",
-                "Access denied; you need (at least one of) the DROP GLOBAL FUNCTION privilege(s) for this operation");
+                "Access denied; you need (at least one of) the DROP privilege(s) on GLOBAL FUNCTION " +
+                        "my_udf_json_get(VARCHAR,VARCHAR) for this operation");
 
         Config.enable_udf = true;
         ctxToTestUser();
@@ -2434,8 +2473,8 @@ public class PrivilegeCheckerTest {
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains(
-                    "Access denied. Found UDF: __global_udf_db__.my_udf_json_get" +
-                            " and need the USAGE privilege for GLOBAL FUNCTION"));
+                    "Access denied; you need (at least one of) the USAGE privilege(s) on GLOBAL FUNCTION " +
+                            "my_udf_json_get(VARCHAR,VARCHAR)"));
         }
         Config.enable_udf = false;
     }
@@ -2505,9 +2544,10 @@ public class PrivilegeCheckerTest {
             StatementBase statement = UtFrameUtils.parseStmtWithNewParser(selectSQL, starRocksAssert.getCtx());
             PrivilegeChecker.check(statement, starRocksAssert.getCtx());
             Assert.fail();
-        } catch (StarRocksPlannerException e) {
+        } catch (AccessDeniedException e) {
             System.out.println(e.getMessage() + ", sql: " + selectSQL);
-            Assert.assertTrue(e.getMessage().contains("need the USAGE privilege for GLOBAL FUNCTION"));
+            Assert.assertTrue(e.getMessage().contains("Access denied; you need (at least one of) the USAGE privilege(s) " +
+                    "on GLOBAL FUNCTION my_udf_json_get(VARCHAR,VARCHAR) for this operation"));
         }
 
         // grant usage on global function
@@ -2689,8 +2729,7 @@ public class PrivilegeCheckerTest {
             Assert.fail();
         } catch (Exception e) {
             Assert.assertEquals(e.getMessage(),
-                    "Getting analyzing error. Detail message: Access denied; " +
-                            "you need (at least one of) the GRANT privilege(s) for this operation.");
+                    "Access denied; you need (at least one of) the GRANT privilege(s) on SYSTEM for this operation");
         }
 
         sql = "drop user u1";
@@ -2730,19 +2769,19 @@ public class PrivilegeCheckerTest {
                 "select * from db1.tbl1, db1.tbl2, db2.tbl1",
                 "grant SELECT on TABLE db2.tbl1 to test",
                 "revoke SELECT on TABLE db2.tbl1 from test",
-                "SELECT command denied to user 'test'@'localhost' for table 'db2.tbl1'");
+                "Access denied; you need (at least one of) the SELECT privilege(s) on TABLE tbl1 for this operation");
 
         verifyGrantRevoke(
                 "select * from db1.tbl1, db1.tbl2 where exists (select * from db2.tbl1)",
                 "grant SELECT on TABLE db2.tbl1 to test",
                 "revoke SELECT on TABLE db2.tbl1 from test",
-                "SELECT command denied to user 'test'@'localhost' for table 'db2.tbl1'");
+                "Access denied; you need (at least one of) the SELECT privilege(s) on TABLE tbl1 for this operation");
 
         verifyGrantRevoke(
                 "with cte as (select * from db2.tbl1) select * from db1.tbl1, db1.tbl2",
                 "grant SELECT on TABLE db2.tbl1 to test",
                 "revoke SELECT on TABLE db2.tbl1 from test",
-                "SELECT command denied to user 'test'@'localhost' for table 'db2.tbl1'");
+                "Access denied; you need (at least one of) the SELECT privilege(s) on TABLE tbl1 for this operation");
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant SELECT on TABLE db2.tbl1 to test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
@@ -2751,7 +2790,7 @@ public class PrivilegeCheckerTest {
                 "insert into db1.tbl2 select * from db2.tbl1",
                 "grant SELECT, INSERT on TABLE db1.tbl2 to test",
                 "revoke INSERT on TABLE db1.tbl2 from test",
-                "INSERT command denied to user 'test'@'localhost' for table 'db1.tbl2'");
+                "Access denied;");
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant INSERT on TABLE db1.tbl2 to test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
@@ -2762,13 +2801,13 @@ public class PrivilegeCheckerTest {
                 "insert into db1.tbl2 select * from db2.tbl1",
                 "grant SELECT on TABLE db2.tbl1 to test",
                 "revoke SELECT on TABLE db2.tbl1 from test",
-                "SELECT command denied to user 'test'@'localhost' for table 'db2.tbl1'");
+                "Access denied; you need (at least one of) the SELECT privilege(s) on TABLE tbl1 for this operation");
 
         verifyGrantRevoke(
                 "update db1.tprimary set v1 = db1.tbl1.k1 from db1.tbl1 where db1.tbl1.k2 = db1.tprimary.pk",
                 "grant select, update on table db1.tprimary to test",
                 "revoke update on TABLE db1.tprimary from test",
-                "UPDATE command denied to user 'test'@'localhost' for table 'db1.tprimary'");
+                "Access denied; you need (at least one of) the UPDATE privilege(s) on TABLE");
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant UPDATE on TABLE db1.tprimary to test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
@@ -2779,7 +2818,7 @@ public class PrivilegeCheckerTest {
                 "update db1.tprimary set v1 = db1.tbl1.k1 from db1.tbl1 where db1.tbl1.k2 = db1.tprimary.pk",
                 "grant select on table db1.tbl1 to test",
                 "revoke select on TABLE db1.tbl1 from test",
-                "SELECT command denied to user 'test'@'localhost' for table 'db1.tbl1'");
+                "Access denied; you need (at least one of) the SELECT privilege(s) on TABLE tbl1 for this operation");
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant select on TABLE db1.tbl1 to test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
@@ -2788,7 +2827,7 @@ public class PrivilegeCheckerTest {
                 "delete from db1.tprimary using db1.tbl1 where db1.tbl1.k2 = db1.tprimary.pk",
                 "grant select, delete on table db1.tprimary to test",
                 "revoke delete on TABLE db1.tprimary from test",
-                "DELETE command denied to user 'test'@'localhost' for table 'db1.tprimary'");
+                "Access denied; you need (at least one of) the DELETE privilege(s) on TABLE");
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant DELETE on TABLE db1.tprimary to test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
@@ -2799,7 +2838,7 @@ public class PrivilegeCheckerTest {
                 "delete from db1.tprimary using db1.tbl1 where db1.tbl1.k2 = db1.tprimary.pk",
                 "grant select on TABLE db1.tbl1 to test",
                 "revoke select on TABLE db1.tbl1 from test",
-                "SELECT command denied to user 'test'@'localhost' for table 'db1.tbl1'");
+                "Access denied; you need (at least one of) the SELECT privilege(s) on TABLE");
 
         starRocksAssert.dropTable("db1.tprimary");
     }
@@ -2879,14 +2918,15 @@ public class PrivilegeCheckerTest {
                 "desc storage volume local",
                 "grant USAGE on storage volume local to test",
                 "revoke USAGE on storage volume local from test",
-                "Access denied for user 'test' to storage volume 'local' when checking privilege");
+                "Access denied; you need (at least one of) the ANY privilege(s) on STORAGE VOLUME local " +
+                        "for this operation");
 
         // test drop storage volume
         verifyGrantRevoke(
                 "drop storage volume local",
                 "grant DROP on storage volume local to test",
                 "revoke DROP on storage volume local from test",
-                "Access denied; you need (at least one of) the DROP STORAGE VOLUME privilege(s) for this operation");
+                "Access denied;");
 
         String sql = "" +
                 "ALTER STORAGE VOLUME local \n" +
@@ -2897,7 +2937,7 @@ public class PrivilegeCheckerTest {
                 sql,
                 "grant ALTER on storage volume local to test",
                 "revoke ALTER on storage volume local from test",
-                "Access denied; you need (at least one of) the ALTER STORAGE VOLUME privilege(s) for this operation");
+                "Access denied;");
 
         // test create storage volume
         String createSv1Sql = "create storage volume sv1 type = s3 " +
@@ -2909,7 +2949,7 @@ public class PrivilegeCheckerTest {
                 createSv1Sql,
                 "grant create storage volume on system to test",
                 "revoke create storage volume on system from test",
-                "Access denied; you need (at least one of) the CREATE STORAGE VOLUME privilege(s) for this operation");
+                "Access denied;");
 
         // test usage of storage volume
         String grantCreateDb = "grant create database on catalog default_catalog to test";
@@ -2920,7 +2960,7 @@ public class PrivilegeCheckerTest {
                 createDbSql,
                 "grant USAGE on storage volume local to test",
                 "revoke USAGE ON storage volume local from test",
-                "Access denied; you need (at least one of) the USAGE ON STORAGE VOLUME privilege(s) for this operation");
+                "Access denied;");
         ctxToRoot();
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createDbSql, ctx), ctx);
         String grantCreateTable = "grant create table on database testdb to test";
@@ -2932,7 +2972,7 @@ public class PrivilegeCheckerTest {
                 createTableSql,
                 "grant USAGE on storage volume local to test",
                 "revoke USAGE ON storage volume local from test",
-                "Access denied; you need (at least one of) the USAGE ON STORAGE VOLUME privilege(s) for this operation");
+                "Access denied;");
 
         ctxToRoot();
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
@@ -2946,6 +2986,6 @@ public class PrivilegeCheckerTest {
                 sql,
                 "grant ALTER on all storage volumes to test",
                 "revoke ALTER on all storage volumes from test",
-                "Access denied; you need (at least one of) the ALTER STORAGE VOLUME privilege(s) for this operation");
+                "Access denied;");
     }
 }

@@ -59,25 +59,27 @@ For example, if you create a table without specifying the data distribution meth
 
 ```SQL
 CREATE TABLE site_access(
-    site_id INT DEFAULT '10',
-    city_code SMALLINT,
-    user_name VARCHAR(32) DEFAULT '',
-    pv BIGINT SUM DEFAULT '0'
+    event_day DATE,
+    site_id INT DEFAULT '10', 
+    pv BIGINT DEFAULT '0' ,
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT ''
 )
-AGGREGATE KEY(site_id, city_code, user_name); -- The data distribution method is not specified.
+DUPLICATE KEY(event_day,site_id,pv); -- The data distribution method is not specified.
 ```
 
 Specify Hash distribution as the data distribution method at table creation.
 
 ```SQL
 CREATE TABLE site_access(
+    event_day DATE,
     site_id INT DEFAULT '10',
     city_code SMALLINT,
     user_name VARCHAR(32) DEFAULT '',
     pv BIGINT SUM DEFAULT '0'
 )
-AGGREGATE KEY(site_id, city_code, user_name)
-DISTRIBUTED BY HASH(site_id); -- Set the bucketing method as Hash bucketing and specify the bucketing key.
+AGGREGATE KEY(event_day, site_id, city_code, user_name)
+DISTRIBUTED BY HASH(event_day,site_id); -- Set the bucketing method as Hash bucketing and specify the bucketing key.
 ```
 
 Specify Range + Random distribution as the data distribution method at table creation.
@@ -85,13 +87,14 @@ Specify Range + Random distribution as the data distribution method at table cre
 ```SQL
 CREATE TABLE site_access(
     event_day DATE,
-    site_id INT DEFAULT '10',
+    site_id INT DEFAULT '10', 
+    pv BIGINT DEFAULT '0' ,
     city_code VARCHAR(100),
-    user_name VARCHAR(32) DEFAULT '',
-    pv BIGINT SUM DEFAULT '0'
+    user_name VARCHAR(32) DEFAULT ''
 )
-AGGREGATE KEY(event_day, site_id, city_code, user_name)
-PARTITION BY RANGE(event_day) ( -- Set the partitioning method as Range partitioning.
+DUPLICATE KEY(event_day,site_id,pv)
+PARTITION BY RANGE(event_day) (
+    -- Set the partitioning method as Range partitioning.
     PARTITION p1 VALUES LESS THAN ("2020-01-31"),
     PARTITION p2 VALUES LESS THAN ("2020-02-29"),
     PARTITION p3 VALUES LESS THAN ("2020-03-31")
@@ -109,12 +112,14 @@ CREATE TABLE site_access(
     pv BIGINT SUM DEFAULT '0'
 )
 AGGREGATE KEY(event_day, site_id, city_code, user_name)
-PARTITION BY RANGE(event_day) ( -- Set the partitioning method as Range partitioning.
+-- Set the partitioning method as Range partitioning.
+PARTITION BY RANGE(event_day) (
     PARTITION p1 VALUES LESS THAN ("2020-01-31"),
     PARTITION p2 VALUES LESS THAN ("2020-02-29"),
     PARTITION p3 VALUES LESS THAN ("2020-03-31")
 )
-DISTRIBUTED BY HASH(site_id); -- Set the bucketing method as Hash bucketing and specify the bucketing key.
+-- Set the bucketing method as Hash bucketing and specify the bucketing key.
+DISTRIBUTED BY HASH(event_day, site_id);
 ```
 
 ## Design partitioning and bucketing rules
@@ -145,36 +150,36 @@ For data in a partition, StarRocks distributes the data randomly across all buck
 
 However, note that the query performance provided by random bucketing may not be ideal when you query massive amounts of data and frequently use certain columns as conditional columns. In this scenario, it is recommended to use [hash bucketing](#hash-bucketing). Because only a small number of buckets need to be scanned and computed, significantly improving query performance.
 
-**Precautions**
+##### Precautions
 
 - You can only use random bucketing to create Duplicate Key tables.
-  - You can not specify a [Colocation Group](../using_starrocks/Colocate_join.md) for a table bucketed randomly.
+- You can not specify a [Colocation Group](../using_starrocks/Colocate_join.md) for a table bucketed randomly.
 - [Spark Load](../loading/SparkLoad.md) cannot be used to load data into tables bucketed randomly.
 
-The following example does not include the DISTRIBUTED BY xxx clause, so StarRocks uses random bucketing by default and automatically determines the number of buckets.
+The following example does not include the DISTRIBUTED BY clause, so StarRocks uses random bucketing by default and automatically determines the number of buckets.
 
 ```SQL
 CREATE TABLE site_access1(
     event_day DATE,
-    site_id INT DEFAULT '10',
+    site_id INT DEFAULT '10', 
+    pv BIGINT DEFAULT '0' ,
     city_code VARCHAR(100),
-    user_name VARCHAR(32) DEFAULT '',
-    pv BIGINT SUM DEFAULT '0'
+    user_name VARCHAR(32) DEFAULT ''
 )
-DUPLICATE KEY(event_day,site_id,city_code,pv);
+DUPLICATE KEY(event_day,site_id,pv);
 ```
 
 Also, if you are familiar with StarRocks's bucketing mechanism, you can also manually set the number of buckets when creating a table with random bucketing.
 
 ```SQL
-CREATE TABLE site_access(
+CREATE TABLE site_access2(
     event_day DATE,
-    site_id INT DEFAULT '10',
+    site_id INT DEFAULT '10', 
+    pv BIGINT DEFAULT '0' ,
     city_code VARCHAR(100),
-    user_name VARCHAR(32) DEFAULT '',
-    pv BIGINT SUM DEFAULT '0'
+    user_name VARCHAR(32) DEFAULT ''
 )
-DUPLICATE KEY(event_day,site_id,city_code,pv)
+DUPLICATE KEY(event_day,site_id,pv)
 DISTRIBUTED BY RANDOM BUCKETS 8; -- manually set the number of buckets to 8
 ```
 
@@ -182,12 +187,12 @@ DISTRIBUTED BY RANDOM BUCKETS 8; -- manually set the number of buckets to 8
 
 Data in partitions can be subdivided into tablets based on the hash values of the bucketing columns and the number of buckets. In hash bucketing, the value of the bucketing column is used as input to calculate a hash value by using the hash function, and then the data is assigned to the corresponding bucket based on that hash value.
 
-**Advantages**
+##### Advantages
 
 - Improved query performance: Rows with the same bucketing key value are assigned to the same bucket, which reduces the amount of data scanned during queries.
 - Even data distribution: By using the high-cardinality column (with a large number of unique values) as the bucketing key, data can be more evenly distributed across buckets.
 
-**Choose the bucketing key**
+##### Choose the bucketing key
 
 We recommend that you choose the column or columns that satisfy the following two requirements as the bucketing key.
 
@@ -204,13 +209,13 @@ If partition data cannot be evenly distributed into each tablet by using one buc
 - One bucketing column: This method can reduce data transmission between nodes. It improves the performance of short-running query because short-running query only runs on one server and scan a small amount of data.
 - Multiple bucketing columns: This method makes the most of the concurrency performance of a distributed cluster. It improves the performance of long-running query because long-running query runs across multiple servers and scan a large amount of data by using multiple servers in parallel. We recommend that you choose three bucketing columns at most.
 
-**Precautions**
+##### Precautions
 
 - **When a table is created, you must specify the bucketing columns**.
 - The values of bucketing columns cannot be updated.
 - Bucketing columns cannot be modified after they are specified.
 
-**Examples**
+##### Examples
 
 In the following example, the `site_access` table uses `site_id` as the bucketing key because `site_id` is a high-cardinality column and is always used as a filter in queries. By using site_id as the bucketing key, StarRocks only needs to scan the relevant buckets during querying.
 

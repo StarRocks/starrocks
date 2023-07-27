@@ -147,6 +147,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SPILLABLE_OPERATOR_MASK = "spillable_operator_mask";
     // spill mode: auto, force
     public static final String SPILL_MODE = "spill_mode";
+    // enable table pruning(RBO) in cardinality-preserving joins
+    public static final String ENABLE_RBO_TABLE_PRUNE = "enable_rbo_table_prune";
+
+    // enable table pruning(CBO) in cardinality-preserving joins
+    public static final String ENABLE_CBO_TABLE_PRUNE = "enable_cbo_table_prune";
+    // if set to true, some of stmt will be forwarded to leader FE to get result
+
     // if set to true, some of stmt will be forwarded to leader FE to get result
     public static final String FORWARD_TO_LEADER = "forward_to_leader";
     public static final String FORWARD_TO_MASTER = "forward_to_master";
@@ -190,8 +197,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      * and scan distribution keys, when there is only one BE.
      */
     public static final String ENABLE_LOCAL_SHUFFLE_AGG = "enable_local_shuffle_agg";
-
-    public static final String ENABLE_DELIVER_BATCH_FRAGMENTS = "enable_deliver_batch_fragments";
 
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
@@ -394,6 +399,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SPILL_MEM_LIMIT_THRESHOLD = "spill_mem_limit_threshold";
     public static final String SPILL_OPERATOR_MIN_BYTES = "spill_operator_min_bytes";
     public static final String SPILL_OPERATOR_MAX_BYTES = "spill_operator_max_bytes";
+    public static final String SPILL_REVOCABLE_MAX_BYTES = "spill_revocable_max_bytes";
     public static final String SPILL_ENCODE_LEVEL = "spill_encode_level";
 
     // full_sort_max_buffered_{rows,bytes} are thresholds that limits input size of partial_sort
@@ -404,6 +410,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // Used by full sort inorder to permute only order-by columns in cascading merging phase, after
     // that, non-order-by output columns are permuted according to the ordinal column.
+    public static final String FULL_SORT_LATE_MATERIALIZATION_V2 = "full_sort_late_materialization_v2";
     public static final String FULL_SORT_LATE_MATERIALIZATION = "full_sort_late_materialization";
 
     // For group-by-count-distinct query like select a, count(distinct b) from t group by a, if group-by column a
@@ -435,6 +442,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String DISABLE_FUNCTION_FOLD_CONSTANTS = "disable_function_fold_constants";
 
     public static final String ENABLE_SIMPLIFY_CASE_WHEN = "enable_simplify_case_when";
+
+    public static final String ENABLE_COUNT_STAR_OPTIMIZATION = "enable_count_star_optimization";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -488,16 +497,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = LOG_REJECTED_RECORD_NUM)
     private long logRejectedRecordNum = 0;
-
-    /**
-     * If enable this variable (only take effect for pipeline), it will deliver fragment instances
-     * to BE in batch and concurrently.
-     * - Uses `exec_batch_plan_fragments` instead of `exec_plan_fragment` RPC API, which all the instances
-     * of a fragment to the same destination host are delivered in the same request.
-     * - Send different fragments concurrently according to topological order of the fragment tree
-     */
-    @VariableMgr.VarAttr(name = ENABLE_DELIVER_BATCH_FRAGMENTS)
-    private boolean enableDeliverBatchFragments = true;
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
@@ -647,7 +646,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final int PIPELINE_BATCH_SIZE = 4096;
 
     @VariableMgr.VarAttr(name = STREAMING_PREAGGREGATION_MODE)
-    private String streamingPreaggregationMode = "auto"; // auto, force_streaming, force_preaggregation
+    private String streamingPreaggregationMode = SessionVariableConstants.AUTO; // auto, force_streaming, force_preaggregation
 
     @VariableMgr.VarAttr(name = DISABLE_COLOCATE_JOIN)
     private boolean disableColocateJoin = false;
@@ -745,14 +744,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = SPILL_MEM_LIMIT_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private double spillMemLimitThreshold = 0.8;
     @VarAttr(name = SPILL_OPERATOR_MIN_BYTES, flag = VariableMgr.INVISIBLE)
-    private long spillOperatorMinBytes = 1024L * 1024 * 10;
+    private long spillOperatorMinBytes = 1024L * 1024 * 50;
     @VarAttr(name = SPILL_OPERATOR_MAX_BYTES, flag = VariableMgr.INVISIBLE)
     private long spillOperatorMaxBytes = 1024L * 1024 * 1000;
+    // If the operator memory revocable memory exceeds this value, the operator will perform a spill as soon as possible
+    @VarAttr(name = SPILL_REVOCABLE_MAX_BYTES)
+    private long spillRevocableMaxBytes = 0;
     // the encoding level of spilled data, the meaning of values is similar to transmission_encode_level,
     // see more details in the comment above transmissionEncodeLevel
     @VarAttr(name = SPILL_ENCODE_LEVEL)
     private int spillEncodeLevel = 7;
 
+    @VarAttr(name = ENABLE_RBO_TABLE_PRUNE)
+    private boolean enableRboTablePrune = false;
+
+    @VarAttr(name = ENABLE_CBO_TABLE_PRUNE)
+    private boolean enableCboTablePrune = false;
     @VariableMgr.VarAttr(name = FORWARD_TO_LEADER, alias = FORWARD_TO_MASTER)
     private boolean forwardToLeader = false;
 
@@ -1071,7 +1078,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private String queryExcludingMVNames = "";
 
     @VarAttr(name = QUERY_INCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
-    private String queryincludingMVNames = "";
+    private String queryIncludingMVNames = "";
 
     @VarAttr(name = ANALYZE_FOR_MV)
     private String analyzeTypeForMV = "sample";
@@ -1125,8 +1132,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = FULL_SORT_MAX_BUFFERED_BYTES, flag = VariableMgr.INVISIBLE)
     private long fullSortMaxBufferedBytes = 16L * 1024 * 1024;
 
-    @VariableMgr.VarAttr(name = FULL_SORT_LATE_MATERIALIZATION)
-    private boolean fullSortLateMaterialization = false;
+    @VariableMgr.VarAttr(name = FULL_SORT_LATE_MATERIALIZATION_V2, alias = FULL_SORT_LATE_MATERIALIZATION,
+            show = FULL_SORT_LATE_MATERIALIZATION)
+    private boolean fullSortLateMaterialization = true;
 
     @VariableMgr.VarAttr(name = DISTINCT_COLUMN_BUCKETS)
     private int distinctColumnBuckets = 1024;
@@ -1157,6 +1165,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_SIMPLIFY_CASE_WHEN, flag = VariableMgr.INVISIBLE)
     private boolean enableSimplifyCaseWhen = true;
+
+    @VarAttr(name = ENABLE_COUNT_STAR_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
+    private boolean enableCountStarOptimization = true;
 
     private int exprChildrenLimit = -1;
 
@@ -1301,6 +1312,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getQueryTimeoutS() {
         return queryTimeoutS;
+    }
+
+    public void setQueryDeliveryTimeoutS(int queryDeliveryTimeoutS) {
+        this.queryDeliveryTimeoutS = queryDeliveryTimeoutS;
+    }
+
+    public int getQueryDeliveryTimeoutS() {
+        return queryDeliveryTimeoutS;
     }
 
     public boolean isEnableProfile() {
@@ -1453,6 +1472,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setSpillMode(String spillMode) {
         this.spillMode = spillMode;
+    }
+
+    public void setEnableRboTablePrune(boolean enableRboTablePrune) {
+        this.enableRboTablePrune = enableRboTablePrune;
+    }
+
+    public void setEnableCboTablePrune(boolean enableCboTablePrune) {
+        this.enableCboTablePrune = enableCboTablePrune;
+    }
+
+    public boolean isEnableRboTablePrune() {
+        return enableRboTablePrune;
+    }
+
+    public boolean isEnableCboTablePrune() {
+        return enableCboTablePrune;
     }
 
     public int getSpillMemTableSize() {
@@ -1659,10 +1694,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return globalRuntimeFilterProbeMinSelectivity;
     }
 
-    public boolean isEnableDeliverBatchFragments() {
-        return enableDeliverBatchFragments;
-    }
-
     public boolean isMVPlanner() {
         return enableMVPlanner;
     }
@@ -1767,8 +1798,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return runtimeProfileReportInterval;
     }
 
+    public void setProfileLimitFold(boolean profileLimitFold) {
+        this.profileLimitFold = profileLimitFold;
+    }
+
     public boolean isProfileLimitFold() {
         return profileLimitFold;
+    }
+
+    public void setPipelineProfileLevel(int pipelineProfileLevel) {
+        this.pipelineProfileLevel = pipelineProfileLevel;
     }
 
     public int getPipelineProfileLevel() {
@@ -2071,12 +2110,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.queryExcludingMVNames = queryExcludingMVNames;
     }
 
-    public String getQueryincludingMVNames() {
-        return queryincludingMVNames;
+    public String getQueryIncludingMVNames() {
+        return queryIncludingMVNames;
     }
 
-    public void setQueryincludingMVNames(String queryincludingMVNames) {
-        this.queryincludingMVNames = queryincludingMVNames;
+    public void setQueryIncludingMVNames(String queryIncludingMVNames) {
+        this.queryIncludingMVNames = queryIncludingMVNames;
     }
 
     public String getAnalyzeForMV() {
@@ -2247,6 +2286,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableSimplifyCaseWhen = enableSimplifyCaseWhen;
     }
 
+    public boolean isEnableCountStarOptimization() {
+        return enableCountStarOptimization;
+    }
+
+    public void setEnableCountStarOptimization(boolean v) {
+        enableCountStarOptimization = v;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -2278,6 +2325,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setSpill_mem_limit_threshold(spillMemLimitThreshold);
             tResult.setSpill_operator_min_bytes(spillOperatorMinBytes);
             tResult.setSpill_operator_max_bytes(spillOperatorMaxBytes);
+            tResult.setSpill_revocable_max_bytes(spillRevocableMaxBytes);
             tResult.setSpill_encode_level(spillEncodeLevel);
             tResult.setSpillable_operator_mask(spillableOperatorMask);
         }

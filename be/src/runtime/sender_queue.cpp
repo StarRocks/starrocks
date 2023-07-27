@@ -14,6 +14,8 @@
 
 #include "runtime/sender_queue.h"
 
+#include <atomic>
+
 #include "column/chunk.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -158,7 +160,7 @@ Status DataStreamRecvr::NonPipelineSenderQueue::get_chunk(Chunk** chunk, const i
         // and the execution thread will call run() to let brpc continue to send packets,
         // and there will be memory release
 #ifndef BE_TEST
-        MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->process_mem_tracker());
+        MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->process_mem_tracker());
         DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 #endif
 
@@ -443,7 +445,8 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(Chunk** chunk, const int3
         auto* closure = item.closure;
         if (closure != nullptr) {
 #ifndef BE_TEST
-            MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->process_mem_tracker());
+            MemTracker* prev_tracker =
+                    tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->process_mem_tracker());
             DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 #endif
             _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
@@ -731,10 +734,6 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
             ++max_processed_sequence;
         }
     } else {
-        ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
-        std::lock_guard<Mutex> l(_lock);
-        wait_timer.stop();
-
         // In order to keep the order of pass through chunks, we need to guarantee that
         // the chunk which is taken out first from pass_throush_context must be enqueued first.
         // So here we put these two steps under the same lock.
@@ -750,7 +749,9 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
 
         // remove the short-circuited chunks
         for (auto iter = chunks.begin(); iter != chunks.end();) {
-            if (_is_pipeline_level_shuffle && _chunk_queue_states[iter->driver_sequence].is_short_circuited) {
+            if (_is_pipeline_level_shuffle &&
+                // First check here for short circuit compatibility without introducing a critical section
+                _chunk_queue_states[iter->driver_sequence].is_short_circuited.load(std::memory_order_relaxed)) {
                 total_chunk_bytes -= iter->chunk_bytes;
                 chunks.erase(iter++);
                 continue;
@@ -776,6 +777,10 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
             }
             _chunk_queue_states[index].blocked_closure_num += closure != nullptr;
             _total_chunks++;
+            // Double check here for short circuit compatibility without introducing a critical section
+            if (_chunk_queue_states[index].is_short_circuited.load(std::memory_order_relaxed)) {
+                short_circuit(index);
+            }
             _recvr->_num_buffered_bytes += chunk_bytes;
             COUNTER_ADD(_recvr->_peak_buffer_mem_bytes, chunk_bytes);
         }
@@ -785,9 +790,8 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
 }
 
 void DataStreamRecvr::PipelineSenderQueue::short_circuit(const int32_t driver_sequence) {
-    std::lock_guard<Mutex> l(_lock);
     auto& chunk_queue_state = _chunk_queue_states[driver_sequence];
-    chunk_queue_state.is_short_circuited = true;
+    chunk_queue_state.is_short_circuited.store(true, std::memory_order_relaxed);
     if (_is_pipeline_level_shuffle) {
         auto& chunk_queue = _chunk_queues[driver_sequence];
         ChunkItem item;
