@@ -14,17 +14,17 @@
 
 #include "common/s3_uri.h"
 
+#include <aws/core/utils/StringUtils.h>
+#include <aws/crt/io/Uri.h>
 #include <fmt/format.h>
 #include <gutil/strings/util.h>
-#include <aws/crt/io/Uri.h>
-#include <aws/core/utils/StringUtils.h>
 
 #include <algorithm>
 
 namespace starrocks {
 
 bool S3URI::parse(const char* uri_str, const size_t size) {
-    Aws::Crt::Io::Uri uri(Aws::Crt::ByteCursor{size, (uint8_t*) uri_str});
+    Aws::Crt::Io::Uri uri(Aws::Crt::ByteCursor{size, (uint8_t*)uri_str});
     if (!uri) {
         return false;
     }
