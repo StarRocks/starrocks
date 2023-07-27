@@ -50,6 +50,7 @@
 #include <thread>
 #include <utility>
 
+#include "common/config.h"
 #include "util/thread.h"
 
 namespace starrocks {
@@ -303,11 +304,13 @@ ThriftServer::ThriftServer(const std::string& name, std::shared_ptr<apache::thri
 
 Status ThriftServer::start() {
     DCHECK(!_started);
-    std::shared_ptr<apache::thrift::protocol::TProtocolFactory> protocol_factory(
-            new apache::thrift::protocol::TBinaryProtocolFactory());
+    auto protocol_factory = std::make_shared<apache::thrift::protocol::TBinaryProtocolFactory>();
+    protocol_factory->setStrict(config::thrift_rpc_strict_mode, true);
+    protocol_factory->setStringSizeLimit(config::thrift_rpc_max_body_size);
+
+    auto thread_factory = std::make_shared<apache::thrift::concurrency::ThreadFactory>();
+
     std::shared_ptr<apache::thrift::concurrency::ThreadManager> thread_mgr;
-    std::shared_ptr<apache::thrift::concurrency::ThreadFactory> thread_factory(
-            new apache::thrift::concurrency::ThreadFactory());
     std::shared_ptr<apache::thrift::transport::TServerTransport> fe_server_transport;
     std::shared_ptr<apache::thrift::transport::TTransportFactory> transport_factory;
 
