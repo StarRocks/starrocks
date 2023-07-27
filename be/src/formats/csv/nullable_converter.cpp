@@ -81,7 +81,7 @@ bool NullableConverter::read_quoted_string(Column* column, Slice s, const Option
     auto* nullable = down_cast<NullableColumn*>(column);
     auto* data = nullable->data_column().get();
 
-    if (s == "null") {
+    if (s == "null" || s == "\\N") {
         return nullable->append_nulls(1);
     } else if (_base_converter->read_quoted_string(data, s, options)) {
         nullable->null_column()->append(0);
