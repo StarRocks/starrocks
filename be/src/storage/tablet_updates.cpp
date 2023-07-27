@@ -2854,14 +2854,20 @@ RowsetSharedPtr TabletUpdates::get_delta_rowset(int64_t version) const {
 
 Status TabletUpdates::get_applied_rowsets(int64_t version, std::vector<RowsetSharedPtr>* rowsets,
                                           EditVersion* full_edit_version) {
+    std::unique_lock<std::mutex> ul(_lock);
+    auto st = get_applied_rowsets_unlocked(version, rowsets, full_edit_version, &ul);
+    return st;
+}
+
+Status TabletUpdates::get_applied_rowsets_unlocked(int64_t version, std::vector<RowsetSharedPtr>* rowsets,
+                                                   EditVersion* full_edit_version, std::unique_lock<std::mutex>* ul) {
     if (_error) {
         return Status::InternalError(
                 strings::Substitute("get_applied_rowsets failed, tablet updates is in error state: tablet:$0 $1",
                                     _tablet.tablet_id(), _error_msg));
     }
-    std::unique_lock<std::mutex> ul(_lock);
     // wait for version timeout 55s, should smaller than exec_plan_fragment rpc timeout(60s)
-    RETURN_IF_ERROR(_wait_for_version(EditVersion(version, 0), 55000, ul));
+    RETURN_IF_ERROR(_wait_for_version(EditVersion(version, 0), 55000, *ul));
     if (_edit_version_infos.empty()) {
         string msg = strings::Substitute("tablet deleted when get_applied_rowsets tablet:$0", _tablet.tablet_id());
         LOG(WARNING) << msg;
@@ -4467,6 +4473,11 @@ Status TabletUpdates::get_rowset_and_segment_idx_by_rssid(uint32_t rssid, Rowset
         }
     }
     return Status::NotFound(strings::Substitute("rowset for rssid $0 not found", rssid));
+}
+
+void get_lock(std::unique_lock<std::mutex>* ul) {
+    std::unique_lock<std::mutex> tmp_ul(_lock);
+    ul->swap(tmp_ul);
 }
 
 } // namespace starrocks

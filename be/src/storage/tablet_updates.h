@@ -211,6 +211,8 @@ public:
     // Wait until |version| been applied.
     Status get_applied_rowsets(int64_t version, std::vector<RowsetSharedPtr>* rowsets,
                                EditVersion* full_version = nullptr);
+    Status get_applied_rowsets_unlocked(int64_t version, std::vector<RowsetSharedPtr>* rowsets,
+                                        EditVersion* full_version, std::unique_lock<std::mutex>* ul);
 
     void to_updates_pb(TabletUpdatesPB* updates_pb) const;
 
@@ -424,6 +426,8 @@ private:
     void stop_apply(bool apply_stopped) { _apply_stopped = apply_stopped; }
 
     void check_for_apply() { _check_for_apply(); }
+
+    void get_lock(std::unique_lock<std::mutex>* ul);
 
 private:
     Tablet& _tablet;
