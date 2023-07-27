@@ -320,10 +320,8 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
             _collect_field_io_range(field.children[subfield_pos[i]], col_type.children[i], active, ranges, end_offset);
         }
     } else if (field.type.type == LogicalType::TYPE_MAP) {
-        // ParquetFiled Map -> Map<Struct<key,value>>
-        DCHECK(field.children[0].type.type == TYPE_STRUCT);
         auto index = 0;
-        for (auto& child : field.children[0].children) {
+        for (auto& child : field.children) {
             if ((!col_type.children[index].is_unknown_type())) {
                 _collect_field_io_range(child, col_type.children[index], active, ranges, end_offset);
             }
