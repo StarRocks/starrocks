@@ -28,6 +28,7 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../data-manipulatio
   SUBMIT [/*+ SET_VAR(key=value) */] TASK [[database.]<task_name>]AS
   CREATE TABLE [IF NOT EXISTS] [database.]table_name
   [(column_name [, column_name2, ...]]
+  [key_desc]
   [COMMENT "table comment"]
   [partition_desc]
   [distribution_desc]
@@ -40,7 +41,7 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../data-manipulatio
 | **Parameter**     | **Required** | **Description**                                              |
 | ----------------- | ------------ | ------------------------------------------------------------ |
 | column_name       | Yes          | The name of a column in the new table. You do not need to specify the data type for the column. StarRocks automatically specifies an appropriate data type for the column . StarRocks converts FLOAT and DOUBLE data into DECIMAL(38,9) data. StarRocks also converts CHAR, VARCHAR, and STRING data into VARCHAR(65533) data. |
-| key_desc          | No           | The syntax is  `key_type ( <col_name1> [, <col_name2> , ...])`.<br>*Parameter***:<ul><li>`key_type`: [The key type of the new table](../../../table_design/table_types/table_types.md). Valid values: `DUPLICATE KEY` and `PRIMARY KEY`. Default value: `DUPLICATE KEY`.</li><li> `col_name`: the column to form the key.</li></ul> |
+| key_desc          | No           | The syntax is  `key_type ( <col_name1> [, <col_name2> , ...])`.<br>*Parameters**:<ul><li>`key_type`: [the key type of the new table](../../../table_design/table_types/table_types.md). Valid values: `DUPLICATE KEY` and `PRIMARY KEY`. Default value: `DUPLICATE KEY`.</li><li> `col_name`: the column to form the key.</li></ul> |
 | COMMENT           | No           | The comment of the new table.                                |
 | partition_desc    | No           | The partitioning method of the new table. If you do not specify this parameter, by default, the new table has no partition. For more information about partitioning, see CREATE TABLE. |
 | distribution_desc | No           | The bucketing method of the new table. If you do not specify this parameter, the bucket column defaults to the column with the highest cardinality collected by the cost-based optimizer (CBO). The number of buckets defaults to 10. If the CBO does not collect information about the cardinality, the bucket column defaults to the first column in the new table. For more information about bucketing, see CREATE TABLE. |
@@ -111,7 +112,7 @@ SELECT * FROM employee_new;
 +------------+
 ```
 
-Example 4: Use CTAS to create a Primary Key table. Note that the number of data rows in the Primary Key table may be less than that in the query result. It is because the [Primary Key]((../../../table_design/table_types/primary_key_table.md) table only stores the most recent data row among a group of rows that have the same primary key. 
+Example 4: Use CTAS to create a Primary Key table. Note that the number of data rows in the Primary Key table may be less than that in the query result. It is because the [Primary Key](../../../table_design/table_types/primary_key_table.md) table only stores the most recent data row among a group of rows that have the same primary key. 
 
 ```SQL
 CREATE TABLE employee_new
