@@ -245,13 +245,13 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
     }
 
     for (int i = 0; i < columns.size(); ++i) {
-        size_t col_size = columns[i]->size();
-        if (col_size != rows) {
+        size_t col_num_rows = columns[i]->size();
+        if (col_num_rows != rows) {
             SlotId slot_id = get_slot_id_by_index(_meta.slot_id_to_index, i);
             return Status::Corruption(
                     fmt::format("Internal error. Detail: deserialize chunk data failed. column slot id: {}, column row "
                                 "count: {}, expected row count: {}. There is probably a bug here.",
-                                slot_id, col_size, rows));
+                                slot_id, col_num_rows, rows));
         }
     }
 
@@ -269,13 +269,13 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
             cur = ColumnArraySerde::deserialize(cur, column.get());
         }
         for (int i = 0; i < extra_columns.size(); ++i) {
-            size_t col_size = extra_columns[i]->size();
-            if (col_size != rows) {
+            size_t col_num_rows = extra_columns[i]->size();
+            if (col_num_rows != rows) {
                 return Status::Corruption(
                         fmt::format("Internal error. Detail: deserialize chunk data failed. extra column index: {}, "
                                     "column row count: {}, expected "
                                     "row count: {}. There is probably a bug here.",
-                                    i, col_size, rows));
+                                    i, col_num_rows, rows));
             }
         }
         chunk_extra_data = std::make_shared<ChunkExtraColumnsData>(_meta.extra_data_metas, std::move(extra_columns));
