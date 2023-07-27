@@ -19,4 +19,10 @@ ADD_BE_BENCH(${SRC_DIR}/bench/shuffle_chunk_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/parquet_writer_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/parquet_writer_array_bench)
 #ADD_BE_BENCH(${SRC_DIR}/bench/block_cache_bench)
+<<<<<<< HEAD
 ADD_BE_BENCH(${SRC_DIR}/bench/parquet_dict_decode_bench)
+=======
+ADD_BE_BENCH(${SRC_DIR}/bench/roaring_bitmap_mem_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/parquet_dict_decode_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/get_dict_codes_bench)
+>>>>>>> 45d691ad7 ([Enhancement] no need get_dict_code by value just transform directly (#27849))
