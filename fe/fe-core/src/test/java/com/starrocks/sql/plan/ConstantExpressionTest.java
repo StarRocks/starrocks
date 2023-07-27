@@ -31,7 +31,7 @@ public class ConstantExpressionTest extends PlanTestBase {
 
     private void testFragmentPlanContains(String sql, String result) throws Exception {
         String explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains(result));
+        Assert.assertTrue(explainString, explainString.contains(result));
     }
 
     @Test
@@ -57,6 +57,15 @@ public class ConstantExpressionTest extends PlanTestBase {
                 () -> getFragmentPlan("select inspect_mv_meta('a.b.c.d');"));
         Assert.assertThrows(StarRocksPlannerException.class,
                 () -> getFragmentPlan("select inspect_mv_meta('db_notexists.mv1');"));
+
+        // inspect_related_mv
+        testFragmentPlanContains("select inspect_related_mv('mv_base_table_9527')", "name\":\"mv1\"");
+    }
+
+    @Test
+    public void testInspectHivePartitionInfo() throws Exception {
+        Assert.assertThrows(StarRocksPlannerException.class,
+                () -> testFragmentPlanContains("select inspect_hive_part_info('hive0.partitioned_db.t1')", ""));
     }
 
     @Test

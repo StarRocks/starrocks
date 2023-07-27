@@ -90,16 +90,17 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
 
     public static TableName fromString(String name) {
         List<String> pieces = Splitter.on(".").splitToList(name);
+        String catalog = ConnectContext.get().getCurrentCatalog();
+        String db = ConnectContext.get().getDatabase();
         if (pieces.isEmpty()) {
             throw new IllegalArgumentException("empty table name");
         } else if (pieces.size() == 1) {
-            String db = ConnectContext.get().getDatabase();
             if (StringUtils.isEmpty(db)) {
                 throw new IllegalArgumentException("no database");
             }
-            return new TableName(db, pieces.get(0));
+            return new TableName(catalog, db, pieces.get(0));
         } else if (pieces.size() == 2) {
-            return new TableName(pieces.get(0), pieces.get(1));
+            return new TableName(catalog, pieces.get(0), pieces.get(1));
         } else if (pieces.size() == 3) {
             return new TableName(pieces.get(0), pieces.get(1), pieces.get(2));
         } else {

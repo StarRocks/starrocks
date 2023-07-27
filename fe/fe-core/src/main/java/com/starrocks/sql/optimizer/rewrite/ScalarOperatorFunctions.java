@@ -37,10 +37,15 @@ package com.starrocks.sql.optimizer.rewrite;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonNull;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 import com.google.re2j.Pattern;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -50,10 +55,15 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.PartitionUtil;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import org.apache.commons.collections4.MapUtils;
+import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang.StringUtils;
 
 import java.math.BigDecimal;
@@ -1039,10 +1049,15 @@ public class ScalarOperatorFunctions {
     }
 
     // =================================== meta functions ==================================== //
+
+    /**
+     * Return verbose metadata of a materialized-view
+     */
     @ConstantFunction(name = "inspect_mv_meta", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
     public static ConstantOperator inspect_mv_meta(ConstantOperator mvName) {
         TableName tableName = TableName.fromString(mvName.getVarchar());
-        Table table = GlobalStateMgr.getCurrentState().mayGetDb(tableName.getDb())
+        Table table = GlobalStateMgr.getCurrentState()
+                .mayGetDb(tableName.getDb())
                 .flatMap(db -> db.mayGetTable(tableName.getTbl()))
                 .orElseThrow(
                         () -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, mvName.getVarchar()));
@@ -1051,12 +1066,74 @@ public class ScalarOperatorFunctions {
                     mvName.getVarchar() + " is not materialized view");
         }
         ConnectContext connectContext = ConnectContext.get();
-        PrivilegeChecker.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
-                connectContext.getCurrentRoleIds(), tableName);
+        PrivilegeChecker.checkAnyActionOnTable(
+                connectContext.getCurrentUserIdentity(),
+                connectContext.getCurrentRoleIds(),
+                tableName);
 
         MaterializedView mv = (MaterializedView) table;
         String meta = mv.inspectMeta();
         return ConstantOperator.createVarchar(meta);
+    }
+
+    /**
+     * Return related materialized-views of a table, in JSON array format
+     */
+    @ConstantFunction(name = "inspect_related_mv", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspect_related_mv(ConstantOperator arg0) {
+        TableName tableName = TableName.fromString(arg0.getVarchar());
+        Table table = GlobalStateMgr.getCurrentState().mayGetDb(tableName.getDb())
+                .flatMap(db -> db.mayGetTable(tableName.getTbl()))
+                .orElseThrow(
+                        () -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, arg0.getVarchar()));
+        ConnectContext connectContext = ConnectContext.get();
+        PrivilegeChecker.checkAnyActionOnTable(
+                connectContext.getCurrentUserIdentity(),
+                connectContext.getCurrentRoleIds(),
+                tableName);
+
+        Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
+        JsonArray array = new JsonArray();
+        for (MvId mv : SetUtils.emptyIfNull(relatedMvs)) {
+            String name = GlobalStateMgr.getCurrentState().mayGetTable(mv.getDbId(), mv.getId())
+                    .map(Table::getName)
+                    .orElse(null);
+            JsonObject obj = new JsonObject();
+            obj.add("id", new JsonPrimitive(mv.getId()));
+            obj.add("name", name != null ? new JsonPrimitive(name) : JsonNull.INSTANCE);
+
+            array.add(obj);
+        }
+
+        String json = array.toString();
+        return ConstantOperator.createVarchar(json);
+    }
+
+    /**
+     * Return Hive partition info
+     */
+    @ConstantFunction(name = "inspect_hive_part_info", argTypes = {
+            VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspect_hive_part_info(ConstantOperator arg0) {
+        TableName tableName = TableName.fromString(arg0.getVarchar());
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName)
+                .orElseThrow(
+                        () -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, arg0.getVarchar()));
+
+        ConnectContext connectContext = ConnectContext.get();
+        PrivilegeChecker.checkAnyActionOnTable(
+                connectContext.getCurrentUserIdentity(),
+                connectContext.getCurrentRoleIds(),
+                tableName);
+
+        Map<String, PartitionInfo> info = PartitionUtil.getPartitionNameWithPartitionInfo(table);
+        JsonObject obj = new JsonObject();
+        for (Map.Entry<String, PartitionInfo> entry : MapUtils.emptyIfNull(info).entrySet()) {
+            String value = GsonUtils.GSON.toJson(entry.getValue());
+            obj.add(entry.getKey(), new JsonPrimitive(value));
+        }
+        String json = obj.toString();
+        return ConstantOperator.createVarchar(json);
     }
 
 }

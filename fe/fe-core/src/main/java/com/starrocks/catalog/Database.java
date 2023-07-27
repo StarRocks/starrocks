@@ -599,6 +599,10 @@ public class Database extends MetaObject implements Writable {
         return Optional.ofNullable(nameToTable.get(tableName));
     }
 
+    public Optional<Table> mayGetTable(long tableId) {
+        return Optional.ofNullable(idToTable.get(tableId));
+    }
+
     public Table getTable(String tableName) {
         if (nameToTable.containsKey(tableName)) {
             return nameToTable.get(tableName);
