@@ -61,6 +61,33 @@ public abstract class ScanNode extends PlanNode {
         this.columnFilters = columnFilters;
     }
 
+<<<<<<< HEAD
+=======
+    public void setColumnAccessPaths(List<ColumnAccessPath> columnAccessPaths) {
+        this.columnAccessPaths = columnAccessPaths;
+    }
+
+    public void setCanUseAnyColumn(boolean canUseAnyColumn) {
+        this.canUseAnyColumn = canUseAnyColumn;
+    }
+
+    public void setCanUseMinMaxCountOpt(boolean canUseMinMaxCountOpt) {
+        this.canUseMinMaxCountOpt = canUseMinMaxCountOpt;
+    }
+
+    public boolean getCanUseAnyColumn() {
+        return canUseAnyColumn;
+    }
+
+    public boolean getCanUseMinMaxCountOpt() {
+        return canUseMinMaxCountOpt;
+    }
+
+    public String getTableName() {
+        return desc.getTable().getName();
+    }
+
+>>>>>>> 278478b094 ([Enhancement] Use consistent hash as hdfs backend selector default strategy (#27985))
     /**
      * cast expr to SlotDescriptor type
      */

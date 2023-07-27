@@ -14,6 +14,7 @@
 
 package com.starrocks.qe;
 
+import autovalue.shaded.com.google.common.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableCollection;
@@ -35,6 +36,12 @@ import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.ScanNode;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.scheduler.NonRecoverableException;
+import com.starrocks.qe.scheduler.WorkerProvider;
+import com.starrocks.sql.PlannerProfile;
+>>>>>>> 278478b094 ([Enhancement] Use consistent hash as hdfs backend selector default strategy (#27985))
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.THdfsScanRange;
@@ -70,6 +77,8 @@ public class HDFSBackendSelector implements BackendSelector {
     public static final Logger LOG = LogManager.getLogger(HDFSBackendSelector.class);
     // be -> assigned scans
     Map<ComputeNode, Long> assignedScansPerComputeNode = Maps.newHashMap();
+    // be -> re-balance bytes
+    Map<ComputeNode, Long> reBalanceBytesPerComputeNode = Maps.newHashMap();
     // be host -> bes
     Multimap<String, ComputeNode> hostToBackends = HashMultimap.create();
     private final ScanNode scanNode;
@@ -83,8 +92,7 @@ public class HDFSBackendSelector implements BackendSelector {
     private boolean shuffleScanRange;
     private final int kCandidateNumber = 3;
     private final int kMaxImbalanceRatio = 3;
-    private final int kMaxNodeSizeUseRendezvousHashRing = 64;
-    private final int kConsistenHashRingVirtualNumber = 32;
+    public static final int CONSISTENT_HASH_RING_VIRTUAL_NUMBER = 32;
 
     class HdfsScanRangeHasher {
         String basePath;
@@ -153,7 +161,7 @@ public class HDFSBackendSelector implements BackendSelector {
         this.shuffleScanRange = shuffleScanRange;
     }
 
-    private ComputeNode selectLeastScanBytesComputeNode(Collection<ComputeNode> backends, long maxImbalanceBytes) {
+    private ComputeNode selectLeastScanBytesComputeNode(List<ComputeNode> backends, long maxImbalanceBytes) {
         if (backends == null || backends.isEmpty()) {
             return null;
         }
@@ -196,15 +204,20 @@ public class HDFSBackendSelector implements BackendSelector {
         }
     }
 
-    private HashRing makeHashRing() {
+    @VisibleForTesting
+    public HashRing makeHashRing() {
         Set<ComputeNode> nodes = assignedScansPerComputeNode.keySet();
         HashRing hashRing = null;
-        if (nodes.size() > kMaxNodeSizeUseRendezvousHashRing) {
-            hashRing = new ConsistentHashRing(Hashing.murmur3_128(), new TScanRangeLocationsFunnel(),
-                    new ComputeNodeFunnel(), nodes, kConsistenHashRingVirtualNumber);
-        } else {
+        String hashAlgorithm = ConnectContext.get() != null ? ConnectContext.get().getSessionVariable().
+                getHdfsBackendSelectorHashAlgorithm() : "consistent";
+        int virtualNodeNum = ConnectContext.get() != null ? ConnectContext.get().getSessionVariable().
+                getConsistentHashVirtualNodeNum() : CONSISTENT_HASH_RING_VIRTUAL_NUMBER;
+        if (hashAlgorithm.equalsIgnoreCase("rendezvous")) {
             hashRing = new RendezvousHashRing(Hashing.murmur3_128(), new TScanRangeLocationsFunnel(),
                     new ComputeNodeFunnel(), nodes);
+        } else {
+            hashRing = new ConsistentHashRing(Hashing.murmur3_128(), new TScanRangeLocationsFunnel(),
+                    new ComputeNodeFunnel(), nodes, virtualNodeNum);
         }
         return hashRing;
     }
@@ -232,6 +245,7 @@ public class HDFSBackendSelector implements BackendSelector {
                 continue;
             }
             assignedScansPerComputeNode.put(computeNode, 0L);
+            reBalanceBytesPerComputeNode.put(computeNode, 0L);
             hostToBackends.put(computeNode.getHost(), computeNode);
         }
         if (hostToBackends.isEmpty()) {
@@ -244,7 +258,7 @@ public class HDFSBackendSelector implements BackendSelector {
         if (forceScheduleLocal) {
             for (int i = 0; i < locations.size(); ++i) {
                 TScanRangeLocations scanRangeLocations = locations.get(i);
-                Collection<ComputeNode> backends = new ArrayList<>();
+                List<ComputeNode> backends = new ArrayList<>();
                 // select all backends that are co-located with this scan range.
                 for (final TScanRangeLocation location : scanRangeLocations.getLocations()) {
                     Collection<ComputeNode> servers = hostToBackends.get(location.getServer().getHostname());
@@ -257,7 +271,7 @@ public class HDFSBackendSelector implements BackendSelector {
                 if (node == null) {
                     remoteScanRangeLocations.add(scanRangeLocations);
                 } else {
-                    recordScanRangeAssignment(node, scanRangeLocations);
+                    recordScanRangeAssignment(node, backends, scanRangeLocations);
                 }
             }
         } else {
@@ -280,10 +294,13 @@ public class HDFSBackendSelector implements BackendSelector {
             if (node == null) {
                 throw new RuntimeException("Failed to find backend to execute");
             }
-            recordScanRangeAssignment(node, scanRangeLocations);
+            recordScanRangeAssignment(node, backends, scanRangeLocations);
         }
+
+        recordScanRangeStatistic();
     }
 
+<<<<<<< HEAD
     private void recordScanRangeAssignment(ComputeNode node, TScanRangeLocations scanRangeLocations) {
         TNetworkAddress address = new TNetworkAddress(node.getHost(), node.getBePort());
         usedBackendIDs.add(node.getId());
@@ -292,6 +309,21 @@ public class HDFSBackendSelector implements BackendSelector {
         // update statistic
         long addedScans = scanRangeLocations.scan_range.hdfs_scan_range.length;
         assignedScansPerComputeNode.put(node, assignedScansPerComputeNode.get(node) + addedScans);
+=======
+    private void recordScanRangeAssignment(ComputeNode worker, List<ComputeNode> backends,
+                                           TScanRangeLocations scanRangeLocations)
+            throws NonRecoverableException {
+        workerProvider.selectWorker(worker.getId());
+
+        // update statistic
+        long addedScans = scanRangeLocations.scan_range.hdfs_scan_range.length;
+        assignedScansPerComputeNode.put(worker, assignedScansPerComputeNode.get(worker) + addedScans);
+        // the fist item in backends will be assigned if there is no re-balance, we compute re-balance bytes
+        // if the worker is not the first item in backends.
+        if (worker != backends.get(0)) {
+            reBalanceBytesPerComputeNode.put(worker, reBalanceBytesPerComputeNode.get(worker) + addedScans);
+        }
+>>>>>>> 278478b094 ([Enhancement] Use consistent hash as hdfs backend selector default strategy (#27985))
 
         // add in assignment
         Map<Integer, List<TScanRangeParams>> scanRanges =
@@ -302,5 +334,20 @@ public class HDFSBackendSelector implements BackendSelector {
         TScanRangeParams scanRangeParams = new TScanRangeParams();
         scanRangeParams.scan_range = scanRangeLocations.scan_range;
         scanRangeParamsList.add(scanRangeParams);
+    }
+
+    private void recordScanRangeStatistic() {
+        // record scan range size for each backend
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<ComputeNode, Long> entry : assignedScansPerComputeNode.entrySet()) {
+            sb.append(entry.getKey().getAddress().hostname).append(":").append(entry.getValue()).append(",");
+        }
+        PlannerProfile.addCustomProperties(scanNode.getTableName() + " scan_range_bytes", sb.toString());
+        // record re-balance bytes for each backend
+        sb = new StringBuilder();
+        for (Map.Entry<ComputeNode, Long> entry : reBalanceBytesPerComputeNode.entrySet()) {
+            sb.append(entry.getKey().getAddress().hostname).append(":").append(entry.getValue()).append(",");
+        }
+        PlannerProfile.addCustomProperties(scanNode.getTableName() + " rebalance_bytes", sb.toString());
     }
 }
