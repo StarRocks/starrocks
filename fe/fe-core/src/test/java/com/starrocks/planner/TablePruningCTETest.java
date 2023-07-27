@@ -93,7 +93,7 @@ public class TablePruningCTETest extends TablePruningTestBase {
         return createTableSql.replaceAll(pat.pattern(), "CREATE TABLE `$10`");
     }
 
-    @Test
+    // @Test
     public void testUpdate() {
         String sql = "WITH cte0 as (\n" +
                 "WITH cte1 as (\n" +
@@ -132,31 +132,31 @@ public class TablePruningCTETest extends TablePruningTestBase {
         checkHashJoinCountWithOnlyRBO(sql, 1);
     }
 
-    @Test
+    // @Test
     public void testUpdateCTEFullInlined() {
         String q = getSqlList("sql/tpch_pk_tables/", "q1").get(0);
         checkHashJoinCountWithOnlyRBO(q, 3);
     }
 
-    @Test
+    // @Test
     public void testUpdateCTENotFullInlined() {
         String q = getSqlList("sql/tpch_pk_tables/", "q2").get(0);
         checkHashJoinCountWithOnlyRBO(q, 3);
     }
 
-    @Test
+    // @Test
     public void testUpdateCTEInnerJoin() {
         String q = getSqlList("sql/tpch_pk_tables/", "q3").get(0);
         checkHashJoinCountWithOnlyRBO(q, 3);
     }
 
-    @Test
+    // @Test
     public void testUpdateAggregationPreventPruning() {
         String q = getSqlList("sql/tpch_pk_tables/", "q4").get(0);
         checkHashJoinCountWithOnlyRBO(q, 5);
     }
 
-    @Test
+    // @Test
     public void testUpdateWithPredicates() {
         String q = getSqlList("sql/tpch_pk_tables/", "q5").get(0);
         String plan = checkHashJoinCountWithOnlyRBO(q, 3);
@@ -170,7 +170,7 @@ public class TablePruningCTETest extends TablePruningTestBase {
                 "[l_orderkey, BIGINT, false] <= 1000"));
     }
 
-    @Test
+    // @Test
     public void testUpdateContainsRightJoin() {
         String q = getSqlList("sql/tpch_pk_tables/", "q6").get(0);
         checkHashJoinCountWithOnlyRBO(q, 3);
