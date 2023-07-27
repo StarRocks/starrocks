@@ -143,7 +143,7 @@ public class DefaultCoordinator extends Coordinator {
     private List<RuntimeProfile> fragmentProfiles;
     private final Map<PlanFragmentId, Integer> fragmentId2fragmentProfileIds = Maps.newHashMap();
     // backend execute state
-    private final ConcurrentNavigableMap<Integer, ExecutionFragmentInstance> executionFragmentInstances =
+    private final ConcurrentNavigableMap<Integer, ExecutionFragmentInstance> indexInJobToExecution =
             new ConcurrentSkipListMap<>();
     // backend which state need to be checked when joining this coordinator.
     // It is supposed to be the subset of backendExecStates.
@@ -280,7 +280,7 @@ public class DefaultCoordinator extends Coordinator {
         profileDoneSignal.addMark(queryId, -1L /* value is meaningless */);
 
         ExecutionFragmentInstance execution = ExecutionFragmentInstance.createFakeExecution(queryId, address);
-        executionFragmentInstances.put(0, execution);
+        indexInJobToExecution.put(0, execution);
 
         attachInstanceProfileToFragmentProfile();
 
@@ -377,7 +377,7 @@ public class DefaultCoordinator extends Coordinator {
     public void clearExportStatus() {
         lock.lock();
         try {
-            this.executionFragmentInstances.clear();
+            this.indexInJobToExecution.clear();
             this.queryStatus.setStatus(new Status());
             if (this.exportFiles == null) {
                 this.exportFiles = Lists.newArrayList();
@@ -423,11 +423,11 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     public Collection<ExecutionFragmentInstance> getBackendExecutions() {
-        return executionFragmentInstances.values();
+        return indexInJobToExecution.values();
     }
 
     public Collection<Integer> getBackendNums() {
-        return executionFragmentInstances.keySet();
+        return indexInJobToExecution.keySet();
     }
 
     public Set<TUniqueId> getInstanceIds() {
@@ -693,7 +693,7 @@ public class DefaultCoordinator extends Coordinator {
         lock();
         try {
             // execute all instances from up to bottom
-            int backendNum = 0;
+            int indexInJob = 0;
 
             jobSpec.getDescTable().setIs_cached(false);
             TDescriptorTable emptyDescTable = new TDescriptorTable();
@@ -721,7 +721,7 @@ public class DefaultCoordinator extends Coordinator {
                     // Fragment instances to keep consistent order with Fragment instances in
                     // FragmentExecParams.instanceExecParams.
                     for (CoordinatorPreprocessor.FInstanceExecParam fInstanceExecParam : params.instanceExecParams) {
-                        fInstanceExecParam.backendNum = backendNum++;
+                        fInstanceExecParam.setBackendNum(indexInJob++);
                     }
 
                     List<List<CoordinatorPreprocessor.FInstanceExecParam>> twoStageInstancesToDeploy =
@@ -796,7 +796,7 @@ public class DefaultCoordinator extends Coordinator {
                                     tRequest,
                                     profileFragmentId,
                                     worker);
-                            executionFragmentInstances.put(tRequest.backend_num, execState);
+                            indexInJobToExecution.put(tRequest.backend_num, execState);
                             if (needCheckBackendState) {
                                 needCheckBackendExecStates.add(execState);
                                 if (LOG.isDebugEnabled()) {
@@ -1204,7 +1204,7 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     private void cancelRemoteFragmentsAsync(PPlanFragmentCancelReason cancelReason) {
-        for (ExecutionFragmentInstance execution : executionFragmentInstances.values()) {
+        for (ExecutionFragmentInstance execution : indexInJobToExecution.values()) {
             // If the execution fails to be cancelled, and it has been finished or not been deployed,
             // count down the profileDoneSignal of this execution immediately,
             // because the profile report will not arrive anymore for the finished or non-deployed execution.
@@ -1216,16 +1216,16 @@ public class DefaultCoordinator extends Coordinator {
 
         coordinatorPreprocessor.getFragmentExecParamsMap().values()
                 .stream().flatMap(execFragment -> execFragment.instanceExecParams.stream())
-                .filter(instance -> !executionFragmentInstances.containsKey(instance.getBackendNum()))
+                .filter(instance -> !indexInJobToExecution.containsKey(instance.getBackendNum()))
                 .forEach(instance -> profileDoneSignal.markedCountDown(instance.getInstanceId(), -1L));
     }
 
     @Override
     public void updateFragmentExecStatus(TReportExecStatusParams params) {
-        ExecutionFragmentInstance execState = executionFragmentInstances.get(params.backend_num);
+        ExecutionFragmentInstance execState = indexInJobToExecution.get(params.backend_num);
         if (execState == null) {
             LOG.warn("unknown backend number: {}, valid backend numbers: {}", params.backend_num,
-                    executionFragmentInstances.keySet());
+                    indexInJobToExecution.keySet());
             return;
         }
 
@@ -1341,7 +1341,7 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     public void endProfile() {
-        if (executionFragmentInstances.isEmpty()) {
+        if (indexInJobToExecution.isEmpty()) {
             return;
         }
 
@@ -1663,7 +1663,7 @@ public class DefaultCoordinator extends Coordinator {
     public List<QueryStatisticsItem.FragmentInstanceInfo> getFragmentInstanceInfos() {
         final List<QueryStatisticsItem.FragmentInstanceInfo> result = Lists.newArrayList();
         for (PlanFragment fragment : jobSpec.getFragments()) {
-            for (ExecutionFragmentInstance execution : executionFragmentInstances.values()) {
+            for (ExecutionFragmentInstance execution : indexInJobToExecution.values()) {
                 if (fragment.getFragmentId() != execution.getFragmentId()) {
                     continue;
                 }
@@ -1675,7 +1675,7 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     private void attachInstanceProfileToFragmentProfile() {
-        for (ExecutionFragmentInstance execution : executionFragmentInstances.values()) {
+        for (ExecutionFragmentInstance execution : indexInJobToExecution.values()) {
             if (!execution.computeTimeInProfile(fragmentProfiles.size())) {
                 return;
             }

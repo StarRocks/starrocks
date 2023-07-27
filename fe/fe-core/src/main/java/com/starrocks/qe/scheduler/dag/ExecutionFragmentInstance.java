@@ -14,6 +14,7 @@
 
 package com.starrocks.qe.scheduler.dag;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
@@ -59,7 +60,7 @@ import java.util.concurrent.TimeoutException;
  *               FAILED ◄────────────┘
  * }
  * </pre>
- *
+ * <p>
  * All the methods are thead-safe.
  * The {@link #state} and {@link #profile} are protected by {@code synchronized(this)}.
  */
@@ -141,6 +142,10 @@ public class ExecutionFragmentInstance {
         this.lastMissingHeartbeatTime = lastMissingHeartbeatTime;
     }
 
+    /**
+     * Deploy the fragment instance to the worker asynchronously.
+     * The state transitions to DEPLOYING.
+     */
     public void deployAsync() {
         transitionState(State.DEPLOYING);
 
@@ -214,12 +219,23 @@ public class ExecutionFragmentInstance {
         }
     }
 
-    public DeploymentResult waitForDeploymentCompletion(long deliveryTimeoutMs) {
+    /**
+     * Wait for the response of deployment.
+     * The state transitions to EXECUTING or FAILED, if it is at DEPLOYING state.
+     *
+     * @param deployTimeoutMs The timeout of deployment.
+     * @return The deployment result.
+     * - With OK status, if the deployment succeeds.
+     * - With non-OK status and failure, otherwise.
+     */
+    public DeploymentResult waitForDeploymentCompletion(long deployTimeoutMs) {
+        Preconditions.checkState(State.CREATED != state, "wait for deployment completion before deploying");
+
         TStatusCode code;
         String errMsg = null;
         Throwable failure = null;
         try {
-            PExecPlanFragmentResult result = deployFuture.get(deliveryTimeoutMs, TimeUnit.MILLISECONDS);
+            PExecPlanFragmentResult result = deployFuture.get(deployTimeoutMs, TimeUnit.MILLISECONDS);
             code = TStatusCode.findByValue(result.status.statusCode);
             if (!CollectionUtils.isEmpty(result.status.errorMsgs)) {
                 errMsg = result.status.errorMsgs.get(0);
@@ -240,9 +256,9 @@ public class ExecutionFragmentInstance {
         }
 
         if (code == TStatusCode.OK) {
-            transitionState(State.EXECUTING);
+            transitionState(State.DEPLOYING, State.EXECUTING);
         } else {
-            transitionState(State.FAILED);
+            transitionState(State.DEPLOYING, State.FAILED);
 
             if (errMsg == null) {
                 errMsg = "exec rpc error.";
@@ -258,8 +274,12 @@ public class ExecutionFragmentInstance {
         return new DeploymentResult(code, errMsg, failure);
     }
 
-    // update profile.
-    // return true if profile is updated. Otherwise, return false.
+    /**
+     * Update the execution state and profile from the report RPC.
+     *
+     * @param params The report RPC request.
+     * @return true if the state is updated. Otherwise, return false.
+     */
     public synchronized boolean updateExecStatus(TReportExecStatusParams params) {
         switch (state) {
             case CREATED:
@@ -284,8 +304,12 @@ public class ExecutionFragmentInstance {
         }
     }
 
-    // cancel the fragment instance.
-    // return true if cancel success. Otherwise, return false
+    /**
+     * Cancel the fragment instance.
+     *
+     * @param cancelReason The cancel reason.
+     * @return true if cancel succeeds. Otherwise, return false.
+     */
     public synchronized boolean cancelFragmentInstance(PPlanFragmentCancelReason cancelReason) {
         if (LOG.isDebugEnabled()) {
             LOG.debug(
@@ -388,6 +412,12 @@ public class ExecutionFragmentInstance {
 
     private synchronized void transitionState(State to) {
         state = to;
+    }
+
+    private synchronized void transitionState(State from, State to) {
+        if (state == from) {
+            state = to;
+        }
     }
 
     public enum State {
