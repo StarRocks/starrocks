@@ -241,7 +241,11 @@ public class MaterializedViewRewriter {
             if (queryJoinType.equals(mvJoinType)) {
                 // it means both joins' type and onPredicate are equal
                 // for outer join, we should check some extra conditions
-                return checkJoinMatch(queryJoinType, queryExpr, mvExpr);
+                boolean ret = checkJoinMatch(queryJoinType, queryExpr, mvExpr);
+                if (!ret) {
+                    logMVRewrite(mvRewriteContext, "join match check failed, joinType: %s", queryJoinType);
+                }
+                return ret;
             }
 
             if (!JOIN_COMPATIBLE_MAP.get(mvJoinType).contains(queryJoinType)) {
@@ -313,19 +317,33 @@ public class MaterializedViewRewriter {
     }
 
     private boolean checkJoinChildPredicate(OptExpression queryExpr, OptExpression mvExpr, int index) {
-        Set<ScalarOperator> queryPredicates = Sets.newTreeSet((v1, v2) -> v1.toString().compareTo(v2.toString()));
-        queryPredicates.addAll(MvUtils.getAllPredicates(queryExpr.inputAt(index)));
+        Set<ScalarOperator> queryPredicates = Sets.newHashSet();
+        // extract all conjuncts
+        queryPredicates.addAll(Utils.extractConjuncts(Utils.compoundAnd(MvUtils.getAllPredicates(queryExpr.inputAt(index)))));
         queryPredicates =
                 queryPredicates.stream().filter(scalarOperator -> !scalarOperator.isPushdown()).collect(Collectors.toSet());
-        Set<ScalarOperator> mvPredicates = Sets.newTreeSet((v1, v2) -> v1.toString().compareTo(v2.toString()));
-        mvPredicates.addAll(MvUtils.getAllPredicates(mvExpr.inputAt(index)));
+        Set<ScalarOperator> mvPredicates = Sets.newHashSet();
+        // extract all conjuncts
+        mvPredicates.addAll(Utils.extractConjuncts(Utils.compoundAnd(MvUtils.getAllPredicates(mvExpr.inputAt(index)))));
         mvPredicates = mvPredicates.stream().filter(scalarOperator -> !scalarOperator.isPushdown()).collect(Collectors.toSet());
         if (queryPredicates.isEmpty() && mvPredicates.isEmpty()) {
             return true;
         }
-        ScalarOperator queryConjunct = Utils.compoundAnd(queryPredicates);
-        ScalarOperator mvConjunct = Utils.compoundAnd(mvPredicates);
-        return queryConjunct.equivalent(mvConjunct);
+        boolean isEqual = isAllPredicateEquivalent(queryPredicates, mvPredicates);
+        if (!isEqual) {
+            logMVRewrite(
+                    mvRewriteContext,
+                    "join child predicate not matched, queryPredicates: %s, mvPredicates: %s, index: %s",
+                    queryPredicates, mvPredicates, index);
+        }
+        return isEqual;
+    }
+
+    private boolean isAllPredicateEquivalent(
+            Collection<ScalarOperator> queryPredicates, final Collection<ScalarOperator> mvPredicates) {
+        return queryPredicates.size() == mvPredicates.size()
+                && queryPredicates.stream().allMatch(queryPredicate ->
+                mvPredicates.stream().anyMatch(mvPredicate -> mvPredicate.equivalent(queryPredicate)));
     }
 
     private boolean isJoinCompatible(
@@ -514,6 +532,7 @@ public class MaterializedViewRewriter {
 
         // Check whether mv can be applicable for the query.
         if (!isMVApplicable(mvExpression, queryTables, mvTables, matchMode, queryExpression)) {
+            logMVRewrite(mvRewriteContext, "mv applicable check failed");
             return null;
         }
 
