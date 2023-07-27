@@ -213,9 +213,15 @@ From v3.1 onwards, you can modify the table comment suing `ALTER TABLE <table_na
 
 ### partition_desc
 
-Partition description can be used in the following three ways:
+Partition description can be used in the following ways:
 
-#### LESS THAN
+#### Create partitions dynamically
+
+[Dynamic partitioning](../../../table_design/dynamic_partitioning.md) provides a time-to-live (TTL) management for partitions. StarRocks automatically creates new partitions in advance and removes expired partitions to ensure data freshness. To enable this feature, you can configure Dynamic partitioning related properties at table creation.
+
+#### Create partitions one by one
+
+**Specify only the upper bound for a partition**
 
 Syntax:
 
@@ -243,7 +249,7 @@ Please note:
 - Partitions are often used for managing data related to time.
 - When data backtracking is needed, you may want to consider emptying the first partition for adding partitions later when necessary.
 
-#### Fixed Range
+**Specify both the lower and upper bounds for a partition**
 
 Syntax:
 
@@ -261,24 +267,34 @@ Note:
 - Fixed Range is more flexible than LESS THAN. You can customize the left and right partitions.
 - Fixed Range is the same as LESS THAN in the other aspects.
 
-#### Create partitions in bulk
+#### Create multiple partitions at a time
 
 Syntax
 
-```Plain%20Text
-PARTITION BY RANGE (datekey) (
-    START ("2021-01-01") END ("2021-01-04") EVERY (INTERVAL 1 day)
-)
-```
+- If the partitioning column is of an date type.
+
+    ```Plain%20Text
+    PARTITION BY RANGE (datekey) (
+        START ("2021-01-01") END ("2021-01-04") EVERY (INTERVAL 1 day)
+    )
+    ```
+
+- If the partitioning column is of an integer type.
+
+    ```Plain%20Text
+    PARTITION BY RANGE (datekey) (
+        START ("1") END ("5") EVERY (1)
+    )
+    ```
 
 Description
 
-You can specify the value for `START` and `END` and the expression in `EVERY` to create partitions in bulk .
+You can specify the lower and upper bounds in `START` and `END` and the time unit or partitioning granunity in `EVERY` to create multiple partitions at a time.
 
-- If `datekey` supports DATE and INTEGER data type, the data type of `START`, `END`, and `EVERY` must be the same as the data type of `datekey`.
-- If `datekey` only supports DATE data type, you need to use the `INTERVAL` keyword to specify the date interval. You can specify the date interval by day, week, month, or year. The naming conventions of partitions are the same as those for dynamic partitions.
+- The partitioning column can be of a date or integer type, and the data type of values in `START()` and `END()`, and `EVERY()` must be the same as the data type of partitioning column.
+- The partitioning column is of a data type, you need to use the `INTERVAL` keyword to specify the date interval. You can specify the time unit as hour (since v3.0), day, week, month, or year. The naming conventions of partitions are the same as those for dynamic partitions.
 
-For more information, see [Data distribution](../../../table_design/Data_distribution.md#create-and-modify-partitions-in-bulk).
+For more information, see [Data distribution](../../../table_design/Data_distribution.md).
 
 ### distribution_desc
 
