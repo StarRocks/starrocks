@@ -275,12 +275,18 @@ inline bool RleDecoder<T>::ReadHeader() {
         bool is_literal = indicator_value & 1;
         if (is_literal) {
             literal_count_ = (indicator_value >> 1) * 8;
-            DCHECK_GT(literal_count_, 0);
+            if (PREDICT_FALSE(literal_count_ == 0)) {
+                return false;
+            }
         } else {
             repeat_count_ = indicator_value >> 1;
-            DCHECK_GT(repeat_count_, 0);
+            if (PREDICT_FALSE(repeat_count_ == 0)) {
+                return false;
+            }
             result = bit_reader_.GetAligned<T>(BitUtil::Ceil(bit_width_, 8), reinterpret_cast<T*>(&current_value_));
-            DCHECK(result);
+            if (PREDICT_FALSE(!result)) {
+                return false;
+            }
         }
     }
     return true;
