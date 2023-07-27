@@ -14,6 +14,8 @@
 
 package com.starrocks.qe.scheduler;
 
+import com.google.api.client.util.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.common.Reference;
 import com.starrocks.common.UserException;
 import com.starrocks.proto.PExecPlanFragmentResult;
@@ -23,9 +25,12 @@ import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.rpc.PExecPlanFragmentRequest;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.thrift.FrontendServiceVersion;
+import com.starrocks.thrift.TExecPlanFragmentParams;
+import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+import org.apache.thrift.TException;
 import org.awaitility.Awaitility;
 import org.jetbrains.annotations.NotNull;
 import org.junit.After;
@@ -33,13 +38,18 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import static com.starrocks.utframe.MockedBackend.MockPBackendService;
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class StartSchedulingTest extends SchedulerTestBase {
     private boolean originalEnableProfile;
@@ -47,25 +57,68 @@ public class StartSchedulingTest extends SchedulerTestBase {
     @Before
     public void before() {
         originalEnableProfile = connectContext.getSessionVariable().isEnableProfile();
-
-        connectContext.getSessionVariable().setEnableDeliverBatchFragments(false);
     }
 
     @After
     public void after() {
         connectContext.getSessionVariable().setEnableProfile(originalEnableProfile);
-
-        connectContext.getSessionVariable().setEnableDeliverBatchFragments(true);
     }
 
     @Test
     public void testDeploySuccess() throws Exception {
         setBackendService(new MockPBackendService());
 
-        String sql = "select count(1) from lineitem";
+        Map<TNetworkAddress, Integer> backendToNumInstances = Maps.newHashMap();
+        Map<TNetworkAddress, List<TExecPlanFragmentParams>> backendToRequests = Maps.newHashMap();
+        Map<Integer, List<TExecPlanFragmentParams>> fragmentToRequest = Maps.newHashMap();
+        setBackendService(address -> new MockPBackendService() {
+            @Override
+            public Future<PExecPlanFragmentResult> execPlanFragmentAsync(PExecPlanFragmentRequest request) {
+                TExecPlanFragmentParams tRequest = new TExecPlanFragmentParams();
+                try {
+                    request.getRequest(tRequest);
+                } catch (TException e) {
+                    throw new RuntimeException(e);
+                }
+                backendToRequests.computeIfAbsent(address, (k) -> Lists.newArrayList()).add(tRequest);
+
+                int rootNodeId = tRequest.getFragment().getPlan().getNodes().get(0).getNode_id();
+                fragmentToRequest.computeIfAbsent(rootNodeId, (k) -> Lists.newArrayList()).add(tRequest);
+
+                // Check cache desc table.
+                backendToNumInstances.compute(address, (k, v) -> {
+                    if (v == null) {
+                        Assert.assertFalse(tRequest.desc_tbl.isIs_cached());
+                        Assert.assertFalse(tRequest.desc_tbl.getTupleDescriptors().isEmpty());
+                        return 1;
+                    } else {
+                        Assert.assertTrue(tRequest.desc_tbl.isIs_cached());
+                        Assert.assertTrue(tRequest.desc_tbl.getTupleDescriptors().isEmpty());
+                        return v + 1;
+                    }
+                });
+
+                return super.execPlanFragmentAsync(request);
+            }
+        });
+
+        String sql = "select count(1) from lineitem UNION ALL select count(1) from lineitem";
         DefaultCoordinator scheduler = startScheduling(sql);
 
         Assert.assertTrue(scheduler.getExecStatus().ok());
+
+        // Check instance number.
+        backendToRequests.forEach((address, requests) -> requests.forEach(req ->
+                Assert.assertEquals(backendToNumInstances.get(address).intValue(), req.getParams().getInstances_number())));
+
+        // Check backend number.
+        fragmentToRequest.values().forEach(requestsOfFragment -> {
+            List<TExecPlanFragmentParams> requestsOrderedByBackendNum = new ArrayList<>(requestsOfFragment);
+            List<TExecPlanFragmentParams> requestsOrderedByInstanceId = new ArrayList<>(requestsOfFragment);
+            requestsOrderedByBackendNum.sort(Comparator.comparingInt(TExecPlanFragmentParams::getBackend_num));
+            requestsOrderedByInstanceId.sort(Comparator.comparing(req -> req.getParams().getFragment_instance_id()));
+            assertThat(requestsOrderedByBackendNum).containsExactlyElementsOf(requestsOrderedByInstanceId);
+        });
     }
 
     @Test
@@ -166,7 +219,7 @@ public class StartSchedulingTest extends SchedulerTestBase {
                 public Future<PExecPlanFragmentResult> execPlanFragmentAsync(PExecPlanFragmentRequest request) {
                     return submit(() -> {
                         try {
-                            Thread.sleep(5_000L);
+                            Thread.sleep(5_000L); // NOSONAR
                         } catch (InterruptedException e) {
                             throw new RuntimeException(e);
                         }

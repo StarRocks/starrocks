@@ -43,6 +43,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MarkedCountDownLatch;
@@ -63,7 +64,6 @@ import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
-import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PQueryStatistics;
@@ -82,7 +82,6 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TDescriptorTable;
-import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TNetworkAddress;
@@ -108,7 +107,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -123,7 +121,6 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -274,7 +271,7 @@ public class DefaultCoordinator extends Coordinator {
 
         TUniqueId queryId = jobSpec.getQueryId();
 
-        LOG.info("Execution Profile " + DebugUtil.printId(queryId));
+        LOG.info("Execution Profile: {}", DebugUtil.printId(queryId));
         queryProfile = new RuntimeProfile("Execution");
 
         fragmentProfiles = new ArrayList<>();
@@ -529,7 +526,7 @@ public class DefaultCoordinator extends Coordinator {
         }
     }
 
-    private void prepareResultSink() throws Exception {
+    private void prepareResultSink() throws AnalysisException {
         PlanFragmentId topId = jobSpec.getFragments().get(0).getFragmentId();
         CoordinatorPreprocessor.FragmentExecParams topParams =
                 coordinatorPreprocessor.getFragmentExecParamsMap().get(topId);
@@ -574,17 +571,8 @@ public class DefaultCoordinator extends Coordinator {
         }
     }
 
-    private void deliverExecFragments() throws Exception {
-        // Only pipeline uses deliver_batch_fragments.
-        boolean enableDeliverBatchFragments =
-                coordinatorPreprocessor.isUsePipeline() &&
-                        connectContext.getSessionVariable().isEnableDeliverBatchFragments();
-
-        if (enableDeliverBatchFragments) {
-            deliverExecBatchFragmentsRequests(coordinatorPreprocessor.isUsePipeline());
-        } else {
-            deliverExecFragmentRequests(coordinatorPreprocessor.isUsePipeline());
-        }
+    private void deliverExecFragments() throws TException, RpcException, UserException {
+        deliverExecFragmentsRequests(coordinatorPreprocessor.isUsePipeline());
     }
 
     private void handleErrorBackendExecState(BackendExecState errorBackendExecState, TStatusCode errorCode,
@@ -601,190 +589,6 @@ public class DefaultCoordinator extends Coordinator {
                 default:
                     throw new UserException(errMessage + " backend:" + errorBackendExecState.address.hostname);
             }
-        }
-    }
-
-    private void deliverExecFragmentRequests(boolean enablePipelineEngine) throws Exception {
-        TQueryOptions queryOptions = jobSpec.getQueryOptions();
-        long queryDeliveryTimeoutMs = Math.min(queryOptions.query_timeout, queryOptions.query_delivery_timeout) * 1000L;
-        lock();
-        try {
-            // execute all instances from up to bottom
-            int backendId = 0;
-
-            Set<Long> firstDeliveryWorkerIds = new HashSet<>();
-            for (PlanFragment fragment : jobSpec.getFragments()) {
-                int profileFragmentId = fragmentId2fragmentProfileIds.get(fragment.getFragmentId());
-                CoordinatorPreprocessor.FragmentExecParams params =
-                        coordinatorPreprocessor.getFragmentExecParamsMap().get(fragment.getFragmentId());
-
-                // set up exec states
-                int instanceNum = params.instanceExecParams.size();
-                Preconditions.checkState(instanceNum > 0);
-                List<List<CoordinatorPreprocessor.FInstanceExecParam>> infightExecParamList = new LinkedList<>();
-
-                // Fragment instances' ordinals in FragmentExecParams.instanceExecParams determine
-                // shuffle partitions' ordinals in DataStreamSink. backendIds of Fragment instances that
-                // contain shuffle join determine the ordinals of GRF components in the GRF. For a
-                // shuffle join, its shuffle partitions and corresponding one-map-one GRF components
-                // should have the same ordinals. so here assign monotonic unique backendIds to
-                // Fragment instances to keep consistent order with Fragment instances in
-                // FragmentExecParams.instanceExecParams.
-                for (CoordinatorPreprocessor.FInstanceExecParam fInstanceExecParam : params.instanceExecParams) {
-                    fInstanceExecParam.backendNum = backendId++;
-                }
-                if (enablePipelineEngine) {
-                    List<CoordinatorPreprocessor.FInstanceExecParam> firstFInstanceParamList = new ArrayList<>();
-                    List<CoordinatorPreprocessor.FInstanceExecParam> remainingFInstanceParamList = new ArrayList<>();
-
-                    for (CoordinatorPreprocessor.FInstanceExecParam fInstanceExecParam : params.instanceExecParams) {
-                        if (!firstDeliveryWorkerIds.contains(fInstanceExecParam.getWorkerId())) {
-                            firstDeliveryWorkerIds.add(fInstanceExecParam.getWorkerId());
-                            firstFInstanceParamList.add(fInstanceExecParam);
-                        } else {
-                            remainingFInstanceParamList.add(fInstanceExecParam);
-                        }
-                    }
-                    infightExecParamList.add(firstFInstanceParamList);
-                    infightExecParamList.add(remainingFInstanceParamList);
-                } else {
-                    infightExecParamList.add(params.instanceExecParams);
-                }
-
-                // if pipeline is enable and current fragment contain olap table sink, in fe we will 
-                // calculate the number of all tablet sinks in advance and assign them to each fragment instance
-                boolean enablePipelineTableSinkDop = enablePipelineEngine &&
-                        (fragment.hasOlapTableSink() || fragment.hasIcebergTableSink());
-                boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
-                int tabletSinkTotalDop = 0;
-                int accTabletSinkDop = 0;
-                if (enablePipelineTableSinkDop) {
-                    for (List<CoordinatorPreprocessor.FInstanceExecParam> fInstanceExecParamList : infightExecParamList) {
-                        for (CoordinatorPreprocessor.FInstanceExecParam instanceExecParam : fInstanceExecParamList) {
-                            if (!forceSetTableSinkDop) {
-                                tabletSinkTotalDop += instanceExecParam.getPipelineDop();
-                            } else {
-                                tabletSinkTotalDop += fragment.getPipelineDop();
-                            }
-                        }
-                    }
-                }
-
-                if (tabletSinkTotalDop < 0) {
-                    throw new UserException(
-                            "tabletSinkTotalDop = " + tabletSinkTotalDop + " should be >= 0");
-                }
-
-                boolean isFirst = true;
-                for (List<CoordinatorPreprocessor.FInstanceExecParam> fInstanceExecParamList : infightExecParamList) {
-                    TDescriptorTable descTable = new TDescriptorTable();
-                    descTable.setIs_cached(true);
-                    descTable.setTupleDescriptors(Collections.emptyList());
-                    if (isFirst) {
-                        descTable = jobSpec.getDescTable();
-                        descTable.setIs_cached(false);
-                        isFirst = false;
-                    }
-
-                    if (fInstanceExecParamList.isEmpty()) {
-                        continue;
-                    }
-
-                    Map<TUniqueId, Long> instanceId2WorkerId =
-                            fInstanceExecParamList.stream().collect(Collectors.toMap(
-                                    CoordinatorPreprocessor.FInstanceExecParam::getInstanceId,
-                                    CoordinatorPreprocessor.FInstanceExecParam::getWorkerId));
-                    List<TExecPlanFragmentParams> tParams =
-                            params.toThrift(instanceId2WorkerId.keySet(), descTable, enablePipelineEngine,
-                                    accTabletSinkDop, tabletSinkTotalDop, false);
-                    if (enablePipelineTableSinkDop) {
-                        for (CoordinatorPreprocessor.FInstanceExecParam instanceExecParam : fInstanceExecParamList) {
-                            if (!forceSetTableSinkDop) {
-                                accTabletSinkDop += instanceExecParam.getPipelineDop();
-                            } else {
-                                accTabletSinkDop += fragment.getPipelineDop();
-                            }
-                        }
-                    }
-                    List<Pair<BackendExecState, Future<PExecPlanFragmentResult>>> futures = Lists.newArrayList();
-
-                    // This is a load process, and it is the first fragment.
-                    // we should add all BackendExecState of this fragment to needCheckBackendExecStates,
-                    // so that we can check these backends' state when joining this Coordinator
-                    boolean needCheckBackendState = isLoadType() && profileFragmentId == 0;
-
-                    for (TExecPlanFragmentParams tParam : tParams) {
-                        // TODO: pool of pre-formatted BackendExecStates?
-                        Long workerId = instanceId2WorkerId.get(tParam.params.fragment_instance_id);
-                        ComputeNode worker = coordinatorPreprocessor.getWorkerProvider().getWorkerById(workerId);
-                        BackendExecState execState = new BackendExecState(fragment.getFragmentId(), worker.getAddress(),
-                                profileFragmentId, tParam,
-                                worker);
-                        backendExecStates.put(tParam.backend_num, execState);
-                        if (needCheckBackendState) {
-                            needCheckBackendExecStates.add(execState);
-                            if (LOG.isDebugEnabled()) {
-                                LOG.debug("add need check backend {} for fragment, {} job: {}",
-                                        execState.backend.getId(),
-                                        fragment.getFragmentId().asInt(), jobSpec.getLoadJobId());
-                            }
-                        }
-                        futures.add(Pair.create(execState, execState.execRemoteFragmentAsync()));
-                    }
-
-                    BackendExecState errorBackendExecState = null;
-                    TStatusCode errorCode = null;
-                    String errMessage = null;
-                    for (Pair<BackendExecState, Future<PExecPlanFragmentResult>> pair : futures) {
-                        TStatusCode code;
-                        String errMsg = null;
-                        try {
-                            PExecPlanFragmentResult result =
-                                    pair.second.get(queryDeliveryTimeoutMs, TimeUnit.MILLISECONDS);
-                            code = TStatusCode.findByValue(result.status.statusCode);
-                            if (result.status.errorMsgs != null && !result.status.errorMsgs.isEmpty()) {
-                                errMsg = result.status.errorMsgs.get(0);
-                            }
-                        } catch (ExecutionException e) {
-                            LOG.warn("catch a execute exception", e);
-                            code = TStatusCode.THRIFT_RPC_ERROR;
-                        } catch (InterruptedException e) { // NOSONAR
-                            LOG.warn("catch a interrupt exception", e);
-                            code = TStatusCode.INTERNAL_ERROR;
-                        } catch (TimeoutException e) {
-                            LOG.warn("catch a timeout exception", e);
-                            code = TStatusCode.TIMEOUT;
-                        }
-
-                        if (code != TStatusCode.OK) {
-                            if (errMsg == null) {
-                                errMsg = "exec rpc error. backend id: " + pair.first.backend.getId();
-                            }
-                            queryStatus.setInternalErrorStatus(errMsg + " backend:" + pair.first.address.hostname);
-                            LOG.warn("exec plan fragment failed, errmsg={}, code: {}, fragmentId={}, backend={}:{}",
-                                    errMsg, code, fragment.getFragmentId(),
-                                    pair.first.address.hostname, pair.first.address.port);
-                            if (errorBackendExecState == null) {
-                                errorBackendExecState = pair.first;
-                                errorCode = code;
-                                errMessage = errMsg;
-                            }
-                            if (Objects.requireNonNull(code) == TStatusCode.TIMEOUT) {
-                                break;
-                            }
-                        }
-                    }
-
-                    // Handle error results and cancel fragment instances, excluding TIMEOUT errors,
-                    // until all the delivered fragment instances are completed.
-                    // Otherwise, the cancellation RPC may arrive at BE before the delivery fragment instance RPC,
-                    // causing the instances to become stale and only able to be released after a timeout.
-                    handleErrorBackendExecState(errorBackendExecState, errorCode, errMessage);
-                }
-            }
-            attachInstanceProfileToFragmentProfile();
-        } finally {
-            unlock();
         }
     }
 
@@ -881,10 +685,9 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     /**
-     * Deliver multiple fragments concurrently according to the topological order,
-     * and all the instances of a fragment to the same destination host are delivered in the same request.
+     * Deliver multiple fragments concurrently according to the topological order.
      */
-    private void deliverExecBatchFragmentsRequests(boolean enablePipelineEngine) throws Exception {
+    private void deliverExecFragmentsRequests(boolean enablePipelineEngine) throws RpcException, UserException, TException {
         TQueryOptions queryOptions = jobSpec.getQueryOptions();
         long queryDeliveryTimeoutMs = Math.min(queryOptions.query_timeout, queryOptions.query_delivery_timeout) * 1000L;
         List<List<PlanFragment>> fragmentGroups = computeTopologicalOrderFragments();
@@ -899,18 +702,12 @@ public class DefaultCoordinator extends Coordinator {
             emptyDescTable.setIs_cached(true);
             emptyDescTable.setTupleDescriptors(Collections.emptyList());
 
-            // Record the first groupIndex of each host.
-            // Each host only sends descTable once in the first batch request.
-            Map<Long, Integer> workerId2firstGroupIndex = Maps.newHashMap();
-            for (int groupIndex = 0; groupIndex < fragmentGroups.size(); ++groupIndex) {
-                List<PlanFragment> fragmentGroup = fragmentGroups.get(groupIndex);
-
+            Set<Long> deployedWorkerIds = new HashSet<>();
+            for (List<PlanFragment> fragmentGroup : fragmentGroups) {
                 // Divide requests of fragments in the current group to two stages.
-                // If a request need send descTable, the other requests to the same host will be in the second stage.
-                // Otherwise, the request will be in the first stage, including
-                // - the request need send descTable.
-                // - the request to the host, where some request in the previous group has already sent descTable.
-                List<List<Pair<List<BackendExecState>, TExecBatchPlanFragmentsParams>>> inflightRequestsList =
+                // - stage 1, the first request to a host, which need send descTable.
+                // - stage 2, the non-first requests to a host, which needn't send descTable.
+                List<List<BackendExecState>> twoStageExecutionsToDeploy =
                         ImmutableList.of(new ArrayList<>(), new ArrayList<>());
                 for (PlanFragment fragment : fragmentGroup) {
                     int profileFragmentId = fragmentId2fragmentProfileIds.get(fragment.getFragmentId());
@@ -929,100 +726,77 @@ public class DefaultCoordinator extends Coordinator {
                         fInstanceExecParam.backendNum = backendNum++;
                     }
 
-                    Map<Long, List<CoordinatorPreprocessor.FInstanceExecParam>> requestsPerWorkerId =
-                            params.instanceExecParams.stream()
-                                    .collect(Collectors.groupingBy(
-                                            CoordinatorPreprocessor.FInstanceExecParam::getWorkerId,
-                                            Collectors.mapping(Function.identity(), Collectors.toList())));
+                    List<List<CoordinatorPreprocessor.FInstanceExecParam>> twoStageInstancesToDeploy =
+                            ImmutableList.of(new ArrayList<>(), new ArrayList<>());
+                    if (!enablePipelineEngine) {
+                        twoStageInstancesToDeploy.get(0).addAll(params.instanceExecParams);
+                    } else {
+                        params.instanceExecParams.forEach(instance -> {
+                            if (deployedWorkerIds.contains(instance.getWorkerId())) {
+                                twoStageInstancesToDeploy.get(1).add(instance);
+                            } else {
+                                deployedWorkerIds.add(instance.getWorkerId());
+                                twoStageInstancesToDeploy.get(0).add(instance);
+                            }
+                        });
+                    }
+
                     // if pipeline is enable and current fragment contain olap table sink, in fe we will 
                     // calculate the number of all tablet sinks in advance and assign them to each fragment instance
                     boolean enablePipelineTableSinkDop = enablePipelineEngine &&
                             (fragment.hasOlapTableSink() || fragment.hasIcebergTableSink());
-                    boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
                     int tableSinkTotalDop = 0;
                     int accTabletSinkDop = 0;
                     if (enablePipelineTableSinkDop) {
-                        for (Map.Entry<Long, List<CoordinatorPreprocessor.FInstanceExecParam>> workerIdAndRequests :
-                                requestsPerWorkerId.entrySet()) {
-                            List<CoordinatorPreprocessor.FInstanceExecParam> requests = workerIdAndRequests.getValue();
-                            for (CoordinatorPreprocessor.FInstanceExecParam request : requests) {
-                                if (!forceSetTableSinkDop) {
-                                    tableSinkTotalDop += request.getPipelineDop();
-                                } else {
-                                    tableSinkTotalDop += fragment.getPipelineDop();
-                                }
-                            }
-                        }
+                        tableSinkTotalDop = twoStageInstancesToDeploy.stream()
+                                .flatMap(Collection::stream)
+                                .mapToInt(CoordinatorPreprocessor.FInstanceExecParam::getTableSinkDop)
+                                .sum();
                     }
+                    Preconditions.checkState(tableSinkTotalDop >= 0,
+                            "tableSinkTotalDop = %d should be >= 0", tableSinkTotalDop);
 
-                    if (tableSinkTotalDop < 0) {
-                        throw new UserException(
-                                "tableSinkTotalDop = " + tableSinkTotalDop + " should be >= 0");
-                    }
-
-                    for (Map.Entry<Long, List<CoordinatorPreprocessor.FInstanceExecParam>> workerIdAndRequests :
-                            requestsPerWorkerId.entrySet()) {
-                        Long workerId = workerIdAndRequests.getKey();
-                        List<CoordinatorPreprocessor.FInstanceExecParam> requests = workerIdAndRequests.getValue();
-                        if (requests.isEmpty()) {
+                    for (int stageIndex = 0; stageIndex < twoStageInstancesToDeploy.size(); stageIndex++) {
+                        List<CoordinatorPreprocessor.FInstanceExecParam> stageInstances =
+                                twoStageInstancesToDeploy.get(stageIndex);
+                        if (stageInstances.isEmpty()) {
                             continue;
                         }
 
-                        ComputeNode worker = coordinatorPreprocessor.getWorkerProvider().getWorkerById(workerId);
-
-                        int inflightIndex = 0;
-                        TDescriptorTable curDescTable = jobSpec.getDescTable();
-                        if (enablePipelineEngine) {
-                            Integer firstGroupIndex = workerId2firstGroupIndex.get(workerId);
-                            if (firstGroupIndex == null) {
-                                // Hasn't sent descTable for this host,
-                                // so send descTable this time.
-                                workerId2firstGroupIndex.put(workerId, groupIndex);
-                            } else if (firstGroupIndex < groupIndex) {
-                                // Has sent descTable for this host in the previous fragment group,
-                                // so needn't wait and use cached descTable.
-                                curDescTable = emptyDescTable;
-                            } else {
-                                // The previous fragment for this host int the current fragment group will send descTable,
-                                // so this fragment need wait until the previous one finishes delivering.
-                                inflightIndex = 1;
-                                curDescTable = emptyDescTable;
-                            }
+                        TDescriptorTable descTable;
+                        if (stageIndex == 0) {
+                            descTable = jobSpec.getDescTable();
+                        } else {
+                            descTable = emptyDescTable;
                         }
 
-                        Set<TUniqueId> curInstanceIds = requests.stream()
-                                .map(CoordinatorPreprocessor.FInstanceExecParam::getInstanceId)
-                                .collect(Collectors.toSet());
-                        TExecBatchPlanFragmentsParams tRequest =
-                                params.toThriftInBatch(curInstanceIds, workerId, curDescTable, enablePipelineEngine,
-                                        accTabletSinkDop, tableSinkTotalDop);
+                        Map<TUniqueId, Long> instanceId2WorkerId =
+                                stageInstances.stream().collect(Collectors.toMap(
+                                        CoordinatorPreprocessor.FInstanceExecParam::getInstanceId,
+                                        CoordinatorPreprocessor.FInstanceExecParam::getWorkerId));
+                        List<TExecPlanFragmentParams> tRequests =
+                                params.toThrift(instanceId2WorkerId.keySet(), descTable, enablePipelineEngine,
+                                        accTabletSinkDop, tableSinkTotalDop, false);
                         if (enablePipelineTableSinkDop) {
-                            for (CoordinatorPreprocessor.FInstanceExecParam request : requests) {
-                                if (!forceSetTableSinkDop) {
-                                    accTabletSinkDop += request.getPipelineDop();
-                                } else {
-                                    accTabletSinkDop += fragment.getPipelineDop();
-                                }
-                            }
+                            accTabletSinkDop += stageInstances.stream()
+                                    .mapToInt(CoordinatorPreprocessor.FInstanceExecParam::getTableSinkDop)
+                                    .sum();
                         }
-                        TExecPlanFragmentParams tCommonParams = tRequest.getCommon_param();
-                        List<TExecPlanFragmentParams> tUniqueParamsList = tRequest.getUnique_param_per_instance();
-                        Preconditions.checkState(!tUniqueParamsList.isEmpty());
 
-                        // this is a load process, and it is the first fragment.
+                        // This is a load process, and it is the first fragment.
                         // we should add all BackendExecState of this fragment to needCheckBackendExecStates,
                         // so that we can check these backends' state when joining this Coordinator
                         boolean needCheckBackendState = isLoadType() && profileFragmentId == 0;
 
-                        // Create ExecState for each fragment instance.
-                        List<BackendExecState> execStates = Lists.newArrayList();
-                        for (TExecPlanFragmentParams tUniquePrams : tUniqueParamsList) {
+                        for (TExecPlanFragmentParams tRequest : tRequests) {
                             // TODO: pool of pre-formatted BackendExecStates?
+                            Long workerId = instanceId2WorkerId.get(tRequest.params.fragment_instance_id);
+                            ComputeNode worker = coordinatorPreprocessor.getWorkerProvider().getWorkerById(workerId);
                             BackendExecState execState =
                                     new BackendExecState(fragment.getFragmentId(), worker.getAddress(),
-                                            profileFragmentId, tCommonParams, tUniquePrams, worker);
-                            execStates.add(execState);
-                            backendExecStates.put(tUniquePrams.backend_num, execState);
+                                            profileFragmentId, tRequest,
+                                            worker);
+                            backendExecStates.put(tRequest.backend_num, execState);
                             if (needCheckBackendState) {
                                 needCheckBackendExecStates.add(execState);
                                 if (LOG.isDebugEnabled()) {
@@ -1031,35 +805,31 @@ public class DefaultCoordinator extends Coordinator {
                                             fragment.getFragmentId().asInt(), jobSpec.getLoadJobId());
                                 }
                             }
+                            twoStageExecutionsToDeploy.get(stageIndex).add(execState);
                         }
-
-                        inflightRequestsList.get(inflightIndex).add(Pair.create(execStates, tRequest));
                     }
                 }
 
-                for (List<Pair<List<BackendExecState>, TExecBatchPlanFragmentsParams>> inflightRequests :
-                        inflightRequestsList) {
-                    List<Pair<BackendExecState, Future<PExecBatchPlanFragmentsResult>>> futures = Lists.newArrayList();
-                    for (Pair<List<BackendExecState>, TExecBatchPlanFragmentsParams> inflightRequest : inflightRequests) {
-                        List<BackendExecState> execStates = inflightRequest.first;
-                        execStates.forEach(execState -> execState.setInitiated(true));
-
-                        Preconditions.checkState(!execStates.isEmpty());
-                        // Just choose any instance ExecState to send the batch RPC request.
-                        BackendExecState firstExecState = execStates.get(0);
-                        futures.add(Pair.create(firstExecState,
-                                firstExecState.execRemoteBatchFragmentsAsync(inflightRequest.second)));
+                for (List<BackendExecState> stageExecutions : twoStageExecutionsToDeploy) {
+                    // Send requests of the executions in this stage.
+                    List<Pair<BackendExecState, Future<PExecPlanFragmentResult>>> futures =
+                            new ArrayList<>(stageExecutions.size());
+                    for (BackendExecState execution : stageExecutions) {
+                        futures.add(Pair.create(execution, execution.execRemoteFragmentAsync()));
                     }
 
+                    // Wait responses of the executions in this stage.
                     BackendExecState errorBackendExecState = null;
                     TStatusCode errorCode = null;
                     String errMessage = null;
-                    for (Pair<BackendExecState, Future<PExecBatchPlanFragmentsResult>> pair : futures) {
+                    for (Pair<BackendExecState, Future<PExecPlanFragmentResult>> pair : futures) {
+                        BackendExecState execution = pair.first;
+                        Future<PExecPlanFragmentResult> future = pair.second;
+
                         TStatusCode code;
                         String errMsg = null;
                         try {
-                            PExecBatchPlanFragmentsResult result =
-                                    pair.second.get(queryDeliveryTimeoutMs, TimeUnit.MILLISECONDS);
+                            PExecPlanFragmentResult result = future.get(queryDeliveryTimeoutMs, TimeUnit.MILLISECONDS);
                             code = TStatusCode.findByValue(result.status.statusCode);
                             if (result.status.errorMsgs != null && !result.status.errorMsgs.isEmpty()) {
                                 errMsg = result.status.errorMsgs.get(0);
@@ -1077,15 +847,14 @@ public class DefaultCoordinator extends Coordinator {
 
                         if (code != TStatusCode.OK) {
                             if (errMsg == null) {
-                                errMsg = "exec rpc error. backend id: " + pair.first.backend.getId();
+                                errMsg = "exec rpc error. backend id: " + execution.backend.getId();
                             }
-                            queryStatus.setInternalErrorStatus(errMsg + " backend:" + pair.first.address.hostname);
+                            queryStatus.setInternalErrorStatus(errMsg + " backend:" + execution.address.hostname);
                             LOG.warn("exec plan fragment failed, errmsg={}, code: {}, fragmentId={}, backend={}:{}",
-                                    errMsg, code, pair.first.fragmentId,
-                                    pair.first.address.hostname, pair.first.address.port);
-                            profileDoneSignal.markedCountDown(pair.first.fragmentInstanceId(), -1L);
+                                    errMsg, code, execution.fragmentId,
+                                    execution.address.hostname, execution.address.port);
                             if (errorBackendExecState == null) {
-                                errorBackendExecState = pair.first;
+                                errorBackendExecState = execution;
                                 errorCode = code;
                                 errMessage = errMsg;
                             }
@@ -1145,8 +914,7 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     private void setGlobalRuntimeFilterParams(CoordinatorPreprocessor.FragmentExecParams topParams,
-                                              TNetworkAddress mergeHost)
-            throws Exception {
+                                              TNetworkAddress mergeHost) {
 
         Map<Integer, List<TRuntimeFilterProberParams>> broadcastGRFProbersMap = Maps.newHashMap();
         List<RuntimeFilterDescription> broadcastGRFList = Lists.newArrayList();
@@ -1356,7 +1124,7 @@ public class DefaultCoordinator extends Coordinator {
         resultBatch = receiver.getNext(status);
         if (!status.ok()) {
             connectContext.setErrorCodeOnce(status.getErrorCodeString());
-            LOG.warn("get next fail, need cancel. status {}, query id: {}", status.toString(),
+            LOG.warn("get next fail, need cancel. status {}, query id: {}", status,
                     DebugUtil.printId(jobSpec.getQueryId()));
         }
         updateStatus(status, null /* no instance id */);
@@ -1533,7 +1301,7 @@ public class DefaultCoordinator extends Coordinator {
             LOG.debug("profile for query_id={} instance_id={}\n{}",
                     DebugUtil.printId(jobSpec.getQueryId()),
                     DebugUtil.printId(params.getFragment_instance_id()),
-                    builder.toString());
+                    builder);
         }
 
         Status status = new Status(params.status);
@@ -2144,56 +1912,6 @@ public class DefaultCoordinator extends Coordinator {
             }
         }
 
-        public Future<PExecBatchPlanFragmentsResult> execRemoteBatchFragmentsAsync(
-                TExecBatchPlanFragmentsParams tRequest) throws TException {
-            TNetworkAddress brpcAddress;
-            try {
-                brpcAddress = new TNetworkAddress(backend.getHost(), backend.getBrpcPort());
-            } catch (Exception e) {
-                throw new TException(e.getMessage());
-            }
-            this.initiated = true;
-            try {
-                return BackendServiceClient.getInstance().execBatchPlanFragmentsAsync(brpcAddress, tRequest);
-            } catch (RpcException e) {
-                // DO NOT throw exception here, return a complete future with error code,
-                // so that the following logic will cancel the fragment.
-                return new Future<PExecBatchPlanFragmentsResult>() {
-                    @Override
-                    public boolean cancel(boolean mayInterruptIfRunning) {
-                        return false;
-                    }
-
-                    @Override
-                    public boolean isCancelled() {
-                        return false;
-                    }
-
-                    @Override
-                    public boolean isDone() {
-                        return true;
-                    }
-
-                    @Override
-                    public PExecBatchPlanFragmentsResult get() {
-                        PExecBatchPlanFragmentsResult result = new PExecBatchPlanFragmentsResult();
-                        StatusPB pStatus = new StatusPB();
-                        pStatus.errorMsgs = Lists.newArrayList();
-                        pStatus.errorMsgs.add(e.getMessage());
-                        // use THRIFT_RPC_ERROR so that this BE will be added to the blacklist later.
-                        pStatus.statusCode = TStatusCode.THRIFT_RPC_ERROR.getValue();
-                        result.status = pStatus;
-                        return result;
-                    }
-
-                    @Override
-                    public PExecBatchPlanFragmentsResult get(long timeout, TimeUnit unit) {
-                        return get();
-                    }
-                };
-            }
-        }
-
         public FragmentInstanceInfo buildFragmentInstanceInfo() {
             return new QueryStatisticsItem.FragmentInstanceInfo.Builder()
                     .instanceId(fragmentInstanceId()).fragmentId(String.valueOf(fragmentId)).address(this.address)
@@ -2202,10 +1920,6 @@ public class DefaultCoordinator extends Coordinator {
 
         private TUniqueId fragmentInstanceId() {
             return this.uniqueRpcParams.params.getFragment_instance_id();
-        }
-
-        public void setInitiated(boolean initiated) {
-            this.initiated = initiated;
         }
     }
 }
