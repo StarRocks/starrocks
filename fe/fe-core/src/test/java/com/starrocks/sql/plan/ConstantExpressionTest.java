@@ -18,6 +18,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.ParsingException;
 import org.junit.Assert;
 import org.junit.Test;
@@ -25,12 +26,37 @@ import org.junit.Test;
 public class ConstantExpressionTest extends PlanTestBase {
     private void testFragmentPlanContainsConstExpr(String sql, String result) throws Exception {
         String explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains(": " + result));
+        Assert.assertTrue(explainString, explainString.contains(": " + result));
     }
 
     private void testFragmentPlanContains(String sql, String result) throws Exception {
         String explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains(result));
+    }
+
+    @Test
+    public void testInspectMvMeta() throws Exception {
+        String db = starRocksAssert.getCtx().getDatabase();
+        starRocksAssert.withTable(
+                "create table mv_base_table_9527 (id int, name string) properties('replication_num'='1')");
+        starRocksAssert.withMaterializedView("create materialized view mv1 " +
+                "distributed by hash(id) " +
+                "refresh async " +
+                "properties('replication_num'='1') " +
+                "as select * from mv_base_table_9527");
+        testFragmentPlanContains("select inspect_mv_meta('mv1');", "MaterializedView");
+        String fullName = db + ".mv1";
+        testFragmentPlanContains(String.format("select inspect_mv_meta('%s');", fullName), "MaterializedView");
+
+        // wrong arguments
+        Assert.assertThrows(StarRocksPlannerException.class,
+                () -> getFragmentPlan("select inspect_mv_meta('snowflake');"));
+        Assert.assertThrows(StarRocksPlannerException.class,
+                () -> getFragmentPlan("select inspect_mv_meta('mv_base_table_9527');"));
+        Assert.assertThrows(StarRocksPlannerException.class,
+                () -> getFragmentPlan("select inspect_mv_meta('a.b.c.d');"));
+        Assert.assertThrows(StarRocksPlannerException.class,
+                () -> getFragmentPlan("select inspect_mv_meta('db_notexists.mv1');"));
     }
 
     @Test

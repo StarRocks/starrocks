@@ -39,13 +39,20 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.re2j.Pattern;
 import com.starrocks.analysis.DecimalLiteral;
+import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.apache.commons.lang.StringUtils;
 
@@ -980,6 +987,7 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createVarchar(Config.mysql_server_version);
     }
 
+
     @ConstantFunction.List(list = {
             @ConstantFunction(name = "substring", argTypes = {VARCHAR, INT}, returnType = VARCHAR),
             @ConstantFunction(name = "substring", argTypes = {VARCHAR, INT, INT}, returnType = VARCHAR),
@@ -1029,4 +1037,26 @@ public class ScalarOperatorFunctions {
         BigInteger opened = l.subtract(INT_128_OPENER);
         return opened.shiftRight(shiftBy).and(INT_128_MASK1_ARR1[shiftBy]);
     }
+
+    // =================================== meta functions ==================================== //
+    @ConstantFunction(name = "inspect_mv_meta", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspect_mv_meta(ConstantOperator mvName) {
+        TableName tableName = TableName.fromString(mvName.getVarchar());
+        Table table = GlobalStateMgr.getCurrentState().mayGetDb(tableName.getDb())
+                .flatMap(db -> db.mayGetTable(tableName.getTbl()))
+                .orElseThrow(
+                        () -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, mvName.getVarchar()));
+        if (!table.isMaterializedView()) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    mvName.getVarchar() + " is not materialized view");
+        }
+        ConnectContext connectContext = ConnectContext.get();
+        PrivilegeChecker.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
+                connectContext.getCurrentRoleIds(), tableName);
+
+        MaterializedView mv = (MaterializedView) table;
+        String meta = mv.inspectMeta();
+        return ConstantOperator.createVarchar(meta);
+    }
+
 }
