@@ -36,7 +36,8 @@ SchemaScanner::ColumnDesc SchemaTaskRunsScanner::_s_tbls_columns[] = {
         {"ERROR_CODE", TYPE_BIGINT, sizeof(StringValue), true},
         {"ERROR_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), true},
         {"PROGRESS", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"EXTRA_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), true}};
+        {"EXTRA_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"PROPERTIES", TYPE_VARCHAR, sizeof(StringValue), true}};
 
 SchemaTaskRunsScanner::SchemaTaskRunsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
