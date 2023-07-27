@@ -52,6 +52,10 @@ import java.util.concurrent.atomic.AtomicLong;
 import static com.starrocks.utframe.MockedBackend.MockPBackendService;
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * Test getNext is executed successfully or failed by several conditions.
+ * Could also see {@link StartSchedulingTest}.
+ */
 public class GetNextTest extends SchedulerTestBase {
     private boolean originalEnableProfile;
 
@@ -220,7 +224,7 @@ public class GetNextTest extends SchedulerTestBase {
             request.setBackend_num(execution.getIndexInJob());
             request.setDone(true);
             request.setStatus(new TStatus(TStatusCode.CANCELLED));
-            request.setFragment_instance_id(execution.getInstanceId());
+            request.setFragment_instance_id(execution.getFragmentInstanceId());
 
             scheduler.updateFragmentExecStatus(request);
         });
@@ -251,7 +255,7 @@ public class GetNextTest extends SchedulerTestBase {
             request.setBackend_num(execution.getIndexInJob());
             request.setDone(true);
             request.setStatus(new TStatus(TStatusCode.CANCELLED));
-            request.setFragment_instance_id(execution.getInstanceId());
+            request.setFragment_instance_id(execution.getFragmentInstanceId());
 
             scheduler.updateFragmentExecStatus(request);
         });

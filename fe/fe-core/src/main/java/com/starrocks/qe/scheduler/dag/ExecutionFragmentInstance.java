@@ -43,7 +43,26 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-// record backend execute state
+/**
+ * Maintain the execution state of a fragment instance.
+ * Executions begin in the state CREATED and transition between states following this diagram:
+ *
+ * <pre>{@code
+ * CREATED ────► DEPLOYING ────► EXECUTING ───► FINISHED
+ *                  │                │
+ *                  │                │
+ *                  │                ▼
+ *                  ├──────────► CANCELLING
+ *                  │                │
+ *                  │                │
+ *                  ▼                │
+ *               FAILED ◄────────────┘
+ * }
+ * </pre>
+ *
+ * All the methods are thead-safe.
+ * The {@link #state} and {@link #profile} are protected by {@code synchronized(this)}.
+ */
 public class ExecutionFragmentInstance {
     private static final Logger LOG = LogManager.getLogger(ExecutionFragmentInstance.class);
 
@@ -61,9 +80,6 @@ public class ExecutionFragmentInstance {
     private Future<PExecPlanFragmentResult> deployFuture = null;
 
     private final int profileFragmentId;
-    /**
-     * profile is protected by synchronized(this).
-     */
     private final RuntimeProfile profile;
 
     private final ComputeNode worker;
@@ -212,7 +228,7 @@ public class ExecutionFragmentInstance {
             LOG.warn("catch a execute exception", e);
             code = TStatusCode.THRIFT_RPC_ERROR;
             failure = e;
-        } catch (InterruptedException e) {
+        } catch (InterruptedException e) { // NOSONAR
             LOG.warn("catch a interrupt exception", e);
             code = TStatusCode.INTERNAL_ERROR;
             failure = e;
@@ -233,7 +249,7 @@ public class ExecutionFragmentInstance {
             }
             errMsg += " " + String.format("backend [id=%d] [host=%s]", worker.getId(), address.getHostname());
 
-            LOG.warn("exec plan fragment failed, errmsg={}, code: {}, fragmentId={}, backend={}:{}",
+            LOG.warn("exec plan fragment failed, errmsg={}, code={}, fragmentId={}, backend={}:{}",
                     errMsg, code, getFragmentId(), address.hostname, address.port);
         }
 
@@ -276,59 +292,39 @@ public class ExecutionFragmentInstance {
                     "cancelRemoteFragments state={}  backend: {}, fragment instance id={}, reason: {}",
                     state, worker.getId(), DebugUtil.printId(fragmentInstanceId), cancelReason.name());
         }
+
+        switch (state) {
+            case CREATED:
+            case CANCELLING:
+            case FINISHED:
+            case FAILED:
+                return false;
+            case DEPLOYING: // The cancelling request may arrive earlier than the deployed response.
+            case EXECUTING:
+            default:
+                transitionState(State.CANCELLING);
+        }
+
+        TNetworkAddress brpcAddress = worker.getBrpcAddress();
         try {
-            switch (state) {
-                case CREATED:
-                case CANCELLING:
-                case FINISHED:
-                case FAILED:
-                    return false;
-                case DEPLOYING:
-                case EXECUTING:
-                default:
-                    transitionState(State.CANCELLING);
-            }
-
-            TNetworkAddress brpcAddress = worker.getBrpcAddress();
-
-            try {
-                BackendServiceClient.getInstance().cancelPlanFragmentAsync(brpcAddress,
-                        jobSpec.getQueryId(), fragmentInstanceId, cancelReason,
-                        jobSpec.isEnablePipeline());
-            } catch (RpcException e) {
-                LOG.warn("cancel plan fragment get a exception, address={}:{}", brpcAddress.getHostname(),
-                        brpcAddress.getPort());
-                SimpleScheduler.addToBlacklist(worker.getId());
-            }
-        } catch (Exception e) {
-            LOG.warn("catch a exception", e);
+            BackendServiceClient.getInstance().cancelPlanFragmentAsync(brpcAddress,
+                    jobSpec.getQueryId(), fragmentInstanceId, cancelReason,
+                    jobSpec.isEnablePipeline());
+        } catch (RpcException e) {
+            LOG.warn("cancel plan fragment get a exception, address={}:{}", brpcAddress.getHostname(), brpcAddress.getPort(), e);
+            SimpleScheduler.addToBlacklist(worker.getId());
             return false;
         }
-        return true;
-    }
 
-    public boolean isFinished() {
-        return state.isTerminal();
+        return true;
     }
 
     public boolean hasBeenDeployed() {
         return state.hasBeenDeployed();
     }
 
-    public Integer getIndexInJob() {
-        return indexInJob;
-    }
-
-    public TUniqueId getInstanceId() {
-        return fragmentInstanceId;
-    }
-
-    public ComputeNode getWorker() {
-        return worker;
-    }
-
-    public TNetworkAddress getAddress() {
-        return address;
+    public boolean isFinished() {
+        return state.isTerminal();
     }
 
     public PlanFragmentId getFragmentId() {
@@ -337,6 +333,18 @@ public class ExecutionFragmentInstance {
 
     public TUniqueId getFragmentInstanceId() {
         return fragmentInstanceId;
+    }
+
+    public Integer getIndexInJob() {
+        return indexInJob;
+    }
+
+    public ComputeNode getWorker() {
+        return worker;
+    }
+
+    public TNetworkAddress getAddress() {
+        return address;
     }
 
     public int getProfileFragmentId() {
@@ -348,8 +356,8 @@ public class ExecutionFragmentInstance {
     }
 
     public synchronized void printProfile(StringBuilder builder) {
-        this.profile.computeTimeInProfile();
-        this.profile.prettyPrint(builder, "");
+        profile.computeTimeInProfile();
+        profile.prettyPrint(builder, "");
     }
 
     public synchronized boolean computeTimeInProfile(int maxFragmentId) {
@@ -374,11 +382,11 @@ public class ExecutionFragmentInstance {
         return new QueryStatisticsItem.FragmentInstanceInfo.Builder()
                 .instanceId(fragmentInstanceId)
                 .fragmentId(String.valueOf(fragmentId))
-                .address(this.address)
+                .address(address)
                 .build();
     }
 
-    private void transitionState(State to) {
+    private synchronized void transitionState(State to) {
         state = to;
     }
 

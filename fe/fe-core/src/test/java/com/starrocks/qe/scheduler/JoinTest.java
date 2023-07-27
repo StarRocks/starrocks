@@ -56,7 +56,6 @@ public class JoinTest extends SchedulerTestBase {
         Thread joinThread = new Thread(() -> joinFinished.set(scheduler.join(300)));
         joinThread.start();
 
-        Thread.sleep(2_000L);
         scheduler.cancel();
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(joinFinished::get);
 
@@ -153,7 +152,7 @@ public class JoinTest extends SchedulerTestBase {
                 request.setBackend_num(indexInJob)
                         .setDone(true)
                         .setStatus(new TStatus(TStatusCode.OK))
-                        .setFragment_instance_id(execution.getInstanceId());
+                        .setFragment_instance_id(execution.getFragmentInstanceId());
 
                 String deltaUrl = "delta_url-" + indexInJob + "-" + finalIndex;
                 request.setDelta_urls(Collections.singletonList(deltaUrl));

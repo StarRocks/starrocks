@@ -18,6 +18,8 @@ import com.google.api.client.util.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Reference;
 import com.starrocks.common.UserException;
+import com.starrocks.proto.PCancelPlanFragmentRequest;
+import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.qe.DefaultCoordinator;
@@ -30,7 +32,9 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TUniqueId;
 import org.apache.thrift.TException;
+import org.assertj.core.util.Sets;
 import org.awaitility.Awaitility;
 import org.jetbrains.annotations.NotNull;
 import org.junit.After;
@@ -43,14 +47,31 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.utframe.MockedBackend.MockPBackendService;
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * The procedure of starting scheduling is as follows.
+ * <pre>{@code
+ * Deploy instances -> Wait for deployment futures       ----> getNext -> Wait for reports
+ *      | RPC throws exception | Future::get throws error    | wrong packetSeq or
+ *      |                      |         or                  | RPC throws exception or
+ *      |                      | Future::get timeout         | Future::get throws error or
+ *      |                      |         or                  | Reach limit
+ *      |                      | Future returns error status |
+ *      |                      V                             |
+ *      ------------>     Cancel the deployed instances <-----
+ * }</pre>
+ * *
+ */
 public class StartSchedulingTest extends SchedulerTestBase {
     private boolean originalEnableProfile;
 
@@ -66,8 +87,6 @@ public class StartSchedulingTest extends SchedulerTestBase {
 
     @Test
     public void testDeploySuccess() throws Exception {
-        setBackendService(new MockPBackendService());
-
         Map<TNetworkAddress, Integer> backendToNumInstances = Maps.newHashMap();
         Map<TNetworkAddress, List<TExecPlanFragmentParams>> backendToRequests = Maps.newHashMap();
         Map<Integer, List<TExecPlanFragmentParams>> fragmentToRequest = Maps.newHashMap();
@@ -122,72 +141,6 @@ public class StartSchedulingTest extends SchedulerTestBase {
     }
 
     @Test
-    public void testDeployReturnErrorStatus() {
-        setBackendService(new MockPBackendService() {
-            @Override
-            public Future<PExecPlanFragmentResult> execPlanFragmentAsync(PExecPlanFragmentRequest request) {
-                return submit(() -> {
-                    PExecPlanFragmentResult result = new PExecPlanFragmentResult();
-                    StatusPB pStatus = new StatusPB();
-                    pStatus.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
-                    pStatus.errorMsgs = Collections.singletonList("test error message");
-                    result.status = pStatus;
-                    return result;
-                });
-            }
-        });
-
-        String sql = "select count(1) from lineitem";
-        Assert.assertThrows("test error message", UserException.class, () -> startScheduling(sql));
-    }
-
-    @Test
-    public void testDeployFutureThrowException() throws Exception {
-        connectContext.getSessionVariable().setEnableProfile(true);
-
-        Reference<Future<PExecPlanFragmentResult>> deployFuture = new Reference<>();
-        setBackendService(address -> {
-            if (!backend3.getHost().equals(address.getHostname())) {
-                return new MockPBackendService();
-            }
-            return new MockPBackendService() {
-                @Override
-                public Future<PExecPlanFragmentResult> execPlanFragmentAsync(PExecPlanFragmentRequest request) {
-                    return deployFuture.getRef();
-                }
-            };
-        });
-
-        String sql = "select count(1) from lineitem t1 JOIN [shuffle] lineitem t2 using(l_orderkey)";
-
-        deployFuture.setRef(
-                mockFutureWithException(new ExecutionException("test execution exception", new Exception())));
-        Assert.assertThrows("test execution exception", RpcException.class, () -> startScheduling(sql));
-        Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> !SimpleScheduler.isInBlacklist(backend3.getId()));
-
-        deployFuture.setRef(mockFutureWithException(new InterruptedException("test interrupted exception")));
-        DefaultCoordinator scheduler = getScheduler(sql);
-        Assert.assertThrows("test interrupted exception", UserException.class, () -> scheduler.startScheduling());
-
-        // The deployed executions haven't reported.
-        Assert.assertFalse(scheduler.isDone());
-
-        // Shouldn't deploy the rest instances, when the previous instance deployment failed.
-        Assert.assertTrue(scheduler.getBackendNums().size() < scheduler.getInstanceIds().size());
-        // Receive execution reports.
-        scheduler.getBackendExecutions().forEach(execution -> {
-            TReportExecStatusParams request = new TReportExecStatusParams(FrontendServiceVersion.V1);
-            request.setBackend_num(execution.getIndexInJob());
-            request.setDone(true);
-            request.setStatus(new TStatus(TStatusCode.CANCELLED));
-            request.setFragment_instance_id(execution.getInstanceId());
-
-            scheduler.updateFragmentExecStatus(request);
-        });
-        Assert.assertTrue(scheduler.isDone());
-    }
-
-    @Test
     public void testDeployThrowException() {
         setBackendService(address -> {
             if (!backend3.getHost().equals(address.getHostname())) {
@@ -205,6 +158,103 @@ public class StartSchedulingTest extends SchedulerTestBase {
 
         Assert.assertThrows("test runtime exception", RpcException.class, () -> startScheduling(sql));
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> !SimpleScheduler.isInBlacklist(backend3.getId()));
+    }
+
+    @Test
+    public void testDeployFutureThrowException() throws Exception {
+        connectContext.getSessionVariable().setEnableProfile(true);
+
+        AtomicBoolean isFirstFragmentToDeploy = new AtomicBoolean(true);
+        Reference<Future<PExecPlanFragmentResult>> deployFuture = new Reference<>();
+        setBackendService(address -> {
+            if (isFirstFragmentToDeploy.get() || !backend3.getHost().equals(address.getHostname())) {
+                isFirstFragmentToDeploy.set(false);
+                return new MockPBackendService();
+            }
+            return new MockPBackendService() {
+                @Override
+                public Future<PExecPlanFragmentResult> execPlanFragmentAsync(PExecPlanFragmentRequest request) {
+                    return deployFuture.getRef();
+                }
+            };
+        });
+
+        String sql = "select count(1) from lineitem t1 JOIN [shuffle] lineitem t2 using(l_orderkey)";
+
+        deployFuture.setRef(
+                mockFutureWithException(new ExecutionException("test execution exception", new Exception())));
+        Assert.assertThrows("test execution exception", RpcException.class, () -> startScheduling(sql));
+        Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> !SimpleScheduler.isInBlacklist(backend3.getId()));
+
+        isFirstFragmentToDeploy.set(true);
+        deployFuture.setRef(mockFutureWithException(new InterruptedException("test interrupted exception")));
+        DefaultCoordinator scheduler = getScheduler(sql);
+        Assert.assertThrows("test interrupted exception", UserException.class, () -> scheduler.startScheduling());
+
+        // The deployed executions haven't reported.
+        Assert.assertFalse(scheduler.isDone());
+
+        // Shouldn't deploy the rest instances, when the previous instance deployment failed.
+        Assert.assertTrue(scheduler.getBackendNums().size() < scheduler.getInstanceIds().size());
+        // Receive execution reports.
+        scheduler.getBackendExecutions().forEach(execution -> {
+            TReportExecStatusParams request = new TReportExecStatusParams(FrontendServiceVersion.V1);
+            request.setBackend_num(execution.getIndexInJob());
+            request.setDone(true);
+            request.setStatus(new TStatus(TStatusCode.CANCELLED));
+            request.setFragment_instance_id(execution.getFragmentInstanceId());
+
+            scheduler.updateFragmentExecStatus(request);
+        });
+        Assert.assertTrue(scheduler.isDone());
+    }
+
+    @Test
+    public void testDeployFutureReturnErrorStatus() throws Exception {
+        final int successDeployedFragmentCount = 3;
+        Set<TUniqueId> deployedInstanceIds = Sets.newHashSet();
+        Set<TUniqueId> cancelledInstanceIds = Sets.newHashSet();
+        setBackendService(new MockPBackendService() {
+            @Override
+            public Future<PExecPlanFragmentResult> execPlanFragmentAsync(PExecPlanFragmentRequest request) {
+                if (deployedInstanceIds.size() < successDeployedFragmentCount) {
+                    TExecPlanFragmentParams tRequest = new TExecPlanFragmentParams();
+                    try {
+                        request.getRequest(tRequest);
+                    } catch (TException e) {
+                        throw new RuntimeException(e);
+                    }
+                    deployedInstanceIds.add(tRequest.getParams().getFragment_instance_id());
+                    return super.execPlanFragmentAsync(request);
+                }
+
+                return submit(() -> {
+                    PExecPlanFragmentResult result = new PExecPlanFragmentResult();
+                    StatusPB pStatus = new StatusPB();
+                    pStatus.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
+                    pStatus.errorMsgs = Collections.singletonList("test error message");
+                    result.status = pStatus;
+                    return result;
+                });
+            }
+
+            @Override
+            public Future<PCancelPlanFragmentResult> cancelPlanFragmentAsync(PCancelPlanFragmentRequest request) {
+                TUniqueId instanceId = new TUniqueId(request.finstId.hi, request.finstId.lo);
+                cancelledInstanceIds.add(instanceId);
+
+                return super.cancelPlanFragmentAsync(request);
+            }
+        });
+
+        String sql =
+                "select count(1) from lineitem UNION ALL select count(1) from lineitem UNION ALL select count(1) from lineitem";
+        DefaultCoordinator scheduler = getScheduler(sql);
+        Assert.assertThrows("test error message", UserException.class, scheduler::startScheduling);
+
+        // All the deployed fragment instances should be cancelled.
+        Assert.assertEquals(successDeployedFragmentCount, cancelledInstanceIds.size());
+        assertThat(cancelledInstanceIds).containsExactlyElementsOf(deployedInstanceIds);
     }
 
     @Test
@@ -239,6 +289,49 @@ public class StartSchedulingTest extends SchedulerTestBase {
         } finally {
             connectContext.getSessionVariable().setQueryDeliveryTimeoutS(prevQueryDeliveryTimeoutSecond);
         }
+    }
+
+
+    @Test
+    public void testCancelThrowErrors() throws Exception {
+        Set<TUniqueId> successCancelledInstanceIds = Sets.newHashSet();
+        final int numSuccessCancelledInstances = 3;
+        setBackendService(new MockPBackendService() {
+            @Override
+            public Future<PCancelPlanFragmentResult> cancelPlanFragmentAsync(PCancelPlanFragmentRequest request) {
+                if (successCancelledInstanceIds.size() < numSuccessCancelledInstances) {
+                    TUniqueId instanceId = new TUniqueId(request.finstId.hi, request.finstId.lo);
+                    successCancelledInstanceIds.add(instanceId);
+                    return super.cancelPlanFragmentAsync(request);
+                } else {
+                    throw new RuntimeException("mock-runtime-exception-when-cancel-plan-fragment-async");
+                }
+            }
+        });
+
+        String sql = "select count(1) from lineitem UNION ALL select count(1) from lineitem";
+        DefaultCoordinator scheduler = startScheduling(sql);
+        Assert.assertTrue(scheduler.getExecStatus().ok());
+
+        // All the instances should be deployed.
+        Assert.assertEquals(scheduler.getInstanceIds().size(), scheduler.getBackendExecutions().size());
+
+        scheduler.cancel();
+        Assert.assertEquals(numSuccessCancelledInstances, successCancelledInstanceIds.size());
+        // Receive execution reports from the successfully cancelled instances.
+        scheduler.getBackendExecutions().forEach(execution -> {
+            if (successCancelledInstanceIds.contains(execution.getFragmentInstanceId())) {
+                TReportExecStatusParams request = new TReportExecStatusParams(FrontendServiceVersion.V1);
+                request.setBackend_num(execution.getIndexInJob());
+                request.setDone(true);
+                request.setStatus(new TStatus(TStatusCode.CANCELLED));
+                request.setFragment_instance_id(execution.getFragmentInstanceId());
+
+                scheduler.updateFragmentExecStatus(request);
+            }
+        });
+        // Shouldn't block by the failed cancelled instance.
+        Assert.assertTrue(scheduler.isDone());
     }
 
     private static Future<PExecPlanFragmentResult> mockFutureWithException(Exception exception) {
