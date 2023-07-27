@@ -311,7 +311,10 @@ public class TaskManager {
             throw new DmlException("Failed to get task lock when execute Task sync[" + task.getName() + "]");
         }
         try {
-            taskRun = TaskRunBuilder.newBuilder(task).setConnectContext(ConnectContext.get()).build();
+            taskRun = TaskRunBuilder.newBuilder(task)
+                    .properties(option.getTaskRunProperties())
+                    .type(option)
+                    .setConnectContext(ConnectContext.get()).build();
             submitResult = taskRunManager.submitTaskRun(taskRun, option);
             if (submitResult.getStatus() != SUBMITTED) {
                 throw new DmlException("execute task:" + task.getName() + " failed");
