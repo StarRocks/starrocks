@@ -176,7 +176,7 @@ GROUP BY order_id;
   - 对于 Iceberg 和 Hudi 外部数据目录，StarRocks 目前无法感知基表数据是否发生变动，所以每次刷新会默认刷新所有分区。您可以通过 [REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/REFRESH%20MATERIALIZED%20VIEW.md) 命令手动刷新指定分区。
   - 在 2.5.5 版本后，StarRocks 可以周期性刷新经常访问的 Hive 外部数据目录的元数据缓存，达到感知数据更新的效果。您可以通过以下 FE 动态参数配置 Hive 元数据缓存周期性刷新：
 
-    | 配置名称<img width=150/> | 默认值<img width=100/> | 说明<img width=200>           |
+    | 配置名称 | 默认值 | 说明           |
     | ----------------------------| ---------------- | ------------------------------------ |
     | enable_background_refresh_connector_metadata | v3.0 为 true，v2.5 为 false | 是否开启 Hive 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Hive 集群的元数据服务（Hive Metastore 或 AWS Glue），并刷新经常访问的 Hive 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。 |
     | background_refresh_metadata_interval_millis | 600000（10 分钟）| 接连两次 Hive 元数据缓存刷新之间的间隔。单位：毫秒。 |
