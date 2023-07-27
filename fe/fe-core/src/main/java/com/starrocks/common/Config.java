@@ -619,6 +619,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int thrift_rpc_retry_times = 3;
 
+    @ConfField
+    public static boolean thrift_rpc_strict_mode = true;
+
+    // thrift rpc max body limit size. -1 means unlimited
+    @ConfField
+    public static int thrift_rpc_max_body_size = -1;
+
     // May be necessary to modify the following BRPC configurations in high concurrency scenarios.
 
     // The size of BRPC connection pool. It will limit the concurrency of sending requests, because
