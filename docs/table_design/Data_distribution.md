@@ -147,31 +147,31 @@ Also, StarRocks distributes data by implementing the two-level partitioning + bu
 
 #### Partitioning
 
-The partitioning method divides a table into multiple partitions. Partitioning primarily is used to split a table into different management granularity based on the partition key. You can set a storage strategy for each partition, including the number of buckets, the strategy of storing hot and cold data, different types of storage medium, and the number of replicas. StarRocks allows you to use multiple storage mediums within a cluster. For example, you can store the latest data on solid-state drives (SSDs) to improve query performance, and historical data on SATA hard drives to reduce storage costs.
+The partitioning method divides a table into multiple partitions. Partitioning primarily is used to split a table into different management units (partitions) based on the partition key. You can set a storage strategy for each partition, including the number of buckets, the strategy of storing hot and cold data, the type of storage medium, and the number of replicas. StarRocks allows you to use different types of storage mediums within a cluster. For example, you can store the latest data on solid-state drives (SSDs) to improve query performance, and historical data on SATA hard drives to reduce storage costs.
 
-| Partitioning method                   | Scenarios                                                    | Methods to create partitions               |
+| **Partitioning method**                   | **Scenarios**                                                    | **Methods to create partitions**               |
 | ------------------------------------- | ------------------------------------------------------------ | ------------------------------------------ |
-| Expression partitioning (recommended) | Previously known as automatic partitioning. This partitioning method is more flexible and user-friendly. It is suitable for most scenarios including querying and managing data based on continuous date ranges or emurated values. | Automatically created during data loading |
+| Expression partitioning (recommended) | Previously known as automatic partitioning. This partitioning method is more flexible and easy-to-use. It is suitable for most scenarios including querying and managing data based on continuous date ranges or emurated values. | Automatically created during data loading |
 | Range partitioning                    | The typical scenario is to store simple, ordered data that is often queried and managed based on continuous date/numeric ranges. For instance, in some special cases, historical data needs to be partitioned by month, while recent data needs to be partitioned by day. | Created manually, dynamically, or in batch |
-| List partitioning                     | A typical scenario is to query and manage data based on emurated values, where a partition needs to include data with different values for each partitioning column. For example, if you frequently query and manage data based on country and city, you can use this method and select `city` as the partitioning column. So a partition can contain data for multiple cities belonging to one country. | Created manually                           |
+| List partitioning                     | A typical scenario is to query and manage data based on emurated values, and a partition needs to include data with different values for each partitioning column. For example, if you frequently query and manage data based on countries and cities, you can use this method and select `city` as the partitioning column. So a partition can store data for multiple cities belonging to the same country. | Created manually                           |
 
 **How to choose partitioning columns and granularity**
 
-- Selecting a appropriate partitioning column can effectively reduce the amount of data scanned during queries. In most business systems, partitioning based on time is commonly chosen to resolve issues caused by the deletion of expired data and facilitate management of tiered storage of hot and cold data. In this case, you can use expression partitioning or range partitioning and specify a time column as the partitioning column. Additionally, if the data is frequently queried and managed based on emurated values, you can use expression partitioning or list partitioning and specify a column including these values as the partitioning column.
-- When choosing the partitioning granularity, you need to be consider factors such as data volume, query patterns, and data management granularity.
-  - Example 1: If the volume of data per month in a table is small, partitioning by month can reduce the number of metadata entries compared to partitioning by day, thereby reducing the resource consumption of metadata management and scheduling.
-  - Example 2: If the monthly data volume of a table is large and most query conditions are precise to the day, partitioning by day can effectively reduce the amount of data scanned during queries.
-  - Example 3: If the data needs to expire on a daily basis, partitioning by day can be used.
+- Selecting a proper partitioning column can effectively reduce the amount of data scanned during queries. In most business systems, partitioning based on time is commonly adopted to resolve issues caused by the deletion of expired data and facilitate management of tiered storage of hot and cold data. In this case, you can use expression partitioning or range partitioning and specify a time column as the partitioning column. Additionally, if the data is frequently queried and managed based on emurated values, you can use expression partitioning or list partitioning and specify a column including these values as the partitioning column.
+- When choosing the partitioning granularity, you need to consider factors data volume, query patterns, and data management granularity.
+  - Example 1: If the monthly data volume in a table is small, partitioning by month can reduce the amount of metadata compared to partitioning by day, thereby reducing the resource consumption of metadata management and scheduling.
+  - Example 2: If the monthly data volume in a table is large and queries mostly request data of certain days, partitioning by day can effectively reduce the amount of data scanned during queries.
+  - Example 3: If the data needs to expire on a daily basis, partitioning by day is recommended.
 
 #### Bucketing
 
-The partitioning method divides a partition into multiple buckets. Data in a bucket is referred as a tablet.
+The bucketing method divides a partition into multiple buckets. Data in a bucket is referred to as a tablet.
 
 The supported bucketing methods are [random bucketing](#random-bucketing-since-v31) (from v3.1) and [hash bucketing](#hash-bucketing).
 
-- Random bucketing: When creating a table or adding partitions, you do not need to set a bucketing key. Data within the same partition is randomly distributed into different buckets.
+- Random bucketing: When creating a table or adding partitions, you do not need to set a bucketing key. Data within a partition is randomly distributed into different buckets.
 
-- Hash Bucketing: When creating a table or adding partitions, you need to specify a bucketing key. Data within the same partition is divided into buckets based on the bucketing key, and rows with the same value in the bucketing key are assigned to the corresponding and unique bucket.
+- Hash Bucketing: When creating a table or adding partitions, you need to specify a bucketing key. Data within the same partition is divided into buckets based on the values of the bucketing key, and rows with the same value in the bucketing key are distributed to the corresponding and unique bucket.
 
 The number of buckets: By default, StarRocks automatically sets the number of buckets (from v2.5.7). And you can also manually set the number of buckets. For more information, please refer to [determining the number of buckets](#determine-the-number-of-buckets).
 
@@ -185,25 +185,25 @@ The number of buckets: By default, StarRocks automatically sets the number of bu
 >
 > Since v3.1,  StarRocks's [shared-data mode](../deployment/deploy_shared_data.md) supports the time function expression and does not support the column expression.
 
-Since v3.0, StarRocks supports [expression partitioning](./expression_partitioning.md) (previously known as automatic partitioning) which is more flexible and user-friendly. This partitioning method is suitable for most scenarios including querying and managing data based on continuous date ranges or emurated values.
+Since v3.0, StarRocks supports [expression partitioning](./expression_partitioning.md) (previously known as automatic partitioning) which is more flexible and easy-to-use. This partitioning method is suitable for most scenarios such as querying and managing data based on continuous date ranges or emurated values.
 
-You only need to configure a partition expression (either a time function expression or a column expression) at table creation, and StarRocks will automatically create partitions during data loading. You no longer need to manually create numerous partitions in advance, nor configure dynamic partition properties.
+You only need to configure a partition expression (a time function expression or a column expression) at table creation, and StarRocks will automatically create partitions during data loading. You no longer need to manually create numerous partitions in advance, nor configure dynamic partition properties.
 
 #### Range partitioning
 
-Range partitioning is suitable for storing simple and contiguous data, such as time series data (dates or timestamps) or continuous numerical data. And you frequently query and manage data based on continuous date/numerical ranges. Also, it can be applied in some special cases where historical data needs to be partitioned by month, and recent data needs to be partitioned by day.
+Range partitioning is suitable for storing simple, contiguous data, such as time series data (dates or timestamps), or continuous numerical data. And you frequently query and manage data based on continuous date/numerical ranges. Also, it can be applied in some special cases where historical data needs to be partitioned by month, and recent data needs to be partitioned by day.
 
-StarRocks stores data in the corresponding partition based on the explicit mapping of the predefined range for each partition.
+StarRocks stores data in the corresponding partitions based on the explicit mapping of the explictly defined range for each partition.
 
 **Dynamic partitioning**
 
-[Dynamic partitioning](./dynamic_partitioning.md) related properties are configured at table creation. StarRocks automatically creates new partitions in advance and removes expired partitions to ensure data freshness and implement lifecycle management for partitions, known as Time to Life (TTL).
+[Dynamic partitioning](./dynamic_partitioning.md) related properties are configured at table creation. StarRocks automatically creates new partitions in advance and removes expired partitions to ensure data freshness, which implements time-to-live (TTL) management for partitions.
 
-Different from the automatic partition creation ability provided by the expression partitioning, dynamic partitioning can only periodically creating new partitions based on the properties. If the new data does not belong to these partitions, an error is returned for the loading job. However, the automatic partition creation ability provided by the expression partitioning always can create corresponding new partitions based on the loaded data.
+Different from the automatic partition creation ability provided by the expression partitioning, dynamic partitioning can only periodically creating new partitions based on the properties. If the new data does not belong to these partitions, an error is returned for the loading job. However, the automatic partition creation ability provided by the expression partitioning can always create corresponding new partitions based on the loaded data.
 
 **Manually create partitions**
 
-Using a suitable partition key can effectively reduce the amount of data scanned during queries. Currently, only date and integer data types are supported as partitioning columns. In business scenarios, partition keys are typically chosen from a data management perspective. Common partitioning columns include dates and regions.
+Using a proper partition key can effectively reduce the amount of data scanned during queries. Currently, only date and integer data types are supported as partitioning columns. In business scenarios, partition keys are typically selected from a data management perspective. Common partitioning columns include dates and locations.
 
 ```SQL
 CREATE TABLE site_access(
@@ -224,13 +224,13 @@ DISTRIBUTED BY HASH(site_id);
 
 **Create multiple partitions at a time**
 
-Multiple partitions can be created at a time at and after table creation. You can specify the start and end time for all the partitions created at a time in `START()` and `END()` and the partition increment value in `EVERY()`. However, note that the range of partitions includes the start time but does not include the end time. The naming for partitions is the same as that of dynamic partitioning.
+Multiple partitions can be created at a time at and after table creation. You can specify the start and end time for all the partitions created at a time in `START()` and `END()` and the partition increment value in `EVERY()`. However, note that the range of partitions is right hand half open, which includes the start time but does not include the end time. The naming rule for partitions is the same as that of dynamic partitioning.
 
 - **Partition a table on a date-type column (DATE and DATETIME) at the table creation**
 
-  When the partitioning column is of date type, during table creation, you can use `START` and `END` to specify the start date and end date for all the partitions created at a time, and `EVERY` to specify the partition increment value. The `EVERY` uses the `INTERVAL` keyword to indicate the date interval, and currently supports date intervals to be `HOUR` (since version 3.0), `DAY`, `WEEK`, `MONTH`, and `YEAR`.
+  When the partitioning column is of date type, at table creation, you can use `START()` and `END()` to specify the start date and end date for all the partitions created at a time, and `EVERY(INTERVAL xxx)` to specify the incremental interval between two partitions. Currently the interval granularity supports `HOUR` (since v3.0), `DAY`, `WEEK`, `MONTH`, and `YEAR`.
 
-  In the following example, the date range of all the partitions created at a time starts from 2021-01-01 and ends on 2021-01-04, with an increment value of one day:
+  In the following example, the date range of all the partitions created at a time starts from 2021-01-01 and ends on 2021-01-04, with an incremental interval of one day:
 
     ```SQL
   CREATE TABLE site_access (
@@ -249,7 +249,7 @@ Multiple partitions can be created at a time at and after table creation. You ca
   PROPERTIES ("replication_num" = "3" );
     ```
 
-    It is equivalent to using the following `PARTITION BY` clause in the CREATE TABLE statement:
+  It is equivalent to using the following `PARTITION BY` clause in the CREATE TABLE statement:
 
     ```SQL
   PARTITION BY RANGE (datekey) (
@@ -261,7 +261,7 @@ Multiple partitions can be created at a time at and after table creation. You ca
 
 - **Partition a table on a date-type column (DATE and DATETIME)  with different date intervals at the table creation**.
 
-  You can create batches of date partitions with different date intervals by specifying different date intervals in `EVERY` for each batch of partitions (make sure that each batch partition intervals does not overlap). Partitions in each batch are created according to the defined date interval in the `EVERY clause`. For example:
+  You can create batches of date partitions with different incremental interval by specifying different incremental interval in `EVERY` for each batch of partitions (make sure that the partition ranges between different batches do not overlap). Partitions in each batch are created according to the `START (xxx) END (xxx) EVERY (xxx)` clause. For example:
 
     ```SQL
   CREATE TABLE site_access(
@@ -285,7 +285,7 @@ Multiple partitions can be created at a time at and after table creation. You ca
   );
     ```
 
-    It is equivalent to using the following `PARTITION BY` clause in the CREATE TABLE statement:
+  It is equivalent to using the following `PARTITION BY` clause in the CREATE TABLE statement:
 
     ```SQL
   PARTITION BY RANGE (datekey) (
@@ -307,7 +307,7 @@ Multiple partitions can be created at a time at and after table creation. You ca
 
   > **NOTE**
   >
-  > Do not double quote the incremental value in `EVERY`.
+  > The partition column values in **START()** and **END()** need to be wrapped in quotation marks, while the incremental value in the **EVERY()** does not need to be wrapped in quotation marks.
 
   In the following example, the range of all the partition starts from `1` and ends at `5`, with a partition increment of `1`:
 
@@ -327,7 +327,7 @@ Multiple partitions can be created at a time at and after table creation. You ca
   PROPERTIES ("replication_num" = "3");
     ```
 
-    It is equivalent to using the following `PARTITION BY` clause in the CREATE TABLE statement:
+  It is equivalent to using the following `PARTITION BY` clause in the CREATE TABLE statement:
 
     ```SQL
   PARTITION BY RANGE (datekey) (
@@ -343,26 +343,26 @@ Multiple partitions can be created at a time at and after table creation. You ca
   )
     ```
 
-**Create partitions at a time after a table is created.**
+**Create partitions at a time after a table is created**
 
-  After a table is created, you can use the ALTER TABLE statement to add partitions at a time for the table. The syntax is similar to creating multiple partitions at a time at table creation. You can configure `START`, `END`, and `EVERY` in the `ADD PARTITIONS` clause to create multiple partitions at a time.
+  After a table is created, you can use the ALTER TABLE statement to add partitions at a time. The syntax is similar to that of creating multiple partitions at a time at table creation. You need to configure `START`, `END`, and `EVERY` in the `ADD PARTITIONS` clause.
 
   ```SQL
-ALTER TABLE site_access 
-ADD PARTITIONS START ("2021-01-04") END ("2021-01-06") EVERY (INTERVAL 1 DAY);
+  ALTER TABLE site_access 
+  ADD PARTITIONS START ("2021-01-04") END ("2021-01-06") EVERY (INTERVAL 1 DAY);
   ```
 
 #### List partitioning (since v3.1)
 
 [List Partitioning](./list_partitioning.md) is suitable for accelerating queries and efficiently managing data based on emurated values. It is especially useful for scenarios where a partition needs to include data with different values in a partitioning column. For example, if you frequently query and manage data based on countries and cities, you can use this partitioning method and select the `city` column as the partitioning column. In this case, one partition can contain data of various cities belonging to one country.
 
-StarRocks stores data in the corresponding partitions based on the explicit mapping of the predefined list of values for each partition.
+StarRocks stores data in the corresponding partitions based on the explicit mapping of the predefined value list for each partition.
 
 ### Manage  partitions
 
 #### Add partitions
 
-For range partitioning and list partitioning, you can manually add new partitions to store new data in a table. However for expression partitioning, because partitions are created autocmatically during data loading, you do not need to do so.
+For range partitioning and list partitioning, you can manually add new partitions to store new data. However for expression partitioning, because partitions are created autocmatically during data loading, you do not need to do so.
 
 The following statement adds a new partition to table `site_access` to store data for a new month:
 
@@ -395,7 +395,7 @@ RECOVER PARTITION p1 FROM site_access;
 
 #### View partitions
 
-The following statement displays all partitions in table `site_access`.
+The following statement returns details of all partitions in table `site_access`.
 
 ```SQL
 SHOW PARTITIONS FROM site_access;
@@ -405,19 +405,17 @@ SHOW PARTITIONS FROM site_access;
 
 ### Random bucketing (since v3.1)
 
-StarRocks distributes the data in a partition randomly across all bucketss. It is suitable for scenarios with relatively small data sizes and relatively low requirement for query performance. If you do not set a bucketing method, StarRocks uses random bucketing by default and automatically sets the number of buckets.
+StarRocks distributes the data in a partition randomly across all buckets. It is suitable for scenarios with small data sizes and relatively low requirement for query performance. If you do not set a bucketing method, StarRocks uses random bucketing by default and automatically sets the number of buckets.
 
-However, note that if you are querying massive amounts of data and frequently using certain columns in the filtering condition, the query performance provided by Random Bucketing may not be optimal. In such scenarios, it is recommended to use [hash bucketing](#hash-bucketing). When querying with these columns in the filtering condition, you only need to scan and compute data in a small number of buckets that the query involves, which can significantly improve query performance.
+However, note that if you querymassive amounts of data and frequently use certain columns in the filtering condition, the query performance provided by random bucketing may not be optimal. In such scenarios, it is recommended to use [hash bucketing](#hash-bucketing). When querying with these columns in the filtering condition, only data in a small number of buckets that the query hits need to be scanned and computed, which can significantly improve query performance.
 
 **Precautions**
 
-- You can only use random bucketing to create a Depulicate Key table.
+- You can only use random bucketing to create a Duplicate Key table.
 - You can not specify a table bucketed randomly to belong to a [Colocation Group](../using_starrocks/Colocate_join.md).
 - [Spark Load](../loading/SparkLoad.md) can not be used to load data into tables bucketed randomly.
 
-In the following example, a table `site_access1` is created by using random bucketing, and the system automatically sets the number of buckets.
-
-In the following CREATE TABLE example, the `DISTRIBUTED BY xxx` statement is not used, so StarRocks uses random bucketing by default, and utomatically the number of buckets.
+In the following CREATE TABLE example, the `DISTRIBUTED BY xxx` statement is not used, so StarRocks uses random bucketing by default, and automatically sets the number of buckets.
 
 ```SQL
 CREATE TABLE site_access1(
@@ -446,13 +444,13 @@ DISTRIBUTED BY RANDOM BUCKETS 8; -- manually set the number of buckets to 8
 
 ### Hash bucketing
 
-StarRocks can use hash bucketing to subdivide data in a partition into bucktes based on the bucketing key and [the number of buckets](#determine-the-number-of-buckets). In Hash bucketing, a a hash function takes specific column value as input and calculates a hash value, which is then used to store the data to the corresponding bucket.
+StarRocks can use hash bucketing to subdivide data in a partition into buckets based on the bucketing key and [the number of buckets](#determine-the-number-of-buckets). In hash bucketing, a hash function takes data's bucketing key value as an input and calculates a hash value. Data is stored in the corresponding bucket based on the mapping between the hash values and buckets.
 
-Advantages:
+**Advantages**:
 
 - Improved query performance: Rows with the same bucketing key values are stored in the same bucket, reducing the amount of data scanned during queries.
 
-- Even data distribution: By selecting columns with higher cardinality (a larger number of unique values) as the bucketing key, data can be more evenly distributed into each bucket.
+- Even data distribution: By selecting columns with higher cardinality (a larger number of unique values) as the bucketing key, data can be more evenly distributed across buckets.
 
 **How to choose the bucketing columns**
 
@@ -463,20 +461,19 @@ We recommend that you choose the column that satisfy the following two requireme
 
 But if the column that satisfies both requirements does not exist, you need to determine the buckting column according to the complexity of queries.
 
-- If the query is complex, it is recommended that you select the high cardinality column as the bucketing column to ensure that the data is as evenly distributed as possible in each bucket and improve the cluster resource utilization.
-- If the query is relatively simple, then it is recommended to select the column that is often used as in the query condition as the bucketing column to improve the query efficiency.
+- If the query is complex, it is recommended that you select the high cardinality column as the bucketing column to ensure that the data is as evenly distributed as possible across all the buckets and improve the cluster resource utilization.
+- If the query is relatively simple, it is recommended to select the column that is often used in the query condition as the bucketing column to improve the query efficiency.
 
-If partition data cannot be evenly distributed into each tablet by using one bucketing column, you can choose multiple bucketing columns. but it is recommended to use no more than 3 columns.
+If partition data cannot be evenly distributed across all the buckets by using one bucketing column, you can choose multiple bucketing columns. Note that it is recommended to use no more than 3 columns.
 
 **Precautions**
 
 - **When a table is created, you must specify the bucketing columns**.
-- The values of bucketing columns cannot be updated.
 - Bucketing columns cannot be modified after they are specified.
 
 **Examples**
 
-In the following example, the `site_access` table is created by using `site_id` as the bucketing column. Because this column is high cardinality column and is always used as a filter in queries. When the bucketing column `site_id` is used as a filter in queries, StarRocks only scans the relevant tablets, which greatly improves query performance.
+In the following example, the `site_access` table is created by using `site_id` as the bucketing column. Additionally, when data in the `site_access` table is queried, data is often filtered by sites. Using `site_id` as the bucketing key can prune a significant number of irrelevant buckets during queries.
 
 ```SQL
 CREATE TABLE site_access(
@@ -504,7 +501,7 @@ from site_access
 where site_id = 54321;
 ```
 
-However, if `site_id` is unevenly distributed and a large number of queries are destined for only a few sites, the preceding bucketing method will cause severe data skew, causing system performance bottlenecks. In this case, you can use a combination of bucketing columns. For example, the following statement uses `site_id` and `city_code` as bucketing columns.
+However, if `site_id` is unevenly distributed and a large number of queries only request data of a few sites, only using one bucketing column can result in severe data skew, causing system performance bottlenecks. In this case, you can use a combination of bucketing columns. For example, the following statement uses `site_id` and `city_code` as bucketing columns.
 
 ```SQL
 CREATE TABLE site_access
@@ -518,22 +515,22 @@ AGGREGATE KEY(site_id, city_code, user_name)
 DISTRIBUTED BY HASH(site_id,city_code);
 ```
 
-In practical use, you can use one or two bucketing columns based on the characteristics of your business. Using one bucketing column `site_id` is highly beneficial for short queries as it reduces data exchange between nodes, thereby enhancing the overall performance of the cluster. On the other hand, adopting two bucketing columns `site_id` and `city_code` is advantageous for long queries as it can leverage the overall concurrency of the distributed cluster to significantly improve performance.
+Practically speaking, you can use one or two bucketing columns based on your business characteristics. Using one bucketing column `site_id` is highly beneficial for short queries as it reduces data exchange between nodes, thereby enhancing the overall performance of the cluster. On the other hand, adopting two bucketing columns `site_id` and `city_code` is advantageous for long queries as it can leverage the overall concurrency of the distributed cluster to significantly improve performance.
 
 > **NOTE**
 >
-> - Short queries often invlove scanning a small amount of data, and can be completed on a single node.
-> - Long queries, on the other hand, involve scanning a large amount of data, and their performance can be significantly improved by parallel scanning across multiple nodes in a distributed cluster.
+> - Short queries invlove scanning a small amount of data, and can be completed on a single node.
+> - Long queries involve scanning a large amount of data, and their performance can be significantly improved by parallel scanning across multiple nodes in a distributed cluster.
 
 ### Determine the number of buckets
 
-Buckets reflect how data files are organized in StarRocks.
+Buckets reflect how data files are actually organized in StarRocks.
 
-- How to set the number of buckets when creating a table
+- How to set the number of buckets at table creation
 
-  - Method 1: automatically set the number of buckets (Recommended)
+  - Method 1: automatically set the number of buckets (recommended)
 
-    Since v2.5.7, StarRocks supports automatically setting the number of buckets based on machine resources and data volume for a partition.
+    Since v2.5.7, StarRocks can automatically set the number of buckets based on machine resources and data volume for a partition.
 
     Example:
 
@@ -552,7 +549,9 @@ Buckets reflect how data files are organized in StarRocks.
 
   - Method 2: manually set the number of buckets
 
-    StarRocks 2.4 and later versions support using multiple threads to scan a tablet in parallel during a query, thereby reducing the dependency of scanning performance on the tablet count. We recommend that each tablet contain about 10 GB of raw data. If you intend to manually set the number of buckets, you can estimate the amount of data in each partition of a table and then decide the number of tablets. To enable parallel scanning on tablets, make sure the `enable_tablet_internal_parallel` parameter is set to `TRUE` globally for the entire system (`SET GLOBAL enable_tablet_internal_parallel = true;`).
+     Since v2.4.0, StarRocks support using multiple threads to scan a tablet in parallel during a query, thereby reducing the dependency of scanning performance on the tablet count. We recommend that each tablet contain about 10 GB of raw data. If you intend to manually set the number of buckets, you can estimate the amount of data in each partition of a table and then decide the number of tablets.
+
+     To enable parallel scanning on tablets, make sure the `enable_tablet_internal_parallel` parameter is set to `TRUE` globally for the entire system (`SET GLOBAL enable_tablet_internal_parallel = true;`).
 
     ```SQL
     CREATE TABLE site_access (
@@ -566,8 +565,10 @@ Buckets reflect how data files are organized in StarRocks.
     DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 30;
     ```
 
-- How to set the number of buckets when adding a partition
-
+- How to set the number of buckets when adding a new partition
+  > **NOTICE**
+  >
+  > You cannot modify the number of buckets for an existing partition.
   - Method 1: automatically set the number of buckets (Recommended)
 
     Since v2.5.7, StarRocks supports automatically setting the number of buckets based on machine resources and data volume for a partition. To enable this feature, make sure that the FE dynamic parameter `enable_auto_tablet_distribution` retains the default value `TRUE`.
@@ -578,7 +579,7 @@ Buckets reflect how data files are organized in StarRocks.
 
     You can also manually specify the bucket count when adding a new partition. To calculate the number of buckets for a new partition, you can refer to the approach used when manually setting the number of buckets at table creation, as mentioned above.
 
-      ```SQL
+    ```SQL
     -- Manually create partitions
     ALTER TABLE <table_name> 
     ADD PARTITION <partition_name>
@@ -587,8 +588,4 @@ Buckets reflect how data files are organized in StarRocks.
     -- Dynamic partitioning
     ALTER TABLE <table_name> 
     SET ("dynamic_partition.buckets"="xxx");
-      ```
-
-> **NOTICE**
->
-> You cannot modify the number of buckets for an existing partition.
+    ```
