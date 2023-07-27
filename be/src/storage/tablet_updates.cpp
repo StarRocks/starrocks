@@ -1913,7 +1913,7 @@ std::string TabletUpdates::_debug_string(bool lock, bool abbr) const {
     // num_version can be 0, if clear_meta is called after deleting this Tablet
     if (num_version == 0) {
         if (lock) _lock.unlock();
-        return Substitute("tablet:$0 <deleted>");
+        return Substitute("tablet:$0 <deleted>", _tablet.tablet_id());
     }
     apply_idx = _apply_version_idx;
     first_version = _edit_version_infos[0]->version;
@@ -1944,7 +1944,7 @@ std::string TabletUpdates::_debug_version_info(bool lock) const {
     // num_version can be 0, if clear_meta is called after deleting this Tablet
     if (num_version == 0) {
         if (lock) _lock.unlock();
-        return Substitute("tablet:$0 <deleted>");
+        return Substitute("tablet:$0 <deleted>", _tablet.tablet_id());
     }
     apply_idx = _apply_version_idx;
     first_version = _edit_version_infos[0]->version;
