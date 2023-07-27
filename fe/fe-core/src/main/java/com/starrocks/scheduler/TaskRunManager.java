@@ -80,6 +80,7 @@ public class TaskRunManager {
         TaskRunStatus status = taskRun.initStatus(queryId, System.currentTimeMillis());
         status.setPriority(option.getPriority());
         status.setMergeRedundant(option.isMergeRedundant());
+        status.setProperties(option.getTaskRunProperties());
         GlobalStateMgr.getCurrentState().getEditLog().logTaskRunCreateStatus(status);
         arrangeTaskRun(taskRun, option.isMergeRedundant());
         return new SubmitResult(queryId, SubmitResult.SubmitStatus.SUBMITTED, taskRun.getFuture());

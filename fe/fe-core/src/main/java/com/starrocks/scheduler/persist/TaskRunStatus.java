@@ -25,6 +25,7 @@ import com.starrocks.scheduler.Constants;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Map;
 
 public class TaskRunStatus implements Writable {
 
@@ -83,7 +84,11 @@ public class TaskRunStatus implements Writable {
     @SerializedName("mvExtraMessage")
     private MVTaskRunExtraMessage mvTaskRunExtraMessage = new MVTaskRunExtraMessage();
 
-    public TaskRunStatus() {}
+    @SerializedName("properties")
+    private Map<String, String> properties;
+
+    public TaskRunStatus() {
+    }
 
     public String getQueryId() {
         return queryId;
@@ -248,6 +253,14 @@ public class TaskRunStatus implements Writable {
         } else {
             // do nothing
         }
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+    public void setProperties(Map<String, String> properties) {
+        this.properties = properties;
     }
 
     public static TaskRunStatus read(DataInput in) throws IOException {
