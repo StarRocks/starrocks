@@ -224,6 +224,9 @@ public class FunctionSet {
     public static final String VARIANCE_POP = "variance_pop";
     public static final String VAR_SAMP = "var_samp";
     public static final String VARIANCE_SAMP = "variance_samp";
+    public static final String COVAR_POP = "covar_pop";
+    public static final String COVAR_SAMP = "covar_samp";
+    public static final String CORR = "corr";
     public static final String ANY_VALUE = "any_value";
     public static final String SUM_DISTINCT = "sum_distinct";
     public static final String STD = "std";
@@ -423,6 +426,15 @@ public class FunctionSet {
                     .add(Type.FLOAT)
                     .add(Type.DOUBLE)
                     .build();
+    private static final Set<Type> COVAR_ARG_TYPE =
+            ImmutableSet.<Type>builder()
+                    .add(Type.TINYINT)
+                    .add(Type.SMALLINT)
+                    .add(Type.INT)
+                    .add(Type.BIGINT)
+                    .add(Type.FLOAT)
+                    .add(Type.DOUBLE)
+                    .build();
 
     private static final Set<Type> HISTOGRAM_TYPE =
             ImmutableSet.<Type>builder()
@@ -547,6 +559,13 @@ public class FunctionSet {
             .add(FunctionSet.STDDEV_POP)
             .add(FunctionSet.STDDEV_SAMP)
             .add(FunctionSet.STDDEV_VAL).build();
+
+    public static final Set<String> STATISTIC_FUNCTIONS = ImmutableSet.<String>builder()
+            .addAll(varianceFunctions)
+            .add(FunctionSet.COVAR_POP)
+            .add(FunctionSet.COVAR_SAMP)
+            .add(FunctionSet.CORR)
+            .build();
 
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();
@@ -872,6 +891,18 @@ public class FunctionSet {
                         Lists.newArrayList(t), Type.DOUBLE, Type.VARCHAR,
                         false, true, false));
             }
+
+            if(COVAR_ARG_TYPE.contains(t)){
+                addBuiltin(AggregateFunction.createBuiltin(COVAR_POP,
+                        Lists.newArrayList(t, t), Type.DOUBLE, Type.VARCHAR,
+                        false, true, false));
+                addBuiltin(AggregateFunction.createBuiltin(COVAR_SAMP,
+                        Lists.newArrayList(t, t), Type.DOUBLE, Type.VARCHAR,
+                        false, true, false));
+                addBuiltin(AggregateFunction.createBuiltin(CORR,
+                        Lists.newArrayList(t, t), Type.DOUBLE, Type.VARCHAR,
+                        false, true, false));
+            }
         }
 
         // Sum
@@ -1149,7 +1180,7 @@ public class FunctionSet {
                     false, false, false));
         }
     }
-
+    
     public List<Function> getBuiltinFunctions() {
         List<Function> builtinFunctions = Lists.newArrayList();
         for (Map.Entry<String, List<Function>> entry : vectorizedFunctions.entrySet()) {
