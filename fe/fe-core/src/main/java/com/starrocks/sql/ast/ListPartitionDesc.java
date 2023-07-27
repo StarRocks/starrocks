@@ -135,9 +135,9 @@ public class ListPartitionDesc extends PartitionDesc {
     }
 
     public void checkPartitionColPos(List<ColumnDef> columnDefs) {
-        for (int i = 0; i < columnDefs.size(); i++) {
+        for (int i = 0; i < columnDefs.size() - partitionColNames.size(); i++) {
             String colName = columnDefs.get(i).getName();
-            if (partitionColNames.contains(colName) && i < columnDefs.size() - partitionColNames.size()) {
+            if (partitionColNames.contains(colName)) {
                 throw new SemanticException("Partition columns must be at the end of column defs");
             }
         }
