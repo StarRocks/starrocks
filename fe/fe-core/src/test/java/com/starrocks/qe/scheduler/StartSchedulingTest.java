@@ -53,7 +53,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.utframe.MockedBackend.MockPBackendService;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -202,7 +201,7 @@ public class StartSchedulingTest extends SchedulerTestBase {
             request.setBackend_num(execution.getIndexInJob());
             request.setDone(true);
             request.setStatus(new TStatus(TStatusCode.CANCELLED));
-            request.setFragment_instance_id(execution.getFragmentInstanceId());
+            request.setFragment_instance_id(execution.getInstanceId());
 
             scheduler.updateFragmentExecStatus(request);
         });
@@ -320,12 +319,12 @@ public class StartSchedulingTest extends SchedulerTestBase {
         Assert.assertEquals(numSuccessCancelledInstances, successCancelledInstanceIds.size());
         // Receive execution reports from the successfully cancelled instances.
         scheduler.getBackendExecutions().forEach(execution -> {
-            if (successCancelledInstanceIds.contains(execution.getFragmentInstanceId())) {
+            if (successCancelledInstanceIds.contains(execution.getInstanceId())) {
                 TReportExecStatusParams request = new TReportExecStatusParams(FrontendServiceVersion.V1);
                 request.setBackend_num(execution.getIndexInJob());
                 request.setDone(true);
                 request.setStatus(new TStatus(TStatusCode.CANCELLED));
-                request.setFragment_instance_id(execution.getFragmentInstanceId());
+                request.setFragment_instance_id(execution.getInstanceId());
 
                 scheduler.updateFragmentExecStatus(request);
             }

@@ -1210,7 +1210,7 @@ public class DefaultCoordinator extends Coordinator {
             // because the profile report will not arrive anymore for the finished or non-deployed execution.
             if (!execution.cancelFragmentInstance(cancelReason) &&
                     (!execution.hasBeenDeployed() || execution.isFinished())) {
-                profileDoneSignal.markedCountDown(execution.getFragmentInstanceId(), -1L);
+                profileDoneSignal.markedCountDown(execution.getInstanceId(), -1L);
             }
         }
 

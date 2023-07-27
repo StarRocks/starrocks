@@ -152,7 +152,7 @@ public class JoinTest extends SchedulerTestBase {
                 request.setBackend_num(indexInJob)
                         .setDone(true)
                         .setStatus(new TStatus(TStatusCode.OK))
-                        .setFragment_instance_id(execution.getFragmentInstanceId());
+                        .setFragment_instance_id(execution.getInstanceId());
 
                 String deltaUrl = "delta_url-" + indexInJob + "-" + finalIndex;
                 request.setDelta_urls(Collections.singletonList(deltaUrl));

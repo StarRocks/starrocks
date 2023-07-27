@@ -70,7 +70,7 @@ public class ExecutionFragmentInstance {
 
     private final JobSpec jobSpec;
     private final PlanFragmentId fragmentId;
-    private final TUniqueId fragmentInstanceId;
+    private final TUniqueId instanceId;
     private final int indexInJob;
 
     /**
@@ -118,7 +118,7 @@ public class ExecutionFragmentInstance {
 
     private ExecutionFragmentInstance(JobSpec jobSpec,
                                       PlanFragmentId fragmentId,
-                                      TUniqueId fragmentInstanceId,
+                                      TUniqueId instanceId,
                                       int indexInJob,
                                       TExecPlanFragmentParams requestToDeploy,
                                       int profileFragmentId,
@@ -128,7 +128,7 @@ public class ExecutionFragmentInstance {
                                       long lastMissingHeartbeatTime) {
         this.jobSpec = jobSpec;
         this.fragmentId = fragmentId;
-        this.fragmentInstanceId = fragmentInstanceId;
+        this.instanceId = instanceId;
         this.indexInJob = indexInJob;
 
         this.requestToDeploy = requestToDeploy;
@@ -290,7 +290,7 @@ public class ExecutionFragmentInstance {
         if (LOG.isDebugEnabled()) {
             LOG.debug(
                     "cancelRemoteFragments state={}  backend: {}, fragment instance id={}, reason: {}",
-                    state, worker.getId(), DebugUtil.printId(fragmentInstanceId), cancelReason.name());
+                    state, worker.getId(), DebugUtil.printId(instanceId), cancelReason.name());
         }
 
         switch (state) {
@@ -308,7 +308,7 @@ public class ExecutionFragmentInstance {
         TNetworkAddress brpcAddress = worker.getBrpcAddress();
         try {
             BackendServiceClient.getInstance().cancelPlanFragmentAsync(brpcAddress,
-                    jobSpec.getQueryId(), fragmentInstanceId, cancelReason,
+                    jobSpec.getQueryId(), instanceId, cancelReason,
                     jobSpec.isEnablePipeline());
         } catch (RpcException e) {
             LOG.warn("cancel plan fragment get a exception, address={}:{}", brpcAddress.getHostname(), brpcAddress.getPort(), e);
@@ -331,8 +331,8 @@ public class ExecutionFragmentInstance {
         return fragmentId;
     }
 
-    public TUniqueId getFragmentInstanceId() {
-        return fragmentInstanceId;
+    public TUniqueId getInstanceId() {
+        return instanceId;
     }
 
     public Integer getIndexInJob() {
@@ -380,7 +380,7 @@ public class ExecutionFragmentInstance {
 
     public QueryStatisticsItem.FragmentInstanceInfo buildFragmentInstanceInfo() {
         return new QueryStatisticsItem.FragmentInstanceInfo.Builder()
-                .instanceId(fragmentInstanceId)
+                .instanceId(instanceId)
                 .fragmentId(String.valueOf(fragmentId))
                 .address(address)
                 .build();

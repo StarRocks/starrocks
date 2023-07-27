@@ -224,7 +224,7 @@ public class GetNextTest extends SchedulerTestBase {
             request.setBackend_num(execution.getIndexInJob());
             request.setDone(true);
             request.setStatus(new TStatus(TStatusCode.CANCELLED));
-            request.setFragment_instance_id(execution.getFragmentInstanceId());
+            request.setFragment_instance_id(execution.getInstanceId());
 
             scheduler.updateFragmentExecStatus(request);
         });
@@ -255,7 +255,7 @@ public class GetNextTest extends SchedulerTestBase {
             request.setBackend_num(execution.getIndexInJob());
             request.setDone(true);
             request.setStatus(new TStatus(TStatusCode.CANCELLED));
-            request.setFragment_instance_id(execution.getFragmentInstanceId());
+            request.setFragment_instance_id(execution.getInstanceId());
 
             scheduler.updateFragmentExecStatus(request);
         });
