@@ -108,6 +108,8 @@ public:
 private:
     Status _load_upserts(Rowset* rowset, uint32_t upsert_id);
 
+    void _release_upserts(uint32_t upsert_id);
+
     Status _do_load(Tablet* tablet, Rowset* rowset);
 
     // finalize decide the `ColumnPartialUpdateState` after conflict resolve
