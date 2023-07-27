@@ -18,6 +18,7 @@
 
 #include "column/chunk.h"
 #include "common/statusor.h"
+#include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/source_operator.h"
@@ -219,6 +220,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
         if (ScanOperator* scan = source_scan_operator()) {
             scan->end_driver_process(this);
         }
+
         _update_statistics(total_chunks_moved, total_rows_moved, time_spent);
     });
 
@@ -255,6 +257,10 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 if (curr_op->is_finished()) {
                     if (i == 0) {
                         // For source operators
+                        // We rely on the exchange operator to pass query statistics,
+                        // so when the scan operator finishes,
+                        // we need to update the scan stats immediately to ensure that the exchange operator can send all the data before the end
+                        _update_scan_statistics();
                         RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));
                     }
                     _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, nullptr);
@@ -338,6 +344,10 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                     // TODO: need add control flag
                     if (i == 0) {
                         // For source operators
+                        // We rely on the exchange operator to pass query statistics,
+                        // so when the scan operator finishes,
+                        // we need to update the scan stats immediately to ensure that the exchange operator can send all the data before the end
+                        _update_scan_statistics();
                         RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));
                     }
                     _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, nullptr);
@@ -730,10 +740,7 @@ void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_
     _update_driver_acct(total_chunks_moved, total_rows_moved, time_spent);
 
     // Update statistics of scan operator
-    if (ScanOperator* scan = source_scan_operator()) {
-        query_ctx()->incr_cur_scan_rows_num(scan->get_last_scan_rows_num());
-        query_ctx()->incr_cur_scan_bytes(scan->get_last_scan_bytes());
-    }
+    _update_scan_statistics();
 
     // Update cpu cost of this query
     int64_t runtime_ns = driver_acct().get_last_time_spent();
@@ -741,6 +748,19 @@ void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_
     int64_t sink_operator_last_cpu_time_ns = sink_operator()->get_last_growth_cpu_time_ns();
     int64_t accounted_cpu_cost = runtime_ns + source_operator_last_cpu_time_ns + sink_operator_last_cpu_time_ns;
     query_ctx()->incr_cpu_cost(accounted_cpu_cost);
+}
+
+void PipelineDriver::_update_scan_statistics() {
+    if (ScanOperator* scan = source_scan_operator()) {
+        int64_t scan_rows = scan->get_last_scan_rows_num();
+        int64_t scan_bytes = scan->get_last_scan_bytes();
+        int64_t table_id = scan->get_scan_table_id();
+        if (scan_rows > 0 || scan_bytes > 0) {
+            query_ctx()->incr_cur_scan_rows_num(scan_rows);
+            query_ctx()->incr_cur_scan_bytes(scan_bytes);
+            query_ctx()->update_scan_stats(table_id, scan_rows, scan_bytes);
+        }
+    }
 }
 
 void PipelineDriver::increment_schedule_times() {
