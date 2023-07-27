@@ -177,15 +177,9 @@ GROUP BY order_id;
   - 在 2.5.5 版本后，StarRocks 可以周期性刷新经常访问的 Hive 外部数据目录的元数据缓存，达到感知数据更新的效果。您可以通过以下 FE 动态参数配置 Hive 元数据缓存周期性刷新：
 
   <style>
-  table th:first-of-type {
-    width: 30%;
-  }
-  table th:nth-of-type(2) {
-      width: 20%;
-  }
-  table th:nth-of-type(3) {
-      width: 50%;
-  }
+  table th:first-of-type {width: 20%;}
+  table th:nth-of-type(2) {width: 30%;}
+  table th:nth-of-type(3) {width: 50%;}
   </style>
 
     | 配置名称                                                      | 默认值                        | 说明                                  |
