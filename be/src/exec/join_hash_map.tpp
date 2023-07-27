@@ -812,6 +812,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_remain(RuntimeState* stat
     if (state->query_options().experimental_interleaving > 0) {                 \
         if constexpr (first_probe) {                                            \
             auto group_size = state->query_options().experimental_interleaving; \
+            _probe_state->cur_probe_index = 0;                                  \
             _probe_state->handles.clear();                                      \
             for (int i = 0; i < group_size; ++i) {                              \
                 _probe_state->handles.insert(X(state, build_data, data));       \
@@ -1155,8 +1156,6 @@ HashTableProbeState::ProbeCoroutine JoinHashMap<LT, BuildFunc, ProbeFunc>::_prob
         CHECK_ALL_MATCH()
         REORDER_PROBE_INDEX()
     }
-    std::cout << fmt::format("rows = {}, match = {}", _probe_state->probe_row_count, _probe_state->match_count)
-              << std::endl;
     PROBE_OVER()
 }
 
