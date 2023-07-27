@@ -294,7 +294,7 @@ minReplicas: 1 # The minimum number of CNs is set to 1.
 
 ## FAQ
 
-**Issue description:** When a custom resource StarRocksCluster is installed using `kubectl apply -f xxx`, an error is returned `The CustomResourceDefinition 'starrocksclusters.starrocks.com' is invalid: metadata.annotations: Too long: must have at most 262144 bytes`. 
+**Issue description:** When a custom resource StarRocksCluster is installed using `kubectl apply -f xxx`, an error is returned `The CustomResourceDefinition 'starrocksclusters.starrocks.com' is invalid: metadata.annotations: Too long: must have at most 262144 bytes`.
 
 **Cause analysis:** Whenever `kubectl apply -f xxx` is used to create or update resources, a metadata annotation `kubectl.kubernetes.io/last-applied-configuration` is added. This metadata annotation is in JSON format and records the *last-applied-configuration*. `kubectl apply -f xxx`" is suitable for most cases, but in rare situations , such as when the configuration file for the custom resource is too large, it may cause the size of the metadata annotation to exceed the limit.
 
