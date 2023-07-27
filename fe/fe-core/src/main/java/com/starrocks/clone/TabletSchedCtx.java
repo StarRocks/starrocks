@@ -168,6 +168,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
     private LocalTablet tablet = null;
     private long visibleVersion = -1;
+    private long visibleTxnId = -1;
     private long committedVersion = -1;
 
     private Replica srcReplica = null;
@@ -348,9 +349,13 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     }
 
     public void setVersionInfo(long visibleVersion,
-                               long committedVersion) {
+                               long committedVersion, long visibleTxnId) {
         this.visibleVersion = visibleVersion;
-        this.committedVersion = committedVersion;
+        this.visibleTxnId = visibleTxnId;
+    }
+
+    public long getVisibleTxnId() {
+        return visibleTxnId;
     }
 
     public void setDest(Long destBeId, long destPathHash) {
@@ -583,13 +588,14 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
      * 1. replica's last failed version > 0
      * 2. better to choose a replica which has a lower last failed version
      * 3. best to choose a replica if its last success version > last failed version
-     * 4. if these is replica which need further repair, choose that replica.
+     * 4. if there is replica which need further repair, choose that replica.
      *
      * database lock should be held.
      */
-    public void chooseDestReplicaForVersionIncomplete(Map<Long, PathSlot> backendsWorkingSlots)
+    public boolean chooseDestReplicaForVersionIncomplete(Map<Long, PathSlot> backendsWorkingSlots)
             throws SchedException {
         Replica chosenReplica = null;
+        boolean needFurtherRepair = false;
         for (Replica replica : tablet.getReplicas()) {
             if (replica.isBad()) {
                 continue;
@@ -609,6 +615,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
             if (replica.needFurtherRepair()) {
                 chosenReplica = replica;
+                needFurtherRepair = true;
                 break;
             }
 
@@ -624,7 +631,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         }
 
         if (chosenReplica == null) {
-            throw new SchedException(Status.UNRECOVERABLE, "unable to choose dest replica");
+            throw new SchedException(Status.UNRECOVERABLE, "unable to choose dest replica(maybe no incomplete replica");
         }
 
         // check if the dest replica has available slot
@@ -640,6 +647,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         }
 
         setDest(chosenReplica.getBackendId(), chosenReplica.getPathHash());
+
+        return needFurtherRepair;
     }
 
     public void releaseResource(TabletScheduler tabletScheduler) {

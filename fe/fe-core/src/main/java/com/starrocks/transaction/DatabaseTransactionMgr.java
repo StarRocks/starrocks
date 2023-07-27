@@ -1439,7 +1439,7 @@ public class DatabaseTransactionMgr {
                 }
                 long version = partitionCommitInfo.getVersion();
                 long versionTime = partitionCommitInfo.getVersionTime();
-                partition.updateVisibleVersion(version, versionTime);
+                partition.updateVisibleVersion(version, versionTime, transactionState.getTransactionId());
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("transaction state {} set partition {}'s version to [{}]",
                             transactionState, partition.getId(), version);
