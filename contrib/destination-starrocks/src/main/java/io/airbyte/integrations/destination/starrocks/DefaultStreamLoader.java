@@ -104,13 +104,11 @@ public class DefaultStreamLoader implements StreamLoader {
         }
 
         String sendUrl = String.format("%s://%s:%d%s", scheme, host, port, loadUrlPath);
-        LOG.info("Stream Load URL : {}", sendUrl);
-
         String label = StreamLoadUtils.label(loadTable);
         HttpPut httpPut = new HttpPut(sendUrl);
 
         httpPut.setEntity(new StreamLoadEntity(records));
-        httpPut.setHeaders(defaultHeaders);;
+        httpPut.setHeaders(defaultHeaders);
         httpPut.addHeader("label", label);
 
         LOG.info("Stream loading, label : {}, database : {}, table : {}, request : {}",
