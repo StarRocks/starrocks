@@ -290,7 +290,6 @@ public class StartSchedulingTest extends SchedulerTestBase {
         }
     }
 
-
     @Test
     public void testCancelThrowErrors() throws Exception {
         Set<TUniqueId> successCancelledInstanceIds = Sets.newHashSet();
@@ -331,6 +330,10 @@ public class StartSchedulingTest extends SchedulerTestBase {
         });
         // Shouldn't block by the failed cancelled instance.
         Assert.assertTrue(scheduler.isDone());
+
+        Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() ->
+                !SimpleScheduler.isInBlacklist(BACKEND1_ID) && !SimpleScheduler.isInBlacklist(backend2.getId()) &&
+                        !SimpleScheduler.isInBlacklist(backend3.getId()));
     }
 
     private static Future<PExecPlanFragmentResult> mockFutureWithException(Exception exception) {
