@@ -523,7 +523,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     RETURN_IF_ERROR(scanner->init(state, scanner_params));
     Status st = scanner->open(state);
     if (!st.ok()) {
-        if (typeid(*scanner) == typeid(JniScanner)) {
+        if (scanner->is_jni_scanner()) {
             return st;
         }
 
