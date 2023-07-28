@@ -735,7 +735,8 @@ std::shared_ptr<ExchangeSinkOperatorFactory> _create_exchange_sink_operator(Pipe
     auto exchange_sink = std::make_shared<ExchangeSinkOperatorFactory>(
             context->next_operator_id(), stream_sink.dest_node_id, sink_buffer, sender->get_partition_type(),
             sender->destinations(), is_pipeline_level_shuffle, dest_dop, sender->sender_id(),
-            sender->get_dest_node_id(), sender->get_partition_exprs(), sender->get_enable_exchange_pass_through(),
+            sender->get_dest_node_id(), sender->get_partition_exprs(),
+            !is_dest_merge && sender->get_enable_exchange_pass_through(),
             sender->get_enable_exchange_perf() && !context->has_aggregation, fragment_ctx, sender->output_columns());
     return exchange_sink;
 }
