@@ -18,6 +18,7 @@ import org.apache.paimon.types.ArrayType;
 import org.apache.paimon.types.BigIntType;
 import org.apache.paimon.types.BinaryType;
 import org.apache.paimon.types.BooleanType;
+import org.apache.paimon.types.CharType;
 import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.DataTypeDefaultVisitor;
 import org.apache.paimon.types.DateType;
@@ -29,6 +30,7 @@ import org.apache.paimon.types.MapType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.SmallIntType;
 import org.apache.paimon.types.TimestampType;
+import org.apache.paimon.types.TinyIntType;
 import org.apache.paimon.types.VarCharType;
 
 import java.util.stream.Collectors;
@@ -45,6 +47,10 @@ public class PaimonTypeUtils {
 
         private static final PaimonToHiveTypeVisitor INSTANCE = new PaimonToHiveTypeVisitor();
 
+        public String visit(CharType charType) {
+            return "string";
+        }
+
         public String visit(VarCharType varCharType) {
             return "string";
         }
@@ -59,6 +65,10 @@ public class PaimonTypeUtils {
 
         public String visit(DecimalType decimalType) {
             return String.format("decimal(%d,%d)", decimalType.getPrecision(), decimalType.getScale());
+        }
+
+        public String visit(TinyIntType tinyIntType) {
+            return "tinyint";
         }
 
         public String visit(SmallIntType smallIntType) {
@@ -107,7 +117,7 @@ public class PaimonTypeUtils {
 
         @Override
         protected String defaultMethod(DataType dataType) {
-            return "unsupported_type";
+            return dataType.getTypeRoot().name();
         }
     }
 }
