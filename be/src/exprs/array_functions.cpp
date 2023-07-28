@@ -1709,4 +1709,223 @@ StatusOr<ColumnPtr> ArrayFunctions::array_slice(FunctionContext* ctx, const Colu
     }
 }
 
+<<<<<<< HEAD
+=======
+// unpack array column, return: null_column, element_column, offset_column
+static inline std::tuple<NullColumnPtr, Column*, const UInt32Column*> unpack_array_column(const ColumnPtr& input) {
+    NullColumnPtr array_null = nullptr;
+    ArrayColumn* array_col = nullptr;
+
+    auto array = ColumnHelper::unpack_and_duplicate_const_column(input->size(), input);
+    if (array->is_nullable()) {
+        auto nullable = down_cast<NullableColumn*>(array.get());
+        array_col = down_cast<ArrayColumn*>(nullable->data_column().get());
+        array_null = NullColumn::create(*nullable->null_column());
+    } else {
+        array_null = NullColumn::create(input->size(), 0);
+        array_col = down_cast<ArrayColumn*>(array.get());
+    }
+
+    const UInt32Column* offsets = &array_col->offsets();
+    Column* elements = array_col->elements_column().get();
+
+    return {array_null, elements, offsets};
+}
+
+StatusOr<ColumnPtr> ArrayFunctions::array_distinct_any_type(FunctionContext* ctx, const Columns& columns) {
+    DCHECK_EQ(1, columns.size());
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    auto [array_null, elements, offsets] = unpack_array_column(columns[0]);
+    auto* offsets_ptr = offsets->get_data().data();
+    auto* row_nulls = array_null->get_data().data();
+
+    auto result_elements = elements->clone_empty();
+    auto result_offsets = UInt32Column::create();
+    result_offsets->reserve(offsets->size());
+    result_offsets->append(0);
+
+    phmap::flat_hash_set<uint32_t> sets;
+
+    uint32_t hash[elements->size()];
+    memset(hash, 0, elements->size() * sizeof(uint32_t));
+    elements->fnv_hash(hash, 0, elements->size());
+
+    size_t rows = columns[0]->size();
+    for (auto i = 0; i < rows; i++) {
+        size_t offset = offsets_ptr[i];
+        int64_t array_size = offsets_ptr[i + 1] - offsets_ptr[i];
+
+        if (row_nulls[i] == 1) {
+            // append offsets directly
+        } else if (array_size <= 1) {
+            for (size_t j = 0; j < array_size; j++) {
+                result_elements->append(*elements, offset + j, 1);
+            }
+        } else {
+            // put first
+            result_elements->append(*elements, offset, 1);
+
+            sets.clear();
+            sets.emplace(hash[offset]);
+
+            for (size_t j = 1; j < array_size; j++) {
+                auto elements_idx = offset + j;
+                // hash check
+                if (!sets.contains(hash[elements_idx])) {
+                    result_elements->append(*elements, elements_idx, 1);
+                    sets.emplace(hash[elements_idx]);
+                    continue;
+                }
+
+                // find same hash
+                bool is_contains = false;
+                for (size_t k = offset; k < elements_idx; k++) {
+                    if (hash[k] == hash[elements_idx] && elements->equals(k, *elements, elements_idx)) {
+                        is_contains = true;
+                        break;
+                    }
+                }
+
+                if (!is_contains) {
+                    result_elements->append(*elements, elements_idx, 1);
+                }
+            }
+        }
+
+        result_offsets->append(result_elements->size());
+    }
+
+    return NullableColumn::create(ArrayColumn::create(std::move(result_elements), result_offsets), array_null);
+}
+
+StatusOr<ColumnPtr> ArrayFunctions::array_reverse_any_types(FunctionContext* ctx, const Columns& columns) {
+    DCHECK_EQ(1, columns.size());
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    auto [array_null, elements, offsets] = unpack_array_column(columns[0]);
+    auto* offsets_ptr = offsets->get_data().data();
+    auto* row_nulls = array_null->get_data().data();
+
+    auto result_elements = elements->clone_empty();
+    auto result_offsets = UInt32Column::create();
+    result_offsets->reserve(offsets->size());
+    result_offsets->append(0);
+
+    size_t rows = columns[0]->size();
+    for (auto i = 0; i < rows; i++) {
+        size_t offset = offsets_ptr[i];
+        int64_t array_size = offsets_ptr[i + 1] - offsets_ptr[i];
+
+        if (row_nulls[i] == 0) {
+            for (int64_t j = array_size - 1; j >= 0; j--) {
+                result_elements->append(*elements, offset + j, 1);
+            }
+        }
+
+        result_offsets->append(result_elements->size());
+    }
+
+    return NullableColumn::create(ArrayColumn::create(std::move(result_elements), std::move(result_offsets)),
+                                  array_null);
+}
+
+inline static void nestloop_intersect(uint8_t* hits, const Column* base, size_t base_start, size_t base_end,
+                                      const Column* cmp, size_t cmp_start, size_t cmp_end) {
+    for (size_t base_ele_idx = base_start; base_ele_idx < base_end; base_ele_idx++) {
+        if (hits[base_ele_idx] == 0) {
+            continue;
+        }
+
+        size_t cmp_idx = cmp_start;
+        for (; cmp_idx < cmp_end; cmp_idx++) {
+            if (base->equals(base_ele_idx, *cmp, cmp_idx)) {
+                break;
+            }
+        }
+
+        if (cmp_idx >= cmp_end) {
+            hits[base_ele_idx] = 0;
+        }
+    }
+}
+
+StatusOr<ColumnPtr> ArrayFunctions::array_intersect_any_type(FunctionContext* ctx, const Columns& columns) {
+    DCHECK_LE(1, columns.size());
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    size_t rows = columns[0]->size();
+    size_t usage = columns[0]->memory_usage();
+    ColumnPtr base_col = columns[0];
+    int base_idx = 0;
+
+    auto nulls = NullColumn::create(rows, 0);
+    // find minimum column
+    for (size_t i = 0; i < columns.size(); i++) {
+        if (columns[i]->memory_usage() < usage) {
+            base_col = columns[i];
+            base_idx = i;
+            usage = columns[i]->memory_usage();
+        }
+
+        FunctionHelper::union_produce_nullable_column(columns[i], &nulls);
+    }
+
+    // do distinct first
+    auto distinct_col = array_distinct_any_type(ctx, {base_col});
+    DCHECK(distinct_col.ok());
+
+    auto* dis_array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(distinct_col.value().get()));
+
+    auto& base_elements = dis_array_col->elements_column();
+    auto* base_offsets = &dis_array_col->offsets();
+    auto* base_offsets_ptr = base_offsets->get_data().data();
+    auto* nulls_ptr = nulls->get_data().data();
+
+    Filter filter;
+    filter.resize(base_elements->size(), 1);
+    auto* hits = filter.data();
+
+    // mark intersect filter
+    for (size_t col_idx = 0; col_idx < columns.size(); col_idx++) {
+        if (col_idx == base_idx) {
+            continue;
+        }
+
+        auto [_2, cmp_elements, cmp_offsets] = unpack_array_column(columns[col_idx]);
+        auto* cmp_offsets_ptr = cmp_offsets->get_data().data();
+
+        for (size_t row_idx = 0; row_idx < rows; row_idx++) {
+            if (nulls_ptr[row_idx] == 1) {
+                continue;
+            }
+
+            size_t base_start = base_offsets_ptr[row_idx];
+            size_t base_end = base_offsets_ptr[row_idx + 1];
+
+            size_t cmp_start = cmp_offsets_ptr[row_idx];
+            size_t cmp_end = cmp_offsets_ptr[row_idx + 1];
+
+            nestloop_intersect(hits, base_elements.get(), base_start, base_end, cmp_elements, cmp_start, cmp_end);
+        }
+    }
+
+    // result column
+    auto result_offsets = UInt32Column::create();
+    base_elements->filter(filter);
+
+    result_offsets->append(0);
+    uint32_t pre_offset = 0;
+    for (size_t row_idx = 0; row_idx < rows; row_idx++) {
+        size_t base_start = base_offsets_ptr[row_idx];
+        size_t size = base_offsets_ptr[row_idx + 1] - base_start;
+
+        auto count = SIMD::count_nonzero(hits + base_start, size);
+        pre_offset += count;
+        result_offsets->append(pre_offset);
+    }
+
+    return NullableColumn::create(ArrayColumn::create(base_elements, result_offsets), nulls);
+}
+>>>>>>> d7e8f8d9cb ([Enhancement] Fix wrong dcheck of array_intersect (#28183))
 } // namespace starrocks
