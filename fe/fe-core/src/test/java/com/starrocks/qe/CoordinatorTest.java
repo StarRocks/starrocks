@@ -87,13 +87,13 @@ public class CoordinatorTest extends PlanTestBase {
 
     private void testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode mode) throws IOException {
         PlanFragment fragment = genFragment();
-        CoordinatorPreprocessor.FragmentExecParams params = coordinatorPreprocessor.new FragmentExecParams(fragment);
-        CoordinatorPreprocessor.FInstanceExecParam instance0 =
-                new CoordinatorPreprocessor.FInstanceExecParam(null, null, params);
-        CoordinatorPreprocessor.FInstanceExecParam instance1 =
-                new CoordinatorPreprocessor.FInstanceExecParam(null, null, params);
-        CoordinatorPreprocessor.FInstanceExecParam instance2 =
-                new CoordinatorPreprocessor.FInstanceExecParam(null, null, params);
+        CoordinatorPreprocessor.ExecutionFragment params = coordinatorPreprocessor.new ExecutionFragment(fragment);
+        CoordinatorPreprocessor.FragmentInstance instance0 =
+                new CoordinatorPreprocessor.FragmentInstance(null, null, params);
+        CoordinatorPreprocessor.FragmentInstance instance1 =
+                new CoordinatorPreprocessor.FragmentInstance(null, null, params);
+        CoordinatorPreprocessor.FragmentInstance instance2 =
+                new CoordinatorPreprocessor.FragmentInstance(null, null, params);
         instance0.bucketSeqToDriverSeq = ImmutableMap.of(2, -1, 0, -1);
         instance1.bucketSeqToDriverSeq = ImmutableMap.of(1, -1, 4, -1);
         instance2.bucketSeqToDriverSeq = ImmutableMap.of(3, -1, 5, -1);
@@ -138,8 +138,8 @@ public class CoordinatorTest extends PlanTestBase {
                                                              List<Map<Integer, Integer>> expectedBucketSeqToDriverSeqs,
                                                              List<Integer> expectedNumScanRangesList,
                                                              List<Map<Integer, Integer>> expectedDriverSeq2NumScanRangesList) {
-        CoordinatorPreprocessor.FragmentExecParams params =
-                coordinatorPreprocessor.new FragmentExecParams(genFragment());
+        CoordinatorPreprocessor.ExecutionFragment params =
+                coordinatorPreprocessor.new ExecutionFragment(genFragment());
         BucketSeqToScanRange bucketSeqToScanRange = new BucketSeqToScanRange();
         for (Integer bucketSeq : bucketSeqToWorkerId.keySet()) {
             bucketSeqToScanRange.put(bucketSeq, createScanId2scanRanges(scanId, 1));
@@ -147,11 +147,11 @@ public class CoordinatorTest extends PlanTestBase {
 
         coordinatorPreprocessor.computeColocatedJoinInstanceParam(bucketSeqToWorkerId, bucketSeqToScanRange,
                 parallelExecInstanceNum, pipelineDop, enablePipeline, params);
-        params.instanceExecParams.sort(Comparator.comparing(CoordinatorPreprocessor.FInstanceExecParam::getWorkerId));
+        params.instanceExecParams.sort(Comparator.comparing(CoordinatorPreprocessor.FragmentInstance::getWorkerId));
 
         Assert.assertEquals(expectedInstances, params.instanceExecParams.size());
         for (int i = 0; i < expectedInstances; ++i) {
-            CoordinatorPreprocessor.FInstanceExecParam param = params.instanceExecParams.get(i);
+            CoordinatorPreprocessor.FragmentInstance param = params.instanceExecParams.get(i);
             Assert.assertEquals(expectedParamAddresses.get(i), param.getWorkerId());
             Assert.assertEquals(expectedPipelineDops.get(i).intValue(), param.getPipelineDop());
 
@@ -518,15 +518,15 @@ public class CoordinatorTest extends PlanTestBase {
         prepare.computeFragmentExecParams();
 
         // Assert
-        Map<PlanFragmentId, CoordinatorPreprocessor.FragmentExecParams> fragmentParams =
-                prepare.getFragmentExecParamsMap();
+        Map<PlanFragmentId, CoordinatorPreprocessor.ExecutionFragment> fragmentParams =
+                prepare.getExecFragmentMap();
         fragmentParams.forEach((k, v) -> {
             System.err.println("Fragment " + k + " : " + v);
         });
         Assert.assertTrue(fragmentParams.containsKey(fragmentId));
-        CoordinatorPreprocessor.FragmentExecParams fragmentParam = fragmentParams.get(fragmentId);
+        CoordinatorPreprocessor.ExecutionFragment fragmentParam = fragmentParams.get(fragmentId);
         FragmentScanRangeAssignment scanRangeAssignment = fragmentParam.scanRangeAssignment;
-        List<CoordinatorPreprocessor.FInstanceExecParam> instances = fragmentParam.instanceExecParams;
+        List<CoordinatorPreprocessor.FragmentInstance> instances = fragmentParam.instanceExecParams;
         Assert.assertFalse(fragmentParams.isEmpty());
         Assert.assertEquals(1, scanRangeAssignment.size());
         Assert.assertEquals(1, instances.size());
