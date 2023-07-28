@@ -98,9 +98,19 @@ This feature is supported since StarRocks v3.0.
 
 The following fields are provided in `load_tracking_logs`:
 
+<<<<<<< HEAD
 | **Field**        | **Description**                                              |
 | ---------------- | ------------------------------------------------------------ |
 | JOB_ID           | The ID of the load job.                                      |
 | LABEL            | The label of the load job.                                   |
 | DATABASE_NAME    | The database that the load job belongs to.                   |
 | TRACKING_LOG     | Error logs (if any) of the load job.                         |
+=======
+| **Field**     | **Description**                                                                       |
+|---------------|---------------------------------------------------------------------------------------|
+| JOB_ID        | The ID of the load job.                                                               |
+| LABEL         | The label of the load job.                                                            |
+| DATABASE_NAME | The database that the load job belongs to.                                            |
+| TRACKING_LOG  | Error logs (if any) of the load job.                                                  |
+| Type          | The type of the load job. Valid values: BROKER, INSERT, ROUTINE_LOAD and STREAM_LOAD. |
+>>>>>>> 1dac17d612 ([Doc] Update System_variable.md (#28124))
