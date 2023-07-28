@@ -1,344 +1,23 @@
--- name: test_next_day
-CREATE TABLE `next_day_test` (
-  `d1` DATE,
-  `d2` DATETIME
-)
-DISTRIBUTED BY HASH(`d1`)
-PROPERTIES(
-  "replication_num" = "1"
-);
+-- name: test_dayofweek_iso
+select dayofweek_iso("2023-01-01");
 -- result:
+7
 -- !result
-INSERT INTO `next_day_test`(d1, d2)
-VALUES ('2023-04-01', '2023-04-01 20:13:14'),
-       ('2023-04-02', '2023-04-02 20:13:14'),
-       ('2023-04-03', '2023-04-03 20:13:14'),
-       ('2023-04-04', '2023-04-04 20:13:14'),
-       ('2023-04-05', '2023-04-05 20:13:14'),
-       ('2023-04-06', '2023-04-06 20:13:14'),
-       ('2023-04-07', '2023-04-07 20:13:14'),
-       ('2023-02-27', '2023-02-27 20:13:14'),
-       ('2023-02-28', '2023-02-28 20:13:14'),
-       ('2024-02-27', '2024-02-27 20:13:14'),
-       ('2024-02-28', '2024-02-28 20:13:14'),
-       ('2024-02-29', '2024-02-29 20:13:14');
+select dayofweek_iso("2023-01-02");
 -- result:
+1
 -- !result
-CREATE TABLE IF NOT EXISTS `dow_test` (
-  `d3` DATE,
-  `dow_2` CHAR(20),
-  `dow_3` VARCHAR(30),
-  `dow_full` STRING
-)
-DISTRIBUTED BY HASH(`d3`)
-PROPERTIES(
-  "replication_num" = "1"
-);
+select dayofweek_iso("2023-01-03");
 -- result:
+2
 -- !result
-INSERT INTO `dow_test`(d3, dow_2, dow_3, dow_full)
-VALUES ('2023-04-01', 'Mo', 'Mon', 'Monday'),
-       ('2023-04-02', 'Tu', 'Tue', 'Tuesday'),
-       ('2023-04-03', 'We', 'Wed', 'Wednesday'),
-       ('2023-04-04', 'Th', 'Thu', 'Thursday'),
-       ('2023-04-05', 'Fr', 'Fri', 'Friday'),
-       ('2023-04-06', 'Sa', 'Sat', 'Saturday'),
-       ('2023-04-07', 'Su', 'Sun', 'Sunday');
--- result:
--- !result
-select next_day('2023-04-05', 'Mo');
--- result:
-2023-04-10
--- !result
-select next_day('2023-04-05', 'Tue');
--- result:
-2023-04-11
--- !result
-select next_day('2023-04-05', 'Wednesday');
--- result:
-2023-04-12
--- !result
-select next_day('2023-04-05 20:13:14', 'Thursday');
--- result:
-2023-04-06
--- !result
-select next_day('2023-02-27', 'Tuesday');
--- result:
-2023-02-28
--- !result
-select next_day('2023-02-28', 'Tuesday');
--- result:
-2023-03-07
--- !result
-select next_day('2023-02-27', 'Friday');
--- result:
-2023-03-03
--- !result
-select next_day('2023-02-28', 'Friday');
--- result:
-2023-03-03
--- !result
-select next_day('2024-02-27', 'Wednesday');
--- result:
-2024-02-28
--- !result
-select next_day('2024-02-28', 'Wednesday');
--- result:
-2024-03-06
--- !result
-select next_day('2024-02-29', 'Wednesday');
--- result:
-2024-03-06
--- !result
-select d1, next_day(d1, 'Fr'), d2, next_day(d2, 'Fr') from next_day_test order by d1;
--- result:
-2023-02-27	2023-03-03	2023-02-27 20:13:14	2023-03-03
-2023-02-28	2023-03-03	2023-02-28 20:13:14	2023-03-03
-2023-04-01	2023-04-07	2023-04-01 20:13:14	2023-04-07
-2023-04-02	2023-04-07	2023-04-02 20:13:14	2023-04-07
-2023-04-03	2023-04-07	2023-04-03 20:13:14	2023-04-07
-2023-04-04	2023-04-07	2023-04-04 20:13:14	2023-04-07
-2023-04-05	2023-04-07	2023-04-05 20:13:14	2023-04-07
-2023-04-06	2023-04-07	2023-04-06 20:13:14	2023-04-07
-2023-04-07	2023-04-14	2023-04-07 20:13:14	2023-04-14
-2024-02-27	2024-03-01	2024-02-27 20:13:14	2024-03-01
-2024-02-28	2024-03-01	2024-02-28 20:13:14	2024-03-01
-2024-02-29	2024-03-01	2024-02-29 20:13:14	2024-03-01
--- !result
-select d1, next_day(d1, 'Sat'), d2, next_day(d2,'Sat') from next_day_test order by d1;
--- result:
-2023-02-27	2023-03-04	2023-02-27 20:13:14	2023-03-04
-2023-02-28	2023-03-04	2023-02-28 20:13:14	2023-03-04
-2023-04-01	2023-04-08	2023-04-01 20:13:14	2023-04-08
-2023-04-02	2023-04-08	2023-04-02 20:13:14	2023-04-08
-2023-04-03	2023-04-08	2023-04-03 20:13:14	2023-04-08
-2023-04-04	2023-04-08	2023-04-04 20:13:14	2023-04-08
-2023-04-05	2023-04-08	2023-04-05 20:13:14	2023-04-08
-2023-04-06	2023-04-08	2023-04-06 20:13:14	2023-04-08
-2023-04-07	2023-04-08	2023-04-07 20:13:14	2023-04-08
-2024-02-27	2024-03-02	2024-02-27 20:13:14	2024-03-02
-2024-02-28	2024-03-02	2024-02-28 20:13:14	2024-03-02
-2024-02-29	2024-03-02	2024-02-29 20:13:14	2024-03-02
--- !result
-select d1, next_day(d1, 'Sunday'), d2, next_day(d2, 'Sunday') from next_day_test order by d1;
--- result:
-2023-02-27	2023-03-05	2023-02-27 20:13:14	2023-03-05
-2023-02-28	2023-03-05	2023-02-28 20:13:14	2023-03-05
-2023-04-01	2023-04-02	2023-04-01 20:13:14	2023-04-02
-2023-04-02	2023-04-09	2023-04-02 20:13:14	2023-04-09
-2023-04-03	2023-04-09	2023-04-03 20:13:14	2023-04-09
-2023-04-04	2023-04-09	2023-04-04 20:13:14	2023-04-09
-2023-04-05	2023-04-09	2023-04-05 20:13:14	2023-04-09
-2023-04-06	2023-04-09	2023-04-06 20:13:14	2023-04-09
-2023-04-07	2023-04-09	2023-04-07 20:13:14	2023-04-09
-2024-02-27	2024-03-03	2024-02-27 20:13:14	2024-03-03
-2024-02-28	2024-03-03	2024-02-28 20:13:14	2024-03-03
-2024-02-29	2024-03-03	2024-02-29 20:13:14	2024-03-03
--- !result
-select next_day('2023-02-29', 'Tuesday');
+select dayofweek_iso("");
 -- result:
 None
 -- !result
-select next_day('2023-02-29', 'Friday');
+select dayofweek_iso(NULL);
 -- result:
 None
--- !result
-select next_day('2024-02-30', 'Friday');
--- result:
-None
--- !result
-select next_day('2023-0405', 'Friday');
--- result:
-None
--- !result
-select next_day('2023-04-05 20:13:61', 'Friday');
--- result:
-None
--- !result
-select next_day('2023_xxx', 'Friday');
--- result:
-None
--- !result
-select next_day('2023-04-05', 'F');
--- result:
-[REGEX].*F not supported in next_day dow_string.*
--- !result
-select next_day('2023-04-05', 'Frid');
--- result:
-[REGEX].*Frid not supported in next_day dow_string.*
--- !result
-select next_day('2023-04-05', 'xxx');
--- result:
-[REGEX].*xxx not supported in next_day dow_string.*
--- !result
-select next_day('2023-02-29', 'Tuesday') from next_day_test;
--- result:
-None
-None
-None
-None
-None
-None
-None
-None
-None
-None
-None
-None
--- !result
-select next_day('2024-02-30', 'Friday') from next_day_test;
--- result:
-None
-None
-None
-None
-None
-None
-None
-None
-None
-None
-None
-None
--- !result
-select next_day('2023-04-05 20:13:61', 'Friday') from next_day_test;
--- result:
-None
-None
-None
-None
-None
-None
-None
-None
-None
-None
-None
-None
--- !result
-select next_day('2023_xxx', 'Friday') from next_day_test;
--- result:
-None
-None
-None
-None
-None
-None
-None
-None
-None
-None
-None
-None
--- !result
-select next_day('2023-04-05', 'F') from next_day_test;
--- result:
-[REGEX].*F not supported in next_day dow_string.*
--- !result
-select next_day('2023-04-05', 'Frid') from next_day_test;
--- result:
-[REGEX].*Frid not supported in next_day dow_string.*
--- !result
-select next_day('2023-04-05', 'xxx') from next_day_test;
--- result:
-[REGEX].*xxx not supported in next_day dow_string.*
--- !result
-select next_day('2023-04-05', null);
--- result:
-None
--- !result
-select next_day(null, "Friday");
--- result:
-None
--- !result
-select next_day(null, null);
--- result:
-None
--- !result
-select next_day('2023-04-05', null) from next_day_test;
--- result:
-None
-None
-None
-None
-None
-None
-None
-None
-None
-None
-None
-None
--- !result
-select next_day(null, 'Friday') from next_day_test;
--- result:
-None
-None
-None
-None
-None
-None
-None
-None
-None
-None
-None
-None
--- !result
-select next_day(null, null) from next_day_test;
--- result:
-None
-None
-None
-None
-None
-None
-None
-None
-None
-None
-None
-None
--- !result
-select d3, dow_2, next_day(d3, dow_2) from dow_test order by d3;
--- result:
-2023-04-01	Mo	2023-04-03
-2023-04-02	Tu	2023-04-04
-2023-04-03	We	2023-04-05
-2023-04-04	Th	2023-04-06
-2023-04-05	Fr	2023-04-07
-2023-04-06	Sa	2023-04-08
-2023-04-07	Su	2023-04-09
--- !result
-select d3, dow_3, next_day(d3, dow_3) from dow_test order by d3;
--- result:
-2023-04-01	Mon	2023-04-03
-2023-04-02	Tue	2023-04-04
-2023-04-03	Wed	2023-04-05
-2023-04-04	Thu	2023-04-06
-2023-04-05	Fri	2023-04-07
-2023-04-06	Sat	2023-04-08
-2023-04-07	Sun	2023-04-09
--- !result
-select d3, dow_full, next_day(d3, dow_full) from dow_test order by d3;
--- result:
-2023-04-01	Monday	2023-04-03
-2023-04-02	Tuesday	2023-04-04
-2023-04-03	Wednesday	2023-04-05
-2023-04-04	Thursday	2023-04-06
-2023-04-05	Friday	2023-04-07
-2023-04-06	Saturday	2023-04-08
-2023-04-07	Sunday	2023-04-09
--- !result
-select d1, dow_2, next_day(d1, dow_2) from next_day_test a join dow_test b on a.d1 = b.d3 order by d1;
--- result:
-2023-04-01	Mo	2023-04-03
-2023-04-02	Tu	2023-04-04
-2023-04-03	We	2023-04-05
-2023-04-04	Th	2023-04-06
-2023-04-05	Fr	2023-04-07
-2023-04-06	Sa	2023-04-08
-2023-04-07	Su	2023-04-09
 -- !result
 -- name: test_previous_day
 CREATE TABLE IF NOT EXISTS `previous_day_test` (
@@ -503,15 +182,15 @@ None
 -- !result
 select previous_day('2023-04-05', 'F');
 -- result:
-[REGEX].*F not supported in previous_day dow_string.*
+E: (1064, 'F not supported in previous_day dow_string backend:172.26.92.195')
 -- !result
 select previous_day('2023-04-05', 'Frid');
 -- result:
-[REGEX].*Frid not supported in previous_day dow_string.*
+E: (1064, 'Frid not supported in previous_day dow_string backend:172.26.92.195')
 -- !result
 select previous_day('2023-04-05', 'xxx');
 -- result:
-[REGEX].*xxx not supported in previous_day dow_string.*
+E: (1064, 'xxx not supported in previous_day dow_string backend:172.26.92.195')
 -- !result
 select previous_day('2023-02-29', 'Tuesday') from previous_day_test;
 -- result:
@@ -575,15 +254,15 @@ None
 -- !result
 select previous_day('2023-04-05', 'F') from previous_day_test;
 -- result:
-[REGEX].*F not supported in previous_day dow_string.*
+E: (1064, 'F not supported in previous_day dow_string backend:172.26.92.195')
 -- !result
 select previous_day('2023-04-05', 'Frid') from previous_day_test;
 -- result:
-[REGEX].*Frid not supported in previous_day dow_string.*
+E: (1064, 'Frid not supported in previous_day dow_string backend:172.26.92.195')
 -- !result
 select previous_day('2023-04-05', 'xxx') from previous_day_test;
 -- result:
-[REGEX].*xxx not supported in previous_day dow_string.*
+E: (1064, 'xxx not supported in previous_day dow_string backend:172.26.92.195')
 -- !result
 select previous_day('2023-04-05', null);
 -- result:
@@ -759,15 +438,15 @@ select makedate(NUll,NUll);
 -- result:
 None
 -- !result
-select makedate(1,NUll);
+select makedate(1, NUll);
 -- result:
 None
 -- !result
-select makedate(NUll,1);
+select makedate(NULL, 1);
 -- result:
 None
 -- !result
-select makedate(0,1);
+select makedate(0, 1);
 -- result:
 0000-01-01
 -- !result
@@ -823,7 +502,454 @@ None
 None
 None
 -- !result
-
+-- name: test_date_diff
+select date_diff("2010-11-30 23:59:59", "2010-11-30 20:58:59", "millisecond");
+-- result:
+10860000
+-- !result
+select date_diff("2010-11-30 23:59:59", "2010-11-30 20:58:59", "hour");
+-- result:
+3
+-- !result
+select date_diff("2010-11-30 23:59:59", "2010-11-30 20:58:59", "minute");
+-- result:
+181
+-- !result
+select date_diff("2010-11-30 23:59:59", "2010-11-30 20:59:59", "second");
+-- result:
+10800
+-- !result
+select date_diff('2010-11-30 23:59:59.000001', '2010-11-30 20:58:59.000001', 'hour');
+-- result:
+3
+-- !result
+select date_diff('2010-11-30 23:59:59.000001', '2010-11-30 20:58:59.000001', 'day');
+-- result:
+0
+-- !result
+select date_diff('2010-12-22 00:59:59.000001', '2010-11-30 20:58:59.000001', 'week');
+-- result:
+3
+-- !result
+select date_diff('2011-12-22 00:59:59.000001', '2010-11-30 20:58:59.000001', 'month');
+-- result:
+12
+-- !result
+select date_diff('2012-12-22 00:59:59.000001', '2010-11-30 20:58:59.000001', 'year');
+-- result:
+2
+-- !result
+select date_diff('2011-12-22 00:59:59.000001', '2010-11-30 20:58:59.000001', 'quarter');
+-- result:
+4
+-- !result
+select date_diff("2010-11-30 23:59:59", NULL, "hour");
+-- result:
+None
+-- !result
+select date_diff("2010-11-30 23:59:59", "2010-11-30 20:59:59", "aaa");
+-- result:
+E: (1064, 'type column should be one of day/hour/minute/second/millisecond backend:172.26.92.195')
+-- !result
+CREATE TABLE IF NOT EXISTS `test_data_diff` (
+  `d0` datetime,
+  `d1` datetime,
+  `t` varchar(12)
+)
+PROPERTIES(
+  "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into test_data_diff(d0,d1,t)
+values ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'hour'),
+       ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'day'),
+       ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'second'),
+       ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'minute'),
+       ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'millisecond');
+-- result:
+-- !result
+select date_diff(d0,d1,t) from test_data_diff order by t;
+-- result:
+0
+3
+10860000
+181
+10860
+-- !result
+-- name: test_next_day
+CREATE TABLE IF NOT EXISTS `next_day_test` (
+  `d1` DATE,
+  `d2` DATETIME
+)
+DISTRIBUTED BY HASH(`d1`)
+PROPERTIES(
+  "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO `next_day_test`(d1, d2)
+VALUES ('2023-04-01', '2023-04-01 20:13:14'),
+       ('2023-04-02', '2023-04-02 20:13:14'),
+       ('2023-04-03', '2023-04-03 20:13:14'),
+       ('2023-04-04', '2023-04-04 20:13:14'),
+       ('2023-04-05', '2023-04-05 20:13:14'),
+       ('2023-04-06', '2023-04-06 20:13:14'),
+       ('2023-04-07', '2023-04-07 20:13:14'),
+       ('2023-02-27', '2023-02-27 20:13:14'),
+       ('2023-02-28', '2023-02-28 20:13:14'),
+       ('2024-02-27', '2024-02-27 20:13:14'),
+       ('2024-02-28', '2024-02-28 20:13:14'),
+       ('2024-02-29', '2024-02-29 20:13:14');
+-- result:
+-- !result
+CREATE TABLE IF NOT EXISTS `dow_test` (
+  `d3` DATE,
+  `dow_2` CHAR(20),
+  `dow_3` VARCHAR(30),
+  `dow_full` STRING
+)
+DISTRIBUTED BY HASH(`d3`)
+PROPERTIES(
+  "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO `dow_test`(d3, dow_2, dow_3, dow_full)
+VALUES ('2023-04-01', 'Mo', 'Mon', 'Monday'),
+       ('2023-04-02', 'Tu', 'Tue', 'Tuesday'),
+       ('2023-04-03', 'We', 'Wed', 'Wednesday'),
+       ('2023-04-04', 'Th', 'Thu', 'Thursday'),
+       ('2023-04-05', 'Fr', 'Fri', 'Friday'),
+       ('2023-04-06', 'Sa', 'Sat', 'Saturday'),
+       ('2023-04-07', 'Su', 'Sun', 'Sunday');
+-- result:
+-- !result
+select next_day('2023-04-05', 'Mo');
+-- result:
+2023-04-10
+-- !result
+select next_day('2023-04-05', 'Tue');
+-- result:
+2023-04-11
+-- !result
+select next_day('2023-04-05', 'Wednesday');
+-- result:
+2023-04-12
+-- !result
+select next_day('2023-04-05 20:13:14', 'Thursday');
+-- result:
+2023-04-06
+-- !result
+select next_day('2023-02-27', 'Tuesday');
+-- result:
+2023-02-28
+-- !result
+select next_day('2023-02-28', 'Tuesday');
+-- result:
+2023-03-07
+-- !result
+select next_day('2023-02-27', 'Friday');
+-- result:
+2023-03-03
+-- !result
+select next_day('2023-02-28', 'Friday');
+-- result:
+2023-03-03
+-- !result
+select next_day('2024-02-27', 'Wednesday');
+-- result:
+2024-02-28
+-- !result
+select next_day('2024-02-28', 'Wednesday');
+-- result:
+2024-03-06
+-- !result
+select next_day('2024-02-29', 'Wednesday');
+-- result:
+2024-03-06
+-- !result
+select d1, next_day(d1, 'Fr'), d2, next_day(d2, 'Fr') from next_day_test order by d1;
+-- result:
+2023-02-27	2023-03-03	2023-02-27 20:13:14	2023-03-03
+2023-02-28	2023-03-03	2023-02-28 20:13:14	2023-03-03
+2023-04-01	2023-04-07	2023-04-01 20:13:14	2023-04-07
+2023-04-02	2023-04-07	2023-04-02 20:13:14	2023-04-07
+2023-04-03	2023-04-07	2023-04-03 20:13:14	2023-04-07
+2023-04-04	2023-04-07	2023-04-04 20:13:14	2023-04-07
+2023-04-05	2023-04-07	2023-04-05 20:13:14	2023-04-07
+2023-04-06	2023-04-07	2023-04-06 20:13:14	2023-04-07
+2023-04-07	2023-04-14	2023-04-07 20:13:14	2023-04-14
+2024-02-27	2024-03-01	2024-02-27 20:13:14	2024-03-01
+2024-02-28	2024-03-01	2024-02-28 20:13:14	2024-03-01
+2024-02-29	2024-03-01	2024-02-29 20:13:14	2024-03-01
+-- !result
+select d1, next_day(d1, 'Sat'), d2, next_day(d2,'Sat') from next_day_test order by d1;
+-- result:
+2023-02-27	2023-03-04	2023-02-27 20:13:14	2023-03-04
+2023-02-28	2023-03-04	2023-02-28 20:13:14	2023-03-04
+2023-04-01	2023-04-08	2023-04-01 20:13:14	2023-04-08
+2023-04-02	2023-04-08	2023-04-02 20:13:14	2023-04-08
+2023-04-03	2023-04-08	2023-04-03 20:13:14	2023-04-08
+2023-04-04	2023-04-08	2023-04-04 20:13:14	2023-04-08
+2023-04-05	2023-04-08	2023-04-05 20:13:14	2023-04-08
+2023-04-06	2023-04-08	2023-04-06 20:13:14	2023-04-08
+2023-04-07	2023-04-08	2023-04-07 20:13:14	2023-04-08
+2024-02-27	2024-03-02	2024-02-27 20:13:14	2024-03-02
+2024-02-28	2024-03-02	2024-02-28 20:13:14	2024-03-02
+2024-02-29	2024-03-02	2024-02-29 20:13:14	2024-03-02
+-- !result
+select d1, next_day(d1, 'Sunday'), d2, next_day(d2, 'Sunday') from next_day_test order by d1;
+-- result:
+2023-02-27	2023-03-05	2023-02-27 20:13:14	2023-03-05
+2023-02-28	2023-03-05	2023-02-28 20:13:14	2023-03-05
+2023-04-01	2023-04-02	2023-04-01 20:13:14	2023-04-02
+2023-04-02	2023-04-09	2023-04-02 20:13:14	2023-04-09
+2023-04-03	2023-04-09	2023-04-03 20:13:14	2023-04-09
+2023-04-04	2023-04-09	2023-04-04 20:13:14	2023-04-09
+2023-04-05	2023-04-09	2023-04-05 20:13:14	2023-04-09
+2023-04-06	2023-04-09	2023-04-06 20:13:14	2023-04-09
+2023-04-07	2023-04-09	2023-04-07 20:13:14	2023-04-09
+2024-02-27	2024-03-03	2024-02-27 20:13:14	2024-03-03
+2024-02-28	2024-03-03	2024-02-28 20:13:14	2024-03-03
+2024-02-29	2024-03-03	2024-02-29 20:13:14	2024-03-03
+-- !result
+select next_day('2023-02-29', 'Tuesday');
+-- result:
+None
+-- !result
+select next_day('2023-02-29', 'Friday');
+-- result:
+None
+-- !result
+select next_day('2024-02-30', 'Friday');
+-- result:
+None
+-- !result
+select next_day('2023-0405', 'Friday');
+-- result:
+None
+-- !result
+select next_day('2023-04-05 20:13:61', 'Friday');
+-- result:
+None
+-- !result
+select next_day('2023_xxx', 'Friday');
+-- result:
+None
+-- !result
+select next_day('2023-04-05', 'F');
+-- result:
+E: (1064, 'F not supported in next_day dow_string backend:172.26.92.195')
+-- !result
+select next_day('2023-04-05', 'Frid');
+-- result:
+E: (1064, 'Frid not supported in next_day dow_string backend:172.26.92.195')
+-- !result
+select next_day('2023-04-05', 'xxx');
+-- result:
+E: (1064, 'xxx not supported in next_day dow_string backend:172.26.92.195')
+-- !result
+select next_day('2023-02-29', 'Tuesday') from next_day_test;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select next_day('2024-02-30', 'Friday') from next_day_test;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select next_day('2023-04-05 20:13:61', 'Friday') from next_day_test;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select next_day('2023_xxx', 'Friday') from next_day_test;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select next_day('2023-04-05', 'F') from next_day_test;
+-- result:
+E: (1064, 'F not supported in next_day dow_string backend:172.26.92.195')
+-- !result
+select next_day('2023-04-05', 'Frid') from next_day_test;
+-- result:
+E: (1064, 'Frid not supported in next_day dow_string backend:172.26.92.195')
+-- !result
+select next_day('2023-04-05', 'xxx') from next_day_test;
+-- result:
+E: (1064, 'xxx not supported in next_day dow_string backend:172.26.92.195')
+-- !result
+select next_day('2023-04-05', null);
+-- result:
+None
+-- !result
+select next_day(null, "Friday");
+-- result:
+None
+-- !result
+select next_day(null, null);
+-- result:
+None
+-- !result
+select next_day('2023-04-05', null) from next_day_test;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select next_day(null, 'Friday') from next_day_test;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select next_day(null, null) from next_day_test;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select d3, dow_2, next_day(d3, dow_2) from dow_test order by d3;
+-- result:
+2023-04-01	Mo	2023-04-03
+2023-04-02	Tu	2023-04-04
+2023-04-03	We	2023-04-05
+2023-04-04	Th	2023-04-06
+2023-04-05	Fr	2023-04-07
+2023-04-06	Sa	2023-04-08
+2023-04-07	Su	2023-04-09
+-- !result
+select d3, dow_3, next_day(d3, dow_3) from dow_test order by d3;
+-- result:
+2023-04-01	Mon	2023-04-03
+2023-04-02	Tue	2023-04-04
+2023-04-03	Wed	2023-04-05
+2023-04-04	Thu	2023-04-06
+2023-04-05	Fri	2023-04-07
+2023-04-06	Sat	2023-04-08
+2023-04-07	Sun	2023-04-09
+-- !result
+select d3, dow_full, next_day(d3, dow_full) from dow_test order by d3;
+-- result:
+2023-04-01	Monday	2023-04-03
+2023-04-02	Tuesday	2023-04-04
+2023-04-03	Wednesday	2023-04-05
+2023-04-04	Thursday	2023-04-06
+2023-04-05	Friday	2023-04-07
+2023-04-06	Saturday	2023-04-08
+2023-04-07	Sunday	2023-04-09
+-- !result
+select d1, dow_2, next_day(d1, dow_2) from next_day_test a join dow_test b on a.d1 = b.d3 order by d1;
+-- result:
+2023-04-01	Mo	2023-04-03
+2023-04-02	Tu	2023-04-04
+2023-04-03	We	2023-04-05
+2023-04-04	Th	2023-04-06
+2023-04-05	Fr	2023-04-07
+2023-04-06	Sa	2023-04-08
+2023-04-07	Su	2023-04-09
+-- !result
+-- name: test_to_iso8601
+CREATE TABLE IF NOT EXISTS `to_iso8601_test`(
+  `d1` DATE,
+  `d2` DATETIME
+)
+DISTRIBUTED BY HASH(`d1`)
+PROPERTIES(
+  "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO `to_iso8601_test`(d1, d2)
+VALUES ('2020-01-01','2020-01-01 00:00:00'),
+  ('2020-01-02', '2020-01-01 00:00:00.1'),
+  ('2020-01-03', '2020-01-01 00:00:00.12'),
+  ('2020-01-04', '2020-01-01 00:00:00.123'),
+  ('2020-01-05', '2020-01-01 00:00:00.1234');
+-- result:
+-- !result
+select to_iso8601(d1),to_iso8601(d2) from to_iso8601_test order by d1;
+-- result:
+2020-01-01	2020-01-01T00:00:00.000000
+2020-01-02	2020-01-01T00:00:00.100000
+2020-01-03	2020-01-01T00:00:00.120000
+2020-01-04	2020-01-01T00:00:00.123000
+2020-01-05	2020-01-01T00:00:00.123400
+-- !result
+select to_iso8601(date'2020-01-01'), to_iso8601(datetime'2020-01-01 00:00:00'),to_iso8601(datetime'2020-01-01 00:00:00.1');
+-- result:
+2020-01-01	2020-01-01T00:00:00.000000	2020-01-01T00:00:00.100000
+-- !result
 -- name: test_last_day
 select last_day('2023-02-12', 'month');
 -- result:
@@ -842,7 +968,11 @@ select last_day('2023-05-10', 'year');
 2023-12-31
 -- !result
 create database test_last_day_db;
+-- result:
+-- !result
 use test_last_day_db;
+-- result:
+-- !result
 CREATE TABLE IF NOT EXISTS `last_day_table` (
   `d1` DATE,
   `d2` DATETIME
@@ -851,11 +981,15 @@ DISTRIBUTED BY HASH(`d1`)
 PROPERTIES(
   "replication_num" = "1"
 );
+-- result:
+-- !result
 INSERT INTO `last_day_table`(d1, d2)
 VALUES ('2020-02-12', '2020-02-12 08:08:14'),
        ('2021-03-28', '2021-03-28 08:08:14'),
        ('2022-04-28', '2022-04-28 08:08:14'),
        ('2023-05-29', '2023-05-29 08:08:14');
+-- result:
+-- !result
 CREATE TABLE IF NOT EXISTS `last_day_with_optional_table` (
   `d1` DATE,
   `d2` DATETIME,
@@ -865,11 +999,15 @@ DISTRIBUTED BY HASH(`d1`)
 PROPERTIES(
   "replication_num" = "1"
 );
+-- result:
+-- !result
 INSERT INTO `last_day_with_optional_table`(d1, d2, optional)
 VALUES ('2020-02-12', '2020-02-12 08:08:14', 'month'),
        ('2021-03-28', '2021-03-28 08:08:14', 'quarter'),
        ('2022-04-28', '2022-04-28 08:08:14', 'year'),
        ('2023-05-29', '2023-05-29 08:08:14', 'year');
+-- result:
+-- !result
 select d1, last_day(d1, 'month'), d2, last_day(d2, 'month') from last_day_table order by d1;
 -- result:
 2020-02-12	2020-02-29	2020-02-12 08:08:14	2020-02-29
@@ -885,3 +1023,26 @@ select d1, optional, last_day(d1, optional), d2, optional, last_day(d2, optional
 2023-05-29	year	2023-12-31	2023-05-29 08:08:14	year	2023-12-31
 -- !result
 drop database test_last_day_db;
+-- result:
+-- !result
+-- name: test_week_iso
+select week_iso("2023-01-01");
+-- result:
+52
+-- !result
+select week_iso("2023-01-02");
+-- result:
+1
+-- !result
+select week_iso("2023-01-03");
+-- result:
+1
+-- !result
+select week_iso("");
+-- result:
+None
+-- !result
+select week_iso(NULL);
+-- result:
+None
+-- !result
