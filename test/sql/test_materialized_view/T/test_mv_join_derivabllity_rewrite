@@ -431,3 +431,40 @@ select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
 from lineorder inner join customer
 on lo_custkey = c_custkey
 order by lo_orderkey, lo_linenumber;
+
+-- name: test_outer_join_rewrite
+
+CREATE TABLE t1 (
+                k1 int,
+                k2 int not null
+            )
+            DUPLICATE KEY(k1);
+CREATE TABLE t2 (
+                a int,
+                b int not null
+            )
+            DUPLICATE KEY(a);
+INSERT INTO t1 VALUES (1,1),(3,2),(null,1);
+INSERT INTO t2 VALUES (1,1),(2,2),(null,1);
+CREATE MATERIALIZED VIEW mv1 REFRESH MANUAL AS select * from t1 full outer join t2 on k1=a;
+REFRESH MATERIALIZED VIEW mv1 with sync mode;
+select * from t1 left outer join t2 on k1=a where k1=3;
+select * from t1 right outer join t2 on k1=a where b=2;
+
+-- name: test_anti_join_rewrite
+
+CREATE TABLE t1 (
+                                    k1 int,
+                                    k2 int
+                                )
+                                DUPLICATE KEY(k1);
+CREATE TABLE t2 (
+                  a int,
+                  b int
+              )
+              DUPLICATE KEY(a);
+INSERT INTO t1 VALUES (1,1),(3,2),(1,null),(null,null);
+INSERT INTO t2 VALUES (1,1),(2,2),(null,1),(null,null);
+CREATE MATERIALIZED VIEW mv1 REFRESH MANUAL AS select * from t1 right outer join t2 on k1=a;
+REFRESH MATERIALIZED VIEW mv1 with sync mode;
+select * from t1 right anti join t2 on k1=a order by 1,2;
