@@ -257,21 +257,6 @@ public class DateLiteral extends LiteralExpr {
         return convertToString(type.getPrimitiveType());
     }
 
-    public String getHiveFormatStringValue() {
-        if (type.getPrimitiveType() == PrimitiveType.DATE) {
-            return String.format("%04d-%02d-%02d", year, month, day);
-        } else {
-            if (microsecond == 0) {
-                // 2007-01-01 10:35:00 => 2007-01-01 10:35:00.0
-                return String.format("%04d-%02d-%02d %02d:%02d:%02d.0", year, month, day, hour, minute, second);
-            } else {
-                // 2007-01-01 10:35:00.123000 => 2007-01-01 10:35:00.123
-                return String.format("%04d-%02d-%02d %02d:%02d:%02d.%6d", year, month, day, hour, minute, second,
-                        microsecond).replaceFirst("0+$", "");
-            }
-        }
-    }
-
     private String convertToString(PrimitiveType type) {
         if (type == PrimitiveType.DATE) {
             return String.format("%04d-%02d-%02d", year, month, day);
