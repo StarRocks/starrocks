@@ -48,6 +48,7 @@
 #include "storage/rowset/common.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/dictcode_column_iterator.h"
+#include "storage/rowset/fill_subfield_iterator.h"
 #include "storage/rowset/rowid_column_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/segment.h"
@@ -154,6 +155,8 @@ private:
         Schema _dict_decode_schema;
         std::vector<bool> _is_dict_column;
         std::vector<ColumnIterator*> _column_iterators;
+        std::vector<ColumnId> _subfield_columns;
+        std::vector<ColumnIterator*> _subfield_iterators;
         ScanContext* _next{nullptr};
 
         // index the column which only be used for filter
@@ -260,6 +263,8 @@ private:
     //  This function will search and build the segment from delta column group,
     // and also return the columns's index in this segment if need.
     StatusOr<std::shared_ptr<Segment>> _get_dcg_segment(uint32_t ucid, int32_t* col_index);
+
+    bool need_early_materialize_subfield(const FieldPtr& field);
 
 private:
     using RawColumnIterators = std::vector<std::unique_ptr<ColumnIterator>>;
@@ -600,6 +605,19 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
         }
     }
     return Status::OK();
+}
+
+bool SegmentIterator::need_early_materialize_subfield(const FieldPtr& field) {
+    if (field->type()->type() != LogicalType::TYPE_STRUCT) {
+        // @Todo: support json/map/array when support flat-column,
+        // the performance improvement scenarios are too few now
+        return false;
+    }
+    auto cid = field->id();
+    if (_predicate_column_access_paths.find(cid) != _predicate_column_access_paths.end()) {
+        return true;
+    }
+    return false;
 }
 
 void SegmentIterator::_init_column_predicates() {
@@ -1265,6 +1283,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
 
     ctx->_read_schema.reserve(ctx_fields);
     ctx->_dict_decode_schema.reserve(ctx_fields);
+    ctx->_subfield_columns.reserve(ctx_fields);
     ctx->_is_dict_column.reserve(ctx_fields);
     ctx->_column_iterators.reserve(ctx_fields);
     ctx->_skip_dict_decode_indexes.reserve(ctx_fields);
@@ -1319,6 +1338,16 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
             } else {
                 ctx->_dict_decode_schema.append(f);
             }
+        } else if (late_materialization && need_early_materialize_subfield(f)) {
+            auto path = _predicate_column_access_paths[cid];
+            ColumnIterator* iter = new FillSubfieldIterator(cid, path, _column_iterators[cid].get());
+            _obj_pool.add(iter);
+            ctx->_read_schema.append(f);
+            ctx->_column_iterators.emplace_back(iter);
+            ctx->_is_dict_column.emplace_back(false);
+            ctx->_dict_decode_schema.append(f);
+            ctx->_subfield_columns.emplace_back(i);
+            ctx->_subfield_iterators.emplace_back(iter);
         } else {
             ctx->_read_schema.append(f);
             ctx->_column_iterators.emplace_back(_column_iterators[cid].get());
@@ -1328,9 +1357,13 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
     }
 
     size_t build_read_index_size = ctx->_read_schema.num_fields();
-    if (late_materialization && predicate_count < _schema.num_fields()) {
+    if (late_materialization && (predicate_count < _schema.num_fields() || !_predicate_column_access_paths.empty())) {
         // ordinal column
-        ColumnId cid = _schema.field(predicate_count)->id();
+        ColumnId cid = -1;
+        if (predicate_count < _schema.num_fields()) {
+            cid = _schema.field(predicate_count)->id();
+        }
+
         static_assert(std::is_same_v<rowid_t, TypeTraits<TYPE_UNSIGNED_INT>::CppType>);
         auto f = std::make_shared<Field>(cid, "ordinal", TYPE_UNSIGNED_INT, -1, -1, false);
         auto* iter = new RowIdColumnIterator();
@@ -1374,7 +1407,8 @@ Status SegmentIterator::_init_context() {
 
     RETURN_IF_ERROR(_init_global_dict_decoder());
 
-    if (_predicate_columns == 0 || _predicate_columns >= _schema.num_fields()) {
+    if (_predicate_columns == 0 ||
+        (_predicate_columns >= _schema.num_fields() && _predicate_column_access_paths.empty())) {
         // non or all field has predicate, disable late materialization.
         RETURN_IF_ERROR(_build_context<false>(&_context_list[0]));
     } else {
@@ -1514,19 +1548,32 @@ Status SegmentIterator::_finish_late_materialization(ScanContext* ctx) {
     ColumnPtr rowid_column = ctx->_dict_chunk->get_column_by_index(m - 1);
     const auto* ordinals = down_cast<FixedLengthColumn<rowid_t>*>(rowid_column.get());
 
-    const size_t n = _schema.num_fields();
-    const size_t start_pos = ctx->_read_index_map.size();
-    for (size_t i = m - 1, j = start_pos; i < n; i++, j++) {
-        const FieldPtr& f = _schema.field(i);
-        const ColumnId cid = f->id();
-        ColumnPtr& col = ctx->_final_chunk->get_column_by_index(j);
-        col->reserve(ordinals->size());
-        col->resize(0);
+    if (_predicate_columns < _schema.num_fields()) {
+        const size_t n = _schema.num_fields();
+        const size_t start_pos = ctx->_read_index_map.size();
+        for (size_t i = m - 1, j = start_pos; i < n; i++, j++) {
+            const FieldPtr& f = _schema.field(i);
+            const ColumnId cid = f->id();
+            ColumnPtr& col = ctx->_final_chunk->get_column_by_index(j);
+            col->reserve(ordinals->size());
+            col->resize(0);
 
-        RETURN_IF_ERROR(_column_decoders[cid].decode_values_by_rowid(*ordinals, col.get()));
-        DCHECK_EQ(ordinals->size(), col->size());
-        may_has_del_row |= (col->delete_state() != DEL_NOT_SATISFIED);
+            RETURN_IF_ERROR(_column_decoders[cid].decode_values_by_rowid(*ordinals, col.get()));
+            DCHECK_EQ(ordinals->size(), col->size());
+            may_has_del_row |= (col->delete_state() != DEL_NOT_SATISFIED);
+        }
     }
+
+    // fill subfield of early materialization columns
+    for (size_t i = 0; i < ctx->_subfield_columns.size(); i++) {
+        auto cid = ctx->_subfield_columns[i];
+        auto f = _schema.field(cid);
+        ColumnPtr& col = ctx->_final_chunk->get_column_by_index(cid);
+        // FillSubfieldIterator
+        RETURN_IF_ERROR(ctx->_subfield_iterators[i]->fetch_values_by_rowid(*ordinals, col.get()));
+        DCHECK_EQ(ordinals->size(), col->size());
+    }
+
     ctx->_final_chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
     ctx->_final_chunk->check_or_die();
 
