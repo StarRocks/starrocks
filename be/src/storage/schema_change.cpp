@@ -61,10 +61,10 @@ namespace starrocks {
 
 using ChunkRow = std::pair<size_t, Chunk*>;
 
-int compare_chunk_row(const ChunkRow& lhs, const ChunkRow& rhs) {
-    for (uint16_t i = 0; i < lhs.second->schema()->num_key_fields(); ++i) {
-        int res = lhs.second->get_column_by_index(i)->compare_at(lhs.first, rhs.first,
-                                                                 *rhs.second->get_column_by_index(i), -1);
+int compare_chunk_row(const ChunkRow& lhs, const ChunkRow& rhs, const std::vector<ColumnId>& sort_key_idxes) {
+    for (uint16_t i = 0; i < sort_key_idxes.size(); ++i) {
+        int res = lhs.second->get_column_by_index(sort_key_idxes[i])
+                          ->compare_at(lhs.first, rhs.first, *rhs.second->get_column_by_index(sort_key_idxes[i]), -1);
         if (res != 0) {
             return res;
         }
@@ -72,32 +72,36 @@ int compare_chunk_row(const ChunkRow& lhs, const ChunkRow& rhs) {
     return 0;
 }
 
+struct MergeElement;
 // TODO: optimize it with vertical sort
 class ChunkMerger {
 public:
-    explicit ChunkMerger(TabletSharedPtr tablet);
+    explicit ChunkMerger(TabletSharedPtr tablet, std::vector<ColumnId> sort_key_idxes);
     virtual ~ChunkMerger();
 
     bool merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_writer);
     static void aggregate_chunk(ChunkAggregator& aggregator, ChunkPtr& chunk, RowsetWriter* rowset_writer);
 
 private:
-    struct MergeElement {
-        bool operator<(const MergeElement& other) const {
-            return compare_chunk_row(std::make_pair(row_index, chunk), std::make_pair(other.row_index, other.chunk)) >
-                   0;
-        }
-
-        Chunk* chunk;
-        size_t row_index;
-    };
-
+    friend class MergeElement;
     bool _make_heap(std::vector<ChunkPtr>& chunk_arr);
     bool _pop_heap();
 
     TabletSharedPtr _tablet;
     std::priority_queue<MergeElement> _heap;
     std::unique_ptr<ChunkAggregator> _aggregator;
+    std::vector<ColumnId> _sort_key_idxes;
+};
+
+struct MergeElement {
+    bool operator<(const MergeElement& other) const {
+        return compare_chunk_row(std::make_pair(row_index, chunk), std::make_pair(other.row_index, other.chunk),
+                                 _merger->_sort_key_idxes) > 0;
+    }
+
+    Chunk* chunk;
+    size_t row_index;
+    ChunkMerger* _merger;
 };
 
 ChunkSorter::ChunkSorter(ChunkAllocator* chunk_allocator) {}
@@ -167,7 +171,8 @@ Status ChunkAllocator::allocate(ChunkPtr& chunk, size_t num_rows, Schema& schema
     return Status::OK();
 }
 
-ChunkMerger::ChunkMerger(TabletSharedPtr tablet) : _tablet(std::move(tablet)), _aggregator(nullptr) {}
+ChunkMerger::ChunkMerger(TabletSharedPtr tablet, std::vector<ColumnId> sort_key_idxes)
+        : _tablet(std::move(tablet)), _aggregator(nullptr), _sort_key_idxes(std::move(sort_key_idxes)) {}
 
 ChunkMerger::~ChunkMerger() {
     if (_aggregator != nullptr) {
@@ -261,6 +266,7 @@ bool ChunkMerger::_make_heap(std::vector<ChunkPtr>& chunk_arr) {
         MergeElement element;
         element.chunk = chunk.get();
         element.row_index = 0;
+        element._merger = this;
 
         _heap.push(element);
     }
@@ -676,8 +682,13 @@ bool SchemaChangeWithSorting::_internal_sorting(std::vector<ChunkPtr>& chunk_arr
         }
     }
 
-    ChunkMerger merger(std::move(tablet));
-    if (!merger.merge(chunk_arr, new_rowset_writer)) {
+    std::vector<ColumnId> sort_key_idxes = tablet->tablet_schema().sort_key_idxes();
+    if (sort_key_idxes.empty()) {
+        sort_key_idxes.resize(tablet->tablet_schema().num_key_columns());
+        std::iota(sort_key_idxes.begin(), sort_key_idxes.end(), 0);
+    }
+    ChunkMerger merger(std::move(tablet), std::move(sort_key_idxes));
+    if (auto st = merger.merge(chunk_arr, new_rowset_writer); !st.ok()) {
         LOG(WARNING) << "merge chunk arr failed";
         return false;
     }
