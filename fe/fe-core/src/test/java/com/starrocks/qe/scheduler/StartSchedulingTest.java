@@ -24,6 +24,7 @@ import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.SimpleScheduler;
+import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.rpc.PExecPlanFragmentRequest;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.thrift.FrontendServiceVersion;
@@ -194,9 +195,10 @@ public class StartSchedulingTest extends SchedulerTestBase {
         Assert.assertFalse(scheduler.isDone());
 
         // Shouldn't deploy the rest instances, when the previous instance deployment failed.
-        Assert.assertTrue(scheduler.getIndexesInJob().size() < scheduler.getInstanceIds().size());
+        ExecutionDAG executionDAG = scheduler.getExecutionDAG();
+        Assert.assertTrue(executionDAG.getExecutions().size() < executionDAG.getInstances().size());
         // Receive execution reports.
-        scheduler.getExecStates().forEach(execution -> {
+        executionDAG.getExecutions().forEach(execution -> {
             TReportExecStatusParams request = new TReportExecStatusParams(FrontendServiceVersion.V1);
             request.setBackend_num(execution.getIndexInJob());
             request.setDone(true);
@@ -310,14 +312,15 @@ public class StartSchedulingTest extends SchedulerTestBase {
         String sql = "select count(1) from lineitem UNION ALL select count(1) from lineitem";
         DefaultCoordinator scheduler = startScheduling(sql);
         Assert.assertTrue(scheduler.getExecStatus().ok());
+        ExecutionDAG executionDAG = scheduler.getExecutionDAG();
 
         // All the instances should be deployed.
-        Assert.assertEquals(scheduler.getInstanceIds().size(), scheduler.getExecStates().size());
+        Assert.assertEquals(executionDAG.getInstances().size(), executionDAG.getExecutions().size());
 
         scheduler.cancel();
         Assert.assertEquals(numSuccessCancelledInstances, successCancelledInstanceIds.size());
         // Receive execution reports from the successfully cancelled instances.
-        scheduler.getExecStates().forEach(execution -> {
+        executionDAG.getExecutions().forEach(execution -> {
             if (successCancelledInstanceIds.contains(execution.getInstanceId())) {
                 TReportExecStatusParams request = new TReportExecStatusParams(FrontendServiceVersion.V1);
                 request.setBackend_num(execution.getIndexInJob());

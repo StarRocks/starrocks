@@ -21,6 +21,7 @@ import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.JobSpec;
@@ -37,20 +38,19 @@ import com.starrocks.thrift.TQueryOptions;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
-public class TExecPlanFragmentParamsFactory {
+public class TFragmentInstanceFactory {
     private final ConnectContext context;
     private final JobSpec jobSpec;
-    private final Map<Long, Integer> workerIdToNumInstances;
+    private final ExecutionDAG executionDAG;
     private final TNetworkAddress coordAddress;
 
-    public TExecPlanFragmentParamsFactory(ConnectContext context,
-                                          JobSpec jobSpec,
-                                          Map<Long, Integer> workerIdToNumInstances,
-                                          TNetworkAddress coordAddress) {
+    public TFragmentInstanceFactory(ConnectContext context,
+                                    JobSpec jobSpec,
+                                    ExecutionDAG executionDAG,
+                                    TNetworkAddress coordAddress) {
         this.jobSpec = jobSpec;
-        this.workerIdToNumInstances = workerIdToNumInstances;
+        this.executionDAG = executionDAG;
         this.context = context;
         this.coordAddress = coordAddress;
     }
@@ -92,10 +92,13 @@ public class TExecPlanFragmentParamsFactory {
                                          ExecutionFragment execFragment,
                                          TDescriptorTable descTable,
                                          int totalTableSinkDop) {
+        // TODO(lzh): move to a more proper place.
+        execFragment.setBucketSeqToInstanceForRuntimeFilters();
+
         PlanFragment fragment = execFragment.getPlanFragment();
 
         boolean isEnablePipeline = jobSpec.isEnablePipeline();
-        boolean enablePipelineTableSinkDop = isEnablePipeline && fragment.hasTableSink();
+        boolean isEnablePipelineTableSinkDop = isEnablePipeline && fragment.hasTableSink();
 
         result.setProtocol_version(InternalServiceVersion.V1);
         result.setFragment(fragment.toThrift());
@@ -107,7 +110,7 @@ public class TExecPlanFragmentParamsFactory {
         result.params.setUse_vectorized(true);
         result.params.setQuery_id(jobSpec.getQueryId());
         result.params.setDestinations(execFragment.getDestinations());
-        if (enablePipelineTableSinkDop) {
+        if (isEnablePipelineTableSinkDop) {
             result.params.setNum_senders(totalTableSinkDop);
         } else {
             result.params.setNum_senders(execFragment.getInstances().size());
@@ -158,7 +161,7 @@ public class TExecPlanFragmentParamsFactory {
         PlanFragment fragment = execFragment.getPlanFragment();
 
         boolean isEnablePipeline = jobSpec.isEnablePipeline();
-        boolean enablePipelineTableSinkDop = isEnablePipeline && fragment.hasTableSink();
+        boolean isEnablePipelineTableSinkDop = isEnablePipeline && fragment.hasTableSink();
 
         result.setBackend_num(instance.getIndexInJob());
         if (isEnablePipeline) {
@@ -191,12 +194,12 @@ public class TExecPlanFragmentParamsFactory {
                     .setDestinations(newDestinations);
         }
 
-        result.params.setInstances_number(workerIdToNumInstances.get(instance.getWorkerId()));
+        result.params.setInstances_number(executionDAG.getNumInstancesOfWorkerId(instance.getWorkerId()));
         result.params.setFragment_instance_id(instance.getInstanceId());
         result.params.setPer_node_scan_ranges(instance.getNode2ScanRanges());
         result.params.setNode_to_per_driver_seq_scan_ranges(instance.getNode2DriverSeqToScanRanges());
 
-        if (enablePipelineTableSinkDop) {
+        if (isEnablePipelineTableSinkDop) {
             result.params.setSender_id(accTabletSinkDop);
             result.params.setPipeline_sink_dop(instance.getTableSinkDop());
         } else {

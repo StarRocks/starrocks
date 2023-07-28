@@ -95,7 +95,7 @@ public class JoinTest extends SchedulerTestBase {
         Thread joinThread = new Thread(() -> joinFinished.set(scheduler.join(300)));
         joinThread.start();
 
-        scheduler.getIndexesInJob().forEach(indexInJob -> {
+        scheduler.getExecutionDAG().getExecutionIndexesInJob().forEach(indexInJob -> {
             TReportExecStatusParams request = new TReportExecStatusParams(FrontendServiceVersion.V1);
             request.setBackend_num(indexInJob);
             request.setDone(true);
@@ -120,7 +120,7 @@ public class JoinTest extends SchedulerTestBase {
         joinThread.start();
 
         // Receive non-EOS updateFragmentExecStatus for each Execution.
-        scheduler.getIndexesInJob().forEach(indexInJob -> {
+        scheduler.getExecutionDAG().getExecutionIndexesInJob().forEach(indexInJob -> {
             TReportExecStatusParams request = new TReportExecStatusParams(FrontendServiceVersion.V1);
             request.setBackend_num(indexInJob);
             request.setDone(false);
@@ -128,7 +128,7 @@ public class JoinTest extends SchedulerTestBase {
 
             scheduler.updateFragmentExecStatus(request);
         });
-        for (FragmentInstanceExecState execution : scheduler.getExecStates()) {
+        for (FragmentInstanceExecState execution : scheduler.getExecutionDAG().getExecutions()) {
             Assert.assertFalse(execution.isFinished());
         }
         Assert.assertFalse(joinFinished.get());
@@ -144,7 +144,7 @@ public class JoinTest extends SchedulerTestBase {
         final List<TSinkCommitInfo> sinkCommitInfos = Lists.newArrayList();
         for (int i = 0; i < 2; i++) {
             final int finalIndex = i;
-            scheduler.getExecStates().forEach(execution -> {
+            scheduler.getExecutionDAG().getExecutions().forEach(execution -> {
                 int indexInJob = execution.getIndexInJob();
 
                 TReportExecStatusParams request = new TReportExecStatusParams(FrontendServiceVersion.V1);
@@ -199,7 +199,7 @@ public class JoinTest extends SchedulerTestBase {
                 scheduler.updateFragmentExecStatus(request);
             });
         }
-        for (FragmentInstanceExecState execution : scheduler.getExecStates()) {
+        for (FragmentInstanceExecState execution : scheduler.getExecutionDAG().getExecutions()) {
             Assert.assertTrue(execution.isFinished());
         }
 

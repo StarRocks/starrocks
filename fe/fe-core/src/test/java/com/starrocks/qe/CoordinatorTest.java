@@ -15,18 +15,19 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.starrocks.analysis.AggregateInfo;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.planner.BinlogScanNode;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.EmptySetNode;
 import com.starrocks.planner.JoinNode;
+import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
@@ -55,12 +56,9 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-
-import static com.starrocks.qe.ColocatedBackendSelector.BucketSeqToScanRange;
 
 public class CoordinatorTest extends PlanTestBase {
     ConnectContext ctx;
@@ -89,7 +87,7 @@ public class CoordinatorTest extends PlanTestBase {
 
     private void testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode mode) throws IOException {
         PlanFragment fragment = genFragment();
-        ExecutionFragment execFragment = new ExecutionFragment(fragment);
+        ExecutionFragment execFragment = new ExecutionFragment(null, fragment, 0);
         FragmentInstance instance0 = new FragmentInstance(null, execFragment);
         FragmentInstance instance1 = new FragmentInstance(null, execFragment);
         FragmentInstance instance2 = new FragmentInstance(null, execFragment);
@@ -103,6 +101,14 @@ public class CoordinatorTest extends PlanTestBase {
         execFragment.addInstance(instance0);
         execFragment.addInstance(instance1);
         execFragment.addInstance(instance2);
+
+        OlapTable table = new OlapTable();
+        table.setDefaultDistributionInfo(new HashDistributionInfo(6, Collections.emptyList()));
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+        OlapScanNode scanNode = new OlapScanNode(new PlanNodeId(0), desc, "test-scan-node");
+        scanNode.setSelectedPartitionIds(ImmutableList.of(0L, 1L));
+        execFragment.getOrCreateColocatedAssignment(scanNode);
 
         RuntimeFilterDescription rf = new RuntimeFilterDescription(ctx.sessionVariable);
         rf.setJoinMode(mode);
@@ -120,309 +126,6 @@ public class CoordinatorTest extends PlanTestBase {
     @Test
     public void testBucketShuffleRuntimeFilter() throws IOException {
         testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode.LOCAL_HASH_BUCKET);
-    }
-
-    private Map<Integer, List<TScanRangeParams>> createScanId2scanRanges(int scanId, int numScanRanges) {
-        List<TScanRangeParams> scanRanges = Lists.newArrayList();
-        for (int i = 0; i < numScanRanges; ++i) {
-            scanRanges.add(new TScanRangeParams());
-        }
-
-        return ImmutableMap.of(scanId, scanRanges);
-    }
-
-    private void testComputeColocatedJoinInstanceParamHelper(int scanId,
-                                                             Map<Integer, Long> bucketSeqToWorkerId,
-                                                             int parallelExecInstanceNum,
-                                                             int pipelineDop, boolean enablePipeline,
-                                                             int expectedInstances,
-                                                             List<Long> expectedParamAddresses,
-                                                             List<Integer> expectedPipelineDops,
-                                                             List<Map<Integer, Integer>> expectedBucketSeqToDriverSeqs,
-                                                             List<Integer> expectedNumScanRangesList,
-                                                             List<Map<Integer, Integer>> expectedDriverSeq2NumScanRangesList) {
-        ExecutionFragment execFragment = new ExecutionFragment(genFragment());
-        BucketSeqToScanRange bucketSeqToScanRange = new BucketSeqToScanRange();
-        for (Integer bucketSeq : bucketSeqToWorkerId.keySet()) {
-            bucketSeqToScanRange.put(bucketSeq, createScanId2scanRanges(scanId, 1));
-        }
-
-        coordinatorPreprocessor.computeColocatedJoinInstanceParam(bucketSeqToWorkerId, bucketSeqToScanRange,
-                parallelExecInstanceNum, pipelineDop, enablePipeline, execFragment);
-        execFragment.getInstances().sort(Comparator.comparing(FragmentInstance::getWorkerId));
-
-        Assert.assertEquals(expectedInstances, execFragment.getInstances().size());
-        for (int i = 0; i < expectedInstances; ++i) {
-            FragmentInstance instance = execFragment.getInstances().get(i);
-            Assert.assertEquals(expectedParamAddresses.get(i), instance.getWorkerId());
-            Assert.assertEquals(expectedPipelineDops.get(i).intValue(), instance.getPipelineDop());
-
-            Map<Integer, Integer> expectedBucketSeqToDriverSeq = expectedBucketSeqToDriverSeqs.get(i);
-
-            Assert.assertEquals(expectedBucketSeqToDriverSeq.size(), instance.getBucketSeqs().size());
-            expectedBucketSeqToDriverSeq.forEach((expectedBucketSeq, expectedDriverSeq) -> {
-                Assert.assertEquals(expectedDriverSeq, instance.getDriverSeqOfBucketSeq(expectedBucketSeq));
-            });
-
-            if (enablePipeline && expectedPipelineDops.get(i) != -1) {
-                Assert.assertTrue(instance.getNode2ScanRanges().isEmpty());
-
-                Map<Integer, Integer> expectedDriverSeq2NumScanRanges = expectedDriverSeq2NumScanRangesList.get(i);
-                Map<Integer, List<TScanRangeParams>> perDriverSeqScanRanges =
-                        instance.getNode2DriverSeqToScanRanges().get(scanId);
-                Assert.assertEquals(expectedDriverSeq2NumScanRanges.size(), perDriverSeqScanRanges.size());
-                expectedDriverSeq2NumScanRanges.forEach((expectedDriverSeq, expectedNumScanRanges) -> {
-                    Assert.assertEquals(expectedNumScanRanges.intValue(),
-                            perDriverSeqScanRanges.get(expectedDriverSeq).size());
-                });
-
-            } else {
-                Assert.assertTrue(instance.getNode2DriverSeqToScanRanges().isEmpty());
-                Assert.assertEquals(expectedNumScanRangesList.get(i).intValue(),
-                        instance.getNode2ScanRanges().get(scanId).size());
-            }
-        }
-    }
-
-    @Test
-    public void testComputeColocatedJoinInstanceParam() {
-        int scanId = 0;
-
-        // Bucket distribution:
-        // - addr1: 11, 12, 13, 14, 15.
-        // - addr2: 21, 22, 23.
-        // - addr3: 31, 32
-        Long addr1 = 1L;
-        Long addr2 = 2L;
-        Long addr3 = 3L;
-        Map<Integer, Long> bucketSeqToWorkerId = ImmutableMap.<Integer, Long>builder()
-                .put(11, addr1).put(12, addr1).put(13, addr1).put(14, addr1).put(15, addr1)
-                .put(21, addr2).put(22, addr2).put(23, addr2)
-                .put(32, addr3).put(31, addr3)
-                .build();
-
-        // Test case 1: numInstance=1, pipelineDop=3, enablePipeline.
-        // - addr1
-        //      - Instance#0
-        //          - DriverSequence#0: 11, 14.
-        //          - DriverSequence#1: 12, 15.
-        //          - DriverSequence#2: 13.
-        // - addr2
-        //      - Instance#0
-        //          - DriverSequence#0: 21.
-        //          - DriverSequence#1: 22.
-        //          - DriverSequence#2: 23.
-        // - addr3
-        //      - Instance#0
-        //          - DriverSequence#0: 32.
-        //          - DriverSequence#1: 31.
-        int expectedInstances = 3;
-        List<Long> expectedParamAddresses = ImmutableList.of(addr1, addr2, addr3);
-        List<Map<Integer, Integer>> expectedBucketSeqToDriverSeqs = ImmutableList.of(
-                ImmutableMap.of(11, 0, 12, 1, 13, 2, 14, 0, 15, 1),
-                ImmutableMap.of(21, 0, 22, 1, 23, 2),
-                ImmutableMap.of(32, 0, 31, 1)
-        );
-        List<Integer> expectedPipelineDops = ImmutableList.of(3, 3, 2);
-        List<Integer> expectedNumScanRangesList = null;
-        List<Map<Integer, Integer>> expectedDriverSeq2NumScanRangesList = ImmutableList.of(
-                ImmutableMap.of(0, 2, 1, 2, 2, 1),
-                ImmutableMap.of(0, 1, 1, 1, 2, 1),
-                ImmutableMap.of(0, 1, 1, 1)
-        );
-        testComputeColocatedJoinInstanceParamHelper(scanId, bucketSeqToWorkerId, 1, 3, true,
-                expectedInstances, expectedParamAddresses, expectedPipelineDops, expectedBucketSeqToDriverSeqs,
-                expectedNumScanRangesList, expectedDriverSeq2NumScanRangesList);
-
-        // Test case 2: numInstance=3, pipelineDop=2, enablePipeline.
-        // - addr1
-        //      - Instance#0
-        //          - DriverSequence#0: 11.
-        //          - DriverSequence#1: 14.
-        //      - Instance#1
-        //          - DriverSequence#0: 12.
-        //          - DriverSequence#1: 15.
-        //      - Instance#2
-        //          - DriverSequence#0: 13.
-        // - addr2
-        //      - Instance#0
-        //          - DriverSequence#0: 21.
-        //      - Instance#1
-        //          - DriverSequence#0: 22.
-        //      - Instance#2
-        //          - DriverSequence#0: 23.
-        // - addr3
-        //      - Instance#0
-        //          - DriverSequence#0: 32.
-        //      - Instance#1
-        //          - DriverSequence#0: 31.
-        expectedInstances = 8;
-        expectedParamAddresses = ImmutableList.of(addr1, addr1, addr1, addr2, addr2, addr2, addr3, addr3);
-        expectedPipelineDops = ImmutableList.of(2, 2, 1, 1, 1, 1, 1, 1);
-        expectedBucketSeqToDriverSeqs = ImmutableList.of(
-                ImmutableMap.of(11, 0, 14, 1),
-                ImmutableMap.of(12, 0, 15, 1),
-                ImmutableMap.of(13, 0),
-                ImmutableMap.of(21, 0),
-                ImmutableMap.of(22, 0),
-                ImmutableMap.of(23, 0),
-                ImmutableMap.of(32, 0),
-                ImmutableMap.of(31, 0)
-        );
-        expectedDriverSeq2NumScanRangesList = ImmutableList.of(
-                ImmutableMap.of(0, 1, 1, 1),
-                ImmutableMap.of(0, 1, 1, 1),
-                ImmutableMap.of(0, 1),
-                ImmutableMap.of(0, 1),
-                ImmutableMap.of(0, 1),
-                ImmutableMap.of(0, 1),
-                ImmutableMap.of(0, 1),
-                ImmutableMap.of(0, 1)
-        );
-        testComputeColocatedJoinInstanceParamHelper(scanId, bucketSeqToWorkerId, 3, 2, true,
-                expectedInstances, expectedParamAddresses, expectedPipelineDops, expectedBucketSeqToDriverSeqs,
-                expectedNumScanRangesList, expectedDriverSeq2NumScanRangesList);
-
-        // Test case 3: numInstance=3, pipelineDop=1, enablePipeline.
-        // - addr1
-        //      - Instance#0
-        //          - DriverSequence#0: 11, 14.
-        //      - Instance#1
-        //          - DriverSequence#0: 12, 15.
-        //      - Instance#2
-        //          - DriverSequence#0: 13.
-        // - addr2
-        //      - Instance#0
-        //          - DriverSequence#0: 21.
-        //      - Instance#1
-        //          - DriverSequence#0: 22.
-        //      - Instance#2
-        //          - DriverSequence#0: 23.
-        // - addr3
-        //      - Instance#0
-        //          - DriverSequence#0: 32.
-        //      - Instance#1
-        //          - DriverSequence#0: 31.
-        expectedParamAddresses = ImmutableList.of(addr1, addr1, addr1, addr2, addr2, addr2, addr3, addr3);
-        expectedPipelineDops = Collections.nCopies(expectedInstances, 1);
-        expectedBucketSeqToDriverSeqs = ImmutableList.of(
-                ImmutableMap.of(11, 0, 14, 0),
-                ImmutableMap.of(12, 0, 15, 0),
-                ImmutableMap.of(13, 0),
-                ImmutableMap.of(21, 0),
-                ImmutableMap.of(22, 0),
-                ImmutableMap.of(23, 0),
-                ImmutableMap.of(32, 0),
-                ImmutableMap.of(31, 0)
-        );
-        expectedDriverSeq2NumScanRangesList = ImmutableList.of(
-                ImmutableMap.of(0, 2),
-                ImmutableMap.of(0, 2),
-                ImmutableMap.of(0, 1),
-                ImmutableMap.of(0, 1),
-                ImmutableMap.of(0, 1),
-                ImmutableMap.of(0, 1),
-                ImmutableMap.of(0, 1),
-                ImmutableMap.of(0, 1)
-        );
-        testComputeColocatedJoinInstanceParamHelper(scanId, bucketSeqToWorkerId, 3, 1, true,
-                expectedInstances, expectedParamAddresses, expectedPipelineDops, expectedBucketSeqToDriverSeqs,
-                expectedNumScanRangesList, expectedDriverSeq2NumScanRangesList);
-
-        // Test case 4: numInstance=3, pipelineDop=1, disablePipeline.
-        // - addr1
-        //      - Instance#0: 11, 14.
-        //      - Instance#1: 12, 15.
-        //      - Instance#2: 13.
-        // - addr2
-        //      - Instance#0: 21.
-        //      - Instance#1: 22.
-        //      - Instance#2: 23.
-        // - addr3
-        //      - Instance#0: 32.
-        //      - Instance#1: 31.
-        expectedNumScanRangesList = ImmutableList.of(2, 2, 1, 1, 1, 1, 1, 1);
-        expectedPipelineDops = Collections.nCopies(expectedInstances, -1);
-        expectedBucketSeqToDriverSeqs = ImmutableList.of(
-                ImmutableMap.of(11, -1, 14, -1),
-                ImmutableMap.of(12, -1, 15, -1),
-                ImmutableMap.of(13, -1),
-                ImmutableMap.of(21, -1),
-                ImmutableMap.of(22, -1),
-                ImmutableMap.of(23, -1),
-                ImmutableMap.of(32, -1),
-                ImmutableMap.of(31, -1)
-        );
-        expectedDriverSeq2NumScanRangesList = null;
-        testComputeColocatedJoinInstanceParamHelper(scanId, bucketSeqToWorkerId, 3, 1, false,
-                expectedInstances, expectedParamAddresses, expectedPipelineDops, expectedBucketSeqToDriverSeqs,
-                expectedNumScanRangesList, expectedDriverSeq2NumScanRangesList);
-
-        // Test case 5: numInstance=1, pipelineDop=3, enablePipeline, the scan node is replicated scan.
-        // - addr1
-        //      - Instance#0
-        //          - DriverSequence#0: 11.
-        //          - DriverSequence#1: empty.
-        //          - DriverSequence#2: empty.
-        // - addr2
-        //      - Instance#0
-        //          - DriverSequence#0: 21.
-        //          - DriverSequence#1: empty.
-        //          - DriverSequence#2: empty.
-        // - addr3
-        //      - Instance#0
-        //          - DriverSequence#0: 31.
-        //          - DriverSequence#1: empty.
-        coordinator.addReplicateScanId(scanId);
-        expectedInstances = 3;
-        expectedParamAddresses = ImmutableList.of(addr1, addr2, addr3);
-        expectedBucketSeqToDriverSeqs = ImmutableList.of(
-                ImmutableMap.of(11, 0, 12, 1, 13, 2, 14, 0, 15, 1),
-                ImmutableMap.of(21, 0, 22, 1, 23, 2),
-                ImmutableMap.of(32, 0, 31, 1)
-        );
-        expectedPipelineDops = ImmutableList.of(3, 3, 2);
-        expectedNumScanRangesList = null;
-        expectedDriverSeq2NumScanRangesList = ImmutableList.of(
-                ImmutableMap.of(0, 1, 1, 0, 2, 0),
-                ImmutableMap.of(0, 1, 1, 0, 2, 0),
-                ImmutableMap.of(0, 1, 1, 0)
-        );
-        testComputeColocatedJoinInstanceParamHelper(scanId, bucketSeqToWorkerId, 1, 3, true,
-                expectedInstances, expectedParamAddresses, expectedPipelineDops, expectedBucketSeqToDriverSeqs,
-                expectedNumScanRangesList, expectedDriverSeq2NumScanRangesList);
-
-        // Test case 6: numInstance=1, pipelineDop=3, enablePipeline, addr3 is assigned only one bucket.
-        // Bucket distribution:
-        // - addr1: 11, 12, 13, 14, 15.
-        // - addr2: 21, 22, 23.
-        // - addr3: 31
-        scanId = 1;
-        bucketSeqToWorkerId = ImmutableMap.<Integer, Long>builder()
-                .put(11, addr1).put(12, addr1).put(13, addr1).put(14, addr1).put(15, addr1)
-                .put(21, addr2).put(22, addr2).put(23, addr2)
-                .put(31, addr3)
-                .build();
-        // Test case 1: numInstance=1, pipelineDop=3, enablePipeline.
-        // - addr1
-        //      - Instance#0: 11, 12, 13, 14, 15.
-        // - addr2
-        //      - Instance#0: 21, 22, 23.
-        // - addr3
-        //      - Instance#0: 31
-        expectedParamAddresses = ImmutableList.of(addr1, addr2, addr3);
-        expectedBucketSeqToDriverSeqs = ImmutableList.of(
-                ImmutableMap.of(11, -1, 12, -1, 13, -1, 14, -1, 15, -1),
-                ImmutableMap.of(21, -1, 22, -1, 23, -1),
-                ImmutableMap.of(31, -1)
-        );
-        expectedPipelineDops = ImmutableList.of(-1, -1, -1);
-        expectedNumScanRangesList = ImmutableList.of(5, 3, 1);
-        expectedDriverSeq2NumScanRangesList = null;
-        testComputeColocatedJoinInstanceParamHelper(scanId, bucketSeqToWorkerId, 1, 3, true,
-                expectedInstances, expectedParamAddresses, expectedPipelineDops, expectedBucketSeqToDriverSeqs,
-                expectedNumScanRangesList, expectedDriverSeq2NumScanRangesList);
-
     }
 
     @Test
@@ -514,13 +217,11 @@ public class CoordinatorTest extends PlanTestBase {
 
         // Build topology
         CoordinatorPreprocessor prepare = new CoordinatorPreprocessor(fragments, scanNodes);
-        prepare.prepareFragments();
         prepare.computeScanRangeAssignment();
         prepare.computeFragmentExecParams();
 
         // Assert
-        Map<PlanFragmentId, ExecutionFragment> fragmentParams =
-                prepare.getIdToExecFragment();
+        Map<PlanFragmentId, ExecutionFragment> fragmentParams = prepare.getIdToExecFragment();
         fragmentParams.forEach((k, v) -> {
             System.err.println("Fragment " + k + " : " + v);
         });

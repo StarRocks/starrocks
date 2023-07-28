@@ -28,13 +28,12 @@ import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
-import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.qe.QeProcessorImpl;
-import com.starrocks.qe.scheduler.TExecPlanFragmentParamsFactory;
+import com.starrocks.qe.scheduler.TFragmentInstanceFactory;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.JobSpec;
@@ -273,7 +272,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         }
         queryCoordinator.prepareExec();
 
-        Map<PlanFragmentId, ExecutionFragment> fragmentExecParams = queryCoordinator.getIdToExecFragment();
+        List<ExecutionFragment> execFragments = queryCoordinator.getFragmentsInPreorder();
         TDescriptorTable descTable = queryCoordinator.getDescriptorTable();
         int tabletSinkDop = 1;
 
@@ -283,16 +282,14 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         Map<Long, MVMaintenanceTask> tasksByBe = new HashMap<>();
         long taskIdGen = 0;
         int backendIdGen = 0;
-        TExecPlanFragmentParamsFactory execPlanFragmentParamsFactory =
-                queryCoordinator.getExecPlanFragmentParamsFactory();
-        for (Map.Entry<PlanFragmentId, ExecutionFragment> kv : fragmentExecParams.entrySet()) {
-            ExecutionFragment execParams = kv.getValue();
+        TFragmentInstanceFactory execPlanFragmentParamsFactory = queryCoordinator.createTFragmentInstanceFactory();
+        for (ExecutionFragment execFragment : execFragments) {
             List<TExecPlanFragmentParams> tParams = execPlanFragmentParamsFactory.create(
-                    execParams, execParams.getInstances(), descTable, tabletSinkDop, tabletSinkDop);
-            for (int i = 0; i < execParams.getInstances().size(); i++) {
-                FragmentInstance instanceParam = execParams.getInstances().get(i);
+                    execFragment, execFragment.getInstances(), descTable, tabletSinkDop, tabletSinkDop);
+            for (int i = 0; i < execFragment.getInstances().size(); i++) {
+                FragmentInstance instance = execFragment.getInstances().get(i);
                 // Get brpc address instead of the default address
-                TNetworkAddress beRpcAddr = queryCoordinator.getBrpcAddress(instanceParam.getWorkerId());
+                TNetworkAddress beRpcAddr = queryCoordinator.getBrpcAddress(instance.getWorkerId());
                 Long taskId = addr2TaskId.get(beRpcAddr);
                 MVMaintenanceTask task;
                 if (taskId == null) {
@@ -306,7 +303,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
 
                 // TODO(murphy) is this necessary
                 int backendId = backendIdGen++;
-                instanceParam.setIndexInJob(backendId);
+                instance.setIndexInJob(backendId);
                 task.addFragmentInstance(tParams.get(i));
             }
         }

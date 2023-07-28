@@ -43,10 +43,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 public class ExecutionFragment {
+    private final ExecutionDAG executionDAG;
+    private final int fragmentIndex;
     private final PlanFragment planFragment;
     private final Map<PlanNodeId, ScanNode> scanNodes;
 
@@ -69,7 +69,9 @@ public class ExecutionFragment {
 
     private boolean isRightOrFullBucketShuffle = false;
 
-    public ExecutionFragment(PlanFragment planFragment) {
+    public ExecutionFragment(ExecutionDAG executionDAG, PlanFragment planFragment, int fragmentIndex) {
+        this.executionDAG = executionDAG;
+        this.fragmentIndex = fragmentIndex;
         this.planFragment = planFragment;
         this.scanNodes = planFragment.collectScanNodes();
 
@@ -78,6 +80,10 @@ public class ExecutionFragment {
 
         this.instances = Lists.newArrayList();
         this.scanRangeAssignment = new FragmentScanRangeAssignment();
+    }
+
+    public int getFragmentIndex() {
+        return fragmentIndex;
     }
 
     public PlanFragment getPlanFragment() {
@@ -113,14 +119,6 @@ public class ExecutionFragment {
         }
     }
 
-    public Map<Long, List<FragmentInstance>> geWorkerIdToInstances() {
-        return instances.stream()
-                .collect(Collectors.groupingBy(
-                        FragmentInstance::getWorkerId,
-                        Collectors.mapping(Function.identity(), Collectors.toList())
-                ));
-    }
-
     public FragmentScanRangeAssignment getScanRangeAssignment() {
         return scanRangeAssignment;
     }
@@ -144,10 +142,13 @@ public class ExecutionFragment {
     }
 
     public List<Integer> getBucketSeqToInstance() {
-        Preconditions.checkNotNull(colocatedAssignment);
+        if (cachedBucketSeqToInstance != null) {
+            return cachedBucketSeqToInstance;
+        }
 
-        if (this.cachedBucketSeqToInstance != null) {
-            return this.cachedBucketSeqToInstance;
+        if (colocatedAssignment == null) {
+            cachedBucketSeqToInstance = Collections.emptyList();
+            return cachedBucketSeqToInstance;
         }
 
         int numBuckets = getBucketNum();
@@ -163,8 +164,8 @@ public class ExecutionFragment {
             }
         }
 
-        this.cachedBucketSeqToInstance = Arrays.asList(bucketSeqToInstance);
-        return this.cachedBucketSeqToInstance;
+        cachedBucketSeqToInstance = Arrays.asList(bucketSeqToInstance);
+        return cachedBucketSeqToInstance;
     }
 
     public void addDestination(TPlanFragmentDestination destination) {
@@ -173,6 +174,14 @@ public class ExecutionFragment {
 
     public List<TPlanFragmentDestination> getDestinations() {
         return destinations;
+    }
+
+    public int childrenSize() {
+        return planFragment.getChildren().size();
+    }
+
+    public ExecutionFragment getChild(int i) {
+        return executionDAG.getFragment(planFragment.getChild(i).getFragmentId());
     }
 
     public List<FragmentInstance> getInstances() {
@@ -191,6 +200,7 @@ public class ExecutionFragment {
         }
     }
 
+    // Returns the id of the leftmost node of any of the gives types in 'plan_root'.
     public PlanNode getLeftMostNode() {
         PlanNode node = planFragment.getPlanRoot();
         while (node.getChildren().size() != 0 && !(node instanceof ExchangeNode)) {
