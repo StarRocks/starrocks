@@ -515,7 +515,7 @@ Status HashJoiner::_create_runtime_in_filters(RuntimeState* state) {
     size_t ht_row_count = get_ht_row_count();
     auto& ht = _hash_join_builder->hash_table();
 
-    if (ht_row_count > 1024) {
+    if (ht_row_count > config::max_pushdown_conditions_per_column) {
         return Status::OK();
     }
 
