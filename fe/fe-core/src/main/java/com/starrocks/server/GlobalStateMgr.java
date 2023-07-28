@@ -3000,7 +3000,7 @@ public class GlobalStateMgr {
     }
 
     public Optional<Table> mayGetTable(long dbId, long tableId) {
-        return mayGetDb(dbId).flatMap(db -> db.mayGetTable(tableId));
+        return mayGetDb(dbId).flatMap(db -> db.tryGetTable(tableId));
     }
 
     public Optional<Database> mayGetDb(String name) {

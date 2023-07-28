@@ -1050,26 +1050,29 @@ public class ScalarOperatorFunctions {
 
     // =================================== meta functions ==================================== //
 
-    /**
-     * Return verbose metadata of a materialized-view
-     */
-    @ConstantFunction(name = "inspect_mv_meta", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
-    public static ConstantOperator inspect_mv_meta(ConstantOperator mvName) {
-        TableName tableName = TableName.fromString(mvName.getVarchar());
+    private static Table inspectTable(String name) {
+        TableName tableName = TableName.fromString(name);
         Table table = GlobalStateMgr.getCurrentState()
                 .mayGetDb(tableName.getDb())
-                .flatMap(db -> db.mayGetTable(tableName.getTbl()))
-                .orElseThrow(
-                        () -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, mvName.getVarchar()));
-        if (!table.isMaterializedView()) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
-                    mvName.getVarchar() + " is not materialized view");
-        }
+                .flatMap(db -> db.tryGetTable(tableName.getTbl()))
+                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, name));
         ConnectContext connectContext = ConnectContext.get();
         PrivilegeChecker.checkAnyActionOnTable(
                 connectContext.getCurrentUserIdentity(),
                 connectContext.getCurrentRoleIds(),
                 tableName);
+        return table;
+    }
+
+    /**
+     * Return verbose metadata of a materialized-view
+     */
+    @ConstantFunction(name = "inspect_mv_meta", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspect_mv_meta(ConstantOperator mvName) {
+        Table table = inspectTable(mvName.getVarchar());
+        if (!table.isMaterializedView()) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, table + " is not materialized view");
+        }
 
         MaterializedView mv = (MaterializedView) table;
         String meta = mv.inspectMeta();
@@ -1080,18 +1083,8 @@ public class ScalarOperatorFunctions {
      * Return related materialized-views of a table, in JSON array format
      */
     @ConstantFunction(name = "inspect_related_mv", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
-    public static ConstantOperator inspect_related_mv(ConstantOperator arg0) {
-        TableName tableName = TableName.fromString(arg0.getVarchar());
-        Table table = GlobalStateMgr.getCurrentState().mayGetDb(tableName.getDb())
-                .flatMap(db -> db.mayGetTable(tableName.getTbl()))
-                .orElseThrow(
-                        () -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, arg0.getVarchar()));
-        ConnectContext connectContext = ConnectContext.get();
-        PrivilegeChecker.checkAnyActionOnTable(
-                connectContext.getCurrentUserIdentity(),
-                connectContext.getCurrentRoleIds(),
-                tableName);
-
+    public static ConstantOperator inspect_related_mv(ConstantOperator tableName) {
+        Table table = inspectTable(tableName.getVarchar());
         Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
         JsonArray array = new JsonArray();
         for (MvId mv : SetUtils.emptyIfNull(relatedMvs)) {
@@ -1112,20 +1105,12 @@ public class ScalarOperatorFunctions {
     /**
      * Return Hive partition info
      */
-    @ConstantFunction(name = "inspect_hive_part_info", argTypes = {
-            VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
-    public static ConstantOperator inspect_hive_part_info(ConstantOperator arg0) {
-        TableName tableName = TableName.fromString(arg0.getVarchar());
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName)
-                .orElseThrow(
-                        () -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, arg0.getVarchar()));
-
-        ConnectContext connectContext = ConnectContext.get();
-        PrivilegeChecker.checkAnyActionOnTable(
-                connectContext.getCurrentUserIdentity(),
-                connectContext.getCurrentRoleIds(),
-                tableName);
-
+    @ConstantFunction(name = "inspect_hive_part_info",
+            argTypes = {VARCHAR},
+            returnType = VARCHAR,
+            isMetaFunction = true)
+    public static ConstantOperator inspect_hive_part_info(ConstantOperator name) {
+        Table table = inspectTable(name.getVarchar());
         Map<String, PartitionInfo> info = PartitionUtil.getPartitionNameWithPartitionInfo(table);
         JsonObject obj = new JsonObject();
         for (Map.Entry<String, PartitionInfo> entry : MapUtils.emptyIfNull(info).entrySet()) {
