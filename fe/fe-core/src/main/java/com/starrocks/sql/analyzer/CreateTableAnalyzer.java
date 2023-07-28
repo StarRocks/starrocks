@@ -162,6 +162,8 @@ public class CreateTableAnalyzer {
                     keysPos = keysDesc.getPos();
                 }
                 throw new SemanticException("only primary key support sort key", keysPos);
+            } else if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                throw new SemanticException("not support sort key in cloud native table yet!");
             } else {
                 List<String> columnNames =
                         statement.getColumnDefs().stream().map(ColumnDef::getName).collect(Collectors.toList());
