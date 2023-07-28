@@ -1,0 +1,50 @@
+-- name: test_memory_metrics_tablet_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep tablet_count | wc -l
+
+-- name: test_memory_metrics_tablet_bytes
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep tablet_bytes | wc -l
+
+-- name: test_memory_metrics_replica_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep replica_count | wc -l
+
+-- name: test_memory_metrics_replica_bytes
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep replica_bytes | wc -l
+
+-- name: test_memory_metrics_txn_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep txn_count | wc -l
+
+-- name: test_memory_metrics_txn_bytes
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep txn_bytes | wc -l
+
+-- name: test_memory_metrics_txn_callback_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep txn_callback_count | wc -l
+
+-- name: test_memory_metrics_delete_job_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep delete_job_count | wc -l
+
+-- name: test_memory_metrics_delete_job_info_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep delete_job_info_count | wc -l
+
+-- name: test_memory_metrics_task_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep task_count | wc -l
+
+-- name: test_memory_metrics_running_task_run_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep running_task_run_count | wc -l
+
+-- name: test_memory_metrics_pending_task_run_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep pending_task_run_count | wc -l
+
+-- name: test_memory_metrics_history_task_run_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep history_task_run_count | wc -l
+
+-- name: test_memory_metrics_catalogs_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep catalogs_count | wc -l
+
+-- name: test_memory_metrics_insert_overwrite_jobs_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep insert_overwrite_jobs_count | wc -l
+
+-- name: test_memory_metrics_compaction_stats_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep compaction_stats_count | wc -l
+
+-- name: test_memory_metrics_stream_load_task_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep stream_load_task_count | wc -l
