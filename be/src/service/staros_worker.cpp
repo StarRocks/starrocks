@@ -46,6 +46,10 @@ DECLARE_double(cachemgr_evict_high_water);
 DECLARE_int32(cachemgr_dir_allocate_policy);
 // buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
 DECLARE_int32(fs_stream_buffer_size_bytes);
+// enable buffer prefetch to improve sequential read performance
+DECLARE_bool(fs_enable_buffer_prefetch);
+// thread pool size for buffer prefetch tasks
+DECLARE_int32(fs_buffer_prefetch_threadpool_size);
 
 namespace starrocks {
 
@@ -399,6 +403,8 @@ void init_staros_worker() {
     FLAGS_cachemgr_evict_high_water = config::starlet_cache_evict_high_water;
     FLAGS_cachemgr_dir_allocate_policy = config::starlet_cache_dir_allocate_policy;
     FLAGS_fs_stream_buffer_size_bytes = config::starlet_fs_stream_buffer_size_bytes;
+    FLAGS_fs_enable_buffer_prefetch = config::starlet_fs_enable_buffer_prefetch;
+    FLAGS_fs_buffer_prefetch_threadpool_size = config::starlet_fs_buffer_prefetch_threadpool_size;
 
     fslib::FLAGS_use_star_cache = config::starlet_use_star_cache;
     fslib::FLAGS_star_cache_mem_size_percent = config::starlet_star_cache_mem_size_percent;
