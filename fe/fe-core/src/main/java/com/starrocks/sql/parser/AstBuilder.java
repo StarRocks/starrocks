@@ -4412,7 +4412,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QualifiedName functionName = getQualifiedName(context.qualifiedName());
         List<Expr> parameters = visit(context.expressionList().expression(), Expr.class);
         FunctionCallExpr functionCallExpr =
-                new FunctionCallExpr(FunctionName.createFnName(functionName.toString().toLowerCase()), parameters);
+                new FunctionCallExpr(FunctionName.createFnName(functionName.toString()), parameters);
         TableFunctionRelation tableFunctionRelation = new TableFunctionRelation(functionCallExpr);
 
         if (context.alias != null) {
@@ -4428,7 +4428,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QualifiedName functionName = getQualifiedName(context.qualifiedName());
         List<Expr> parameters = visit(context.expressionList().expression(), Expr.class);
         FunctionCallExpr functionCallExpr =
-                new FunctionCallExpr(FunctionName.createFnName(functionName.toString().toLowerCase()), parameters);
+                new FunctionCallExpr(FunctionName.createFnName(functionName.toString()), parameters);
         TableFunctionRelation relation = new TableFunctionRelation(functionCallExpr);
 
         if (context.alias != null) {
