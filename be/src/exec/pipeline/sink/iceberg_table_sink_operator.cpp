@@ -334,7 +334,6 @@ Status IcebergTableSinkOperator::partition_value_to_string(Column* column, std::
                                          std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
                         partition_value = std::to_string(arg);
                     } else if constexpr (std::is_same_v<T, int8_t>) {
-                        LOG(ERROR) << typeid(arg).name();
                         // iceberg has no smallint type. we can safely use int8 as boolean.
                         partition_value = arg == 0 ? "false" : "true";
                     } else {
