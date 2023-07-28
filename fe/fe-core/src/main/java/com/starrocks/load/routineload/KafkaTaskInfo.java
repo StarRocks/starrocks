@@ -51,6 +51,8 @@ import com.starrocks.thrift.TLoadSourceType;
 import com.starrocks.thrift.TPlanFragment;
 import com.starrocks.thrift.TRoutineLoadTask;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.DatabaseTransactionMgr;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -174,7 +176,12 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         tRoutineLoadTask.setKafka_load_info(tKafkaLoadInfo);
         tRoutineLoadTask.setType(TLoadSourceType.KAFKA);
         tRoutineLoadTask.setParams(plan(routineLoadJob));
-        tRoutineLoadTask.setMax_interval_s(routineLoadJob.getTaskConsumeSecond());
+        // When the transaction times out, we reduce the consumption time to lower the BE load.
+        if (msg.contains(DatabaseTransactionMgr.TXN_TIMEOUT_BY_MANAGER)) {
+            tRoutineLoadTask.setMax_interval_s(routineLoadJob.getTaskConsumeSecond()/2);
+        } else {
+            tRoutineLoadTask.setMax_interval_s(routineLoadJob.getTaskConsumeSecond());
+        }
         tRoutineLoadTask.setMax_batch_rows(routineLoadJob.getMaxBatchRows());
         tRoutineLoadTask.setMax_batch_size(Config.max_routine_load_batch_size);
         if (!routineLoadJob.getFormat().isEmpty() && routineLoadJob.getFormat().equalsIgnoreCase("json")) {
