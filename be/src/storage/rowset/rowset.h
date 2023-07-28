@@ -380,6 +380,8 @@ private:
 
     Status _link_delta_column_group_files(KVStore* kvstore, const std::string& dir, int64_t version);
 
+    Status _copy_delta_column_group_files(KVStore* kvstore, const std::string& dir, int64_t version);
+
     std::vector<SegmentSharedPtr> _segments;
 };
 
