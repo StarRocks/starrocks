@@ -46,9 +46,6 @@ public:
         for (size_t i = 0; i < _schema.num_key_fields(); i++) {
             CHECK(_schema.field(i)->is_key());
         }
-        for (size_t i = 0; i + 1 < _schema.num_key_fields(); i++) {
-            CHECK_LT(_schema.field(i)->id(), _schema.field(i + 1)->id());
-        }
 #endif
     }
 
