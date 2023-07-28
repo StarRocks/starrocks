@@ -60,7 +60,7 @@ public class ExecutionFragment {
     private ColocatedBackendSelector.Assignment colocatedAssignment = null;
 
     private List<Integer> cachedBucketSeqToInstance = null;
-    public boolean bucketSeqToInstanceForFilterIsSet = false;
+    private boolean bucketSeqToInstanceForFilterIsSet = false;
 
     private final TRuntimeFilterParams runtimeFilterParams = new TRuntimeFilterParams();
 
@@ -206,7 +206,7 @@ public class ExecutionFragment {
     // Returns the id of the leftmost node of any of the gives types in 'plan_root'.
     public PlanNode getLeftMostNode() {
         PlanNode node = planFragment.getPlanRoot();
-        while (node.getChildren().size() != 0 && !(node instanceof ExchangeNode)) {
+        while (!node.getChildren().isEmpty() && !(node instanceof ExchangeNode)) {
             node = node.getChild(0);
         }
         return node;

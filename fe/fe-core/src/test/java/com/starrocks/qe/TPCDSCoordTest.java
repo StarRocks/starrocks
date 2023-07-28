@@ -92,7 +92,7 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
         coord.prepareExec();
 
         ExecutionFragment execFragment = coord.getExecutionDAG().getRootFragment();
-        Assert.assertEquals(execFragment.getRuntimeFilterParams().id_to_prober_params.get(1).size(), 10);
+        Assert.assertEquals(10, execFragment.getRuntimeFilterParams().id_to_prober_params.get(1).size());
     }
 
     @Test

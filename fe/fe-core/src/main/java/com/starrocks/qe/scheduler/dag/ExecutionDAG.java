@@ -343,11 +343,9 @@ public class ExecutionDAG {
     }
 
     private boolean needScheduleByBucketShuffleJoin(ExecutionFragment destFragment, DataSink sourceSink) {
-        if (destFragment.isBucketShuffleJoin()) {
-            if (sourceSink instanceof DataStreamSink) {
-                DataStreamSink streamSink = (DataStreamSink) sourceSink;
-                return streamSink.getOutputPartition().isBucketShuffle();
-            }
+        if (destFragment.isBucketShuffleJoin() && sourceSink instanceof DataStreamSink) {
+            DataStreamSink streamSink = (DataStreamSink) sourceSink;
+            return streamSink.getOutputPartition().isBucketShuffle();
         }
         return false;
     }
