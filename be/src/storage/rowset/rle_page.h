@@ -73,10 +73,7 @@ template <LogicalType Type>
 class RlePageBuilder final : public PageBuilder {
 public:
     explicit RlePageBuilder(const PageBuilderOptions& options)
-            : _options(options),
-              _rle_encoder(nullptr),
-              _first_value(0),
-              _last_value(0) {
+            : _options(options), _rle_encoder(nullptr), _first_value(0), _last_value(0) {
         _bit_width = (Type == TYPE_BOOLEAN) ? 1 : SIZE_OF_TYPE * 8;
         _rle_encoder = std::make_unique<RleEncoder<CppType>>(&_buf, _bit_width);
         reset();
