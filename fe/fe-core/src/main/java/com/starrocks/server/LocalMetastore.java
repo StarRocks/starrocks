@@ -1215,7 +1215,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 partitionInfo.getIsInMemory(partitionId),
                 isTempPartition,
                 ((ListPartitionInfo) partitionInfo).getIdToValues().get(partitionId),
-                ((ListPartitionInfo) partitionInfo).getIdToMultiValues().get(partitionId));
+                ((ListPartitionInfo) partitionInfo).getIdToMultiValues().get(partitionId),
+                partitionDescs.get(0).getDataCacheInfo());
         GlobalStateMgr.getCurrentState().getEditLog().logAddPartition(info);
 
         LOG.info("succeed in creating list partition[{}], name: {}, temp: {}", partitionId,
