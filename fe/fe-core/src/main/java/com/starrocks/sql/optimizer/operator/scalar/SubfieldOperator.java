@@ -18,7 +18,6 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
@@ -35,11 +34,6 @@ public class SubfieldOperator extends ScalarOperator {
     private List<ScalarOperator> children = new ArrayList<>();
     private final ImmutableList<String> fieldNames;
 
-    // Build based on SubfieldExpr
-    public static SubfieldOperator build(ScalarOperator child, SubfieldExpr expr) {
-        return new SubfieldOperator(child, expr.getType(), expr.getFieldNames());
-    }
-
     // Build based on SlotRef which contains struct subfield access information
     public static SubfieldOperator build(ScalarOperator child, Type type, List<Integer> usedSubfieldPos) {
         Type tmpType = type;
@@ -55,7 +49,7 @@ public class SubfieldOperator extends ScalarOperator {
         return new SubfieldOperator(child, tmpType, ImmutableList.copyOf(usedSubfieldNames));
     }
 
-    private SubfieldOperator(ScalarOperator child, Type type, List<String> fieldNames) {
+    public SubfieldOperator(ScalarOperator child, Type type, List<String> fieldNames) {
         super(OperatorType.SUBFIELD, type);
         this.children.add(child);
         this.fieldNames = ImmutableList.copyOf(fieldNames); 
