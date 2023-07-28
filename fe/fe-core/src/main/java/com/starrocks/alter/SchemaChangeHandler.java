@@ -86,6 +86,7 @@ import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AlterClause;
@@ -1316,6 +1317,9 @@ public class SchemaChangeHandler extends AlterHandler {
             } else if (alterClause instanceof ReorderColumnsClause) {
                 // reorder column
                 if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
+                    if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                        throw new DdlException("not support sort key in cloud native table yet!");
+                    }
                     List<Integer> sortKeyIdxes = new ArrayList<>();
                     processReorderColumnOfPrimaryKey((ReorderColumnsClause) alterClause, olapTable, indexSchemaMap, sortKeyIdxes);
                     return createJobForProcessReorderColumnOfPrimaryKey(db.getId(), olapTable,
