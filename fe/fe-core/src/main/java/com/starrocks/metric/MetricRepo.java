@@ -578,7 +578,7 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(txnBytes);
 
         GaugeMetric<Long> txnCallbackCnt = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
-                "The count of txn callback") {
+                "The count of txn callbacks") {
             @Override
             public Long getValue() {
                 return GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().getCallBackCnt();
@@ -668,7 +668,7 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(insertOverwriteJobCount);
 
         GaugeMetric<Long> compactionStatsCount = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
-                "The count of compaction statistics") {
+                "The count of compaction statistic") {
             @Override
             public Long getValue() {
                 return GlobalStateMgr.getCurrentState().getCompactionMgr().getPartitionStatsCount();
@@ -678,7 +678,7 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(compactionStatsCount);
 
         GaugeMetric<Long> streamLoadTaskCount = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
-                "The count of stream load task") {
+                "The count of stream load tasks") {
             @Override
             public Long getValue() {
                 return GlobalStateMgr.getCurrentState().getStreamLoadMgr().getStreamLoadTaskCount();
