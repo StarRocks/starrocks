@@ -374,6 +374,7 @@ public class CreateTableAnalyzer {
                     try {
                         // Iceberg table must use ListPartitionDesc
                         ((ListPartitionDesc) partitionDesc).analyzePartitionColumns(columnDefs);
+                        ((ListPartitionDesc) partitionDesc).checkPartitionColPos(columnDefs);
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
                     }

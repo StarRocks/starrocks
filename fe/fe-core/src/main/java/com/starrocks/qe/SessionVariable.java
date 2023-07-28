@@ -198,8 +198,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      */
     public static final String ENABLE_LOCAL_SHUFFLE_AGG = "enable_local_shuffle_agg";
 
-    public static final String ENABLE_DELIVER_BATCH_FRAGMENTS = "enable_deliver_batch_fragments";
-
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
 
@@ -447,6 +445,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_COUNT_STAR_OPTIMIZATION = "enable_count_star_optimization";
 
+    public static final String HDFS_BACKEND_SELECTOR_HASH_ALGORITHM = "hdfs_backend_selector_hash_algorithm";
+
+    public static final String CONSISTENT_HASH_VIRTUAL_NUMBER = "consistent_hash_virtual_number";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -499,16 +501,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = LOG_REJECTED_RECORD_NUM)
     private long logRejectedRecordNum = 0;
-
-    /**
-     * If enable this variable (only take effect for pipeline), it will deliver fragment instances
-     * to BE in batch and concurrently.
-     * - Uses `exec_batch_plan_fragments` instead of `exec_plan_fragment` RPC API, which all the instances
-     * of a fragment to the same destination host are delivered in the same request.
-     * - Send different fragments concurrently according to topological order of the fragment tree
-     */
-    @VariableMgr.VarAttr(name = ENABLE_DELIVER_BATCH_FRAGMENTS)
-    private boolean enableDeliverBatchFragments = true;
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
@@ -987,6 +979,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PARTIAL_UPDATE_MODE)
     private String partialUpdateMode = "auto";
 
+    @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_HASH_ALGORITHM, flag = VariableMgr.INVISIBLE)
+    private String hdfsBackendSelectorHashAlgorithm = "consistent";
+
+    @VariableMgr.VarAttr(name = CONSISTENT_HASH_VIRTUAL_NUMBER, flag = VariableMgr.INVISIBLE)
+    private int consistentHashVirtualNodeNum = 32;
+
     public void setPartialUpdateMode(String mode) {
         this.partialUpdateMode = mode;
     }
@@ -1422,6 +1420,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return maxParallelScanInstanceNum;
     }
 
+    public String getHdfsBackendSelectorHashAlgorithm() {
+        return hdfsBackendSelectorHashAlgorithm;
+    }
+
+    public void setHdfsBackendSelectorHashAlgorithm(String hdfsBackendSelectorHashAlgorithm) {
+        this.hdfsBackendSelectorHashAlgorithm = hdfsBackendSelectorHashAlgorithm;
+    }
+
+    public int getConsistentHashVirtualNodeNum() {
+        return consistentHashVirtualNodeNum;
+    }
+
+    public void setConsistentHashVirtualNodeNum(int consistentHashVirtualNodeNum) {
+        this.consistentHashVirtualNodeNum = consistentHashVirtualNodeNum;
+    }
+
     // when pipeline engine is enabled
     // in case of pipeline_dop > 0: return pipeline_dop * parallelExecInstanceNum;
     // in case of pipeline_dop <= 0 and avgNumCores < 2: return 1;
@@ -1704,14 +1718,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public float getGlobalRuntimeFilterProbeMinSelectivity() {
         return globalRuntimeFilterProbeMinSelectivity;
-    }
-
-    public void setEnableDeliverBatchFragments(boolean enableDeliverBatchFragments) {
-        this.enableDeliverBatchFragments = enableDeliverBatchFragments;
-    }
-
-    public boolean isEnableDeliverBatchFragments() {
-        return enableDeliverBatchFragments;
     }
 
     public boolean isMVPlanner() {
