@@ -87,21 +87,21 @@ PATCH /api/v2/databases/ssb_100g/tables/customer -d '{"unique_key_constraints": 
 
 ## HTTP Response Format
 
-1. When the API returns an HTTP status code of 200/201/202, the HTTP response is not empty. The API returns results in JSON format, including top-level fields "status", "message", and "result". All JSON fields are named using camel-case.
+1. When the API returns an HTTP code code of 200/201/202, the HTTP response is not empty. The API returns results in JSON format, including top-level fields "code", "message", and "result". All JSON fields are named using camel-case.
 
-2. In a successful API response, the "status" is "0", the "message" is "OK", and the "result" contains the actual results.
+2. In a successful API response, the "code" is "0", the "message" is "OK", and the "result" contains the actual results.
 ```json
 {
-   "status":"0",
+   "code":"0",
    "message": "OK",
    "result": {....}
 }
 ```
 
-3. In a failed API response, the "status" is not "0", the "message" is a simple error message, and the "result" can contain detailed error information, such as error stack traces.
+3. In a failed API response, the "code" is not "0", the "message" is a simple error message, and the "result" can contain detailed error information, such as error stack traces.
 ```json
 {
-   "status":"1",
+   "code":"1",
    "message": "Analyze error",
    "result": {....}
 }
