@@ -519,7 +519,7 @@ public class CoordinatorTest extends PlanTestBase {
 
         // Assert
         Map<PlanFragmentId, CoordinatorPreprocessor.ExecutionFragment> fragmentParams =
-                prepare.getExecFragmentMap();
+                prepare.getFragmentExecParamsMap();
         fragmentParams.forEach((k, v) -> {
             System.err.println("Fragment " + k + " : " + v);
         });

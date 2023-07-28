@@ -481,7 +481,7 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     public Map<PlanFragmentId, CoordinatorPreprocessor.ExecutionFragment> getFragmentExecParamsMap() {
-        return coordinatorPreprocessor.getExecFragmentMap();
+        return coordinatorPreprocessor.getFragmentExecParamsMap();
     }
 
     public List<PlanFragment> getFragments() {
@@ -536,7 +536,7 @@ public class DefaultCoordinator extends Coordinator {
     private void prepareResultSink() throws AnalysisException {
         PlanFragmentId topId = jobSpec.getFragments().get(0).getFragmentId();
         CoordinatorPreprocessor.ExecutionFragment topParams =
-                coordinatorPreprocessor.getExecFragmentMap().get(topId);
+                coordinatorPreprocessor.getFragmentExecParamsMap().get(topId);
         if (topParams.fragment.getSink() instanceof ResultSink) {
             long workerId = topParams.instanceExecParams.get(0).getWorkerId();
             ComputeNode worker = coordinatorPreprocessor.getWorkerProvider().getWorkerById(workerId);
@@ -718,7 +718,7 @@ public class DefaultCoordinator extends Coordinator {
                 for (PlanFragment fragment : fragmentGroup) {
                     int profileFragmentId = fragmentId2fragmentProfileIds.get(fragment.getFragmentId());
                     CoordinatorPreprocessor.ExecutionFragment params =
-                            coordinatorPreprocessor.getExecFragmentMap().get(fragment.getFragmentId());
+                            coordinatorPreprocessor.getFragmentExecParamsMap().get(fragment.getFragmentId());
                     Preconditions.checkState(!params.instanceExecParams.isEmpty());
 
                     // Fragment instances' ordinals in FragmentExecParams.instanceExecParams determine
@@ -906,7 +906,7 @@ public class DefaultCoordinator extends Coordinator {
             fragment.collectBuildRuntimeFilters(fragment.getPlanRoot());
             fragment.collectProbeRuntimeFilters(fragment.getPlanRoot());
             CoordinatorPreprocessor.ExecutionFragment params =
-                    coordinatorPreprocessor.getExecFragmentMap().get(fragment.getFragmentId());
+                    coordinatorPreprocessor.getFragmentExecParamsMap().get(fragment.getFragmentId());
             for (Map.Entry<Integer, RuntimeFilterDescription> kv : fragment.getProbeRuntimeFilters().entrySet()) {
                 List<TRuntimeFilterProberParams> probeParamList = Lists.newArrayList();
                 for (final CoordinatorPreprocessor.FragmentInstance instance : params.instanceExecParams) {
@@ -1222,7 +1222,7 @@ public class DefaultCoordinator extends Coordinator {
             }
         }
 
-        coordinatorPreprocessor.getExecFragmentMap().values()
+        coordinatorPreprocessor.getFragmentExecParamsMap().values()
                 .stream().flatMap(execFragment -> execFragment.instanceExecParams.stream())
                 .filter(instance -> !indexInJobToExecState.containsKey(instance.getBackendNum()))
                 .forEach(instance -> profileDoneSignal.markedCountDown(instance.getInstanceId(), -1L));

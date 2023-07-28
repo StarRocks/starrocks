@@ -273,7 +273,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         queryCoordinator.prepareExec();
 
         Map<PlanFragmentId, CoordinatorPreprocessor.ExecutionFragment> fragmentExecParams =
-                queryCoordinator.getExecFragmentMap();
+                queryCoordinator.getFragmentExecParamsMap();
         TDescriptorTable descTable = queryCoordinator.getDescriptorTable();
         boolean enablePipeline = true;
         int tabletSinkDop = 1;

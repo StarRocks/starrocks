@@ -117,7 +117,7 @@ public class CoordinatorPreprocessor {
     private final Set<TUniqueId> instanceIds = Sets.newHashSet();
 
     // populated in computeFragmentExecParams()
-    private final Map<PlanFragmentId, ExecutionFragment> execFragmentMap = Maps.newHashMap();
+    private final Map<PlanFragmentId, ExecutionFragment> fragmentExecParamsMap = Maps.newHashMap();
 
     private final Map<PlanFragmentId, List<Integer>> fragmentIdToSeqToInstanceMap = Maps.newHashMap();
 
@@ -155,7 +155,7 @@ public class CoordinatorPreprocessor {
                 // Fake a fragment for this node
                 fragment = new PlanFragment(id, scan, DataPartition.RANDOM);
             }
-            execFragmentMap.put(scan.getFragmentId(), new ExecutionFragment(fragment));
+            fragmentExecParamsMap.put(scan.getFragmentId(), new ExecutionFragment(fragment));
         }
     }
 
@@ -224,8 +224,8 @@ public class CoordinatorPreprocessor {
         return jobSpec.getScanNodes();
     }
 
-    public Map<PlanFragmentId, ExecutionFragment> getExecFragmentMap() {
-        return execFragmentMap;
+    public Map<PlanFragmentId, ExecutionFragment> getFragmentExecParamsMap() {
+        return fragmentExecParamsMap;
     }
 
     public Map<PlanFragmentId, List<Integer>> getFragmentIdToSeqToInstanceMap() {
@@ -286,7 +286,7 @@ public class CoordinatorPreprocessor {
     @VisibleForTesting
     void prepareFragments() {
         for (PlanFragment fragment : jobSpec.getFragments()) {
-            execFragmentMap.put(fragment.getFragmentId(), new ExecutionFragment(fragment));
+            fragmentExecParamsMap.put(fragment.getFragmentId(), new ExecutionFragment(fragment));
         }
 
         coordAddress = new TNetworkAddress(LOCAL_IP, Config.rpc_port);
@@ -299,7 +299,7 @@ public class CoordinatorPreprocessor {
             int idx = 0;
             sb.append("query id=").append(DebugUtil.printId(jobSpec.getQueryId())).append(",");
             sb.append("fragment=[");
-            for (Map.Entry<PlanFragmentId, ExecutionFragment> entry : execFragmentMap.entrySet()) {
+            for (Map.Entry<PlanFragmentId, ExecutionFragment> entry : fragmentExecParamsMap.entrySet()) {
                 if (idx++ != 0) {
                     sb.append(",");
                 }
@@ -351,7 +351,7 @@ public class CoordinatorPreprocessor {
 
         for (int i = jobSpec.getFragments().size() - 1; i >= 0; --i) {
             PlanFragment fragment = jobSpec.getFragments().get(i);
-            ExecutionFragment params = execFragmentMap.get(fragment.getFragmentId());
+            ExecutionFragment params = fragmentExecParamsMap.get(fragment.getFragmentId());
 
             boolean dopAdaptionEnabled = jobSpec.isEnablePipeline() &&
                     connectContext.getSessionVariable().isEnablePipelineAdaptiveDop();
@@ -359,7 +359,7 @@ public class CoordinatorPreprocessor {
             // If left child is MultiCastDataFragment(only support left now), will keep same instance with child.
             if (fragment.getChildren().size() > 0 && fragment.getChild(0) instanceof MultiCastPlanFragment) {
                 ExecutionFragment childFragmentParams =
-                        execFragmentMap.get(fragment.getChild(0).getFragmentId());
+                        fragmentExecParamsMap.get(fragment.getChild(0).getFragmentId());
                 for (FragmentInstance childInstanceParam : childFragmentParams.instanceExecParams) {
                     params.instanceExecParams.add(
                             new FragmentInstance(null, childInstanceParam.getWorkerId(), params));
@@ -392,7 +392,7 @@ public class CoordinatorPreprocessor {
                 int maxParallelism = 0;
                 for (int j = 0; j < fragment.getChildren().size(); j++) {
                     int currentChildFragmentParallelism =
-                            execFragmentMap.get(fragment.getChild(j).getFragmentId()).instanceExecParams.size();
+                            fragmentExecParamsMap.get(fragment.getChild(j).getFragmentId()).instanceExecParams.size();
                     // when dop adaptation enabled, numInstances * pipelineDop is equivalent to numInstances in
                     // non-pipeline engine and pipeline engine(dop adaptation disabled).
                     if (dopAdaptionEnabled) {
@@ -405,7 +405,7 @@ public class CoordinatorPreprocessor {
                 }
 
                 PlanFragmentId inputFragmentId = fragment.getChild(inputFragmentIndex).getFragmentId();
-                ExecutionFragment maxParallelismExecFragment = execFragmentMap.get(inputFragmentId);
+                ExecutionFragment maxParallelismExecFragment = fragmentExecParamsMap.get(inputFragmentId);
 
                 // hostSet contains target backends to whom fragment instances of the current PlanFragment will be
                 // delivered. when pipeline parallelization is adopted, the number of instances should be the size
@@ -422,7 +422,7 @@ public class CoordinatorPreprocessor {
                         // union fragment use all children's host
                         // if output fragment isn't gather, all fragment must keep 1 instance
                         for (PlanFragment child : fragment.getChildren()) {
-                            ExecutionFragment childParams = execFragmentMap.get(child.getFragmentId());
+                            ExecutionFragment childParams = fragmentExecParamsMap.get(child.getFragmentId());
                             childParams.instanceExecParams.stream()
                                     .map(FragmentInstance::getWorkerId)
                                     .forEach(workerIdSet::add);
@@ -494,7 +494,7 @@ public class CoordinatorPreprocessor {
                 boolean assignScanRangesPerDriverSeq = jobSpec.isEnablePipeline() &&
                         (fragment.isAssignScanRangesPerDriverSeq() || fragment.isForceAssignScanRangesPerDriverSeq());
                 for (Map.Entry<Long, Map<Integer, List<TScanRangeParams>>> workerIdMapEntry :
-                        execFragmentMap.get(fragment.getFragmentId()).scanRangeAssignment.entrySet()) {
+                        fragmentExecParamsMap.get(fragment.getFragmentId()).scanRangeAssignment.entrySet()) {
                     Long workerId = workerIdMapEntry.getKey();
                     Map<Integer, List<TScanRangeParams>> value = workerIdMapEntry.getValue();
 
@@ -816,7 +816,7 @@ public class CoordinatorPreprocessor {
     }
 
     public FragmentScanRangeAssignment getFragmentScanRangeAssignment(PlanFragmentId fragmentId) {
-        return execFragmentMap.get(fragmentId).scanRangeAssignment;
+        return fragmentExecParamsMap.get(fragmentId).scanRangeAssignment;
     }
 
     // Populates scan_range_assignment_.
@@ -834,7 +834,7 @@ public class CoordinatorPreprocessor {
                 continue;
             }
 
-            ExecutionFragment execFragment = execFragmentMap.get(scanNode.getFragmentId());
+            ExecutionFragment execFragment = fragmentExecParamsMap.get(scanNode.getFragmentId());
             FragmentScanRangeAssignment assignment = execFragment.scanRangeAssignment;
 
             if (scanNode instanceof SchemaScanNode) {
@@ -890,7 +890,7 @@ public class CoordinatorPreprocessor {
 
         // assign instance ids
         instanceIds.clear();
-        for (ExecutionFragment params : execFragmentMap.values()) {
+        for (ExecutionFragment params : fragmentExecParamsMap.values()) {
             if (LOG.isDebugEnabled()) {
                 LOG.debug("fragment {} has instances {}", params.fragment.getFragmentId(),
                         params.instanceExecParams.size());
@@ -919,7 +919,7 @@ public class CoordinatorPreprocessor {
         // MultiCastFragment params
         handleMultiCastFragmentParams();
 
-        for (ExecutionFragment params : execFragmentMap.values()) {
+        for (ExecutionFragment params : fragmentExecParamsMap.values()) {
             if (params.fragment instanceof MultiCastPlanFragment) {
                 continue;
             }
@@ -930,7 +930,7 @@ public class CoordinatorPreprocessor {
                 // root plan fragment
                 continue;
             }
-            ExecutionFragment destParams = execFragmentMap.get(destFragment.getFragmentId());
+            ExecutionFragment destParams = fragmentExecParamsMap.get(destFragment.getFragmentId());
 
             // set # of senders
             DataSink sink = params.fragment.getSink();
@@ -1011,7 +1011,7 @@ public class CoordinatorPreprocessor {
     }
 
     private void handleMultiCastFragmentParams() throws Exception {
-        for (ExecutionFragment params : execFragmentMap.values()) {
+        for (ExecutionFragment params : fragmentExecParamsMap.values()) {
             if (!(params.fragment instanceof MultiCastPlanFragment)) {
                 continue;
             }
@@ -1028,7 +1028,7 @@ public class CoordinatorPreprocessor {
                 if (destFragment == null) {
                     continue;
                 }
-                ExecutionFragment destParams = execFragmentMap.get(destFragment.getFragmentId());
+                ExecutionFragment destParams = fragmentExecParamsMap.get(destFragment.getFragmentId());
 
                 // Set params for pipeline level shuffle.
                 multi.getDestNode(i).setPartitionType(params.fragment.getOutputPartition().getType());
@@ -1111,7 +1111,7 @@ public class CoordinatorPreprocessor {
     private void computeBeInstanceNumbers() {
         workerIdToNumInstances.clear();
         for (PlanFragment fragment : jobSpec.getFragments()) {
-            ExecutionFragment params = execFragmentMap.get(fragment.getFragmentId());
+            ExecutionFragment params = fragmentExecParamsMap.get(fragment.getFragmentId());
             for (final FragmentInstance instance : params.instanceExecParams) {
                 long workerId = instance.getWorkerId();
                 Integer number = workerIdToNumInstances.getOrDefault(workerId, 0);
@@ -1122,7 +1122,7 @@ public class CoordinatorPreprocessor {
 
     private int getFragmentBucketNum(PlanFragmentId fragmentId) {
         ColocatedBackendSelector.Assignment colocatedAssignment =
-                execFragmentMap.get(fragmentId).colocatedAssignment;
+                fragmentExecParamsMap.get(fragmentId).colocatedAssignment;
         return colocatedAssignment == null ? 0 : colocatedAssignment.getBucketNum();
     }
 
