@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
@@ -32,13 +33,15 @@ import java.util.List;
 public class CreateTableLikeAnalyzer {
 
     public static void analyze(CreateTableLikeStmt stmt, ConnectContext context) {
+        TableName existedDbTbl = stmt.getExistedDbTbl();
         MetaUtils.normalizationTableName(context, stmt.getDbTbl());
-        MetaUtils.normalizationTableName(context, stmt.getExistedDbTbl());
+        MetaUtils.normalizationTableName(context, existedDbTbl);
         String tableName = stmt.getTableName();
         FeNameFormat.checkTableName(tableName);
 
-        Database db = MetaUtils.getDatabase(context, stmt.getExistedDbTbl());
-        Table table = MetaUtils.getTable(stmt.getExistedDbTbl());
+        MetaUtils.checkNotSupportCatalog(existedDbTbl.getCatalog(), "CREATE TABLE LIKE");
+        Database db = MetaUtils.getDatabase(context, existedDbTbl);
+        Table table = MetaUtils.getTable(existedDbTbl);
 
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(stmt.getDbName(), table, createTableStmt, null, null, false, false);

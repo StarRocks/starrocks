@@ -40,6 +40,7 @@ public class AlterTableStatementAnalyzer {
                     "you can use 'ALTER MATERIALIZED VIEW' to alter it.", tbl.getTbl());
             throw new SemanticException(msg, tbl.getPos());
         }
+        MetaUtils.checkNotSupportCatalog(tbl.getCatalog(), "ALTER");
         List<AlterClause> alterClauseList = statement.getOps();
         if (alterClauseList == null || alterClauseList.isEmpty()) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_NO_ALTER_OPERATION);
