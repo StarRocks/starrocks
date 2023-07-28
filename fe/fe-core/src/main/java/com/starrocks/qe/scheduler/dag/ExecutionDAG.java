@@ -83,188 +83,12 @@ public class ExecutionDAG {
         return executionDAG;
     }
 
-    public Map<Integer, TNetworkAddress> getChannelIdToBEHTTP() {
-        return channelIdToBEHTTP;
-    }
-
-    public Map<Integer, TNetworkAddress> getChannelIdToBEPort() {
-        return channelIdToBEPort;
-    }
-
     public void attachFragments(List<PlanFragment> planFragments) {
         for (PlanFragment planFragment : planFragments) {
             ExecutionFragment fragment = new ExecutionFragment(this, planFragment, fragments.size());
             fragments.add(fragment);
             idToFragment.put(planFragment.getFragmentId(), fragment);
         }
-    }
-
-    /**
-     * Initialize the execution fragment.
-     * The mainly work is to compute destinations and # senders per exchange node
-     * (the root fragment doesn't have a destination).
-     *
-     * @param execFragment The fragment to be initialized.
-     * @throws SchedulerException when there is something wrong for the plan or execution informatino.
-     */
-    public void initFragment(ExecutionFragment execFragment) throws SchedulerException {
-        for (FragmentInstance instance : execFragment.getInstances()) {
-            setInstanceId(instance);
-        }
-
-        if (execFragment.getPlanFragment() instanceof MultiCastPlanFragment) {
-            initMultiCastFragment(execFragment, (MultiCastPlanFragment) execFragment.getPlanFragment());
-        } else {
-            initNormalFragment(execFragment);
-        }
-    }
-
-    private boolean needScheduleByBucketShuffleJoin(ExecutionFragment destFragment, DataSink sourceSink) {
-        if (destFragment.isBucketShuffleJoin()) {
-            if (sourceSink instanceof DataStreamSink) {
-                DataStreamSink streamSink = (DataStreamSink) sourceSink;
-                return streamSink.getOutputPartition().isBucketShuffle();
-            }
-        }
-        return false;
-    }
-
-    private void initMultiCastFragment(ExecutionFragment execFragment, MultiCastPlanFragment fragment)
-            throws SchedulerException {
-        Preconditions.checkState(fragment.getSink() instanceof MultiCastDataSink);
-        MultiCastDataSink multiSink = (MultiCastDataSink) fragment.getSink();
-
-        // set # of senders
-
-        for (int i = 0; i < fragment.getDestFragmentList().size(); i++) {
-            PlanFragment destFragment = fragment.getDestFragmentList().get(i);
-
-            if (destFragment == null) {
-                continue;
-            }
-
-            ExecutionFragment destExecFragment = idToFragment.get(destFragment.getFragmentId());
-            DataStreamSink sink = multiSink.getDataStreamSinks().get(i);
-
-            // Set params for pipeline level shuffle.
-            fragment.getDestNode(i).setPartitionType(fragment.getOutputPartition().getType());
-            sink.setExchDop(destFragment.getPipelineDop());
-
-            Integer exchangeId = sink.getExchNodeId().asInt();
-            // MultiCastSink only send to itself, destination exchange only one sender,
-            // and it doesn't support sort-merge
-            Preconditions.checkState(!destExecFragment.getNumSendersPerExchange().containsKey(exchangeId));
-            destExecFragment.getNumSendersPerExchange().put(exchangeId, 1);
-
-            if (needScheduleByBucketShuffleJoin(destExecFragment, sink)) {
-                throw new NonRecoverableException("CTE consumer fragment cannot be bucket shuffle join");
-            } else {
-                // add destination host to this fragment's destination
-                for (FragmentInstance destInstance : destExecFragment.getInstances()) {
-                    TPlanFragmentDestination dest = new TPlanFragmentDestination();
-
-                    dest.setFragment_instance_id(destInstance.getInstanceId());
-                    ComputeNode worker = destInstance.getWorker();
-                    // NOTE(zc): can be removed in version 4.0
-                    dest.setDeprecated_server(worker.getAddress());
-                    dest.setBrpc_server(worker.getBrpcAddress());
-
-                    multiSink.getDestinations().get(i).add(dest);
-                }
-            }
-        }
-    }
-
-    private void initNormalFragment(ExecutionFragment execFragment) {
-        PlanFragment fragment = execFragment.getPlanFragment();
-        PlanFragment destFragment = fragment.getDestFragment();
-
-        if (destFragment == null) {
-            // root plan fragment
-            return;
-        }
-
-        ExecutionFragment destExecFragment = idToFragment.get(destFragment.getFragmentId());
-        DataSink sink = fragment.getSink();
-
-        // Set params for pipeline level shuffle.
-        fragment.getDestNode().setPartitionType(fragment.getOutputPartition().getType());
-        if (sink instanceof DataStreamSink) {
-            DataStreamSink dataStreamSink = (DataStreamSink) sink;
-            dataStreamSink.setExchDop(destFragment.getPipelineDop());
-        }
-
-        Integer exchangeId = sink.getExchNodeId().asInt();
-        destExecFragment.getNumSendersPerExchange().compute(exchangeId, (k, oldNumSenders) -> {
-            if (oldNumSenders == null) {
-                return execFragment.getInstances().size();
-            }
-            // we might have multiple fragments sending to this exchange node
-            // (distributed MERGE), which is why we need to add up the #senders
-            // e.g. sort-merge
-            return oldNumSenders + execFragment.getInstances().size();
-        });
-
-        // We can only handle unpartitioned (= broadcast) and hash-partitioned output at the moment.
-        if (needScheduleByBucketShuffleJoin(destExecFragment, sink)) {
-            Map<Integer, FragmentInstance> bucketSeqToDestInstance = Maps.newHashMap();
-            for (FragmentInstance destInstance : destExecFragment.getInstances()) {
-                for (int bucketSeq : destInstance.getBucketSeqs()) {
-                    bucketSeqToDestInstance.put(bucketSeq, destInstance);
-                }
-            }
-
-            TNetworkAddress dummyServer = new TNetworkAddress("0.0.0.0", 0);
-            int bucketNum = destExecFragment.getBucketNum();
-            for (int bucketSeq = 0; bucketSeq < bucketNum; bucketSeq++) {
-                TPlanFragmentDestination dest = new TPlanFragmentDestination();
-
-                FragmentInstance destInstance = bucketSeqToDestInstance.get(bucketSeq);
-                if (destInstance == null) {
-                    // dest bucket may be pruned, these bucket dest should be set an invalid value
-                    // and will be deal with in BE's DataStreamSender
-                    dest.setFragment_instance_id(new TUniqueId(-1, -1));
-                    // NOTE(zc): can be removed in version 4.0
-                    dest.setDeprecated_server(dummyServer);
-                    dest.setBrpc_server(dummyServer);
-                } else {
-                    dest.setFragment_instance_id(destInstance.getInstanceId());
-                    ComputeNode worker = destInstance.getWorker();
-                    // NOTE(zc): can be removed in version 4.0
-                    dest.setDeprecated_server(worker.getAddress());
-                    dest.setBrpc_server(worker.getBrpcAddress());
-
-                    int driverSeq = destInstance.getDriverSeqOfBucketSeq(bucketSeq);
-                    if (driverSeq != FragmentInstance.ABSENT_DRIVER_SEQUENCE) {
-                        dest.setPipeline_driver_sequence(driverSeq);
-                    }
-                }
-                execFragment.addDestination(dest);
-            }
-        } else {
-            // add destination host to this fragment's destination
-            for (FragmentInstance destInstance : destExecFragment.getInstances()) {
-                TPlanFragmentDestination dest = new TPlanFragmentDestination();
-
-                dest.setFragment_instance_id(destInstance.getInstanceId());
-                ComputeNode worker = destInstance.getWorker();
-                // NOTE(zc): can be removed in version 4.0
-                dest.setDeprecated_server(worker.getAddress());
-                dest.setBrpc_server(worker.getBrpcAddress());
-
-                execFragment.addDestination(dest);
-            }
-        }
-    }
-
-    public void setInstanceId(FragmentInstance instance) {
-        TUniqueId jobId = jobSpec.getQueryId();
-        TUniqueId instanceId = new TUniqueId();
-        instanceId.setHi(jobId.hi);
-        instanceId.setLo(jobId.lo + instanceIdToInstance.size() + 1);
-
-        instance.setInstanceId(instanceId);
-        instanceIdToInstance.put(instanceId, instance);
     }
 
     public Set<TUniqueId> getInstanceIds() {
@@ -288,7 +112,6 @@ public class ExecutionDAG {
     public List<ExecutionFragment> getFragmentsInCreatedOrder() {
         return fragments;
     }
-
 
     public List<ExecutionFragment> getFragmentsInPreorder() {
         return fragments;
@@ -404,14 +227,7 @@ public class ExecutionDAG {
         return fragments.get(0).getPlanFragment().getDataPartition() == DataPartition.UNPARTITIONED;
     }
 
-    public void finalizeDAG() {
-        workerIdToNumInstances = fragments.stream()
-                .flatMap(fragment -> fragment.getInstances().stream())
-                .collect(Collectors.groupingBy(
-                        FragmentInstance::getWorkerId,
-                        Collectors.summingInt(instance -> 1)
-                ));
-
+    public void finalizeDAG() throws SchedulerException {
         // For a shuffle join, its shuffle partitions and corresponding one-map-one GRF components should have the same ordinals.
         // - Fragment instances' ordinals in ExecutionFragment.instances determine shuffle partitions' ordinals in DataStreamSink.
         // - IndexInJob of Fragment instances that contain shuffle join determine the ordinals of GRF components in the GRF.
@@ -420,9 +236,21 @@ public class ExecutionDAG {
         int index = 0;
         for (ExecutionFragment fragment : fragments) {
             for (FragmentInstance instance : fragment.getInstances()) {
+                setInstanceId(instance);
                 instance.setIndexInJob(index++);
             }
         }
+
+        for (ExecutionFragment fragment : fragments) {
+            connectFragmentToDestFragments(fragment);
+        }
+
+        workerIdToNumInstances = fragments.stream()
+                .flatMap(fragment -> fragment.getInstances().stream())
+                .collect(Collectors.groupingBy(
+                        FragmentInstance::getWorkerId,
+                        Collectors.summingInt(instance -> 1)
+                ));
 
         if (jobSpec.isStreamLoad()) {
             fragments.stream()
@@ -440,6 +268,14 @@ public class ExecutionDAG {
                             })
                     );
         }
+    }
+
+    public Map<Integer, TNetworkAddress> getChannelIdToBEHTTP() {
+        return channelIdToBEHTTP;
+    }
+
+    public Map<Integer, TNetworkAddress> getChannelIdToBEPort() {
+        return channelIdToBEPort;
     }
 
     public int getNumInstancesOfWorkerId(Long addr) {
@@ -490,6 +326,168 @@ public class ExecutionDAG {
         indexInJobToExecState.clear();
         needCheckExecutions.clear();
         instanceIdToInstance.clear();
+    }
+
+    /**
+     * Compute destinations and # senders per exchange node.
+     *
+     * @param execFragment The fragment to be initialized.
+     * @throws SchedulerException when there is something wrong for the plan or execution information.
+     */
+    private void connectFragmentToDestFragments(ExecutionFragment execFragment) throws SchedulerException {
+        if (execFragment.getPlanFragment() instanceof MultiCastPlanFragment) {
+            connectMultiCastFragmentToDestFragments(execFragment, (MultiCastPlanFragment) execFragment.getPlanFragment());
+        } else {
+            connectNormalFragmentToDestFragments(execFragment);
+        }
+    }
+
+    private boolean needScheduleByBucketShuffleJoin(ExecutionFragment destFragment, DataSink sourceSink) {
+        if (destFragment.isBucketShuffleJoin()) {
+            if (sourceSink instanceof DataStreamSink) {
+                DataStreamSink streamSink = (DataStreamSink) sourceSink;
+                return streamSink.getOutputPartition().isBucketShuffle();
+            }
+        }
+        return false;
+    }
+
+    private void connectMultiCastFragmentToDestFragments(ExecutionFragment execFragment, MultiCastPlanFragment fragment)
+            throws SchedulerException {
+        Preconditions.checkState(fragment.getSink() instanceof MultiCastDataSink);
+        MultiCastDataSink multiSink = (MultiCastDataSink) fragment.getSink();
+
+        // set # of senders
+
+        for (int i = 0; i < fragment.getDestFragmentList().size(); i++) {
+            PlanFragment destFragment = fragment.getDestFragmentList().get(i);
+
+            if (destFragment == null) {
+                continue;
+            }
+
+            ExecutionFragment destExecFragment = idToFragment.get(destFragment.getFragmentId());
+            DataStreamSink sink = multiSink.getDataStreamSinks().get(i);
+
+            // Set params for pipeline level shuffle.
+            fragment.getDestNode(i).setPartitionType(fragment.getOutputPartition().getType());
+            sink.setExchDop(destFragment.getPipelineDop());
+
+            Integer exchangeId = sink.getExchNodeId().asInt();
+            // MultiCastSink only send to itself, destination exchange only one sender,
+            // and it doesn't support sort-merge
+            Preconditions.checkState(!destExecFragment.getNumSendersPerExchange().containsKey(exchangeId));
+            destExecFragment.getNumSendersPerExchange().put(exchangeId, 1);
+
+            if (needScheduleByBucketShuffleJoin(destExecFragment, sink)) {
+                throw new NonRecoverableException("CTE consumer fragment cannot be bucket shuffle join");
+            } else {
+                // add destination host to this fragment's destination
+                for (FragmentInstance destInstance : destExecFragment.getInstances()) {
+                    TPlanFragmentDestination dest = new TPlanFragmentDestination();
+
+                    dest.setFragment_instance_id(destInstance.getInstanceId());
+                    ComputeNode worker = destInstance.getWorker();
+                    // NOTE(zc): can be removed in version 4.0
+                    dest.setDeprecated_server(worker.getAddress());
+                    dest.setBrpc_server(worker.getBrpcAddress());
+
+                    multiSink.getDestinations().get(i).add(dest);
+                }
+            }
+        }
+    }
+
+    private void connectNormalFragmentToDestFragments(ExecutionFragment execFragment) {
+        PlanFragment fragment = execFragment.getPlanFragment();
+        PlanFragment destFragment = fragment.getDestFragment();
+
+        if (destFragment == null) {
+            // root plan fragment
+            return;
+        }
+
+        ExecutionFragment destExecFragment = idToFragment.get(destFragment.getFragmentId());
+        DataSink sink = fragment.getSink();
+
+        // Set params for pipeline level shuffle.
+        fragment.getDestNode().setPartitionType(fragment.getOutputPartition().getType());
+        if (sink instanceof DataStreamSink) {
+            DataStreamSink dataStreamSink = (DataStreamSink) sink;
+            dataStreamSink.setExchDop(destFragment.getPipelineDop());
+        }
+
+        Integer exchangeId = sink.getExchNodeId().asInt();
+        destExecFragment.getNumSendersPerExchange().compute(exchangeId, (k, oldNumSenders) -> {
+            if (oldNumSenders == null) {
+                return execFragment.getInstances().size();
+            }
+            // we might have multiple fragments sending to this exchange node
+            // (distributed MERGE), which is why we need to add up the #senders
+            // e.g. sort-merge
+            return oldNumSenders + execFragment.getInstances().size();
+        });
+
+        // We can only handle unpartitioned (= broadcast) and hash-partitioned output at the moment.
+        if (needScheduleByBucketShuffleJoin(destExecFragment, sink)) {
+            Map<Integer, FragmentInstance> bucketSeqToDestInstance = Maps.newHashMap();
+            for (FragmentInstance destInstance : destExecFragment.getInstances()) {
+                for (int bucketSeq : destInstance.getBucketSeqs()) {
+                    bucketSeqToDestInstance.put(bucketSeq, destInstance);
+                }
+            }
+
+            TNetworkAddress dummyServer = new TNetworkAddress("0.0.0.0", 0);
+            int bucketNum = destExecFragment.getBucketNum();
+            for (int bucketSeq = 0; bucketSeq < bucketNum; bucketSeq++) {
+                TPlanFragmentDestination dest = new TPlanFragmentDestination();
+
+                FragmentInstance destInstance = bucketSeqToDestInstance.get(bucketSeq);
+                if (destInstance == null) {
+                    // dest bucket may be pruned, these bucket dest should be set an invalid value
+                    // and will be deal with in BE's DataStreamSender
+                    dest.setFragment_instance_id(new TUniqueId(-1, -1));
+                    // NOTE(zc): can be removed in version 4.0
+                    dest.setDeprecated_server(dummyServer);
+                    dest.setBrpc_server(dummyServer);
+                } else {
+                    dest.setFragment_instance_id(destInstance.getInstanceId());
+                    ComputeNode worker = destInstance.getWorker();
+                    // NOTE(zc): can be removed in version 4.0
+                    dest.setDeprecated_server(worker.getAddress());
+                    dest.setBrpc_server(worker.getBrpcAddress());
+
+                    int driverSeq = destInstance.getDriverSeqOfBucketSeq(bucketSeq);
+                    if (driverSeq != FragmentInstance.ABSENT_DRIVER_SEQUENCE) {
+                        dest.setPipeline_driver_sequence(driverSeq);
+                    }
+                }
+                execFragment.addDestination(dest);
+            }
+        } else {
+            // add destination host to this fragment's destination
+            for (FragmentInstance destInstance : destExecFragment.getInstances()) {
+                TPlanFragmentDestination dest = new TPlanFragmentDestination();
+
+                dest.setFragment_instance_id(destInstance.getInstanceId());
+                ComputeNode worker = destInstance.getWorker();
+                // NOTE(zc): can be removed in version 4.0
+                dest.setDeprecated_server(worker.getAddress());
+                dest.setBrpc_server(worker.getBrpcAddress());
+
+                execFragment.addDestination(dest);
+            }
+        }
+    }
+
+    private void setInstanceId(FragmentInstance instance) {
+        TUniqueId jobId = jobSpec.getQueryId();
+        TUniqueId instanceId = new TUniqueId();
+        instanceId.setHi(jobId.hi);
+        instanceId.setLo(jobId.lo + instanceIdToInstance.size() + 1);
+
+        instance.setInstanceId(instanceId);
+        instanceIdToInstance.put(instanceId, instance);
     }
 
 }

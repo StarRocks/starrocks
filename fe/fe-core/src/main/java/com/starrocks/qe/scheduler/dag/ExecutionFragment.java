@@ -36,6 +36,7 @@ import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TPlanFragmentDestination;
 import com.starrocks.thrift.TRuntimeFilterParams;
 import com.starrocks.thrift.TScanRangeParams;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -107,10 +108,12 @@ public class ExecutionFragment {
             return;
         }
         bucketSeqToInstanceForFilterIsSet = true;
+
         List<Integer> seqToInstance = getBucketSeqToInstance();
-        if (seqToInstance == null || seqToInstance.isEmpty()) {
+        if (CollectionUtils.isEmpty(seqToInstance)) {
             return;
         }
+
         for (RuntimeFilterDescription rf : planFragment.getBuildRuntimeFilters().values()) {
             if (!rf.isColocateOrBucketShuffle()) {
                 continue;
@@ -245,58 +248,8 @@ public class ExecutionFragment {
     }
 
     public boolean isRightOrFullBucketShuffle() {
+        isBucketShuffleJoin(); // isRightOrFullBucketShuffle is calculated when calculating isBucketShuffleJoin.
         return isRightOrFullBucketShuffle;
-    }
-
-    private boolean isColocated(PlanNode root) {
-        if (root instanceof ExchangeNode) {
-            return false;
-        }
-
-        if (root.isColocate()) {
-            return true;
-        }
-
-        if (root.isReplicated()) {
-            // Only check left if node is replicate join
-            return isColocated(root.getChild(0));
-        } else {
-            return root.getChildren().stream().anyMatch(this::isColocated);
-        }
-    }
-
-    private boolean isReplicated(PlanNode root) {
-        if (root instanceof ExchangeNode) {
-            return false;
-        }
-
-        if (root.isReplicated()) {
-            return true;
-        }
-
-        return root.getChildren().stream().anyMatch(PlanNode::isReplicated);
-    }
-
-    private boolean isBucketShuffleJoin(PlanNode root) {
-        if (root instanceof ExchangeNode) {
-            return false;
-        }
-
-        if (root instanceof JoinNode) {
-            JoinNode joinNode = (JoinNode) root;
-            if (joinNode.isLocalHashBucket()) {
-                isRightOrFullBucketShuffle =
-                        joinNode.getJoinOp().isFullOuterJoin() || joinNode.getJoinOp().isRightJoin();
-                return true;
-            }
-        }
-
-        boolean childHasBucketShuffle = false;
-        for (PlanNode child : root.getChildren()) {
-            childHasBucketShuffle |= isBucketShuffleJoin(child);
-        }
-
-        return childHasBucketShuffle;
     }
 
     // Append range information
@@ -373,5 +326,55 @@ public class ExecutionFragment {
         StringBuilder sb = new StringBuilder();
         appendTo(sb);
         return sb.toString();
+    }
+
+    private boolean isColocated(PlanNode root) {
+        if (root instanceof ExchangeNode) {
+            return false;
+        }
+
+        if (root.isColocate()) {
+            return true;
+        }
+
+        if (root.isReplicated()) {
+            // Only check left if node is replicate join
+            return isColocated(root.getChild(0));
+        } else {
+            return root.getChildren().stream().anyMatch(this::isColocated);
+        }
+    }
+
+    private boolean isReplicated(PlanNode root) {
+        if (root instanceof ExchangeNode) {
+            return false;
+        }
+
+        if (root.isReplicated()) {
+            return true;
+        }
+
+        return root.getChildren().stream().anyMatch(PlanNode::isReplicated);
+    }
+
+    private boolean isBucketShuffleJoin(PlanNode root) {
+        if (root instanceof ExchangeNode) {
+            return false;
+        }
+
+        if (root instanceof JoinNode) {
+            JoinNode joinNode = (JoinNode) root;
+            if (joinNode.isLocalHashBucket()) {
+                isRightOrFullBucketShuffle = joinNode.getJoinOp().isFullOuterJoin() || joinNode.getJoinOp().isRightJoin();
+                return true;
+            }
+        }
+
+        boolean childHasBucketShuffle = false;
+        for (PlanNode child : root.getChildren()) {
+            childHasBucketShuffle |= isBucketShuffleJoin(child);
+        }
+
+        return childHasBucketShuffle;
     }
 }

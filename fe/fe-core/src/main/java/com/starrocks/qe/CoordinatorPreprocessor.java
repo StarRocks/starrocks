@@ -208,8 +208,6 @@ public class CoordinatorPreprocessor {
         computeScanRangeAssignment();
         computeFragmentExecParams();
         traceInstance();
-
-        executionDAG.finalizeDAG();
     }
 
     /**
@@ -696,9 +694,7 @@ public class CoordinatorPreprocessor {
             }
         }
 
-        for (ExecutionFragment execFragment : executionDAG.getFragmentsInPreorder()) {
-            executionDAG.initFragment(execFragment);
-        }
+        executionDAG.finalizeDAG();
     }
 
     public TFragmentInstanceFactory createTFragmentInstanceFactory() {
