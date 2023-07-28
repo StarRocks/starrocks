@@ -89,21 +89,4 @@ The following fields are provided in `tables_config`:
 | DISTRIBUTE_BUCKET | Number of buckets in the table.                              |
 | SORT_KEY         | Sort keys of the table.                                      |
 | PROPERTIES       | Properties of the table.                                     |
-<<<<<<< HEAD
-=======
 | TABLE_ID         | ID of the table.                                             |
-
-## load_tracking_logs
-
-This feature is supported since StarRocks v3.0.
-
-The following fields are provided in `load_tracking_logs`:
-
-| **Field**     | **Description**                                                                       |
-|---------------|---------------------------------------------------------------------------------------|
-| JOB_ID        | The ID of the load job.                                                               |
-| LABEL         | The label of the load job.                                                            |
-| DATABASE_NAME | The database that the load job belongs to.                                            |
-| TRACKING_LOG  | Error logs (if any) of the load job.                                                  |
-| Type          | The type of the load job. Valid values: BROKER, INSERT, ROUTINE_LOAD and STREAM_LOAD. |
->>>>>>> cc78022b92 ([Doc] Add table ID to tables_config (#28127))
