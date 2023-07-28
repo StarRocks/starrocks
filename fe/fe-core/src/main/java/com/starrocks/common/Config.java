@@ -1520,6 +1520,21 @@ public class Config extends ConfigBase {
     public static boolean enable_statistic_collect = true;
 
     /**
+<<<<<<< HEAD
+=======
+     * auto statistic collect on first load flag
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_statistic_collect_on_first_load = true;
+
+    /**
+     * max await time for collect statistic for loading
+     */
+    @ConfField(mutable = true)
+    public static long semi_sync_collect_statistic_await_seconds = 30;
+
+    /**
+>>>>>>> 2c446ea6cc ([Enhancement] set a timeout for collecting statistics (#28030))
      * The start time of day when auto-updates are enabled
      */
     @ConfField(mutable = true)
