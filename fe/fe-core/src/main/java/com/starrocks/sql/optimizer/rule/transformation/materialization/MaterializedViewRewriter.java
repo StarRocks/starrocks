@@ -319,12 +319,16 @@ public class MaterializedViewRewriter {
     private boolean checkJoinChildPredicate(OptExpression queryExpr, OptExpression mvExpr, int index) {
         Set<ScalarOperator> queryPredicates = Sets.newHashSet();
         // extract all conjuncts
-        queryPredicates.addAll(Utils.extractConjuncts(Utils.compoundAnd(MvUtils.getAllPredicates(queryExpr.inputAt(index)))));
+        ScalarOperator normalizedQueryPredicate =
+                MvUtils.canonizePredicateForRewrite(Utils.compoundAnd(MvUtils.getAllPredicates(queryExpr.inputAt(index))));
+        queryPredicates.addAll(Utils.extractConjuncts(normalizedQueryPredicate));
         queryPredicates =
                 queryPredicates.stream().filter(scalarOperator -> !scalarOperator.isPushdown()).collect(Collectors.toSet());
         Set<ScalarOperator> mvPredicates = Sets.newHashSet();
         // extract all conjuncts
-        mvPredicates.addAll(Utils.extractConjuncts(Utils.compoundAnd(MvUtils.getAllPredicates(mvExpr.inputAt(index)))));
+        ScalarOperator normalizedMvPredicate =
+                MvUtils.canonizePredicateForRewrite(Utils.compoundAnd(MvUtils.getAllPredicates(mvExpr.inputAt(index))));
+        mvPredicates.addAll(Utils.extractConjuncts(normalizedMvPredicate));
         mvPredicates = mvPredicates.stream().filter(scalarOperator -> !scalarOperator.isPushdown()).collect(Collectors.toSet());
         if (queryPredicates.isEmpty() && mvPredicates.isEmpty()) {
             return true;
