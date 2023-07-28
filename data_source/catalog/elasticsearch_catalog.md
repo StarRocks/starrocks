@@ -37,7 +37,6 @@ Elasticsearch Catalog 的属性。支持如下属性：
 | **参数**             | **是否必须** | **默认值** | **说明**                                                     |
 | -------------------- | ------------ | ---------- | ------------------------------------------------------------ |
 | hosts                | 是           | 无         | Elasticsearch 集群连接地址，用于获取 Elasticsearch 版本号以及索引的分片分布信息，可指定一个或多个。StarRocks 是根据 `GET /_nodes/http` API 返回的地址和 Elasticsearch 集群进行通讯，所以 `hosts` 参数值必须和 `GET /_nodes/http` 返回的地址一致，否则可能导致 BE 无法和 Elasticsearch 集群进行正常的通讯。 |
-| index                | 是           | 无         | StarRocks 中的表对应的 Elasticsearch 索引的名字，可以是索引的别名。支持通配符匹配 (`*`)，比如设置 `index` 为 `hello*`，则 StarRocks 会匹配到所有以 `hello` 开头的索引。 |
 | type                 | 是           | 无         | 数据源的类型。创建 Elasticsearch Catalog 时，必须设置为 `es`。 |
 | user                 | 否           | 空         | 开启 HTTP Basic 认证的 Elasticsearch 集群的用户名，需要确保该用户有访问 `/cluster/state/ nodes/http` 等路径权限和对索引的读取权限。 |
 | password             | 否           | 空         | 对应用户的密码信息。                                         |
