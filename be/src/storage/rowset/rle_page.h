@@ -74,7 +74,6 @@ class RlePageBuilder final : public PageBuilder {
 public:
     explicit RlePageBuilder(const PageBuilderOptions& options)
             : _options(options),
-
               _rle_encoder(nullptr),
               _first_value(0),
               _last_value(0) {

@@ -451,7 +451,7 @@ inline size_t RleDecoder<T>::GetBatch(T* vals, size_t batch_num) {
 // it decides whether they should be encoded as a literal or repeated run.
 template <typename T>
 inline void RleEncoder<T>::Put(T value, size_t run_length) {
-    DCHECK(bit_width_ == 64 || value < (1LL << bit_width_));
+    DCHECK(value < (1LL << bit_width_));
 
     // TODO(perf): remove the loop and use the repeat_count_
     for (; run_length > 0; run_length--) {
