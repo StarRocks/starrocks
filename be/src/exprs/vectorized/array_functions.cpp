@@ -1249,9 +1249,88 @@ ColumnPtr ArrayFunctions::array_arithmetic(const Columns& columns) {
     }
 }
 
+<<<<<<< HEAD:be/src/exprs/vectorized/array_functions.cpp
 template <PrimitiveType type>
 ColumnPtr ArrayFunctions::array_sum(const Columns& columns) {
     return ArrayFunctions::template array_arithmetic<type, ArithmeticType::SUM>(columns);
+=======
+StatusOr<ColumnPtr> ArrayFunctions::array_intersect_any_type(FunctionContext* ctx, const Columns& columns) {
+    DCHECK_LE(1, columns.size());
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    size_t rows = columns[0]->size();
+    size_t usage = columns[0]->memory_usage();
+    ColumnPtr base_col = columns[0];
+    int base_idx = 0;
+
+    auto nulls = NullColumn::create(rows, 0);
+    // find minimum column
+    for (size_t i = 0; i < columns.size(); i++) {
+        if (columns[i]->memory_usage() < usage) {
+            base_col = columns[i];
+            base_idx = i;
+            usage = columns[i]->memory_usage();
+        }
+
+        FunctionHelper::union_produce_nullable_column(columns[i], &nulls);
+    }
+
+    // do distinct first
+    auto distinct_col = array_distinct_any_type(ctx, {base_col});
+    DCHECK(distinct_col.ok());
+
+    auto* dis_array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(distinct_col.value().get()));
+
+    auto& base_elements = dis_array_col->elements_column();
+    auto* base_offsets = &dis_array_col->offsets();
+    auto* base_offsets_ptr = base_offsets->get_data().data();
+    auto* nulls_ptr = nulls->get_data().data();
+
+    Filter filter;
+    filter.resize(base_elements->size(), 1);
+    auto* hits = filter.data();
+
+    // mark intersect filter
+    for (size_t col_idx = 0; col_idx < columns.size(); col_idx++) {
+        if (col_idx == base_idx) {
+            continue;
+        }
+
+        auto [_2, cmp_elements, cmp_offsets] = unpack_array_column(columns[col_idx]);
+        auto* cmp_offsets_ptr = cmp_offsets->get_data().data();
+
+        for (size_t row_idx = 0; row_idx < rows; row_idx++) {
+            if (nulls_ptr[row_idx] == 1) {
+                continue;
+            }
+
+            size_t base_start = base_offsets_ptr[row_idx];
+            size_t base_end = base_offsets_ptr[row_idx + 1];
+
+            size_t cmp_start = cmp_offsets_ptr[row_idx];
+            size_t cmp_end = cmp_offsets_ptr[row_idx + 1];
+
+            nestloop_intersect(hits, base_elements.get(), base_start, base_end, cmp_elements, cmp_start, cmp_end);
+        }
+    }
+
+    // result column
+    auto result_offsets = UInt32Column::create();
+    base_elements->filter(filter);
+
+    result_offsets->append(0);
+    uint32_t pre_offset = 0;
+    for (size_t row_idx = 0; row_idx < rows; row_idx++) {
+        size_t base_start = base_offsets_ptr[row_idx];
+        size_t size = base_offsets_ptr[row_idx + 1] - base_start;
+
+        auto count = SIMD::count_nonzero(hits + base_start, size);
+        pre_offset += count;
+        result_offsets->append(pre_offset);
+    }
+
+    return NullableColumn::create(ArrayColumn::create(base_elements, result_offsets), nulls);
+>>>>>>> d7e8f8d9cb ([Enhancement] Fix wrong dcheck of array_intersect (#28183)):be/src/exprs/array_functions.cpp
 }
 
 ColumnPtr ArrayFunctions::array_sum_boolean([[maybe_unused]] FunctionContext* context, const Columns& columns) {
