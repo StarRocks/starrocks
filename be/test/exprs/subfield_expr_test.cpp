@@ -133,7 +133,7 @@ TEST_F(SubfieldExprTest, subfield_null_test) {
         EXPECT_TRUE(subfield_column->is_numeric());
         EXPECT_EQ(3, subfield_column->size());
         EXPECT_EQ("1", subfield_column->debug_item(0));
-        EXPECT_EQ("0", subfield_column->debug_item(1));
+        EXPECT_TRUE(result->is_null(1));
         EXPECT_EQ("3", subfield_column->debug_item(2));
     }
 
@@ -194,7 +194,7 @@ TEST_F(SubfieldExprTest, subfield_clone_test) {
     EXPECT_TRUE(subfield_column->is_numeric());
     EXPECT_EQ(3, subfield_column->size());
     EXPECT_EQ("1", subfield_column->debug_item(0));
-    EXPECT_EQ("0", subfield_column->debug_item(1));
+    EXPECT_TRUE(result->is_null(1));
     EXPECT_EQ("3", subfield_column->debug_item(2));
 
     // Column must be cloned

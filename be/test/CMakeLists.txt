@@ -21,7 +21,7 @@ set(EXEC_FILES
         ./common/config_test.cpp
         ./common/status_test.cpp
         ./common/tracer_test.cpp
-        ./common/s3_uri_test.cpp
+        ./common/uri_test.cpp
         ./fs/fs_broker_test.cpp
         ./fs/fs_posix_test.cpp
         ./fs/fs_memory_test.cpp
@@ -162,6 +162,8 @@ set(EXEC_FILES
         ./formats/parquet/iceberg_schema_evolution_file_reader_test.cpp
         ./formats/parquet/column_converter_test.cpp
         ./formats/parquet/parquet_footer_test.cpp
+        ./formats/parquet/parquet_cli_reader.h
+        ./formats/parquet/parquet_cli_reader_test.cpp
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
         ./http/http_client_test.cpp
@@ -316,6 +318,7 @@ set(EXEC_FILES
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
         ./types/bitmap_value_test.cpp
+        ./simd/batch_run_counter_test.cpp
         ./simd/simd_test.cpp
         ./simd/simd_selector_test.cpp
         ./simd/simd_mulselector_test.cpp

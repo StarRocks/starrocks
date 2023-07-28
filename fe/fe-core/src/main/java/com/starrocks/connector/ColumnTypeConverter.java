@@ -32,18 +32,17 @@ import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
 import org.apache.iceberg.types.Types;
 import org.apache.paimon.types.BigIntType;
+import org.apache.paimon.types.BinaryType;
 import org.apache.paimon.types.BooleanType;
-import org.apache.paimon.types.DataField;
+import org.apache.paimon.types.CharType;
 import org.apache.paimon.types.DataTypeDefaultVisitor;
 import org.apache.paimon.types.DateType;
 import org.apache.paimon.types.DecimalType;
 import org.apache.paimon.types.DoubleType;
 import org.apache.paimon.types.FloatType;
 import org.apache.paimon.types.IntType;
-import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.SmallIntType;
 import org.apache.paimon.types.TimestampType;
-import org.apache.paimon.types.TinyIntType;
 import org.apache.paimon.types.VarCharType;
 
 import java.util.ArrayList;
@@ -394,6 +393,14 @@ public class ColumnTypeConverter {
 
         private static final PaimonToHiveTypeVisitor INSTANCE = new PaimonToHiveTypeVisitor();
 
+        public Type visit(BinaryType binaryType) {
+            return ScalarType.createType(PrimitiveType.VARBINARY);
+        }
+
+        public Type visit(CharType charType) {
+            return ScalarType.createCharType(charType.getLength());
+        }
+
         public Type visit(VarCharType varCharType) {
             return ScalarType.createDefaultExternalTableString();
         }
@@ -406,9 +413,10 @@ public class ColumnTypeConverter {
             return ScalarType.createUnifiedDecimalType(decimalType.getPrecision(), decimalType.getScale());
         }
 
-        public Type visit(TinyIntType tinyIntType) {
-            return ScalarType.createType(PrimitiveType.TINYINT);
-        }
+        // TODO: uncomment this and unit test case when this type is supported in paimon connector
+        //public Type visit(TinyIntType tinyIntType) {
+        //    return ScalarType.createType(PrimitiveType.TINYINT);
+        //}
 
         public Type visit(SmallIntType smallIntType) {
             return ScalarType.createType(PrimitiveType.SMALLINT);
@@ -438,24 +446,27 @@ public class ColumnTypeConverter {
             return ScalarType.createType(PrimitiveType.DATETIME);
         }
 
-        public Type visit(org.apache.paimon.types.ArrayType arrayType) {
-            return new ArrayType(fromPaimonType(arrayType.getElementType()));
-        }
+        // TODO: uncomment this and unit test case when this type is supported in paimon connector
+        //public Type visit(org.apache.paimon.types.ArrayType arrayType) {
+        //    return new ArrayType(fromPaimonType(arrayType.getElementType()));
+        //}
 
-        public Type visit(org.apache.paimon.types.MapType mapType) {
-            return new MapType(fromPaimonType(mapType.getKeyType()), fromPaimonType(mapType.getValueType()));
-        }
+        // TODO: uncomment this and unit test case when this type is supported in paimon connector
+        //public Type visit(org.apache.paimon.types.MapType mapType) {
+        //    return new MapType(fromPaimonType(mapType.getKeyType()), fromPaimonType(mapType.getValueType()));
+        //}
 
-        public Type visit(RowType rowType) {
-            List<DataField> fields = rowType.getFields();
-            ArrayList<StructField> structFields = new ArrayList<>(fields.size());
-            for (DataField field : fields) {
-                String fieldName = field.name();
-                Type fieldType = fromPaimonType(field.type());
-                structFields.add(new StructField(fieldName, fieldType));
-            }
-            return new StructType(structFields);
-        }
+        // TODO: uncomment this and unit test case when this type is supported in paimon connector
+        //public Type visit(RowType rowType) {
+        //    List<DataField> fields = rowType.getFields();
+        //    ArrayList<StructField> structFields = new ArrayList<>(fields.size());
+        //    for (DataField field : fields) {
+        //        String fieldName = field.name();
+        //        Type fieldType = fromPaimonType(field.type());
+        //        structFields.add(new StructField(fieldName, fieldType));
+        //    }
+        //    return new StructType(structFields);
+        //}
 
         @Override
         protected Type defaultMethod(org.apache.paimon.types.DataType dataType) {

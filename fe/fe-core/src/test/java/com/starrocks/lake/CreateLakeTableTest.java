@@ -309,16 +309,6 @@ public class CreateLakeTableTest {
                         "create table lake_test.single_partition_invalid_cache_property (key1 int, key2 varchar(10))\n" +
                                 "distributed by hash(key1) buckets 3\n" +
                                 " properties('datacache.enable' = 'false', 'enable_async_write_back' = 'true');"));
-
-        // do not support list partition
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "Do not support create list partition Cloud Native table",
-                () -> createTable(
-                        "create table lake_test.list_partition_invalid (dt date not null, key2 varchar(10))\n" +
-                                "PARTITION BY LIST (dt) (PARTITION p1 VALUES IN ((\"2022-04-01\")),\n" +
-                                "PARTITION p2 VALUES IN ((\"2022-04-02\")),\n" +
-                                "PARTITION p3 VALUES IN ((\"2022-04-03\")))\n" +
-                                "distributed by hash(dt) buckets 3;"));
     }
 
     @Test
@@ -364,5 +354,41 @@ public class CreateLakeTableTest {
         String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, sql);
         System.out.println(plan);
         Assert.assertTrue(plan.contains("actualRows=6"));
+    }
+
+    @Test
+    public void testCreateLakeTableListPartition(@Mocked StarOSAgent agent) throws UserException {
+        new Expectations() {
+            {
+                agent.allocateFilePath(anyString, anyLong);
+                result = getPathInfo();
+                agent.createShardGroup(anyLong, anyLong, anyLong);
+                result = GlobalStateMgr.getCurrentState().getNextId();
+                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong, (Map<String, String>) any);
+                returns(Lists.newArrayList(20001L, 20002L, 20003L),
+                        Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
+                        Lists.newArrayList(20008L), Lists.newArrayList(20009L));
+                agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
+                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+            }
+        };
+
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
+
+        // list partition
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.list_partition (dt date not null, key2 varchar(10))\n" +
+                        "PARTITION BY LIST (dt) (PARTITION p1 VALUES IN ((\"2022-04-01\")),\n" +
+                        "PARTITION p2 VALUES IN ((\"2022-04-02\")),\n" +
+                        "PARTITION p3 VALUES IN ((\"2022-04-03\")))\n" +
+                        "distributed by hash(dt) buckets 3;"));
+        checkLakeTable("lake_test", "list_partition");
+
+        // auto list partition
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.auto_list_partition (dt date not null, key2 varchar(10))\n" +
+                        "PARTITION BY (dt) \n" +
+                        "distributed by hash(dt) buckets 3;"));
+        checkLakeTable("lake_test", "auto_list_partition");
     }
 }

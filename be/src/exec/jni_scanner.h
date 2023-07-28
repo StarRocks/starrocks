@@ -35,6 +35,7 @@ public:
     void do_close(RuntimeState* runtime_state) noexcept override;
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
     Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
+    bool is_jni_scanner() override { return true; }
 
 private:
     struct FillColumnArgs {
@@ -57,10 +58,10 @@ private:
 
     Status _get_next_chunk(JNIEnv* _jni_env, long* chunk_meta);
 
-    template <LogicalType type, typename CppType>
+    template <LogicalType type>
     Status _append_primitive_data(const FillColumnArgs& args);
 
-    template <LogicalType type, typename CppType>
+    template <LogicalType type>
     Status _append_decimal_data(const FillColumnArgs& args);
 
     template <LogicalType type>
