@@ -181,7 +181,7 @@ public class PartitionUtil {
             } else if (value instanceof BoolLiteral) {
                 BoolLiteral boolValue = ((BoolLiteral) value);
                 values.add(String.valueOf(boolValue.getValue()));
-            } else if (value instanceof DateLiteral && key instanceof HivePartitionKey) {
+            } else if (key instanceof HivePartitionKey && value instanceof DateLiteral) {
                 // Special handle Hive timestamp partition key
                 values.add(getHiveFormatStringValue((DateLiteral) value));
             } else {
