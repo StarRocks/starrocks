@@ -180,14 +180,15 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         }
 
         for (size_t j = 0; j < _agg_expr_ctxs[i].size(); ++j) {
-            // if function's args is const, like lead/lag's second and third parameter
-            if (_agg_expr_ctxs[i][j]->root()->is_constant()) {
+            // we always treat first argument as non const, because most window function has only one args
+            // and cant't handler const column within the function
+            if (j == 0) {
+                _agg_intput_columns[i][j] = vectorized::ColumnHelper::create_column(
+                        _agg_expr_ctxs[i][j]->root()->type(), is_input_nullable);
+            } else {
                 _agg_intput_columns[i][j] = vectorized::ColumnHelper::create_column(
                         _agg_expr_ctxs[i][j]->root()->type(), _agg_expr_ctxs[i][j]->root()->is_nullable(),
                         _agg_expr_ctxs[i][j]->root()->is_constant(), 0);
-            } else {
-                _agg_intput_columns[i][j] = vectorized::ColumnHelper::create_column(
-                        _agg_expr_ctxs[i][j]->root()->type(), is_input_nullable);
             }
         }
 
