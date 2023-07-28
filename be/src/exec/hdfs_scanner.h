@@ -310,6 +310,7 @@ public:
     virtual Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) = 0;
     virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) = 0;
     virtual void do_update_counter(HdfsScanProfile* profile);
+    virtual bool is_jni_scanner() { return false; }
 
     void enter_pending_queue();
     // how long it stays inside pending queue.
