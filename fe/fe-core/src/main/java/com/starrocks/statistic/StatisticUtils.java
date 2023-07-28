@@ -62,6 +62,8 @@ import java.util.Optional;
 import java.util.StringJoiner;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 
@@ -166,10 +168,13 @@ public class StatisticUtils {
         }
 
         if (sync) {
+            long await = Config.semi_sync_collect_statistic_await_seconds;
             try {
-                future.get();
+                future.get(await, TimeUnit.SECONDS);
             } catch (InterruptedException | ExecutionException e) {
                 LOG.error("failed to execute statistic collect job", e);
+            } catch (TimeoutException e) {
+                LOG.warn("await collect statistic failed after {} seconds", await);
             }
         }
     }
