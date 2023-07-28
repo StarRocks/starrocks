@@ -485,6 +485,7 @@ if [[ -d $TP_SOURCE_DIR/$ARROW_SOURCE ]] ; then
         patch -p1 < $TP_PATCH_DIR/arrow-5.0.0-force-use-external-jemalloc.patch
         # fix exception handling
         patch -p1 < $TP_PATCH_DIR/arrow-5.0.0-fix-exception-handling.patch
+        patch -p1 < $TP_PATCH_DIR/arrow-5.0.0-parquet-map-key.patch
         touch $PATCHED_MARK
     fi
     cd -

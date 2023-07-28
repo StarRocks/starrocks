@@ -1,0 +1,32 @@
+diff --git a/cpp/src/parquet/arrow/schema.cc b/cpp/src/parquet/arrow/schema.cc
+index eb7fd628d..d80754752 100644
+--- a/cpp/src/parquet/arrow/schema.cc
++++ b/cpp/src/parquet/arrow/schema.cc
+@@ -542,10 +542,23 @@ Status MapToSchemaField(const GroupNode& group, LevelInfo current_levels,
+     return Status::Invalid("Key-value map node must have 1 or 2 child elements. Found: ",
+                            key_value.field_count());
+   }
+-  const Node& key_node = *key_value.field(0);
+-  if (!key_node.is_required()) {
+-    return Status::Invalid("Map keys must be annotated as required.");
+-  }
++  /*
++ * If Parquet file was written by Flink, key type of map column is allowed to be optional,
++like this:
++ * optional group event_info (MAP) {
++ *   repeated group key_value {
++ *     optional binary key (UTF8);
++ *     optional binary value (UTF8);
++ *   }
++ * }
++ *
++ * Refer to:
++https://nightlies.apache.org/flink/flink-docs-release-1.16/docs/dev/table/types/#constructured-data-types
++const Node& key_node = *key_value.field(0);
++if (!key_node.is_required()) {
++  return Status::Invalid("Map keys must be annotated as required.");
++}
++*/
+   // Arrow doesn't support 1 column maps (i.e. Sets).  The options are to either
+   // make the values column nullable, or process the map as a list.  We choose the latter
+   // as it is simpler.
