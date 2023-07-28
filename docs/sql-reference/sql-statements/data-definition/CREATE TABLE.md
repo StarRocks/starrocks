@@ -225,12 +225,12 @@ Partition description can be used in the following ways:
 
 Syntax:
 
-```Plain%20Text
-PARTITION BY RANGE (k1, k2, ...)
-(
-    PARTITION partition_name1 VALUES LESS THAN MAXVALUE|("value1", "value2", ...),
-    PARTITION partition_name2 VALUES LESS THAN MAXVALUE|("value1", "value2", ...)
-    ...
+```sql
+PARTITION BY RANGE ( <partition_column1> [, <partition_column2>, ... ] )
+  PARTITION <partition1_name> VALUES LESS THAN { ("<upper_bound_for_partition_column1>" [ , "<upper_bound_for_partition_column2>", ... ] )
+  [ ,
+  PARTITION <partition2_name> VALUES LESS THAN { ("<upper_bound_for_partition_column1>" [ , "<upper_bound_for_partition_column2>", ... ] )
+  , ... ] 
 )
 ```
 
@@ -243,6 +243,7 @@ Please use specified key columns and specified value ranges for partitioning.
 - Partitions are left closed and right open. The left boundary of the first partition is of minimum value.
 - NULL value is stored only in partitions that contain minimum values. When the partition containing the minimum value is deleted, NULL values can no longer be imported.
 - Partition columns can either be single columns or multiple columns. The partition values are the default minimum values.
+- When only one column is specified as the partitioning column, you can set `MAXVALUE` as the upper bound for the partition column in the most recent partition.
 
 Please note:
 
@@ -254,11 +255,12 @@ Please note:
 Syntax:
 
 ```SQL
-PARTITION BY RANGE (k1, k2, k3, ...)
+PARTITION BY RANGE ( <partition_column1> [, <partition_column2>, ... ] )
 (
-    PARTITION partition_name1 VALUES [("k1-lower1", "k2-lower1", "k3-lower1",...), ("k1-upper1", "k2-upper1", "k3-upper1", ...)),
-    PARTITION partition_name2 VALUES [("k1-lower1-2", "k2-lower1-2", ...), ("k1-upper1-2", MAXVALUE, )),
-    "k3-upper1-2", ...
+    PARTITION <partition_name1> VALUES [( "<lower_bound_for_partition_column1>" [ , "<lower_bound_for_partition_column2>", ... ] ), ( "<upper_bound_for_partition_column1?" [ , "<upper_bound_for_partition_column2>", ... ] ) ) 
+    [,
+    PARTITION <partition_name2> VALUES [( "<lower_bound_for_partition_column1>" [ , "<lower_bound_for_partition_column2>", ... ] ), ( "<upper_bound_for_partition_column1>" [ , "<upper_bound_for_partition_column2>", ... ] ) ) 
+    , ...]
 )
 ```
 
@@ -266,6 +268,7 @@ Note:
 
 - Fixed Range is more flexible than LESS THAN. You can customize the left and right partitions.
 - Fixed Range is the same as LESS THAN in the other aspects.
+- When only one column is specified as the partitioning column, you can set `MAXVALUE` as the upper bound for the partition column in the latest partition.
 
 #### Create multiple partitions at a time
 
@@ -273,23 +276,23 @@ Syntax
 
 - If the partitioning column is of an date type.
 
-    ```Plain%20Text
-    PARTITION BY RANGE (datekey) (
-        START ("2021-01-01") END ("2021-01-04") EVERY (INTERVAL 1 day)
+    ```sql
+    PARTITION BY RANGE (<partitioning_column>) (
+        START ("<start_date>") END ("<end_date>") EVERY (INTERVAL <N> <time_unit>)
     )
     ```
 
 - If the partitioning column is of an integer type.
 
-    ```Plain%20Text
-    PARTITION BY RANGE (datekey) (
-        START ("1") END ("5") EVERY (1)
+    ```sql
+    PARTITION BY RANGE (<partitioning_column>) (
+        START ("<start integer>") END ("<end integer>") EVERY (<partitioning_granularity>)
     )
     ```
 
 Description
 
-You can specify the lower and upper bounds in `START` and `END` and the time unit or partitioning granunity in `EVERY` to create multiple partitions at a time.
+You can specify the start and end value in `START()` and `END()` and the time unit or partitioning granunity in `EVERY()` to create multiple partitions at a time.
 
 - The partitioning column can be of a date or integer type, and the data type of values in `START()` and `END()`, and `EVERY()` must be the same as the data type of partitioning column.
 - The partitioning column is of a data type, you need to use the `INTERVAL` keyword to specify the date interval. You can specify the time unit as hour (since v3.0), day, week, month, or year. The naming conventions of partitions are the same as those for dynamic partitions.
