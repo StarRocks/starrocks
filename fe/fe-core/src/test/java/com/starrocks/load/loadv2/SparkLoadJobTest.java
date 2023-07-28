@@ -66,6 +66,7 @@ import com.starrocks.load.loadv2.SparkLoadJob.SparkLoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ResourceDesc;
@@ -79,6 +80,7 @@ import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
+import com.starrocks.warehouse.LocalWarehouse;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -215,14 +217,15 @@ public class SparkLoadJobTest {
     @Test
     public void testExecute(@Mocked GlobalStateMgr globalStateMgr, @Mocked SparkLoadPendingTask pendingTask,
                             @Injectable String originStmt, @Injectable GlobalTransactionMgr transactionMgr,
-                            @Injectable LeaderTaskExecutor executor) throws Exception {
+                            @Injectable LeaderTaskExecutor executor,
+                            @Mocked WarehouseManager warehouseManager) throws Exception {
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentGlobalTransactionMgr();
                 result = transactionMgr;
                 transactionMgr.beginTransaction(dbId, Lists.newArrayList(), label, null,
                         (TransactionState.TxnCoordinator) any, LoadJobSourceType.FRONTEND,
-                        anyLong, anyLong);
+                        anyLong, anyLong, anyLong);
                 result = transactionId;
                 pendingTask.init();
                 pendingTask.getSignature();
@@ -231,6 +234,20 @@ public class SparkLoadJobTest {
                 result = executor;
                 executor.submit((SparkLoadPendingTask) any);
                 result = true;
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouse(anyString);
+                minTimes = 0;
+                result = new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID,
+                        "An internal warehouse contains all compute nodes in this system");
             }
         };
 
@@ -485,7 +502,7 @@ public class SparkLoadJobTest {
                 result = Lists.newArrayList(tablet);
                 tablet.getId();
                 result = tabletId;
-                ((LakeTablet) tablet).getPrimaryComputeNodeId();
+                ((LakeTablet) tablet).getPrimaryComputeNodeId(anyLong);
                 result = backendId;
                 AgentTaskExecutor.submit((AgentBatchTask) any);
                 GlobalStateMgr.getCurrentGlobalTransactionMgr();

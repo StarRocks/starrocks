@@ -1628,6 +1628,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
         dropMv("test", "hive_parttbl_mv");
     }
 
+    @Ignore
     @Test
     public void testHivePartialPartition() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);

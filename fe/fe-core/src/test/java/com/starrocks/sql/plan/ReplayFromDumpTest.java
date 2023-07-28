@@ -40,6 +40,7 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.BufferedReader;
@@ -886,7 +887,8 @@ public class ReplayFromDumpTest {
         FeConstants.isReplayFromQueryDump = false;
     }
 
-    //@Test
+    @Ignore
+    // @Test
     public void testMV_JoinAgg3() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
         // Table and mv have no stats, mv rewrite is ok.

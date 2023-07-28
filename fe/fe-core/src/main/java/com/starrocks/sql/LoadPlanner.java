@@ -56,7 +56,6 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.StreamLoadScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.PartitionNames;
@@ -374,8 +373,7 @@ public class LoadPlanner {
                     "FileScanNode", fileStatusesList, filesAdded);
             fileScanNode.setLoadInfo(loadJobId, txnId, destTable, brokerDesc, fileGroups, strictMode,
                     parallelInstanceNum);
-            fileScanNode.setWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-
+            fileScanNode.setWarehouse(sessionVariables.get(BulkLoadJob.CURRENT_WAREHOUSE));
             fileScanNode.setUseVectorizedLoad(true);
             fileScanNode.init(analyzer);
             fileScanNode.finalizeStats(analyzer);
@@ -385,8 +383,7 @@ public class LoadPlanner {
                     destTable, streamLoadInfo, dbName, label, parallelInstanceNum, txnId);
             streamScanNode.setNeedAssignBE(true);
             streamScanNode.setUseVectorizedLoad(true);
-            streamScanNode.setWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-
+            streamScanNode.setWarehouse(sessionVariables.get(BulkLoadJob.CURRENT_WAREHOUSE));
             streamScanNode.init(analyzer);
             streamScanNode.finalizeStats(analyzer);
             scanNode = streamScanNode;

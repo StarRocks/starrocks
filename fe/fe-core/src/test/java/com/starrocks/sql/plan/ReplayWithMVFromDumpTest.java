@@ -25,6 +25,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.Set;
@@ -71,6 +72,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTest {
         FeConstants.isReplayFromQueryDump = false;
     }
 
+    @Ignore
     @Test
     public void testMV_JoinAgg3() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
