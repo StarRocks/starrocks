@@ -227,9 +227,9 @@ Syntax:
 
 ```sql
 PARTITION BY RANGE ( <partition_column1> [, <partition_column2>, ... ] )
-  PARTITION <partition1_name> VALUES LESS THAN { ("<upper_bound_for_partition_column1>" [ , "<upper_bound_for_partition_column2>", ... ] )
+  PARTITION <partition1_name> VALUES LESS THAN ("<upper_bound_for_partition_column1>" [ , "<upper_bound_for_partition_column2>", ... ] )
   [ ,
-  PARTITION <partition2_name> VALUES LESS THAN { ("<upper_bound_for_partition_column1>" [ , "<upper_bound_for_partition_column2>", ... ] )
+  PARTITION <partition2_name> VALUES LESS THAN ("<upper_bound_for_partition_column1>" [ , "<upper_bound_for_partition_column2>", ... ] )
   , ... ] 
 )
 ```
@@ -826,6 +826,30 @@ PROPERTIES(
     "dynamic_partition.buckets" = "10"
 );
 ```
+
+### Create a table with multiple partitions created at a time and partitioned an integer type column**
+
+  In the following example, the partitioning column `datekey` is of INT data type. All the partitions are created by only one simple partition clause  `START ("1") END ("5") EVERY (1)`. The range of all the partitions starts from `1` and ends at `5`, with a partition granularity of `1`:
+  > **NOTE**
+  >
+  > The partition column values in **START()** and **END()** need to be wrapped in quotation marks, while the partition granularity in the **EVERY()** does not need to be wrapped in quotation marks.
+
+  ```SQL
+  CREATE TABLE site_access (
+      datekey INT,
+      site_id INT,
+      city_code SMALLINT,
+      user_name VARCHAR(32),
+      pv BIGINT DEFAULT '0'
+  )
+  ENGINE=olap
+  DUPLICATE KEY(datekey, site_id, city_code, user_name)
+  PARTITION BY RANGE (datekey) (START ("1") END ("5") EVERY (1)
+  )
+  DISTRIBUTED BY HASH(site_id)
+  PROPERTIES ("replication_num" = "3");
+    ```
+
 
 ### Create a Hive external table
 
