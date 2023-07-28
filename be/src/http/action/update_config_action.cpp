@@ -60,6 +60,7 @@
 #include "storage/segment_replicate_executor.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
+#include "util/bthreads/executor.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
@@ -128,7 +129,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             if (tablet_mgr != nullptr) tablet_mgr->update_metacache_limit(config::lake_metadata_cache_limit);
         });
         _config_callback.emplace("transaction_apply_worker_count", [&]() {
-            int max_thread_cnt = CpuInfo::num_cores();
+            int max_thread_cnt = CpuInfo::num_cores() * 4;
             if (config::transaction_apply_worker_count > 0) {
                 max_thread_cnt = config::transaction_apply_worker_count;
             }
@@ -141,6 +142,13 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             }
             (void)StorageEngine::instance()->update_manager()->get_pindex_thread_pool()->update_max_threads(
                     max_thread_cnt);
+        });
+        _config_callback.emplace("number_tablet_writer_threads", [&]() {
+            auto thread_pool =
+                    static_cast<bthreads::ThreadPoolExecutor*>(StorageEngine::instance()->async_delta_writer_executor())
+                            ->get_thread_pool();
+            (void)thread_pool->update_max_threads(
+                    std::max(MIN_TABLET_WRITER_COUNT, config::number_tablet_writer_threads));
         });
     });
 

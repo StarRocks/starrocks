@@ -144,14 +144,15 @@ void AgentServer::Impl::init_or_die() {
             }
         }
 
-#define BUILD_DYNAMIC_TASK_THREAD_POOL(name, min_threads, max_threads, queue_size, pool) \
-    do {                                                                                 \
-        auto st = ThreadPoolBuilder(name)                                                \
-                          .set_min_threads(min_threads)                                  \
-                          .set_max_threads(max_threads)                                  \
-                          .set_max_queue_size(queue_size)                                \
-                          .build(&(pool));                                               \
-        CHECK(st.ok()) << st;                                                            \
+#define BUILD_DYNAMIC_TASK_THREAD_POOL(name, min_threads, max_threads, queue_size, pool)        \
+    do {                                                                                        \
+        auto st = ThreadPoolBuilder(name)                                                       \
+                          .set_min_threads(min_threads)                                         \
+                          .set_max_threads(max_threads)                                         \
+                          .set_max_queue_size(queue_size)                                       \
+                          .set_idle_timeout(MonoDelta::FromMilliseconds(THREAD_POOL_IDLE_TIME)) \
+                          .build(&(pool));                                                      \
+        CHECK(st.ok()) << st;                                                                   \
     } while (false)
 
 // The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.
@@ -163,7 +164,7 @@ void AgentServer::Impl::init_or_die() {
 #else
         int max_publish_version_worker_count = config::transaction_publish_version_worker_count;
         if (max_publish_version_worker_count <= 0) {
-            max_publish_version_worker_count = CpuInfo::num_cores();
+            max_publish_version_worker_count = CpuInfo::num_cores() * 4;
         }
         max_publish_version_worker_count =
                 std::max(max_publish_version_worker_count, MIN_TRANSACTION_PUBLISH_WORKER_COUNT);

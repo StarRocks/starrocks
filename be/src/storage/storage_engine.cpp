@@ -196,13 +196,17 @@ Status StorageEngine::_open(const EngineOptions& options) {
 
     // `load_data_dirs` depend on |_update_manager|.
     load_data_dirs(dirs);
+    int max_tablet_writer_count = config::number_tablet_writer_threads;
+    if (max_tablet_writer_count <= 0) {
+        max_tablet_writer_count = CpuInfo::num_cores() * 4;
+    }
 
     std::unique_ptr<ThreadPool> thread_pool;
     RETURN_IF_ERROR(ThreadPoolBuilder("delta_writer")
-                            .set_min_threads(config::number_tablet_writer_threads / 2)
-                            .set_max_threads(std::max<int>(1, config::number_tablet_writer_threads))
+                            .set_min_threads(MIN_TABLET_WRITER_COUNT)
+                            .set_max_threads(std::max<int>(MIN_TABLET_WRITER_COUNT, max_tablet_writer_count))
                             .set_max_queue_size(40960 /*a random chosen number that should big enough*/)
-                            .set_idle_timeout(MonoDelta::FromMilliseconds(/*5 minutes=*/5 * 60 * 1000))
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(THREAD_POOL_IDLE_TIME))
                             .build(&thread_pool));
 
     _async_delta_writer_executor =

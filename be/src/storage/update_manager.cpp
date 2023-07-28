@@ -100,11 +100,15 @@ UpdateManager::~UpdateManager() {
 }
 
 Status UpdateManager::init() {
-    int max_thread_cnt = CpuInfo::num_cores();
+    int max_thread_cnt = CpuInfo::num_cores() * 4;
     if (config::transaction_apply_worker_count > 0) {
         max_thread_cnt = config::transaction_apply_worker_count;
     }
-    RETURN_IF_ERROR(ThreadPoolBuilder("update_apply").set_max_threads(max_thread_cnt).build(&_apply_thread_pool));
+    RETURN_IF_ERROR(ThreadPoolBuilder("update_apply")
+                            .set_min_threads(MIN_TRANSACTION_APPLY_WORKER_COUNT)
+                            .set_max_threads(max_thread_cnt)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(THREAD_POOL_IDLE_TIME))
+                            .build(&_apply_thread_pool));
     REGISTER_GAUGE_STARROCKS_METRIC(update_apply_queue_count,
                                     [this]() { return _apply_thread_pool->num_queued_tasks(); });
 

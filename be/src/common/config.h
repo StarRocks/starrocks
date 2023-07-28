@@ -349,7 +349,7 @@ CONF_mInt32(periodic_counter_update_period_ms, "500");
 CONF_Int64(load_data_reserve_hours, "4");
 // log error log will be removed after this time
 CONF_mInt64(load_error_log_reserve_hours, "48");
-CONF_Int32(number_tablet_writer_threads, "16");
+CONF_mInt32(number_tablet_writer_threads, "0");
 CONF_mInt64(max_queueing_memtable_per_tablet, "2");
 
 // delta writer hang after this time, be will exit since storage is in error state
@@ -557,7 +557,7 @@ CONF_mInt64(storage_flood_stage_left_capacity_bytes, "107374182400"); // 100GB
 CONF_mDouble(storage_high_usage_disk_protect_ratio, "0.1"); // 10%
 
 // Number of thread for flushing memtable per store.
-CONF_mInt32(flush_thread_num_per_store, "2");
+CONF_mInt32(flush_thread_num_per_store, "4");
 
 // Config for tablet meta checkpoint.
 CONF_mInt32(tablet_meta_checkpoint_min_new_rowsets_num, "10");

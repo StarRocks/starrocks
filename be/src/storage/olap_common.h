@@ -409,6 +409,16 @@ struct TabletSegmentIdRange {
     }
 };
 
+const int MIN_TRANSACTION_PUBLISH_WORKER_COUNT = 8;
+const int MIN_TABLET_WRITER_COUNT = 8;
+const int MIN_TRANSACTION_APPLY_WORKER_COUNT = 1;
+
+#ifdef BE_TEST
+const int THREAD_POOL_IDLE_TIME = /*500 ms=*/500;
+#else
+const int THREAD_POOL_IDLE_TIME = /*5 minutes=*/5 * 60 * 1000;
+#endif
+
 } // namespace starrocks
 
 namespace std {
