@@ -71,6 +71,7 @@ import com.starrocks.sql.optimizer.rule.tree.PushDownDistinctAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.rule.tree.UseSortAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PruneSubfieldRule;
+import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PushDownSubfieldRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -343,6 +344,7 @@ public class Optimizer {
             ruleRewriteIterative(tree, rootTaskContext, new RewriteGroupingSetsByCTERule());
         }
 
+        tree = pruneSubfield(tree, rootTaskContext, requiredColumns);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_ASSERT_ROW);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_PROJECT);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_SET_OPERATOR);
@@ -377,7 +379,6 @@ public class Optimizer {
             deriveLogicalProperty(tree);
         }
 
-        tree = pruneSubfield(tree, rootTaskContext);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
 
@@ -480,12 +481,20 @@ public class Optimizer {
         return tree;
     }
 
-    private OptExpression pruneSubfield(OptExpression tree, TaskContext rootTaskContext) {
+    private OptExpression pruneSubfield(OptExpression tree, TaskContext rootTaskContext, ColumnRefSet requiredColumns) {
         if (!context.getSessionVariable().isCboPruneSubfield()) {
             return tree;
         }
 
-        tree = new PruneSubfieldRule().rewrite(tree, rootTaskContext);
+        PushDownSubfieldRule pushDownRule = new PushDownSubfieldRule();
+        tree = pushDownRule.rewrite(tree, rootTaskContext);
+
+        if (pushDownRule.hasRewrite()) {
+            rootTaskContext.setRequiredColumns(requiredColumns.clone());
+            ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+        }
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new PruneSubfieldRule());
+
         return tree;
     }
 

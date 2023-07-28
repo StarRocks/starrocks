@@ -315,7 +315,7 @@ public final class SqlToScalarOperatorTranslator {
         public ScalarOperator visitSubfieldExpr(SubfieldExpr node, Context context) {
             Preconditions.checkArgument(node.getChildren().size() == 1);
             ScalarOperator child = visit(node.getChild(0), context);
-            return SubfieldOperator.build(child, node);
+            return new SubfieldOperator(child, node.getType(), node.getFieldNames());
         }
 
         @Override
@@ -340,7 +340,7 @@ public final class SqlToScalarOperatorTranslator {
             for (Expr expr : node.getChildren()) {
                 mapElements.add(visit(expr, context.clone(node)));
             }
-            return new MapOperator(node.getType(), node.isNullable(), mapElements);
+            return new MapOperator(node.getType(), mapElements);
         }
 
         @Override
@@ -540,7 +540,8 @@ public final class SqlToScalarOperatorTranslator {
             }
             List<ColumnRefOperator> rightColRefs = subqueryPlan.getOutputColumn();
             if (rightColRefs.size() != leftExprs.size()) {
-                throw new SemanticException("subquery must return the same number of columns as provided by the IN predicate");
+                throw new SemanticException(
+                        "subquery must return the same number of columns as provided by the IN predicate");
             }
             ScalarOperator inPredicateOperator = new MultiInPredicateOperator(node.isNotIn(), leftExprs, rightColRefs);
             ColumnRefOperator outputPredicateRef = columnRefFactory.create(inPredicateOperator,

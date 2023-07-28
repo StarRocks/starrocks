@@ -17,11 +17,9 @@ package com.starrocks.sql.optimizer.rule.tree.prunesubfield;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.StructType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
@@ -178,23 +176,6 @@ public class SubfieldAccessPathNormalizer extends ScalarOperatorVisitor<Void, Vo
             }
         }
 
-        return null;
-    }
-
-    @Override
-    public Void visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
-        predicate.getChild(0).accept(this, context);
-        if (currentPath != null) {
-            if (predicate.getChild(0).getType().isMapType()) {
-                currentPath.appendPath(ColumnAccessPath.PATH_PLACEHOLDER, TAccessPathType.OFFSET);
-            } else if (predicate.getChild(0).getType().isStructType()) {
-                StructType type = (StructType) predicate.getChild(0).getType();
-                currentPath.appendPath(type.getFields().get(0).getName(), TAccessPathType.FIELD);
-            } else if (predicate.getChild(0).getType().isArrayType()) {
-                currentPath.appendPath(ColumnAccessPath.PATH_PLACEHOLDER, TAccessPathType.OFFSET);
-            }
-        }
-        currentPath = null;
         return null;
     }
 }

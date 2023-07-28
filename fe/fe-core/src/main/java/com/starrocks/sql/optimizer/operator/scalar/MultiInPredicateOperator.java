@@ -38,6 +38,12 @@ public class MultiInPredicateOperator extends PredicateOperator {
         this.isNotIn = isNotIn;
     }
 
+    public MultiInPredicateOperator(boolean isNotIn, List<ScalarOperator> arguments, int tupleSize) {
+        super(MULTI_IN, arguments);
+        this.isNotIn = isNotIn;
+        this.tupleSize = tupleSize;
+    }
+
     public boolean isNotIn() {
         return isNotIn;
     }

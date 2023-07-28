@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
@@ -72,6 +71,8 @@ public class PruneProjectColumnsRule extends TransformationRule {
         // Change the requiredOutputColumns in context
         requiredOutputColumns.union(requiredInputColumns);
 
-        return Lists.newArrayList(OptExpression.create(new LogicalProjectOperator(newMap), input.getInputs()));
+        return Lists.newArrayList(OptExpression.create(
+                LogicalProjectOperator.builder().withOperator(projectOperator).setColumnRefMap(newMap).build(),
+                input.getInputs()));
     }
 }

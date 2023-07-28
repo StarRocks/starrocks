@@ -37,7 +37,7 @@ public class LambdaFunctionOperator extends ScalarOperator {
     }
 
     // should be in order.
-    private Map<ColumnRefOperator, ScalarOperator> columnRefMap =
+    private final Map<ColumnRefOperator, ScalarOperator> columnRefMap =
             Maps.newTreeMap(Comparator.comparing(ColumnRefOperator::getId));
 
     public LambdaFunctionOperator(List<ColumnRefOperator> refColumns, ScalarOperator lambdaExpr, Type retType) {
