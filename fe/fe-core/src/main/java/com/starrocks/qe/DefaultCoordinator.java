@@ -43,7 +43,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MarkedCountDownLatch;
@@ -68,6 +67,8 @@ import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.qe.QueryStatisticsItem.FragmentInstanceInfo;
 import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.rpc.RpcException;
@@ -480,8 +481,8 @@ public class DefaultCoordinator extends Coordinator {
         return coordinatorPreprocessor;
     }
 
-    public Map<PlanFragmentId, CoordinatorPreprocessor.ExecutionFragment> getFragmentExecParamsMap() {
-        return coordinatorPreprocessor.getFragmentExecParamsMap();
+    public Map<PlanFragmentId, ExecutionFragment> getIdToExecFragment() {
+        return coordinatorPreprocessor.getIdToExecFragment();
     }
 
     public List<PlanFragment> getFragments() {
@@ -533,29 +534,28 @@ public class DefaultCoordinator extends Coordinator {
         }
     }
 
-    private void prepareResultSink() throws AnalysisException {
+    private void prepareResultSink() throws Exception {
         PlanFragmentId topId = jobSpec.getFragments().get(0).getFragmentId();
-        CoordinatorPreprocessor.ExecutionFragment topParams =
-                coordinatorPreprocessor.getFragmentExecParamsMap().get(topId);
-        if (topParams.fragment.getSink() instanceof ResultSink) {
-            long workerId = topParams.instanceExecParams.get(0).getWorkerId();
+        ExecutionFragment rootExecFragment = coordinatorPreprocessor.getIdToExecFragment().get(topId);
+        if (rootExecFragment.getPlanFragment().getSink() instanceof ResultSink) {
+            long workerId = rootExecFragment.getInstances().get(0).getWorkerId();
             ComputeNode worker = coordinatorPreprocessor.getWorkerProvider().getWorkerById(workerId);
             TNetworkAddress execBeAddr = worker.getAddress();
             receiver = new ResultReceiver(
-                    topParams.instanceExecParams.get(0).instanceId,
+                    rootExecFragment.getInstances().get(0).getInstanceId(),
                     workerId,
                     worker.getBrpcAddress(),
                     jobSpec.getQueryOptions().query_timeout * 1000);
 
             // Select top fragment as global runtime filter merge address
-            setGlobalRuntimeFilterParams(topParams, worker.getBrpcAddress());
+            setGlobalRuntimeFilterParams(rootExecFragment, worker.getBrpcAddress());
 
             if (LOG.isDebugEnabled()) {
                 LOG.debug("dispatch query job: {} to {}", DebugUtil.printId(jobSpec.getQueryId()), execBeAddr);
             }
 
             // set the broker address for OUTFILE sink
-            ResultSink resultSink = (ResultSink) topParams.fragment.getSink();
+            ResultSink resultSink = (ResultSink) rootExecFragment.getPlanFragment().getSink();
             if (resultSink.isOutputFileSink() && resultSink.needBroker()) {
                 FsBroker broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(resultSink.getBrokerName(),
                         execBeAddr.getHostname());
@@ -717,9 +717,9 @@ public class DefaultCoordinator extends Coordinator {
                         ImmutableList.of(new ArrayList<>(), new ArrayList<>());
                 for (PlanFragment fragment : fragmentGroup) {
                     int profileFragmentId = fragmentId2fragmentProfileIds.get(fragment.getFragmentId());
-                    CoordinatorPreprocessor.ExecutionFragment params =
-                            coordinatorPreprocessor.getFragmentExecParamsMap().get(fragment.getFragmentId());
-                    Preconditions.checkState(!params.instanceExecParams.isEmpty());
+                    ExecutionFragment execFragment =
+                            coordinatorPreprocessor.getIdToExecFragment().get(fragment.getFragmentId());
+                    Preconditions.checkState(!execFragment.getInstances().isEmpty());
 
                     // Fragment instances' ordinals in FragmentExecParams.instanceExecParams determine
                     // shuffle partitions' ordinals in DataStreamSink. backendIds of Fragment instances that
@@ -728,16 +728,16 @@ public class DefaultCoordinator extends Coordinator {
                     // should have the same ordinals. so here assign monotonic unique backendIds to
                     // Fragment instances to keep consistent order with Fragment instances in
                     // FragmentExecParams.instanceExecParams.
-                    for (CoordinatorPreprocessor.FragmentInstance instance : params.instanceExecParams) {
-                        instance.setBackendNum(indexInJob++);
+                    for (FragmentInstance instance : execFragment.getInstances()) {
+                        instance.setIndexInJob(indexInJob++);
                     }
 
-                    List<List<CoordinatorPreprocessor.FragmentInstance>> twoStageInstancesToDeploy =
+                    List<List<FragmentInstance>> twoStageInstancesToDeploy =
                             ImmutableList.of(new ArrayList<>(), new ArrayList<>());
                     if (!enablePipelineEngine) {
-                        twoStageInstancesToDeploy.get(0).addAll(params.instanceExecParams);
+                        twoStageInstancesToDeploy.get(0).addAll(execFragment.getInstances());
                     } else {
-                        params.instanceExecParams.forEach(instance -> {
+                        execFragment.getInstances().forEach(instance -> {
                             if (deployedWorkerIds.contains(instance.getWorkerId())) {
                                 twoStageInstancesToDeploy.get(1).add(instance);
                             } else {
@@ -756,15 +756,14 @@ public class DefaultCoordinator extends Coordinator {
                     if (enablePipelineTableSinkDop) {
                         tableSinkTotalDop = twoStageInstancesToDeploy.stream()
                                 .flatMap(Collection::stream)
-                                .mapToInt(CoordinatorPreprocessor.FragmentInstance::getTableSinkDop)
+                                .mapToInt(FragmentInstance::getTableSinkDop)
                                 .sum();
                     }
                     Preconditions.checkState(tableSinkTotalDop >= 0,
                             "tableSinkTotalDop = %d should be >= 0", tableSinkTotalDop);
 
                     for (int stageIndex = 0; stageIndex < twoStageInstancesToDeploy.size(); stageIndex++) {
-                        List<CoordinatorPreprocessor.FragmentInstance> stageInstances =
-                                twoStageInstancesToDeploy.get(stageIndex);
+                        List<FragmentInstance> stageInstances = twoStageInstancesToDeploy.get(stageIndex);
                         if (stageInstances.isEmpty()) {
                             continue;
                         }
@@ -778,14 +777,14 @@ public class DefaultCoordinator extends Coordinator {
 
                         Map<TUniqueId, Long> instanceId2WorkerId =
                                 stageInstances.stream().collect(Collectors.toMap(
-                                        CoordinatorPreprocessor.FragmentInstance::getInstanceId,
-                                        CoordinatorPreprocessor.FragmentInstance::getWorkerId));
+                                        FragmentInstance::getInstanceId,
+                                        FragmentInstance::getWorkerId));
                         List<TExecPlanFragmentParams> tRequests =
-                                params.toThrift(instanceId2WorkerId.keySet(), descTable, enablePipelineEngine,
-                                        accTabletSinkDop, tableSinkTotalDop, false);
+                                coordinatorPreprocessor.getExecPlanFragmentParamsFactory().create(
+                                        execFragment, stageInstances, descTable, accTabletSinkDop, tableSinkTotalDop);
                         if (enablePipelineTableSinkDop) {
                             accTabletSinkDop += stageInstances.stream()
-                                    .mapToInt(CoordinatorPreprocessor.FragmentInstance::getTableSinkDop)
+                                    .mapToInt(FragmentInstance::getTableSinkDop)
                                     .sum();
                         }
 
@@ -861,20 +860,20 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     // choose at most num FInstances on difference BEs
-    private List<CoordinatorPreprocessor.FragmentInstance> pickupFInstancesOnDifferentHosts(
-            List<CoordinatorPreprocessor.FragmentInstance> instances, int num) {
+    private List<FragmentInstance> pickupFInstancesOnDifferentHosts(
+            List<FragmentInstance> instances, int num) {
         if (instances.size() <= num) {
             return instances;
         }
 
-        Map<Long, List<CoordinatorPreprocessor.FragmentInstance>> workerId2instances = Maps.newHashMap();
-        for (CoordinatorPreprocessor.FragmentInstance instance : instances) {
+        Map<Long, List<FragmentInstance>> workerId2instances = Maps.newHashMap();
+        for (FragmentInstance instance : instances) {
             workerId2instances.putIfAbsent(instance.getWorkerId(), Lists.newLinkedList());
             workerId2instances.get(instance.getWorkerId()).add(instance);
         }
-        List<CoordinatorPreprocessor.FragmentInstance> picked = Lists.newArrayList();
+        List<FragmentInstance> picked = Lists.newArrayList();
         while (picked.size() < num) {
-            for (List<CoordinatorPreprocessor.FragmentInstance> instancesPerHost : workerId2instances.values()) {
+            for (List<FragmentInstance> instancesPerHost : workerId2instances.values()) {
                 if (instancesPerHost.isEmpty()) {
                     continue;
                 }
@@ -895,7 +894,7 @@ public class DefaultCoordinator extends Coordinator {
         ).collect(Collectors.toList());
     }
 
-    private void setGlobalRuntimeFilterParams(CoordinatorPreprocessor.ExecutionFragment topParams,
+    private void setGlobalRuntimeFilterParams(ExecutionFragment topParams,
                                               TNetworkAddress mergeHost) {
 
         Map<Integer, List<TRuntimeFilterProberParams>> broadcastGRFProbersMap = Maps.newHashMap();
@@ -905,13 +904,13 @@ public class DefaultCoordinator extends Coordinator {
         for (PlanFragment fragment : jobSpec.getFragments()) {
             fragment.collectBuildRuntimeFilters(fragment.getPlanRoot());
             fragment.collectProbeRuntimeFilters(fragment.getPlanRoot());
-            CoordinatorPreprocessor.ExecutionFragment params =
-                    coordinatorPreprocessor.getFragmentExecParamsMap().get(fragment.getFragmentId());
+            ExecutionFragment params =
+                    coordinatorPreprocessor.getIdToExecFragment().get(fragment.getFragmentId());
             for (Map.Entry<Integer, RuntimeFilterDescription> kv : fragment.getProbeRuntimeFilters().entrySet()) {
                 List<TRuntimeFilterProberParams> probeParamList = Lists.newArrayList();
-                for (final CoordinatorPreprocessor.FragmentInstance instance : params.instanceExecParams) {
+                for (final FragmentInstance instance : params.getInstances()) {
                     TRuntimeFilterProberParams probeParam = new TRuntimeFilterProberParams();
-                    probeParam.setFragment_instance_id(instance.instanceId);
+                    probeParam.setFragment_instance_id(instance.getInstanceId());
                     probeParam.setFragment_instance_address(coordinatorPreprocessor.getBrpcAddress(instance.getWorkerId()));
                     probeParamList.add(probeParam);
                 }
@@ -924,37 +923,37 @@ public class DefaultCoordinator extends Coordinator {
             }
 
             Set<TUniqueId> broadcastGRfSenders =
-                    pickupFInstancesOnDifferentHosts(params.instanceExecParams, 3).stream().
-                            map(instance -> instance.instanceId).collect(Collectors.toSet());
+                    pickupFInstancesOnDifferentHosts(params.getInstances(), 3).stream().
+                            map(FragmentInstance::getInstanceId).collect(Collectors.toSet());
             for (Map.Entry<Integer, RuntimeFilterDescription> kv : fragment.getBuildRuntimeFilters().entrySet()) {
                 int rid = kv.getKey();
                 RuntimeFilterDescription rf = kv.getValue();
                 if (rf.isHasRemoteTargets()) {
                     if (rf.isBroadcastJoin()) {
                         // for broadcast join, we send at most 3 copy to probers, the first arrival wins.
-                        topParams.runtimeFilterParams.putToRuntime_filter_builder_number(rid, 1);
+                        topParams.getRuntimeFilterParams().putToRuntime_filter_builder_number(rid, 1);
                         if (coordinatorPreprocessor.isUsePipeline()) {
                             rf.setBroadcastGRFSenders(broadcastGRfSenders);
                             broadcastGRFList.add(rf);
                         } else {
-                            rf.setSenderFragmentInstanceId(params.instanceExecParams.get(0).instanceId);
+                            rf.setSenderFragmentInstanceId(params.getInstances().get(0).getInstanceId());
                         }
                     } else {
-                        topParams.runtimeFilterParams
-                                .putToRuntime_filter_builder_number(rid, params.instanceExecParams.size());
+                        topParams.getRuntimeFilterParams()
+                                .putToRuntime_filter_builder_number(rid, params.getInstances().size());
                     }
                 }
             }
             fragment.setRuntimeFilterMergeNodeAddresses(fragment.getPlanRoot(), mergeHost);
         }
-        topParams.runtimeFilterParams.setId_to_prober_params(idToProbePrams);
+        topParams.getRuntimeFilterParams().setId_to_prober_params(idToProbePrams);
 
         broadcastGRFList.forEach(rf -> rf.setBroadcastGRFDestinations(
                 mergeGRFProbers(broadcastGRFProbersMap.get(rf.getFilterId()))));
 
         if (connectContext != null) {
             SessionVariable sessionVariable = connectContext.getSessionVariable();
-            topParams.runtimeFilterParams.setRuntime_filter_max_size(
+            topParams.getRuntimeFilterParams().setRuntime_filter_max_size(
                     sessionVariable.getGlobalRuntimeFilterBuildMaxSize());
         }
     }
@@ -1222,9 +1221,9 @@ public class DefaultCoordinator extends Coordinator {
             }
         }
 
-        coordinatorPreprocessor.getFragmentExecParamsMap().values()
-                .stream().flatMap(execFragment -> execFragment.instanceExecParams.stream())
-                .filter(instance -> !indexInJobToExecState.containsKey(instance.getBackendNum()))
+        coordinatorPreprocessor.getIdToExecFragment().values()
+                .stream().flatMap(execFragment -> execFragment.getInstances().stream())
+                .filter(instance -> !indexInJobToExecState.containsKey(instance.getIndexInJob()))
                 .forEach(instance -> profileDoneSignal.markedCountDown(instance.getInstanceId(), -1L));
     }
 

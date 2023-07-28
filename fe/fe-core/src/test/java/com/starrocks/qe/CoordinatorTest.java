@@ -33,6 +33,8 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.stream.StreamAggNode;
+import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.system.Backend;
@@ -87,26 +89,27 @@ public class CoordinatorTest extends PlanTestBase {
 
     private void testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode mode) throws IOException {
         PlanFragment fragment = genFragment();
-        CoordinatorPreprocessor.ExecutionFragment params = coordinatorPreprocessor.new ExecutionFragment(fragment);
-        CoordinatorPreprocessor.FragmentInstance instance0 =
-                new CoordinatorPreprocessor.FragmentInstance(null, null, params);
-        CoordinatorPreprocessor.FragmentInstance instance1 =
-                new CoordinatorPreprocessor.FragmentInstance(null, null, params);
-        CoordinatorPreprocessor.FragmentInstance instance2 =
-                new CoordinatorPreprocessor.FragmentInstance(null, null, params);
-        instance0.bucketSeqToDriverSeq = ImmutableMap.of(2, -1, 0, -1);
-        instance1.bucketSeqToDriverSeq = ImmutableMap.of(1, -1, 4, -1);
-        instance2.bucketSeqToDriverSeq = ImmutableMap.of(3, -1, 5, -1);
-        params.instanceExecParams.add(instance0);
-        params.instanceExecParams.add(instance1);
-        params.instanceExecParams.add(instance2);
+        ExecutionFragment execFragment = new ExecutionFragment(fragment);
+        FragmentInstance instance0 = new FragmentInstance(null, execFragment);
+        FragmentInstance instance1 = new FragmentInstance(null, execFragment);
+        FragmentInstance instance2 = new FragmentInstance(null, execFragment);
+        instance0.addBucketSeq(2);
+        instance0.addBucketSeq(0);
+        instance1.addBucketSeq(1);
+        instance1.addBucketSeq(4);
+        instance2.addBucketSeq(3);
+        instance2.addBucketSeq(5);
+
+        execFragment.addInstance(instance0);
+        execFragment.addInstance(instance1);
+        execFragment.addInstance(instance2);
+
         RuntimeFilterDescription rf = new RuntimeFilterDescription(ctx.sessionVariable);
         rf.setJoinMode(mode);
         fragment.getBuildRuntimeFilters().put(1, rf);
         Assert.assertTrue(rf.getBucketSeqToInstance() == null || rf.getBucketSeqToInstance().isEmpty());
-        coordinatorPreprocessor.computeBucketSeq2InstanceOrdinal(params, 6);
-        params.setBucketSeqToInstanceForRuntimeFilters();
-        Assert.assertEquals(rf.getBucketSeqToInstance(), Arrays.<Integer>asList(0, 1, 0, 2, 1, 2));
+        execFragment.setBucketSeqToInstanceForRuntimeFilters();
+        Assert.assertEquals(rf.getBucketSeqToInstance(), Arrays.asList(0, 1, 0, 2, 1, 2));
     }
 
     @Test
@@ -138,37 +141,35 @@ public class CoordinatorTest extends PlanTestBase {
                                                              List<Map<Integer, Integer>> expectedBucketSeqToDriverSeqs,
                                                              List<Integer> expectedNumScanRangesList,
                                                              List<Map<Integer, Integer>> expectedDriverSeq2NumScanRangesList) {
-        CoordinatorPreprocessor.ExecutionFragment params =
-                coordinatorPreprocessor.new ExecutionFragment(genFragment());
+        ExecutionFragment execFragment = new ExecutionFragment(genFragment());
         BucketSeqToScanRange bucketSeqToScanRange = new BucketSeqToScanRange();
         for (Integer bucketSeq : bucketSeqToWorkerId.keySet()) {
             bucketSeqToScanRange.put(bucketSeq, createScanId2scanRanges(scanId, 1));
         }
 
         coordinatorPreprocessor.computeColocatedJoinInstanceParam(bucketSeqToWorkerId, bucketSeqToScanRange,
-                parallelExecInstanceNum, pipelineDop, enablePipeline, params);
-        params.instanceExecParams.sort(Comparator.comparing(CoordinatorPreprocessor.FragmentInstance::getWorkerId));
+                parallelExecInstanceNum, pipelineDop, enablePipeline, execFragment);
+        execFragment.getInstances().sort(Comparator.comparing(FragmentInstance::getWorkerId));
 
-        Assert.assertEquals(expectedInstances, params.instanceExecParams.size());
+        Assert.assertEquals(expectedInstances, execFragment.getInstances().size());
         for (int i = 0; i < expectedInstances; ++i) {
-            CoordinatorPreprocessor.FragmentInstance param = params.instanceExecParams.get(i);
-            Assert.assertEquals(expectedParamAddresses.get(i), param.getWorkerId());
-            Assert.assertEquals(expectedPipelineDops.get(i).intValue(), param.getPipelineDop());
+            FragmentInstance instance = execFragment.getInstances().get(i);
+            Assert.assertEquals(expectedParamAddresses.get(i), instance.getWorkerId());
+            Assert.assertEquals(expectedPipelineDops.get(i).intValue(), instance.getPipelineDop());
 
-            Map<Integer, Integer> bucketSeqToDriverSeq = param.getBucketSeqToDriverSeq();
             Map<Integer, Integer> expectedBucketSeqToDriverSeq = expectedBucketSeqToDriverSeqs.get(i);
 
-            Assert.assertEquals(expectedBucketSeqToDriverSeq.size(), bucketSeqToDriverSeq.size());
+            Assert.assertEquals(expectedBucketSeqToDriverSeq.size(), instance.getBucketSeqs().size());
             expectedBucketSeqToDriverSeq.forEach((expectedBucketSeq, expectedDriverSeq) -> {
-                Assert.assertEquals(expectedDriverSeq, bucketSeqToDriverSeq.get(expectedBucketSeq));
+                Assert.assertEquals(expectedDriverSeq, instance.getDriverSeqOfBucketSeq(expectedBucketSeq));
             });
 
             if (enablePipeline && expectedPipelineDops.get(i) != -1) {
-                Assert.assertTrue(param.getPerNodeScanRanges().isEmpty());
+                Assert.assertTrue(instance.getNode2ScanRanges().isEmpty());
 
                 Map<Integer, Integer> expectedDriverSeq2NumScanRanges = expectedDriverSeq2NumScanRangesList.get(i);
                 Map<Integer, List<TScanRangeParams>> perDriverSeqScanRanges =
-                        param.getNodeToPerDriverSeqScanRanges().get(scanId);
+                        instance.getNode2DriverSeqToScanRanges().get(scanId);
                 Assert.assertEquals(expectedDriverSeq2NumScanRanges.size(), perDriverSeqScanRanges.size());
                 expectedDriverSeq2NumScanRanges.forEach((expectedDriverSeq, expectedNumScanRanges) -> {
                     Assert.assertEquals(expectedNumScanRanges.intValue(),
@@ -176,9 +177,9 @@ public class CoordinatorTest extends PlanTestBase {
                 });
 
             } else {
-                Assert.assertTrue(param.getNodeToPerDriverSeqScanRanges().isEmpty());
+                Assert.assertTrue(instance.getNode2DriverSeqToScanRanges().isEmpty());
                 Assert.assertEquals(expectedNumScanRangesList.get(i).intValue(),
-                        param.getPerNodeScanRanges().get(scanId).size());
+                        instance.getNode2ScanRanges().get(scanId).size());
             }
         }
     }
@@ -518,15 +519,15 @@ public class CoordinatorTest extends PlanTestBase {
         prepare.computeFragmentExecParams();
 
         // Assert
-        Map<PlanFragmentId, CoordinatorPreprocessor.ExecutionFragment> fragmentParams =
-                prepare.getFragmentExecParamsMap();
+        Map<PlanFragmentId, ExecutionFragment> fragmentParams =
+                prepare.getIdToExecFragment();
         fragmentParams.forEach((k, v) -> {
             System.err.println("Fragment " + k + " : " + v);
         });
         Assert.assertTrue(fragmentParams.containsKey(fragmentId));
-        CoordinatorPreprocessor.ExecutionFragment fragmentParam = fragmentParams.get(fragmentId);
-        FragmentScanRangeAssignment scanRangeAssignment = fragmentParam.scanRangeAssignment;
-        List<CoordinatorPreprocessor.FragmentInstance> instances = fragmentParam.instanceExecParams;
+        ExecutionFragment fragmentParam = fragmentParams.get(fragmentId);
+        FragmentScanRangeAssignment scanRangeAssignment = fragmentParam.getScanRangeAssignment();
+        List<FragmentInstance> instances = fragmentParam.getInstances();
         Assert.assertFalse(fragmentParams.isEmpty());
         Assert.assertEquals(1, scanRangeAssignment.size());
         Assert.assertEquals(1, instances.size());

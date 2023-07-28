@@ -256,6 +256,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.pipelineDop = dop;
     }
 
+    public boolean hasTableSink() {
+        return hasIcebergTableSink() || hasOlapTableSink();
+    }
+
     public boolean hasOlapTableSink() {
         return this.hasOlapTableSink;
     }
@@ -656,8 +660,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.cacheParam = cacheParam;
     }
 
-    public List<OlapScanNode> collectOlapScanNodes() {
-        List<OlapScanNode> olapScanNodes = Lists.newArrayList();
+    public Map<PlanNodeId, ScanNode> collectScanNodes() {
+        Map<PlanNodeId, ScanNode> scanNodes = Maps.newHashMap();
         Queue<PlanNode> queue = Lists.newLinkedList();
         queue.add(planRoot);
         while (!queue.isEmpty()) {
@@ -666,14 +670,14 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             if (node instanceof ExchangeNode) {
                 continue;
             }
-            if (node instanceof OlapScanNode) {
-                olapScanNodes.add((OlapScanNode) node);
+            if (node instanceof ScanNode) {
+                scanNodes.put(node.getId(), (ScanNode) node);
             }
 
             queue.addAll(node.getChildren());
         }
 
-        return olapScanNodes;
+        return scanNodes;
     }
 
     public boolean isUnionFragment() {

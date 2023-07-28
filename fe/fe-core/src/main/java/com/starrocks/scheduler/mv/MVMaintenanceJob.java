@@ -34,6 +34,9 @@ import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.scheduler.TExecPlanFragmentParamsFactory;
+import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
@@ -60,11 +63,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 
 /**
  * Long-running job responsible for MV incremental maintenance.
@@ -272,10 +273,8 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         }
         queryCoordinator.prepareExec();
 
-        Map<PlanFragmentId, CoordinatorPreprocessor.ExecutionFragment> fragmentExecParams =
-                queryCoordinator.getFragmentExecParamsMap();
+        Map<PlanFragmentId, ExecutionFragment> fragmentExecParams = queryCoordinator.getIdToExecFragment();
         TDescriptorTable descTable = queryCoordinator.getDescriptorTable();
-        boolean enablePipeline = true;
         int tabletSinkDop = 1;
 
         // Group all fragment instances by BE id, and package them into a task
@@ -284,17 +283,14 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         Map<Long, MVMaintenanceTask> tasksByBe = new HashMap<>();
         long taskIdGen = 0;
         int backendIdGen = 0;
-        for (Map.Entry<PlanFragmentId, CoordinatorPreprocessor.ExecutionFragment> kv : fragmentExecParams.entrySet()) {
-            CoordinatorPreprocessor.ExecutionFragment execParams = kv.getValue();
-            Set<TUniqueId> inflightInstanceSet =
-                    execParams.instanceExecParams.stream()
-                            .map(CoordinatorPreprocessor.FragmentInstance::getInstanceId)
-                            .collect(Collectors.toSet());
-            List<TExecPlanFragmentParams> tParams =
-                    execParams.toThrift(inflightInstanceSet, descTable, enablePipeline, tabletSinkDop,
-                            tabletSinkDop, true);
-            for (int i = 0; i < execParams.instanceExecParams.size(); i++) {
-                CoordinatorPreprocessor.FragmentInstance instanceParam = execParams.instanceExecParams.get(i);
+        TExecPlanFragmentParamsFactory execPlanFragmentParamsFactory =
+                queryCoordinator.getExecPlanFragmentParamsFactory();
+        for (Map.Entry<PlanFragmentId, ExecutionFragment> kv : fragmentExecParams.entrySet()) {
+            ExecutionFragment execParams = kv.getValue();
+            List<TExecPlanFragmentParams> tParams = execPlanFragmentParamsFactory.create(
+                    execParams, execParams.getInstances(), descTable, tabletSinkDop, tabletSinkDop);
+            for (int i = 0; i < execParams.getInstances().size(); i++) {
+                FragmentInstance instanceParam = execParams.getInstances().get(i);
                 // Get brpc address instead of the default address
                 TNetworkAddress beRpcAddr = queryCoordinator.getBrpcAddress(instanceParam.getWorkerId());
                 Long taskId = addr2TaskId.get(beRpcAddr);
@@ -310,7 +306,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
 
                 // TODO(murphy) is this necessary
                 int backendId = backendIdGen++;
-                instanceParam.setBackendNum(backendId);
+                instanceParam.setIndexInJob(backendId);
                 task.addFragmentInstance(tParams.get(i));
             }
         }
