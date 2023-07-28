@@ -186,9 +186,12 @@ Status MetaFileBuilder::finalize(int64_t txn_id) {
     auto version = _tablet_meta->version();
     // finalize delvec
     RETURN_IF_ERROR(_finalize_delvec(version, txn_id));
+    TRACE("FinalizeDelvec");
     RETURN_IF_ERROR(_tablet.put_metadata(_tablet_meta));
+    TRACE("PutMetadata");
     _update_mgr->update_primary_index_data_version(_tablet, version);
     _fill_delvec_cache();
+    TRACE("FillDelvecCache");
     _has_finalized = true;
     return Status::OK();
 }

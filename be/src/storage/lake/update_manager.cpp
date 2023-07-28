@@ -54,6 +54,7 @@ Status LakeDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, DelV
 Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                                  const TabletMetadata& metadata, Tablet* tablet,
                                                  MetaFileBuilder* builder, int64_t base_version) {
+    TRACE("PublishPrimaryTableStart");
     // 1. update primary index
     auto index_entry = _index_cache.get_or_create(tablet->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
@@ -68,6 +69,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     }
     // release index entry but keep it in cache
     DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
+    TRACE("PrimaryIndexLoad");
     // 2. load rowset update data to cache, get upsert and delete list
     const uint32_t rowset_id = metadata.next_rowset_id();
     std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
@@ -78,8 +80,10 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     auto& state = state_entry->value();
     RETURN_IF_ERROR(state.load(op_write, metadata, base_version, tablet, builder, true));
     _update_state_cache.update_object_size(state_entry, state.memory_usage());
+    TRACE("UpdateStateCacheLoad");
     // 3. rewrite segment file if it is partial update
     RETURN_IF_ERROR(state.rewrite_segment(op_write, metadata, tablet));
+    TRACE("RewriteSegment");
     PrimaryIndex::DeletesMap new_deletes;
     for (uint32_t i = 0; i < op_write.rowset().segments_size(); i++) {
         new_deletes[rowset_id + i] = {};
@@ -106,6 +110,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     for (const auto& one_delete : state.auto_increment_deletes()) {
         index.erase(*one_delete, &new_deletes);
     }
+    TRACE("UpdatePrimaryIndex");
     // 4. generate delvec
     size_t ndelvec = new_deletes.size();
     vector<std::pair<uint32_t, DelVectorPtr>> new_del_vecs(ndelvec);
@@ -147,12 +152,14 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         idx++;
     }
     new_deletes.clear();
+    TRACE("GenerateDelvec");
 
     // 5. update TabletMeta and write to meta file
     for (auto&& each : new_del_vecs) {
         builder->append_delvec(each.second, each.first);
     }
     builder->apply_opwrite(op_write);
+    TRACE("ApplyMeta");
 
     TRACE_COUNTER_INCREMENT("rowsetid", rowset_id);
     TRACE_COUNTER_INCREMENT("#upserts", upserts.size());
