@@ -35,7 +35,6 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           run_id: ${{ github.event.workflow_run.id }}
-          workflow: test_fork.yml
           name: 'pr_num'
 
       - name: Download workflow artifact - HEAD REF
@@ -43,7 +42,6 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           run_id: ${{ github.event.workflow_run.id }}
-          workflow: test_fork.yml
           name: 'head_sha'
 
       - name: Read the pr num file
