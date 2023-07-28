@@ -437,7 +437,7 @@ Hive Catalog 从 3.0 版本起支持 Google GCS。
 
 指定缓存元数据更新策略的一组参数。StarRocks 根据该策略更新缓存的 Hive 元数据。此组参数为可选。
 
-StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般情况下，您可以忽略 `MetadataUpdateParams`，无需对其中的策略参数进行调优。
+StarRocks 默认采用[自动异步更新策略](#附录理解元数据自动异步更新策略)，开箱即用。因此，一般情况下，您可以忽略 `MetadataUpdateParams`，无需对其中的策略参数进行调优。
 
 如果 Hive 数据更新频率较高，那么您可以对这些参数进行调优，从而优化自动异步更新策略的性能。
 
@@ -450,8 +450,6 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
 | metastore_cache_ttl_sec                | 否       | StarRocks 自动淘汰缓存的 Hive 表或分区的元数据的时间间隔。单位：秒。默认值：`86400`，即 24 小时。 |
 | remote_file_cache_ttl_sec              | 否       | StarRocks 自动淘汰缓存的 Hive 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`129600`，即 36 小时。 |
 | enable_cache_list_names                | 否       | 指定 StarRocks 是否缓存 Hive Partition Names。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。 |
-
-参见本文[附录：理解自动异步更新策略](../../data_source/catalog/hive_catalog.md#附录理解自动异步更新策略)小节。
 
 ### 示例
 
