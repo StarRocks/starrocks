@@ -680,6 +680,7 @@ Status Aggregator::_evaluate_exprs(vectorized::Chunk* chunk) {
             // For simplicity and don't change the overall processing flow,
             // We handle const column as normal data column
             // TODO(kks): improve const column aggregate later
+<<<<<<< HEAD
             if (j == 0) {
                 ASSIGN_OR_RETURN(auto&& col, _agg_expr_ctxs[i][j]->evaluate(chunk));
                 _agg_intput_columns[i][j] =
@@ -687,6 +688,23 @@ Status Aggregator::_evaluate_exprs(vectorized::Chunk* chunk) {
             } else {
                 ASSIGN_OR_RETURN(auto&& col, _agg_expr_ctxs[i][j]->evaluate(chunk));
                 _agg_intput_columns[i][j] = std::move(col);
+=======
+            ASSIGN_OR_RETURN(auto&& col, agg_expr_ctxs[i][j]->evaluate(chunk));
+            // if first column is const, we have to unpack it. Most agg function only has one arg, and treat it as non-const column
+            if (j == 0) {
+                _agg_input_columns[i][j] =
+                        vectorized::ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), col);
+            } else {
+                // if function has at least two argument, unpack const column selectively
+                // for function like corr, FE forbid second args to be const, we will always unpack const column for it
+                // for function like percentile_disc, the second args is const, do not unpack it
+                if (agg_expr_ctxs[i][j]->root()->is_constant()) {
+                    _agg_input_columns[i][j] = std::move(col);
+                } else {
+                    _agg_input_columns[i][j] =
+                            vectorized::ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), col);
+                }
+>>>>>>> 5f4e5ae41 ([Feature] fix agg/window'logic for multi args agg function (#28193))
             }
             _agg_input_raw_columns[i][j] = _agg_intput_columns[i][j].get();
         }

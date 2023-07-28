@@ -181,9 +181,14 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         }
 
         for (size_t j = 0; j < _agg_expr_ctxs[i].size(); ++j) {
+<<<<<<< HEAD
             // Currently, only lead and lag window function have multi args.
             // For performance, we do this special handle.
             // In future, if need, we could remove this if else easily.
+=======
+            // we always treat first argument as non const, because most window function has only one args
+            // and cant't handler const column within the function
+>>>>>>> 5f4e5ae41 ([Feature] fix agg/window'logic for multi args agg function (#28193))
             if (j == 0) {
                 _agg_intput_columns[i][j] = vectorized::ColumnHelper::create_column(
                         _agg_expr_ctxs[i][j]->root()->type(), is_input_nullable);
