@@ -44,6 +44,7 @@ import com.google.gson.JsonPrimitive;
 import com.google.re2j.Pattern;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.ScalarType;
@@ -65,6 +66,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -1050,18 +1052,17 @@ public class ScalarOperatorFunctions {
 
     // =================================== meta functions ==================================== //
 
-    private static Table inspectTable(String name) {
-        TableName tableName = TableName.fromString(name);
-        Table table = GlobalStateMgr.getCurrentState()
-                .mayGetDb(tableName.getDb())
-                .flatMap(db -> db.tryGetTable(tableName.getTbl()))
-                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, name));
+    private static Pair<Database, Table> inspectTable(TableName tableName) {
+        Database db = GlobalStateMgr.getCurrentState().mayGetDb(tableName.getDb())
+                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, tableName.getDb()));
+        Table table = db.tryGetTable(tableName.getTbl())
+                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
         ConnectContext connectContext = ConnectContext.get();
         PrivilegeChecker.checkAnyActionOnTable(
                 connectContext.getCurrentUserIdentity(),
                 connectContext.getCurrentRoleIds(),
                 tableName);
-        return table;
+        return Pair.of(db, table);
     }
 
     /**
@@ -1069,37 +1070,54 @@ public class ScalarOperatorFunctions {
      */
     @ConstantFunction(name = "inspect_mv_meta", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
     public static ConstantOperator inspect_mv_meta(ConstantOperator mvName) {
-        Table table = inspectTable(mvName.getVarchar());
+        TableName tableName = TableName.fromString(mvName.getVarchar());
+        Pair<Database, Table> dbTable = inspectTable(tableName);
+        Table table = dbTable.getRight();
         if (!table.isMaterializedView()) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, table + " is not materialized view");
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    tableName + " is not materialized view");
         }
+        try {
+            dbTable.getLeft().readLock();
 
-        MaterializedView mv = (MaterializedView) table;
-        String meta = mv.inspectMeta();
-        return ConstantOperator.createVarchar(meta);
+            MaterializedView mv = (MaterializedView) table;
+            String meta = mv.inspectMeta();
+            return ConstantOperator.createVarchar(meta);
+        } finally {
+            dbTable.getLeft().readUnlock();
+        }
     }
 
     /**
      * Return related materialized-views of a table, in JSON array format
      */
     @ConstantFunction(name = "inspect_related_mv", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
-    public static ConstantOperator inspect_related_mv(ConstantOperator tableName) {
-        Table table = inspectTable(tableName.getVarchar());
-        Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
-        JsonArray array = new JsonArray();
-        for (MvId mv : SetUtils.emptyIfNull(relatedMvs)) {
-            String name = GlobalStateMgr.getCurrentState().mayGetTable(mv.getDbId(), mv.getId())
-                    .map(Table::getName)
-                    .orElse(null);
-            JsonObject obj = new JsonObject();
-            obj.add("id", new JsonPrimitive(mv.getId()));
-            obj.add("name", name != null ? new JsonPrimitive(name) : JsonNull.INSTANCE);
+    public static ConstantOperator inspect_related_mv(ConstantOperator name) {
+        TableName tableName = TableName.fromString(name.getVarchar());
+        Pair<Database, Table> dbTable = inspectTable(tableName);
+        Table table = dbTable.getRight();
 
-            array.add(obj);
+        try {
+            dbTable.getLeft().readLock();
+
+            Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
+            JsonArray array = new JsonArray();
+            for (MvId mv : SetUtils.emptyIfNull(relatedMvs)) {
+                String mvName = GlobalStateMgr.getCurrentState().mayGetTable(mv.getDbId(), mv.getId())
+                        .map(Table::getName)
+                        .orElse(null);
+                JsonObject obj = new JsonObject();
+                obj.add("id", new JsonPrimitive(mv.getId()));
+                obj.add("name", mvName != null ? new JsonPrimitive(mvName) : JsonNull.INSTANCE);
+
+                array.add(obj);
+            }
+
+            String json = array.toString();
+            return ConstantOperator.createVarchar(json);
+        } finally {
+            dbTable.getLeft().readUnlock();
         }
-
-        String json = array.toString();
-        return ConstantOperator.createVarchar(json);
     }
 
     /**
@@ -1110,17 +1128,25 @@ public class ScalarOperatorFunctions {
             returnType = VARCHAR,
             isMetaFunction = true)
     public static ConstantOperator inspect_hive_part_info(ConstantOperator name) {
-        Table table = inspectTable(name.getVarchar());
-        Map<String, PartitionInfo> info = PartitionUtil.getPartitionNameWithPartitionInfo(table);
-        JsonObject obj = new JsonObject();
-        for (Map.Entry<String, PartitionInfo> entry : MapUtils.emptyIfNull(info).entrySet()) {
-            if (entry.getValue() instanceof Partition) {
-                Partition part = (Partition) entry.getValue();
-                obj.add(entry.getKey(), part.toJson());
+        TableName tableName = TableName.fromString(name.getVarchar());
+        Pair<Database, Table> dbTable = inspectTable(tableName);
+        Table table = dbTable.getRight();
+        try {
+            dbTable.getLeft().readLock();
+
+            Map<String, PartitionInfo> info = PartitionUtil.getPartitionNameWithPartitionInfo(table);
+            JsonObject obj = new JsonObject();
+            for (Map.Entry<String, PartitionInfo> entry : MapUtils.emptyIfNull(info).entrySet()) {
+                if (entry.getValue() instanceof Partition) {
+                    Partition part = (Partition) entry.getValue();
+                    obj.add(entry.getKey(), part.toJson());
+                }
             }
+            String json = obj.toString();
+            return ConstantOperator.createVarchar(json);
+        } finally {
+            dbTable.getLeft().readUnlock();
         }
-        String json = obj.toString();
-        return ConstantOperator.createVarchar(json);
     }
 
 }
