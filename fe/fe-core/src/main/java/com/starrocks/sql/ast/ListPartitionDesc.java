@@ -235,7 +235,7 @@ public class ListPartitionDesc extends PartitionDesc {
                 listPartitionInfo.setValues(partitionId, desc.getValues());
                 listPartitionInfo.setLiteralExprValues(partitionId, desc.getValues());
                 listPartitionInfo.setIdToIsTempPartition(partitionId, isTemp);
-                listPartitionInfo.setStorageToCacheInfo(partitionId, desc.getDataCacheInfo());
+                listPartitionInfo.setStorageCacheInfo(partitionId, desc.getDataCacheInfo());
             }
             for (MultiItemListPartitionDesc desc : this.multiListPartitionDescs) {
                 long partitionId = partitionNameToId.get(desc.getPartitionName());
@@ -246,7 +246,7 @@ public class ListPartitionDesc extends PartitionDesc {
                 listPartitionInfo.setMultiValues(partitionId, desc.getMultiValues());
                 listPartitionInfo.setMultiLiteralExprValues(partitionId, desc.getMultiValues());
                 listPartitionInfo.setIdToIsTempPartition(partitionId, isTemp);
-                listPartitionInfo.setStorageToCacheInfo(partitionId, desc.getDataCacheInfo());
+                listPartitionInfo.setStorageCacheInfo(partitionId, desc.getDataCacheInfo());
             }
             listPartitionInfo.setAutomaticPartition(isAutoPartitionTable);
             return listPartitionInfo;

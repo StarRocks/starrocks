@@ -460,7 +460,7 @@ public class ListPartitionInfo extends PartitionInfo {
         return 0;
     }
 
-    public void setStorageToCacheInfo(long partitionId, DataCacheInfo dataCacheInfo) {
+    public void setStorageCacheInfo(long partitionId, DataCacheInfo dataCacheInfo) {
         idToStorageCacheInfo.put(partitionId, dataCacheInfo);
     }
 }
