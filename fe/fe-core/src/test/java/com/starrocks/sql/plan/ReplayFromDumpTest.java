@@ -14,12 +14,13 @@
 
 package com.starrocks.sql.plan;
 
-import com.google.common.collect.Lists;
-import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+=======
+>>>>>>> 282bb770f ([BugFix] Redefine mv's staleness to make it more clear (#27659))
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -28,18 +29,14 @@ import com.starrocks.sql.optimizer.base.CTEProperty;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
-import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
+<<<<<<< HEAD
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -173,6 +170,9 @@ public class ReplayFromDumpTest {
                 UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
                         getExplainString(level));
     }
+=======
+public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
+>>>>>>> 282bb770f ([BugFix] Redefine mv's staleness to make it more clear (#27659))
 
     @Test
     public void testTPCH1() throws Exception {
