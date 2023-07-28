@@ -827,7 +827,7 @@ PROPERTIES(
 );
 ```
 
-### Create a table with multiple partitions created at a time and partitioned an integer type column**
+### Create a table where multiple partitions created at a time, and an integer type column is specified as partitining column
 
   In the following example, the partitioning column `datekey` is of INT data type. All the partitions are created by only one simple partition clause  `START ("1") END ("5") EVERY (1)`. The range of all the partitions starts from `1` and ends at `5`, with a partition granularity of `1`:
   > **NOTE**
