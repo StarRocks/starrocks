@@ -374,6 +374,7 @@ public class ListPartitionInfo extends PartitionInfo {
                                 "add list partition only support single item or multi item list partition now");
                     }
                     this.idToIsTempPartition.put(partitionId, isTempPartition);
+                    this.idToStorageCacheInfo.put(partitionId, partitionDesc.getDataCacheInfo());
                 }
             }
         } catch (Exception e) {
@@ -389,6 +390,7 @@ public class ListPartitionInfo extends PartitionInfo {
         this.idToReplicationNum.put(partitionId, partitionPersistInfo.getReplicationNum());
         this.idToInMemory.put(partitionId, partitionPersistInfo.isInMemory());
         this.idToIsTempPartition.put(partitionId, partitionPersistInfo.isTempPartition());
+        this.idToStorageCacheInfo.put(partitionId, partitionPersistInfo.getDataCacheInfo());
 
         List<List<String>> multiValues = partitionPersistInfo.getMultiValues();
         if (multiValues != null && multiValues.size() > 0) {
@@ -411,6 +413,7 @@ public class ListPartitionInfo extends PartitionInfo {
         idToMultiValues.remove(partitionId);
         idToMultiLiteralExprValues.remove(partitionId);
         idToIsTempPartition.remove(partitionId);
+        idToStorageCacheInfo.remove(partitionId);
     }
 
     @Override
@@ -431,6 +434,7 @@ public class ListPartitionInfo extends PartitionInfo {
             this.idToValues.put(partitionId, values);
             this.setLiteralExprValues(partitionId, values);
         }
+        this.idToStorageCacheInfo.put(partitionId, dataCacheInfo);
     }
 
     @Override
@@ -441,4 +445,25 @@ public class ListPartitionInfo extends PartitionInfo {
         idToInMemory.put(partitionId, false);
         idToStorageCacheInfo.put(partitionId, new DataCacheInfo(true, false));
     }
+<<<<<<< HEAD
+=======
+
+    public static int compareByValue(List<List<String>> left, List<List<String>> right) {
+        int valueSize = left.size();
+        for (int i = 0; i < valueSize; i++) {
+            int partitionSize = left.get(i).size();
+            for (int j = 0; j < partitionSize; j++) {
+                int compareResult = left.get(i).get(j).compareTo(right.get(i).get(j));
+                if (compareResult != 0) {
+                    return compareResult;
+                }
+            }
+        }
+        return 0;
+    }
+
+    public void setStorageCacheInfo(long partitionId, DataCacheInfo dataCacheInfo) {
+        idToStorageCacheInfo.put(partitionId, dataCacheInfo);
+    }
+>>>>>>> 2ac110086e ([Feature] Support list partition of cloud native table (#28012))
 }
