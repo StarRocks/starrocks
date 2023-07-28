@@ -848,8 +848,7 @@ PROPERTIES(
   )
   DISTRIBUTED BY HASH(site_id)
   PROPERTIES ("replication_num" = "3");
-    ```
-
+  ```
 
 ### Create a Hive external table
 
