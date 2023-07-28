@@ -679,10 +679,17 @@ StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, i
     if (txns_size != 1) {
         return Status::NotSupported("does not support publish multiple txns yet");
     }
+
+    auto new_version_metadata_or_error = [=](Status error) -> StatusOr<TabletMetadataPtr> {
+        auto res = tablet->get_metadata(new_version);
+        if (res.ok()) return res;
+        return error;
+    };
+
     // Read base version metadata
     auto res = tablet->get_metadata(base_version);
     if (res.status().is_not_found()) {
-        return tablet->get_metadata(new_version);
+        return new_version_metadata_or_error(res.status());
     }
 
     if (!res.ok()) {
@@ -709,7 +716,7 @@ StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, i
     auto init_st = log_applier->init();
     if (!init_st.ok()) {
         if (init_st.is_already_exist()) {
-            return tablet->get_metadata(new_version);
+            return new_version_metadata_or_error(init_st);
         } else {
             return init_st;
         }
@@ -722,7 +729,7 @@ StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, i
         auto txn_log_st = tablet->get_txn_log(txn_id);
 
         if (txn_log_st.status().is_not_found()) {
-            return tablet->get_metadata(new_version);
+            return new_version_metadata_or_error(txn_log_st.status());
         }
 
         if (!txn_log_st.ok()) {
@@ -750,7 +757,7 @@ StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, i
         for (int64_t v = alter_version + 1; v < new_version; ++v) {
             auto txn_vlog = tablet->get_txn_vlog(v);
             if (txn_vlog.status().is_not_found()) {
-                return tablet->get_metadata(new_version);
+                return new_version_metadata_or_error(txn_vlog.status());
             }
 
             if (!txn_vlog.ok()) {
@@ -779,8 +786,8 @@ StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, i
         // Delete vtxn logs
         if (alter_version != -1 && alter_version + 1 < new_version) {
             for (int64_t v = alter_version + 1; v < new_version; ++v) {
-                auto st = tablet_mgr->delete_txn_vlog(tablet_id, v);
-                LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet->txn_vlog_location(v) << ": " << st;
+                auto r = tablet_mgr->delete_txn_vlog(tablet_id, v);
+                LOG_IF(WARNING, !r.ok()) << "Fail to delete " << tablet->txn_vlog_location(v) << ": " << r;
             }
         }
     };
