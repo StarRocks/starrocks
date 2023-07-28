@@ -257,24 +257,24 @@ public class DateLiteral extends LiteralExpr {
         return convertToString(type.getPrimitiveType());
     }
 
+    public String getHiveFormatStringValue() {
+        if (microsecond == 0) {
+            return String.format("%04d-%02d-%02d %02d:%02d:%02d.0", year, month, day, hour, minute, second);
+        } else {
+            return String.format("%04d-%02d-%02d %02d:%02d:%02d.%6d", year, month, day, hour, minute, second,
+                    microsecond).replaceFirst("0+$", "");
+        }
+    }
+
     private String convertToString(PrimitiveType type) {
         if (type == PrimitiveType.DATE) {
             return String.format("%04d-%02d-%02d", year, month, day);
         } else {
-            if (hiveFormat) {
-                if (microsecond == 0) {
-                    return String.format("%04d-%02d-%02d %02d:%02d:%02d.0", year, month, day, hour, minute, second);
-                } else {
-                    return String.format("%04d-%02d-%02d %02d:%02d:%02d.%6d", year, month, day, hour, minute, second,
-                            microsecond).replaceFirst("0+$", "");
-                }
+            if (microsecond == 0) {
+                return String.format("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, minute, second);
             } else {
-                if (microsecond == 0) {
-                    return String.format("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, minute, second);
-                } else {
-                    return String.format("%04d-%02d-%02d %02d:%02d:%02d.%06d", year, month, day, hour, minute, second,
-                            microsecond);
-                }
+                return String.format("%04d-%02d-%02d %02d:%02d:%02d.%06d", year, month, day, hour, minute, second,
+                        microsecond);
             }
         }
     }
@@ -433,12 +433,6 @@ public class DateLiteral extends LiteralExpr {
     private long minute;
     private long second;
     private long microsecond;
-
-    private boolean hiveFormat = false;
-
-    public void setHiveFormat(boolean hiveFormat) {
-        this.hiveFormat = hiveFormat;
-    }
 
     @Override
     public int hashCode() {

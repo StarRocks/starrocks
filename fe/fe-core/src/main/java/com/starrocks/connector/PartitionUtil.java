@@ -111,19 +111,11 @@ public class PartitionUtil {
             if (((NullablePartitionKey) partitionKey).nullPartitionValue().equals(rawValue)) {
                 exprValue = NullLiteral.create(type);
             } else {
-                exprValue = createLiteralExpr(rawValue, type, tableType);
+                exprValue = LiteralExpr.create(rawValue, type);
             }
             partitionKey.pushColumn(exprValue, type.getPrimitiveType());
         }
         return partitionKey;
-    }
-
-    private static LiteralExpr createLiteralExpr(String rawValue, Type type, Table.TableType tableType) throws AnalysisException {
-        LiteralExpr exprValue = LiteralExpr.create(rawValue, type);
-        if (type.isDatetime() && tableType == Table.TableType.HIVE) {
-            ((DateLiteral) exprValue).setHiveFormat(true);
-        }
-        return exprValue;
     }
 
     public static List<String> toPartitionValues(String partitionName) {
@@ -188,6 +180,9 @@ public class PartitionUtil {
             } else if (value instanceof BoolLiteral) {
                 BoolLiteral boolValue = ((BoolLiteral) value);
                 values.add(String.valueOf(boolValue.getValue()));
+            } else if (value instanceof DateLiteral) {
+                DateLiteral dateLiteral = ((DateLiteral) value);
+                values.add(dateLiteral.getHiveFormatStringValue());
             } else {
                 values.add(value.getStringValue());
             }
