@@ -330,9 +330,6 @@ public class OlapTableFactory implements AbstractTableFactory {
                         throw new DdlException(e.getMessage());
                     }
                 }
-                if (partitionInfo.getType() == PartitionType.LIST) {
-                    throw new DdlException("Do not support create list partition Cloud Native table");
-                }
             }
 
             if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {

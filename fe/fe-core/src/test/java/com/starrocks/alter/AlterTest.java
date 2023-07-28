@@ -1967,7 +1967,8 @@ public class AlterTest {
         boolean isInMemory = partitionInfo.getIsInMemory(partitionId);
         boolean isTempPartition = false;
         ListPartitionPersistInfo partitionPersistInfoOut = new ListPartitionPersistInfo(dbId, tableId, partition,
-                dataProperty, replicationNum, isInMemory, isTempPartition, values, new ArrayList<>());
+                dataProperty, replicationNum, isInMemory, isTempPartition, values, new ArrayList<>(),
+                partitionInfo.getDataCacheInfo(partitionId));
 
         // write log
         File file = new File("./test_serial.log");
@@ -2043,7 +2044,8 @@ public class AlterTest {
         boolean isInMemory = partitionInfo.getIsInMemory(partitionId);
         boolean isTempPartition = false;
         ListPartitionPersistInfo partitionPersistInfoOut = new ListPartitionPersistInfo(dbId, tableId, partition,
-                dataProperty, replicationNum, isInMemory, isTempPartition, new ArrayList<>(), multiValues);
+                dataProperty, replicationNum, isInMemory, isTempPartition, new ArrayList<>(), multiValues,
+                partitionInfo.getDataCacheInfo(partitionId));
 
         // write log
         File file = new File("./test_serial.log");
