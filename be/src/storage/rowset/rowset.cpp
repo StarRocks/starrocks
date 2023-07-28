@@ -458,7 +458,48 @@ Status Rowset::copy_files_to(KVStore* kvstore, const std::string& dir) {
             }
         }
     }
-    RETURN_IF_ERROR(_link_delta_column_group_files(kvstore, dir, INT64_MAX));
+    RETURN_IF_ERROR(_copy_delta_column_group_files(kvstore, dir, INT64_MAX));
+    return Status::OK();
+}
+
+Status Rowset::_copy_delta_column_group_files(KVStore* kvstore, const std::string& dir, int64_t version) {
+    if (num_segments() > 0 && kvstore != nullptr && _rowset_path != dir) {
+        // link dcg files
+        for (int i = 0; i < num_segments(); i++) {
+            DeltaColumnGroupList list;
+
+            if (_schema->keys_type() == PRIMARY_KEYS) {
+                RETURN_IF_ERROR(TabletMetaManager::scan_delta_column_group(
+                        kvstore, _rowset_meta->tablet_id(), _rowset_meta->get_rowset_seg_id() + i, 0, version, &list));
+            } else {
+                RETURN_IF_ERROR(TabletMetaManager::scan_delta_column_group(
+                        kvstore, _rowset_meta->tablet_id(), _rowset_meta->rowset_id(), i, 0, INT64_MAX, &list));
+            }
+
+            for (const auto& dcg : list) {
+                std::vector<std::string> src_file_paths = dcg->column_files(_rowset_path);
+                std::vector<std::string> dst_copy_paths = dcg->column_files(dir);
+
+                for (int j = 0; j < src_file_paths.size(); ++j) {
+                    const std::string& src_file_path = src_file_paths[j];
+                    const std::string& dst_copy_path = dst_copy_paths[j];
+
+                    if (fs::path_exist(dst_copy_path)) {
+                        LOG(WARNING) << "Path already exist: " << dst_copy_path;
+                        return Status::AlreadyExist(fmt::format("Path already exist: {}", dst_copy_path));
+                    }
+
+                    if (!fs::copy_file(src_file_path.c_str(), dst_copy_path.c_str()).ok()) {
+                        LOG(WARNING) << "Fail to copy " << src_file_path << " to " << dst_copy_path;
+                        return Status::RuntimeError(fmt::format("Fail to copy segment cols file, src: {}, dst {}",
+                                                                src_file_path, dst_copy_path));
+                    } else {
+                        VLOG(1) << "success to copy " << src_file_path << " to " << dst_copy_path;
+                    }
+                }
+            }
+        }
+    }
     return Status::OK();
 }
 
