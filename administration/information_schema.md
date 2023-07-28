@@ -89,3 +89,4 @@ StarRocks 优化了 `information_schema` 中以下表提供的元数据信息：
 | DISTRIBUTE_BUCKET | 表的分桶数。                                                 |
 | SORT_KEY         | 表的排序键。                                                 |
 | PROPERTIES       | 表的属性。                                                   |
+| TABLE_ID         | 表的 ID。                                                   |
