@@ -365,8 +365,8 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
     } else if (field.type.type == LogicalType::TYPE_MAP) {
         for (size_t i = 0; i < field.children.size(); i++) {
             if ((!col_type.children[i].is_unknown_type())) {
-                _collect_field_io_range(field.children[i], col_type.children[i], &iceberg_schema_field->children[i], active, ranges,
-                                        end_offset);
+                _collect_field_io_range(field.children[i], col_type.children[i], &iceberg_schema_field->children[i],
+                                        active, ranges, end_offset);
             }
         }
     } else {
