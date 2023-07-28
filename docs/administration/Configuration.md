@@ -474,6 +474,7 @@ BE static parameters are as follows.
 | load_process_max_memory_limit_bytes | 107374182400 | Byte | The maximum size limit of memory resources can be taken up by all load process on a BE node. |
 | load_process_max_memory_limit_percent | 30 | % | The maximum percentage limit of memory resources can be taken up by all load process on a BE node. |
 | sync_tablet_meta | FALSE | N/A | The boolean value to control if to enable the synchronization of the tablet metadata. The value true indicates to enable the synchronization. The value false indicates to disable the synchronization. |
+| routine_load_thread_pool_size | 10 | N/A | The thread pool size for Routine Load on each BE. Since v3.1.0, this parameter is deprecated. The thread pool size for Routine Load on each BE is now entirely controlled by the FE dynamic parameter `max_routine_load_task_num_per_be`. |
 | brpc_max_body_size | 2147483648 | Byte | The maximum body size of a BRPC. |
 | tablet_map_shard_size | 32 | N/A | The tablet map shard size. The value must be the power of two. |
 | enable_bitmap_union_disk_format_with_set | FALSE | N/A | The boolean value to control if to enable the new storage format of the BITMAP type, which can improve the performance of bitmap_union. The value true indicates to enable the new storage format. The value false indicates to disable the new storage format. |
