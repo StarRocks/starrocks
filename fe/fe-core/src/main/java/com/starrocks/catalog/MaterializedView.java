@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -80,11 +81,13 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -559,17 +562,16 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     public Set<String> getUpdatedPartitionNamesOfOlapTable(OlapTable baseTable) {
+        // Ignore partitions when mv 's last refreshed time period is less than `maxMVRewriteStaleness`
+        if (isStalenessSatisfied()) {
+            return Sets.newHashSet();
+        }
+
         Map<String, BasePartitionInfo> mvBaseTableVisibleVersionMap = getRefreshScheme()
                 .getAsyncRefreshContext()
                 .getBaseTableVisibleVersionMap()
                 .computeIfAbsent(baseTable.getId(), k -> Maps.newHashMap());
         Set<String> result = Sets.newHashSet();
-
-        // Ignore partitions when mv 's last refreshed time period is less than `maxMVRewriteStaleness`
-        boolean isLessThanMVRewriteStaleness = isLessThanMVRewriteStaleness();
-        if (isLessThanMVRewriteStaleness) {
-            return result;
-        }
 
         // If there are new added partitions, add it into refresh result.
         for (String partitionName : baseTable.getPartitionNames()) {
@@ -605,14 +607,84 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return result;
     }
 
-    private boolean isLessThanMVRewriteStaleness() {
+    /**
+     * @return Return max timestamp of all table's max refresh timestamp
+     *          which is computed by checking all its partitions' modified time.
+     */
+    public Optional<Long> maxBaseTableRefreshTimestamp() {
+        long maxRefreshTimestamp = -1;
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            Table baseTable = baseTableInfo.getTable();
+            if (baseTable instanceof MaterializedView) {
+                MaterializedView mv = (MaterializedView) baseTable;
+                if (!mv.isStalenessSatisfied()) {
+                    return Optional.empty();
+                }
+                Optional<Long> maxPartitionRefreshTimestamp =
+                        mv.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo);
+                if (!maxPartitionRefreshTimestamp.isPresent()) {
+                    return Optional.empty();
+                }
+                maxRefreshTimestamp = Math.max(maxPartitionRefreshTimestamp.get(), maxRefreshTimestamp);
+            } else if (baseTable instanceof OlapTable) {
+                OlapTable olapTable = (OlapTable) baseTable;
+                Optional<Long> maxPartitionRefreshTimestamp =
+                        olapTable.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo);
+                if (!maxPartitionRefreshTimestamp.isPresent()) {
+                    return Optional.empty();
+                }
+                maxRefreshTimestamp = Math.max(maxPartitionRefreshTimestamp.get(), maxRefreshTimestamp);
+            } else if (baseTable instanceof HiveTable) {
+                HiveTable hiveTable = (HiveTable) baseTable;
+                Map<String, com.starrocks.connector.PartitionInfo> partitionNameWithPartition =
+                        PartitionUtil.getPartitionNameWithPartitionInfo(hiveTable);
+                Optional<Long> maxPartitionRefreshTimestamp =
+                        partitionNameWithPartition.values().stream().map(com.starrocks.connector.PartitionInfo::getModifiedTime)
+                                .max(Long::compareTo);
+                if (!maxPartitionRefreshTimestamp.isPresent()) {
+                    return Optional.empty();
+                }
+                maxRefreshTimestamp = Math.max(maxPartitionRefreshTimestamp.get(), maxRefreshTimestamp);
+            } else if (baseTable instanceof View) {
+                // continue
+            } else {
+                return Optional.empty();
+            }
+        }
+        return Optional.of(maxRefreshTimestamp);
+    }
+
+    public long getLastRefreshTime() {
+        return refreshScheme.getLastRefreshTime();
+    }
+
+    @VisibleForTesting
+    public boolean isStalenessSatisfied() {
         if (this.maxMVRewriteStaleness <= 0) {
             return false;
         }
-        // Use mv's last refresh time to check whether to satisfy the `max_staleness`.
-        long lastRefreshTime = refreshScheme.getLastRefreshTime();
-        long currentTimestamp = System.currentTimeMillis();
-        if (lastRefreshTime < currentTimestamp - this.maxMVRewriteStaleness * 1000) {
+        // Define:
+        //      MV's stalness = max of all base tables' refresh timestamp  - mv's refresh timestamp .
+        // Check staleness by using all base tables' refresh timestamp and this mv's refresh timestamp,
+        // if MV's staleness is greater than user's config `maxMVRewriteStaleness`:
+        // we think this mv is outdated, otherwise we can use this mv to rewrite user's query.
+        long mvRefreshTimestamp = getLastRefreshTime();
+        Optional<Long> baseTableRefreshTimestampOpt = maxBaseTableRefreshTimestamp();
+        // If we can not find the base table's refresh timestamp, just return false directly.
+        if (!baseTableRefreshTimestampOpt.isPresent()) {
+            return false;
+        }
+
+        long baseTableRefreshTimestamp = baseTableRefreshTimestampOpt.get();
+        long mvStaleness = (baseTableRefreshTimestamp - mvRefreshTimestamp) / 1000;
+        if (mvStaleness > this.maxMVRewriteStaleness) {
+            ZoneId currentTimeZoneId = TimeUtils.getTimeZone().toZoneId();
+            LOG.info("MV is outdated because MV's staleness {} (baseTables' lastRefreshTime {} - " +
+                            "MV's lastRefreshTime {}) is greater than the staleness config {}",
+                    DateUtils.formatTimeStampInMill(baseTableRefreshTimestamp, currentTimeZoneId),
+                    DateUtils.formatTimeStampInMill(mvRefreshTimestamp, currentTimeZoneId),
+                    mvStaleness,
+                    maxMVRewriteStaleness);
             return false;
         }
         return true;
@@ -640,21 +712,16 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             // Only support hive table now
             return null;
         }
-        Set<String> result = Sets.newHashSet();
 
+        Set<String> result = Sets.newHashSet();
         // NOTE: For query dump replay, ignore updated partition infos only to check mv can rewrite query or not.
-        if (FeConstants.isReplayFromQueryDump) {
+        // Ignore partitions when mv 's last refreshed time period is less than `maxMVRewriteStaleness`
+        if (FeConstants.isReplayFromQueryDump || isStalenessSatisfied()) {
             return result;
         }
 
         Map<String, com.starrocks.connector.PartitionInfo> latestPartitionInfo =
                 PartitionUtil.getPartitionNameWithPartitionInfo(baseTable);
-
-        // Ignore partitions when mv 's last refreshed time period is less than `maxMVRewriteStaleness`
-        boolean isLessThanMVRewriteStaleness = isLessThanMVRewriteStaleness();
-        if (isLessThanMVRewriteStaleness) {
-            return result;
-        }
 
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
             if (!baseTableInfo.getTableIdentifier().equalsIgnoreCase(baseTable.getTableIdentifier())) {

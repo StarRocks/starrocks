@@ -84,9 +84,11 @@ import com.starrocks.sql.parser.ParsingException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -884,5 +886,18 @@ public class MvUtils {
             return "";
         }
         return o.toString();
+    }
+    
+    /**
+     * Return the max refresh timestamp of all partition infos.
+     */
+    public static long  getMaxTablePartitionInfoRefreshTime(
+            Collection<Map<String, MaterializedView.BasePartitionInfo>> partitionInfos) {
+        return partitionInfos.stream()
+                .flatMap(x -> x.values().stream())
+                .map(x -> x.getLastRefreshTime())
+                .max(Long::compareTo)
+                .filter(Objects::nonNull)
+                .orElse(System.currentTimeMillis());
     }
 }
