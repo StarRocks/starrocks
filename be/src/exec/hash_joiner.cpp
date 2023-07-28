@@ -53,6 +53,7 @@ void HashJoinBuildMetrics::prepare(RuntimeProfile* runtime_profile) {
     build_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "BuildConjunctEvaluateTime");
     build_buckets_counter = ADD_COUNTER(runtime_profile, "BuildBuckets", TUnit::UNIT);
     runtime_filter_num = ADD_COUNTER(runtime_profile, "RuntimeFilterNum", TUnit::UNIT);
+    build_buckets_avg_depth = ADD_COUNTER(runtime_profile, "BuildBucketsAvgDepth%", TUnit::UNIT);
 }
 
 HashJoiner::HashJoiner(const HashJoinerParam& param)
@@ -211,6 +212,7 @@ Status HashJoiner::build_ht(RuntimeState* state) {
         RETURN_IF_ERROR(_hash_join_builder->build(state));
         size_t bucket_size = _hash_join_builder->hash_table().get_bucket_size();
         COUNTER_SET(build_metrics().build_buckets_counter, static_cast<int64_t>(bucket_size));
+        COUNTER_SET(build_metrics().build_buckets_avg_depth, static_cast<int64_t>(100 * avg_keys_perf_bucket()));
     }
 
     return Status::OK();
@@ -346,14 +348,13 @@ void HashJoiner::decr_prober(RuntimeState* state) {
     }
 }
 
-size_t HashJoiner::avg_keys_perf_bucket() const {
+double HashJoiner::avg_keys_perf_bucket() const {
     const auto& hash_table = _hash_join_builder->hash_table();
     size_t used_bucket_count = hash_table.get_used_bucket_count();
     if (used_bucket_count == 0) {
         return 0;
     }
-    size_t count = hash_table.get_row_count() / used_bucket_count;
-    return count;
+    return hash_table.get_row_count() * 1.0 / used_bucket_count;
 }
 
 Status HashJoiner::reset_probe(starrocks::RuntimeState* state) {

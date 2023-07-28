@@ -749,6 +749,7 @@ public:
     size_t get_probe_column_count() const { return _table_items->probe_column_count; }
     size_t get_build_column_count() const { return _table_items->build_column_count; }
     size_t get_bucket_size() const { return _table_items->bucket_size; }
+    double get_buckets_avg_depth() const;
     size_t get_used_bucket_count() const;
 
     void remove_duplicate_index(Filter* filter);

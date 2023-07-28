@@ -66,12 +66,8 @@ size_t HashJoinBuildOperator::output_amplification_factor() const {
     if (_avg_keys_perf_bucket > 0) {
         return _avg_keys_perf_bucket;
     }
-
     _avg_keys_perf_bucket = _join_builder->avg_keys_perf_bucket();
     _avg_keys_perf_bucket = std::max<size_t>(_avg_keys_perf_bucket, 1);
-
-    auto* counter = ADD_COUNTER(_unique_metrics, "AvgKeysPerBuckets", TUnit::UNIT);
-    COUNTER_SET(counter, static_cast<int64_t>(_avg_keys_perf_bucket));
 
     return _avg_keys_perf_bucket;
 }
