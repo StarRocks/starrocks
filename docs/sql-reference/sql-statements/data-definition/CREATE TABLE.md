@@ -226,10 +226,10 @@ Partition description can be used in the following ways:
 Syntax:
 
 ```sql
-PARTITION BY RANGE ( <partition_column1> [, <partition_column2>, ... ] )
-  PARTITION <partition1_name> VALUES LESS THAN ("<upper_bound_for_partition_column1>" [ , "<upper_bound_for_partition_column2>", ... ] )
+PARTITION BY RANGE ( <partitioning_column1> [, <partitioning_column2>, ... ] )
+  PARTITION <partition1_name> VALUES LESS THAN ("<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] )
   [ ,
-  PARTITION <partition2_name> VALUES LESS THAN ("<upper_bound_for_partition_column1>" [ , "<upper_bound_for_partition_column2>", ... ] )
+  PARTITION <partition2_name> VALUES LESS THAN ("<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] )
   , ... ] 
 )
 ```
@@ -243,7 +243,7 @@ Please use specified key columns and specified value ranges for partitioning.
 - Partitions are left closed and right open. The left boundary of the first partition is of minimum value.
 - NULL value is stored only in partitions that contain minimum values. When the partition containing the minimum value is deleted, NULL values can no longer be imported.
 - Partition columns can either be single columns or multiple columns. The partition values are the default minimum values.
-- When only one column is specified as the partitioning column, you can set `MAXVALUE` as the upper bound for the partition column in the most recent partition.
+- When only one column is specified as the partitioning column, you can set `MAXVALUE` as the upper bound for the partitioning column in the most recent partition.
 
 Please note:
 
@@ -255,11 +255,11 @@ Please note:
 Syntax:
 
 ```SQL
-PARTITION BY RANGE ( <partition_column1> [, <partition_column2>, ... ] )
+PARTITION BY RANGE ( <partitioning_column1> [, <partitioning_column2>, ... ] )
 (
-    PARTITION <partition_name1> VALUES [( "<lower_bound_for_partition_column1>" [ , "<lower_bound_for_partition_column2>", ... ] ), ( "<upper_bound_for_partition_column1?" [ , "<upper_bound_for_partition_column2>", ... ] ) ) 
+    PARTITION <partition_name1> VALUES [( "<lower_bound_for_partitioning_column1>" [ , "<lower_bound_for_partitioning_column2>", ... ] ), ( "<upper_bound_for_partitioning_column1?" [ , "<upper_bound_for_partitioning_column2>", ... ] ) ) 
     [,
-    PARTITION <partition_name2> VALUES [( "<lower_bound_for_partition_column1>" [ , "<lower_bound_for_partition_column2>", ... ] ), ( "<upper_bound_for_partition_column1>" [ , "<upper_bound_for_partition_column2>", ... ] ) ) 
+    PARTITION <partition_name2> VALUES [( "<lower_bound_for_partitioning_column1>" [ , "<lower_bound_for_partitioning_column2>", ... ] ), ( "<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] ) ) 
     , ...]
 )
 ```
@@ -268,13 +268,13 @@ Note:
 
 - Fixed Range is more flexible than LESS THAN. You can customize the left and right partitions.
 - Fixed Range is the same as LESS THAN in the other aspects.
-- When only one column is specified as the partitioning column, you can set `MAXVALUE` as the upper bound for the partition column in the latest partition.
+- When only one column is specified as the partitioning column, you can set `MAXVALUE` as the upper bound for the partitioning column in the latest partition.
 
 #### Create multiple partitions at a time
 
 Syntax
 
-- If the partitioning column is of an date type.
+- If the partitioning column is of a date type.
 
     ```sql
     PARTITION BY RANGE (<partitioning_column>) (
@@ -292,10 +292,10 @@ Syntax
 
 Description
 
-You can specify the start and end value in `START()` and `END()` and the time unit or partitioning granunity in `EVERY()` to create multiple partitions at a time.
+You can specify the start and end values in `START()` and `END()` and the time unit or partitioning granularity in `EVERY()` to create multiple partitions at a time.
 
-- The partitioning column can be of a date or integer type, and the data type of values in `START()` and `END()`, and `EVERY()` must be the same as the data type of partitioning column.
-- The partitioning column is of a data type, you need to use the `INTERVAL` keyword to specify the date interval. You can specify the time unit as hour (since v3.0), day, week, month, or year. The naming conventions of partitions are the same as those for dynamic partitions.
+- The partitioning column can be of a date or integer type. The data type of values in `START()`, `END()`, and `EVERY()` must be the same as the data type of the partitioning column.
+- If the partitioning column is of a date type, you need to use the `INTERVAL` keyword to specify the time interval. You can specify the time unit as hour (since v3.0), day, week, month, or year. The naming conventions of partitions are the same as those for dynamic partitions.
 
 For more information, see [Data distribution](../../../table_design/Data_distribution.md).
 
@@ -827,12 +827,12 @@ PROPERTIES(
 );
 ```
 
-### Create a table where multiple partitions created at a time, and an integer type column is specified as partitining column
+### Create a table where multiple partitions are created at a time, and an integer type column is specified as partitioning column
 
-  In the following example, the partitioning column `datekey` is of INT data type. All the partitions are created by only one simple partition clause  `START ("1") END ("5") EVERY (1)`. The range of all the partitions starts from `1` and ends at `5`, with a partition granularity of `1`:
+  In the following example, the partitioning column `datekey` is of the INT type. All the partitions are created by only one simple partition clause  `START ("1") END ("5") EVERY (1)`. The range of all the partitions starts from `1` and ends at `5`, with a partition granularity of `1`:
   > **NOTE**
   >
-  > The partition column values in **START()** and **END()** need to be wrapped in quotation marks, while the partition granularity in the **EVERY()** does not need to be wrapped in quotation marks.
+  > The partitioning column values in **START()** and **END()** need to be wrapped in quotation marks, while the partition granularity in the **EVERY()** does not need to be wrapped in quotation marks.
 
   ```SQL
   CREATE TABLE site_access (
