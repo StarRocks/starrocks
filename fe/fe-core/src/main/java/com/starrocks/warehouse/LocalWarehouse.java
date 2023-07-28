@@ -21,6 +21,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcResult;
+import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.ComputeNode;
@@ -106,7 +107,8 @@ public class LocalWarehouse extends Warehouse {
 
     private void deleteWorkerFromStarMgr() throws DdlException {
         long workerGroupId = cluster.getWorkerGroupId();
-        GlobalStateMgr.getCurrentStarOSAgent().deleteWorkerGroup(workerGroupId);
+        StarOSAgentEpack starOSAgent = (StarOSAgentEpack) GlobalStateMgr.getCurrentStarOSAgent();
+        starOSAgent.deleteWorkerGroup(workerGroupId);
     }
 
     private void dropNodeFromSystem() {

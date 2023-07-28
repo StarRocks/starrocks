@@ -143,6 +143,7 @@ import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.credential.CloudCredentialUtil;
 import com.starrocks.epack.failover.FailoverGroupMgr;
+import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.epack.persist.SRMetaBlockIDEPack;
 import com.starrocks.epack.privilege.SecurityPolicyMgr;
 import com.starrocks.ha.FrontendNodeType;
@@ -159,8 +160,8 @@ import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
-import com.starrocks.lake.ShardDeleter;
 import com.starrocks.lake.ShardManager;
+import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
@@ -506,7 +507,7 @@ public class GlobalStateMgr {
 
     private StarOSAgent starOSAgent;
 
-    private ShardDeleter shardDeleter;
+    private StarMgrMetaSyncer starMgrMetaSyncer;
 
     private MetadataMgr metadataMgr;
     private CatalogMgr catalogMgr;
@@ -655,7 +656,7 @@ public class GlobalStateMgr {
         }
 
         if (RunMode.allowCreateLakeTable()) {
-            this.starOSAgent = new StarOSAgent();
+            this.starOSAgent = new StarOSAgentEpack();
         }
 
         // System Manager
@@ -758,7 +759,7 @@ public class GlobalStateMgr {
         this.shardManager = new ShardManager();
         this.compactionMgr = new CompactionMgr();
         this.configRefreshDaemon = new ConfigRefreshDaemon();
-        this.shardDeleter = new ShardDeleter();
+        this.starMgrMetaSyncer = new StarMgrMetaSyncer();
 
         this.binlogManager = new BinlogManager();
         this.pipeManager = new PipeManager();
@@ -1397,7 +1398,7 @@ public class GlobalStateMgr {
         taskRunStateSynchronizer.start();
 
         if (RunMode.allowCreateLakeTable()) {
-            shardDeleter.start();
+            starMgrMetaSyncer.start();
             autovacuumDaemon.start();
         }
 

@@ -17,6 +17,7 @@ package com.starrocks.server;
 
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.epack.persist.DropWarehouseLog;
 import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.epack.sql.ast.DropWarehouseStmt;
@@ -64,7 +65,7 @@ public class WarehouseMgrTest {
     }
 
     @Test
-    public void testReplay(@Mocked StarOSAgent starOSAgent) throws Exception {
+    public void testReplay(@Mocked StarOSAgentEpack starOSAgent) throws Exception {
 
         new MockUp<GlobalStateMgr>() {
             @Mock
@@ -104,8 +105,7 @@ public class WarehouseMgrTest {
 
 
     @Test
-    public void testLoadWarehouse(@Mocked StarOSAgent starOSAgent, @Mocked EditLog editLog)
-            throws IOException, DdlException {
+    public void testLoadWarehouse() throws IOException, DdlException {
         WarehouseManager warehouseMgr = GlobalStateMgr.getServingState().getWarehouseMgr();
         File file = new File(fileName);
         file.createNewFile();
@@ -114,6 +114,18 @@ public class WarehouseMgrTest {
 
         out.flush();
         out.close();
+
+        Deencapsulation.setField(warehouseMgr, "fullNameToWh", new HashMap<>());
+        DataInputStream in = new DataInputStream(new FileInputStream(file));
+        warehouseMgr.loadWarehouses(in, 0);
+    }
+
+    @Test
+    public void testNewLoadWarehouse(@Mocked StarOSAgentEpack starOSAgent, @Mocked EditLog editLog)
+            throws IOException, DdlException {
+        WarehouseManager warehouseMgr = GlobalStateMgr.getServingState().getWarehouseMgr();
+        File file = new File(fileName);
+        file.createNewFile();
 
         new MockUp<GlobalStateMgr>() {
             @Mock

@@ -14,10 +14,13 @@
 
 package com.starrocks.http;
 
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.warehouse.Cluster;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -85,7 +88,7 @@ public class ProcWarehousesTest extends StarRocksHttpTestCase {
 
     @Test
     public void testGetWarehousesInfoSharedData(@Mocked StarOSAgent agent) throws IOException {
-        GlobalStateMgr.getCurrentState().setStarOSAgent(agent);
+        agent = new StarOSAgentEpack();
         new MockUp<StarOSAgent>() {
             @Mock
             public List<Long> getWorkersByWorkerGroup(long workerGroupId) {
@@ -99,6 +102,8 @@ public class ProcWarehousesTest extends StarRocksHttpTestCase {
                 return RunMode.SHARED_DATA;
             }
         };
+
+        GlobalStateMgr.getCurrentState().setStarOSAgent(agent);
 
         // list all warehouses
         sendHttpAndValidateResponse("/warehouses",

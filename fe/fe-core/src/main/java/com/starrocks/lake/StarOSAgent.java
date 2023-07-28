@@ -42,7 +42,6 @@ import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
 import com.staros.proto.UpdateMetaGroupInfo;
 import com.staros.proto.WorkerGroupDetailInfo;
-import com.staros.proto.WorkerGroupSpec;
 import com.staros.proto.WorkerInfo;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.Config;
@@ -76,8 +75,8 @@ public class StarOSAgent {
 
     public static final long DEFAULT_WORKER_GROUP_ID = 0L;
 
-    private StarClient client;
-    private String serviceId;
+    protected StarClient client;
+    protected String serviceId;
     private Map<String, Long> workerToId;
     private Map<Long, Long> workerToBackend;
     private ReentrantReadWriteLock rwLock;
@@ -95,7 +94,7 @@ public class StarOSAgent {
         return true;
     }
 
-    private void prepare() {
+    protected void prepare() {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             if (serviceId.equals("")) {
                 getServiceId();
@@ -692,32 +691,20 @@ public class StarOSAgent {
         }
     }
 
-    public long createWorkerGroup(String size) throws DdlException {
+    public List<String> listDefaultWorkerGroupIpPort() throws UserException {
+        List<String> addresses = new ArrayList<>();
         prepare();
-
-        // size should be x0, x1, x2, x4...
-        WorkerGroupSpec spec = WorkerGroupSpec.newBuilder().setSize(size).build();
-        // owner means tenant, now there is only one tenant, so pass "Starrocks" to starMgr
-        String owner = "Starrocks";
-        WorkerGroupDetailInfo result = null;
         try {
-            result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(),
-                    Collections.emptyMap());
+            List<WorkerGroupDetailInfo> workerGroupDetailInfos = client.
+                    listWorkerGroup(serviceId, Collections.singletonList(DEFAULT_WORKER_GROUP_ID), true);
+            Preconditions.checkState(1 == workerGroupDetailInfos.size());
+            WorkerGroupDetailInfo workerGroupInfo = workerGroupDetailInfos.get(0);
+            for (WorkerInfo workerInfo : workerGroupInfo.getWorkersInfoList()) {
+                addresses.add(workerInfo.getIpPort());
+            }
+            return addresses;
         } catch (StarClientException e) {
-            LOG.warn("Failed to create worker group. error: {}", e.getMessage());
-            throw new DdlException("Failed to create worker group. error: " + e.getMessage());
-        }
-        return result.getGroupId();
-    }
-
-    public void deleteWorkerGroup(long groupId) throws DdlException {
-        prepare();
-
-        try {
-            client.deleteWorkerGroup(serviceId, groupId);
-        } catch (StarClientException e) {
-            LOG.warn("Failed to delete worker group {}. error: {}", groupId, e.getMessage());
-            throw new DdlException("Failed to delete worker group. error: " + e.getMessage());
+            throw new UserException("Fail to get workers by default group id, error: " + e.getMessage());
         }
     }
 

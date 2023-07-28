@@ -3,6 +3,7 @@
 package com.starrocks.epack;
 
 import com.starrocks.common.DdlException;
+import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.epack.sql.ast.DropWarehouseStmt;
 import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
@@ -81,7 +82,7 @@ public class WarehouseStmtTest {
 
 
     @Test
-    public void testOperateWarehouse(@Mocked StarOSAgent starOSAgent) throws Exception {
+    public void testOperateWarehouse(@Mocked StarOSAgentEpack starOSAgent) throws Exception {
         new MockUp<GlobalStateMgr>() {
             @Mock
             public StarOSAgent getCurrentStarOSAgent() {

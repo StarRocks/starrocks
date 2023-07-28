@@ -21,6 +21,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
@@ -55,7 +56,8 @@ public class Cluster implements Writable {
 
     public void init() throws DdlException {
         try {
-            workerGroupId = GlobalStateMgr.getCurrentStarOSAgent().createWorkerGroup("x0");
+            StarOSAgentEpack starOSAgent = (StarOSAgentEpack) GlobalStateMgr.getCurrentStarOSAgent();
+            workerGroupId = starOSAgent.createWorkerGroup("x0");
         } catch (DdlException e) {
             LOG.warn("create Cluster " + id + " failed, because : " + e);
             throw e;
@@ -96,8 +98,8 @@ public class Cluster implements Writable {
         }
         try {
             // ask starMgr for node lists
-            nodeIds = GlobalStateMgr.getCurrentStarOSAgent().
-                    getWorkersByWorkerGroup(workerGroupId);
+            StarOSAgentEpack starOSAgent = (StarOSAgentEpack) GlobalStateMgr.getCurrentStarOSAgent();
+            nodeIds = starOSAgent.getWorkersByWorkerGroup(workerGroupId);
         } catch (UserException e) {
             LOG.warn("Fail to get compute node ids from starMgr : {}", e.getMessage());
         }
