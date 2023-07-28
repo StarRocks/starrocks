@@ -29,18 +29,16 @@ import static com.starrocks.sql.optimizer.operator.OperatorType.MAP;
  * (k,v) -> map(k1,v1) a new map will created.
  */
 public class MapOperator extends ScalarOperator {
-    private final boolean nullable;
     protected List<ScalarOperator> arguments;
 
-    public MapOperator(Type type, boolean nullable, List<ScalarOperator> arguments) {
+    public MapOperator(Type type, List<ScalarOperator> arguments) {
         super(MAP, type);
-        this.nullable = nullable;
         this.arguments = arguments;
     }
 
     @Override
     public boolean isNullable() {
-        return nullable;
+        return true;
     }
 
     @Override

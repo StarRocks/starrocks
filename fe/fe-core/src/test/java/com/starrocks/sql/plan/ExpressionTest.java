@@ -644,19 +644,20 @@ public class ExpressionTest extends PlanTestBase {
                 "AS actions FROM action1 GROUP BY uid) AS t ) AS t1) AS t2;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  |  common expressions:\n" +
-                "  |  <slot 17> : array_sort(4: array_agg)\n" +
-                "  |  <slot 18> : array_sortby(5: array_agg, 4: array_agg)\n" +
-                "  |  <slot 19> : array_map((<slot 8>, <slot 9>) -> (<slot 9> = '浏览') AND ((<slot 8> >= " +
-                "'2020-01-02 00:00:00') AND (<slot 8> <= '2020-01-02 23:59:59'))," +
-                " 17: array_sort, 18: array_sortby)\n" +
-                "  |  <slot 20> : array_filter(17: array_sort, 19: array_map)\n" +
-                "  |  <slot 21> : 20: array_filter[1]\n" +
-                "  |  <slot 22> : minutes_add(21: expr, 90)\n" +
-                "  |  <slot 23> : 21: expr != '2020-01-01 00:00:00'\n" +
-                "  |  <slot 24> : array_map((<slot 11>, <slot 12>) -> ((<slot 12> = '下单') AND ((<slot 11> >= 21:" +
-                " expr) AND (<slot 11> <= 22: minutes_add))) AND (23: expr), 17: array_sort, 18: array_sortby)\n" +
-                "  |  <slot 25> : array_filter(17: array_sort, 24: array_map)\n" +
-                "  |  <slot 26> : 25: array_filter[1]");
+                "  |  <slot 22> : array_sort(4: array_agg)\n" +
+                "  |  <slot 23> : array_sortby(5: array_agg, 4: array_agg)\n" +
+                "  |  <slot 24> : array_map((<slot 8>, <slot 9>) -> (<slot 9> = '浏览') " +
+                "AND ((<slot 8> >= '2020-01-02 00:00:00') " +
+                "AND (<slot 8> <= '2020-01-02 23:59:59')), 22: array_sort, 23: array_sortby)\n" +
+                "  |  <slot 25> : array_filter(22: array_sort, 24: array_map)\n" +
+                "  |  <slot 26> : 25: array_filter[1]\n" +
+                "  |  <slot 27> : minutes_add(26: expr, 90)\n" +
+                "  |  <slot 28> : 26: expr != '2020-01-01 00:00:00'\n" +
+                "  |  <slot 29> : array_map((<slot 11>, <slot 12>) -> ((<slot 12> = '下单') " +
+                "AND ((<slot 11> >= 26: expr) AND (<slot 11> <= 27: minutes_add))) " +
+                "AND (28: expr), 22: array_sort, 23: array_sortby)\n" +
+                "  |  <slot 30> : array_filter(22: array_sort, 29: array_map)\n" +
+                "  |  <slot 31> : 30: array_filter[1]");
     }
 
     @Test
@@ -1581,7 +1582,7 @@ public class ExpressionTest extends PlanTestBase {
     }
 
     @Test
-    public void testDecimalCastString() throws  Exception {
+    public void testDecimalCastString() throws Exception {
         String sql = "select cast(cast('1.10000' as decimal(27,9)) as string)";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "1.100000000");

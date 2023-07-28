@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
@@ -26,16 +25,17 @@ import java.util.Map;
 // Replace the corresponding ColumnRef with ScalarOperator
 public class ReplaceColumnRefRewriter {
     private final Rewriter rewriter = new Rewriter();
-    private final Map<ColumnRefOperator, ScalarOperator> operatorMap;
+    private final Map<ColumnRefOperator, ? extends ScalarOperator> operatorMap;
 
     private final boolean isRecursively;
 
-    public ReplaceColumnRefRewriter(Map<ColumnRefOperator, ScalarOperator> operatorMap) {
+    public ReplaceColumnRefRewriter(Map<ColumnRefOperator, ? extends ScalarOperator> operatorMap) {
         this.operatorMap = operatorMap;
         this.isRecursively = false;
     }
 
-    public ReplaceColumnRefRewriter(Map<ColumnRefOperator, ScalarOperator> operatorMap, boolean isRecursively) {
+    public ReplaceColumnRefRewriter(Map<ColumnRefOperator, ? extends ScalarOperator> operatorMap,
+                                    boolean isRecursively) {
         this.operatorMap = operatorMap;
         this.isRecursively = isRecursively;
     }

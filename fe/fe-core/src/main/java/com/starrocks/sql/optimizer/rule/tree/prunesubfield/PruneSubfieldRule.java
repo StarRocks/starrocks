@@ -15,23 +15,80 @@
 package com.starrocks.sql.optimizer.rule.tree.prunesubfield;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.rule.tree.TreeRewriteRule;
-import com.starrocks.sql.optimizer.task.TaskContext;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
+import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.rule.transformation.TransformationRule;
 
 import java.util.List;
 
-public class PruneSubfieldRule implements TreeRewriteRule {
+public class PruneSubfieldRule extends TransformationRule {
     public static final List<String> SUPPORT_FUNCTIONS = ImmutableList.<String>builder()
             .add(FunctionSet.MAP_KEYS, FunctionSet.MAP_SIZE)
             .add(FunctionSet.ARRAY_LENGTH)
             .add(FunctionSet.CARDINALITY)
             .build();
 
+    public PruneSubfieldRule() {
+        super(RuleType.TF_PRUNE_SUBFIELD, Pattern.create(OperatorType.LOGICAL_PROJECT, OperatorType.PATTERN_SCAN));
+    }
+
     @Override
-    public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
-        SubfieldAccessPathComputer computer = new SubfieldAccessPathComputer();
-        return root.getOp().accept(computer, root, null);
+    public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+        // project expression
+        LogicalProjectOperator project = input.getOp().cast();
+        SubfieldExpressionCollector collector = new SubfieldExpressionCollector();
+        for (ScalarOperator value : project.getColumnRefMap().values()) {
+            value.accept(collector, null);
+        }
+
+        List<ScalarOperator> allSubfieldExpr = Lists.newArrayList();
+        allSubfieldExpr.addAll(collector.getComplexExpressions());
+
+        // scan predicate
+        LogicalScanOperator scan = input.getInputs().get(0).getOp().cast();
+        if (scan.getPredicate() != null) {
+            SubfieldExpressionCollector cc = new SubfieldExpressionCollector();
+            scan.getPredicate().accept(cc, null);
+            allSubfieldExpr.addAll(cc.getComplexExpressions());
+        }
+
+        // normalize access path
+        SubfieldAccessPathNormalizer normalizer = new SubfieldAccessPathNormalizer();
+        for (ScalarOperator expr : allSubfieldExpr) {
+            expr.accept(normalizer, null);
+        }
+
+        List<ColumnAccessPath> accessPaths = Lists.newArrayList();
+        for (ColumnRefOperator ref : scan.getColRefToColumnMetaMap().keySet()) {
+            if (!normalizer.hasPath(ref)) {
+                continue;
+            }
+            String columnName = scan.getColRefToColumnMetaMap().get(ref).getName();
+            ColumnAccessPath p = normalizer.normalizePath(ref, columnName);
+
+            if (p.hasChildPath()) {
+                accessPaths.add(p);
+            }
+        }
+
+        if (accessPaths.isEmpty()) {
+            return Lists.newArrayList(input);
+        }
+
+        LogicalScanOperator.Builder builder = OperatorBuilderFactory.build(scan);
+        Operator newScan = builder.withOperator(scan).setColumnAccessPaths(accessPaths).build();
+        return Lists.newArrayList(OptExpression.create(project, OptExpression.create(newScan)));
     }
 }
