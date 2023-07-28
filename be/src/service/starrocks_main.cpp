@@ -312,7 +312,9 @@ int main(int argc, char** argv) {
     }
 
 #ifdef WITH_BLOCK_CACHE
-    starrocks::BlockCache::instance()->shutdown();
+    if (starrocks::config::block_cache_enable) {
+        starrocks::BlockCache::instance()->shutdown();
+    }
 #endif
 
     daemon->stop();
