@@ -41,6 +41,7 @@
 
 #include "Adaptor.hh"
 #include "orc/Exceptions.hh"
+#include <glog/logging.h>
 
 namespace orc {
 
@@ -304,7 +305,7 @@ void StructVectorBatch::filterOnFields(uint8_t* f_data, uint32_t f_size, uint32_
         ColumnVectorBatch::filter(f_data, f_size, true_size);
     } else {
         if (!alreadyFilteredByActiveColumn) {
-            throw orc::ParseError("We have to filter active column first");
+            ColumnVectorBatch::filter(f_data, f_size, true_size);
         }
         numElements = true_size;
     }
