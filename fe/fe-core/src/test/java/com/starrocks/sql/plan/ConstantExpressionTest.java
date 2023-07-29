@@ -21,9 +21,17 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.ParsingException;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class ConstantExpressionTest extends PlanTestBase {
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        PlanTestBase.beforeClass();
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+    }
+
     private void testFragmentPlanContainsConstExpr(String sql, String result) throws Exception {
         String explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString, explainString.contains(": " + result));
@@ -65,7 +73,9 @@ public class ConstantExpressionTest extends PlanTestBase {
     @Test
     public void testInspectHivePartitionInfo() throws Exception {
         Assert.assertThrows(StarRocksPlannerException.class,
-                () -> testFragmentPlanContains("select inspect_hive_part_info('hive0.partitioned_db.t1')", ""));
+                () -> testFragmentPlanContains("select inspect_hive_part_info('not_exist_catalog.no_db.no_table')",
+                        ""));
+        testFragmentPlanContains("select inspect_hive_part_info('hive0.partitioned_db.lineitem_par')", "Project");
     }
 
     @Test
