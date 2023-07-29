@@ -137,7 +137,8 @@ public:
     RowsetSharedPtr create_partial_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
                                           std::vector<int32_t>& column_indexes, std::function<int16_t(int64_t)> v1_func,
                                           std::function<int32_t(int64_t)> v2_func,
-                                          const std::shared_ptr<TabletSchema>& partial_schema, int segment_num) {
+                                          const std::shared_ptr<TabletSchema>& partial_schema, int segment_num,
+                                          PartialUpdateMode mode = PartialUpdateMode::COLUMN_UPDATE_ONLY_MODE) {
         // create partial rowset
         RowsetWriterContext writer_context;
         RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
@@ -154,7 +155,7 @@ public:
         writer_context.version.first = 0;
         writer_context.version.second = 0;
         writer_context.segments_overlap = NONOVERLAPPING;
-        writer_context.partial_update_mode = PartialUpdateMode::COLUMN_MODE;
+        writer_context.partial_update_mode = mode;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(*partial_schema.get());
@@ -737,6 +738,43 @@ TEST_F(RowsetColumnPartialUpdateTest, test_get_column_values) {
             ASSERT_EQ(columns[1]->get(i).get_int16(), (int16_t)(i % 100 + 3));
             ASSERT_EQ(columns[2]->get(i).get_int32(), (int32_t)(i % 1000 + 4));
         }
+    }
+}
+
+TEST_F(RowsetColumnPartialUpdateTest, test_upsert) {
+    const int N = 100;
+    auto tablet = create_tablet(rand(), rand());
+    ASSERT_EQ(1, tablet->updates()->version_history_count());
+    int64_t version = 1;
+    int64_t version_before_partial_update = 1;
+    prepare_tablet(this, tablet, version, version_before_partial_update, N);
+    auto v1_func = [](int64_t k1) { return (int16_t)(k1 % 100 + 3); };
+    auto v2_func = [](int64_t k1) { return (int32_t)(k1 % 1000 + 4); };
+
+    {
+        // upsert keys, because keys aren't exist, so they will be inserted.
+        std::vector<int64_t> keys(N);
+        for (int i = 0; i < N; i++) {
+            keys[i] = i + N;
+        }
+        std::vector<RowsetSharedPtr> rowsets;
+        rowsets.reserve(10);
+        std::vector<std::shared_ptr<TabletSchema>> partial_schemas;
+        // upsert v1 and v2 one by one
+        for (int i = 0; i < 10; i++) {
+            std::vector<int32_t> column_indexes = {0, (i % 2) + 1};
+            partial_schemas.push_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
+            rowsets.emplace_back(create_partial_rowset(tablet, keys, column_indexes, v1_func, v2_func,
+                                                       partial_schemas[i], 5, PartialUpdateMode::COLUMN_MODE));
+            ASSERT_EQ(rowsets[i]->num_update_files(), 5);
+            // preload rowset update state
+            ASSERT_OK(StorageEngine::instance()->update_manager()->on_rowset_finished(tablet.get(), rowsets[i].get()));
+        }
+        commit_rowsets(tablet, rowsets, version);
+        // check data
+        ASSERT_TRUE(check_tablet(tablet, version, 2 * N, [](int64_t k1, int64_t v1, int32_t v2) {
+            return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
+        }));
     }
 }
 

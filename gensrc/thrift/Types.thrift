@@ -516,6 +516,8 @@ enum TPartialUpdateMode {
     ROW_MODE = 1;
     COLUMN_MODE = 2;
     AUTO_MODE = 3;
+    // update only. not upsert
+    COLUMN_UPDATE_ONLY_MODE = 4;
 }
 
 enum TRunMode {

@@ -158,6 +158,8 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
         request.set_partial_update_mode(PartialUpdateMode::AUTO_MODE);
     } else if (_parent->_partial_update_mode == TPartialUpdateMode::type::COLUMN_MODE) {
         request.set_partial_update_mode(PartialUpdateMode::COLUMN_MODE);
+    } else if (_parent->_partial_update_mode == TPartialUpdateMode::type::COLUMN_UPDATE_ONLY_MODE) {
+        request.set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_ONLY_MODE);
     }
     request.set_allocated_id(&_parent->_load_id);
     request.set_index_id(index_id);
