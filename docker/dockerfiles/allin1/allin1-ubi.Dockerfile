@@ -20,6 +20,7 @@ ARG LOCAL_REPO_PATH
 
 COPY ${LOCAL_REPO_PATH}/output/fe /release/fe_artifacts/fe
 COPY ${LOCAL_REPO_PATH}/output/be /release/be_artifacts/be
+COPY ${LOCAL_REPO_PATH}/fs_brokers/apache_hdfs_broker/output/apache_hdfs_broker /release/broker_artifacts/apache_hdfs_broker
 
 
 FROM artifacts-from-${ARTIFACT_SOURCE} as artifacts
