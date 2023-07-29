@@ -702,9 +702,7 @@ TEST(OrcLazyLoadTest, TestArrayStructLazyLoad) {
         filter.resize(7, 1);
         filter[1] = 0;
 
-        std::vector<int> fields{0, 1};
-        root->filterOnFields(filter.data(), 7, 6, {0}, false);
-        root->filterOnFields(filter.data(), 7, 6, {1}, true);
+        root->filterOnFields(filter.data(), 7, 6, {0, 1}, true);
 
         // check root
         EXPECT_TRUE(root->hasNulls);
