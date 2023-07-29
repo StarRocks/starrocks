@@ -75,6 +75,10 @@ public class SplitAggregateRule extends TransformationRule {
 
     private static final int TWO_STAGE = 2;
 
+    private static final int THREE_STAGE = 3;
+
+    private static final int FOUR_STAGE = 4;
+
     public static SplitAggregateRule getInstance() {
         return INSTANCE;
     }
@@ -178,6 +182,10 @@ public class SplitAggregateRule extends TransformationRule {
 
 
     private boolean isThreeStageMoreEfficient(OptExpression input, List<ColumnRefOperator> groupKeys) {
+        if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == FOUR_STAGE) {
+            return false;
+        }
+
         Statistics inputStatistics = input.getGroupExpression().inputAt(0).getStatistics();
         Collection<ColumnStatistic> inputsColumnStatistics = inputStatistics.getColumnStatistics().values();
         if (inputsColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown)) {
