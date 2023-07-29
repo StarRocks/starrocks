@@ -35,13 +35,11 @@
 
 #include "orc/Vector.hh"
 
-#include <cstdlib>
 #include <iostream>
 #include <sstream>
 
 #include "Adaptor.hh"
 #include "orc/Exceptions.hh"
-#include <glog/logging.h>
 
 namespace orc {
 
