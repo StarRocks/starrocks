@@ -1,6 +1,6 @@
 # Data distribution
 
-Configuring appropriate partitioning and bucketing at table creation can help to achieve even data distribution. Even data distribution means dividing the data into subsets according to certain rules and distributing them evenly across different nodes. It can also reduce the amount of data scanned and make full use of the cluster's capability in processing concurrent queries, thereby improving query performance.
+Configuring appropriate partitioning and bucketing at table creation can help to achieve even data distribution. Even data distribution means dividing the data into subsets according to certain rules and distributing them evenly across different nodes. It can also reduce the amount of data scanned and make full use of the cluster's parallel processing capability, thereby improving query performance.
 
 > **NOTE**
 >
@@ -41,8 +41,8 @@ Also, StarRocks distributes data by implementing the two-level partitioning + bu
 | Hash distribution         | Hash bucketing                                               | The entire table is considered a partition. The data in the table is distributed to the corresponding bucket, which is based on the hash value of the data's bucketing key by using a hash function. |
 | Range+Random distribution | <ol><li>Expression partitioning or range partitioning </li><li>Random bucketing </li></ol> | <ol><li>The data in the table is partitioned based on the ranges of values in the partitioning columns. </li><li>The data in the partition is randomly distributed across different buckets. </li></ol> |
 | Range+Hash distribution   | <ol><li>Expression partitioning or range partitioning</li><li>Hash bucketing </li></ol> | <ol><li>The data in the table is partitioned based on the ranges of values in the partitioning columns.</li><li>The data in the partition is distributed to the corresponding bucket, which is based on the hash value of the data's bucketing key by using a hash function.</li></ol> |
-| List+Hash distribution    | <ol><li>Expression partitioning or List partitioning</li><li>Hash bucketing </li></ol> | <ol><li>The data in the table is partitioned based on the values in the partitioning columns.</li><li>The data in the partition is distributed to the corresponding bucket, which is based on the hash value of the data's bucketing key by using a hash function.</li></ol> |
-| List+Random distribution  | <ol><li>Expression partitioning or List partitioning</li><li>Random bucketing </li></ol> | <ol><li>The data in the table is partitioned based on the values in the partitioning column.</li><li>The data in the partition is randomly distributed across different buckets.</li></ol> |
+| List+Hash distribution    | <ol><li>Expression partitioning or List partitioning</li><li>Hash bucketing </li></ol> | <ol><li>The data in the table is partitioned based on the enum values in the partitioning columns.</li><li>The data in the partition is distributed to the corresponding bucket, which is based on the hash value of the data's bucketing key by using a hash function.</li></ol> |
+| List+Random distribution  | <ol><li>Expression partitioning or List partitioning</li><li>Random bucketing </li></ol> | <ol><li>The data in the table is partitioned based on the enum values in the partitioning columns.</li><li>The data in the partition is randomly distributed across different buckets.</li></ol> |
 
 - **Random distribution**
 
@@ -75,7 +75,7 @@ Also, StarRocks distributes data by implementing the two-level partitioning + bu
   DISTRIBUTED BY HASH(event_day,site_id); 
   ```
 
-- **Range+Random distribution** (currently only support Duplicate Key tables)
+- **Range+Random distribution** (This distribution method currently can only be used to create a Duplicate Key table.)
 
   ```SQL
   CREATE TABLE site_access3 (
@@ -110,7 +110,7 @@ Also, StarRocks distributes data by implementing the two-level partitioning + bu
   DISTRIBUTED BY HASH(event_day, site_id);
   ```
 
-- **List+Random distribution** (currently only support Duplicate Key tables)
+- **List+Random distribution** (This distribution method currently can only be used to create a Duplicate Key table.)
 
   ```SQL
   CREATE TABLE t_recharge_detail1 (
@@ -193,13 +193,13 @@ You only need to configure a partition expression (a time function expression or
 
 Range partitioning is suitable for storing simple, contiguous data, such as time series data (dates or timestamps), or continuous numerical data. And you frequently query and manage data based on continuous date/numerical ranges. Also, it can be applied in some special cases where historical data needs to be partitioned by month, and recent data needs to be partitioned by day.
 
-StarRocks stores data in the corresponding partitions based on the explicit mapping of the explictly defined range for each partition.
+StarRocks stores data in the corresponding partitions based on the explicit mapping of the explicitly defined range for each partition.
 
 **Dynamic partitioning**
 
 [Dynamic partitioning](./dynamic_partitioning.md) related properties are configured at table creation. StarRocks automatically creates new partitions in advance and removes expired partitions to ensure data freshness, which implements time-to-live (TTL) management for partitions.
 
-Different from the automatic partition creation ability provided by the expression partitioning, dynamic partitioning can only periodically creating new partitions based on the properties. If the new data does not belong to these partitions, an error is returned for the load job. However, the automatic partition creation ability provided by the expression partitioning can always create corresponding new partitions based on the loaded data.
+Different from the automatic partition creation ability provided by the expression partitioning, dynamic partitioning can only periodically create new partitions based on the properties. If the new data does not belong to these partitions, an error is returned for the load job. However, the automatic partition creation ability provided by the expression partitioning can always create corresponding new partitions based on the loaded data.
 
 **Manually create partitions**
 
@@ -224,13 +224,13 @@ DISTRIBUTED BY HASH(site_id);
 
 **Create multiple partitions in batch**
 
-Multiple partitions can be created  in batch at and after table creation. You can specify the start and end time for all the partitions created at a time in `START()` and `END()` and the partition increment value in `EVERY()`. However, note that the range of partitions is right hand half open, which includes the start time but does not include the end time. The naming rule for partitions is the same as that of dynamic partitioning.
+Multiple partitions can be created  in batch at and after table creation. You can specify the start and end time for all the partitions created in batch in `START()` and `END()` and the partition increment value in `EVERY()`. However, note that the range of partitions is right hand half open, which includes the start time but does not include the end time. The naming rule for partitions is the same as that of dynamic partitioning.
 
 - **Partition a table on a date-type column (DATE and DATETIME) at table creation**
 
-  When the partitioning column is of date type, at table creation, you can use `START()` and `END()` to specify the start date and end date for all the partitions created at a time, and `EVERY(INTERVAL xxx)` to specify the incremental interval between two partitions. Currently the interval granularity supports `HOUR` (since v3.0), `DAY`, `WEEK`, `MONTH`, and `YEAR`.
+  When the partitioning column is of date type, at table creation, you can use `START()` and `END()` to specify the start date and end date for all the partitions created in batch, and `EVERY(INTERVAL xxx)` to specify the incremental interval between two partitions. Currently the interval granularity supports `HOUR` (since v3.0), `DAY`, `WEEK`, `MONTH`, and `YEAR`.
 
-  In the following example, the date range of all the partitions created at a time starts from 2021-01-01 and ends on 2021-01-04, with an incremental interval of one day:
+  In the following example, the date range of all the partitions created in batch starts from 2021-01-01 and ends on 2021-01-04, with an incremental interval of one day:
 
     ```SQL
   CREATE TABLE site_access (
@@ -259,7 +259,7 @@ Multiple partitions can be created  in batch at and after table creation. You ca
   )
     ```
 
-- **Partition a table on a date-type column (DATE and DATETIME) with different date intervals at the table creation**.
+- **Partition a table on a date-type column (DATE and DATETIME) with different date intervals at table creation**
 
   You can create batches of date partitions with different incremental intervals by specifying different incremental intervals in `EVERY` for each batch of partitions (make sure that the partition ranges between different batches do not overlap). Partitions in each batch are created according to the `START (xxx) END (xxx) EVERY (xxx)` clause. For example:
 
@@ -345,7 +345,7 @@ Multiple partitions can be created  in batch at and after table creation. You ca
 
 **Create multiple partitions in batch after a table is created**
 
-  After a table is created, you can use the ALTER TABLE statement to add partitions at a time. The syntax is similar to that of creating multiple partitions at a time at table creation. You need to configure `START`, `END`, and `EVERY` in the `ADD PARTITIONS` clause.
+  After a table is created, you can use the ALTER TABLE statement to add partitions in. The syntax is similar to that of creating multiple partitions in batch at table creation. You need to configure `START`, `END`, and `EVERY` in the `ADD PARTITIONS` clause.
 
   ```SQL
   ALTER TABLE site_access 
