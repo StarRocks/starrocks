@@ -34,7 +34,6 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.google.gson.Gson;
-import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 import com.starrocks.analysis.StringLiteral;
@@ -138,11 +137,8 @@ public class ExecuteSqlAction extends RestBaseAction {
             finalize(request, response, parsedStmt, context);
 
         } catch (StarRocksHttpException e) {
-            // send {"exception","error message"}
-            JsonObject jsonObject = new JsonObject();
-            jsonObject.addProperty("exception", e.getMessage());
-            String exceptionInfo = jsonObject.toString();
-            response.getContent().append(exceptionInfo);
+            RestBaseResult failResult = new RestBaseResult(e.getMessage());
+            response.getContent().append(failResult.toJsonString());
             sendResult(request, response, HttpResponseStatus.valueOf(e.getCode().code()));
         }
     }

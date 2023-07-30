@@ -125,7 +125,7 @@ sync;
 shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "select 1;":"xxx"}' --header "Content-Type: application/json"  
 -- result:
 0
-{"exception":"malformed json [ {\"query\": \"select 1;\":\"xxx\"} ]"}
+{"code":"1","message":"malformed json [ {\"query\": \"select 1;\":\"xxx\"} ]"}
 -- !result
 sync;
 -- result:
@@ -133,7 +133,7 @@ sync;
 shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"sessionVariables":{"broadcast_row_limit":14000000}}' --header "Content-Type: application/json"  
 -- result:
 0
-{"exception":"\"query can not be empty\""}
+{"code":"1","message":"\"query can not be empty\""}
 -- !result
 sync;
 -- result:
@@ -141,7 +141,7 @@ sync;
 shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "select 1;", "sessionVariables":{"broadcast":14000000}}' --header "Content-Type: application/json"  
 -- result:
 0
-{"exception":"Unknown system variable 'broadcast', the most similar variables are {'broadcast_row_limit', 'broadcast_right_table_scale_factor', 'disable_colocate_join'}"}
+{"code":"1","message":"Unknown system variable 'broadcast', the most similar variables are {'broadcast_row_limit', 'broadcast_right_table_scale_factor', 'disable_colocate_join'}"}
 -- !result
 sync;
 -- result:
@@ -149,7 +149,7 @@ sync;
 shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "select from duplicate_table_with_null;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
 -- result:
 0
-{"exception":"Getting syntax error at line 1, column 7. Detail message: Unexpected input 'from', the most similar input is {a legal identifier}."}
+{"code":"1","message":"Getting syntax error at line 1, column 7. Detail message: Unexpected input 'from', the most similar input is {a legal identifier}."}
 -- !result
 sync;
 -- result:
@@ -157,17 +157,17 @@ sync;
 shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "select * from duplicate_table_with_null;select 1 from duplicate_table_with_null;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
 -- result:
 0
-{"exception":"/api/v2/<catalog_name>/<database_name>/query does not support execute multiple query"}
+{"code":"1","message":"/api/v2/<catalog_name>/<database_name>/query does not support execute multiple query"}
 -- !result
 shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "set profile_timeout =60", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
 -- result:
 0
-{"exception":"/api/v2/<catalog_name>/<database_name>/query only support SELECT, SHOW, EXPLAIN, DESC, KILL statement"}
+{"code":"1","message":"/api/v2/<catalog_name>/<database_name>/query only support SELECT, SHOW, EXPLAIN, DESC, KILL statement"}
 -- !result
 shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "kill 314159265432222;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
 -- result:
 0
-{"exception":"Unknown thread id: 314159265432222"}
+{"code":"1","message":"Unknown thread id: 314159265432222"}
 -- !result
 sync;
 -- result:
