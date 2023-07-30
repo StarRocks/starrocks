@@ -50,3 +50,9 @@ JINDOSDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/jindosdk-4.6.8-linux.tar
 JINDOSDK_NAME="jindosdk-4.6.8-linux.tar.gz"
 JINDOSDK_SOURCE="jindosdk-4.6.8-linux"
 JINDOSDK_MD5SUM="5436e4fe39c4dfdc942e41821f1dd8a9"
+
+# starcache
+STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/x86_64/starcache-20230706.tar.gz"
+STARCACHE_NAME="starcache.tar.gz"
+STARCACHE_SOURCE="starcache"
+STARCACHE_MD5SUM="0973cb108b7f159a228de0a8ba6071ad"

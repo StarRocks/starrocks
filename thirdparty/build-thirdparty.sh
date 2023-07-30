@@ -1020,6 +1020,12 @@ build_cachelib() {
     rm -rf $TP_INSTALL_DIR/$CACHELIB_SOURCE && mv $TP_SOURCE_DIR/$CACHELIB_SOURCE $TP_INSTALL_DIR/
 }
 
+build_starcache() {
+    check_if_source_exist $STARCACHE_SOURCE
+    cp -r $TP_SOURCE_DIR/$STARCACHE_SOURCE/include/* $TP_INCLUDE_DIR/
+    cp -r $TP_SOURCE_DIR/$STARCACHE_SOURCE/lib/* $TP_LIB_DIR/
+}
+
 # streamvbyte
 build_streamvbyte() {
     check_if_source_exist $STREAMVBYTE_SOURCE
@@ -1200,6 +1206,7 @@ build_opentelemetry
 build_benchmark
 build_fast_float
 build_cachelib
+build_starcache
 build_streamvbyte
 build_jansson
 build_avro_c
