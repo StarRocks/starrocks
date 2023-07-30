@@ -22,7 +22,7 @@ source $FE_HOME/bin/common.sh
 PREVIOUS_FQDN=
 CURRENT_FQDN=`hostname -f`
 
-PASSWD_ERROR_MSG="Password error, believed to have been changed, stop retrying!
+PASSWD_ERROR_MSG="Password error, stop retrying!
 If the root user password is changed, please re-run the container with '-e MYSQL_PWD=<root_password>'"
 PERSISTENT_MSG=" * IMPORTANT NOTICE!
 
@@ -39,24 +39,24 @@ fixed hostname and restart.
 
 MYHOST=127.0.0.1
 
-log_stdout()
+log_stderr()
 {
-    echo "`date --rfc-3339=seconds` $@"
+    echo "`date --rfc-3339=seconds` $@" >&2
 }
 
 loginfo()
 {
-    log_stdout "INFO $@"
+    log_stderr "INFO $@"
 }
 
 logwarn()
 {
-    log_stdout "WARN $@"
+    log_stderr "WARN $@"
 }
 
 logerror()
 {
-    log_stdout "ERROR $@"
+    log_stderr "ERROR $@"
 }
 
 hang_and_die()
@@ -175,7 +175,6 @@ check_and_add_be()
         result=`exec_sql_with_retry "SHOW BACKENDS;"`
         ret=$?
         if [ $ret -ne 0 ] ; then
-            echo "$result"
             hang_and_die
         else
             if echo "$result" | grep -q $MYHOST &>/dev/null ; then
