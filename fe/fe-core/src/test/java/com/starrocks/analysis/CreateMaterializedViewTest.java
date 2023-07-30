@@ -1537,7 +1537,7 @@ public class CreateMaterializedViewTest {
             currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
             Assert.assertEquals("Getting analyzing error at line 3, column 24. Detail message: " +
-                            "Create materialized view from inactive materialized view: base_inactive_mv.",
+                            "Create/Rebuild materialized view from inactive materialized view: base_inactive_mv.",
                     e.getMessage());
         }
     }

@@ -671,7 +671,7 @@ public class InsertPlanner {
         List<Expr> partitionColValues = insertStatement.getTargetPartitionNames().getPartitionColValues();
         List<String> tablePartitionColumnNames = targetTable.getPartitionColumnNames();
 
-        for (Column column : targetTable.getColumns()) {
+        for (Column column : targetTable.getFullSchema()) {
             String columnName = column.getName();
             if (tablePartitionColumnNames.contains(columnName)) {
                 int index = partitionColNames.indexOf(columnName);

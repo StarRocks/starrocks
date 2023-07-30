@@ -153,6 +153,7 @@ public:
     // reload this rowset after the underlying segment file is changed
     Status reload();
     Status reload_segment(int32_t segment_id);
+    int64_t total_segment_data_size();
 
     const TabletSchema& schema_ref() const { return *_schema; }
     const TabletSchemaCSPtr& schema() const { return _schema; }
@@ -380,6 +381,8 @@ private:
     Status _remove_delta_column_group_files(const std::shared_ptr<FileSystem>& fs, KVStore* kvstore);
 
     Status _link_delta_column_group_files(KVStore* kvstore, const std::string& dir, int64_t version);
+
+    Status _copy_delta_column_group_files(KVStore* kvstore, const std::string& dir, int64_t version);
 
     std::vector<SegmentSharedPtr> _segments;
 };

@@ -84,9 +84,11 @@ import com.starrocks.sql.parser.ParsingException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -182,7 +184,7 @@ public class MvUtils {
                         Integer id = scanContext.getTableIdMap().computeIfAbsent(table, t -> 0);
                         LogicalJoinOperator joinOperator = optExpression.getOp().cast();
                         TableScanDesc tableScanDesc = new TableScanDesc(
-                                table, id, scanOperator, joinOperator.getJoinType(), i == 0);
+                                table, id, scanOperator, optExpression, i == 0);
                         context.getTableScanDescs().add(tableScanDesc);
                         scanContext.getTableIdMap().put(table, ++id);
                     } else {
@@ -418,6 +420,7 @@ public class MvUtils {
             compoundPredicate = Utils.compoundAnd(conjuncts);
             compoundPredicate = columnRefRewriter.rewrite(compoundPredicate.clone());
         }
+        compoundPredicate = MvUtils.canonizePredicateForRewrite(compoundPredicate);
         return compoundPredicate;
     }
 
@@ -427,8 +430,10 @@ public class MvUtils {
         return new ReplaceColumnRefRewriter(mvLineage, true);
     }
 
+    // pushdown predicates are excluded when calculating comppensation predicates,
+    // because they are derived from equivalence class, the original predicates have be considered
     private static void collectValidPredicates(List<ScalarOperator> conjuncts, List<ScalarOperator> predicates) {
-        conjuncts.stream().filter(x -> !x.isRedundant()).forEach(predicates::add);
+        conjuncts.stream().filter(x -> !x.isRedundant() && !x.isPushdown()).forEach(predicates::add);
     }
 
     private static void getAllPredicates(OptExpression root, List<ScalarOperator> predicates) {
@@ -883,5 +888,45 @@ public class MvUtils {
             return "";
         }
         return o.toString();
+    }
+
+    /**
+     * Return the max refresh timestamp of all partition infos.
+     */
+    public static long  getMaxTablePartitionInfoRefreshTime(
+            Collection<Map<String, MaterializedView.BasePartitionInfo>> partitionInfos) {
+        return partitionInfos.stream()
+                .flatMap(x -> x.values().stream())
+                .map(x -> x.getLastRefreshTime())
+                .max(Long::compareTo)
+                .filter(Objects::nonNull)
+                .orElse(System.currentTimeMillis());
+    }
+
+    public static List<ScalarOperator> collectOnPredicate(OptExpression optExpression) {
+        List<ScalarOperator> onPredicates = Lists.newArrayList();
+        collectOnPredicate(optExpression, onPredicates, false);
+        return onPredicates;
+    }
+
+    public static List<ScalarOperator> collectOuterAntiJoinOnPredicate(OptExpression optExpression) {
+        List<ScalarOperator> onPredicates = Lists.newArrayList();
+        collectOnPredicate(optExpression, onPredicates, true);
+        return onPredicates;
+    }
+
+    public static void collectOnPredicate(
+            OptExpression optExpression, List<ScalarOperator> onPredicates, boolean onlyOuterAntiJoin) {
+        for (OptExpression child : optExpression.getInputs()) {
+            collectOnPredicate(child, onPredicates, onlyOuterAntiJoin);
+        }
+        if (optExpression.getOp() instanceof LogicalJoinOperator) {
+            LogicalJoinOperator joinOperator = optExpression.getOp().cast();
+            if (onlyOuterAntiJoin &&
+                    !(joinOperator.getJoinType().isOuterJoin() || joinOperator.getJoinType().isAntiJoin())) {
+                return;
+            }
+            onPredicates.addAll(Utils.extractConjuncts(joinOperator.getOnPredicate()));
+        }
     }
 }

@@ -175,11 +175,14 @@ IcebergTableDescriptor::IcebergTableDescriptor(const TTableDescriptor& tdesc, Ob
 
 std::vector<int32_t> IcebergTableDescriptor::partition_index_in_schema() {
     std::vector<int32_t> indexes;
-    for (int i = 0; i < _columns.size(); i++) {
-        std::string& name = _columns[i].column_name;
-        if (std::find(_partition_column_names.begin(), _partition_column_names.end(), name) !=
-            _partition_column_names.end()) {
-            indexes.emplace_back(i);
+    indexes.reserve(_partition_column_names.size());
+
+    for (const auto& name : _partition_column_names) {
+        for (int i = 0; i < _columns.size(); ++i) {
+            if (_columns[i].column_name == name) {
+                indexes.emplace_back(i);
+                break;
+            }
         }
     }
 

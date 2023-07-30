@@ -23,12 +23,12 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
-import com.starrocks.meta.LimitExceededException;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -313,7 +313,10 @@ public class TaskManager {
             throw new DmlException("Failed to get task lock when execute Task sync[" + task.getName() + "]");
         }
         try {
-            taskRun = TaskRunBuilder.newBuilder(task).setConnectContext(ConnectContext.get()).build();
+            taskRun = TaskRunBuilder.newBuilder(task)
+                    .properties(option.getTaskRunProperties())
+                    .type(option)
+                    .setConnectContext(ConnectContext.get()).build();
             submitResult = taskRunManager.submitTaskRun(taskRun, option);
             if (submitResult.getStatus() != SUBMITTED) {
                 throw new DmlException("execute task:" + task.getName() + " failed");
@@ -574,20 +577,16 @@ public class TaskManager {
         data.tasks = new ArrayList<>(nameToTaskMap.values());
         checksum ^= data.tasks.size();
         data.runStatus = showTaskRunStatus(null);
-        String s = GsonUtils.GSON.toJson(data);
-        boolean retry = false;
-        try {
-            Text.writeString(dos, s);
-        } catch (LimitExceededException ex) {
-            retry = true;
-        }
-        if (retry) {
-            int beforeLength = s.length();
+        int beforeSize = data.runStatus.size();
+        if (beforeSize >= Config.task_runs_max_history_number) {
             taskRunManager.getTaskRunHistory().forceGC();
             data.runStatus = showTaskRunStatus(null);
-            s = GsonUtils.GSON.toJson(data);
+            String s = GsonUtils.GSON.toJson(data);
             LOG.warn("Too much task metadata triggers forced task_run GC, " +
-                    "length before GC:{}, length after GC:{}.", beforeLength, s.length());
+                    "size before GC:{}, size after GC:{}.", beforeSize, data.runStatus.size());
+            Text.writeString(dos, s);
+        } else {
+            String s = GsonUtils.GSON.toJson(data);
             Text.writeString(dos, s);
         }
         return checksum;

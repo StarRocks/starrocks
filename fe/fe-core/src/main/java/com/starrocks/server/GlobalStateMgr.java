@@ -156,8 +156,8 @@ import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
-import com.starrocks.lake.ShardDeleter;
 import com.starrocks.lake.ShardManager;
+import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
@@ -304,6 +304,7 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.WarehouseInfo;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -502,7 +503,7 @@ public class GlobalStateMgr {
 
     private StarOSAgent starOSAgent;
 
-    private ShardDeleter shardDeleter;
+    private StarMgrMetaSyncer starMgrMetaSyncer;
 
     private MetadataMgr metadataMgr;
     private CatalogMgr catalogMgr;
@@ -749,7 +750,7 @@ public class GlobalStateMgr {
         this.shardManager = new ShardManager();
         this.compactionMgr = new CompactionMgr();
         this.configRefreshDaemon = new ConfigRefreshDaemon();
-        this.shardDeleter = new ShardDeleter();
+        this.starMgrMetaSyncer = new StarMgrMetaSyncer();
 
         this.binlogManager = new BinlogManager();
         this.pipeManager = new PipeManager();
@@ -992,6 +993,10 @@ public class GlobalStateMgr {
 
     public WarehouseManager getWarehouseMgr() {
         return warehouseMgr;
+    }
+
+    public List<WarehouseInfo> getWarehouseInfosFromOtherFEs() {
+        return nodeMgr.getWarehouseInfosFromOtherFEs();
     }
 
     public StorageVolumeMgr getStorageVolumeMgr() {
@@ -1377,7 +1382,7 @@ public class GlobalStateMgr {
         taskRunStateSynchronizer.start();
 
         if (RunMode.allowCreateLakeTable()) {
-            shardDeleter.start();
+            starMgrMetaSyncer.start();
             autovacuumDaemon.start();
         }
 

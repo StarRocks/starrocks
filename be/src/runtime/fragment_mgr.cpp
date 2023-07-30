@@ -532,6 +532,13 @@ void FragmentMgr::receive_runtime_filter(const PTransmitRuntimeFilterParams& par
     }
 }
 
+void FragmentMgr::close() {
+    std::lock_guard<std::mutex> lock(_lock);
+    for (auto& it : _fragment_map) {
+        cancel(it.second->fragment_instance_id(), PPlanFragmentCancelReason::USER_CANCEL);
+    }
+}
+
 void FragmentMgr::cancel_worker() {
     LOG(INFO) << "FragmentMgr cancel worker start working.";
     while (!_stop) {
@@ -604,7 +611,7 @@ void FragmentMgr::report_fragments_with_same_host(
             Status executor_status = executor->status();
             if (!executor_status.ok()) {
                 reported[i] = true;
-                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
+                ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
                         fragment_exec_state->fragment_instance_id());
                 continue;
             }
@@ -669,7 +676,7 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
 
             Status executor_status = executor->status();
             if (!executor_status.ok()) {
-                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
+                ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
                         fragment_exec_state->fragment_instance_id());
                 continue;
             }
@@ -682,7 +689,7 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
                 std::stringstream ss;
                 ss << "couldn't get a client for " << fragment_exec_state->coord_addr();
                 LOG(WARNING) << ss.str();
-                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
+                ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
                         fragment_exec_state->fragment_instance_id());
                 fragment_exec_state->exec_env()->frontend_client_cache()->close_connections(
                         fragment_exec_state->coord_addr());
@@ -759,7 +766,7 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
     }
 
     for (const auto& fragment_instance_id : fragments_non_exist) {
-        starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(fragment_instance_id);
+        ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(fragment_instance_id);
     }
 }
 
@@ -858,12 +865,12 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
     TPlanFragmentExecParams fragment_exec_params;
     fragment_exec_params.query_id = t_query_plan_info.query_id;
     fragment_exec_params.fragment_instance_id = fragment_instance_id;
-    std::map<::starrocks::TPlanNodeId, std::vector<TScanRangeParams>> per_node_scan_ranges;
+    std::map<TPlanNodeId, std::vector<TScanRangeParams>> per_node_scan_ranges;
     std::vector<TScanRangeParams> scan_ranges;
     std::vector<int64_t> tablet_ids = params.tablet_ids;
     TNetworkAddress address;
     address.hostname = BackendOptions::get_localhost();
-    address.port = starrocks::config::be_port;
+    address.port = config::be_port;
     std::map<int64_t, TTabletVersionInfo> tablet_info = t_query_plan_info.tablet_info;
     for (auto tablet_id : params.tablet_ids) {
         TInternalScanRange scan_range;
@@ -888,7 +895,7 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
         scan_range_params.scan_range = starrocks_scan_range;
         scan_ranges.push_back(scan_range_params);
     }
-    per_node_scan_ranges.insert(std::make_pair((::starrocks::TPlanNodeId)0, scan_ranges));
+    per_node_scan_ranges.insert(std::make_pair((TPlanNodeId)0, scan_ranges));
     fragment_exec_params.per_node_scan_ranges = per_node_scan_ranges;
     // set a mock sender id
     fragment_exec_params.__set_sender_id(0);

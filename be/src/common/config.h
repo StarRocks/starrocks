@@ -486,6 +486,10 @@ CONF_mBool(sync_tablet_meta, "false");
 // Default thrift rpc timeout ms.
 CONF_mInt32(thrift_rpc_timeout_ms, "5000");
 
+CONF_Bool(thrift_rpc_strict_mode, "true");
+// rpc max string body size. 0 means unlimited
+CONF_Int32(thrift_rpc_max_body_size, "0");
+
 // txn commit rpc timeout
 CONF_mInt32(txn_commit_rpc_timeout_ms, "20000");
 
@@ -843,6 +847,16 @@ CONF_Int32(starlet_star_cache_mem_size_percent, "0");
 CONF_Int32(starlet_star_cache_disk_size_percent, "60");
 CONF_Int64(starlet_star_cache_disk_size_bytes, "0");
 CONF_Int32(starlet_star_cache_block_size_bytes, "1048576");
+// domain list separated by comma, e.g. '.example.com,.helloworld.com'
+CONF_String(starlet_s3_virtual_address_domainlist, "");
+// number of caches allowed from s3client factory
+CONF_Int32(starlet_s3_client_max_cache_capacity, "8");
+// number of instances per cache item
+CONF_Int32(starlet_s3_client_num_instances_per_cache, "1");
+// whether turn on read prefetch feature
+CONF_Bool(starlet_fs_read_prefetch_enable, "true");
+// prefetch threadpool size
+CONF_Int32(starlet_fs_read_prefetch_threadpool_size, "128");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");

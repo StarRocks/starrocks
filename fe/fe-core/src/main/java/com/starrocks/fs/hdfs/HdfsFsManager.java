@@ -450,7 +450,7 @@ public class HdfsFsManager {
                     "for load without broker. For broker load with broker, you can set namenode HA in the load_properties");
         }
 
-        if (!authentication.equals("")) {
+        if (!authentication.equals("") && !authentication.equals("simple")) {
             LOG.warn("Invalid load_properties, kerberos should be set in hdfs/core-site.xml for broker " +
                     "load without broker. For broker load with broker, you can set namenode HA in the load_properties");
             throw new UserException("invalid load_properties, kerberos should be set in hdfs/core-site.xml " +
@@ -1216,6 +1216,12 @@ public class HdfsFsManager {
         } catch (FileNotFoundException e) {
             LOG.info("file not found: " + path, e);
             throw new UserException("file not found: " + path, e);
+        } catch (IllegalArgumentException e) {
+            LOG.error("The arguments of blob store(S3/Azure) may be wrong. You can check " +
+                      "the arguments like region, IAM, instance profile and so on.");
+            throw new UserException("The arguments of blob store(S3/Azure) may be wrong. " +
+                                    "You can check the arguments like region, IAM, " +
+                                    "instance profile and so on.", e);
         } catch (Exception e) {
             LOG.error("errors while get file status ", e);
             throw new UserException("listPath failed", e);

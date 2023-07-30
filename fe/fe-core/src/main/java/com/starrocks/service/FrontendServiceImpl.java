@@ -112,11 +112,12 @@ import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
-import com.starrocks.qe.Coordinator;
+import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
@@ -191,6 +192,8 @@ import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TGetTrackingLoadsResult;
 import com.starrocks.thrift.TGetUserPrivsParams;
 import com.starrocks.thrift.TGetUserPrivsResult;
+import com.starrocks.thrift.TGetWarehousesRequest;
+import com.starrocks.thrift.TGetWarehousesResponse;
 import com.starrocks.thrift.TIsMethodSupportedRequest;
 import com.starrocks.thrift.TListMaterializedViewStatusResult;
 import com.starrocks.thrift.TListTableStatusResult;
@@ -241,6 +244,7 @@ import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUpdateResourceUsageResponse;
 import com.starrocks.thrift.TUserPrivDesc;
 import com.starrocks.thrift.TVerboseVariableRecord;
+import com.starrocks.thrift.TWarehouseInfo;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionNotFoundException;
@@ -248,6 +252,8 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TxnCommitAttachment;
+import com.starrocks.warehouse.WarehouseInfo;
+import com.starrocks.warehouse.WarehouseInfosBuilder;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -1487,6 +1493,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return result;
     }
 
+    private Coordinator.Factory getCoordinatorFactory() {
+        return new DefaultCoordinator.Factory();
+    }
+
     private TExecPlanFragmentParams streamLoadPutImpl(TStreamLoadPutRequest request) throws UserException {
         String cluster = request.getCluster();
         if (Strings.isNullOrEmpty(cluster)) {
@@ -1530,7 +1540,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
                 streamLoadTask.setTUniqueId(request.getLoadId());
 
-                Coordinator coord = new Coordinator(planner, getClientAddr());
+                Coordinator coord = getCoordinatorFactory().createSyncStreamLoadScheduler(planner, getClientAddr());
                 streamLoadTask.setCoordinator(coord);
 
                 QeProcessorImpl.INSTANCE.registerQuery(streamLoadInfo.getId(), coord);
@@ -1963,6 +1973,20 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TUpdateResourceUsageResponse res = new TUpdateResourceUsageResponse();
         TStatus status = new TStatus(TStatusCode.OK);
         res.setStatus(status);
+        return res;
+    }
+
+    @Override
+    public TGetWarehousesResponse getWarehouses(TGetWarehousesRequest request) throws TException {
+        Map<String, WarehouseInfo> warehouseToInfo = WarehouseInfosBuilder.makeBuilderFromMetricAndMgrs().build();
+        List<TWarehouseInfo> warehouseInfos = warehouseToInfo.values().stream()
+                .map(WarehouseInfo::toThrift)
+                .collect(Collectors.toList());
+
+        TGetWarehousesResponse res = new TGetWarehousesResponse();
+        res.setStatus(new TStatus(OK));
+        res.setWarehouse_infos(warehouseInfos);
+
         return res;
     }
 

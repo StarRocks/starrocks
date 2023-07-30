@@ -15,6 +15,8 @@
 #include "exprs/string_functions.h"
 
 #include <hs/hs.h>
+#include <immintrin.h>
+#include <mmintrin.h>
 #include <re2/re2.h>
 
 #include <algorithm>
@@ -2015,64 +2017,145 @@ StatusOr<ColumnPtr> StringFunctions::hex_int(FunctionContext* context, const sta
     return VectorizedStringStrictUnaryFunction<hex_intImpl>::evaluate<TYPE_BIGINT, TYPE_VARCHAR>(columns[0]);
 }
 
+static constexpr char const* alphabet = "0123456789ABCDEF";
 DEFINE_STRING_UNARY_FN_WITH_IMPL(hex_stringImpl, str) {
-    std::stringstream ss;
-    ss << std::hex << std::uppercase << std::setfill('0');
-    for (int i = 0; i < str.size; ++i) {
-        // setw is not sticky. stringstream only converts integral values,
-        // so a cast to int is required, but only convert the least significant byte to hex.
-        ss << std::setw(2) << (static_cast<int32_t>(str.data[i]) & 0xFF);
+    std::string s;
+    raw::stl_string_resize_uninitialized(&s, str.size << 1);
+    auto* p = s.data();
+    const auto* q = str.data;
+    const auto* end = str.data + str.size;
+    while (q != end) {
+        int ci = static_cast<unsigned char>(*q++);
+        *p++ = alphabet[ci >> 4];
+        *p++ = alphabet[ci & 0xf];
     }
-    return ss.str();
+    return s;
 }
 
 StatusOr<ColumnPtr> StringFunctions::hex_string(FunctionContext* context, const starrocks::Columns& columns) {
     return VectorizedStringStrictUnaryFunction<hex_stringImpl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
 }
 
-DEFINE_STRING_UNARY_FN_WITH_IMPL(unhexImpl, str) {
+#ifdef __AVX2__
+static inline bool hexdigit_4chars(char ch0, char ch1, char ch2, char ch3, char* ret0, char* ret1) {
+    const auto bs = _mm256_set_epi64x(0x6660'4640'392f'0000, 0x6660'4640'392f'0000, 0x6660'4640'392f'0000,
+                                      0x6660'4640'392f'0000);
+    auto chs = _mm256_set_epi8(ch3, ch3, ch3, ch3, ch3, ch3, '\1', '\1', ch2, ch2, ch2, ch2, ch2, ch2, '\1', '\1', ch1,
+                               ch1, ch1, ch1, ch1, ch1, '\1', '\1', ch0, ch0, ch0, ch0, ch0, ch0, '\1', '\1');
+
+    auto x = _mm256_sub_epi8(bs, chs);
+    // mask         legal  bits  range
+    // 11111111   N  6    'z' < ch
+    // 01111111   Y  5    'a' <= ch <= 'z'
+    // 00111111   N  4    'a' < ch < 'Z'
+    // 00011111   Y  3    'Z' <= ch <= 'A'
+    // 00001111   N  2    '9' < ch < 'A'
+    // 00000111   Y  1    '0' <= ch <= '9'
+    // 00000011   N  0     ch < '0'
+    auto mask = _mm256_movemask_epi8(x);
+    // if bits == 0x1; then t = -1;otherwise t = 9;
+    // ch in 0..9; 1st byte is ('0' - 1 - ch), so obtain (ch - '0') from -1 - ('0' - 1 - ch)
+    // ch in A..F; 3st byte is ('A' - 1 - ch), so obtain (ch - 'A' + 10) from -9 - ('A' - 1 - ch)
+    // ch in a..f; 5st byte is ('a' - 1 - ch), so obtain (ch - 'a' + 10) from -9 - ('a' - 1 - ch)
+
+    // process ch0
+#define PROCESS_CHAR(i, stmt)                                                                           \
+    do {                                                                                                \
+        auto mask0 = mask & 0xff;                                                                       \
+        auto bits = 30 - __builtin_clz(mask0);                                                          \
+        if ((bits & 0x1) == 0) {                                                                        \
+            return false;                                                                               \
+        }                                                                                               \
+        auto t = (10 & (0xff << ((bits == 0b1) << 3))) - 1;                                             \
+        auto bytes_vec = (__v32qi)_mm256_srli_epi64(_mm256_permute4x64_epi64(x, (i)), (bits + 1) << 3); \
+        auto delta = bytes_vec[0];                                                                      \
+        stmt;                                                                                           \
+    } while (0);
+
+    // process ch0
+    PROCESS_CHAR(0, *ret0 = static_cast<char>((t - delta) << 4));
+    // process ch1
+    mask >>= 8;
+    PROCESS_CHAR(1, *ret0 += static_cast<char>(t - delta));
+    // process ch2
+    mask >>= 8;
+    PROCESS_CHAR(2, *ret1 = static_cast<char>((t - delta) << 4));
+    // process ch3
+    mask >>= 8;
+    PROCESS_CHAR(3, *ret1 += static_cast<char>(t - delta));
+    return true;
+}
+
+static inline std::string unhex_4chars(Slice s) {
+    const auto sz = s.size;
+    if (sz == 0 || (sz & 0x1)) {
+        return {};
+    }
+    std::string ret;
+    raw::stl_string_resize_uninitialized(&ret, sz >> 1);
+    const auto* q = s.data;
+    const auto* end = s.data + sz;
+    auto* p = ret.data();
+    for (; q + 3 < end; q += 4, p += 2) {
+        if (!hexdigit_4chars(q[0], q[1], q[2], q[3], &p[0], &p[1])) {
+            return {};
+        }
+    }
+    if (q == end) {
+        return ret;
+    }
+    char dummy;
+    if (!hexdigit_4chars(q[0], q[1], '0', '0', &p[0], &dummy)) {
+        return {};
+    }
+    return ret;
+}
+#endif
+
+static inline char hexdigit_1char(char ch) {
+    if (int value = ch - '0'; value >= 0 && value <= ('9' - '0')) {
+        return value;
+    } else if (int value = ch - 'A'; value >= 0 && value <= ('F' - 'A')) {
+        return value + 10;
+    } else if (int value = ch - 'a'; value >= 0 && value <= ('f' - 'a')) {
+        return value + 10;
+    } else {
+        return 0xff;
+    }
+}
+
+static inline std::string unhex_1char(Slice str) {
     // For uneven number of chars return empty string like Hive does.
-    if (str.size == 0 || str.size % 2 != 0) {
+    if (str.size == 0 || (str.size & 0x1)) {
         return {};
     }
 
-    size_t result_len = str.size / 2;
-    std::vector<char> result;
-    result.resize(result_len);
-    int res_index = 0;
-    int s_index = 0;
-    while (s_index < str.size) {
-        char c = 0;
-
+    std::string ret;
+    raw::stl_string_resize_uninitialized(&ret, str.size >> 1);
+    const auto* q = str.data;
+    const auto* end = str.data + str.size;
+    char* p = ret.data();
+    while (q < end) {
         // first half of byte
-        char check_char = str.data[s_index];
-        if (int value = check_char - '0'; value >= 0 && value <= ('9' - '0')) {
-            c += value * 16;
-        } else if (int value = check_char - 'A'; value >= 0 && value <= ('F' - 'A')) {
-            c += (value + 10) * 16;
-        } else if (int value = check_char - 'a'; value >= 0 && value <= ('f' - 'a')) {
-            c += (value + 10) * 16;
-        } else {
+        char ch0 = hexdigit_1char(*q++);
+        if ((ch0 & 0xff) == 0xff) {
             return {};
         }
-
-        // second half of byte
-        check_char = str.data[s_index + 1];
-        if (int value = check_char - '0'; value >= 0 && value <= ('9' - '0')) {
-            c += value;
-        } else if (int value = check_char - 'A'; value >= 0 && value <= ('F' - 'A')) {
-            c += (value + 10);
-        } else if (int value = check_char - 'a'; value >= 0 && value <= ('f' - 'a')) {
-            c += (value + 10);
-        } else {
+        char ch1 = hexdigit_1char(*q++);
+        if ((ch1 & 0xff) == 0xff) {
             return {};
         }
-
-        result[res_index] = c;
-        ++res_index;
-        s_index += 2;
+        *p++ = static_cast<char>((ch0 << 4) + ch1);
     }
-    return {result.data(), result_len};
+    return ret;
+}
+
+DEFINE_STRING_UNARY_FN_WITH_IMPL(unhexImpl, str) {
+#ifdef __AVX2__
+    return unhex_4chars(str);
+#else
+    return unhex_1char(str);
+#endif
 }
 
 StatusOr<ColumnPtr> StringFunctions::unhex(FunctionContext* context, const starrocks::Columns& columns) {
@@ -2084,21 +2167,21 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(url_encodeImpl, str) {
 }
 
 std::string StringFunctions::url_encode_func(const std::string& value) {
-    std::ostringstream escaped;
-    escaped.fill('0');
-    escaped << std::hex;
-
+    std::string escaped;
+    raw::stl_string_resize_uninitialized(&escaped, value.size() * 3);
+    char* p = escaped.data();
     for (auto c : value) {
         if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
-            escaped << c;
+            *p++ = c;
             continue;
         }
-
-        escaped << std::uppercase;
-        escaped << '%' << std::setw(2) << int((unsigned char)c);
-        escaped << std::nouppercase;
+        int ci = static_cast<unsigned char>(c);
+        *p++ = '%';
+        *p++ = alphabet[ci >> 4];
+        *p++ = alphabet[ci & 0xf];
     }
-    return escaped.str();
+    escaped.resize(p - escaped.data());
+    return escaped;
 }
 
 StatusOr<ColumnPtr> StringFunctions::url_encode(FunctionContext* context, const starrocks::Columns& columns) {

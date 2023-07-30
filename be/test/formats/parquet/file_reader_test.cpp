@@ -1104,7 +1104,7 @@ TEST_F(FileReaderTest, TestReadMapCharKeyColumn) {
     //init
     auto* ctx = _create_file_map_char_key_context();
     Status status = file_reader->init(ctx);
-    ASSERT_TRUE(status.ok());
+    ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
     std::vector<io::SharedBufferedInputStream::IORange> ranges;
@@ -1131,11 +1131,8 @@ TEST_F(FileReaderTest, TestReadMapCharKeyColumn) {
     chunk->append_column(c_map1, chunk->num_columns());
 
     status = file_reader->get_next(&chunk);
-    ASSERT_TRUE(status.ok());
+    ASSERT_TRUE(status.ok()) << status.get_error_msg();
     EXPECT_EQ(chunk->num_rows(), 1);
-    for (int i = 0; i < chunk->num_rows(); ++i) {
-        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
-    }
     EXPECT_EQ(chunk->debug_row(0), "[0, {'abc':123}, {'def':456}]");
 }
 
@@ -1833,6 +1830,7 @@ TEST_F(FileReaderTest, TestReadMapNull) {
     EXPECT_EQ("[3, NULL]", chunk->debug_row(2));
 }
 
+// Illegal parquet files, not support it anymore
 TEST_F(FileReaderTest, TestReadArrayMap) {
     // optional group col_array_map (LIST) {
     //     repeated group array (MAP) {
@@ -1871,20 +1869,23 @@ TEST_F(FileReaderTest, TestReadArrayMap) {
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
-    ASSERT_TRUE(status.ok());
 
-    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    // Illegal parquet files, not support it anymore
+    ASSERT_FALSE(status.ok());
 
-    auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(ColumnHelper::create_column(type_string, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_array_map, true), chunk->num_columns());
-
-    status = file_reader->get_next(&chunk);
-    ASSERT_TRUE(status.ok());
-    ASSERT_EQ(2, chunk->num_rows());
-
-    EXPECT_EQ("['0', [{'def':11,'abc':10},{'ghi':12},{'jkl':13}]]", chunk->debug_row(0));
-    EXPECT_EQ("['1', [{'happy new year':11,'hello world':10},{'vary happy':12},{'ok':13}]]", chunk->debug_row(1));
+    //  ASSERT_TRUE(status.ok()) << status.get_error_msg();
+    //  EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    //
+    //  auto chunk = std::make_shared<Chunk>();
+    //  chunk->append_column(ColumnHelper::create_column(type_string, true), chunk->num_columns());
+    //  chunk->append_column(ColumnHelper::create_column(type_array_map, true), chunk->num_columns());
+    //
+    //  status = file_reader->get_next(&chunk);
+    //  ASSERT_TRUE(status.ok());
+    //  ASSERT_EQ(2, chunk->num_rows());
+    //
+    //  EXPECT_EQ("['0', [{'def':11,'abc':10},{'ghi':12},{'jkl':13}]]", chunk->debug_row(0));
+    //  EXPECT_EQ("['1', [{'happy new year':11,'hello world':10},{'vary happy':12},{'ok':13}]]", chunk->debug_row(1));
 }
 
 TEST_F(FileReaderTest, TestStructArrayNull) {
@@ -2141,6 +2142,7 @@ TEST_F(FileReaderTest, TestComplexTypeNotNull) {
     EXPECT_EQ(262144, total_row_nums);
 }
 
+// Illegal parquet files, not support it anymore
 TEST_F(FileReaderTest, TestHudiMORTwoNestedLevelArray) {
     // format:
     // b: varchar
@@ -2173,36 +2175,39 @@ TEST_F(FileReaderTest, TestHudiMORTwoNestedLevelArray) {
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
-    ASSERT_TRUE(status.ok());
 
-    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    // Illegal parquet files, not support it anymore
+    ASSERT_FALSE(status.ok()) << status.get_error_msg();
+    // ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
-    auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(ColumnHelper::create_column(type_string, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_array, true), chunk->num_columns());
-
-    status = file_reader->get_next(&chunk);
-    ASSERT_TRUE(status.ok());
-
-    chunk->check_or_die();
-
-    EXPECT_EQ("['hello', [[10,20,30],[40,50,60,70]]]", chunk->debug_row(0));
-    EXPECT_EQ("[NULL, [[30,40],[10,20,30]]]", chunk->debug_row(1));
-    EXPECT_EQ("['hello', NULL]", chunk->debug_row(2));
-
-    size_t total_row_nums = 0;
-    total_row_nums += chunk->num_rows();
-
-    {
-        while (!status.is_end_of_file()) {
-            chunk->reset();
-            status = file_reader->get_next(&chunk);
-            chunk->check_or_die();
-            total_row_nums += chunk->num_rows();
-        }
-    }
-
-    EXPECT_EQ(3, total_row_nums);
+    //  EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    //
+    //  auto chunk = std::make_shared<Chunk>();
+    //  chunk->append_column(ColumnHelper::create_column(type_string, true), chunk->num_columns());
+    //  chunk->append_column(ColumnHelper::create_column(type_array, true), chunk->num_columns());
+    //
+    //  status = file_reader->get_next(&chunk);
+    //  ASSERT_TRUE(status.ok());
+    //
+    //  chunk->check_or_die();
+    //
+    //  EXPECT_EQ("['hello', [[10,20,30],[40,50,60,70]]]", chunk->debug_row(0));
+    //  EXPECT_EQ("[NULL, [[30,40],[10,20,30]]]", chunk->debug_row(1));
+    //  EXPECT_EQ("['hello', NULL]", chunk->debug_row(2));
+    //
+    //  size_t total_row_nums = 0;
+    //  total_row_nums += chunk->num_rows();
+    //
+    //  {
+    //      while (!status.is_end_of_file()) {
+    //          chunk->reset();
+    //          status = file_reader->get_next(&chunk);
+    //          chunk->check_or_die();
+    //          total_row_nums += chunk->num_rows();
+    //      }
+    //  }
+    //
+    //  EXPECT_EQ(3, total_row_nums);
 }
 
 TEST_F(FileReaderTest, TestLateMaterializationAboutRequiredComplexType) {

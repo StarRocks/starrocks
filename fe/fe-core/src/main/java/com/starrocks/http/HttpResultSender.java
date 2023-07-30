@@ -32,9 +32,9 @@
 package com.starrocks.http;
 
 import com.google.gson.JsonObject;
-import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TResultBatch;
 import io.netty.buffer.ByteBuf;

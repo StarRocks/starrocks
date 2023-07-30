@@ -463,6 +463,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.fs = _pool.add(fs.release());
     scanner_params.path = native_file_path;
     scanner_params.file_size = _scan_range.file_length;
+    scanner_params.modification_time = _scan_range.modification_time;
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;
     scanner_params.materialize_index_in_chunk = _materialize_index_in_chunk;
@@ -522,6 +523,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     RETURN_IF_ERROR(scanner->init(state, scanner_params));
     Status st = scanner->open(state);
     if (!st.ok()) {
+        if (scanner->is_jni_scanner()) {
+            return st;
+        }
+
         auto msg = fmt::format("file = {}", native_file_path);
 
         // After catching the AWS 404 file not found error and returning it to the FE,

@@ -34,6 +34,7 @@ import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.UnsupportedException;
@@ -46,8 +47,6 @@ import com.starrocks.thrift.TMVMaintenanceStartTask;
 import com.starrocks.thrift.TMVMaintenanceStopTask;
 import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TQueryGlobals;
-import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -237,20 +236,14 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         if (db != null) {
             this.connectContext.setDatabase(db.getFullName());
         }
-        TUniqueId queryId = connectContext.getExecutionId();
 
         // Build  query coordinator
         ExecPlan execPlan = this.view.getMaintenancePlan();
         List<PlanFragment> fragments = execPlan.getFragments();
         List<ScanNode> scanNodes = execPlan.getScanNodes();
         TDescriptorTable descTable = execPlan.getDescTbl().toThrift();
-        TQueryGlobals queryGlobals =
-                CoordinatorPreprocessor.genQueryGlobals(connectContext.getStartTime(),
-                        connectContext.getSessionVariable().getTimeZone());
-        TQueryOptions queryOptions = connectContext.getSessionVariable().toThrift();
-        this.queryCoordinator =
-                new CoordinatorPreprocessor(queryId, connectContext, fragments, scanNodes, descTable, queryGlobals,
-                        queryOptions);
+        JobSpec jobSpec = JobSpec.Factory.fromMVMaintenanceJobSpec(connectContext, fragments, scanNodes, descTable);
+        this.queryCoordinator = new CoordinatorPreprocessor(connectContext, jobSpec);
         this.epochCoordinator = new TxnBasedEpochCoordinator(this);
     }
 
@@ -374,6 +367,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
             throw ex;
         }
     }
+
     private void setMVMaintenanceTasksInfo(TMVMaintenanceTasks request,
                                            MVMaintenanceTask task) {
         // Request information
@@ -480,6 +474,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
     public long getViewId() {
         return viewId;
     }
+
     public long getDbId() {
         return dbId;
     }

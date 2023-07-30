@@ -45,8 +45,6 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.parser.NodePosition;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -83,7 +81,6 @@ import java.util.List;
  * structure of all subclasses.
  */
 public class TableRef implements ParseNode, Writable {
-    private static final Logger LOG = LogManager.getLogger(TableRef.class);
     @SerializedName(value = "name")
     protected TableName name;
     @SerializedName(value = "partitionNames")

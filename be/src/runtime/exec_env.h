@@ -220,6 +220,7 @@ public:
     Status init(const std::vector<StorePath>& store_paths, bool as_cn = false);
     void stop();
     void destroy();
+    void wait_for_finish();
 
     /// Returns the first created exec env instance. In a normal starrocks, this is
     /// the only instance. In test setups with multiple ExecEnv's per process,
@@ -248,9 +249,7 @@ public:
 
     // using template to simplify client cache management
     template <typename T>
-    ClientCache<T>* get_client_cache() {
-        return nullptr;
-    }
+    ClientCache<T>* get_client_cache();
 
     PriorityThreadPool* thread_pool() { return _thread_pool; }
     workgroup::ScanExecutor* scan_executor() { return _scan_executor; }
@@ -274,7 +273,6 @@ public:
     TransactionMgr* transaction_mgr() { return _transaction_mgr; }
 
     const std::vector<StorePath>& store_paths() const { return _store_paths; }
-    void set_store_paths(const std::vector<StorePath>& paths) { _store_paths = paths; }
 
     StreamLoadExecutor* stream_load_executor() { return _stream_load_executor; }
     RoutineLoadTaskExecutor* routine_load_task_executor() { return _routine_load_task_executor; }
@@ -311,6 +309,8 @@ public:
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
 
 private:
+    void _wait_for_fragments_finish();
+
     std::vector<StorePath> _store_paths;
     // Leave protected so that subclasses can override
     ExternalScanContextMgr* _external_scan_context_mgr = nullptr;

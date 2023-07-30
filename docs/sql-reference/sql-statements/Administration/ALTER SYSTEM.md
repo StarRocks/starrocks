@@ -101,7 +101,7 @@ Manages FE, BE, CN, Broker nodes, and metadata snapshots in a cluster.
 
 ### Broker
 
-- Add Broker nodes. You can use Broker nodes to load data from HDFS or cloud storage into StarRocks. For more information, see [Load data from HDFS or cloud storage](../../../loading/BrokerLoad.md).
+- Add Broker nodes. You can use Broker nodes to load data from HDFS or cloud storage into StarRocks. For more information, see [Load data from HDFS](../../../loading/hdfs_load.md) or [Load data from cloud storage](../../../loading/cloud_storage_load.md).
 
   ```SQL
   ALTER SYSTEM ADD BROKER <broker_name> "<broker_host>:<broker_ipc_port>"[, ...]

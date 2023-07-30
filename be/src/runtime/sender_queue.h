@@ -255,6 +255,8 @@ private:
     // key of second level is request sequence
     phmap::flat_hash_map<int, phmap::flat_hash_map<int64_t, ChunkList>> _buffered_chunk_queues;
 
+    std::atomic<bool> _is_chunk_meta_built{false};
+
     static constexpr size_t kUnplugBufferThreshold = 16;
 };
 

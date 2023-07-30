@@ -1276,6 +1276,24 @@ struct TUpdateResourceUsageResponse {
     1: optional Status.TStatus status
 }
 
+struct TGetWarehousesRequest {
+}
+
+struct TWarehouseInfo {
+    1: optional string warehouse
+    2: optional i64 id
+    3: optional i64 num_unfinished_query_jobs
+    4: optional i64 num_unfinished_load_jobs
+    5: optional i64 num_unfinished_backup_jobs
+    6: optional i64 num_unfinished_restore_jobs
+    7: optional i64 last_finished_job_timestamp_ms
+}
+
+struct TGetWarehousesResponse {
+    1: optional Status.TStatus status
+    2: optional list<TWarehouseInfo> warehouse_infos;
+}
+
 struct TTableInfo {
     1: optional string table_catalog
     2: optional string table_schema
@@ -1421,6 +1439,8 @@ service FrontendService {
     TCreatePartitionResult createPartition(1: TCreatePartitionRequest request)
 
     TUpdateResourceUsageResponse updateResourceUsage(1: TUpdateResourceUsageRequest request)
+
+    TGetWarehousesResponse getWarehouses(1: TGetWarehousesRequest request)
     
     // For Materialized View
     MVMaintenance.TMVReportEpochResponse mvReport(1: MVMaintenance.TMVMaintenanceTasks request)

@@ -38,13 +38,13 @@ public class QueryQueueManager {
     private static final Logger LOG = LogManager.getLogger(QueryQueueManager.class);
 
     private static class PendingQueryInfo {
-        private final Coordinator coordinator;
+        private final DefaultCoordinator coordinator;
         private final ConnectContext connectCtx;
         private final ReentrantLock lock;
         private final Condition condition;
         private boolean isCancelled = false;
 
-        private PendingQueryInfo(ConnectContext connectCtx, ReentrantLock lock, Coordinator coordinator) {
+        private PendingQueryInfo(ConnectContext connectCtx, ReentrantLock lock, DefaultCoordinator coordinator) {
             Preconditions.checkState(connectCtx != null);
             this.coordinator = coordinator;
             this.connectCtx = connectCtx;
@@ -117,7 +117,7 @@ public class QueryQueueManager {
         }
     }
 
-    public void maybeWait(ConnectContext connectCtx, Coordinator coord) throws UserException, InterruptedException {
+    public void maybeWait(ConnectContext connectCtx, DefaultCoordinator coord) throws UserException, InterruptedException {
         if (!needCheckQueue(coord)) {
             return;
         }
@@ -195,7 +195,7 @@ public class QueryQueueManager {
         }
     }
 
-    public boolean enableCheckQueue(Coordinator coord) {
+    public boolean enableCheckQueue(DefaultCoordinator coord) {
         if (coord.isLoadType()) {
             return GlobalVariable.isEnableQueryQueueLoad();
         }
@@ -213,7 +213,7 @@ public class QueryQueueManager {
         return false;
     }
 
-    public boolean needCheckQueue(Coordinator coord) {
+    public boolean needCheckQueue(DefaultCoordinator coord) {
         // The queries only using schema meta will never been queued, because a MySQL client will
         // query schema meta after the connection is established.
         List<ScanNode> scanNodes = coord.getScanNodes();

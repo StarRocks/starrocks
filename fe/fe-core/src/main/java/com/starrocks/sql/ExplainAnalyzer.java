@@ -34,6 +34,7 @@ import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.JoinNode;
 import com.starrocks.planner.MultiCastDataSink;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ProjectNode;
@@ -79,13 +80,11 @@ public class ExplainAnalyzer {
     public static final String ANSI_BOLD = "\u001B[1m";
     public static final String ANSI_RED = "\u001B[31m";
     public static final String ANSI_SALMON = "\u001B[38;2;250;128;114m";
+    public static final String ANSI_BLACK_ON_RED = "\u001B[41;30m";
 
     private static boolean isResultSink(RuntimeProfile operator) {
         return ("RESULT_SINK".equals(operator.getName())
-                || "OLAP_TABLE_SINK".equals(operator.getName())
-                || "ICEBERG_TABLE_SINK".equals(operator.getName())
-                || "EXPORT_SINK".equals(operator.getName())
-                || "MEMORY_SCRATCH_SINK".equals(operator.getName()));
+                || "OLAP_TABLE_SINK".equals(operator.getName()));
     }
 
     private static int getPlanNodeId(RuntimeProfile operator) {
@@ -205,7 +204,7 @@ public class ExplainAnalyzer {
         // Bind plan element
         for (PlanFragment fragment : execPlan.getFragments()) {
             DataSink sink = fragment.getSink();
-            if (sink instanceof ResultSink) {
+            if (sink instanceof ResultSink || sink instanceof OlapTableSink) {
                 NodeInfo resultNode = allNodeInfos.get(RESULT_SINK_PSEUDO_PLAN_NODE_ID);
                 resultNode.planElement = sink;
             }
@@ -258,6 +257,13 @@ public class ExplainAnalyzer {
         appendSummaryLine("Summary");
 
         pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        if (execPlan.getFragments().stream()
+                .anyMatch(fragment -> fragment.getSink() instanceof OlapTableSink)) {
+            appendSummaryLine("Attention: ", ANSI_BOLD + ANSI_BLACK_ON_RED,
+                    "The transaction of the statement will be aborted, and no data will be actually inserted!!!",
+                    ANSI_RESET);
+        }
+
         appendSummaryLine("Version: ", summaryProfile.getInfoString("StarRocks Version"));
         appendSummaryLine("QueryId: ", summaryProfile.getInfoString("Query ID"));
 
@@ -279,6 +285,7 @@ public class ExplainAnalyzer {
 
         appendSummaryLine("QueryPeakMemoryUsage: ", executionProfile.getCounter("QueryPeakMemoryUsage"),
                 ", QueryAllocatedMemoryUsage: ", executionProfile.getCounter("QueryAllocatedMemoryUsage"));
+
         popIndent(); // metric indent
 
         cumulativeOperatorTime = executionProfile.getCounter("QueryCumulativeOperatorTime").getValue();
@@ -334,11 +341,17 @@ public class ExplainAnalyzer {
         popIndent(); // metric indent
 
         DataSink sink = fragment.getSink();
-        if (sink instanceof ResultSink) {
+        boolean isResultSink = sink instanceof ResultSink || sink instanceof OlapTableSink;
+        if (isResultSink) {
             // Calculate result sink's time info, other sink's type will be properly processed
             // at the receiver side fragment through exchange node
             NodeInfo resultNodeInfo = allNodeInfos.get(RESULT_SINK_PSEUDO_PLAN_NODE_ID);
             resultNodeInfo.computeTimeUsage(cumulativeOperatorTime);
+            if (resultNodeInfo.totalTimePercentage >= 30) {
+                setRedColor();
+            } else if (resultNodeInfo.totalTimePercentage >= 15) {
+                setSalmonColor();
+            }
         }
         DataPartition outputPartition = null;
         if (sink instanceof MultiCastDataSink) {
@@ -353,15 +366,41 @@ public class ExplainAnalyzer {
         } else {
             outputPartition = sink.getOutputPartition();
             appendDetailLine(GraphElement.LST_OPERATOR_INDENT, transformNodeName(sink.getClass()),
-                    sink instanceof ResultSink ? "" : String.format(" (id=%d)", sink.getExchNodeId().asInt()));
+                    isResultSink ? "" : String.format(" (id=%d)", sink.getExchNodeId().asInt()));
         }
         pushIndent(GraphElement.LAST_CHILD_OPERATOR_INDENT);
         pushIndent(GraphElement.NON_LEAF_METRIC_INDENT);
+        if (isResultSink) {
+            // Time Usage
+            NodeInfo resultNodeInfo = allNodeInfos.get(RESULT_SINK_PSEUDO_PLAN_NODE_ID);
+            List<Object> items = Lists.newArrayList();
+            items.addAll(Arrays.asList("TotalTime: ", resultNodeInfo.totalTime,
+                    String.format(" (%.2f%%)", resultNodeInfo.totalTimePercentage)));
+            items.addAll(Arrays.asList(" [CPUTime: ", resultNodeInfo.cpuTime));
+            items.add("]");
+            appendDetailLine(items.toArray());
+
+            // Output Rows
+            Counter pullRows = searchMetricFromUpperLevel(resultNodeInfo, "CommonMetrics", "PushRowNum");
+            Preconditions.checkNotNull(pullRows);
+            resultNodeInfo.outputRowNums.setValue(pullRows.getValue());
+            appendDetailLine("OutputRows: ", resultNodeInfo.outputRowNums);
+        }
         if (outputPartition != null) {
             appendDetailLine("PartitionType: ", outputPartition.getType());
             if (CollectionUtils.isNotEmpty(outputPartition.getPartitionExprs())) {
                 appendExprs("PartitionExprs", outputPartition.getPartitionExprs());
             }
+        }
+        if (sink instanceof ResultSink) {
+            ResultSink resultSink = (ResultSink) sink;
+            appendDetailLine("SinkType: ", resultSink.getSinkType());
+        } else if (sink instanceof OlapTableSink) {
+            OlapTableSink olapTableSink = (OlapTableSink) sink;
+            appendDetailLine("Table: ", olapTableSink.getDstTable().getName());
+        }
+        if (isResultSink) {
+            resetColor();
         }
         popIndent(); // metric indent
 
@@ -421,7 +460,7 @@ public class ExplainAnalyzer {
     }
 
     private void appendOperatorInfo(NodeInfo nodeInfo) {
-        // 1. CostEstimation
+        // 1. Cost Estimation
         OptExpression optExpression = execPlan.getOptExpression(nodeInfo.planNodeId);
         if (optExpression != null) {
             CostEstimate cost = CostModel.calculateCostEstimate(new ExpressionContext(optExpression));
@@ -444,7 +483,7 @@ public class ExplainAnalyzer {
             appendDetailLine("Estimates: [row: ?, cpu: ?, memory: ?, network: ?, cost: ?]");
         }
 
-        // 2. TimeUsage
+        // 2. Time Usage
         List<Object> items = Lists.newArrayList();
         items.addAll(Arrays.asList("TotalTime: ", nodeInfo.totalTime,
                 String.format(" (%.2f%%)", nodeInfo.totalTimePercentage)));
@@ -461,7 +500,7 @@ public class ExplainAnalyzer {
         items.add("]");
         appendDetailLine(items.toArray());
 
-        // 3. Output rows
+        // 3. Output Rows
         Counter pullRows;
         if (nodeInfo.planElement instanceof UnionNode) {
             pullRows = sumUpMetric(nodeInfo, false, false, "CommonMetrics", "PullRowNum");
@@ -800,7 +839,7 @@ public class ExplainAnalyzer {
         public String getTitle() {
             StringBuilder titleBuilder = new StringBuilder();
             titleBuilder.append(transformNodeName(planElement.getClass()));
-            if (planElement instanceof ResultSink) {
+            if (planElement instanceof ResultSink || planElement instanceof OlapTableSink) {
                 return titleBuilder.toString();
             }
             titleBuilder.append(String.format(" (id=%d) ", planNodeId));

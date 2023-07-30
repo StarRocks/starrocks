@@ -1281,8 +1281,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.columnNameWithComment().size() > 0) {
             colWithComments = visit(context.columnNameWithComment(), ColWithComment.class);
         }
+        if (context.IF() != null && context.REPLACE() != null) {
+            throw new ParsingException(PARSER_ERROR_MSG.conflictedOptions("if not exists", "or replace"),
+                    createPos(context));
+        }
         return new CreateViewStmt(
                 context.IF() != null,
+                context.REPLACE() != null,
                 targetTableName,
                 colWithComments,
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment())).getStringValue(),
@@ -1789,9 +1794,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         if (context.explainDesc() != null) {
             queryStatement.setIsExplain(true, getExplainType(context.explainDesc()));
-            if (StatementBase.ExplainLevel.ANALYZE.equals(queryStatement.getExplainLevel())) {
-                throw new ParsingException(PARSER_ERROR_MSG.unsupportedOp("analyze"));
-            }
         }
 
         return new InsertStmt(targetTableName, partitionNames,

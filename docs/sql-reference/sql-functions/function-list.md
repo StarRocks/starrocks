@@ -1,6 +1,8 @@
 # All functions
 
-StarRocks offers a rich set of functions to facilitate data queries and analysis. You can find a function based on the following categories:
+StarRocks offers a rich set of functions to facilitate data queries and analysis. In addition to commonly used functions, StarRocks supports semi-structured functions such as ARRAY, JSON, MAP, and STRUCT functions. It also supports higher-order [Lambda functions](Lambda_expression.md). If these functions cannot meet your business requirements, you can use [Java UDF](JAVA_UDF.md) to compile functions.
+
+You can find a function based on the following categories:
 
 - [Aggregate functions](#aggregate-functions)
 - [Array functions](#array-functions)
@@ -169,6 +171,7 @@ StarRocks offers a rich set of functions to facilitate data queries and analysis
 - [current_timestamp](../sql-functions/date-time-functions/current_timestamp.md)
 - [date](../sql-functions/date-time-functions/date.md)
 - [date_add](../sql-functions/date-time-functions/date_add.md)
+- [date_diff](../sql-functions/date-time-functions/date_diff.md)
 - [date_format](../sql-functions/date-time-functions/date_format.md)
 - [date_slice](../sql-functions/date-time-functions/date_slice.md)
 - [date_sub, subdate](../sql-functions/date-time-functions/date_sub.md)
@@ -188,6 +191,7 @@ StarRocks offers a rich set of functions to facilitate data queries and analysis
 - [hours_add](../sql-functions/date-time-functions/hours_add.md)
 - [hours_diff](../sql-functions/date-time-functions/hours_diff.md)
 - [hours_sub](../sql-functions/date-time-functions/hours_sub.md)
+- [last_day](../sql-functions/date-time-functions/last_day.md)
 - [makedate](../sql-functions/date-time-functions/makedate.md)
 - [microseconds_add](../sql-functions/date-time-functions/microseconds_add.md)
 - [microseconds_sub](../sql-functions/date-time-functions/microseconds_sub.md)
@@ -203,7 +207,6 @@ StarRocks offers a rich set of functions to facilitate data queries and analysis
 - [next_day](../sql-functions/date-time-functions/next_day.md)
 - [now](../sql-functions/date-time-functions/now.md)
 - [previous_day](../sql-functions/date-time-functions/previous_day.md)
-- [last_day](../sql-functions/date-time-functions/last_day.md)
 - [quarter](../sql-functions/date-time-functions/quarter.md)
 - [second](../sql-functions/date-time-functions/second.md)
 - [seconds_add](../sql-functions/date-time-functions/seconds_add.md)
@@ -214,7 +217,6 @@ StarRocks offers a rich set of functions to facilitate data queries and analysis
 - [time_slice](../sql-functions/date-time-functions/time_slice.md)
 - [time_to_sec](../sql-functions/date-time-functions/time_to_sec.md)
 - [timediff](../sql-functions/date-time-functions/timediff.md)
-- [date_diff](../sql-functions/date-time-functions/date_diff.md)
 - [timestamp](../sql-functions/date-time-functions/timestamp.md)
 - [timestampadd](../sql-functions/date-time-functions/timestampadd.md)
 - [timestampdiff](../sql-functions/date-time-functions/timestampdiff.md)
@@ -253,8 +255,6 @@ StarRocks offers a rich set of functions to facilitate data queries and analysis
 
 ## JSON functions
 
-- [Overview of JSON functions and operators](../sql-functions/json-functions/overview-of-json-functions-and-operators.md)
-- [JSON operators](../sql-functions/json-functions/json-operators.md)
 - [json_array](../sql-functions/json-functions/json-constructor-functions/json_array.md)
 - [json_object](../sql-functions/json-functions/json-constructor-functions/json_object.md)
 - [parse_json](../sql-functions/json-functions/json-constructor-functions/parse_json.md)

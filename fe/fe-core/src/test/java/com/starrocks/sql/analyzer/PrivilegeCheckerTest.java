@@ -58,6 +58,7 @@ import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.AnalyzeStatus;
@@ -87,6 +88,8 @@ public class PrivilegeCheckerTest {
 
     private static AuthorizationMgr authorizationManager;
 
+    private static ConnectContext connectContext;
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
@@ -113,7 +116,10 @@ public class PrivilegeCheckerTest {
         String createTblStmtStr3 = "create table db1.tbl2(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
                 +
                 "AGGREGATE KEY(k1, k2, k3, k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
-        starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
+
+        connectContext = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+        starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("db1");
         starRocksAssert.withDatabase("db2");
         starRocksAssert.withDatabase("db3");
@@ -448,6 +454,33 @@ public class PrivilegeCheckerTest {
         System.out.println(res.getResultRows());
         Assert.assertEquals(2, res.getResultRows().size());
         Assert.assertEquals("test_ex_catalog3", res.getResultRows().get(1).get(0));
+    }
+
+    @Test
+    public void testSelectCatalogTable() throws Exception {
+        ctxToTestUser();
+        try {
+            StmtExecutor stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "select * from hive0.tpch.region");
+            stmtExecutor.execute();
+        } catch (AccessDeniedException e) {
+            Assert.assertTrue(e.getMessage().contains("Access denied;"));
+        }
+
+        ctxToRoot();
+        StmtExecutor stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "set catalog hive0");
+        stmtExecutor.execute();
+        grantRevokeSqlAsRoot("grant SELECT on tpch.region to test");
+        ctxToTestUser();
+        try {
+            stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "select * from hive0.tpch.region");
+            stmtExecutor.execute();
+        } catch (AccessDeniedException e) {
+            Assert.assertFalse(e.getMessage().contains("Access denied;"));
+        }
+        ctxToRoot();
+        grantRevokeSqlAsRoot("revoke SELECT on tpch.region from test");
+        stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "set catalog default_catalog");
+        stmtExecutor.execute();
     }
 
     @Test

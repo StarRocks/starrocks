@@ -166,6 +166,14 @@ endif()
 include_directories(${Boost_INCLUDE_DIRS})
 message(STATUS ${Boost_LIBRARIES})
 
+add_subdirectory(${SRC_DIR}/thirdparty/libdeflate)
+include_directories(libdeflate)
+set(libdeflate_DIR ${BUILD_DIR}/src/thirdparty/libdeflate)
+message(STATUS "Using libdeflate Dir: ${libdeflate_DIR}")
+if(NOT TARGET libdeflate::libdeflate_static)
+    find_package(libdeflate CONFIG REQUIRED)
+endif()
+
 set(GPERFTOOLS_HOME "${THIRDPARTY_DIR}/gperftools")
 
 # Set all libraries
@@ -516,6 +524,8 @@ set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wall -Wno-sign-compare -Wno-unknown-p
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-strict-aliasing -fno-omit-frame-pointer")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -std=gnu++20 -D__STDC_FORMAT_MACROS")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-deprecated -Wno-vla -Wno-comment")
+# disable link delete(void*, long)
+set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -fno-sized-deallocation")
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unused-parameter -Wno-documentation -Wno-weak-vtables")
@@ -788,6 +798,7 @@ set(STARROCKS_DEPENDENCIES
     avro
     serdes
     fiu
+    libdeflate::libdeflate_static
     ${WL_END_GROUP}
 )
 
