@@ -293,7 +293,15 @@ void LakeServiceImpl::delete_tablet(::google::protobuf::RpcController* controlle
     }
 
     auto tablet_mgr = _env->lake_tablet_manager();
+    if (UNLIKELY(tablet_mgr == nullptr)) {
+        cntl->SetFailed("tablet manager is null");
+        return;
+    }
     auto thread_pool = _env->vacuum_thread_pool();
+    if (UNLIKELY(thread_pool == nullptr)) {
+        cntl->SetFailed("no vacuum thread pool");
+        return;
+    }
     auto latch = BThreadCountDownLatch(1);
     auto st = thread_pool->submit_func([&]() {
         lake::delete_tablets(tablet_mgr, *request, response);
@@ -325,6 +333,10 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
     }
 
     auto thread_pool = _env->vacuum_thread_pool();
+    if (UNLIKELY(thread_pool == nullptr)) {
+        cntl->SetFailed("no vacuum thread pool");
+        return;
+    }
     auto latch = BThreadCountDownLatch(1);
     auto task = [&]() {
         auto location = _env->lake_tablet_manager()->tablet_root_location(request->tablet_id());
@@ -366,6 +378,10 @@ void LakeServiceImpl::delete_data(::google::protobuf::RpcController* controller,
     }
 
     auto thread_pool = _env->vacuum_thread_pool();
+    if (UNLIKELY(thread_pool == nullptr)) {
+        cntl->SetFailed("no vacuum thread pool");
+        return;
+    }
     auto latch = BThreadCountDownLatch(request->tablet_ids_size());
     bthread::Mutex response_mtx;
     for (auto tablet_id : request->tablet_ids()) {

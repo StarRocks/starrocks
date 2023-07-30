@@ -796,8 +796,12 @@ StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, i
     };
 
     auto tp = ExecEnv::GetInstance()->vacuum_thread_pool();
-    auto st = tp->submit_func(std::move(clear_task));
-    LOG_IF(INFO, !st.ok()) << "Fail to submit clear task of txn " << txn_id << ", ignore this error";
+    if (LIKELY(tp != nullptr)) {
+        auto st = tp->submit_func(std::move(clear_task));
+        LOG_IF(INFO, !st.ok()) << "Fail to submit clear task of txn " << txn_id << ", ignore this error";
+    } else {
+        clear_task();
+    }
     return new_metadata;
 }
 
