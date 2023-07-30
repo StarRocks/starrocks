@@ -15,6 +15,7 @@
 
 package com.starrocks.connector.jdbc;
 
+import com.google.common.cache.CacheBuilder;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
@@ -34,6 +35,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class JDBCMetadata implements ConnectorMetadata {
 
@@ -42,6 +46,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     private Map<String, String> properties;
     private String catalogName;
     private JDBCSchemaResolver schemaResolver;
+    private static ConcurrentHashMap<JDBCTableName, Integer> tableIdCache = new ConcurrentHashMap();
 
     public JDBCMetadata(Map<String, String> properties, String catalogName) {
         this.properties = properties;
@@ -113,12 +118,33 @@ public class JDBCMetadata implements ConnectorMetadata {
             if (fullSchema.isEmpty()) {
                 return null;
             }
-            return schemaResolver.getTable(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(),
-                    tblName, fullSchema, dbName, catalogName, properties);
+            JDBCTableName tableKey = JDBCTableName.of(catalogName, dbName, tblName);
+            if (tableIdCache.containsKey(tableKey)) {
+                return schemaResolver.getTable(tableIdCache.get(tableKey),
+                        tblName, fullSchema, dbName, catalogName, properties);
+            } else {
+                Integer tableId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt();
+                tableIdCache.put(tableKey, tableId);
+                return schemaResolver.getTable(tableId, tblName, fullSchema, dbName, catalogName, properties);
+            }
         } catch (SQLException | DdlException e) {
             LOG.warn(e.getMessage());
             return null;
         }
+    }
+
+    private static CacheBuilder<Object, Object> newCacheBuilder(long expiresAfterWriteSec, long refreshSec, long maximumSize) {
+        CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
+        if (expiresAfterWriteSec >= 0) {
+            cacheBuilder.expireAfterWrite(expiresAfterWriteSec, SECONDS);
+        }
+
+        if (refreshSec > 0 && expiresAfterWriteSec > refreshSec) {
+            cacheBuilder.refreshAfterWrite(refreshSec, SECONDS);
+        }
+
+        cacheBuilder.maximumSize(maximumSize);
+        return cacheBuilder;
     }
 
 }
