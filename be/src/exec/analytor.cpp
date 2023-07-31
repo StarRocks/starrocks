@@ -516,6 +516,8 @@ Status Analytor::add_chunk(const ChunkPtr& chunk) {
 }
 
 void Analytor::_append_column(size_t chunk_size, Column* dst_column, ColumnPtr& src_column) {
+    DCHECK(!(src_column->is_constant() && dst_column->is_constant() && (!dst_column->empty()) &&
+             (!src_column->empty()) && (src_column->compare_at(0, 0, *dst_column, 1) != 0)));
     if (src_column->only_null()) {
         static_cast<void>(dst_column->append_nulls(chunk_size));
     } else if (src_column->is_constant() && !dst_column->is_constant()) {
@@ -523,10 +525,6 @@ void Analytor::_append_column(size_t chunk_size, Column* dst_column, ColumnPtr& 
         auto* const_column = down_cast<ConstColumn*>(src_column.get());
         const_column->data_column()->assign(chunk_size, 0);
         dst_column->append(*const_column->data_column(), 0, chunk_size);
-    } else if (src_column->is_constant() && dst_column->is_constant() && (!dst_column->empty()) &&
-               (!src_column->empty()) && (src_column->compare_at(0, 0, *dst_column, 1) != 0)) {
-        // i dont't think this will happen
-        DCHECK(0);
     } else {
         // most of case
         dst_column->append(*src_column, 0, chunk_size);
