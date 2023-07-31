@@ -14,13 +14,11 @@
 
 package com.starrocks.http;
 
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.warehouse.Cluster;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;

@@ -81,6 +81,7 @@ import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -433,6 +434,7 @@ public class RestoreJob extends AbstractJob {
      */
     private void checkAndPrepareMeta() {
         MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB.increase(1L);
+        WarehouseMetricMgr.increaseUnfinishedRestoreJobs(getCurrentWarehouse(), 1L);
         Database db = globalStateMgr.getDb(dbId);
         if (db == null) {
             status = new Status(ErrCode.NOT_FOUND, "database " + dbId + " does not exist");
@@ -1211,7 +1213,6 @@ public class RestoreJob extends AbstractJob {
             unfinishedSignatureToId.put(signature, beId);
         }
     }
-
     protected void sendDownloadTasks() {
         for (AgentTask task : batchTask.getAllTasks()) {
             AgentTaskQueue.addTask(task);
@@ -1262,6 +1263,7 @@ public class RestoreJob extends AbstractJob {
                 status = st;
             }
             MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB.increase(-1L);
+            WarehouseMetricMgr.increaseUnfinishedRestoreJobs(getCurrentWarehouse(), -1L);
             return;
         }
         LOG.info("waiting {} tablets to commit. {}", unfinishedSignatureToId.size(), this);
@@ -1427,6 +1429,7 @@ public class RestoreJob extends AbstractJob {
         status = new Status(ErrCode.COMMON_ERROR, "user cancelled, current state: " + state.name());
         cancelInternal(false);
         MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB.increase(-1L);
+        WarehouseMetricMgr.increaseUnfinishedRestoreJobs(getCurrentWarehouse(), -1L);
         return Status.OK;
     }
 
