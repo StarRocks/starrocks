@@ -70,11 +70,9 @@ public class HttpResultSender {
     public RowBatch sendQueryResult(Coordinator coord, ExecPlan execPlan) throws Exception {
         RowBatch batch;
         ChannelHandlerContext nettyChannel = context.getNettyChannel();
-        if (1 + 1 == 2) {
-            throw new Exception("ramdom");
-        }
         // if some data already sent to client, when exception occurs,we just close the channel
         context.setSendDate(true);
+        sendHeader(nettyChannel);
         // write connectId
         if (!context.get_disable_print_connection_id()) {
             nettyChannel.write(JsonSerializer.getConnectId(context.getConnectionId()));
@@ -117,8 +115,7 @@ public class HttpResultSender {
     }
 
     // BE already transferred results into json format, FE just need to Forward json objects to the client
-    private void writeResultBatch(TResultBatch resultBatch, ChannelHandlerContext channel, Coordinator coord)
-            throws Exception {
+    private void writeResultBatch(TResultBatch resultBatch, ChannelHandlerContext channel, Coordinator coord) {
         int rowsSize = resultBatch.getRowsSize();
         for (ByteBuffer row : resultBatch.getRows()) {
             // when channel is not writeable, sleep a while to balance read/write speed to avoid oom

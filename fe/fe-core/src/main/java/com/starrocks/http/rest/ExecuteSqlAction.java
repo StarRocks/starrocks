@@ -16,7 +16,7 @@ package com.starrocks.http.rest;
 
 /* Usage:
    eg:
-     curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:'
+     curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:'
      -d '{"query": "select * from duplicate_table_with_null order by k6;"}'
      --header "Content-Type: application/json"
 
@@ -49,7 +49,6 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.HttpConnectProcessor;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.http.UnauthorizedException;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
@@ -64,7 +63,6 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TResultSinkFormatType;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
@@ -79,16 +77,15 @@ import java.util.concurrent.ExecutorService;
 
 import static io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST;
 import static io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR;
+import static io.netty.handler.codec.http.HttpResponseStatus.SERVICE_UNAVAILABLE;
 
 public class ExecuteSqlAction extends RestBaseAction {
 
-    private static ExecutorService taskService = ThreadPoolManager
-            .newDaemonCacheThreadPool(Config.max_http_sql_service_task_threads_num, "starrocks-http-nio-pool", true);
-
     private static final AttributeKey<HttpConnectContext> HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY =
             AttributeKey.valueOf("httpContextKey");
-
     private static final Logger LOG = LogManager.getLogger(ExecuteSqlAction.class);
+    private static final ExecutorService TASKSERVICE = ThreadPoolManager
+            .newDaemonCacheThreadPool(Config.max_http_sql_service_task_threads_num, "starrocks-http-nio-pool", true);
 
     public ExecuteSqlAction(ActionController controller) {
         super(controller);
@@ -104,12 +101,7 @@ public class ExecuteSqlAction extends RestBaseAction {
 
     @Override
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
-        taskService.submit(new Runnable() {
-            @Override
-            public void run() {
-                realWork(request, response);
-            }
-        });
+        TASKSERVICE.submit(() -> realWork(request, response));
     }
 
     private void realWork(BaseRequest request, BaseResponse response) {
@@ -129,26 +121,26 @@ public class ExecuteSqlAction extends RestBaseAction {
 
         try {
             changeCatalogAndDB(catalogName, databaseName, context);
-            SqlRequest requestBody = validatePostBody(request.getContent(), context);
-            // set result format as json,
-            context.setResultSinkFormatType(TResultSinkFormatType.JSON);
-            checkSessionVariable(requestBody.sessionVariables, context);
-            // parse the sql here, for the convenience of verification of http request
-            parsedStmt = parse(requestBody.query, context.getSessionVariable());
-            context.setStatement(parsedStmt);
-
-            // only register connectContext once for one channel
-            if (!context.isInitialized()) {
-                registerContext(requestBody.query, context);
-                context.setInitialized(true);
-            }
-
-            // store context in current thread, Executor rely on this thread local variable
-            context.setThreadLocalInfo();
-
-            // process this request
-            HttpConnectProcessor connectProcessor = new HttpConnectProcessor(context);
             try {
+                SqlRequest requestBody = validatePostBody(request.getContent(), context);
+                // set result format as json,
+                context.setResultSinkFormatType(TResultSinkFormatType.JSON);
+                checkSessionVariable(requestBody.sessionVariables, context);
+                // parse the sql here, for the convenience of verification of http request
+                parsedStmt = parse(requestBody.query, context.getSessionVariable());
+                context.setStatement(parsedStmt);
+
+                // only register connectContext once for one channel
+                if (!context.isInitialized()) {
+                    registerContext(requestBody.query, context);
+                    context.setInitialized(true);
+                }
+
+                // store context in current thread, Executor rely on this thread local variable
+                context.setThreadLocalInfo();
+
+                // process this request
+                HttpConnectProcessor connectProcessor = new HttpConnectProcessor(context);
                 connectProcessor.processOnce();
             } catch (Exception e) {
                 // just for safe. most Exception is handled in execute(), and set error code in context
@@ -159,22 +151,15 @@ public class ExecuteSqlAction extends RestBaseAction {
             finalize(request, response, parsedStmt, context);
 
         } catch (StarRocksHttpException e) {
+            LOG.warn("fail to process url: {}", request.getRequest().uri(), e);
             RestBaseResult failResult = new RestBaseResult(e.getMessage());
-            response.getContent().append(failResult.toJsonString());
-            sendResult(request, response, HttpResponseStatus.valueOf(e.getCode().code()));
-        } catch (DdlException e) {
-            if (e instanceof UnauthorizedException) {
-                response.updateHeader(HttpHeaderNames.WWW_AUTHENTICATE.toString(), "Basic realm=\"\"");
-                writeResponse(request, response, HttpResponseStatus.UNAUTHORIZED);
-            } else {
-                writeResponse(request, response, HttpResponseStatus.NOT_FOUND);
-            }
+            response.getContent().append(failResult.toJson());
+            writeResponse(request, response, HttpResponseStatus.valueOf(e.getCode().code()));
         }
         // for other rest api, HttpServerHanler.channelReadComplete will flush the buffer
         // but for http sql, when channelReadComplete is invoked, query just sent to thread pool
         // so at the end of query processing, we have to flush explicitly
         request.getContext().flush();
-
     }
 
     private void changeCatalogAndDB(String catalogName, String databaseName, HttpConnectContext context)
@@ -196,7 +181,6 @@ public class ExecuteSqlAction extends RestBaseAction {
 
     private SqlRequest validatePostBody(String postContent, HttpConnectContext context) throws StarRocksHttpException {
         SqlRequest requestBody;
-        StatementBase parsedStmt;
         try {
             Type type = new TypeToken<SqlRequest>() {
             }.getType();
@@ -228,19 +212,19 @@ public class ExecuteSqlAction extends RestBaseAction {
 
         if (stmts.size() > 1) {
             throw new StarRocksHttpException(BAD_REQUEST,
-                    "/api/v2/<catalog_name>/<database_name>/query does not support execute multiple query");
+                    "http query does not support execute multiple query");
         }
 
         parsedStmt = stmts.get(0);
         if (!(parsedStmt instanceof QueryStatement
                 || parsedStmt instanceof ShowStmt || parsedStmt instanceof KillStmt)) {
             throw new StarRocksHttpException(BAD_REQUEST,
-                    "/api/v2/<catalog_name>/<database_name>/query only support SELECT, SHOW, EXPLAIN, DESC, KILL statement");
+                    "http query only support SELECT, SHOW, EXPLAIN, DESC, KILL statement");
         }
 
         if (((parsedStmt instanceof QueryStatement) && ((QueryStatement) parsedStmt).hasOutFileClause())) {
             throw new StarRocksHttpException(BAD_REQUEST,
-                    "/api/v2/<catalog_name>/<database_name>/query does not support a query with OUTFILE clause");
+                    "http query does not support a query with OUTFILE clause");
         }
 
         parsedStmt.setOrigStmt(new OriginStatement(sql));
@@ -257,7 +241,7 @@ public class ExecuteSqlAction extends RestBaseAction {
         // mark as registered
         boolean registered = connectScheduler.registerConnection(context);
         if (!registered) {
-            throw new StarRocksHttpException(HttpResponseStatus.SERVICE_UNAVAILABLE, "Reach limit of connections");
+            throw new StarRocksHttpException(SERVICE_UNAVAILABLE, "Reach limit of connections");
         }
         context.setStartTime();
         LogUtil.logConnectionInfoToAuditLogAndQueryQueue(context, null);
@@ -267,7 +251,9 @@ public class ExecuteSqlAction extends RestBaseAction {
     protected void handleChannelInactive(ChannelHandlerContext ctx) {
         LOG.info("Netty channel is closed");
         HttpConnectContext context = ctx.channel().attr(HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY).get();
-        context.getConnectScheduler().unregisterConnection(context);
+        if (context.isInitialized()) {
+            context.getConnectScheduler().unregisterConnection(context);
+        }
     }
 
     private void checkSessionVariable(Map<String, String> customVariable, HttpConnectContext context) {
@@ -287,12 +273,11 @@ public class ExecuteSqlAction extends RestBaseAction {
     // Currently finalize just send kill's result. But any other statement which only send state information can use finalize to send result
     private void finalize(BaseRequest request, BaseResponse response, StatementBase parsedStmt,
                           HttpConnectContext context)
-            throws StarRocksHttpException, DdlException {
+            throws StarRocksHttpException {
 
-        // need forwarding to leader
+        // if Fe can not read, just throw 503
         if (context.isForwardToLeader()) {
-            redirectToLeader(request, response);
-            return;
+            throw new StarRocksHttpException(SERVICE_UNAVAILABLE, "non-master FE can not read!");
         }
 
         // exception was caught in StmtExecutor and set Error info in QueryState, so just send status 500 with exception info
@@ -302,7 +287,7 @@ public class ExecuteSqlAction extends RestBaseAction {
                 context.getNettyChannel().close();
                 return;
             }
-            // send error message：500 {"exception":"error message"}
+            // send error message
             throw new StarRocksHttpException(INTERNAL_SERVER_ERROR, context.getState().getErrorMessage());
         }
 
