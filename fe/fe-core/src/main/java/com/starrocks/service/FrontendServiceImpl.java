@@ -90,11 +90,11 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
-import com.starrocks.load.pipe.FileListTableRepo;
 import com.starrocks.load.pipe.Pipe;
 import com.starrocks.load.pipe.PipeFileRecord;
 import com.starrocks.load.pipe.PipeId;
 import com.starrocks.load.pipe.PipeManager;
+import com.starrocks.load.pipe.filelist.RepoAccessor;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
@@ -545,7 +545,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TListPipeFilesResult result = new TListPipeFilesResult();
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
         Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
-        FileListTableRepo.RepoAccessor repo = FileListTableRepo.RepoAccessor.getInstance();
+        RepoAccessor repo = RepoAccessor.getInstance();
         List<PipeFileRecord> files = repo.listAllFiles();
         for (PipeFileRecord record : files) {
             TListPipeFilesInfo file = new TListPipeFilesInfo();

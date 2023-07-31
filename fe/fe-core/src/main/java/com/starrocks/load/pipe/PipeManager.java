@@ -100,6 +100,7 @@ public class PipeManager {
             repo.deletePipe(pipe);
         } catch (Throwable e) {
             LOG.error("drop pipe {} failed", pipe, e);
+            throw e;
         } finally {
             lock.writeLock().unlock();
         }
@@ -215,6 +216,16 @@ public class PipeManager {
             lock.writeLock().lock();
             pipeMap.remove(pipe.getPipeId());
             nameToId.remove(pipe.getDbAndName());
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    public void clear() {
+        try {
+            lock.writeLock().lock();
+            pipeMap.clear();
+            nameToId.clear();
         } finally {
             lock.writeLock().unlock();
         }

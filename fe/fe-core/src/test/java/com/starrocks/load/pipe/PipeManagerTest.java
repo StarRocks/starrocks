@@ -14,9 +14,14 @@
 
 package com.starrocks.load.pipe;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.UserException;
 import com.starrocks.fs.HdfsUtil;
+import com.starrocks.load.pipe.filelist.FileListRepo;
+import com.starrocks.load.pipe.filelist.FileListTableRepo;
+import com.starrocks.load.pipe.filelist.RepoAccessor;
+import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PipeOpEntry;
 import com.starrocks.qe.ConnectContext;
@@ -28,6 +33,8 @@ import com.starrocks.scheduler.SubmitResult;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.ExecuteEnv;
+import com.starrocks.service.FrontendServiceImpl;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
@@ -36,21 +43,32 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
-import com.starrocks.thrift.TBrokerFileStatus;
+import com.starrocks.thrift.TListPipeFilesParams;
+import com.starrocks.thrift.TListPipeFilesResult;
+import com.starrocks.thrift.TListPipesParams;
+import com.starrocks.thrift.TResultBatch;
+import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.Path;
+import org.apache.thrift.TException;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
+import org.mockito.Mockito;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 public class PipeManagerTest {
 
@@ -116,9 +134,12 @@ public class PipeManagerTest {
     @Test
     public void persistPipe() throws Exception {
         PipeManager pm = ctx.getGlobalStateMgr().getPipeManager();
+        pm.clear();
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+        long dbId = ctx.getGlobalStateMgr().getDb(PIPE_TEST_DB).getId();
+        pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
 
         // create pipe 1
         String sql = "create pipe p1 as insert into tbl select * from files('path'='fake://pipe', 'format'='parquet')";
@@ -137,7 +158,7 @@ public class PipeManagerTest {
         sql = "create pipe p2 as insert into tbl select * from files('path'='fake://pipe', 'format'='parquet')";
         CreatePipeStmt createStmt1 = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.createPipe(createStmt1);
-        sql = "alter pipe p1 pause";
+        sql = "alter pipe p1 suspend";
         AlterPipeStmt alterPipeStmt = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.alterPipe(alterPipeStmt);
         UtFrameUtils.PseudoImage image2 = new UtFrameUtils.PseudoImage();
@@ -186,15 +207,56 @@ public class PipeManagerTest {
             private int count = 0;
 
             @Mock
-            public void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses)
-                    throws UserException {
+            public List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc) throws UserException {
                 count++;
                 if (count <= errorCount) {
                     throw new UserException("network connection error");
                 } else {
-                    fileStatuses.add(new TBrokerFileStatus("file1", false, 1024, false));
+                    List<FileStatus> res = new ArrayList<>();
+                    res.add(new FileStatus(1024, false, 1, 1, 1, new Path("file1")));
+                    return res;
                 }
             }
+        };
+    }
+
+    private void mockRepoExecutor() {
+        new MockUp<RepoExecutor>() {
+            @Mock
+            public void executeDML(String sql) {
+            }
+
+            @Mock
+            public List<TResultBatch> executeDQL(String sql) {
+                return Lists.newArrayList();
+            }
+
+            @Mock
+            public void executeDDL(String sql) {
+            }
+        };
+
+        new MockUp<FileListTableRepo>() {
+            private List<PipeFileRecord> records = new ArrayList<>();
+
+            @Mock
+            public void updateFileState(List<PipeFileRecord> files, FileListRepo.PipeFileState state) {
+                for (PipeFileRecord file : files) {
+                    records.stream().filter(x -> x.equals(file)).findFirst().get().loadState = state;
+                }
+            }
+
+            @Mock
+            public List<PipeFileRecord> listUnloadedFiles() {
+                return records.stream().filter(x -> x.getLoadState().equals(FileListRepo.PipeFileState.UNLOADED))
+                        .collect(Collectors.toList());
+            }
+
+            @Mock
+            public void addFiles(List<PipeFileRecord> records) {
+                this.records.addAll(records);
+            }
+
         };
     }
 
@@ -243,6 +305,7 @@ public class PipeManagerTest {
     @Ignore("flaky")
     @Test
     public void executeError() throws Exception {
+        mockRepoExecutor();
         final String pipeName = "p3";
         String sql = "create pipe p3 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         createPipe(sql);
@@ -313,6 +376,7 @@ public class PipeManagerTest {
 
     @Test
     public void executeAutoIngest() throws Exception {
+        mockRepoExecutor();
         mockTaskExecution(Constants.TaskRunState.SUCCESS);
         // auto_ingest=false
         String pipeP3 = "p3";
@@ -325,7 +389,11 @@ public class PipeManagerTest {
         pipe.schedule();
         pipe.schedule();
         pipe.poll();
+        // schedule task
         pipe.schedule();
+        // finalize task
+        pipe.schedule();
+        // trigger eos
         pipe.schedule();
         Assert.assertTrue(pipe.getPipeSource().eos());
         Assert.assertEquals(Pipe.State.FINISHED, pipe.getState());
@@ -347,7 +415,10 @@ public class PipeManagerTest {
 
     @Test
     public void pipeCRUD() throws Exception {
+        mockRepoExecutor();
+
         PipeManager pm = ctx.getGlobalStateMgr().getPipeManager();
+        pm.clear();
         PipeName name = new PipeName(PIPE_TEST_DB, "p_crud");
 
         // create
@@ -368,7 +439,7 @@ public class PipeManagerTest {
         pm.createPipe(createStmt);
 
         // pause
-        sql = "alter pipe p_crud pause";
+        sql = "alter pipe p_crud suspend";
         AlterPipeStmt pauseStmt = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.alterPipe(pauseStmt);
         pm.alterPipe(pauseStmt);
@@ -429,10 +500,10 @@ public class PipeManagerTest {
         ShowResultSet result = showExecutor.execute();
         Assert.assertEquals(
                 Arrays.asList("show_1", "pipe_test_db.tbl1", "RUNNING", "0", "0", "0"),
-                result.getResultRows().get(0).subList(2, result.numColumns()));
+                result.getResultRows().get(0).subList(2, result.numColumns() - 1));
         Assert.assertEquals(
                 Arrays.asList("show_2", "pipe_test_db.tbl1", "RUNNING", "0", "0", "0"),
-                result.getResultRows().get(1).subList(2, result.numColumns()));
+                result.getResultRows().get(1).subList(2, result.numColumns() - 1));
 
         // desc
         sql = "desc pipe show_1";
@@ -444,6 +515,69 @@ public class PipeManagerTest {
                         "insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')"),
                 result.getResultRows().get(0).subList(2, result.numColumns())
         );
+    }
+
+    @Test
+    public void testListPipes() throws Exception {
+        mockRepoExecutor();
+        ExecuteEnv env = Mockito.mock(ExecuteEnv.class);
+        FrontendServiceImpl impl = new FrontendServiceImpl(env);
+        TListPipesParams params = new TListPipesParams();
+
+        // without identity
+        Assert.assertThrows(TException.class, () -> impl.listPipes(params));
+        TUserIdentity identity = new TUserIdentity();
+        identity.setUsername("root");
+        params.setUser_ident(identity);
+
+        // normal
+        PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
+        String createSql =
+                "create pipe list_p1 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
+        CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
+        pm.createPipe(createStmt);
+
+        Assert.assertFalse(impl.listPipes(params).pipes.isEmpty());
+
+        String dropSql = "drop pipe list_p1";
+        DropPipeStmt dropPipeStmt = (DropPipeStmt) UtFrameUtils.parseStmtWithNewParser(dropSql, ctx);
+        pm.dropPipe(dropPipeStmt);
+    }
+
+    @Test
+    public void testListPipeFiles() throws Exception {
+        ExecuteEnv env = Mockito.mock(ExecuteEnv.class);
+        FrontendServiceImpl impl = new FrontendServiceImpl(env);
+
+        PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
+        String createSql =
+                "create pipe list_p2 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
+        CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
+        pm.createPipe(createStmt);
+
+        List<PipeFileRecord> records = Arrays.asList(
+                new PipeFileRecord(1, "file1", "version1", 1024),
+                new PipeFileRecord(1, "file2", "version1", 1024),
+                new PipeFileRecord(1, "file3", "version1", 1024)
+        );
+        new Expectations(RepoAccessor.getInstance()) {
+            {
+                RepoAccessor.getInstance().listAllFiles();
+                result = records;
+            }
+        };
+
+        TListPipeFilesParams params = new TListPipeFilesParams();
+
+        // without identify
+        Assert.assertThrows(TException.class, () -> impl.listPipeFiles(params));
+
+        // normal
+        TUserIdentity identity = new TUserIdentity();
+        identity.setUsername("root");
+        params.setUser_ident(identity);
+        TListPipeFilesResult result = impl.listPipeFiles(params);
+        Assert.assertFalse(result.pipe_files.isEmpty());
     }
 
 }

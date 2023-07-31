@@ -19,6 +19,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.thrift.TResultBatch;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -54,6 +55,22 @@ public class PipeFileRecord {
     public LocalDateTime stagedTime;
     public LocalDateTime startLoadTime;
     public LocalDateTime finishLoadTime;
+
+    public PipeFileRecord() {
+    }
+
+    public PipeFileRecord(long pipeId, String name, String version, long fileSize) {
+        this.pipeId = pipeId;
+        this.fileName = name;
+        this.fileVersion = version;
+        this.fileSize = fileSize;
+
+        this.loadState = FileListRepo.PipeFileState.UNLOADED;
+        this.lastModified = LocalDateTime.now();
+        this.stagedTime = LocalDateTime.now();
+        this.startLoadTime = LocalDateTime.now();
+        this.finishLoadTime = LocalDateTime.now();
+    }
 
     public static PipeFileRecord fromHdfsFile(FileStatus file) {
         PipeFileRecord record = new PipeFileRecord();

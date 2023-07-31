@@ -12,13 +12,15 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-package com.starrocks.load.pipe;
+package com.starrocks.load.pipe.filelist;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.load.pipe.PipeFileRecord;
+import com.starrocks.load.pipe.PipeId;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -118,7 +120,7 @@ public class FileListRepoTest {
         List<PipeFileRecord> records =
                 Arrays.asList(PipeFileRecord.fromJson(json), PipeFileRecord.fromJson(json));
         FileListRepo.PipeFileState state = FileListRepo.PipeFileState.LOADING;
-        String sql = FileListTableRepo.RepoAccessor.getInstance().buildSqlStartLoad(records, state);
+        String sql = RepoAccessor.getInstance().buildSqlStartLoad(records, state);
         Assert.assertEquals("UPDATE _statistics_.pipe_file_list " +
                 "SET state = 'LOADING', start_load = now() " +
                 "WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '123asdf') " +
@@ -126,14 +128,14 @@ public class FileListRepoTest {
 
         // finish load
         state = FileListRepo.PipeFileState.LOADED;
-        sql = FileListTableRepo.RepoAccessor.getInstance().buildSqlFinishLoad(records, state);
+        sql = RepoAccessor.getInstance().buildSqlFinishLoad(records, state);
         Assert.assertEquals("UPDATE _statistics_.pipe_file_list " +
                 "SET state = 'LOADED', finish_load = now() " +
                 "WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '123asdf') " +
                 "OR (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '123asdf')", sql);
 
         // add files
-        sql = FileListTableRepo.RepoAccessor.getInstance().buildSqlAddFiles(records);
+        sql = RepoAccessor.getInstance().buildSqlAddFiles(records);
         Assert.assertEquals("INSERT INTO _statistics_.pipe_file_list VALUES " +
                 "(1, 'a.parquet', '123asdf', 1024, 'UNLOADED', '2023-07-01 01:01:01', " +
                 "'2023-07-01 01:01:01', '2023-07-01 01:01:01', '2023-07-01 01:01:01')," +
@@ -141,17 +143,17 @@ public class FileListRepoTest {
                 "'2023-07-01 01:01:01', '2023-07-01 01:01:01', '2023-07-01 01:01:01')", sql);
 
         // delete pipe
-        sql = FileListTableRepo.RepoAccessor.getInstance().buildDeleteByPipe(1);
+        sql = RepoAccessor.getInstance().buildDeleteByPipe(1);
         Assert.assertEquals("DELETE FROM _statistics_.pipe_file_list WHERE pipe_id = 1", sql);
 
         // list unloaded files
-        sql = FileListTableRepo.RepoAccessor.getInstance().buildListUnloadedFile(1);
+        sql = RepoAccessor.getInstance().buildListUnloadedFile(1);
         Assert.assertEquals("SELECT pipe_id, file_name, file_version, file_size, state, last_modified, " +
                 "staged_time, start_load, finish_load FROM _statistics_.pipe_file_list " +
                 "WHERE pipe_id = 1 AND state = 'UNLOADED'", sql);
 
         // select staged
-        sql = FileListTableRepo.RepoAccessor.getInstance().buildSelectStagedFiles(records);
+        sql = RepoAccessor.getInstance().buildSelectStagedFiles(records);
         Assert.assertEquals("SELECT pipe_id, file_name, file_version, file_size, state, last_modified, " +
                         "staged_time, start_load, finish_load FROM _statistics_.pipe_file_list " +
                         "WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '123asdf') " +
@@ -160,7 +162,7 @@ public class FileListRepoTest {
     }
 
     private void mockExecutor() {
-        new MockUp<FileListTableRepo.RepoExecutor>() {
+        new MockUp<RepoExecutor>() {
             private boolean ddlExecuted = false;
 
             @Mock
@@ -185,17 +187,17 @@ public class FileListRepoTest {
     @Test
     public void testCreator() throws RuntimeException {
         mockExecutor();
-        new MockUp<FileListTableRepo.RepoCreator>() {
+        new MockUp<RepoCreator>() {
             @Mock
             public boolean checkDatabaseExists() {
                 return true;
             }
         };
-        FileListTableRepo.RepoExecutor executor = FileListTableRepo.RepoExecutor.getInstance();
-        FileListTableRepo.RepoCreator creator = FileListTableRepo.RepoCreator.getInstance();
+        RepoExecutor executor = RepoExecutor.getInstance();
+        RepoCreator creator = RepoCreator.getInstance();
 
         // failed for the first time
-        new MockUp<FileListTableRepo.RepoExecutor>() {
+        new MockUp<RepoExecutor>() {
             @Mock
             public void executeDDL(String sql) {
                 throw new RuntimeException("ddl failed");
@@ -208,7 +210,7 @@ public class FileListRepoTest {
 
         // succeed
         // failed for the first time
-        new MockUp<FileListTableRepo.RepoExecutor>() {
+        new MockUp<RepoExecutor>() {
             @Mock
             public void executeDDL(String sql) {
             }
@@ -223,8 +225,8 @@ public class FileListRepoTest {
     public void testRepo() {
         FileListTableRepo repo = new FileListTableRepo();
         repo.setPipeId(new PipeId(1, 1));
-        FileListTableRepo.RepoAccessor accessor = FileListTableRepo.RepoAccessor.getInstance();
-        FileListTableRepo.RepoExecutor executor = FileListTableRepo.RepoExecutor.getInstance();
+        RepoAccessor accessor = RepoAccessor.getInstance();
+        RepoExecutor executor = RepoExecutor.getInstance();
         new Expectations(executor) {
             {
                 executor.executeDQL(anyString);
@@ -316,7 +318,7 @@ public class FileListRepoTest {
             }
         };
 
-        FileListTableRepo.RepoExecutor executor = FileListTableRepo.RepoExecutor.getInstance();
+        RepoExecutor executor = RepoExecutor.getInstance();
 
         Assert.assertTrue(executor.executeDQL("select now()").isEmpty());
 
