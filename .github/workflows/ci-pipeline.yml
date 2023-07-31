@@ -37,11 +37,26 @@ jobs:
       - uses: dorny/paths-filter@v2
         id: changes
         with:
+<<<<<<< HEAD
           filters: |
             doc:
             - 'docs/**'
       - name: DOC CHECK INFO
         id: doc-changes-info
+=======
+          name: pr_num
+          path: ./pr_num.txt
+          retention-days: 3
+
+      - name: Upload the PR HEAD REF
+        uses: actions/upload-artifact@v2
+        with:
+          name: head_sha
+          path: ./head_sha.txt
+          retention-days: 3
+
+      - name: clean
+>>>>>>> 411ee7a219 ([Tool] CI Artifacts retention 3days (#28277))
         run: |
           echo "doc=${{ steps.changes.outputs.doc }}" >> $GITHUB_OUTPUT
 
@@ -330,6 +345,17 @@ jobs:
       - name: build result
         run: |
           echo ${{ steps.run_build.outputs.OUTPUT_TAR }}
+<<<<<<< HEAD
+=======
+          echo ${{ steps.run_build.outputs.BASE_VERSION }} > ./base_version.txt
+
+      - name: Upload the Base Version
+        uses: actions/upload-artifact@v2
+        with:
+          name: base_version
+          path: ./base_version.txt
+          retention-days: 3
+>>>>>>> 411ee7a219 ([Tool] CI Artifacts retention 3days (#28277))
 
       - name: clean ECI
         if: always()

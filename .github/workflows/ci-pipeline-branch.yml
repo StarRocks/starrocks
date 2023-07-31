@@ -39,13 +39,18 @@ jobs:
         with:
           name: pr_num
           path: ./pr_num.txt
+<<<<<<< HEAD
           retention-days: 1
+=======
+          retention-days: 3
+
+>>>>>>> 411ee7a219 ([Tool] CI Artifacts retention 3days (#28277))
       - name: Upload the PR HEAD REF
         uses: actions/upload-artifact@v2
         with:
           name: head_sha
           path: ./head_sha.txt
-          retention-days: 1
+          retention-days: 3
 
   doc-checker:
     runs-on: ubuntu-latest
