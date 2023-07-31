@@ -1474,4 +1474,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             }
         }
     }
+
+    public String inspectMeta() {
+        return GsonUtils.GSON.toJson(this);
+    }
 }
