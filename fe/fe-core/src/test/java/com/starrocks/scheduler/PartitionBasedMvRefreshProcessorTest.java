@@ -136,8 +136,6 @@ public class PartitionBasedMvRefreshProcessorTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-<<<<<<< HEAD
-=======
                 .withTable("CREATE TABLE test.tbl5\n" +
                         "(\n" +
                         "    dt date,\n" +
@@ -177,7 +175,6 @@ public class PartitionBasedMvRefreshProcessorTest {
                         "refresh manual\n" +
                         "properties('replication_num' = '1')\n" +
                         "as select dt, -1 as k2 from tbl5 where k2 is null union all select dt, k2 from tbl5;")
->>>>>>> 42cf9f7354 ([BugFix] fix priority of partition refresh  (#28066))
                 .withMaterializedView("create materialized view test.mv1\n" +
                         "partition by date_trunc('month',k1) \n" +
                         "distributed by hash(k2) buckets 10\n" +
