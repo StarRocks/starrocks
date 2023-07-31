@@ -254,7 +254,8 @@ public class FileListRepoTest {
         new Expectations(executor) {
             {
                 executor.executeDML(
-                        "INSERT INTO _statistics_.pipe_file_list VALUES (1, 'a.parquet', '1', 0, 'UNLOADED', NULL, NULL, NULL, NULL)");
+                        "INSERT INTO _statistics_.pipe_file_list VALUES " +
+                                "(1, 'a.parquet', '1', 0, 'UNLOADED', NULL, NULL, NULL, NULL)");
                 result = Lists.newArrayList();
             }
         };
@@ -264,7 +265,9 @@ public class FileListRepoTest {
         new Expectations(executor) {
             {
                 executor.executeDML(
-                        "UPDATE _statistics_.pipe_file_list SET state = 'LOADING', start_load = now() WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '1')");
+                        "UPDATE _statistics_.pipe_file_list " +
+                                "SET state = 'LOADING', start_load = now() " +
+                                "WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '1')");
                 result = Lists.newArrayList();
             }
         };
@@ -272,7 +275,9 @@ public class FileListRepoTest {
         new Expectations(executor) {
             {
                 executor.executeDML(
-                        "UPDATE _statistics_.pipe_file_list SET state = 'LOADED', finish_load = now() WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '1')");
+                        "UPDATE _statistics_.pipe_file_list " +
+                                "SET state = 'LOADED', finish_load = now() " +
+                                "WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '1')");
                 result = Lists.newArrayList();
             }
         };
@@ -280,7 +285,9 @@ public class FileListRepoTest {
         new Expectations(executor) {
             {
                 executor.executeDML(
-                        "UPDATE _statistics_.pipe_file_list SET state = 'ERROR' WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '1')");
+                        "UPDATE _statistics_.pipe_file_list " +
+                                "SET state = 'ERROR' " +
+                                "WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '1')");
                 result = Lists.newArrayList();
             }
         };
