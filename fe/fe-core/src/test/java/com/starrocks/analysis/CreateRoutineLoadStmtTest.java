@@ -581,7 +581,7 @@ public class CreateRoutineLoadStmtTest {
                 + ");";
         ConnectContext ctx = starRocksAssert.getCtx();
         CreateRoutineLoadStmt stmt = (CreateRoutineLoadStmt) com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
-        Assert.assertEquals("CREATE ROUTINE LOAD null.null ON table1PROPERTIES ( \"desired_concurrent_number\" = \"3\", \"timezone\" = \"Asia/Shanghai\", \"strict_mode\" = \"false\", \"max_batch_interval\" = \"20\" ) " +
+        Assert.assertEquals("CREATE ROUTINE LOAD testdb.routine_name ON table1PROPERTIES ( \"desired_concurrent_number\" = \"3\", \"timezone\" = \"Asia/Shanghai\", \"strict_mode\" = \"false\", \"max_batch_interval\" = \"20\" ) " +
         "FROM KAFKA ( \"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\", \"kafka_topic\" = \"topictest\", \"confluent.schema.registry.url\" = \"***\" )", AstToStringBuilder.toString(stmt));
     }
 
