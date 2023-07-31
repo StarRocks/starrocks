@@ -235,6 +235,8 @@ public:
 
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
 
+    ThreadPool* vacuum_thread_pool();
+
 private:
     Status _init(const std::vector<StorePath>& store_paths, bool as_cn);
     void _stop();
@@ -306,124 +308,6 @@ private:
     std::shared_ptr<MemTracker> _consistency_mem_tracker;
 
     std::vector<std::shared_ptr<MemTracker>> _mem_trackers;
-<<<<<<< HEAD
-=======
-};
-
-// Execution environment for queries/plan fragments.
-// Contains all required global structures, and handles to
-// singleton services. Clients must call StartServices exactly
-// once to properly initialise service state.
-class ExecEnv {
-public:
-    // Initial exec environment. must call this to init all
-    Status init(const std::vector<StorePath>& store_paths, bool as_cn = false);
-    void stop();
-    void destroy();
-    void wait_for_finish();
-
-    /// Returns the first created exec env instance. In a normal starrocks, this is
-    /// the only instance. In test setups with multiple ExecEnv's per process,
-    /// we return the most recently created instance.
-    static ExecEnv* GetInstance() {
-        static ExecEnv s_exec_env;
-        return &s_exec_env;
-    }
-
-    // only used for test
-    ExecEnv() = default;
-
-    // Empty destructor because the compiler-generated one requires full
-    // declarations for classes in scoped_ptrs.
-    ~ExecEnv() = default;
-
-    std::string token() const;
-    ExternalScanContextMgr* external_scan_context_mgr() { return _external_scan_context_mgr; }
-    MetricRegistry* metrics() const { return _metrics; }
-    DataStreamMgr* stream_mgr() { return _stream_mgr; }
-    ResultBufferMgr* result_mgr() { return _result_mgr; }
-    ResultQueueMgr* result_queue_mgr() { return _result_queue_mgr; }
-    ClientCache<BackendServiceClient>* client_cache() { return _backend_client_cache; }
-    ClientCache<FrontendServiceClient>* frontend_client_cache() { return _frontend_client_cache; }
-    ClientCache<TFileBrokerServiceClient>* broker_client_cache() { return _broker_client_cache; }
-
-    // using template to simplify client cache management
-    template <typename T>
-    ClientCache<T>* get_client_cache();
-
-    PriorityThreadPool* thread_pool() { return _thread_pool; }
-    workgroup::ScanExecutor* scan_executor() { return _scan_executor; }
-    workgroup::ScanExecutor* connector_scan_executor() { return _connector_scan_executor; }
-
-    PriorityThreadPool* udf_call_pool() { return _udf_call_pool; }
-    PriorityThreadPool* pipeline_prepare_pool() { return _pipeline_prepare_pool; }
-    PriorityThreadPool* pipeline_sink_io_pool() { return _pipeline_sink_io_pool; }
-    PriorityThreadPool* query_rpc_pool() { return _query_rpc_pool; }
-    ThreadPool* load_rpc_pool() { return _load_rpc_pool.get(); }
-    FragmentMgr* fragment_mgr() { return _fragment_mgr; }
-    starrocks::pipeline::DriverExecutor* wg_driver_executor() { return _wg_driver_executor; }
-    BaseLoadPathMgr* load_path_mgr() { return _load_path_mgr; }
-    BfdParser* bfd_parser() const { return _bfd_parser; }
-    BrokerMgr* broker_mgr() const { return _broker_mgr; }
-    BrpcStubCache* brpc_stub_cache() const { return _brpc_stub_cache; }
-    LoadChannelMgr* load_channel_mgr() { return _load_channel_mgr; }
-    LoadStreamMgr* load_stream_mgr() { return _load_stream_mgr; }
-    SmallFileMgr* small_file_mgr() { return _small_file_mgr; }
-    StreamContextMgr* stream_context_mgr() { return _stream_context_mgr; }
-    TransactionMgr* transaction_mgr() { return _transaction_mgr; }
-
-    const std::vector<StorePath>& store_paths() const { return _store_paths; }
-
-    StreamLoadExecutor* stream_load_executor() { return _stream_load_executor; }
-    RoutineLoadTaskExecutor* routine_load_task_executor() { return _routine_load_task_executor; }
-    HeartbeatFlags* heartbeat_flags() { return _heartbeat_flags; }
-
-    ThreadPool* automatic_partition_pool() { return _automatic_partition_pool.get(); }
-
-    RuntimeFilterWorker* runtime_filter_worker() { return _runtime_filter_worker; }
-
-    RuntimeFilterCache* runtime_filter_cache() { return _runtime_filter_cache; }
-
-    ProfileReportWorker* profile_report_worker() { return _profile_report_worker; }
-
-    void add_rf_event(const RfTracePoint& pt);
-
-    pipeline::QueryContextManager* query_context_mgr() { return _query_context_mgr; }
-
-    pipeline::DriverLimiter* driver_limiter() { return _driver_limiter; }
-
-    int64_t max_executor_threads() const { return _max_executor_threads; }
-
-    int32_t calc_pipeline_dop(int32_t pipeline_dop) const;
-
-    lake::TabletManager* lake_tablet_manager() const { return _lake_tablet_manager; }
-
-    lake::LocationProvider* lake_location_provider() const { return _lake_location_provider; }
-
-    lake::UpdateManager* lake_update_manager() const { return _lake_update_manager; }
-
-    AgentServer* agent_server() const { return _agent_server; }
-
-    query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
-
-    spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
-
-    ThreadPool* vacuum_thread_pool();
-
-private:
-    void _wait_for_fragments_finish();
-
-    std::vector<StorePath> _store_paths;
-    // Leave protected so that subclasses can override
-    ExternalScanContextMgr* _external_scan_context_mgr = nullptr;
-    MetricRegistry* _metrics = nullptr;
-    DataStreamMgr* _stream_mgr = nullptr;
-    ResultBufferMgr* _result_mgr = nullptr;
-    ResultQueueMgr* _result_queue_mgr = nullptr;
-    ClientCache<BackendServiceClient>* _backend_client_cache = nullptr;
-    ClientCache<FrontendServiceClient>* _frontend_client_cache = nullptr;
-    ClientCache<TFileBrokerServiceClient>* _broker_client_cache = nullptr;
->>>>>>> 6f79b7fbcb ([BugFix] Fix BE crashed in shared_data mode (#28245))
 
     PriorityThreadPool* _thread_pool = nullptr;
 
