@@ -902,11 +902,11 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(years_diffImpl, l, r) {
     int year = (year1 - year2);
 
     if (year >= 0) {
-        year -= (month1 * 100 + day1) * 1000000L + (hour1 * 10000 + minute1 * 100 + second1) <
-                (month2 * 100 + day2) * 1000000L + (hour2 * 10000 + minute2 * 100 + second2);
+        year -= ((month1 * 100 + day1) * 1000000L + (hour1 * 10000 + minute1 * 100 + second1) <
+                (month2 * 100 + day2) * 1000000L + (hour2 * 10000 + minute2 * 100 + second2));
     } else {
-        year += (month1 * 100 + day1) * 1000000L + (hour1 * 10000 + minute1 * 100 + second1) >
-                (month2 * 100 + day2) * 1000000L + (hour2 * 10000 + minute2 * 100 + second2);
+        year += ((month1 * 100 + day1) * 1000000L + (hour1 * 10000 + minute1 * 100 + second1) >
+                (month2 * 100 + day2) * 1000000L + (hour2 * 10000 + minute2 * 100 + second2));
     }
     return year;
 }
@@ -1042,12 +1042,6 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(milliseconds_diffImpl, l, r) {
     return l.diff_microsecond(r) / USECS_PER_MILLIS;
 }
 DEFINE_TIME_BINARY_FN(milliseconds_diff, TYPE_DATETIME, TYPE_DATETIME, TYPE_BIGINT);
-
-// microseconds_diff
-DEFINE_BINARY_FUNCTION_WITH_IMPL(microseconds_diffImpl, l, r) {
-    return l.diff_microsecond(r);
-}
-DEFINE_TIME_BINARY_FN(microseconds_diff, TYPE_DATETIME, TYPE_DATETIME, TYPE_BIGINT);
 
 /*
  * definition for to_unix operators(SQL TYPE: DATETIME)

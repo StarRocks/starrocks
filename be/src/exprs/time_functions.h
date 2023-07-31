@@ -518,8 +518,6 @@ public:
 
     DEFINE_VECTORIZED_FN(milliseconds_diff);
 
-    DEFINE_VECTORIZED_FN(microseconds_diff);
-
     /**
      * DateValue from number of days.
      * @param context
