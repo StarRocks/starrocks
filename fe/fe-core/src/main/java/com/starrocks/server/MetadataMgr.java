@@ -217,6 +217,10 @@ public class MetadataMgr {
         });
     }
 
+    public Optional<Table> getTable(TableName tableName) {
+        return Optional.ofNullable(getTable(tableName.getCatalog(), tableName.getDb(), tableName.getTbl()));
+    }
+
     public Table getTable(String catalogName, String dbName, String tblName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         Table connectorTable = connectorMetadata.map(metadata -> metadata.getTable(dbName, tblName)).orElse(null);
