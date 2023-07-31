@@ -1084,4 +1084,13 @@ public class AnalyzerUtils {
         return queryStatement.getQueryRelation().accept(slotRefResolver, null);
     }
 
+    public static boolean containsIgnoreCase(List<String> list, String soughtFor) {
+        for (String current : list) {
+            if (current.equalsIgnoreCase(soughtFor)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 }
