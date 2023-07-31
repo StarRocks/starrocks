@@ -110,77 +110,10 @@ public class MetadataMgr {
         return ImmutableList.copyOf(tableNames.build());
     }
 
-<<<<<<< HEAD
-=======
-    public boolean createTable(CreateTableStmt stmt) throws DdlException {
-        String catalogName = stmt.getCatalogName();
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-
-        if (connectorMetadata.isPresent()) {
-            if (!CatalogMgr.isInternalCatalog(catalogName)) {
-                String dbName = stmt.getDbName();
-                String tableName = stmt.getTableName();
-                if (getDb(catalogName, dbName) == null) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-                }
-
-                if (listTableNames(catalogName, dbName).contains(tableName)) {
-                    if (stmt.isSetIfNotExists()) {
-                        LOG.info("create table[{}] which already exists", tableName);
-                        return false;
-                    } else {
-                        ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
-                    }
-                }
-            }
-            return connectorMetadata.get().createTable(stmt);
-        } else {
-            throw new  DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
-        }
-    }
-
-    public void dropTable(String catalogName, String dbName, String tblName) {
-        TableName tableName = new TableName(catalogName, dbName, tblName);
-        DropTableStmt dropTableStmt = new DropTableStmt(false, tableName, false);
-        dropTable(dropTableStmt);
-    }
-
-    public void dropTable(DropTableStmt stmt) {
-        String catalogName = stmt.getCatalogName();
-        String dbName = stmt.getDbName();
-        String tableName = stmt.getTableName();
-
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        connectorMetadata.ifPresent(metadata -> {
-            try {
-                metadata.dropTable(stmt);
-            } catch (DdlException e) {
-                LOG.error("Failed to drop table {}.{}.{}", catalogName, dbName, tableName, e);
-                throw new StarRocksConnectorException("Failed to drop table {}.{}.{}", catalogName, dbName, tableName);
-            }
-        });
-    }
-
     public Optional<Table> getTable(TableName tableName) {
         return Optional.ofNullable(getTable(tableName.getCatalog(), tableName.getDb(), tableName.getTbl()));
     }
 
-    public Table getTable(String catalogName, String dbName, String tblName) {
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        Table connectorTable = connectorMetadata.map(metadata -> metadata.getTable(dbName, tblName)).orElse(null);
-        if (connectorTable != null) {
-            // Load meta information from ConnectorTblMetaInfoMgr for each external table.
-            connectorTblMetaInfoMgr.setTableInfoForConnectorTable(catalogName, dbName, connectorTable);
-        }
-        return connectorTable;
-    }
-
-    public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String catalogName, String dbName, String tblName) {
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        return connectorMetadata.map(metadata -> metadata.getMaterializedViewIndex(dbName, tblName)).orElse(null);
-    }
-
->>>>>>> 9eea14e87b ([Feature] support meta functions (#28094))
     public List<String> listPartitionNames(String catalogName, String dbName, String tableName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<String> partitionNames = ImmutableSet.builder();
