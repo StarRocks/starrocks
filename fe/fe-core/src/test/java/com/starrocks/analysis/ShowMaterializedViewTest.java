@@ -21,9 +21,6 @@
 
 package com.starrocks.analysis;
 
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -31,11 +28,8 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.common.util.UUIDUtil;
->>>>>>> 42cf9f7354 ([BugFix] fix priority of partition refresh  (#28066))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.Task;
@@ -47,29 +41,20 @@ import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
-<<<<<<< HEAD
-import com.starrocks.sql.ast.ShowMaterializedViewStmt;
-=======
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
-import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
+import com.starrocks.sql.ast.ShowMaterializedViewStmt;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
->>>>>>> 42cf9f7354 ([BugFix] fix priority of partition refresh  (#28066))
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.commons.collections.MapUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-<<<<<<< HEAD
-=======
-import org.junit.platform.commons.util.Preconditions;
 
 import java.util.HashMap;
 import java.util.List;
->>>>>>> 42cf9f7354 ([BugFix] fix priority of partition refresh  (#28066))
 
 public class ShowMaterializedViewTest {
 
@@ -220,21 +205,5 @@ public class ShowMaterializedViewTest {
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
 
-        // without db name
-        Assert.assertFalse(tm.showTaskRunStatus(null).isEmpty());
-        Assert.assertFalse(tm.showTasks(null).isEmpty());
-        Assert.assertFalse(tm.showMVLastRefreshTaskRunStatus(null).isEmpty());
-
-        // specific db
-        String dbName = "test";
-        Assert.assertFalse(tm.showTaskRunStatus(dbName).isEmpty());
-        Assert.assertFalse(tm.showTasks(dbName).isEmpty());
-        Assert.assertFalse(tm.showMVLastRefreshTaskRunStatus(dbName).isEmpty());
-
-        long taskId = tm.getTask(TaskBuilder.getMvTaskName(materializedView.getId())).getId();
-        Assert.assertNotNull(tm.getTaskRunManager().getRunnableTaskRun(taskId));
-        while (MapUtils.isNotEmpty(trm.getRunningTaskRunMap())) {
-            Thread.sleep(100);
-        }
     }
 }

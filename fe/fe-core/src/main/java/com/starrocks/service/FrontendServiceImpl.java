@@ -523,11 +523,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setError_message(status.getErrorMessage());
             info.setExpire_time(status.getExpireTime() / 1000);
             info.setProgress(status.getProgress() + "%");
-<<<<<<< HEAD
-=======
-            info.setExtra_message(status.getExtraMessage());
-            info.setProperties(status.getPropertiesJson());
->>>>>>> 42cf9f7354 ([BugFix] fix priority of partition refresh  (#28066))
             tasksResult.add(info);
         }
         return result;
