@@ -264,9 +264,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
         newProperties.put(TaskRun.PARTITION_START, mvContext.getNextPartitionStart());
         newProperties.put(TaskRun.PARTITION_END, mvContext.getNextPartitionEnd());
-        ExecuteOption option = new ExecuteOption(mvContext.getPriority(), false, newProperties);
+        // Partition refreshing task run should have the HIGHEST priority, and be scheduled before other tasks
+        // Otherwise this round of partition refreshing would be staved and never got finished
+        ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.HIGHEST.value(), true, newProperties);
         taskManager.executeTask(taskName, option);
-        LOG.info("Submit a generate taskRun for task:{}, partitionStart:{}, partitionEnd:{}", mvId,
+        LOG.info("[MV] Generate a task to refresh next batches of partitions for MV {}-{}, start={}, end={}",
+                materializedView.getName(), materializedView.getId(),
                 mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd());
     }
 

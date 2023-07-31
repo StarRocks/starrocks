@@ -370,6 +370,12 @@ struct TTaskRunInfo {
     9: optional i32 error_code
     10: optional string error_message
     11: optional string progress
+<<<<<<< HEAD
+=======
+
+    12: optional string extra_message
+    13: optional string properties
+>>>>>>> 42cf9f7354 ([BugFix] fix priority of partition refresh  (#28066))
 }
 
 struct TGetTaskRunInfoResult {
