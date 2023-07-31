@@ -15,6 +15,7 @@
 
 package com.starrocks.persist;
 
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -105,6 +106,12 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
         ChangeMaterializedViewRefreshSchemeLog readChangeLog = ChangeMaterializedViewRefreshSchemeLog.read(in);
         Assert.assertEquals(0, readChangeLog.getDbId());
         Config.ignore_materialized_view_error = false;
+    }
+
+    @Test
+    public void testReplayWhenDbIsEmpty() {
+        AlterJobMgr alterJobMgr = new AlterJobMgr();
+        alterJobMgr.replayChangeMaterializedViewRefreshScheme(new ChangeMaterializedViewRefreshSchemeLog());
     }
 
 }
