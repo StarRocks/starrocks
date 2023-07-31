@@ -2375,5 +2375,22 @@ public class AggregateTest extends PlanTestBase {
                 "  |  output: array_agg(8: array_agg)\n" +
                 "  |  group by: 2: v2, 4: v4");
 
+        sql = "select /*+ SET_VAR (new_planner_agg_stage = 4) */ " +
+                "count(distinct v2), array_length(array_agg(v1)) from t0 join t1 group by v4";
+        plan = getFragmentPlan(sql);
+        assertCContains(plan, "STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 08\n" +
+                "    HASH_PARTITIONED: 4: v4\n" +
+                "\n" +
+                "  7:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(2: v2), array_agg(8: array_agg)\n" +
+                "  |  group by: 4: v4",
+                "9:AGGREGATE (merge finalize)\n" +
+                        "  |  output: count(7: count), array_agg(8: array_agg)\n" +
+                        "  |  group by: 4: v4\n" +
+                        "  |  \n" +
+                        "  8:EXCHANGE");
+
     }
 }
