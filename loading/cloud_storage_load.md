@@ -2,7 +2,7 @@
 
 StarRocks 支持通过两种方式从云存储系统导入大批量数据：[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) 和 [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md)。
 
-在 3.0 及以前版本，StarRocks 只支持 Broker Load 导入方式。Broker Load 是一种异步导入方式，即您提交导入作业以后，StarRocks 会异步地执行导入作业。您需要通过 [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md) 语句或者 `curl` 命令来查看导入作业的结果。
+在 3.0 及以前版本，StarRocks 只支持 Broker Load 导入方式。Broker Load 是一种异步导入方式，即您提交导入作业以后，StarRocks 会异步地执行导入作业。您需要通过 [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) 语句或者 `curl` 命令来查看导入作业的结果。
 
 Broker Load 能够保证单次导入事务的原子性，即单次导入的多个数据文件都成功或者都失败，而不会出现部分导入成功、部分导入失败的情况。
 
