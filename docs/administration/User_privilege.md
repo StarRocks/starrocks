@@ -500,7 +500,7 @@ We recommend you customize roles to manage privileges and users. The following e
      --Grant the privilege to load data into any table.
      GRANT INSERT ON ALL TABLES IN ALL DATABASES TO ROLE recover_db;
      --Grant the privilege to export data from any table in the database to be backed up.
-     GRANT EXPORT ON ALL TABLES IN DATABASE <database_name> TO ROLE recover_db;
+     GRANT EXPORT ON ALL TABLES IN DATABASE <db_name> TO ROLE recover_db;
      ```
 
    - Grant the privileges to perform table-level backup and restore operations:
@@ -514,6 +514,10 @@ We recommend you customize roles to manage privileges and users. The following e
      GRANT REPOSITORY ON SYSTEM TO ROLE recover_tbl;
      --Grant the privilege to create tables in corresponding databases.
      GRANT CREATE TABLE ON DATABASE <db_name> TO ROLE recover_tbl;
+     --Grant the privilege to load data into any table in a database.
+     GRANT INSERT ON ALL TABLES IN DATABASE <db_name> TO ROLE recover_db;
+     -- Grant the privilege to export data from the table you want to back up.
+     GRANT EXPORT ON TABLE <table_name> TO ROLE recover_tbl;     
      ```
 
    - Grant the privileges to perform partition-level backup and restore operations:
