@@ -243,7 +243,7 @@ Please use specified key columns and specified value ranges for partitioning.
 - Partitions are left closed and right open. The left boundary of the first partition is of minimum value.
 - NULL value is stored only in partitions that contain minimum values. When the partition containing the minimum value is deleted, NULL values can no longer be imported.
 - Partition columns can either be single columns or multiple columns. The partition values are the default minimum values.
-- When only one column is specified as the partitioning column, you can set `MAXVALUE` as the upper bound for the partitioning column in the most recent partition.
+- When only one column is specified as the partitioning column, you can set `MAXVALUE` as the upper bound for the partitioning column of the most recent partition.
 
 Please note:
 
@@ -268,9 +268,9 @@ Note:
 
 - Fixed Range is more flexible than LESS THAN. You can customize the left and right partitions.
 - Fixed Range is the same as LESS THAN in the other aspects.
-- When only one column is specified as the partitioning column, you can set `MAXVALUE` as the upper bound for the partitioning column in the latest partition.
+- When only one column is specified as the partitioning column, you can set `MAXVALUE` as the upper bound for the partitioning column of the most recent partition.
 
-#### Create multiple partitions at a time
+#### Create multiple partitions in a batch
 
 Syntax
 
@@ -286,15 +286,15 @@ Syntax
 
     ```sql
     PARTITION BY RANGE (<partitioning_column>) (
-        START ("<start integer>") END ("<end integer>") EVERY (<partitioning_granularity>)
+        START ("<start_integer>") END ("<end_integer>") EVERY (<partitioning_granularity>)
     )
     ```
 
 Description
 
-You can specify the start and end values in `START()` and `END()` and the time unit or partitioning granularity in `EVERY()` to create multiple partitions at a time.
+You can specify the start and end values in `START()` and `END()` and the time unit or partitioning granularity in `EVERY()` to create multiple partitions in a batch.
 
-- The partitioning column can be of a date or integer type. The data type of values in `START()`, `END()`, and `EVERY()` must be the same as the data type of the partitioning column.
+- The partitioning column can be of a date or integer type.
 - If the partitioning column is of a date type, you need to use the `INTERVAL` keyword to specify the time interval. You can specify the time unit as hour (since v3.0), day, week, month, or year. The naming conventions of partitions are the same as those for dynamic partitions.
 
 For more information, see [Data distribution](../../../table_design/Data_distribution.md).
@@ -827,7 +827,7 @@ PROPERTIES(
 );
 ```
 
-### Create a table where multiple partitions are created at a time, and an integer type column is specified as partitioning column
+### Create a table where multiple partitions are created in a batch, and an integer type column is specified as partitioning column
 
   In the following example, the partitioning column `datekey` is of the INT type. All the partitions are created by only one simple partition clause  `START ("1") END ("5") EVERY (1)`. The range of all the partitions starts from `1` and ends at `5`, with a partition granularity of `1`:
   > **NOTE**
