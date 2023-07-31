@@ -346,6 +346,12 @@ public:
      */
     DEFINE_VECTORIZED_FN(date_diff);
 
+    // The semantics of the months_diff_v2/quarters_diff_v2/years_diff_v2 functions are the same as months_diff/quarters_diff/years_diff,
+    // but their implementations are Trino-compitable.
+    DEFINE_VECTORIZED_FN(months_diff_v2);
+    DEFINE_VECTORIZED_FN(quarters_diff_v2);
+    DEFINE_VECTORIZED_FN(years_diff_v2);
+
     /**
      * Calculate time difference in seconds from the first timestamp to the second timestamp.
      * @param context
@@ -364,18 +370,9 @@ public:
     static Status datediff_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status datediff_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
-    /*
-     * Called by date_diff to handle
-     */
-    static StatusOr<ColumnPtr> date_diff_time(FunctionContext* context, const Columns& columns, int64_t t);
-    static StatusOr<ColumnPtr> date_diff_years(FunctionContext* context, const Columns& columns, int64_t t);
-    static StatusOr<ColumnPtr> date_diff_months(FunctionContext* context, const Columns& columns, int64_t t);
-    static StatusOr<ColumnPtr> date_diff_quarters(FunctionContext* context, const Columns& columns, int64_t t);
-
     // function for datediff
     struct DateDiffCtx {
-        int64_t type;
-        StatusOr<ColumnPtr> (*function)(FunctionContext* context, const Columns& columns, int64_t t);
+        ScalarFunction function;
     };
 
     /**
@@ -518,6 +515,10 @@ public:
      * @return BigIntColumn
      */
     DEFINE_VECTORIZED_FN(seconds_diff);
+
+    DEFINE_VECTORIZED_FN(milliseconds_diff);
+
+    DEFINE_VECTORIZED_FN(microseconds_diff);
 
     /**
      * DateValue from number of days.

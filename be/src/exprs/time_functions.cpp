@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <string_view>
+#include <unordered_map>
 
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -893,25 +894,48 @@ Status TimeFunctions::time_slice_close(FunctionContext* context, FunctionContext
 
 // years_diff
 DEFINE_BINARY_FUNCTION_WITH_IMPL(years_diffImpl, l, r) {
-    int year1, month1, day1, hour1, mintue1, second1, usec1;
-    int year2, month2, day2, hour2, mintue2, second2, usec2;
-    l.to_timestamp(&year1, &month1, &day1, &hour1, &mintue1, &second1, &usec1);
-    r.to_timestamp(&year2, &month2, &day2, &hour2, &mintue2, &second2, &usec2);
+    int year1, month1, day1, hour1, minute1, second1, usec1;
+    int year2, month2, day2, hour2, minute2, second2, usec2;
+    l.to_timestamp(&year1, &month1, &day1, &hour1, &minute1, &second1, &usec1);
+    r.to_timestamp(&year2, &month2, &day2, &hour2, &minute2, &second2, &usec2);
 
     int year = (year1 - year2);
 
     if (year >= 0) {
-        year -= ((month1 * 100 + day1) * 1000000L + (hour1 * 10000 + mintue1 * 100 + second1) <
-                 (month2 * 100 + day2) * 1000000L + (hour2 * 10000 + mintue2 * 100 + second2));
+        year -= (month1 * 100 + day1) * 1000000L + (hour1 * 10000 + minute1 * 100 + second1) <
+                (month2 * 100 + day2) * 1000000L + (hour2 * 10000 + minute2 * 100 + second2);
     } else {
-        year += ((month1 * 100 + day1) * 1000000L + (hour1 * 10000 + mintue1 * 100 + second1) >
-                 (month2 * 100 + day2) * 1000000L + (hour2 * 10000 + mintue2 * 100 + second2));
+        year += (month1 * 100 + day1) * 1000000L + (hour1 * 10000 + minute1 * 100 + second1) >
+                (month2 * 100 + day2) * 1000000L + (hour2 * 10000 + minute2 * 100 + second2);
     }
-
     return year;
 }
 
 DEFINE_TIME_BINARY_FN(years_diff, TYPE_DATETIME, TYPE_DATETIME, TYPE_BIGINT);
+
+// years_diff_v2
+DEFINE_BINARY_FUNCTION_WITH_IMPL(years_diff_v2Impl, to_timestamp, from_timestamp) {
+    int8_t sign = from_timestamp < to_timestamp ? 1 : -1;
+
+    int year1, month1, day1, hour1, mintue1, second1, usec1;
+    std::min(from_timestamp, to_timestamp).to_timestamp(&year1, &month1, &day1, &hour1, &mintue1, &second1, &usec1);
+    int64_t us_of_day1 = 1LL * hour1 * 3600000 + mintue1 * 60000 + second1 * 1000 + usec1;
+
+    int year2, month2, day2, hour2, mintue2, second2, usec2;
+    std::max(from_timestamp, to_timestamp).to_timestamp(&year2, &month2, &day2, &hour2, &mintue2, &second2, &usec2);
+    int64_t us_of_day2 = 1LL * hour2 * 3600000 + mintue2 * 60000 + second2 * 1000 + usec2;
+
+    int32_t last_day_of_to_month = DAYS_IN_MONTH[date::is_leap(year2)][month2];
+
+    int64_t diff = year2 - year1;
+    if ((month1 > month2) || (month1 == month2 && day1 > day2 && day2 != last_day_of_to_month) ||
+        (month1 == month2 && day1 == day2 && us_of_day1 > us_of_day2)) {
+        diff--;
+    }
+    return diff * sign;
+}
+
+DEFINE_TIME_BINARY_FN(years_diff_v2, TYPE_DATETIME, TYPE_DATETIME, TYPE_BIGINT);
 
 // months_diff
 DEFINE_BINARY_FUNCTION_WITH_IMPL(months_diffImpl, l, r) {
@@ -935,12 +959,41 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(months_diffImpl, l, r) {
 
 DEFINE_TIME_BINARY_FN(months_diff, TYPE_DATETIME, TYPE_DATETIME, TYPE_BIGINT);
 
+// months_diff_v2
+DEFINE_BINARY_FUNCTION_WITH_IMPL(months_diff_v2Impl, to_timestamp, from_timestamp) {
+    int8_t sign = from_timestamp < to_timestamp ? 1 : -1;
+
+    int year1, month1, day1, hour1, mintue1, second1, usec1;
+    std::min(from_timestamp, to_timestamp).to_timestamp(&year1, &month1, &day1, &hour1, &mintue1, &second1, &usec1);
+    int64_t us_of_day1 = 1LL * hour1 * 3600000 + mintue1 * 60000 + second1 * 1000 + usec1 / 1000;
+
+    int year2, month2, day2, hour2, mintue2, second2, usec2;
+    std::max(from_timestamp, to_timestamp).to_timestamp(&year2, &month2, &day2, &hour2, &mintue2, &second2, &usec2);
+    int64_t us_of_day2 = 1LL * hour2 * 3600000 + mintue2 * 60000 + second2 * 1000 + usec2 / 1000;
+
+    int32_t last_day_of_to_month = DAYS_IN_MONTH[date::is_leap(year2)][month2];
+
+    int64_t diff = (year2 - year1) * 12 + (month2 - month1);
+    if ((day2 != last_day_of_to_month && day1 > day2) || (day1 == day2 && us_of_day1 > us_of_day2)) {
+        diff--;
+    }
+
+    return sign * diff;
+}
+
+DEFINE_TIME_BINARY_FN(months_diff_v2, TYPE_DATETIME, TYPE_DATETIME, TYPE_BIGINT);
+
 // quarters_diff
 DEFINE_BINARY_FUNCTION_WITH_IMPL(quarters_diffImpl, l, r) {
     auto diff = months_diffImpl::apply<LType, RType, ResultType>(l, r);
     return diff / 3;
 }
 DEFINE_TIME_BINARY_FN(quarters_diff, TYPE_DATETIME, TYPE_DATETIME, TYPE_BIGINT);
+
+DEFINE_BINARY_FUNCTION_WITH_IMPL(quarters_diff_v2Impl, l, r) {
+    return months_diff_v2Impl::apply<LType, RType, ResultType>(l, r) / 3;
+}
+DEFINE_TIME_BINARY_FN(quarters_diff_v2, TYPE_DATETIME, TYPE_DATETIME, TYPE_BIGINT);
 
 // weeks_diff
 DEFINE_BINARY_FUNCTION_WITH_IMPL(weeks_diffImpl, l, r) {
@@ -983,6 +1036,18 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(seconds_diffImpl, l, r) {
     return l.diff_microsecond(r) / USECS_PER_SEC;
 }
 DEFINE_TIME_BINARY_FN(seconds_diff, TYPE_DATETIME, TYPE_DATETIME, TYPE_BIGINT);
+
+// milliseconds_diff
+DEFINE_BINARY_FUNCTION_WITH_IMPL(milliseconds_diffImpl, l, r) {
+    return l.diff_microsecond(r) / USECS_PER_MILLIS;
+}
+DEFINE_TIME_BINARY_FN(milliseconds_diff, TYPE_DATETIME, TYPE_DATETIME, TYPE_BIGINT);
+
+// microseconds_diff
+DEFINE_BINARY_FUNCTION_WITH_IMPL(microseconds_diffImpl, l, r) {
+    return l.diff_microsecond(r);
+}
+DEFINE_TIME_BINARY_FN(microseconds_diff, TYPE_DATETIME, TYPE_DATETIME, TYPE_BIGINT);
 
 /*
  * definition for to_unix operators(SQL TYPE: DATETIME)
@@ -2580,101 +2645,51 @@ StatusOr<ColumnPtr> TimeFunctions::make_date(FunctionContext* context, const Col
 }
 
 // date_diff
+using DateDiffFunctionImpl = int64_t (*)(const TimestampValue&, const TimestampValue&);
+const static std::unordered_map<std::string, std::pair<ScalarFunction, DateDiffFunctionImpl>> date_diff_func_map = {
+        {"millisecond",
+         {&TimeFunctions::milliseconds_diff, &milliseconds_diffImpl::apply<TimestampValue, TimestampValue, int64_t>}},
+        {"second", {&TimeFunctions::seconds_diff, &seconds_diffImpl::apply<TimestampValue, TimestampValue, int64_t>}},
+        {"minute", {&TimeFunctions::minutes_diff, &minutes_diffImpl::apply<TimestampValue, TimestampValue, int64_t>}},
+        {"hour", {&TimeFunctions::hours_diff, &hours_diffImpl::apply<TimestampValue, TimestampValue, int64_t>}},
+        {"day", {&TimeFunctions::days_diff, &days_diffImpl::apply<TimestampValue, TimestampValue, int64_t>}},
+        {"week", {&TimeFunctions::weeks_diff, &weeks_diffImpl::apply<TimestampValue, TimestampValue, int64_t>}},
+        {"month",
+         {&TimeFunctions::months_diff_v2, &months_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>}},
+        {"quarter",
+         {&TimeFunctions::quarters_diff_v2, &quarters_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>}},
+        {"year", {&TimeFunctions::years_diff_v2, &years_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>}}};
+
 StatusOr<ColumnPtr> TimeFunctions::datediff(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
-    if (context->is_notnull_constant_column(2)) {
-        auto ctc = reinterpret_cast<DateDiffCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
-        return ctc->function(context, columns, ctc->type);
+    if (context->is_notnull_constant_column(0)) {
+        auto ctx = reinterpret_cast<DateDiffCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+        return ctx->function(context, {columns[1], columns[2]});
     }
 
-    ColumnViewer<TYPE_DATETIME> lv_column(columns[0]);
-    ColumnViewer<TYPE_DATETIME> rv_column(columns[1]);
-    ColumnViewer<TYPE_VARCHAR> type_column(columns[2]);
-    auto size = columns[2]->size();
+    ColumnViewer<TYPE_VARCHAR> type_column(columns[0]);
+    ColumnViewer<TYPE_DATETIME> lv_column(columns[1]);
+    ColumnViewer<TYPE_DATETIME> rv_column(columns[2]);
+    auto size = columns[0]->size();
     ColumnBuilder<TYPE_BIGINT> result(size);
     for (int row = 0; row < size; ++row) {
+        if (lv_column.is_null(row) || rv_column.is_null(row) || type_column.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         TimestampValue l = (TimestampValue)lv_column.value(row);
         TimestampValue r = (TimestampValue)rv_column.value(row);
         auto type_str = type_column.value(row).to_string();
         transform(type_str.begin(), type_str.end(), type_str.begin(), ::tolower);
-        if (type_str == "hour") {
-            result.append(l.diff_microsecond(r) / USECS_PER_HOUR);
-        } else if (type_str == "second") {
-            result.append(l.diff_microsecond(r) / USECS_PER_SEC);
-        } else if (type_str == "minute") {
-            result.append(l.diff_microsecond(r) / USECS_PER_MINUTE);
-        } else if (type_str == "millisecond") {
-            result.append(l.diff_microsecond(r) / USECS_PER_MILLIS);
-        } else if (type_str == "day") {
-            result.append(l.diff_microsecond(r) / USECS_PER_DAY);
-        } else if (type_str == "week") {
-            result.append(l.diff_microsecond(r) / USECS_PER_WEEK);
-        } else if (type_str == "quarter") {
-            result.append(months_diffImpl::apply<TimestampValue, TimestampValue, int>(l, r) / 3);
-        } else if (type_str == "year") {
-            result.append(years_diffImpl::apply<TimestampValue, TimestampValue, int>(l, r));
-        } else if (type_str == "month") {
-            result.append(months_diffImpl::apply<TimestampValue, TimestampValue, int>(l, r));
+        auto iter = date_diff_func_map.find(type_str);
+        if (iter != date_diff_func_map.end()) {
+            result.append(iter->second.second(l, r));
         } else {
-            return Status::InvalidArgument("type column should be one of day/hour/minute/second/millisecond");
+            return Status::InvalidArgument(
+                    "unit of date_diff must be one of year/month/quarter/day/hour/minute/second/millisecond");
         }
     }
-    return result.build(ColumnHelper::is_all_const(columns));
-}
 
-StatusOr<ColumnPtr> TimeFunctions::date_diff_time(FunctionContext* context, const Columns& columns, int64_t t) {
-    ColumnViewer<TYPE_DATETIME> lv_column(columns[0]);
-    ColumnViewer<TYPE_DATETIME> rv_column(columns[1]);
-    ColumnViewer<TYPE_VARCHAR> type_column(columns[2]);
-    auto size = columns[2]->size();
-    ColumnBuilder<TYPE_BIGINT> result(size);
-    for (int row = 0; row < size; ++row) {
-        TimestampValue l = (TimestampValue)lv_column.value(row);
-        TimestampValue r = (TimestampValue)rv_column.value(row);
-        result.append(l.diff_microsecond(r) / t);
-    }
-    return result.build(ColumnHelper::is_all_const(columns));
-}
-
-StatusOr<ColumnPtr> TimeFunctions::date_diff_years(FunctionContext* context, const Columns& columns, int64_t t) {
-    ColumnViewer<TYPE_DATETIME> lv_column(columns[0]);
-    ColumnViewer<TYPE_DATETIME> rv_column(columns[1]);
-    ColumnViewer<TYPE_VARCHAR> type_column(columns[2]);
-    auto size = columns[2]->size();
-    ColumnBuilder<TYPE_BIGINT> result(size);
-    for (int row = 0; row < size; ++row) {
-        TimestampValue l = (TimestampValue)lv_column.value(row);
-        TimestampValue r = (TimestampValue)rv_column.value(row);
-        result.append(years_diffImpl::apply<TimestampValue, TimestampValue, int>(l, r));
-    }
-    return result.build(ColumnHelper::is_all_const(columns));
-}
-
-StatusOr<ColumnPtr> TimeFunctions::date_diff_months(FunctionContext* context, const Columns& columns, int64_t t) {
-    ColumnViewer<TYPE_DATETIME> lv_column(columns[0]);
-    ColumnViewer<TYPE_DATETIME> rv_column(columns[1]);
-    ColumnViewer<TYPE_VARCHAR> type_column(columns[2]);
-    auto size = columns[2]->size();
-    ColumnBuilder<TYPE_BIGINT> result(size);
-    for (int row = 0; row < size; ++row) {
-        TimestampValue l = (TimestampValue)lv_column.value(row);
-        TimestampValue r = (TimestampValue)rv_column.value(row);
-        result.append(months_diffImpl::apply<TimestampValue, TimestampValue, int>(l, r));
-    }
-    return result.build(ColumnHelper::is_all_const(columns));
-}
-
-StatusOr<ColumnPtr> TimeFunctions::date_diff_quarters(FunctionContext* context, const Columns& columns, int64_t t) {
-    ColumnViewer<TYPE_DATETIME> lv_column(columns[0]);
-    ColumnViewer<TYPE_DATETIME> rv_column(columns[1]);
-    ColumnViewer<TYPE_VARCHAR> type_column(columns[2]);
-    auto size = columns[2]->size();
-    ColumnBuilder<TYPE_BIGINT> result(size);
-    for (int row = 0; row < size; ++row) {
-        TimestampValue l = (TimestampValue)lv_column.value(row);
-        TimestampValue r = (TimestampValue)rv_column.value(row);
-        result.append(months_diffImpl::apply<TimestampValue, TimestampValue, int>(l, r) / 3);
-    }
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
@@ -2682,38 +2697,16 @@ Status TimeFunctions::datediff_prepare(FunctionContext* context, FunctionContext
     if (scope != FunctionContext::FRAGMENT_LOCAL || !context->is_notnull_constant_column(2)) {
         return Status::OK();
     }
-    ColumnPtr column = context->get_constant_column(2);
+    ColumnPtr column = context->get_constant_column(0);
     auto type_str = ColumnHelper::get_const_value<TYPE_VARCHAR>(column).to_string();
     transform(type_str.begin(), type_str.end(), type_str.begin(), ::tolower);
-    if (type_str != "day" && type_str != "hour" && type_str != "minute" && type_str != "second" &&
-        type_str != "millisecond" && type_str != "week" && type_str != "month" && type_str != "year" &&
-        type_str != "quarter") {
+    auto iter = date_diff_func_map.find(type_str);
+    if (iter == date_diff_func_map.end()) {
         return Status::InvalidArgument("type column should be one of day/hour/minute/second/millisecond");
     }
     auto fc = new TimeFunctions::DateDiffCtx();
-    fc->function = &TimeFunctions::date_diff_time;
-    if (type_str == "day") {
-        fc->type = USECS_PER_DAY;
-    } else if (type_str == "hour") {
-        fc->type = USECS_PER_HOUR;
-    } else if (type_str == "minute") {
-        fc->type = USECS_PER_MINUTE;
-    } else if (type_str == "second") {
-        fc->type = USECS_PER_SEC;
-    } else if (type_str == "millisecond") {
-        fc->type = USECS_PER_MILLIS;
-    } else if (type_str == "week") {
-        fc->type = USECS_PER_WEEK;
-    } else if (type_str == "year") {
-        fc->type = USECS_PER_YEAR;
-        fc->function = &TimeFunctions::date_diff_years;
-    } else if (type_str == "quarter") {
-        fc->type = USECS_PER_QUARTER;
-        fc->function = &TimeFunctions::date_diff_quarters;
-    } else if (type_str == "month") {
-        fc->type = USECS_PER_MONTH;
-        fc->function = &TimeFunctions::date_diff_months;
-    }
+    fc->function = iter->second.first;
+
     context->set_function_state(scope, fc);
     return Status::OK();
 }
