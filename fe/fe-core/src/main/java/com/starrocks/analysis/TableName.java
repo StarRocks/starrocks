@@ -35,6 +35,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
@@ -48,10 +49,16 @@ import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.parser.NodePosition;
+import org.apache.commons.lang3.StringUtils;
+>>>>>>> 9eea14e87b ([Feature] support meta functions (#28094))
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.List;
 import java.util.Objects;
 
 public class TableName implements Writable, GsonPreProcessable, GsonPostProcessable {
@@ -75,6 +82,26 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
         this.catalog = catalog;
         this.db = db;
         this.tbl = tbl;
+    }
+
+    public static TableName fromString(String name) {
+        List<String> pieces = Splitter.on(".").splitToList(name);
+        String catalog = ConnectContext.get().getCurrentCatalog();
+        String db = ConnectContext.get().getDatabase();
+        if (pieces.isEmpty()) {
+            throw new IllegalArgumentException("empty table name");
+        } else if (pieces.size() == 1) {
+            if (StringUtils.isEmpty(db)) {
+                throw new IllegalArgumentException("no database");
+            }
+            return new TableName(catalog, db, pieces.get(0));
+        } else if (pieces.size() == 2) {
+            return new TableName(catalog, pieces.get(0), pieces.get(1));
+        } else if (pieces.size() == 3) {
+            return new TableName(pieces.get(0), pieces.get(1), pieces.get(2));
+        } else {
+            throw new IllegalArgumentException("illegal table name: " + name);
+        }
     }
 
     public void analyze(Analyzer analyzer) throws AnalysisException {
