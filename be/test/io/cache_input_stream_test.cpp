@@ -170,7 +170,7 @@ TEST_F(CacheInputStreamTest, test_file_overwrite) {
     gen_test_data(data, data_size, block_size);
 
     std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
-    io::CacheInputStream cache_stream(stream, "test_file3", data_size, 1000000);
+    io::CacheInputStream cache_stream(stream, "test_file3", data_size, 1000);
     cache_stream.set_enable_populate_cache(true);
     auto& stats = cache_stream.stats();
 
@@ -192,7 +192,7 @@ TEST_F(CacheInputStreamTest, test_file_overwrite) {
     ASSERT_EQ(stats.read_cache_count, block_count);
 
     // With different modification time, the old cache cannot be used
-    io::CacheInputStream cache_stream2(stream, "test_file3", data_size, 2000000);
+    io::CacheInputStream cache_stream2(stream, "test_file3", data_size, 2000);
     cache_stream2.set_enable_populate_cache(true);
     auto& stats2 = cache_stream2.stats();
     for (int i = 0; i < block_count; ++i) {
