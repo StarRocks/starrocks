@@ -425,6 +425,7 @@ struct TTaskRunInfo {
     11: optional string progress
 
     12: optional string extra_message
+    13: optional string properties
 }
 
 struct TGetTaskRunInfoResult {
