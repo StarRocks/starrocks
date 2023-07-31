@@ -136,6 +136,7 @@ import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeBasicDesc;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
+import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
@@ -338,6 +339,7 @@ import com.starrocks.sql.ast.ShowPrivilegesStmt;
 import com.starrocks.sql.ast.ShowProcStmt;
 import com.starrocks.sql.ast.ShowProcedureStmt;
 import com.starrocks.sql.ast.ShowProcesslistStmt;
+import com.starrocks.sql.ast.ShowProfilelistStmt;
 import com.starrocks.sql.ast.ShowRepositoriesStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.ast.ShowResourcesStmt;
@@ -2269,6 +2271,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new KillAnalyzeStmt(Long.parseLong(context.INTEGER_VALUE().getText()), createPos(context));
     }
 
+    // ------------------------------------------- Analyze Profile Statement -------------------------------------------
+
+    @Override
+    public ParseNode visitAnalyzeProfileStatement(StarRocksParser.AnalyzeProfileStatementContext context) {
+        StringLiteral stringLiteral = (StringLiteral) visit(context.string());
+        List<Integer> planNodeIds = Lists.newArrayList();
+        if (context.INTEGER_VALUE() != null) {
+            planNodeIds = context.INTEGER_VALUE().stream()
+                    .map(ParseTree::getText)
+                    .map(Integer::parseInt)
+                    .collect(toList());
+        }
+        return new AnalyzeProfileStmt(stringLiteral.getStringValue(), planNodeIds, createPos(context));
+    }
+
     // ------------------------------------------- Resource Group Statement --------------------------------------------
 
     public ParseNode visitCreateResourceGroupStatement(StarRocksParser.CreateResourceGroupStatementContext context) {
@@ -2739,6 +2756,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowProcesslistStatement(StarRocksParser.ShowProcesslistStatementContext context) {
         boolean isShowFull = context.FULL() != null;
         return new ShowProcesslistStmt(isShowFull, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowProfilelistStatement(StarRocksParser.ShowProfilelistStatementContext context) {
+        int limit = context.LIMIT() != null ? Integer.parseInt(context.limit.getText()) : -1;
+        return new ShowProfilelistStmt(limit, createPos(context));
     }
 
     @Override

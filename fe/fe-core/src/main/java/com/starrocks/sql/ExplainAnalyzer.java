@@ -17,6 +17,7 @@ package com.starrocks.sql;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.AggregateInfo;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.OrderByElement;
@@ -43,6 +44,8 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SelectNode;
 import com.starrocks.planner.SortNode;
 import com.starrocks.planner.UnionNode;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
@@ -52,6 +55,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TUnit;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -62,7 +66,12 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Queue;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.function.BiConsumer;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -76,11 +85,19 @@ public class ExplainAnalyzer {
     private static final int MAX_EXPR_LENGTH = 64;
 
     // Colors
-    public static final String ANSI_RESET = "\u001B[0m";
-    public static final String ANSI_BOLD = "\u001B[1m";
-    public static final String ANSI_RED = "\u001B[31m";
-    public static final String ANSI_SALMON = "\u001B[38;2;250;128;114m";
-    public static final String ANSI_BLACK_ON_RED = "\u001B[41;30m";
+    private static final String ANSI_RESET = "\u001B[0m";
+    private static final String ANSI_BOLD = "\u001B[1m";
+    private static final String ANSI_RED = "\u001B[31m";
+    private static final String ANSI_CORAL = "\u001B[38;2;250;128;114m";
+    private static final String ANSI_BLACK_ON_RED = "\u001B[41;30m";
+    private static final String ANSI_BLACK_ON_CORAL = "\u001B[38;2;0;0;0m\u001B[48;2;250;128;114m";
+
+    private static final Set<String> EXCLUDE_DETAIL_METRIC_NAMES = Sets.newHashSet(
+            RuntimeProfile.ROOT_COUNTER, RuntimeProfile.TOTAL_TIME_COUNTER,
+            "NetworkTime", "ScanTime");
+    private static final Set<String> INCLUDE_DETAIL_METRIC_NAMES = Sets.newHashSet(
+            "IOTaskWaitTime", "IOTaskExecTime"
+    );
 
     private static boolean isResultSink(RuntimeProfile operator) {
         return ("RESULT_SINK".equals(operator.getName())
@@ -96,8 +113,8 @@ public class ExplainAnalyzer {
         return Integer.parseInt(matcher.group(1));
     }
 
-    public static String analyze(ExecPlan execPlan, RuntimeProfile profile) {
-        ExplainAnalyzer analyzer = new ExplainAnalyzer(execPlan, profile);
+    public static String analyze(ExecPlan execPlan, RuntimeProfile profile, List<Integer> planNodeIds) {
+        ExplainAnalyzer analyzer = new ExplainAnalyzer(execPlan, profile, planNodeIds);
         return analyzer.analyze();
     }
 
@@ -122,12 +139,14 @@ public class ExplainAnalyzer {
     private final RuntimeProfile summaryProfile;
     private final RuntimeProfile plannerProfile;
     private final RuntimeProfile executionProfile;
+    private final Set<Integer> detailPlanNodeIds = Sets.newHashSet();
     private final StringBuilder summaryBuffer = new StringBuilder();
     private final StringBuilder detailBuffer = new StringBuilder();
     private final LinkedList<String> indents = Lists.newLinkedList();
     private final Map<Integer, NodeInfo> allNodeInfos = Maps.newHashMap();
     private final List<NodeInfo> allScanNodeInfos = Lists.newArrayList();
     private final List<NodeInfo> allExchangeNodeInfos = Lists.newArrayList();
+    private boolean isRuntimeProfile;
 
     private String color = ANSI_RESET;
 
@@ -155,11 +174,14 @@ public class ExplainAnalyzer {
         return transformedName.toString();
     }
 
-    public ExplainAnalyzer(ExecPlan execPlan, RuntimeProfile queryProfile) {
+    public ExplainAnalyzer(ExecPlan execPlan, RuntimeProfile queryProfile, List<Integer> planNodeIds) {
         this.execPlan = execPlan;
         this.summaryProfile = queryProfile.getChild("Summary");
         this.plannerProfile = queryProfile.getChild("Planner");
         this.executionProfile = queryProfile.getChild("Execution");
+        if (CollectionUtils.isNotEmpty(planNodeIds)) {
+            detailPlanNodeIds.addAll(planNodeIds);
+        }
     }
 
     public String analyze() {
@@ -177,17 +199,32 @@ public class ExplainAnalyzer {
             summaryBuffer.setLength(0);
             detailBuffer.setLength(0);
             indents.clear();
-            appendSummaryLine("Failed to analyze profiles");
+            resetColor();
+            appendSummaryLine("Failed to analyze profiles, ", e.getMessage());
         }
 
         return summaryBuffer.toString() + detailBuffer;
     }
 
     private void parseProfile() {
+        ConnectContext connectContext = execPlan.getConnectContext();
+        if (connectContext != null) {
+            SessionVariable sessionVariable = connectContext.getSessionVariable();
+            if (sessionVariable != null) {
+                Preconditions.checkState(sessionVariable.getPipelineProfileLevel() == 1,
+                        "please set `pipeline_profile_level` to 1");
+            }
+        }
+
+        String queryState = summaryProfile.getInfoString("Query State");
+        if (Objects.equals(queryState, "Running")) {
+            isRuntimeProfile = true;
+        }
+
         for (int i = 0; i < executionProfile.getChildList().size(); i++) {
             RuntimeProfile fragmentProfile = executionProfile.getChildList().get(i).first;
 
-            ProfileNodeParser parser = new ProfileNodeParser(fragmentProfile);
+            ProfileNodeParser parser = new ProfileNodeParser(isRuntimeProfile, fragmentProfile);
             Map<Integer, NodeInfo> nodeInfos = parser.parse();
 
             for (Map.Entry<Integer, NodeInfo> entry : nodeInfos.entrySet()) {
@@ -205,8 +242,12 @@ public class ExplainAnalyzer {
         for (PlanFragment fragment : execPlan.getFragments()) {
             DataSink sink = fragment.getSink();
             if (sink instanceof ResultSink || sink instanceof OlapTableSink) {
-                NodeInfo resultNode = allNodeInfos.get(RESULT_SINK_PSEUDO_PLAN_NODE_ID);
-                resultNode.planElement = sink;
+                NodeInfo resultNodeInfo = allNodeInfos.get(RESULT_SINK_PSEUDO_PLAN_NODE_ID);
+                if (resultNodeInfo == null) {
+                    resultNodeInfo = new NodeInfo(isRuntimeProfile, RESULT_SINK_PSEUDO_PLAN_NODE_ID, true, null, null);
+                    allNodeInfos.put(resultNodeInfo.planNodeId, resultNodeInfo);
+                }
+                resultNodeInfo.planElement = sink;
             }
 
             PlanNode planNode = fragment.getPlanRoot();
@@ -218,7 +259,10 @@ public class ExplainAnalyzer {
                     PlanNode peek = queue.poll();
                     Preconditions.checkNotNull(peek);
                     NodeInfo nodeInfo = allNodeInfos.get(peek.getId().asInt());
-                    Preconditions.checkNotNull(nodeInfo);
+                    if (nodeInfo == null) {
+                        nodeInfo = new NodeInfo(isRuntimeProfile, peek.getId().asInt(), true, null, null);
+                        allNodeInfos.put(nodeInfo.planNodeId, nodeInfo);
+                    }
                     nodeInfo.planElement = peek;
 
                     for (PlanNode child : peek.getChildren()) {
@@ -227,6 +271,18 @@ public class ExplainAnalyzer {
                 }
             }
         }
+
+        allNodeInfos.values().forEach(NodeInfo::initState);
+
+        allNodeInfos.values().forEach(nodeInfo -> {
+            if (nodeInfo.planNodeId == RESULT_SINK_PSEUDO_PLAN_NODE_ID) {
+                nodeInfo.outputRowNums = searchMetricFromUpperLevel(nodeInfo, "CommonMetrics", "PushRowNum");
+            } else if (nodeInfo.planElement instanceof UnionNode) {
+                nodeInfo.outputRowNums = sumUpMetric(nodeInfo, false, false, "CommonMetrics", "PullRowNum");
+            } else {
+                nodeInfo.outputRowNums = searchMetricFromUpperLevel(nodeInfo, "CommonMetrics", "PullRowNum");
+            }
+        });
 
         for (NodeInfo nodeInfo : allNodeInfos.values()) {
             if (nodeInfo.planElement instanceof ScanNode) {
@@ -264,22 +320,35 @@ public class ExplainAnalyzer {
                     ANSI_RESET);
         }
 
-        appendSummaryLine("Version: ", summaryProfile.getInfoString("StarRocks Version"));
         appendSummaryLine("QueryId: ", summaryProfile.getInfoString("Query ID"));
+        appendSummaryLine("Version: ", summaryProfile.getInfoString("StarRocks Version"));
+        appendSummaryLine("State: ", summaryProfile.getInfoString("Query State"));
+        if (isRuntimeProfile) {
+            appendSummaryLine("Legend: ", NodeState.INIT.symbol, " for blocked; ", NodeState.RUNNING.symbol,
+                    " for running; ", NodeState.FINISHED.symbol, " for finished");
+        }
 
         appendSummaryLine("TotalTime: ", summaryProfile.getInfoString("Total"));
         pushIndent(GraphElement.LEAF_METRIC_INDENT);
         Counter executionWallTime = executionProfile.getCounter("QueryExecutionWallTime");
+        if (executionWallTime == null) {
+            executionWallTime = getMaximumPipelineDriverTime();
+        }
         Counter resultDeliverTime = executionProfile.getCounter("ResultDeliverTime");
-        appendSummaryLine("ExecutionTime: ", executionWallTime, " [",
-                "Scan: ", allScanTime,
-                String.format(" (%.2f%%)", (double) allScanTime.getValue() * 100 / executionWallTime.getValue()),
-                ", Network: ", allNetworkTime,
-                String.format(" (%.2f%%)", (double) allNetworkTime.getValue() * 100 / executionWallTime.getValue()),
-                ", ResultDeliverTime: ", resultDeliverTime,
-                String.format(" (%.2f%%)", (double) resultDeliverTime.getValue() * 100 / executionWallTime.getValue()),
-                "]");
-
+        if (resultDeliverTime == null) {
+            resultDeliverTime = new Counter(TUnit.TIME_NS, null, 0);
+        }
+        if (executionWallTime != null) {
+            appendSummaryLine("ExecutionTime: ", executionWallTime, " [",
+                    "Scan: ", allScanTime,
+                    String.format(" (%.2f%%)", (double) allScanTime.getValue() * 100 / executionWallTime.getValue()),
+                    ", Network: ", allNetworkTime,
+                    String.format(" (%.2f%%)", (double) allNetworkTime.getValue() * 100 / executionWallTime.getValue()),
+                    ", ResultDeliverTime: ", resultDeliverTime,
+                    String.format(" (%.2f%%)",
+                            (double) resultDeliverTime.getValue() * 100 / executionWallTime.getValue()),
+                    "]");
+        }
         appendSummaryLine("CollectProfileTime: ", summaryProfile.getInfoString("Collect Profile Time"));
         popIndent(); // metric indent
 
@@ -291,10 +360,37 @@ public class ExplainAnalyzer {
         cumulativeOperatorTime = executionProfile.getCounter("QueryCumulativeOperatorTime").getValue();
     }
 
+    private Counter getMaximumPipelineDriverTime() {
+        Counter maxDriverTotalTime = null;
+        for (Pair<RuntimeProfile, Boolean> fragmentProfileKv : executionProfile.getChildList()) {
+            RuntimeProfile fragmentProfile = fragmentProfileKv.first;
+            for (Pair<RuntimeProfile, Boolean> pipelineProfileKv : fragmentProfile.getChildList()) {
+                RuntimeProfile pipelineProfile = pipelineProfileKv.first;
+                Counter driverTotalTime = pipelineProfile.getMaxCounter("DriverTotalTime");
+                if (maxDriverTotalTime == null || driverTotalTime.getValue() > maxDriverTotalTime.getValue()) {
+                    maxDriverTotalTime = driverTotalTime;
+                }
+            }
+        }
+        return maxDriverTotalTime;
+    }
+
     private void appendStatisticsSummaryInfo() {
         pushIndent(GraphElement.LEAF_METRIC_INDENT);
 
+        // 1. Top Time-Consuming Nodes
         appendCpuTopNodes();
+
+        // 2. Runtime Progress
+        if (isRuntimeProfile) {
+            long finishedCount = allNodeInfos.values().stream()
+                    .filter(nodeInfo -> nodeInfo.state.isFinished())
+                    .count();
+            if (MapUtils.isNotEmpty(allNodeInfos)) {
+                appendSummaryLine(String.format("Progress (finished operator/all operator): %.2f%%",
+                        100.0 * finishedCount / allNodeInfos.size()));
+            }
+        }
 
         popIndent(); // metric indent
     }
@@ -310,10 +406,10 @@ public class ExplainAnalyzer {
                 break;
             }
             NodeInfo nodeInfo = topCpuNodes.get(i);
-            if (nodeInfo.totalTimePercentage > 30) {
+            if (nodeInfo.isMostConsuming) {
                 setRedColor();
-            } else if (nodeInfo.totalTimePercentage > 15) {
-                setSalmonColor();
+            } else if (nodeInfo.isSecondMostConsuming) {
+                setCoralColor();
             }
             appendSummaryLine(String.format("%d. ", i + 1), nodeInfo.getTitle(),
                     ": ", nodeInfo.totalTime, String.format(" (%.2f%%)", nodeInfo.totalTimePercentage));
@@ -338,21 +434,15 @@ public class ExplainAnalyzer {
                 fragmentProfile.getCounter("InstancePeakMemoryUsage"),
                 ", InstanceAllocatedMemoryUsage: ", fragmentProfile.getCounter("InstanceAllocatedMemoryUsage"));
         appendDetailLine("PrepareTime: ", fragmentProfile.getCounter("FragmentInstancePrepareTime"));
+        String missingInstanceIds = fragmentProfile.getInfoString("MissingInstanceIds");
+        if (missingInstanceIds != null) {
+            appendDetailLine("MissingInstanceIds: ", missingInstanceIds);
+        }
         popIndent(); // metric indent
 
         DataSink sink = fragment.getSink();
-        boolean isResultSink = sink instanceof ResultSink || sink instanceof OlapTableSink;
-        if (isResultSink) {
-            // Calculate result sink's time info, other sink's type will be properly processed
-            // at the receiver side fragment through exchange node
-            NodeInfo resultNodeInfo = allNodeInfos.get(RESULT_SINK_PSEUDO_PLAN_NODE_ID);
-            resultNodeInfo.computeTimeUsage(cumulativeOperatorTime);
-            if (resultNodeInfo.totalTimePercentage >= 30) {
-                setRedColor();
-            } else if (resultNodeInfo.totalTimePercentage >= 15) {
-                setSalmonColor();
-            }
-        }
+        NodeInfo sinkInfo = null;
+        boolean isFinalSink = false;
         DataPartition outputPartition = null;
         if (sink instanceof MultiCastDataSink) {
             List<DataStreamSink> sinks = ((MultiCastDataSink) sink).getDataStreamSinks();
@@ -364,13 +454,27 @@ public class ExplainAnalyzer {
             appendDetailLine(GraphElement.LST_OPERATOR_INDENT, transformNodeName(sink.getClass()),
                     String.format(" (ids=[%s])", String.join(", ", ids)));
         } else {
+            if (sink instanceof ResultSink || sink instanceof OlapTableSink) {
+                isFinalSink = true;
+                // Calculate result sink's time info, other sink's type will be properly processed
+                // at the receiver side fragment through exchange node
+                sinkInfo = allNodeInfos.get(RESULT_SINK_PSEUDO_PLAN_NODE_ID);
+                sinkInfo.computeTimeUsage(cumulativeOperatorTime);
+                if (sinkInfo.isMostConsuming) {
+                    setRedColor();
+                } else if (sinkInfo.isSecondMostConsuming) {
+                    setCoralColor();
+                }
+            } else {
+                sinkInfo = allNodeInfos.get(sink.getExchNodeId().asInt());
+            }
             outputPartition = sink.getOutputPartition();
             appendDetailLine(GraphElement.LST_OPERATOR_INDENT, transformNodeName(sink.getClass()),
-                    isResultSink ? "" : String.format(" (id=%d)", sink.getExchNodeId().asInt()));
+                    isFinalSink ? "" : String.format(" (id=%d)", sink.getExchNodeId().asInt()));
         }
         pushIndent(GraphElement.LAST_CHILD_OPERATOR_INDENT);
         pushIndent(GraphElement.NON_LEAF_METRIC_INDENT);
-        if (isResultSink) {
+        if (isFinalSink && !sinkInfo.state.isInit()) {
             // Time Usage
             NodeInfo resultNodeInfo = allNodeInfos.get(RESULT_SINK_PSEUDO_PLAN_NODE_ID);
             List<Object> items = Lists.newArrayList();
@@ -381,9 +485,6 @@ public class ExplainAnalyzer {
             appendDetailLine(items.toArray());
 
             // Output Rows
-            Counter pullRows = searchMetricFromUpperLevel(resultNodeInfo, "CommonMetrics", "PushRowNum");
-            Preconditions.checkNotNull(pullRows);
-            resultNodeInfo.outputRowNums.setValue(pullRows.getValue());
             appendDetailLine("OutputRows: ", resultNodeInfo.outputRowNums);
         }
         if (outputPartition != null) {
@@ -399,7 +500,7 @@ public class ExplainAnalyzer {
             OlapTableSink olapTableSink = (OlapTableSink) sink;
             appendDetailLine("Table: ", olapTableSink.getDstTable().getName());
         }
-        if (isResultSink) {
+        if (isFinalSink) {
             resetColor();
         }
         popIndent(); // metric indent
@@ -417,10 +518,10 @@ public class ExplainAnalyzer {
         Preconditions.checkNotNull(nodeInfo);
 
         nodeInfo.computeTimeUsage(cumulativeOperatorTime);
-        if (nodeInfo.totalTimePercentage >= 30) {
+        if (nodeInfo.isMostConsuming) {
             setRedColor();
-        } else if (nodeInfo.totalTimePercentage >= 15) {
-            setSalmonColor();
+        } else if (nodeInfo.isSecondMostConsuming) {
+            setCoralColor();
         }
 
         boolean isMiddleChild = (parent != null && index < parent.getChildren().size() - 1);
@@ -460,6 +561,10 @@ public class ExplainAnalyzer {
     }
 
     private void appendOperatorInfo(NodeInfo nodeInfo) {
+        if (isRuntimeProfile && nodeInfo.state.isInit()) {
+            return;
+        }
+
         // 1. Cost Estimation
         OptExpression optExpression = execPlan.getOptExpression(nodeInfo.planNodeId);
         if (optExpression != null) {
@@ -501,14 +606,6 @@ public class ExplainAnalyzer {
         appendDetailLine(items.toArray());
 
         // 3. Output Rows
-        Counter pullRows;
-        if (nodeInfo.planElement instanceof UnionNode) {
-            pullRows = sumUpMetric(nodeInfo, false, false, "CommonMetrics", "PullRowNum");
-        } else {
-            pullRows = searchMetricFromUpperLevel(nodeInfo, "CommonMetrics", "PullRowNum");
-        }
-        Preconditions.checkNotNull(pullRows);
-        nodeInfo.outputRowNums.setValue(pullRows.getValue());
         appendDetailLine("OutputRows: ", nodeInfo.outputRowNums);
 
         // 4. Memory Infos
@@ -530,8 +627,46 @@ public class ExplainAnalyzer {
                             (double) rfInputRows.getValue()));
         }
 
-        // 6. Unique Infos
+        // 6. Progress Percentage
+        if (isRuntimeProfile && nodeInfo.state.isRunning()) {
+            Counter totalRowNum = getTotalRowNum(nodeInfo);
+            if (totalRowNum != null && totalRowNum.getValue() > 0 && nodeInfo.outputRowNums != null) {
+                appendDetailLine(String.format("Progress (processed rows/total rows): %.2f%%",
+                        100.0 * nodeInfo.outputRowNums.getValue() / totalRowNum.getValue()));
+            } else {
+                appendDetailLine("Progress (processed rows/total rows): ?%");
+            }
+        }
+
+        // 7. Unique Infos
         appendOperatorUniqueInfo(nodeInfo);
+
+        // 8. Details
+        appendOperatorDetailInfo(nodeInfo);
+    }
+
+    // In order to calculate the progress of the current operator, we need to get the total row number that this
+    // operator will process. And sometimes, child operator may already finish its execution, so we can get the output
+    // row number from its lowest child along the hierarchy path.
+    private Counter getTotalRowNum(NodeInfo rootInfo) {
+        if (!(rootInfo.planElement instanceof PlanNode)) {
+            return null;
+        }
+        PlanNode cur = (PlanNode) rootInfo.planElement;
+        while (true) {
+            NodeInfo curNodeInfo = allNodeInfos.get(cur.getId().asInt());
+            if (curNodeInfo.state.isInit()) {
+                return null;
+            } else if (curNodeInfo.state.isFinished()) {
+                return curNodeInfo.outputRowNums;
+            } else if (cur instanceof AggregationNode) {
+                return null;
+            } else if (CollectionUtils.isEmpty(cur.getChildren()) || cur.getChildren().size() > 1) {
+                return null;
+            } else {
+                cur = cur.getChild(0);
+            }
+        }
     }
 
     private void appendOperatorUniqueInfo(NodeInfo nodeInfo) {
@@ -612,6 +747,137 @@ public class ExplainAnalyzer {
                 appendDetailLine("Table: ", olapScanNode.getOlapTable().getName());
             }
         }
+    }
+
+    private void appendOperatorDetailInfo(NodeInfo nodeInfo) {
+        if (!detailPlanNodeIds.contains(nodeInfo.planNodeId) && !nodeInfo.isMostConsuming &&
+                !nodeInfo.isSecondMostConsuming) {
+            return;
+        }
+
+        boolean onlyTimeConsumingMetrics = !detailPlanNodeIds.contains(nodeInfo.planNodeId);
+
+        RuntimeProfile mergedUniqueMetrics = new RuntimeProfile();
+        for (RuntimeProfile operatorProfile : nodeInfo.operatorProfiles) {
+            RuntimeProfile uniqueMetrics = operatorProfile.getChild("UniqueMetrics");
+            if (uniqueMetrics == null) {
+                continue;
+            }
+            mergedUniqueMetrics.copyAllInfoStringsFrom(uniqueMetrics, null);
+            mergedUniqueMetrics.copyAllCountersFrom(uniqueMetrics);
+        }
+
+        BiConsumer<Predicate<String>, Boolean> metricTraverser = (predicate, enableHighlight) -> {
+            LinkedList<Pair<String, Boolean>> stack = Lists.newLinkedList();
+            stack.push(Pair.create(RuntimeProfile.ROOT_COUNTER, false));
+            while (!stack.isEmpty()) {
+                Pair<String, Boolean> pair = stack.peek();
+                boolean isRoot = Objects.equals(pair.first, RuntimeProfile.ROOT_COUNTER);
+                if (pair.second) {
+                    if (!isRoot) {
+                        popIndent(); // metric indent
+                    }
+                    stack.pop();
+                    continue;
+                }
+                if (!isRoot) {
+                    pushIndent(GraphElement.LEAF_METRIC_INDENT);
+                    appendDetailMetric(nodeInfo, mergedUniqueMetrics, pair.first, enableHighlight);
+                }
+                pair.second = true;
+                Set<String> childCounterNames = mergedUniqueMetrics.getChildCounterMap().get(pair.first);
+                if (CollectionUtils.isNotEmpty(childCounterNames)) {
+                    childCounterNames.stream()
+                            .filter(name -> !name.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MIN)
+                                    && !name.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MAX))
+                            .filter(predicate)
+                            .collect(Collectors.toCollection(TreeSet::new))
+                            .descendingSet()
+                            .forEach(name -> stack.push(Pair.create(name, false)));
+                }
+            }
+        };
+
+        if (onlyTimeConsumingMetrics) {
+            // Only list time-consuming metrics
+            Set<String> selectNames = Sets.newHashSet();
+            for (Map.Entry<String, Counter> kv : mergedUniqueMetrics.getCounterMap().entrySet()) {
+                String name = kv.getKey();
+                Counter counter = kv.getValue();
+                if (!Counter.isTimeType(counter.getType())) {
+                    continue;
+                }
+                if (INCLUDE_DETAIL_METRIC_NAMES.contains(name) ||
+                        nodeInfo.isTimeConsumingMetric(mergedUniqueMetrics, name)) {
+                    selectNames.add(name);
+                    // Add all ancestors
+                    Pair<Counter, String> pair = mergedUniqueMetrics.getCounterPair(name);
+                    while (pair != null && !RuntimeProfile.ROOT_COUNTER.equals(pair.second)) {
+                        selectNames.add(pair.second);
+                        pair = mergedUniqueMetrics.getCounterPair(pair.second);
+                    }
+                }
+            }
+
+            if (CollectionUtils.isNotEmpty(selectNames)) {
+                appendDetailLine("Detail Timers: ", nodeInfo.getDetailAttributes());
+                metricTraverser.accept(selectNames::contains, false);
+            }
+        } else {
+            appendDetailLine("Details: ", nodeInfo.getDetailAttributes());
+            pushIndent(GraphElement.LEAF_METRIC_INDENT);
+
+            if (MapUtils.isNotEmpty(mergedUniqueMetrics.getInfoStrings())) {
+                appendDetailLine("Infos:");
+                pushIndent(GraphElement.LEAF_METRIC_INDENT);
+                for (Map.Entry<String, String> kv : mergedUniqueMetrics.getInfoStrings().entrySet()) {
+                    appendDetailLine(kv.getKey(), ": ", kv.getValue());
+                }
+                popIndent(); // metric indent
+            }
+
+            if (CollectionUtils.isNotEmpty(mergedUniqueMetrics.getChildCounterMap().get(RuntimeProfile.ROOT_COUNTER))) {
+                appendDetailLine("Counters:");
+                metricTraverser.accept(name -> true, true);
+            }
+
+            popIndent(); // metric indent
+        }
+    }
+
+    private void appendDetailMetric(NodeInfo nodeInfo, RuntimeProfile uniqueMetrics, String name,
+                                    boolean enableHighlight) {
+        if (name.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MIN)
+                || name.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MAX)
+                || EXCLUDE_DETAIL_METRIC_NAMES.contains(name)) {
+            return;
+        }
+        Counter counter = uniqueMetrics.getCounter(name);
+        if (counter == null) {
+            return;
+        }
+        Counter minCounter = uniqueMetrics.getCounter(RuntimeProfile.MERGED_INFO_PREFIX_MIN + name);
+        Counter maxCounter = uniqueMetrics.getCounter(RuntimeProfile.MERGED_INFO_PREFIX_MAX + name);
+        boolean needHighlight = enableHighlight && nodeInfo.isTimeConsumingMetric(uniqueMetrics, name);
+        List<Object> items = Lists.newArrayList();
+        if (needHighlight) {
+            items.add(getBackGround());
+        }
+        items.add(name);
+        items.add(": ");
+        items.add(counter);
+        if (minCounter != null || maxCounter != null) {
+            items.add(" [");
+            items.add("min=");
+            items.add(minCounter);
+            items.add(", max=");
+            items.add(maxCounter);
+            items.add("]");
+        }
+        if (needHighlight) {
+            items.add(ANSI_RESET);
+        }
+        appendDetailLine(items.toArray());
     }
 
     private void appendExprs(String metricName, List<? extends Expr> exprs) {
@@ -752,7 +1018,9 @@ public class ExplainAnalyzer {
                 isColorAppended = true;
             }
 
-            if (content instanceof GraphElement) {
+            if (content == null) {
+                buffer.append("?");
+            } else if (content instanceof GraphElement) {
                 buffer.append(((GraphElement) content).content);
             } else if (content instanceof Counter) {
                 buffer.append(RuntimeProfile.printCounter((Counter) content));
@@ -774,22 +1042,57 @@ public class ExplainAnalyzer {
         indents.pop();
     }
 
+    private String getBackGround() {
+        if (color.contains(ANSI_RED)) {
+            return ANSI_BOLD + ANSI_BLACK_ON_RED;
+        } else if (color.contains(ANSI_CORAL)) {
+            return ANSI_BOLD + ANSI_BLACK_ON_CORAL;
+        }
+        return ANSI_BOLD;
+    }
+
     private void setRedColor() {
         color = ANSI_BOLD + ANSI_RED;
     }
 
-    private void setSalmonColor() {
-        color = ANSI_BOLD + ANSI_SALMON;
+    private void setCoralColor() {
+        color = ANSI_BOLD + ANSI_CORAL;
     }
 
     private void resetColor() {
         color = ANSI_RESET;
     }
 
+    private enum NodeState {
+        INIT("\u23F3"), // ⏳
+        RUNNING("\uD83D\uDE80"), // 🚀
+        FINISHED("\u2705"); // ✅
+
+        private final String symbol;
+
+        NodeState(String symbol) {
+            this.symbol = symbol;
+        }
+
+        public boolean isInit() {
+            return INIT.equals(this);
+        }
+
+        public boolean isRunning() {
+            return RUNNING.equals(this);
+        }
+
+        public boolean isFinished() {
+            return FINISHED.equals(this);
+        }
+    }
+
     // This structure is designed to hold all the information of a node, including plan stage information
     // as well as runtime stage information.
     private static final class NodeInfo {
+        private final boolean isRuntimeProfile;
         private final int planNodeId;
+        private final boolean isIntegrated;
 
         // One node in plan may be decomposed into multiply pipeline operators
         // like `aggregate -> (aggregate_sink_operator, aggregate_source_operator)`
@@ -802,26 +1105,76 @@ public class ExplainAnalyzer {
         private Counter cpuTime;
         private Counter networkTime;
         private Counter scanTime;
-        private final Counter outputRowNums = new Counter(TUnit.UNIT, null, 0);
+        private Counter outputRowNums;
         private double totalTimePercentage;
+        private boolean isMostConsuming;
+        private boolean isSecondMostConsuming;
+        private NodeState state;
 
-        public NodeInfo(int planNodeId, List<RuntimeProfile> operatorProfiles,
-                        List<RuntimeProfile> pseudoOperatorProfiles) {
+        public NodeInfo(boolean isRuntimeProfile, int planNodeId, boolean isIntegrated,
+                        List<RuntimeProfile> operatorProfiles, List<RuntimeProfile> pseudoOperatorProfiles) {
+            this.isRuntimeProfile = isRuntimeProfile;
             this.planNodeId = planNodeId;
-            this.operatorProfiles = operatorProfiles;
-            this.pseudoOperatorProfiles = pseudoOperatorProfiles;
+            this.isIntegrated = isIntegrated;
+            this.operatorProfiles = operatorProfiles == null ? Lists.newArrayList() : operatorProfiles;
+            this.pseudoOperatorProfiles =
+                    pseudoOperatorProfiles == null ? Lists.newArrayList() : pseudoOperatorProfiles;
+        }
+
+        public void initState() {
+            if (operatorProfiles.isEmpty()) {
+                state = NodeState.INIT;
+            } else {
+                state = NodeState.FINISHED;
+                if (!isIntegrated) {
+                    state = NodeState.RUNNING;
+                    return;
+                }
+                for (RuntimeProfile operatorProfile : operatorProfiles) {
+                    RuntimeProfile commonMetrics = operatorProfile.getChild("CommonMetrics");
+                    if (Objects.equals("Running", commonMetrics.getInfoString("Status"))) {
+                        state = NodeState.RUNNING;
+                        return;
+                    }
+                }
+            }
+        }
+
+        public String getDetailAttributes() {
+            if (planElement instanceof ScanNode) {
+                return "[ScanTime = IOTaskExecTime + IOTaskWaitTime]";
+            }
+            return "";
+        }
+
+        public boolean isTimeConsumingMetric(RuntimeProfile metrics, String name) {
+            Counter counter = metrics.getCounter(name);
+            if (counter == null) {
+                return false;
+            }
+            Counter maxCounter = metrics.getCounter(RuntimeProfile.MERGED_INFO_PREFIX_MAX + name);
+            if (Counter.isTimeType(counter.getType()) && totalTime.getValue() > 0) {
+                if (counter.isAvg() && maxCounter != null &&
+                        1d * maxCounter.getValue() / totalTime.getValue() > 0.3) {
+                    return true;
+                } else {
+                    return 1d * counter.getValue() / totalTime.getValue() > 0.3;
+                }
+            }
+            return false;
         }
 
         public void merge(NodeInfo other) {
             this.operatorProfiles.addAll(other.operatorProfiles);
-            this.pseudoOperatorProfiles.addAll(other.operatorProfiles);
+            this.pseudoOperatorProfiles.addAll(other.pseudoOperatorProfiles);
         }
 
         public void computeTimeUsage(long cumulativeOperatorTime) {
             totalTime = new Counter(TUnit.TIME_NS, null, 0);
             cpuTime = sumUpMetric(this, true, true, "CommonMetrics", "OperatorTotalTime");
-            Preconditions.checkNotNull(cpuTime);
-            totalTime.update(cpuTime.getValue());
+            if (cpuTime != null) {
+                totalTime.update(cpuTime.getValue());
+            }
             if (planElement instanceof ExchangeNode) {
                 networkTime = searchMaxMetric(this, "UniqueMetrics", "NetworkTime");
                 if (networkTime != null) {
@@ -834,15 +1187,19 @@ public class ExplainAnalyzer {
                 }
             }
             totalTimePercentage = (totalTime.getValue() * 100D / cumulativeOperatorTime);
+            if (totalTimePercentage > 30) {
+                isMostConsuming = true;
+            } else if (totalTimePercentage > 15) {
+                isSecondMostConsuming = true;
+            }
         }
 
         public String getTitle() {
             StringBuilder titleBuilder = new StringBuilder();
             titleBuilder.append(transformNodeName(planElement.getClass()));
-            if (planElement instanceof ResultSink || planElement instanceof OlapTableSink) {
-                return titleBuilder.toString();
+            if (!(planElement instanceof ResultSink) && !(planElement instanceof OlapTableSink)) {
+                titleBuilder.append(String.format(" (id=%d) ", planNodeId));
             }
-            titleBuilder.append(String.format(" (id=%d) ", planNodeId));
             // Attributes
             List<String> attributes = Lists.newArrayList();
             if (planElement instanceof AggregationNode) {
@@ -869,6 +1226,9 @@ public class ExplainAnalyzer {
                         .append(String.join(", ", attributes))
                         .append(']');
             }
+            if (isRuntimeProfile) {
+                titleBuilder.append(' ').append(state.symbol).append(' ');
+            }
             return titleBuilder.toString();
         }
     }
@@ -876,11 +1236,15 @@ public class ExplainAnalyzer {
     // One node in plan may correspond to multiply pipeline operators,
     // This class is designed to collect all the pipeline operators that should belong to one plan node
     private static final class ProfileNodeParser {
+        private final boolean isRuntimeProfile;
+        private final boolean isIntegrated;
         private final List<RuntimeProfile> pipelineProfiles;
         private int pipelineIdx;
         private int operatorIdx;
 
-        public ProfileNodeParser(RuntimeProfile fragmentProfile) {
+        public ProfileNodeParser(boolean isRuntimeProfile, RuntimeProfile fragmentProfile) {
+            this.isRuntimeProfile = isRuntimeProfile;
+            this.isIntegrated = !StringUtils.equalsIgnoreCase("false", fragmentProfile.getInfoString("IsIntegrated"));
             this.pipelineProfiles = fragmentProfile.getChildList().stream()
                     .map(pair -> pair.first)
                     .collect(Collectors.toList());
@@ -924,7 +1288,8 @@ public class ExplainAnalyzer {
                     moveForward();
                 }
 
-                NodeInfo node = new NodeInfo(planNodeId, operatorProfiles, pseudoOperatorProfiles);
+                NodeInfo node = new NodeInfo(isRuntimeProfile, planNodeId, isIntegrated,
+                        operatorProfiles, pseudoOperatorProfiles);
                 if (nodes.containsKey(planNodeId)) {
                     NodeInfo existingNode = nodes.get(planNodeId);
                     existingNode.merge(node);
