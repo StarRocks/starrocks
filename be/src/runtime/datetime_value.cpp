@@ -34,6 +34,9 @@
 
 #include "runtime/datetime_value.h"
 
+#include <cctz/civil_time.h>
+#include <cctz/time_zone.h>
+
 #include <cctype>
 #include <cstring>
 #include <ctime>
@@ -56,6 +59,69 @@ static const char* s_ab_month_name[] = {"",    "Jan", "Feb", "Mar", "Apr", "May"
 static const char* s_day_name[] = {"Monday", "Tuesday",  "Wednesday", "Thursday",
                                    "Friday", "Saturday", "Sunday",    nullptr};
 static const char* s_ab_day_name[] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", nullptr};
+
+namespace joda {
+
+//  Symbol  Meaning                      Presentation  Examples
+//  ------  -------                      ------------  -------
+//  G       era                          text          AD
+//  C       century of era (>=0)         number        20
+//  Y       year of era (>=0)            year          1996
+
+//  x       weekyear                     year          1996
+//  w       week of weekyear             number        27
+//  e       day of week                  number        2
+//  E       day of week                  text          Tuesday; Tue
+
+//  y       year                         year          1996
+//  D       day of year                  number        189
+//  M       month of year                month         July; Jul; 07
+//  d       day of month                 number        10
+
+//  a       halfday of day               text          PM
+//  K       hour of halfday (0~11)       number        0
+//  h       clockhour of halfday (1~12)  number        12
+
+//  H       hour of day (0~23)           number        0
+//  k       clockhour of day (1~24)      number        24
+//  m       minute of hour               number        30
+//  s       second of minute             number        55
+//  S       fraction of second           millis        978
+
+//  z       time zone                    text          Pacific Standard Time; PST
+//  Z       time zone offset/id          zone          -0800; -08:00; America/Los_Angeles
+
+//  '       escape for text              delimiter
+//  ''      single quote                 literal       '
+enum JodaFormatChar : char {
+    ERA = 'G',
+    CENURY = 'C',
+    YEAR_OF_ERA = 'Y',
+
+    WEEK_YEAR = 'x',
+    WEEK_OF_WEEKYEAR = 'w',
+    DAY_OF_WEEK_NUM = 'e',
+    DAY_OF_WEEK = 'E',
+
+    YEAR = 'y',
+    DAY_OF_YEAR = 'D',
+    MONTH_OF_YEAR = 'M',
+    DAY_OF_MONTH = 'd',
+
+    HALFDAY_OF_DAY = 'a',
+    HOUR_OF_HALFDAY = 'K',
+    CLOCKHOUR_OF_HALFDAY = 'h',
+
+    HOUR_OF_DAY = 'H',
+    CLOCKHOUR_OF_DAY = 'k',
+    MINUTE_OF_HOUR = 'm',
+    SECOND_OF_MINUTE = 's',
+    FRACTION_OF_SECOND = 'S',
+
+    TIME_ZONE = 'z',
+    TIME_ZONE_OFFSET = 'Z',
+};
+} // namespace joda
 
 uint8_t mysql_week_mode(uint32_t mode) {
     mode &= 7;
@@ -720,18 +786,20 @@ bool DateTimeValue::to_joda_format_string(const char* format, int len, char* to)
             if (write_size + actual_size >= buffer_size) return false;
             to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
             break;
-        case 'Y':
+        case 'Y': {
             // year of era
+            int output_year = same_ch_size == 2 ? (_year % 100) : _year;
             if (_year <= 0) {
-                pos = int_to_str(1 - _year, buf);
+                pos = int_to_str(1 - output_year, buf);
             } else {
-                pos = int_to_str(_year, buf);
+                pos = int_to_str(output_year, buf);
             }
             buf_size = pos - buf;
             actual_size = std::max(buf_size, same_ch_size);
             if (write_size + actual_size >= buffer_size) return false;
             to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
             break;
+        }
         case 'x': {
             // weekyear
             if (_type == TIME_TIME) {
@@ -739,7 +807,8 @@ bool DateTimeValue::to_joda_format_string(const char* format, int len, char* to)
             }
             uint32_t year = 0;
             calc_week(*this, mysql_week_mode(3), &year);
-            pos = int_to_str(year, buf);
+            int output_year = same_ch_size == 2 ? (year % 100) : year;
+            pos = int_to_str(output_year, buf);
             buf_size = pos - buf;
             actual_size = std::max(buf_size, same_ch_size);
             if (write_size + actual_size >= buffer_size) return false;
@@ -784,14 +853,16 @@ bool DateTimeValue::to_joda_format_string(const char* format, int len, char* to)
                 to = append_string(s_ab_day_name[weekday()], to);
             }
             break;
-        case 'y':
+        case 'y': {
             // year
-            pos = int_to_str(_year, buf);
+            int output_year = same_ch_size == 2 ? _year % 100 : _year;
+            pos = int_to_str(output_year, buf);
             buf_size = pos - buf;
             actual_size = std::max(buf_size, same_ch_size);
             if (write_size + actual_size >= buffer_size) return false;
             to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
             break;
+        }
         case 'D':
             // day of year (001..366)
             pos = int_to_str(daynr() - calc_daynr(_year, 1, 1) + 1, buf);
@@ -853,7 +924,7 @@ bool DateTimeValue::to_joda_format_string(const char* format, int len, char* to)
             break;
         case 'h':
             // hour (1..12)
-            pos = int_to_str((_hour % 24 + 11) % 12 + 1, buf);
+            pos = int_to_str(((_hour + 1) % 24 + 11) % 12 + 1, buf);
             buf_size = pos - buf;
             actual_size = std::max(buf_size, same_ch_size);
             if (write_size + actual_size >= buffer_size) return false;
@@ -893,7 +964,7 @@ bool DateTimeValue::to_joda_format_string(const char* format, int len, char* to)
             break;
         case 'S':
             // fraction of second
-            pos = int_to_str(_microsecond / 100000, buf);
+            pos = int_to_str(_microsecond / 1000, buf);
             buf_size = pos - buf;
             actual_size = std::max(buf_size, same_ch_size);
             if (write_size + actual_size >= buffer_size) return false;
@@ -1373,7 +1444,7 @@ bool DateTimeValue::from_joda_format_str(const char* format, int format_len, con
     bool time_part_used = false;
     bool frac_part_used = false;
 
-    int day_part = 0;
+    int halfday = 0;
     int weekday = -1;
     int yearday = -1;
     int week_num = -1;
@@ -1382,35 +1453,74 @@ bool DateTimeValue::from_joda_format_str(const char* format, int format_len, con
     bool sunday_first = false;
     bool strict_week_number_year_type = false;
     int strict_week_number_year = -1;
-    bool usa_time = false;
+    cctz::time_zone ctz; // default UTC
+    bool has_timezone = false;
 
     while (ptr < end && val < val_end) {
         // compute the size of same char, this will determine if additional prefixes are required,
         // eg. format 'yyyyyy' need to display '002023'
         const char* next_ch_ptr = ptr;
-        uint32_t same_ch_size = 0;
+        uint32_t repeat_count = 0;
         for (char ch = *ptr; ch == *next_ch_ptr && next_ch_ptr < end; ++next_ch_ptr) {
-            ++same_ch_size;
+            ++repeat_count;
         }
 
         const char* tmp = nullptr;
         int64_t int_value = 0;
         switch (*ptr) {
-        case 'G':
+        case joda::JodaFormatChar::ERA:
+        case joda::JodaFormatChar::CENURY:
+            // NOT SUPPORTED
             return false;
-        case 'C':
-            return false;
-        case 'Y':
-            return false;
-        case 'x':
-            return false;
-        case 'w':
-            return false;
-        case 'e':
-            return false;
-        case 'E':
-            return false;
-        case 'y': {
+        case joda::JodaFormatChar::WEEK_OF_WEEKYEAR: {
+            tmp = val + min(2, val_end - val);
+            if (!str_to_int64(val, &tmp, &int_value)) {
+                return false;
+            }
+            week_num = int_value;
+            if (week_num > 53 || (strict_week_number && week_num == 0)) {
+                return false;
+            }
+            val = tmp;
+            date_part_used = true;
+            break;
+        }
+        case joda::JodaFormatChar::DAY_OF_WEEK_NUM: {
+            tmp = val + min(1, val_end - val);
+            if (!str_to_int64(val, &tmp, &int_value)) {
+                return false;
+            }
+            if (int_value >= 7) {
+                return false;
+            }
+            if (int_value == 0) {
+                int_value = 7;
+            }
+            weekday = int_value;
+            val = tmp;
+            date_part_used = true;
+            break;
+        }
+        case joda::JodaFormatChar::DAY_OF_WEEK: {
+            if (repeat_count <= 3) {
+                int_value = check_word(s_ab_day_name, val, val_end, &val);
+                if (int_value < 0) {
+                    return false;
+                }
+            } else {
+                int_value = check_word(s_day_name, val, val_end, &val);
+                if (int_value < 0) {
+                    return false;
+                }
+            }
+            int_value++;
+            weekday = int_value;
+            date_part_used = true;
+            break;
+        }
+        case joda::JodaFormatChar::WEEK_YEAR:
+        case joda::JodaFormatChar::YEAR_OF_ERA:
+        case joda::JodaFormatChar::YEAR: {
             // year
             tmp = val + min(4, val_end - val);
             if (!str_to_int64(val, &tmp, &int_value)) {
@@ -1424,8 +1534,8 @@ bool DateTimeValue::from_joda_format_str(const char* format, int format_len, con
             date_part_used = true;
             break;
         }
-        case 'D': {
-            tmp = val + min(same_ch_size, val_end - val);
+        case joda::JodaFormatChar::DAY_OF_YEAR: {
+            tmp = val + min(repeat_count, val_end - val);
             if (!str_to_int64(val, &tmp, &int_value)) {
                 return false;
             }
@@ -1434,9 +1544,9 @@ bool DateTimeValue::from_joda_format_str(const char* format, int format_len, con
             date_part_used = true;
             break;
         }
-        case 'M':
+        case joda::JodaFormatChar::MONTH_OF_YEAR:
             // month of year
-            if (same_ch_size == 2) {
+            if (repeat_count == 2) {
                 tmp = val + min(2, val_end - val);
                 if (!str_to_int64(val, &tmp, &int_value)) {
                     return false;
@@ -1445,7 +1555,7 @@ bool DateTimeValue::from_joda_format_str(const char* format, int format_len, con
                 val = tmp;
                 date_part_used = true;
                 break;
-            } else if (same_ch_size == 3) {
+            } else if (repeat_count == 3) {
                 int_value = check_word(s_ab_month_name, val, val_end, &val);
                 if (int_value < 0) {
                     return false;
@@ -1453,7 +1563,7 @@ bool DateTimeValue::from_joda_format_str(const char* format, int format_len, con
                 _month = int_value;
                 break;
 
-            } else if (same_ch_size == 4) {
+            } else if (repeat_count == 4) {
                 int_value = check_word(s_month_name, val, val_end, &val);
                 if (int_value < 0) {
                     return false;
@@ -1463,7 +1573,7 @@ bool DateTimeValue::from_joda_format_str(const char* format, int format_len, con
             } else {
                 return false;
             }
-        case 'd': {
+        case joda::JodaFormatChar::DAY_OF_MONTH: {
             tmp = val + min(2, val_end - val);
             if (!str_to_int64(val, &tmp, &int_value)) {
                 return false;
@@ -1473,41 +1583,36 @@ bool DateTimeValue::from_joda_format_str(const char* format, int format_len, con
             date_part_used = true;
             break;
         }
-        case 'a': {
-            if ((val_end - val) < 2 || toupper(*(val + 1)) != 'M' || !usa_time) {
+        case joda::JodaFormatChar::HALFDAY_OF_DAY: {
+            if ((val_end - val) < 2 || toupper(*(val + 1)) != 'M') {
                 return false;
             }
             if (toupper(*val) == 'P') {
                 // PM
-                day_part = 12;
+                halfday = 12;
             }
             time_part_used = true;
             val += 2;
             break;
         }
-        case 'h':
-            usa_time = true;
-        case 'K':
-        case 'H':
-            tmp = val + min(same_ch_size, val_end - val);
+        case joda::JodaFormatChar::CLOCKHOUR_OF_HALFDAY:
+        case joda::JodaFormatChar::HOUR_OF_HALFDAY:
+        case joda::JodaFormatChar::HOUR_OF_DAY:
+        case joda::JodaFormatChar::CLOCKHOUR_OF_DAY:
+            tmp = val + min(repeat_count, val_end - val);
             if (!str_to_int64(val, &tmp, &int_value)) {
                 return false;
             }
             _hour = int_value;
-            val = tmp;
-            time_part_used = true;
-            break;
-        case 'k':
-            tmp = val + min(same_ch_size, val_end - val);
-            if (!str_to_int64(val, &tmp, &int_value)) {
-                return false;
+            if (*ptr == joda::JodaFormatChar::CLOCKHOUR_OF_DAY || *ptr == joda::JodaFormatChar::CLOCKHOUR_OF_HALFDAY) {
+                _hour--;
             }
-            _hour = int_value + 1;
             val = tmp;
             time_part_used = true;
             break;
-        case 'm':
-            tmp = val + min(same_ch_size, val_end - val);
+
+        case joda::JodaFormatChar::MINUTE_OF_HOUR:
+            tmp = val + min(repeat_count, val_end - val);
             if (!str_to_int64(val, &tmp, &int_value)) {
                 return false;
             }
@@ -1515,7 +1620,7 @@ bool DateTimeValue::from_joda_format_str(const char* format, int format_len, con
             val = tmp;
             time_part_used = true;
             break;
-        case 's':
+        case joda::JodaFormatChar::SECOND_OF_MINUTE:
             tmp = val + min(2, val_end - val);
             if (!str_to_int64(val, &tmp, &int_value)) {
                 return false;
@@ -1524,11 +1629,25 @@ bool DateTimeValue::from_joda_format_str(const char* format, int format_len, con
             val = tmp;
             time_part_used = true;
             break;
-        case 'S':
-        case 'z':
-        case 'Z':
-        case '\'':
-            return false;
+        case joda::JodaFormatChar::FRACTION_OF_SECOND:
+            tmp = val + min(repeat_count, val_end - val);
+            if (!str_to_int64(val, &tmp, &int_value)) {
+                return false;
+            }
+            _microsecond = int_value * 1000;
+            val = tmp;
+            time_part_used = true;
+            frac_part_used = true;
+            break;
+        case joda::JodaFormatChar::TIME_ZONE:
+        case joda::JodaFormatChar::TIME_ZONE_OFFSET: {
+            std::string_view tz(val, val_end);
+            if (!TimezoneUtils::find_cctz_time_zone(tz, ctz)) {
+                return false;
+            }
+            has_timezone = true;
+            break;
+        }
         default: {
             if (*ptr != *val) {
                 return false;
@@ -1538,19 +1657,11 @@ bool DateTimeValue::from_joda_format_str(const char* format, int format_len, con
         }
         }
 
-        ptr += same_ch_size;
+        ptr += repeat_count;
     }
 
-    if (usa_time) {
-        if (_hour > 12 || _hour < 1) {
-            return false;
-        }
-        _hour = (_hour % 12) + day_part;
-    }
-    // if (sub_val_end) {
-    //     *sub_val_end = val;
-    //     return false;
-    // }
+    _hour += halfday;
+
     // Year day
     if (yearday > 0) {
         uint64_t days = calc_daynr(_year, 1, 1) + yearday - 1;
@@ -1595,6 +1706,15 @@ bool DateTimeValue::from_joda_format_str(const char* format, int format_len, con
             }
         } else {
             _type = TIME_TIME;
+        }
+    }
+
+    // Timezone
+    if (has_timezone) {
+        const auto tp = cctz::convert(cctz::civil_second(_year, _month, _day, _hour, _minute, _second), ctz);
+        int64_t timestamp = tp.time_since_epoch().count();
+        if (!from_unixtime(timestamp, TimezoneUtils::local_time_zone())) {
+            return false;
         }
     }
 

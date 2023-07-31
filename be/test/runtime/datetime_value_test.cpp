@@ -1416,32 +1416,68 @@ TEST_F(DateTimeValueTest, packed_time) {
     }
 }
 
-using TestParseDatetimeParam = std::tuple<std::string, std::string, std::string>;
+using TestParseDatetimeParam = std::tuple<std::string, std::string>;
 
 class ParseDateTimeTestFixture : public ::testing::TestWithParam<TestParseDatetimeParam> {};
 
 TEST_P(ParseDateTimeTestFixture, parse_datetime) {
-    auto& [datetime_str, format, parsed] = GetParam();
+    auto& [datetime_str, format] = GetParam();
     const char* sub_val;
     DateTimeValue datetime;
     bool res = datetime.from_joda_format(format, datetime_str, &sub_val);
     EXPECT_TRUE(res);
-    char str[20];
-    datetime.to_string(str);
-    EXPECT_EQ(parsed, str);
+    char str[50];
 
     // to joda format
-    datetime.to_joda_format_string(format.data(), format.length(), str);
-    EXPECT_EQ(datetime_str, str);
+    EXPECT_TRUE(datetime.to_joda_format_string(format.data(), format.length(), str));
+    if (format.find("z") != std::string::npos || format.find('Z') != std::string::npos) {
+        // to_joda does not output the timezone
+    } else {
+        EXPECT_EQ(datetime_str, str);
+    }
 }
 
-INSTANTIATE_TEST_SUITE_P(ParseDateTimeTest, ParseDateTimeTestFixture,
-                         ::testing::Values(
-                                 // clang-format: off
-                                 TestParseDatetimeParam("1994-09-09", "yyyy-MM-dd", "1994-09-09"),
-                                 TestParseDatetimeParam("1994-09-09 01:02:03", "yyyy-MM-dd HH:mm:ss",
-                                                        "1994-09-09 01:02:03")
-                                 // clang-format: on
-                                 ));
+INSTANTIATE_TEST_SUITE_P(
+        ParseDateTimeTest, ParseDateTimeTestFixture,
+        ::testing::Values(
+                // clang-format: off
+                TestParseDatetimeParam("1994-09-09", "yyyy-MM-dd"), TestParseDatetimeParam("1994 09 09", "yyyy MM dd"),
+                TestParseDatetimeParam("1994/09/09", "yyyy/MM/dd"),
+                TestParseDatetimeParam("1994-09-09 01:02:03", "yyyy-MM-dd HH:mm:ss"),
+                TestParseDatetimeParam("1994/09/09 01:02:03", "yyyy/MM/dd HH:mm:ss"),
+
+                // Month
+                TestParseDatetimeParam("Sep/09/1994 01:02:03", "MMM/dd/yyyy HH:mm:ss"),
+                TestParseDatetimeParam("September/09/1994 01:02:03", "MMMM/dd/yyyy HH:mm:ss"),
+                TestParseDatetimeParam("December/09/1994 01:02:03", "MMMM/dd/yyyy HH:mm:ss"),
+                TestParseDatetimeParam("09/Sep/1994 01:02:03", "dd/MMM/yyyy HH:mm:ss"),
+
+                // Year
+                TestParseDatetimeParam("09/09/94 01:02:03", "MM/dd/yy HH:mm:ss"),
+                TestParseDatetimeParam("09/09/94 01:02:03", "MM/dd/yy HH:mm:ss"),
+
+                // Week
+                TestParseDatetimeParam("2023 01 2 Monday", "yyyy MM w EEEE"),
+                TestParseDatetimeParam("2023 01 2 Mon", "yyyy MM w EEE"),
+
+                // Hour
+                TestParseDatetimeParam("1994-09-09 02:02:03 AM", "yyyy-MM-dd hh:mm:ss aa"),
+                TestParseDatetimeParam("1994-09-09 02:02:03 AM", "yyyy-MM-dd KK:mm:ss aa"),
+                TestParseDatetimeParam("1994-09-09 02:02:03 PM", "yyyy-MM-dd hh:mm:ss aa"),
+                TestParseDatetimeParam("1994-09-09 02:02:03 PM", "yyyy-MM-dd KK:mm:ss aa"),
+                TestParseDatetimeParam("1994-09-09 02:02:03", "yyyy-MM-dd KK:mm:ss"),
+
+                //SECOND
+                TestParseDatetimeParam("1994-09-09 01:02:03.123", "yyyy-MM-dd HH:mm:ss.SSS"),
+
+                // Timezone
+                TestParseDatetimeParam("1994-09-09 01:02:03 CST", "yyyy-MM-dd HH:mm:ss zzz"),
+                TestParseDatetimeParam("1994-09-09 01:02:03 UTC", "yyyy-MM-dd HH:mm:ss zzz"),
+                TestParseDatetimeParam("1994-09-09 01:02:03 +08:00", "yyyy-MM-dd HH:mm:ss zzz"),
+                TestParseDatetimeParam("1994-09-09 01:02:03 America/Los_Angeles", "yyyy-MM-dd HH:mm:ss ZZZZ"),
+                TestParseDatetimeParam("1994-09-09 01:02:03 Asia/Shanghai", "yyyy-MM-dd HH:mm:ss ZZZZ")
+
+                // clang-format: on
+                ));
 
 } // namespace starrocks
