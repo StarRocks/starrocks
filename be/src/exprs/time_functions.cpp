@@ -903,10 +903,10 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(years_diffImpl, l, r) {
 
     if (year >= 0) {
         year -= ((month1 * 100 + day1) * 1000000L + (hour1 * 10000 + minute1 * 100 + second1) <
-                (month2 * 100 + day2) * 1000000L + (hour2 * 10000 + minute2 * 100 + second2));
+                 (month2 * 100 + day2) * 1000000L + (hour2 * 10000 + minute2 * 100 + second2));
     } else {
         year += ((month1 * 100 + day1) * 1000000L + (hour1 * 10000 + minute1 * 100 + second1) >
-                (month2 * 100 + day2) * 1000000L + (hour2 * 10000 + minute2 * 100 + second2));
+                 (month2 * 100 + day2) * 1000000L + (hour2 * 10000 + minute2 * 100 + second2));
     }
     return year;
 }
@@ -917,21 +917,51 @@ DEFINE_TIME_BINARY_FN(years_diff, TYPE_DATETIME, TYPE_DATETIME, TYPE_BIGINT);
 DEFINE_BINARY_FUNCTION_WITH_IMPL(years_diff_v2Impl, to_timestamp, from_timestamp) {
     int8_t sign = from_timestamp < to_timestamp ? 1 : -1;
 
-    int year1, month1, day1, hour1, mintue1, second1, usec1;
-    std::min(from_timestamp, to_timestamp).to_timestamp(&year1, &month1, &day1, &hour1, &mintue1, &second1, &usec1);
-    int64_t us_of_day1 = 1LL * hour1 * 3600000 + mintue1 * 60000 + second1 * 1000 + usec1;
+    int year1, month1, day1, hour1, minute1, second1, usec1;
+    std::min(from_timestamp, to_timestamp).to_timestamp(&year1, &month1, &day1, &hour1, &minute1, &second1, &usec1);
+    int64_t us_of_day1 = 1LL * hour1 * 3600000 + minute1 * 60000 + second1 * 1000 + usec1;
+    int32_t last_day_of_month1 = DAYS_IN_MONTH[date::is_leap(year1)][month1];
 
-    int year2, month2, day2, hour2, mintue2, second2, usec2;
-    std::max(from_timestamp, to_timestamp).to_timestamp(&year2, &month2, &day2, &hour2, &mintue2, &second2, &usec2);
-    int64_t us_of_day2 = 1LL * hour2 * 3600000 + mintue2 * 60000 + second2 * 1000 + usec2;
-
-    int32_t last_day_of_to_month = DAYS_IN_MONTH[date::is_leap(year2)][month2];
+    int year2, month2, day2, hour2, minute2, second2, usec2;
+    std::max(from_timestamp, to_timestamp).to_timestamp(&year2, &month2, &day2, &hour2, &minute2, &second2, &usec2);
+    int64_t us_of_day2 = 1LL * hour2 * 3600000 + minute2 * 60000 + second2 * 1000 + usec2;
+    int32_t last_day_of_month2 = DAYS_IN_MONTH[date::is_leap(year2)][month2];
 
     int64_t diff = year2 - year1;
-    if ((month1 > month2) || (month1 == month2 && day1 > day2 && day2 != last_day_of_to_month) ||
-        (month1 == month2 && day1 == day2 && us_of_day1 > us_of_day2)) {
+
+    if (month1 > month2) {
         diff--;
+    } else if (month1 == month2) {
+        if (last_day_of_month1 != last_day_of_month2) {
+            DCHECK_EQ(month1, 2);
+            // The number of days in Feb is different in normal years and leap years,
+            // and requires special handling
+            if (day1 > day2) {
+                if (day2 != last_day_of_month2) {
+                    diff--;
+                } else {
+                    if (day1 == last_day_of_month1 && us_of_day1 > us_of_day2) {
+                        // date_diff('year', '2017-02-28', '2016-02-29 00:00:00.01') should return 0
+                        diff--;
+                    }
+                    // date_diff('year', '2017-02-28', '2016-02-29') should return 1
+                }
+            } else if (day1 == day2) {
+                if (day2 != last_day_of_month2) {
+                    if (us_of_day1 > us_of_day2) {
+                        // date_diff('year', '2016-02-28', '2015-02-28 00:00:00.01') should return 0
+                        diff--;
+                    }
+                    // date_diff('year', '2016-02-28', '2015-02-28') should return 1
+                }
+            }
+        } else {
+            if ((day1 > day2) || (day1 == day2 && us_of_day1 > us_of_day2)) {
+                diff--;
+            }
+        }
     }
+
     return diff * sign;
 }
 
@@ -965,17 +995,51 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(months_diff_v2Impl, to_timestamp, from_timestam
 
     int year1, month1, day1, hour1, mintue1, second1, usec1;
     std::min(from_timestamp, to_timestamp).to_timestamp(&year1, &month1, &day1, &hour1, &mintue1, &second1, &usec1);
-    int64_t us_of_day1 = 1LL * hour1 * 3600000 + mintue1 * 60000 + second1 * 1000 + usec1 / 1000;
+    int64_t us_of_day1 = 1LL * hour1 * 3600000 + mintue1 * 60000 + second1 * 1000 + usec1;
+    int32_t last_day_of_month1 = DAYS_IN_MONTH[date::is_leap(year1)][month1];
 
     int year2, month2, day2, hour2, mintue2, second2, usec2;
     std::max(from_timestamp, to_timestamp).to_timestamp(&year2, &month2, &day2, &hour2, &mintue2, &second2, &usec2);
-    int64_t us_of_day2 = 1LL * hour2 * 3600000 + mintue2 * 60000 + second2 * 1000 + usec2 / 1000;
+    int64_t us_of_day2 = 1LL * hour2 * 3600000 + mintue2 * 60000 + second2 * 1000 + usec2;
 
-    int32_t last_day_of_to_month = DAYS_IN_MONTH[date::is_leap(year2)][month2];
+    int32_t last_day_of_month2 = DAYS_IN_MONTH[date::is_leap(year2)][month2];
 
     int64_t diff = (year2 - year1) * 12 + (month2 - month1);
-    if ((day2 != last_day_of_to_month && day1 > day2) || (day1 == day2 && us_of_day1 > us_of_day2)) {
-        diff--;
+
+    if (day1 > day2) {
+        if (day2 != last_day_of_month2) {
+            // the most common cases
+            diff--;
+        } else {
+            if (day1 == last_day_of_month1 && us_of_day1 > us_of_day2) {
+                // both are the last day of their respective month
+                // date_diff('month', '2017-02-28', '2016-02-29 00:00:00.01') should return 11
+                diff--;
+            }
+            // other cases
+            // date_diff('month', '2017-02-28', '2016-02-29') should return 12
+            // date_diff('month', '2017-02-28', '2016-02-28 00:00:00.01') should return 12
+        }
+    } else if (day1 == day2) {
+        if (day2 == last_day_of_month2) {
+            if (day1 == last_day_of_month1) {
+                // both are the last day of their respective month
+                if (us_of_day1 > us_of_day2) {
+                    // date_diff('month', '2016-06-30', '2016-04-30 00:00:00.01') should return 1
+                    diff--;
+                }
+                // date_diff('month', '2016-06-30', '2016-04-30') should return 2
+            }
+            // date_diff('month', '2017-02-28', '2016-02-28') should return 12
+            // date_diff('month', '2016-06-30', '2016-05-30 00:00:00.01') should return 1
+            // date_diff('month', '2016-02-29', '2016-01-29 00:00:00.01') should return 1
+        } else {
+            if (us_of_day1 > us_of_day2) {
+                // date_diff('month', '2016-02-28', '2016-01-28 00:00:00.01') should return 0
+                diff--;
+            }
+            // date_diff('month', '2016-02-28', '2016-01-28') should return 0
+        }
     }
 
     return sign * diff;
