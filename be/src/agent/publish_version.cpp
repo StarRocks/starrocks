@@ -60,6 +60,7 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
     span->SetAttribute("txn_id", transaction_id);
     auto scoped = trace::Scope(span);
 
+    bool enable_sync_publish = publish_version_req.enable_sync_publish;
     size_t num_partition = publish_version_req.partition_version_infos.size();
     size_t num_active_tablet = 0;
     std::vector<std::map<TabletInfo, RowsetSharedPtr>> partitions(num_partition);
@@ -180,7 +181,7 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                                             tablet_info.tablet_id, partition_version.version, transaction_id);
             } else {
                 const int64_t max_continuous_version =
-                        config::enable_sync_publish ? tablet->max_continuous_version() : tablet->max_readable_version();
+                        enable_sync_publish ? tablet->max_continuous_version() : tablet->max_readable_version();
                 if (max_continuous_version > 0) {
                     auto& pair = tablet_versions.emplace_back();
                     pair.__set_tablet_id(tablet_info.tablet_id);

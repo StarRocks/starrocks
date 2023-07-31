@@ -2676,6 +2676,7 @@ size_t TabletUpdates::_get_rowset_num_deletes(const Rowset& rowset) {
 
 void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
     int64_t min_readable_version = 0;
+    int64_t max_readable_version = 0;
     int64_t version = 0;
     bool has_pending = false;
     int64_t version_count = 0;
@@ -2686,7 +2687,8 @@ void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
             LOG(WARNING) << "tablet delete when get_tablet_info_extra tablet:" << _tablet.tablet_id();
         } else {
             min_readable_version = _edit_version_infos[0]->version.major();
-            auto& last = _edit_version_infos[_apply_version_idx];
+            max_readable_version = _edit_version_infos[_apply_version_idx]->version.major();
+            auto& last = _edit_version_infos.back();
             version = last->version.major();
             rowsets = last->rowsets;
             has_pending = _pending_commits.size() > 0;
@@ -2717,6 +2719,7 @@ void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
     }
     info->__set_version(version);
     info->__set_min_readable_version(min_readable_version);
+    info->__set_max_readable_version(max_readable_version);
     info->__set_version_miss(has_pending);
     info->__set_version_count(version_count);
     info->__set_row_count(total_row);

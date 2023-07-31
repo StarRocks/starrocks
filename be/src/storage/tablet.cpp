@@ -958,7 +958,7 @@ Version Tablet::_max_continuous_version_from_beginning_unlocked() const {
 
 int64_t Tablet::max_continuous_version() const {
     if (_updates != nullptr) {
-        return config::enable_sync_publish ? _updates->max_readable_version() : _updates->max_version();
+        return _updates->max_version();
     } else {
         std::shared_lock rdlock(_meta_lock);
         int64_t v = _timestamped_version_tracker.get_max_continuous_version();
@@ -1442,6 +1442,7 @@ void Tablet::build_tablet_report_info(TTabletInfo* tablet_info) {
             // and perform state modification operations.
         }
         tablet_info->__set_version(max_version);
+        tablet_info->__set_max_readable_version(max_version);
         // TODO: support getting minReadableVersion
         tablet_info->__set_min_readable_version(_timestamped_version_tracker.get_min_readable_version());
         tablet_info->__set_version_count(_tablet_meta->version_count());

@@ -1225,7 +1225,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TStatus status = new TStatus(TStatusCode.OK);
         result.setStatus(status);
         long timeoutSecond = request.isSetTimeout() ? request.getTimeout() : Config.stream_load_default_timeout_second;
-        result.setTimeout(timeoutSecond);
+        if (Config.enable_sync_publish) {
+            result.setTimeout(timeoutSecond);
+        } else {
+            result.setTimeout(0);
+        }
+        
         try {
             result.setTxnId(loadTxnBeginImpl(request, clientAddr));
         } catch (DuplicatedRequestException e) {

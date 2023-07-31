@@ -505,9 +505,6 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
             }
             // All thread are running, set wait_timeout = 0 to avoid publish block
             wait_time = wait_time * worker_pool_this->_sleeping_count / worker_pool_this->_worker_count;
-            if (config::enable_sync_publish) {
-                wait_time = 0;
-            }
 
             while (!worker_pool_this->_tasks.empty()) {
                 // collect some publish version tasks as a group.
@@ -519,6 +516,10 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         const auto& publish_version_task = *priority_tasks.top();
         LOG(INFO) << "get publish version task txn_id: " << publish_version_task.task_req.transaction_id
                   << " priority queue size: " << priority_tasks.size();
+        bool enable_sync_publish = publish_version_task.task_req.enable_sync_publish;
+        if (enable_sync_publish) {
+            wait_time = 0;
+        }
         StarRocksMetrics::instance()->publish_task_request_total.increment(1);
         auto& finish_task_request = finish_task_requests.emplace_back();
         finish_task_request.__set_backend(BackendOptions::get_localBackend());
@@ -532,7 +533,7 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         batch_publish_latency += MonotonicMillis() - start_ts;
         priority_tasks.pop();
 
-        if (!config::enable_sync_publish) {
+        if (!enable_sync_publish) {
             if (priority_tasks.empty() || finish_task_requests.size() > PUBLISH_VERSION_BATCH_SIZE ||
                 batch_publish_latency > config::max_batch_publish_latency_ms) {
                 int64_t t0 = MonotonicMillis();

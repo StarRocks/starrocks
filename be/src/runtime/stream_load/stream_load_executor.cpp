@@ -231,7 +231,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
         LOG(WARNING) << "commit transaction failed, errmsg=" << status.get_error_msg() << ctx->brief();
         if (status.code() == TStatusCode::PUBLISH_TIMEOUT) {
             ctx->need_rollback = false;
-            if (config::enable_sync_publish) {
+            if (ctx->load_deadline_sec > UnixSeconds()) {
                 //wait for apply finish
                 TGetLoadTxnStatusRequest v_request;
                 TGetLoadTxnStatusResult v_result;
@@ -239,11 +239,9 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
                 v_request.db = ctx->db;
                 v_request.tbl = ctx->table;
                 v_request.txnId = ctx->txn_id;
-                int64_t load_deadline_sec =
-                        std::min(ctx->load_deadline_sec, UnixSeconds() + config::txn_wait_publish_timeout_sec);
-                while (load_deadline_sec >
-                       UnixSeconds() + config::get_txn_status_internal_sec + config::txn_commit_rpc_timeout_ms / 1000) {
-                    sleep(config::get_txn_status_internal_sec);
+                while (ctx->load_deadline_sec > UnixSeconds()) {
+                    sleep(std::min((int64_t)config::get_txn_status_internal_sec,
+                                   ctx->load_deadline_sec - UnixSeconds()));
                     auto visiable_st = ThriftRpcHelper::rpc<FrontendServiceClient>(
                             master_addr.hostname, master_addr.port,
                             [&v_request, &v_result](FrontendServiceConnection& client) {
