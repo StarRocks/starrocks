@@ -205,7 +205,6 @@ set(EXEC_FILES
         ./storage/lake/delta_writer_test.cpp
         ./storage/lake/vacuum_test.cpp
         ./storage/lake/location_provider_test.cpp
-        ./storage/lake/compaction_task_test.cpp
         ./storage/lake/schema_change_test.cpp
         ./storage/lake/tablet_manager_test.cpp
         ./storage/lake/partial_update_test.cpp
@@ -402,6 +401,7 @@ SET_TARGET_PROPERTIES(starrocks_test PROPERTIES COMPILE_FLAGS "-fno-access-contr
 # =================================================
 # test cases must be compiled as a standalone binary
 ADD_BE_TEST(storage/task/engine_storage_migration_task_test)
+ADD_BE_TEST(storage/lake/compaction_task_test)
 
 # you can simply add test case as single binary without adding `main`
 # ADD_BE_TEST(exec/sorting_test)

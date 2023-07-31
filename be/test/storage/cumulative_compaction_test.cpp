@@ -279,7 +279,7 @@ public:
         Compaction::init(config::max_compaction_concurrency);
 
         _default_storage_root_path = config::storage_root_path;
-        config::storage_root_path = std::filesystem::current_path().string() + "/data_test_cumulative_compaction";
+        config::storage_root_path = std::filesystem::current_path().string() + "/cumulative_compaction_test";
         fs::remove_all(config::storage_root_path);
         ASSERT_TRUE(fs::create_directories(config::storage_root_path).ok());
         std::vector<StorePath> paths;
