@@ -2,7 +2,7 @@
 # Please run this command from the git repo root directory to build:
 #
 #   - Use artifact image to package runtime container:
-#     > DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=image --build-arg ARTIFACTIMAGE=ghcr.io/starrocks/starrocks/artifact-ubuntu:latest -f docker/dockerfiles/allin1/allin1-ubuntu.Dockerfile -t allin1-ubuntu:latest .
+#     > DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=image --build-arg ARTIFACTIMAGE=starrocks/artifacts-ubuntu:latest -f docker/dockerfiles/allin1/allin1-ubuntu.Dockerfile -t allin1-ubuntu:latest .
 #   - Use locally build artifacts to package runtime container:
 #     > DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=local --build-arg LOCAL_REPO_PATH=. -f docker/dockerfiles/allin1/allin1-ubuntu.Dockerfile -t allin1-ubuntu:latest .
 #
@@ -20,6 +20,7 @@ ARG LOCAL_REPO_PATH
 
 COPY ${LOCAL_REPO_PATH}/output/fe /release/fe_artifacts/fe
 COPY ${LOCAL_REPO_PATH}/output/be /release/be_artifacts/be
+COPY ${LOCAL_REPO_PATH}/fs_brokers/apache_hdfs_broker/output/apache_hdfs_broker /release/broker_artifacts/apache_hdfs_broker
 
 
 FROM artifacts-from-${ARTIFACT_SOURCE} as artifacts
@@ -30,7 +31,7 @@ ARG DEPLOYDIR=/data/deploy
 ENV SR_HOME=${DEPLOYDIR}/starrocks
 
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
-        binutils-dev default-jdk python2 mysql-client curl vim tree net-tools less tzdata linux-tools-common linux-tools-generic && \
+        binutils-dev default-jdk python2 mysql-client curl vim tree net-tools less tzdata linux-tools-common linux-tools-generic supervisor nginx netcat && \
         ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
         dpkg-reconfigure -f noninteractive tzdata && \
         rm -rf /var/lib/apt/lists/*
@@ -42,14 +43,14 @@ WORKDIR $DEPLOYDIR
 # Copy all artifacts to the runtime container image
 COPY --from=artifacts /release/be_artifacts/ $DEPLOYDIR/starrocks
 COPY --from=artifacts /release/fe_artifacts/ $DEPLOYDIR/starrocks
+COPY --from=artifacts /release/broker_artifacts/ $DEPLOYDIR/starrocks
 
-# Copy Setup script.
-COPY --chmod=755 docker/dockerfiles/allin1/*.sh $DEPLOYDIR
+# Copy setup script and config files
+COPY docker/dockerfiles/allin1/*.sh docker/dockerfiles/allin1/*.conf docker/dockerfiles/allin1/*.txt $DEPLOYDIR
+COPY docker/dockerfiles/allin1/services/ $SR_HOME
 
-# Copy config files
-COPY docker/dockerfiles/allin1/*.conf $DEPLOYDIR
 RUN cat be.conf >> $DEPLOYDIR/starrocks/be/conf/be.conf && \
     cat fe.conf >> $DEPLOYDIR/starrocks/fe/conf/fe.conf && \
     mkdir -p $DEPLOYDIR/starrocks/fe/meta && mkdir -p $DEPLOYDIR/starrocks/be/storage && touch /.dockerenv
 
-CMD ./start_fe_be.sh
+CMD ./entrypoint.sh
