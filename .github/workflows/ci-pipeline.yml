@@ -17,16 +17,17 @@ concurrency:
 jobs:
 
   sync-checker:
-    runs-on: ubuntu-latest
-    if: >
-      !contains(github.event.pull_request.title, '(sync #') &&
-      !contains(github.event.pull_request.labels.*.name, 'sync') &&
-      (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
+    runs-on: [self-hosted, normal]
     name: RUN CHECKER
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      CODE_PATH: ${{ github.workspace }}
+      BRANCH: ${{ github.base_ref }}
+      GH_TOKEN: ${{ github.token }}
+    outputs:
+      PASS: ${{ steps.check.outputs.pass }}
+      THIRDPARTY: ${{ steps.thirdparty-checker.outputs.thirdparty }}
     steps:
-      - run: echo "success"
-      - run: |
-          echo "${{ github.head_ref }}"
       - name: upload info
         env:
           PR_NUMBER: ${{ github.event.number }}
@@ -34,12 +35,14 @@ jobs:
           echo $PR_NUMBER > pr_num.txt
           GITHUB_SHA=$(cat $GITHUB_EVENT_PATH | jq -r .pull_request.head.sha)
           echo ${GITHUB_SHA} > head_sha.txt
+
       - name: Upload the PR number
         uses: actions/upload-artifact@v2
         with:
           name: pr_num
           path: ./pr_num.txt
           retention-days: 1
+
       - name: Upload the PR HEAD REF
         uses: actions/upload-artifact@v2
         with:
@@ -47,10 +50,48 @@ jobs:
           path: ./head_sha.txt
           retention-days: 1
 
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
+
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Checkout PR
+        run: |
+          cd /var/lib/ci-tool/ && git pull && ./bin/checkout.sh check
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
+
+      - name: Check
+        id: check
+        if: >
+          !contains(github.event.pull_request.title, '(sync #') &&
+          !contains(github.event.pull_request.labels.*.name, 'sync') &&
+          (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
+        run: |
+          echo "pass=true" >> $GITHUB_OUTPUT
+
+      - uses: dorny/paths-filter@v2
+        id: thirdparty-checker
+        if: always()
+        with:
+          filters: |
+            thirdparty:
+            - 'thirdparty/**'
+            - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+
   be-checker:
     runs-on: ubuntu-latest
     needs: sync-checker
     name: BE FILTER
+    if: needs.sync-checker.outputs.PASS == 'true' || needs.sync-checker.outputs.THIRDPARTY == 'true'
     outputs:
       output1: ${{ steps.be-changes-info.outputs.be }}
       output2: ${{ steps.be-changes-info.outputs.thirdparty }}
@@ -260,6 +301,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: sync-checker
     name: FE FILTER
+    if: needs.sync-checker.outputs.PASS == 'true' || needs.sync-checker.outputs.THIRDPARTY == 'true'
     outputs:
       output1: ${{ steps.fe-changes-info.outputs.fe }}
     steps:
@@ -420,6 +462,9 @@ jobs:
     name: FE UT
     env:
       PR_NUMBER: ${{ github.event.number }}
+      CODE_PATH: ${{ github.workspace }}
+      BRANCH: ${{ github.base_ref }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: clean
         run: |
@@ -440,16 +485,7 @@ jobs:
 
       - name: Checkout PR
         run: |
-          BRANCH=${{steps.branch.outputs.branch}}
-          git config --global user.name "wanpengfei-git";
-          git config --global user.email "wanpengfei91@163.com";
-          git checkout $BRANCH;
-          git pull;
-          BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
-          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
-          git checkout $BRANCH_NAME;
-          git checkout -b merge_pr;
-          git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
+          cd /var/lib/ci-tool/ && git pull && ./bin/checkout.sh
 
       - name: UPDATE ECI & RUN UT
         id: run_ut
