@@ -57,7 +57,7 @@ public class ExplainAnalyzeStmtTest {
             SqlParser.parse("explain analyze update t0 set id = 1", sessionVariable);
         });
 
-        String expectedMessage = "Getting syntax error. Detail message: Unsupported operation analyze.";
+        String expectedMessage = "Getting syntax error. Detail message: Unsupported operation on analyze.";
         String actualMessage = exception.getMessage();
         Assert.assertEquals(expectedMessage, actualMessage);
     }
@@ -69,7 +69,7 @@ public class ExplainAnalyzeStmtTest {
             SqlParser.parse("explain analyze delete from t0 where id = 1", sessionVariable);
         });
 
-        String expectedMessage = "Getting syntax error. Detail message: Unsupported operation analyze.";
+        String expectedMessage = "Getting syntax error. Detail message: Unsupported operation on analyze.";
         String actualMessage = exception.getMessage();
         Assert.assertEquals(expectedMessage, actualMessage);
     }

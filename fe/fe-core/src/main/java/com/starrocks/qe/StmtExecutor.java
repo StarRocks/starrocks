@@ -111,6 +111,7 @@ import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
+import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.DdlStmt;
@@ -568,10 +569,10 @@ public class StmtExecutor {
                     } finally {
                         if (!needRetry) {
                             if (context.getSessionVariable().isEnableProfile()) {
-                                writeProfile(beginTimeInNanoSecond);
+                                writeProfile(execPlan, beginTimeInNanoSecond);
                                 if (parsedStmt.isExplain() &&
                                         StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
-                                    handleExplainStmt(ExplainAnalyzer.analyze(execPlan, profile));
+                                    handleExplainStmt(ExplainAnalyzer.analyze(execPlan, profile, null));
                                 }
                             }
 
@@ -610,6 +611,8 @@ public class StmtExecutor {
                 handleUnsupportedStmt();
             } else if (parsedStmt instanceof AnalyzeStmt) {
                 handleAnalyzeStmt();
+            } else if (parsedStmt instanceof AnalyzeProfileStmt) {
+                handleAnalyzeProfileStmt();
             } else if (parsedStmt instanceof DropHistogramStmt) {
                 handleDropHistogramStmt();
             } else if (parsedStmt instanceof DropStatsStmt) {
@@ -729,7 +732,7 @@ public class StmtExecutor {
         leaderOpExecutor.execute();
     }
 
-    private void writeProfile(long beginTimeInNanoSecond) {
+    private void writeProfile(ExecPlan plan, long beginTimeInNanoSecond) {
         long profileBeginTime = System.currentTimeMillis();
         initProfile(beginTimeInNanoSecond);
         profile.computeTimeInChildProfile();
@@ -739,7 +742,7 @@ public class StmtExecutor {
                         DebugUtil.getPrettyStringMs(profileEndTime - profileBeginTime));
         StringBuilder builder = new StringBuilder();
         profile.prettyPrint(builder, "");
-        String profileContent = ProfileManager.getInstance().pushProfile(profile);
+        String profileContent = ProfileManager.getInstance().pushProfile(plan, profile);
         if (context.getQueryDetail() != null) {
             context.getQueryDetail().setProfile(profileContent);
         }
@@ -876,6 +879,7 @@ public class StmtExecutor {
 
         coord.exec();
         coord.setTopProfileSupplier(this::buildTopLevelProfile);
+        coord.setExecPlanSupplier(() -> execPlan);
 
         // send result
         // 1. If this is a query with OUTFILE clause, eg: select * from tbl1 into outfile xxx,
@@ -1032,6 +1036,15 @@ public class StmtExecutor {
         }
 
         sendShowResult(resultSet);
+    }
+
+    private void handleAnalyzeProfileStmt() throws IOException {
+        AnalyzeProfileStmt analyzeProfileStmt = (AnalyzeProfileStmt) parsedStmt;
+        String queryId = analyzeProfileStmt.getQueryId();
+        List<Integer> planNodeIds = analyzeProfileStmt.getPlanNodeIds();
+        ProfileManager.ProfileElement profileElement = ProfileManager.getInstance().getProfileElement(queryId);
+        Preconditions.checkNotNull(profileElement, "query not exists");
+        handleExplainStmt(ExplainAnalyzer.analyze(profileElement.plan, profileElement.profile, planNodeIds));
     }
 
     private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
@@ -1426,10 +1439,10 @@ public class StmtExecutor {
             handleDMLStmt(execPlan, stmt);
             // TODO: Support write profile even dml aborted.
             if (context.getSessionVariable().isEnableProfile()) {
-                writeProfile(beginTimeInNanoSecond);
+                writeProfile(execPlan, beginTimeInNanoSecond);
                 if (parsedStmt.isExplain() &&
                         StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
-                    handleExplainStmt(ExplainAnalyzer.analyze(execPlan, profile));
+                    handleExplainStmt(ExplainAnalyzer.analyze(execPlan, profile, null));
                 }
             }
         } catch (Throwable t) {
@@ -1447,7 +1460,11 @@ public class StmtExecutor {
         boolean isExplainAnalyze = parsedStmt.isExplain()
                 && StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel());
 
-        if (!isExplainAnalyze && stmt.isExplain()) {
+        if (isExplainAnalyze) {
+            context.getSessionVariable().setEnableProfile(true);
+            context.getSessionVariable().setPipelineProfileLevel(1);
+            context.getSessionVariable().setProfileLimitFold(false);
+        } else if (stmt.isExplain()) {
             handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.INSERT));
             return;
         }
@@ -1614,6 +1631,8 @@ public class StmtExecutor {
             QeProcessorImpl.QueryInfo queryInfo = new QeProcessorImpl.QueryInfo(context, originStmt.originStmt, coord);
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), queryInfo);
             coord.exec();
+            coord.setTopProfileSupplier(this::buildTopLevelProfile);
+            coord.setExecPlanSupplier(() -> execPlan);
 
             coord.join(context.getSessionVariable().getQueryTimeoutS());
             if (!coord.isDone()) {

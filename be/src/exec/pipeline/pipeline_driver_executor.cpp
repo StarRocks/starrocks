@@ -126,12 +126,17 @@ void GlobalDriverExecutor::_worker_thread() {
                     _finalize_driver(driver, runtime_state, DriverState::CANCELED);
                 }
                 continue;
-            }
-            // a blocked driver is canceled because of fragment cancellation or query expiration.
-            if (driver->is_finished()) {
+            } else if (driver->is_finished()) {
+                // a blocked driver is canceled because of fragment cancellation or query expiration.
                 _finalize_driver(driver, runtime_state, driver->driver_state());
                 continue;
+            } else if (!driver->is_ready()) {
+                // Enabling blocked driver a change to trigger exec state report.
+                driver->report_exec_state_if_necessary();
+                _blocked_driver_poller->add_blocked_driver(driver);
+                continue;
             }
+
             StatusOr<DriverState> maybe_state;
             int64_t start_time = driver->get_active_time();
 #ifdef NDEBUG
