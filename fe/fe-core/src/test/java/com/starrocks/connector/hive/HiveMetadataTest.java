@@ -26,6 +26,7 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileBlockDesc;
@@ -290,5 +291,9 @@ public class HiveMetadataTest {
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
                 "Database d1 not empty",
                 () -> hiveMetadata.dropDb("d1", true));
+
+        ExceptionChecker.expectThrowsWithMsg(MetaNotFoundException.class,
+                "Failed to access database empty_db",
+                () -> hiveMetadata.dropDb("empty_db", true));
     }
 }

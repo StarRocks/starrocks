@@ -194,7 +194,11 @@ public class HiveMetastoreTest {
         }
 
         public List<String> getAllTableNames(String dbName) {
-            return Lists.newArrayList("table1", "table2");
+            if (dbName.equals("empty_db")) {
+                return Lists.newArrayList();
+            } else {
+                return Lists.newArrayList("table1", "table2");
+            }
         }
 
         public org.apache.hadoop.hive.metastore.api.Database getDb(String dbName) {
