@@ -52,7 +52,7 @@ public class WarehouseManager implements Writable {
     public static final long DEFAULT_WAREHOUSE_ID = 0L;
 
     private Map<Long, Warehouse> idToWh = new HashMap<>();
-    @SerializedName(value = "nameToWh")
+    @SerializedName(value = "fullNameToWh")
     private Map<String, Warehouse> nameToWh = new HashMap<>();
 
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
