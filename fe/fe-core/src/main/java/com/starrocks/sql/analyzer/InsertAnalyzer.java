@@ -285,7 +285,7 @@ public class InsertAnalyzer {
 
         for (int i = 0; i < partitionColNames.size(); i++) {
             String actualName = partitionColNames.get(i);
-            if (!tablePartitionColumnNames.contains(actualName)) {
+            if (!AnalyzerUtils.containsIgnoreCase(tablePartitionColumnNames, actualName)) {
                 throw new SemanticException("Can't find partition column %s", actualName);
             }
 
