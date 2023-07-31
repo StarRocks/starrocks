@@ -209,7 +209,8 @@ struct StructVectorBatch : public ColumnVectorBatch {
                         bool onLazyLoad) override;
 
 private:
-    bool alreadyFilteredByActiveColumn = false;
+    // Mark that this StructVectorBatch is already called ColumnVectorBatch::filter(f_data, f_size, true_size);
+    bool alreadyFiltered = false;
 };
 
 struct ListVectorBatch : public ColumnVectorBatch {
