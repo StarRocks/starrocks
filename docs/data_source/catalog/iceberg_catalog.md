@@ -1,18 +1,21 @@
 # Iceberg catalog
 
-An Iceberg catalog is a kind of external catalog that enables you to query data from Apache Iceberg without ingestion.
+An Iceberg catalog is a kind of external catalog that is supported by StarRocks from v2.4 onwards. With Iceberg catalogs, you can:
 
-Also, you can directly transform and load data from Iceberg by using [INSERT INTO](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md) based on Iceberg catalogs. StarRocks supports Iceberg catalogs from v2.4 onwards.
+- Directly query data stored in Iceberg with the need to manually create tables.
+- Use [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) or asynchronous materialized views (which are supported from v2.5 onwards) to process data stored in Iceberg and load the data into StarRocks.
+- Perform operations on StarRocks to create or drop databases and tables from Iceberg, or write data to Parquet-formatted tables by using [INSERT INTO](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md) (this feature is supported from v3.1 onwards).
 
 To ensure successful SQL workloads on your Iceberg cluster, your StarRocks cluster needs to integrate with two important components:
 
-- Object storage or distributed file system like AWS S3, other S3-compatible storage system, Microsoft Azure Storage, Google GCS, or HDFS
+- Object storage or distributed file system like AWS S3, Microsoft Azure Storage, Google GCS, other S3-compatible storage system (for example, MinIO), or HDFS
 
-- Metastore like Hive metastore or AWS Glue
+- Metastore like Hive metastore, AWS Glue, or REST
 
   > **NOTE**
   >
-  > If you choose AWS S3 as storage, you can use HMS or AWS Glue as metastore. If you choose any other storage system, you can only use HMS as metastore.
+  > - If you choose AWS S3 as storage, you can use HMS or AWS Glue as metastore. If you choose any other storage system, you can only use HMS as metastore.
+  > - If you use Tabular Iceberg Catalog, you must choose REST as metastore.
 
 ## Usage notes
 
@@ -162,6 +165,40 @@ The following table describes the parameters you need to configure in `Metastore
 | aws.glue.secret_key           | No       | The secret key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
 
 For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
+
+##### REST
+
+If you use Tabular Iceberg Catalog, you must choose REST as metastore and configure `MetastoreParams` as follows:
+
+```SQL
+"iceberg.catalog.type"="rest",
+"iceberg.catalog.uri"="<rest-server-api-endpoint>",
+"iceberg.catalog.credential"="<credential>",
+"iceberg.catalog.warehouse"="<identifier-or-path-to-warehouse>"
+```
+
+The following table describes the parameters you need to configure in `MetastoreParams`.
+
+| Parameter                  | Required | Description                                                         |
+| -------------------------- | -------- | ------------------------------------------------------------------- |
+| iceberg.catalog.type       | Yes      | The type of metastore that you use for your Iceberg cluster. Set the value to `rest`.           |
+| iceberg.catalog.uri        | Yes      | The URI of the REST service endpoint. Example: `https://api.tabular.io/ws`.      |
+| iceberg.catalog.credential | Yes      | The authentication information of the Tabular service.                                        |
+| iceberg.catalog.warehouse  | No       | The warehouse location or identifier of the Iceberg catalog. Example: `s3://my_bucket/warehouse_location` or `sandbox`. |
+
+The following example creates an Iceberg catalog named `tabular` that uses REST as metastore:
+
+```SQL
+CREATE EXTERNAL CATALOG tabular
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "rest",
+    "iceberg.catalog.uri" = "https://api.tabular.io/ws",
+    "iceberg.catalog.credential" = "t-5Ii8e3FIbT9m0",
+    "iceberg.catalog.warehouse" = "sandbox"
+);
+```
 
 #### `StorageCredentialParams`
 
