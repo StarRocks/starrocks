@@ -36,11 +36,7 @@ import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.analyzer.SemanticException;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.lang3.StringUtils;
->>>>>>> 9eea14e87b ([Feature] support meta functions (#28094))
 
 import java.io.DataInput;
 import java.io.DataOutput;

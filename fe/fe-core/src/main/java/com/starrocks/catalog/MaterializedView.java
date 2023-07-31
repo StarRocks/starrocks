@@ -1191,76 +1191,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         this.mvRewriteContextCache = mvRewriteContextCache;
     }
 
-<<<<<<< HEAD
-=======
-    /**
-     * Infer the distribution info based on tables and MV query.
-     * Currently is max{bucket_num of base_table}
-     * TODO: infer the bucket number according to MV pattern and cardinality
-     */
-    @Override
-    public void inferDistribution(DistributionInfo info) throws DdlException {
-        if (info.getBucketNum() == 0) {
-            int inferredBucketNum = 0;
-            for (BaseTableInfo base : getBaseTableInfos()) {
-                if (base.getTable().isNativeTableOrMaterializedView()) {
-                    OlapTable olapTable = (OlapTable) base.getTable();
-                    DistributionInfo dist = olapTable.getDefaultDistributionInfo();
-                    inferredBucketNum = Math.max(inferredBucketNum, dist.getBucketNum());
-                }
-            }
-            if (inferredBucketNum == 0) {
-                inferredBucketNum = CatalogUtils.calBucketNumAccordingToBackends();
-            }
-            info.setBucketNum(inferredBucketNum);
-        }
-    }
-
-    @Override
-    public Map<String, String> getProperties() {
-        Map<String, String> properties = super.getProperties();
-        // For materialized view, add into session variables into properties.
-        if (super.getTableProperty() != null && super.getTableProperty().getProperties() != null) {
-            for (Map.Entry<String, String> entry : super.getTableProperty().getProperties().entrySet()) {
-                if (entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
-                    String varKey = entry.getKey().substring(
-                            PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
-                    properties.put(varKey, entry.getValue());
-                }
-            }
-        }
-        return properties;
-    }
-
-    @Override
-    public void gsonPreProcess() throws IOException {
-        this.serializedPartitionRefTableExprs = new ArrayList<>();
-        if (partitionRefTableExprs != null) {
-            for (Expr partitionExpr : partitionRefTableExprs) {
-                if (partitionExpr != null) {
-                    serializedPartitionRefTableExprs.add(
-                            new GsonUtils.ExpressionSerializedObject(partitionExpr.toSql()));
-                }
-            }
-        }
-    }
-
-    @Override
-    public void gsonPostProcess() throws IOException {
-        super.gsonPostProcess();
-        partitionRefTableExprs = new ArrayList<>();
-        if (serializedPartitionRefTableExprs != null) {
-            for (GsonUtils.ExpressionSerializedObject expressionSql : serializedPartitionRefTableExprs) {
-                if (expressionSql != null) {
-                    partitionRefTableExprs.add(
-                            SqlParser.parseSqlToExpr(expressionSql.expressionSql, SqlModeHelper.MODE_DEFAULT));
-                }
-            }
-        }
-    }
-
     public String inspectMeta() {
         return GsonUtils.GSON.toJson(this);
     }
->>>>>>> 9eea14e87b ([Feature] support meta functions (#28094))
 }

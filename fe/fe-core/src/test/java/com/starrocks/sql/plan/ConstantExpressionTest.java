@@ -17,11 +17,7 @@
 
 package com.starrocks.sql.plan;
 
-<<<<<<< HEAD
-=======
-import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.common.StarRocksPlannerException;
->>>>>>> 9eea14e87b ([Feature] support meta functions (#28094))
 import com.starrocks.sql.parser.ParsingException;
 import org.junit.Assert;
 import org.junit.BeforeClass;
