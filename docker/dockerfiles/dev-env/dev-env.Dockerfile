@@ -7,7 +7,7 @@
 #
 #  `distro` argument can be specified to build for a different linux distribution other than default `ubuntu`.
 #  For example, build centos7 dev-env with following commands
-#    DOCKER_BUILDKIT=1 docker build --rm=true --build-arg distro=centos7 --build-arg starlet_tag=$STARLET_ARTIFACTS_TAG -f docker/dockerfiles/dev-env/dev-env.Dockerfile -t starrocks/dev-env-centos7:<tag> .
+#    DOCKER_BUILDKIT=1 docker build --rm=true --build-arg distro=centos7 --build-arg starlet_tag=$STARLET_ARTIFACTS_TAG -f docker/dockerfiles/dev-env/dev-env.Dockerfile -t dev-env-centos7:latest .
 #
 #  Supported linux distribution are: centos7, ubuntu
 
