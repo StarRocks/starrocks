@@ -118,6 +118,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_ENABLE_PERSISTENT_INDEX = "enable_persistent_index";
 
+    public static final String PROPERTIES_PERSISTENT_INDEX_TYPE = "persistent_index_type";
+
     public static final String PROPERTIES_BINLOG_VERSION = "binlog_version";
 
     public static final String PROPERTIES_BINLOG_ENABLE = "binlog_enable";
