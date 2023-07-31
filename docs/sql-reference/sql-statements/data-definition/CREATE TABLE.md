@@ -239,11 +239,19 @@ Note:
 Please use specified key columns and specified value ranges for partitioning.
 
 - Partition name only supports [A-z0-9_]
-- Columns in Range partition only support the following types: TINYINT, SAMLLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME.
+- Columns in Range partition only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME.
 - Partitions are left closed and right open. The left boundary of the first partition is of minimum value.
 - NULL value is stored only in partitions that contain minimum values. When the partition containing the minimum value is deleted, NULL values can no longer be imported.
 - Partition columns can either be single columns or multiple columns. The partition values are the default minimum values.
 - When only one column is specified as the partitioning column, you can set `MAXVALUE` as the upper bound for the partitioning column of the most recent partition.
+
+  ```SQL
+  PARTITION BY RANGE (pay_dt) (
+    PARTITION p1 VALUES LESS THAN ("20210102"),
+    PARTITION p2 VALUES LESS THAN ("20210103"),
+    PARTITION p3 VALUES LESS THAN MAXVALUE
+  )
+  ```
 
 Please note:
 
@@ -269,6 +277,14 @@ Note:
 - Fixed Range is more flexible than LESS THAN. You can customize the left and right partitions.
 - Fixed Range is the same as LESS THAN in the other aspects.
 - When only one column is specified as the partitioning column, you can set `MAXVALUE` as the upper bound for the partitioning column of the most recent partition.
+
+  ```SQL
+  PARTITION BY RANGE (pay_dt) (
+    PARTITION p202101 VALUES [("20210101"), ("20210201")),
+    PARTITION p202102 VALUES [("20210201"), ("20210301")),
+    PARTITION p202103 VALUES [("20210301"), (MAXVALUE))
+  )
+  ```
 
 #### Create multiple partitions in a batch
 
