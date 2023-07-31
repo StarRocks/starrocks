@@ -217,11 +217,12 @@ public class LoadMgr implements Writable {
             throws UserException {
         LoadJob loadJob = getLoadJob(jobId);
         if (loadJob.isTxnDone() && !Strings.isNullOrEmpty(failMsg)) {
-            throw new LoadException("LoadJob " + jobId + " state " + loadJob.getState().name() + ", can not be cancel");
+            throw new LoadException("LoadJob " + jobId + " state " + loadJob.getState().name()
+                    + ", can not be cancelled");
         }
         if (loadJob.isCompleted()) {
             throw new LoadException(
-                    "LoadJob " + jobId + " state " + loadJob.getState().name() + ", can not be cancel/publish");
+                    "LoadJob " + jobId + " state " + loadJob.getState().name() + ", can not be cancelled/publish");
         }
         if (Objects.requireNonNull(jobType) == EtlJobType.INSERT) {
             InsertLoadJob insertLoadJob = (InsertLoadJob) loadJob;
