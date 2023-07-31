@@ -41,7 +41,6 @@ import java.util.Deque;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Queue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -583,54 +582,6 @@ public class TaskManager {
         return taskRunList;
     }
 
-<<<<<<< HEAD
-=======
-    /**
-     * Return the last refresh TaskRunStatus for the task which the source type is MV.
-     * The iteration order is by the task refresh time:
-     * PendingTaskRunMap > RunningTaskRunMap > TaskRunHistory
-     * TODO: Maybe only return needed MVs rather than all MVs.
-     */
-    public Map<String, TaskRunStatus> showMVLastRefreshTaskRunStatus(String dbName) {
-        Map<String, TaskRunStatus> mvNameRunStatusMap = Maps.newHashMap();
-        if (dbName == null) {
-            for (Queue<TaskRun> pTaskRunQueue : taskRunManager.getPendingTaskRunMap().values()) {
-                pTaskRunQueue.stream()
-                        .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
-                        .map(TaskRun::getStatus)
-                        .filter(Objects::nonNull)
-                        .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
-            }
-            taskRunManager.getTaskRunHistory().getAllHistory()
-                    .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
-            // use Map::put to make running task status overwrite the pending task
-            taskRunManager.getRunningTaskRunMap().values().stream()
-                    .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
-                    .map(TaskRun::getStatus)
-                    .filter(Objects::nonNull)
-                    .forEach(task -> mvNameRunStatusMap.put(task.getTaskName(), task));
-        } else {
-            for (Queue<TaskRun> pTaskRunQueue : taskRunManager.getPendingTaskRunMap().values()) {
-                pTaskRunQueue.stream()
-                        .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
-                        .map(TaskRun::getStatus)
-                        .filter(Objects::nonNull)
-                        .filter(u -> u.getDbName().equals(dbName))
-                        .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
-            }
-            taskRunManager.getTaskRunHistory().getAllHistory().stream()
-                    .filter(u -> u.getDbName().equals(dbName))
-                    .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
-            taskRunManager.getRunningTaskRunMap().values().stream()
-                    .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
-                    .map(TaskRun::getStatus)
-                    .filter(u -> u != null && u.getDbName().equals(dbName))
-                    .forEach(task -> mvNameRunStatusMap.put(task.getTaskName(), task));
-        }
-        return mvNameRunStatusMap;
-    }
-
->>>>>>> 42cf9f7354 ([BugFix] fix priority of partition refresh  (#28066))
     public void replayCreateTaskRun(TaskRunStatus status) {
 
         if (status.getState() == Constants.TaskRunState.SUCCESS ||

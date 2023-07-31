@@ -8,12 +8,10 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
-import org.apache.commons.collections.MapUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.Map;
 
 public class TaskRunStatus implements Writable {
 
@@ -60,21 +58,6 @@ public class TaskRunStatus implements Writable {
     @SerializedName("mergeRedundant")
     private boolean mergeRedundant = false;
 
-<<<<<<< HEAD
-=======
-    @SerializedName("source")
-    private Constants.TaskSource source = Constants.TaskSource.CTAS;
-
-    @SerializedName("mvExtraMessage")
-    private MVTaskRunExtraMessage mvTaskRunExtraMessage = new MVTaskRunExtraMessage();
-
-    @SerializedName("properties")
-    private Map<String, String> properties;
-
-    public TaskRunStatus() {
-    }
-
->>>>>>> 42cf9f7354 ([BugFix] fix priority of partition refresh  (#28066))
     public String getQueryId() {
         return queryId;
     }
@@ -188,60 +171,6 @@ public class TaskRunStatus implements Writable {
         this.mergeRedundant = mergeRedundant;
     }
 
-<<<<<<< HEAD
-=======
-    public Constants.TaskSource getSource() {
-        return source;
-    }
-
-    public void setSource(Constants.TaskSource source) {
-        this.source = source;
-    }
-
-    public MVTaskRunExtraMessage getMvTaskRunExtraMessage() {
-        return mvTaskRunExtraMessage;
-    }
-
-    public void setMvTaskRunExtraMessage(MVTaskRunExtraMessage mvTaskRunExtraMessage) {
-        this.mvTaskRunExtraMessage = mvTaskRunExtraMessage;
-    }
-
-    public String getExtraMessage() {
-        if (source == Constants.TaskSource.MV) {
-            return GsonUtils.GSON.toJson(mvTaskRunExtraMessage);
-        } else {
-            return "";
-        }
-    }
-    public void setExtraMessage(String extraMessage) {
-        if (extraMessage == null) {
-            return;
-        }
-
-        if (source == Constants.TaskSource.MV) {
-            this.mvTaskRunExtraMessage =
-                    GsonUtils.GSON.fromJson(extraMessage, MVTaskRunExtraMessage.class);
-        } else {
-            // do nothing
-        }
-    }
-
-    public Map<String, String> getProperties() {
-        return properties;
-    }
-
-    public String getPropertiesJson() {
-        if (MapUtils.isEmpty(properties)) {
-            return null;
-        }
-        return GsonUtils.GSON.toJson(properties);
-    }
-
-    public void setProperties(Map<String, String> properties) {
-        this.properties = properties;
-    }
-
->>>>>>> 42cf9f7354 ([BugFix] fix priority of partition refresh  (#28066))
     public static TaskRunStatus read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, TaskRunStatus.class);
