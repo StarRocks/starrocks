@@ -697,6 +697,17 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return false;
     }
 
+    /**
+     * Returns the leftmost node of the fragment.
+     */
+    public PlanNode getLeftMostNode() {
+        PlanNode node = planRoot;
+        while (!node.getChildren().isEmpty() && !(node instanceof ExchangeNode)) {
+            node = node.getChild(0);
+        }
+        return node;
+    }
+
     public void reset() {
         // Do nothing.
     }

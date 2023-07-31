@@ -45,6 +45,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
+/**
+ * An {@code ExecutionFragment} is a part of the {@link ExecutionDAG}, and it corresponds one-to-one with a {@link PlanFragment}.
+ *
+ * <p>The {@code ExecutionFragment} represents a collection of multiple parallel instances of a {@link PlanFragment}.
+ * It contains a {@link FragmentInstance} for each parallel instance.
+ * Additionally, it includes information about the source and sink, including assigned scan ranges
+ * and destinations to the downstream.
+ */
 public class ExecutionFragment {
     private final ExecutionDAG executionDAG;
     private final int fragmentIndex;
@@ -66,7 +74,7 @@ public class ExecutionFragment {
 
     private Boolean cachedIsColocated = null;
     private Boolean cachedIsReplicated = null;
-    private Boolean cachedIsBucketShuffleJoin = null;
+    private Boolean cachedIsLocalBucketShuffleJoin = null;
 
     private boolean isRightOrFullBucketShuffle = false;
 
@@ -203,15 +211,6 @@ public class ExecutionFragment {
         }
     }
 
-    // Returns the id of the leftmost node of any of the gives types in 'plan_root'.
-    public PlanNode getLeftMostNode() {
-        PlanNode node = planFragment.getPlanRoot();
-        while (!node.getChildren().isEmpty() && !(node instanceof ExchangeNode)) {
-            node = node.getChild(0);
-        }
-        return node;
-    }
-
     public Map<Integer, Integer> getNumSendersPerExchange() {
         return numSendersPerExchange;
     }
@@ -238,17 +237,17 @@ public class ExecutionFragment {
         return cachedIsReplicated;
     }
 
-    public boolean isBucketShuffleJoin() {
-        if (cachedIsBucketShuffleJoin != null) {
-            return cachedIsBucketShuffleJoin;
+    public boolean isLocalBucketShuffleJoin() {
+        if (cachedIsLocalBucketShuffleJoin != null) {
+            return cachedIsLocalBucketShuffleJoin;
         }
 
-        cachedIsBucketShuffleJoin = isBucketShuffleJoin(planFragment.getPlanRoot());
-        return cachedIsBucketShuffleJoin;
+        cachedIsLocalBucketShuffleJoin = isLocalBucketShuffleJoin(planFragment.getPlanRoot());
+        return cachedIsLocalBucketShuffleJoin;
     }
 
     public boolean isRightOrFullBucketShuffle() {
-        isBucketShuffleJoin(); // isRightOrFullBucketShuffle is calculated when calculating isBucketShuffleJoin.
+        isLocalBucketShuffleJoin(); // isRightOrFullBucketShuffle is calculated when calculating isBucketShuffleJoin.
         return isRightOrFullBucketShuffle;
     }
 
@@ -357,7 +356,7 @@ public class ExecutionFragment {
         return root.getChildren().stream().anyMatch(PlanNode::isReplicated);
     }
 
-    private boolean isBucketShuffleJoin(PlanNode root) {
+    private boolean isLocalBucketShuffleJoin(PlanNode root) {
         if (root instanceof ExchangeNode) {
             return false;
         }
@@ -372,7 +371,7 @@ public class ExecutionFragment {
 
         boolean childHasBucketShuffle = false;
         for (PlanNode child : root.getChildren()) {
-            childHasBucketShuffle |= isBucketShuffleJoin(child);
+            childHasBucketShuffle |= isLocalBucketShuffleJoin(child);
         }
 
         return childHasBucketShuffle;

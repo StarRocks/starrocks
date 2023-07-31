@@ -32,13 +32,27 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * The {@code FragmentInstance} represents a parallel instance of a {@link PlanFragment}.
+ * It may be executed once or multiple times, each of which resulting in the spawning of an {@link FragmentInstanceExecState}.
+ */
 public class FragmentInstance {
-    static final int ABSENT_PIPELINE_DOP = -1;
+    private static final int ABSENT_PIPELINE_DOP = -1;
     public static final int ABSENT_DRIVER_SEQUENCE = -1;
 
+    /**
+     * The index in the job.
+     * <p></p>
+     * The instance ordinals of {@code indexInJob} in the fragment and {@link #indexInFragment} should be the same.
+     * For a shuffle join, its shuffle partitions and corresponding one-map-one GRF components should have the same ordinals.
+     * - Fragment instances' ordinals {@link #indexInFragment} determine shuffle partitions' ordinals in DataStreamSink.
+     * - {@code indexInJob} of fragment instances which contain shuffle join determine the ordinals of GRF components in the GRF.
+     * Therefore, here assign monotonic unique indexInJob to Fragment instances to keep consistent order with Fragment
+     * instances in ExecutionFragment.instances.
+     */
     private int indexInJob = -1;
     /**
-     * The index of `execFragment.instances`, which is set when adding this instance to `execFragment`.
+     * The index in {@link ExecutionFragment#getInstances()}, which is set when adding this instance to {@link ExecutionFragment}.
      */
     private int indexInFragment = -1;
     private TUniqueId instanceId = null;
@@ -50,7 +64,6 @@ public class FragmentInstance {
     private final ComputeNode worker;
 
     private final Map<Integer, Integer> bucketSeqToDriverSeq = Maps.newHashMap();
-
     private final Map<Integer, List<TScanRangeParams>> node2ScanRanges = Maps.newHashMap();
     private final Map<Integer, Map<Integer, List<TScanRangeParams>>> node2DriverSeqToScanRanges = Maps.newHashMap();
 

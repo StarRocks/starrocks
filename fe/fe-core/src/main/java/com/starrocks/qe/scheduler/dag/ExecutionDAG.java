@@ -44,11 +44,23 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
-import java.util.concurrent.ConcurrentNavigableMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+/**
+ * The execution DAG represents the distributed execution of a job, mainly including parallel instances of fragments and the
+ * communication between them.
+ *
+ * <p>The execution DAG consists of the following components:
+ *
+ * <ul>
+ *  <li>The {@link ExecutionFragment} represents a collection of multiple parallel instances of a {@link PlanFragment}.
+ *  <li>The {@link FragmentInstance} represents a parallel instance of a {@link PlanFragment}.
+ *  <li> The {@link FragmentInstanceExecState} represents the execution state of a {@link FragmentInstance} for a single attempt.
+ * </ul>
+ */
 public class ExecutionDAG {
     private static final Logger LOG = LogManager.getLogger(ExecutionDAG.class);
 
@@ -56,15 +68,26 @@ public class ExecutionDAG {
     private final List<ExecutionFragment> fragments;
     private final Map<PlanFragmentId, ExecutionFragment> idToFragment;
 
+    /**
+     * {@code instanceIdToInstance} and {@link #workerIdToNumInstances} will be calculated in {@link #finalizeDAG()},
+     * after all the fragment instances have already been added to the DAG .
+     */
     private final Map<TUniqueId, FragmentInstance> instanceIdToInstance;
     private Map<Long, Integer> workerIdToNumInstances = Maps.newHashMap();
-    private final ConcurrentNavigableMap<Integer, FragmentInstanceExecState> indexInJobToExecState =
-            new ConcurrentSkipListMap<>();
 
-    // backend which state need to be checked when joining this coordinator.
-    // It is supposed to be the subset of backendExecStates.
+    /**
+     * The executions will be added to {@code indexInJobToExecState}, when it is deploying.
+     */
+    private final ConcurrentMap<Integer, FragmentInstanceExecState> indexInJobToExecState = new ConcurrentSkipListMap<>();
+
+    /**
+     * Backend which state need to be checked when joining this coordinator.
+     * It is supposed to be the subset of backendExecStates.
+     */
     private final List<FragmentInstanceExecState> needCheckExecutions = Lists.newArrayList();
-    // used only by channel stream load, records the mapping from channel id to target BE's address
+    /**
+     * Used only by channel stream load, records the mapping from channel id to target BE's address
+     */
     private final Map<Integer, TNetworkAddress> channelIdToBEHTTP = Maps.newHashMap();
     private final Map<Integer, TNetworkAddress> channelIdToBEPort = Maps.newHashMap();
 
@@ -127,21 +150,23 @@ public class ExecutionDAG {
      * - There is no data dependency among fragments in a group.
      * - All the upstream fragments of the fragments in a group must belong to the previous groups.
      * - Each group should be delivered sequentially, and fragments in a group can be delivered concurrently.
-     * <p>
-     * For example, the following tree will produce four groups: [[1], [2, 3, 4], [5, 6], [7]]
-     * -     *         1
-     * -     *         │
-     * -     *    ┌────┼────┐
-     * -     *    │    │    │
-     * -     *    2    3    4
-     * -     *    │    │    │
-     * -     * ┌──┴─┐  │    │
-     * -     * │    │  │    │
-     * -     * 5    6  │    │
-     * -     *      │  │    │
-     * -     *      └──┼────┘
-     * -     *         │
-     * -     *         7
+     *
+     * <p>For example, the following tree will produce four groups: [[1], [2, 3, 4], [5, 6], [7]]
+     * <pre>{@code
+     *                 1
+     *                 │
+     *            ┌────┼────┐
+     *            │    │    │
+     *            2    3    4
+     *            │    │    │
+     *         ┌──┴─┐  │    │
+     *         │    │  │    │
+     *         5    6  │    │
+     *              │  │    │
+     *              └──┼────┘
+     *                 │
+     *                 7
+     * }</pre>
      *
      * @return multiple fragment groups.
      */
@@ -227,12 +252,21 @@ public class ExecutionDAG {
         return fragments.get(0).getPlanFragment().getDataPartition() == DataPartition.UNPARTITIONED;
     }
 
+    /**
+     * Do the finalize work after all the fragment instances have already been added to the DAG, including:
+     *
+     * <ul>
+     *  <li>Assign instance id to fragment instances.
+     *  <li>Assign monotonic unique indexInJob to fragment instances to keep consistent order with indexInFragment.
+     *      Also see {@link FragmentInstance#indexInJob}.
+     *  <li>Connect each fragment to its destination fragments
+     *  <li>Setup {@link #workerIdToNumInstances}, {@link #channelIdToBEHTTP}, and {@link #channelIdToBEPort}
+     * </ul>
+     *
+     * @throws SchedulerException when there is something wrong for the plan or execution information.
+     */
     public void finalizeDAG() throws SchedulerException {
-        // For a shuffle join, its shuffle partitions and corresponding one-map-one GRF components should have the same ordinals.
-        // - Fragment instances' ordinals in ExecutionFragment.instances determine shuffle partitions' ordinals in DataStreamSink.
-        // - IndexInJob of Fragment instances that contain shuffle join determine the ordinals of GRF components in the GRF.
-        // Therefore, here assign monotonic unique indexInJob to Fragment instances to keep consistent order with Fragment
-        // instances in ExecutionFragment.instances.
+        // Assign monotonic unique indexInJob to fragment instances to keep consistent order with indexInFragment.
         int index = 0;
         for (ExecutionFragment fragment : fragments) {
             for (FragmentInstance instance : fragment.getInstances()) {
@@ -342,8 +376,8 @@ public class ExecutionDAG {
         }
     }
 
-    private boolean needScheduleByBucketShuffleJoin(ExecutionFragment destFragment, DataSink sourceSink) {
-        if (destFragment.isBucketShuffleJoin() && sourceSink instanceof DataStreamSink) {
+    private boolean needScheduleByLocalBucketShuffleJoin(ExecutionFragment destFragment, DataSink sourceSink) {
+        if (destFragment.isLocalBucketShuffleJoin() && sourceSink instanceof DataStreamSink) {
             DataStreamSink streamSink = (DataStreamSink) sourceSink;
             return streamSink.getOutputPartition().isBucketShuffle();
         }
@@ -377,7 +411,7 @@ public class ExecutionDAG {
             Preconditions.checkState(!destExecFragment.getNumSendersPerExchange().containsKey(exchangeId));
             destExecFragment.getNumSendersPerExchange().put(exchangeId, 1);
 
-            if (needScheduleByBucketShuffleJoin(destExecFragment, sink)) {
+            if (needScheduleByLocalBucketShuffleJoin(destExecFragment, sink)) {
                 throw new NonRecoverableException("CTE consumer fragment cannot be bucket shuffle join");
             } else {
                 // add destination host to this fragment's destination
@@ -427,7 +461,7 @@ public class ExecutionDAG {
         });
 
         // We can only handle unpartitioned (= broadcast) and hash-partitioned output at the moment.
-        if (needScheduleByBucketShuffleJoin(destExecFragment, sink)) {
+        if (needScheduleByLocalBucketShuffleJoin(destExecFragment, sink)) {
             Map<Integer, FragmentInstance> bucketSeqToDestInstance = Maps.newHashMap();
             for (FragmentInstance destInstance : destExecFragment.getInstances()) {
                 for (int bucketSeq : destInstance.getBucketSeqs()) {

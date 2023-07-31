@@ -42,6 +42,9 @@ import java.util.Set;
 
 import static com.starrocks.qe.scheduler.dag.FragmentInstanceExecState.DeploymentResult;
 
+/**
+ * The utility class to deploy fragment instances to workers.
+ */
 public class Deployer {
     private static final Logger LOG = LogManager.getLogger(Deployer.class);
 

@@ -537,13 +537,18 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     private void deliverExecFragments() throws RpcException, UserException {
-        Deployer deployer = new Deployer(connectContext, jobSpec, executionDAG, coordinatorPreprocessor.getCoordAddress(),
-                this::handleErrorExecution);
-        for (List<ExecutionFragment> concurrentFragments : executionDAG.getFragmentsInTopologicalOrderFromRoot()) {
-            deployer.deployFragments(concurrentFragments);
-        }
+        lock();
+        try {
+            Deployer deployer = new Deployer(connectContext, jobSpec, executionDAG, coordinatorPreprocessor.getCoordAddress(),
+                    this::handleErrorExecution);
+            for (List<ExecutionFragment> concurrentFragments : executionDAG.getFragmentsInTopologicalOrderFromRoot()) {
+                deployer.deployFragments(concurrentFragments);
+            }
 
-        attachInstanceProfileToFragmentProfile();
+            attachInstanceProfileToFragmentProfile();
+        } finally {
+            unlock();
+        }
     }
 
     private void handleErrorExecution(Status status, FragmentInstanceExecState execution, Throwable failure)

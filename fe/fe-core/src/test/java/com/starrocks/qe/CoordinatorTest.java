@@ -221,7 +221,7 @@ public class CoordinatorTest extends PlanTestBase {
         prepare.computeFragmentExecParams();
 
         // Assert
-        Map<PlanFragmentId, ExecutionFragment> fragmentParams = prepare.getIdToExecFragment();
+        Map<PlanFragmentId, ExecutionFragment> fragmentParams = prepare.getExecutionDAG().getIdToFragment();
         fragmentParams.forEach((k, v) -> {
             System.err.println("Fragment " + k + " : " + v);
         });

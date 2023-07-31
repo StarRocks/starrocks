@@ -167,11 +167,6 @@ public class CoordinatorPreprocessor {
         return jobSpec.getDescTable();
     }
 
-    @VisibleForTesting
-    Map<PlanFragmentId, ExecutionFragment> getIdToExecFragment() {
-        return executionDAG.getIdToFragment();
-    }
-
     public List<ExecutionFragment> getFragmentsInPreorder() {
         return executionDAG.getFragmentsInPreorder();
     }
@@ -300,7 +295,7 @@ public class CoordinatorPreprocessor {
                 continue;
             }
 
-            PlanNode leftMostNode = execFragment.getLeftMostNode();
+            PlanNode leftMostNode = fragment.getLeftMostNode();
 
             /*
              * Case A:
@@ -408,7 +403,7 @@ public class CoordinatorPreprocessor {
             boolean hasColocate = execFragment.isColocated()
                     && colocatedAssignment != null
                     && colocatedAssignment.getSeqToWorkerId().size() > 0;
-            boolean hasBucketShuffle = execFragment.isBucketShuffleJoin() && colocatedAssignment != null;
+            boolean hasBucketShuffle = execFragment.isLocalBucketShuffleJoin() && colocatedAssignment != null;
 
             if (hasColocate || hasBucketShuffle) {
                 computeColocatedJoinInstanceParam(colocatedAssignment.getSeqToWorkerId(),
@@ -649,7 +644,7 @@ public class CoordinatorPreprocessor {
                 selector.computeScanRangeAssignment();
             } else {
                 boolean hasColocate = execFragment.isColocated();
-                boolean hasBucket = execFragment.isBucketShuffleJoin();
+                boolean hasBucket = execFragment.isLocalBucketShuffleJoin();
                 boolean hasReplicated = execFragment.isReplicated();
                 if (assignment.size() > 0 && hasReplicated && scanNode.canDoReplicatedJoin()) {
                     BackendSelector selector = new ReplicatedBackendSelector(scanNode, locations, assignment,
