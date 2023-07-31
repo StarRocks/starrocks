@@ -35,30 +35,83 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.StmtExecutor;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.TaskRunBuilder;
+import com.starrocks.scheduler.TaskRunManager;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.DmlStmt;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
+import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
+import org.apache.commons.collections.MapUtils;
 import org.junit.Assert;
-import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.platform.commons.util.Preconditions;
 
+import java.util.HashMap;
 import java.util.List;
 
 public class ShowMaterializedViewTest {
-    private ConnectContext ctx;
 
-    @Before
-    public void setUp() {
+    private static ConnectContext ctx;
+    private static StarRocksAssert starRocksAssert;
+
+    @BeforeClass
+    public static void setUp() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        ctx = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(ctx);
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.tbl6\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p0 values [('2021-12-01'),('2022-01-01')),\n" +
+                        "    PARTITION p1 values [('2022-01-01'),('2022-02-01')),\n" +
+                        "    PARTITION p2 values [('2022-02-01'),('2022-03-01')),\n" +
+                        "    PARTITION p3 values [('2022-03-01'),('2022-04-01')),\n" +
+                        "    PARTITION p4 values [('2022-04-01'),('2022-05-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withMaterializedView("create materialized view test.mv_refresh_priority\n" +
+                        "partition by date_trunc('month',k1) \n" +
+                        "distributed by hash(k2) buckets 10\n" +
+                        "refresh deferred manual\n" +
+                        "properties('replication_num' = '1', 'partition_refresh_number'='1')\n" +
+                        "as select k1, k2 from tbl6;");
+
     }
 
     @Test
     public void testNormal() throws Exception {
-        ctx = UtFrameUtils.createDefaultCtx();
         ctx.setDatabase("testDb");
 
         ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("");
@@ -142,5 +195,72 @@ public class ShowMaterializedViewTest {
         ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.fail("No exception throws");
+    }
+
+    private void setPartitionVersion(Partition partition, long version) {
+        partition.setVisibleVersion(version, System.currentTimeMillis());
+        MaterializedIndex baseIndex = partition.getBaseIndex();
+        List<Tablet> tablets = baseIndex.getTablets();
+        for (Tablet tablet : tablets) {
+            List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
+            for (Replica replica : replicas) {
+                replica.updateVersionInfo(version, -1, version);
+            }
+        }
+    }
+
+    @Test
+    public void testTaskRun() throws Exception {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+                if (stmt instanceof InsertStmt) {
+                    InsertStmt insertStmt = (InsertStmt) stmt;
+                    TableName tableName = insertStmt.getTableName();
+                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
+                    for (Partition partition : tbl.getPartitions()) {
+                        if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
+                            setPartitionVersion(partition, partition.getVisibleVersion() + 1);
+                        }
+                    }
+                }
+            }
+        };
+        String mvName = "mv_refresh_priority";
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+        TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+        TaskRunManager trm = tm.getTaskRunManager();
+
+        String insertSql = "insert into tbl6 partition(p1) values('2022-01-02',2,10);";
+        new StmtExecutor(ctx, insertSql).execute();
+        insertSql = "insert into tbl6 partition(p2) values('2022-02-02',2,10);";
+        new StmtExecutor(ctx, insertSql).execute();
+
+        // refresh materialized view
+        HashMap<String, String> taskRunProperties = new HashMap<>();
+        taskRunProperties.put(TaskRun.FORCE, Boolean.toString(true));
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+
+        // without db name
+        Assert.assertFalse(tm.showTaskRunStatus(null).isEmpty());
+        Assert.assertFalse(tm.showTasks(null).isEmpty());
+        Assert.assertFalse(tm.showMVLastRefreshTaskRunStatus(null).isEmpty());
+
+        // specific db
+        String dbName = "test";
+        Assert.assertFalse(tm.showTaskRunStatus(dbName).isEmpty());
+        Assert.assertFalse(tm.showTasks(dbName).isEmpty());
+        Assert.assertFalse(tm.showMVLastRefreshTaskRunStatus(dbName).isEmpty());
+
+        long taskId = tm.getTask(TaskBuilder.getMvTaskName(materializedView.getId())).getId();
+        Assert.assertNotNull(tm.getTaskRunManager().getRunnableTaskRun(taskId));
+        while (MapUtils.isNotEmpty(trm.getRunningTaskRunMap())) {
+            Thread.sleep(100);
+        }
     }
 }
