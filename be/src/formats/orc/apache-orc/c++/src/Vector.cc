@@ -303,6 +303,7 @@ void StructVectorBatch::filterOnFields(uint8_t* f_data, uint32_t f_size, uint32_
         ColumnVectorBatch::filter(f_data, f_size, true_size);
     } else {
         if (!alreadyFilteredByActiveColumn) {
+            alreadyFilteredByActiveColumn = true;
             ColumnVectorBatch::filter(f_data, f_size, true_size);
         }
         numElements = true_size;
