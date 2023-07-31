@@ -166,6 +166,7 @@ protected:
     std::atomic<bool> _loaded{false};
     Status _status;
     int64_t _tablet_id = 0;
+    std::unique_ptr<PersistentIndex> _persistent_index;
 
 private:
     size_t _key_size = 0;
@@ -173,7 +174,6 @@ private:
     Schema _pk_schema;
     LogicalType _enc_pk_type = TYPE_UNKNOWN;
     std::unique_ptr<HashIndex> _pkey_to_rssid_rowid;
-    std::unique_ptr<PersistentIndex> _persistent_index;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const PrimaryIndex& o) {

@@ -293,11 +293,15 @@ public class HeartbeatMgr extends FrontendDaemon {
                     int httpPort = tBackendInfo.getHttp_port();
                     int brpcPort = -1;
                     int starletPort = 0;
+                    boolean isSetStoragePath = false;
                     if (tBackendInfo.isSetBrpc_port()) {
                         brpcPort = tBackendInfo.getBrpc_port();
                     }
                     if (tBackendInfo.isSetStarlet_port()) {
                         starletPort = tBackendInfo.getStarlet_port();
+                    }
+                    if (tBackendInfo.isSetIs_set_storage_path()) {
+                        isSetStoragePath = tBackendInfo.isIs_set_storage_path();
                     }
                     String version = "";
                     if (tBackendInfo.isSetVersion()) {
@@ -313,7 +317,7 @@ public class HeartbeatMgr extends FrontendDaemon {
                     // backend.updateOnce(bePort, httpPort, beRpcPort, brpcPort);
                     BackendHbResponse backendHbResponse = new BackendHbResponse(
                             computeNodeId, bePort, httpPort, brpcPort, starletPort,
-                            System.currentTimeMillis(), version, cpuCores);
+                            System.currentTimeMillis(), version, cpuCores, isSetStoragePath);
                     if (tBackendInfo.isSetReboot_time()) {
                         backendHbResponse.setRebootTime(tBackendInfo.getReboot_time());
                     }
