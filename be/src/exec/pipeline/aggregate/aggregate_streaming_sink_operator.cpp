@@ -40,7 +40,7 @@ Status AggregateStreamingSinkOperator::set_finishing(RuntimeState* state) {
 
     // skip processing if cancelled
     if (state->is_cancelled()) {
-        return Status::Cancelled("runtime state is cancelled");
+        return Status::OK();
     }
 
     if (_aggregator->hash_map_variant().size() == 0) {

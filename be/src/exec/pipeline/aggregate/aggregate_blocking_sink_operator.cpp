@@ -45,8 +45,7 @@ void AggregateBlockingSinkOperator::close(RuntimeState* state) {
 Status AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
     // skip processing if cancelled
     if (state->is_cancelled()) {
-        _is_finished = true;
-        return Status::Cancelled("runtime state is cancelled");
+        return Status::OK();
     }
 
     if (!_aggregator->is_none_group_by_exprs()) {

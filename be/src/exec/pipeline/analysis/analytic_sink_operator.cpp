@@ -87,7 +87,7 @@ Status AnalyticSinkOperator::set_finishing(RuntimeState* state) {
 
     // skip processing if cancelled
     if (state->is_cancelled()) {
-        return Status::Cancelled("runtime state is cancelled");
+        return Status::OK();
     }
 
     _analytor->input_eos() = true;
