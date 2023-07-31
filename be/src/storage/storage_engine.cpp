@@ -276,8 +276,7 @@ Status StorageEngine::_init_store_map() {
         if (!_lake_persistent_index_dir_inited) {
             auto status = store.second->init_persistent_index_dir();
             if (!status.ok()) {
-                return Status::InternalError(
-                        strings::Substitute("init persistIndex dir          failed, error=$0", error_msg));
+                return Status::InternalError(strings::Substitute("init persistIndex dir failed, error=$0", error_msg));
             }
             _lake_persistent_index_dir_inited = true;
             _persistent_index_data_dir = store.second;
