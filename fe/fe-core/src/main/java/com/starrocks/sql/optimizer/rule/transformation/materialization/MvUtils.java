@@ -839,7 +839,7 @@ public class MvUtils {
                                                                              Column partitionColumn,
                                                                              MaterializedView mv,
                                                                              Set<String> mvPartitionNamesToRefresh) {
-        Set<String> modifiedPartitionNames = mv.getBaseTableUpdatedPartitionNames(partitionByTable);
+        Set<String> modifiedPartitionNames = mv.getUpdatedPartitionNamesOfTable(partitionByTable);
         List<Range<PartitionKey>> baseTableRanges = getLatestPartitionRange(partitionByTable, partitionColumn,
                 modifiedPartitionNames);
         List<Range<PartitionKey>> mvRanges = getLatestPartitionRangeForNativeTable(mv, mvPartitionNamesToRefresh);
@@ -873,7 +873,7 @@ public class MvUtils {
         } else {
             Map<String, Range<PartitionKey>> partitionMap;
             try {
-                partitionMap = PartitionUtil.getTablePartitionKeyRange(table, partitionColumn);
+                partitionMap = PartitionUtil.getPartitionRange(table, partitionColumn);
             } catch (UserException e) {
                 LOG.warn("Materialized view Optimizer compute partition range failed.", e);
                 return Lists.newArrayList();

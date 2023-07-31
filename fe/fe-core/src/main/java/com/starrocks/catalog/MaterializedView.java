@@ -535,8 +535,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.refreshScheme = refreshScheme;
     }
 
-    public Set<String> getBaseTableUpdatedPartitionNames(Table base) {
-        return getBaseTableUpdatedPartitionNames(base, false);
+    public Set<String> getUpdatedPartitionNamesOfTable(Table base) {
+        return getUpdatedPartitionNamesOfTable(base, false);
     }
 
     public int getMaxMVRewriteStaleness() {
@@ -566,6 +566,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return partitionRefTableExprs.get(0);
     }
 
+    /**
+     * @param baseTable : The materialized view's olap base table.
+     * @return          : Return the updated partition names of materialized view's olap base table.
+     */
     public Set<String> getUpdatedPartitionNamesOfOlapTable(OlapTable baseTable) {
         // Ignore partitions when mv 's last refreshed time period is less than `maxMVRewriteStaleness`
         if (isStalenessSatisfied()) {
@@ -665,6 +669,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return refreshScheme.getLastRefreshTime();
     }
 
+    /**
+     * Check weather this materialized view's staleness is satisfied.
+     * @return
+     */
     @VisibleForTesting
     public boolean isStalenessSatisfied() {
         if (this.maxMVRewriteStaleness <= 0) {
@@ -768,7 +776,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * @param withMv    : whether to check the base table recursively when it is also a mv.
      * @return
      */
-    public Set<String> getBaseTableUpdatedPartitionNames(Table baseTable, boolean withMv) {
+    public Set<String> getUpdatedPartitionNamesOfTable(Table baseTable, boolean withMv) {
         if (baseTable.isView()) {
             return Sets.newHashSet();
         } else if (baseTable.isNativeTableOrMaterializedView()) {
@@ -1272,7 +1280,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             }
 
             // once mv's base table has updated, refresh the materialized view totally.
-            Set<String> partitionNames = getBaseTableUpdatedPartitionNames(table, true);
+            Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table, true);
             if (CollectionUtils.isNotEmpty(partitionNames)) {
                 return getPartitionNames();
             }
@@ -1286,7 +1294,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      *   - If ref base table updated, need refresh the ref base table's updated partitions.
      *
      * eg:
-     *    create mater
      *    CREATE MATERIALIZED VIEW mv1
      *    PARTITION BY k1
      *    DISTRIBUTED BY HASH(k1) BUCKETS 10
@@ -1333,7 +1340,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 continue;
             }
             // If the non ref table has already changed, need refresh all materialized views' partitions.
-            Set<String> partitionNames = getBaseTableUpdatedPartitionNames(baseTable, true);
+            Set<String> partitionNames = getUpdatedPartitionNamesOfTable(baseTable, true);
             if (CollectionUtils.isNotEmpty(partitionNames)) {
                 return getPartitionNames();
             }
@@ -1345,7 +1352,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
         Map<String, Range<PartitionKey>> basePartitionNameToRangeMap;
         try {
-            basePartitionNameToRangeMap = PartitionUtil.getTablePartitionKeyRange(refBaseTable, refBasePartitionCol);
+            basePartitionNameToRangeMap = PartitionUtil.getPartitionRange(refBaseTable, refBasePartitionCol);
         } catch (UserException e) {
             LOG.warn("Materialized view compute partition difference with base table failed.", e);
             return getPartitionNames();
@@ -1353,7 +1360,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         Map<String, Range<PartitionKey>> mvPartitionNameToRangeMap = getRangePartitionMap();
         // step1.1: collect ref base table's partition range diff.
-        RangePartitionDiff rangePartitionDiff = SyncPartitionUtils.getRangePartitionDiff(partitionExpr, refBasePartitionCol,
+        RangePartitionDiff rangePartitionDiff = PartitionUtil.getPartitionDiff(partitionExpr, refBasePartitionCol,
                 basePartitionNameToRangeMap, mvPartitionNameToRangeMap);
 
         // refresh ref base table's deleted partitions
@@ -1368,12 +1375,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         mvPartitionNameToRangeMap.putAll(rangePartitionDiff.getAdds());
 
         Map<String, Set<String>> baseToMvNameRef = SyncPartitionUtils
-                .getIntersectedPartitions(basePartitionNameToRangeMap, mvPartitionNameToRangeMap);
+                .generatePartitionRefMap(basePartitionNameToRangeMap, mvPartitionNameToRangeMap);
         Map<String, Set<String>> mvToBaseNameRef = SyncPartitionUtils
-                .getIntersectedPartitions(mvPartitionNameToRangeMap, basePartitionNameToRangeMap);
+                .generatePartitionRefMap(mvPartitionNameToRangeMap, basePartitionNameToRangeMap);
 
         // step2: check ref base table's updated partition names by checking its ref tables recursively.
-        Set<String> baseChangedPartitionNames = getBaseTableUpdatedPartitionNames(refBaseTable, true);
+        Set<String> baseChangedPartitionNames = getUpdatedPartitionNamesOfTable(refBaseTable, true);
         if (baseChangedPartitionNames == null) {
             return mvToBaseNameRef.keySet();
         }
@@ -1393,9 +1400,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     /**
      * Materialized View's partition column can only refer one base table's partition column, get the referred
      * base table and its partition column.
-     *
      * TODO: support multi-column partitions later.
-     *
      * @return : The materialized view's referred base table and its partition column.
      */
     public Pair<Table, Column> getBaseTableAndPartitionColumn() {
