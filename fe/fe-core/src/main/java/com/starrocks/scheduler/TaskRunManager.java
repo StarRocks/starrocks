@@ -228,6 +228,22 @@ public class TaskRunManager {
         this.taskRunLock.unlock();
     }
 
+    public TaskRun getRunnableTaskRun(long taskId) {
+        TaskRun res = runningTaskRunMap.get(taskId);
+        if (res != null) {
+            return res;
+        }
+        PriorityBlockingQueue<TaskRun> queue = pendingTaskRunMap.get(taskId);
+        if (queue != null) {
+            for (TaskRun run : queue) {
+                if (run.getTaskId() == taskId) {
+                    return run;
+                }
+            }
+        }
+        return null;
+    }
+
     public Map<Long, PriorityBlockingQueue<TaskRun>> getPendingTaskRunMap() {
         return pendingTaskRunMap;
     }
