@@ -94,6 +94,7 @@ import com.starrocks.task.DropAutoIncrementMapTask;
 import com.starrocks.task.DropReplicaTask;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOlapTable;
+import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
@@ -1967,7 +1968,26 @@ public class OlapTable extends Table {
         return false;
     }
 
+<<<<<<< HEAD
     // Determine which situation supports importing and automatically creating partitions
+=======
+    public String getPersistentIndexTypeString() {
+        if (tableProperty != null) {
+            return tableProperty.getPersistentIndexTypeString();
+        }
+        return "";
+    }
+
+    public TPersistentIndexType getPersistentIndexType() {
+        if (tableProperty != null) {
+            return tableProperty.getPersistentIndexType();
+        }
+        return null;
+    }
+
+    // Determine which situation supports importing and automatically creating
+    // partitions
+>>>>>>> 6a2717cfe8 ([Feature]Support lake persistent index (#25925))
     public Boolean supportedAutomaticPartition() {
         return partitionInfo.isAutomaticPartition();
     }
@@ -1994,6 +2014,25 @@ public class OlapTable extends Table {
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
                         Boolean.valueOf(enablePersistentIndex).toString());
         tableProperty.buildEnablePersistentIndex();
+    }
+
+    public void setPersistentIndexType(TPersistentIndexType persistentIndexType) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+
+        // only support LOCAL for now
+        if (persistentIndexType == TPersistentIndexType.LOCAL) {
+            tableProperty
+                    .modifyTableProperties(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE,
+                            TableProperty.persistentIndexTypeToString(persistentIndexType));
+        } else {
+            // do nothing
+            LOG.warn("Unknown TPersistentIndexType, only supports LOCAL at now");
+            return;
+        }
+
+        tableProperty.buildPersistentIndexType();
     }
 
     public Boolean enableReplicatedStorage() {

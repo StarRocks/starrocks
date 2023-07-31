@@ -124,6 +124,11 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
         heartbeat_result.backend_info.__set_brpc_port(config::brpc_port);
 #ifdef USE_STAROS
         heartbeat_result.backend_info.__set_starlet_port(config::starlet_port);
+        if (StorageEngine::instance()->get_store_num() != 0) {
+            heartbeat_result.backend_info.__set_is_set_storage_path(true);
+        } else {
+            heartbeat_result.backend_info.__set_is_set_storage_path(false);
+        }
 #endif
         heartbeat_result.backend_info.__set_version(get_short_version());
         heartbeat_result.backend_info.__set_num_hardware_cores(num_hardware_cores);

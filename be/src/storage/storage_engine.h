@@ -152,6 +152,9 @@ public:
     DataDir* get_store(const std::string& path);
     DataDir* get_store(int64_t path_hash);
 
+    bool is_lake_persistent_index_dir_inited();
+    DataDir* get_persistent_index_store();
+
     uint32_t available_storage_medium_type_count() { return _available_storage_medium_type_count; }
 
     virtual Status set_cluster_id(int32_t cluster_id);
@@ -357,7 +360,10 @@ private:
     EngineOptions _options;
     std::mutex _store_lock;
     std::map<std::string, DataDir*> _store_map;
+    DataDir* _persistent_index_data_dir = nullptr;
     uint32_t _available_storage_medium_type_count;
+
+    std::atomic<bool> _lake_persistent_index_dir_inited{false};
 
     bool _is_all_cluster_id_exist;
 
