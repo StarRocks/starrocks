@@ -1009,6 +1009,7 @@ public class AnalyzerUtils {
         return queryStatement.getQueryRelation().accept(slotRefResolver, null);
     }
 
+<<<<<<< HEAD
     public static void checkNondeterministicFunction(ParseNode node) {
         new AstTraverser<Void, Void>() {
             @Override
@@ -1021,4 +1022,15 @@ public class AnalyzerUtils {
             }
         }.visit(node);
     }
+=======
+    public static boolean containsIgnoreCase(List<String> list, String soughtFor) {
+        for (String current : list) {
+            if (current.equalsIgnoreCase(soughtFor)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+>>>>>>> 68821e729b ([Enhancement] Insert overwrite new syntax partition field supports ignoring case (#28309))
 }
