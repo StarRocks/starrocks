@@ -55,6 +55,14 @@ public class Status {
     private TStatusCode errorCode; // anything other than OK
     private String errorMsg;
 
+    public static Status internalError(String errorMsg) {
+        return new Status(TStatusCode.INTERNAL_ERROR, errorMsg);
+    }
+
+    public static Status thriftRPCError(String errorMsg) {
+        return new Status(TStatusCode.THRIFT_RPC_ERROR, errorMsg);
+    }
+
     public Status() {
         this.errorCode = TStatusCode.OK;
         this.errorMsg = null;
@@ -82,6 +90,10 @@ public class Status {
 
     public boolean isCancelled() {
         return this.errorCode == TStatusCode.CANCELLED;
+    }
+
+    public boolean isTimeout() {
+        return this.errorCode == TStatusCode.TIMEOUT;
     }
 
     public boolean isRpcError() {

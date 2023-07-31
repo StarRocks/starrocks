@@ -72,7 +72,7 @@ public class NormalBackendSelector implements BackendSelector {
 
         for (TScanRangeLocations scanRangeLocations : locations) {
             // assign this scan range to the host w/ the fewest assigned row count
-            Long minAssignedBytes = Long.MAX_VALUE;
+            Long minRowCount = Long.MAX_VALUE;
             TScanRangeLocation minLocation = null;
             for (final TScanRangeLocation location : scanRangeLocations.getLocations()) {
                 if (!workerProvider.isDataNodeAvailable(location.getBackend_id())) {
@@ -80,8 +80,8 @@ public class NormalBackendSelector implements BackendSelector {
                 }
 
                 Long assignedBytes = assignedRowCountPerHost.getOrDefault(location.server, 0L);
-                if (assignedBytes < minAssignedBytes) {
-                    minAssignedBytes = assignedBytes;
+                if (assignedBytes < minRowCount) {
+                    minRowCount = assignedBytes;
                     minLocation = location;
                 }
             }
@@ -92,13 +92,13 @@ public class NormalBackendSelector implements BackendSelector {
             Preconditions.checkNotNull(minLocation);
 
             // only enable for load now, The insert into select performance problem caused by data skew is the most serious
+            long curRowCount;
             if (isEnableScheduleByRowCnt(scanRangeLocations)) {
-                assignedRowCountPerHost.put(minLocation.server, minAssignedBytes
-                        + scanRangeLocations.getScan_range().getInternal_scan_range().getRow_count());
+                curRowCount = Math.max(1L, scanRangeLocations.getScan_range().getInternal_scan_range().getRow_count());
             } else {
-                // use tablet num as assigned row count
-                assignedRowCountPerHost.put(minLocation.server, minAssignedBytes + 1);
+                curRowCount = 1L;
             }
+            assignedRowCountPerHost.put(minLocation.server, minRowCount + curRowCount);
             workerProvider.selectWorker(minLocation.backend_id);
             // add scan range
             TScanRangeParams scanRangeParams = new TScanRangeParams(scanRangeLocations.scan_range);

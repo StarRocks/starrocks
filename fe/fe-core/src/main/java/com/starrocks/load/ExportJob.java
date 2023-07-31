@@ -80,7 +80,8 @@ import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.proto.UnlockTabletMetadataRequest;
-import com.starrocks.qe.Coordinator;
+import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
@@ -431,16 +432,19 @@ public class ExportJob implements Writable, GsonPostProcessable {
         return outputExprs;
     }
 
+    private Coordinator.Factory getCoordinatorFactory() {
+        return new DefaultCoordinator.Factory();
+    }
+
     private void genCoordinators(ExportStmt stmt, List<PlanFragment> fragments, List<ScanNode> nodes) {
         UUID uuid = UUID.randomUUID();
         for (int i = 0; i < fragments.size(); ++i) {
             PlanFragment fragment = fragments.get(i);
             ScanNode scanNode = nodes.get(i);
             TUniqueId queryId = new TUniqueId(uuid.getMostSignificantBits() + i, uuid.getLeastSignificantBits());
-            Coordinator coord = new Coordinator(
+            Coordinator coord = getCoordinatorFactory().createBrokerExportScheduler(
                     id, queryId, desc, Lists.newArrayList(fragment), Lists.newArrayList(scanNode),
-                    TimeUtils.DEFAULT_TIME_ZONE, stmt.getExportStartTime(), Maps.newHashMap());
-            coord.setExecMemoryLimit(getMemLimit());
+                    TimeUtils.DEFAULT_TIME_ZONE, stmt.getExportStartTime(), Maps.newHashMap(), getMemLimit());
             this.coordList.add(coord);
             LOG.info("split export job to tasks. job id: {}, job query id: {}, task idx: {}, task query id: {}",
                     id, DebugUtil.printId(this.queryId), i, DebugUtil.printId(queryId));
@@ -482,10 +486,9 @@ public class ExportJob implements Writable, GsonPostProcessable {
         OlapScanNode newTaskScanNode = genOlapScanNodeByLocation(newLocations);
         PlanFragment newFragment = genPlanFragment(exportTable.getType(), newTaskScanNode, taskIndex);
 
-        Coordinator newCoord = new Coordinator(
+        Coordinator newCoord = getCoordinatorFactory().createBrokerExportScheduler(
                 id, newQueryId, desc, Lists.newArrayList(newFragment), Lists.newArrayList(newTaskScanNode),
-                TimeUtils.DEFAULT_TIME_ZONE, coord.getStartTime(), Maps.newHashMap());
-        newCoord.setExecMemoryLimit(getMemLimit());
+                TimeUtils.DEFAULT_TIME_ZONE, coord.getStartTimeMs(), Maps.newHashMap(), getMemLimit());
         this.coordList.set(taskIndex, newCoord);
         LOG.info("reset coordinator for export job: {}, taskIdx: {}", id, taskIndex);
         return newCoord;
@@ -1090,7 +1093,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         public ExportUpdateInfo() {
             this.jobId = -1;
             this.state = JobState.CANCELLED;
-            this.snapshotPaths =  Lists.newArrayList();
+            this.snapshotPaths = Lists.newArrayList();
             this.exportTempPath = "";
             this.exportedFiles = Sets.newConcurrentHashSet();
             this.failMsg = new ExportFailMsg();

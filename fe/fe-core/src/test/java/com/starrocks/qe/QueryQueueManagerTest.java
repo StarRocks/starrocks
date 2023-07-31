@@ -47,7 +47,7 @@ import java.util.stream.Stream;
 
 public class QueryQueueManagerTest {
     @Mocked
-    private Coordinator coordinator;
+    private DefaultCoordinator coordinator;
 
     private boolean taskQueueEnable;
     private int taskQueueConcurrencyHardLimit;
@@ -103,7 +103,7 @@ public class QueryQueueManagerTest {
         QueryQueueManager manager = QueryQueueManager.getInstance();
         new Expectations(manager) {
             {
-                manager.needCheckQueue((Coordinator) any);
+                manager.needCheckQueue((DefaultCoordinator) any);
                 result = true;
             }
         };
@@ -113,7 +113,7 @@ public class QueryQueueManagerTest {
         QueryQueueManager manager = QueryQueueManager.getInstance();
         new Expectations(manager) {
             {
-                manager.needCheckQueue((Coordinator) any);
+                manager.needCheckQueue((DefaultCoordinator) any);
                 result = false;
             }
         };
@@ -123,7 +123,7 @@ public class QueryQueueManagerTest {
         QueryQueueManager manager = QueryQueueManager.getInstance();
         new Expectations(manager) {
             {
-                manager.enableCheckQueue((Coordinator) any);
+                manager.enableCheckQueue((DefaultCoordinator) any);
                 result = true;
             }
         };
@@ -133,7 +133,7 @@ public class QueryQueueManagerTest {
         QueryQueueManager manager = QueryQueueManager.getInstance();
         new Expectations(manager) {
             {
-                manager.enableCheckQueue((Coordinator) any);
+                manager.enableCheckQueue((DefaultCoordinator) any);
                 result = false;
             }
         };

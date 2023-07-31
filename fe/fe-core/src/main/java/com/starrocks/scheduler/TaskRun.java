@@ -105,6 +105,7 @@ public class TaskRun implements Comparable<TaskRun> {
     public TaskRunProcessor getProcessor() {
         return processor;
     }
+
     public void setProcessor(TaskRunProcessor processor) {
         this.processor = processor;
     }
@@ -117,7 +118,7 @@ public class TaskRun implements Comparable<TaskRun> {
         return this.type;
     }
 
-    public Map<String, String>  refreshTaskProperties(ConnectContext ctx) {
+    public Map<String, String> refreshTaskProperties(ConnectContext ctx) {
         Map<String, String> newProperties = Maps.newHashMap();
         if (task.getSource() != Constants.TaskSource.MV) {
             return newProperties;
@@ -222,7 +223,7 @@ public class TaskRun implements Comparable<TaskRun> {
                 if (runCtx != null) {
                     StmtExecutor executor = runCtx.getExecutor();
                     if (executor != null && executor.getCoordinator() != null) {
-                        long jobId = executor.getCoordinator().getJobId();
+                        long jobId = executor.getCoordinator().getLoadJobId();
                         if (jobId != -1) {
                             InsertLoadJob job = (InsertLoadJob) GlobalStateMgr.getCurrentState()
                                     .getLoadMgr().getLoadJob(jobId);
