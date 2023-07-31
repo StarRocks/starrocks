@@ -395,7 +395,7 @@ public class LoadMgr implements Writable {
     }
 
     public void cancelResidualJob() {
-        // clean residual insert job
+        // cancel residual insert job
         readLock();
         List<LoadJob> insertJobs;
         try {
