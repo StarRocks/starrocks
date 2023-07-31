@@ -569,6 +569,8 @@ public:
 
     // Try to process string content, based on uncommon string format
     static StatusOr<ColumnPtr> str_to_date_uncommon(FunctionContext* context, const starrocks::Columns& columns);
+
+    static StatusOr<ColumnPtr> str_to_date_joda(FunctionContext* context, const Columns& columns);
     /**
      *
      * cast string to datetime
@@ -817,6 +819,9 @@ public:
         yyyycMMcdd,
         // for string format like "%Y-%m-%d %H:%i:%s"
         yyyycMMcddcHHcmmcss,
+
+        // any joda format
+        joda,
         None
     };
 

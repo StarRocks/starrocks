@@ -1433,8 +1433,7 @@ static int check_word(const char* lib[], const char* str, const char* end, const
     return pos;
 }
 
-bool DateTimeValue::from_joda_format_str(const char* format, int format_len, const char* value, int value_len,
-                                         const char** sub_val_end) {
+bool DateTimeValue::from_joda_format_str(const char* format, int format_len, const char* value, int value_len) {
     const char* ptr = format;
     const char* end = format + format_len;
     const char* val = value;

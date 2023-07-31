@@ -1422,9 +1422,8 @@ class ParseDateTimeTestFixture : public ::testing::TestWithParam<TestParseDateti
 
 TEST_P(ParseDateTimeTestFixture, parse_datetime) {
     auto& [datetime_str, format] = GetParam();
-    const char* sub_val;
     DateTimeValue datetime;
-    bool res = datetime.from_joda_format(format, datetime_str, &sub_val);
+    bool res = datetime.from_joda_format(format, datetime_str);
     EXPECT_TRUE(res);
     char str[50];
 

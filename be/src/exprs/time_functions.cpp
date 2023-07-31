@@ -1783,11 +1783,46 @@ StatusOr<ColumnPtr> TimeFunctions::str_to_date_uncommon(FunctionContext* context
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+// Try to process string content, based on uncommon string format
+StatusOr<ColumnPtr> TimeFunctions::str_to_date_joda(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    size_t size = columns[0]->size(); // minimum number of rows.
+    ColumnBuilder<TYPE_DATETIME> result(size);
+
+    auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto* ctx = reinterpret_cast<StrToDateCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    std::string fmt = ctx->fmt;
+    for (size_t i = 0; i < size; ++i) {
+        if (str_viewer.is_null(i)) {
+            result.append_null();
+        } else {
+            const Slice& str = str_viewer.value(i);
+
+            DateTimeValue date_time_value;
+            bool res = date_time_value.from_joda_format(fmt, str.data, str.size);
+            if (!res) {
+                result.append_null();
+            } else {
+                TimestampValue ts = TimestampValue::create(
+                        date_time_value.year(), date_time_value.month(), date_time_value.day(), date_time_value.hour(),
+                        date_time_value.minute(), date_time_value.second(), date_time_value.microsecond());
+                result.append(ts);
+            }
+        }
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
 // str_to_date, for the "str_to_date" in sql.
 StatusOr<ColumnPtr> TimeFunctions::str_to_date(FunctionContext* context, const Columns& columns) {
     auto* ctx = reinterpret_cast<StrToDateCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     if (ctx == nullptr) {
         return str_to_date_uncommon(context, columns);
+    }
+    if (ctx->fmt_type == joda) {
+        return str_to_date_joda(context, columns);
     } else if (ctx->fmt_type == yyyycMMcdd) { // for string format like "%Y-%m-%d"
         return str_to_date_from_date_format<true>(context, columns, ctx->fmt);
     } else { // for string format like "%Y-%m-%d %H:%i:%s"
@@ -1857,6 +1892,8 @@ Status TimeFunctions::format_prepare(FunctionContext* context, FunctionContext::
         fc->fmt_type = TimeFunctions::yyyyMM;
     } else if (fc->fmt == "%Y") {
         fc->fmt_type = TimeFunctions::yyyy;
+    } else if (fc->fmt.find('%') == fc->fmt.npos) {
+        fc->fmt_type = TimeFunctions::joda;
     } else {
         fc->fmt_type = TimeFunctions::None;
     }
