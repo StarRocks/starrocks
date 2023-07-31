@@ -58,9 +58,11 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.Partition;
+import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.collections4.SetUtils;
@@ -83,6 +85,7 @@ import java.time.format.DateTimeParseException;
 import java.time.format.ResolverStyle;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
+import java.util.Map;
 import java.util.Set;
 
 import static com.starrocks.catalog.PrimitiveType.BIGINT;
@@ -117,20 +120,6 @@ public class ScalarOperatorFunctions {
         for (int shiftBy = 0; shiftBy < CONSTANT_128; ++shiftBy) {
             INT_128_MASK1_ARR1[shiftBy] = INT_128_OPENER.subtract(BigInteger.ONE).shiftRight(shiftBy + 1);
         }
-<<<<<<< HEAD
-=======
-
-        TIME_SLICE_UNIT_MAPPING = ImmutableMap.<String, TemporalUnit>builder()
-                .put("second", ChronoUnit.SECONDS)
-                .put("minute", ChronoUnit.MINUTES)
-                .put("hour", ChronoUnit.HOURS)
-                .put("day", ChronoUnit.DAYS)
-                .put("month", ChronoUnit.MONTHS)
-                .put("year", ChronoUnit.YEARS)
-                .put("week", ChronoUnit.WEEKS)
-                .put("quarter", IsoFields.QUARTER_YEARS)
-                .build();
->>>>>>> 9eea14e87b ([Feature] support meta functions (#28094))
     }
 
     /**
@@ -372,16 +361,6 @@ public class ScalarOperatorFunctions {
         return dateFormat(dl, fmtLiteral);
     }
 
-<<<<<<< HEAD
-    @ConstantFunction(name = "now", argTypes = {}, returnType = DATETIME)
-=======
-    @ConstantFunction.List(list = {
-            @ConstantFunction(name = "now", argTypes = {}, returnType = DATETIME),
-            @ConstantFunction(name = "current_timestamp", argTypes = {}, returnType = DATETIME),
-            @ConstantFunction(name = "localtime", argTypes = {}, returnType = DATETIME),
-            @ConstantFunction(name = "localtimestamp", argTypes = {}, returnType = DATETIME)
-    })
->>>>>>> 9eea14e87b ([Feature] support meta functions (#28094))
     public static ConstantOperator now() {
         ConnectContext connectContext = ConnectContext.get();
         LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime() / 1000 * 1000)
@@ -430,145 +409,6 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetime(utcStartTime);
     }
 
-<<<<<<< HEAD
-=======
-    @ConstantFunction(name = "next_day", argTypes = {DATETIME, VARCHAR}, returnType = DATE)
-    public static ConstantOperator nextDay(ConstantOperator date, ConstantOperator dow) {
-        int dateDowValue = date.getDate().getDayOfWeek().getValue();
-        switch (dow.getVarchar()) {
-            case "Sunday":
-            case "Sun":
-            case "Su":
-                return ConstantOperator.createDate(date.getDate().plusDays((13L - dateDowValue) % 7 + 1L));
-            case "Monday":
-            case "Mon":
-            case "Mo":
-                return ConstantOperator.createDate(date.getDate().plusDays((7L - dateDowValue) % 7 + 1L));
-            case "Tuesday":
-            case "Tue":
-            case "Tu":
-                return ConstantOperator.createDate(date.getDate().plusDays((8L - dateDowValue) % 7 + 1L));
-            case "Wednesday":
-            case "Wed":
-            case "We":
-                return ConstantOperator.createDate(date.getDate().plusDays((9L - dateDowValue) % 7 + 1L));
-            case "Thursday":
-            case "Thu":
-            case "Th":
-                return ConstantOperator.createDate(date.getDate().plusDays((10L - dateDowValue) % 7 + 1L));
-            case "Friday":
-            case "Fri":
-            case "Fr":
-                return ConstantOperator.createDate(date.getDate().plusDays((11L - dateDowValue) % 7 + 1L));
-            case "Saturday":
-            case "Sat":
-            case "Sa":
-                return ConstantOperator.createDate(date.getDate().plusDays((12L - dateDowValue) % 7 + 1L));
-            default:
-                throw new IllegalArgumentException(dow + " not supported in next_day dow_string");
-        }
-    }
-
-    @ConstantFunction(name = "previous_day", argTypes = {DATETIME, VARCHAR}, returnType = DATE)
-    public static ConstantOperator previousDay(ConstantOperator date, ConstantOperator dow) {
-        int dateDowValue = date.getDate().getDayOfWeek().getValue();
-        switch (dow.getVarchar()) {
-            case "Sunday":
-            case "Sun":
-            case "Su":
-                return ConstantOperator.createDate(date.getDate().minusDays((dateDowValue - 1L) % 7 + 1L));
-            case "Monday":
-            case "Mon":
-            case "Mo":
-                return ConstantOperator.createDate(date.getDate().minusDays((dateDowValue + 5L) % 7 + 1L));
-            case "Tuesday":
-            case "Tue":
-            case "Tu":
-                return ConstantOperator.createDate(date.getDate().minusDays((dateDowValue + 4L) % 7 + 1L));
-            case "Wednesday":
-            case "Wed":
-            case "We":
-                return ConstantOperator.createDate(date.getDate().minusDays((dateDowValue + 3L) % 7 + 1L));
-            case "Thursday":
-            case "Thu":
-            case "Th":
-                return ConstantOperator.createDate(date.getDate().minusDays((dateDowValue + 2L) % 7 + 1L));
-            case "Friday":
-            case "Fri":
-            case "Fr":
-                return ConstantOperator.createDate(date.getDate().minusDays((dateDowValue + 1L) % 7 + 1L));
-            case "Saturday":
-            case "Sat":
-            case "Sa":
-                return ConstantOperator.createDate(date.getDate().minusDays(dateDowValue % 7 + 1L));
-            default:
-                throw new IllegalArgumentException(dow + " not supported in previous_day dow_string");
-        }
-    }
-
-    @ConstantFunction(name = "makedate", argTypes = {INT, INT}, returnType = DATETIME)
-    public static ConstantOperator makeDate(ConstantOperator year, ConstantOperator dayOfYear) {
-        if (year.isNull() || dayOfYear.isNull()) {
-            return ConstantOperator.createNull(Type.DATE);
-        }
-
-        int yearInt = year.getInt();
-        if (yearInt < YEAR_MIN || yearInt > YEAR_MAX) {
-            return ConstantOperator.createNull(Type.DATE);
-        }
-
-        int dayOfYearInt = dayOfYear.getInt();
-        if (dayOfYearInt < DAY_OF_YEAR_MIN || dayOfYearInt > DAY_OF_YEAR_MAX) {
-            return ConstantOperator.createNull(Type.DATE);
-        }
-
-        LocalDate ld = LocalDate.of(yearInt, 1, 1)
-                .plusDays(dayOfYearInt - 1);
-
-        if (ld.getYear() != year.getInt()) {
-            return ConstantOperator.createNull(Type.DATE);
-        }
-
-        return ConstantOperator.createDate(ld.atTime(0, 0, 0));
-    }
-
-    @ConstantFunction(name = "time_slice", argTypes = {DATETIME, INT, VARCHAR}, returnType = DATETIME)
-    public static ConstantOperator timeSlice(ConstantOperator datetime, ConstantOperator interval,
-                                             ConstantOperator unit) throws AnalysisException {
-        return timeSlice(datetime, interval, unit, ConstantOperator.createVarchar("floor"));
-    }
-
-    @ConstantFunction(name = "time_slice", argTypes = {DATETIME, INT, VARCHAR, VARCHAR}, returnType = DATETIME)
-    public static ConstantOperator timeSlice(ConstantOperator datetime, ConstantOperator interval,
-                                             ConstantOperator unit, ConstantOperator boundary)
-            throws AnalysisException {
-        TemporalUnit timeUnit = TIME_SLICE_UNIT_MAPPING.get(unit.getVarchar());
-        if (timeUnit == null) {
-            throw new IllegalArgumentException(unit + " not supported in time_slice unit param");
-        }
-        boolean isEnd;
-        switch (boundary.getVarchar()) {
-            case "floor":
-                isEnd = false;
-                break;
-            case "ceil":
-                isEnd = true;
-                break;
-            default:
-                throw new IllegalArgumentException(boundary + " not supported in time_slice boundary param");
-        }
-        long duration = TIME_SLICE_START.until(datetime.getDatetime(), timeUnit);
-        if (duration < 0) {
-            throw new AnalysisException("time used with time_slice can't before 0001-01-01 00:00:00");
-        }
-        long epoch = duration - (duration % interval.getInt());
-        if (isEnd) {
-            epoch += interval.getInt();
-        }
-        return ConstantOperator.createDatetime(TIME_SLICE_START.plus(epoch, timeUnit));
-    }
-
->>>>>>> 9eea14e87b ([Feature] support meta functions (#28094))
     /**
      * Math function
      */
@@ -1033,10 +873,7 @@ public class ScalarOperatorFunctions {
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName)
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
         ConnectContext connectContext = ConnectContext.get();
-        PrivilegeChecker.checkAnyActionOnTable(
-                connectContext.getCurrentUserIdentity(),
-                connectContext.getCurrentRoleIds(),
-                tableName);
+        PrivilegeChecker.checkTblPriv(connectContext, tableName, PrivPredicate.SELECT);
         return table;
     }
 
@@ -1046,10 +883,7 @@ public class ScalarOperatorFunctions {
         Table table = db.tryGetTable(tableName.getTbl())
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
         ConnectContext connectContext = ConnectContext.get();
-        PrivilegeChecker.checkAnyActionOnTable(
-                connectContext.getCurrentUserIdentity(),
-                connectContext.getCurrentRoleIds(),
-                tableName);
+        PrivilegeChecker.checkTblPriv(connectContext, tableName, PrivPredicate.SELECT);
         return Pair.of(db, table);
     }
 
@@ -1062,8 +896,7 @@ public class ScalarOperatorFunctions {
         Pair<Database, Table> dbTable = inspectTable(tableName);
         Table table = dbTable.getRight();
         if (!table.isMaterializedView()) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
-                    tableName + " is not materialized view");
+            throw new SemanticException(tableName + " is not materialized view");
         }
         try {
             dbTable.getLeft().readLock();
