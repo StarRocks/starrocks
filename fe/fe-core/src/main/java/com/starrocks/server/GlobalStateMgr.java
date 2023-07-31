@@ -2999,6 +2999,10 @@ public class GlobalStateMgr {
         return localMetastore.getDb(name);
     }
 
+    public Optional<Table> mayGetTable(long dbId, long tableId) {
+        return mayGetDb(dbId).flatMap(db -> db.tryGetTable(tableId));
+    }
+
     public Optional<Database> mayGetDb(String name) {
         return Optional.ofNullable(localMetastore.getDb(name));
     }
