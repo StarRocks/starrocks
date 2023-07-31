@@ -34,9 +34,7 @@ SchemaTablePipes::SchemaTablePipes()
         : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 
 Status SchemaTablePipes::start(RuntimeState* state) {
-    RETURN_IF_ERROR(SchemaScanner::start(state));
-
-    return {};
+    return SchemaScanner::start(state);
 }
 
 Status SchemaTablePipes::_list_pipes() {
