@@ -2,7 +2,7 @@
 
 This topic describes how to load data into StarRocks by using a SQL statement - INSERT.
 
-Similar to MySQL and many other database management systems, StarRocks supports loading data to an internal table with INSERT. You can insert one or more rows directly with the VALUES clause to test a function or a DEMO. You can also insert data defined by the results of a query into an internal table from an [external table](../data_source/External_table.md). From StarRocks v3.1 onwards, you can directly load data from files in an external source using the INSERT command and the table function [FILES()](../sql-reference/sql-functions/table-functions/files.md).
+Similar to MySQL and many other database management systems, StarRocks supports loading data to an internal table with INSERT. You can insert one or more rows directly with the VALUES clause to test a function or a DEMO. You can also insert data defined by the results of a query into an internal table from an [external table](../data_source/External_table.md). From StarRocks v3.1 onwards, you can directly load data from files on cloud storage using the INSERT command and the table function [FILES()](../sql-reference/sql-functions/table-functions/files.md).
 
 StarRocks v2.4 further supports overwriting data into a table by using INSERT OVERWRITE. The INSERT OVERWRITE statement integrates the following operations to implement the overwriting function:
 
@@ -35,20 +35,19 @@ CREATE DATABASE IF NOT EXISTS load_test;
 USE load_test;
 CREATE TABLE insert_wiki_edit
 (
-    event_time DATETIME,
-    channel VARCHAR(32) DEFAULT '',
-    user VARCHAR(128) DEFAULT '',
-    is_anonymous TINYINT DEFAULT '0',
-    is_minor TINYINT DEFAULT '0',
-    is_new TINYINT DEFAULT '0',
-    is_robot TINYINT DEFAULT '0',
-    is_unpatrolled TINYINT DEFAULT '0',
-    delta INT DEFAULT '0',
-    added INT DEFAULT '0',
-    deleted INT DEFAULT '0'
+    event_time      DATETIME,
+    channel         VARCHAR(32)      DEFAULT '',
+    user            VARCHAR(128)     DEFAULT '',
+    is_anonymous    TINYINT          DEFAULT '0',
+    is_minor        TINYINT          DEFAULT '0',
+    is_new          TINYINT          DEFAULT '0',
+    is_robot        TINYINT          DEFAULT '0',
+    is_unpatrolled  TINYINT          DEFAULT '0',
+    delta           INT              DEFAULT '0',
+    added           INT              DEFAULT '0',
+    deleted         INT              DEFAULT '0'
 )
-DUPLICATE KEY
-(
+DUPLICATE KEY(
     event_time,
     channel,
     user,
@@ -58,8 +57,7 @@ DUPLICATE KEY
     is_robot,
     is_unpatrolled
 )
-PARTITION BY RANGE(event_time)
-(
+PARTITION BY RANGE(event_time)(
     PARTITION p06 VALUES LESS THAN ('2015-09-12 06:00:00'),
     PARTITION p12 VALUES LESS THAN ('2015-09-12 12:00:00'),
     PARTITION p18 VALUES LESS THAN ('2015-09-12 18:00:00'),
@@ -69,31 +67,28 @@ DISTRIBUTED BY HASH(user);
 
 CREATE TABLE source_wiki_edit
 (
-    event_time DATETIME,
-    channel VARCHAR(32) DEFAULT '',
-    user VARCHAR(128) DEFAULT '',
-    is_anonymous TINYINT DEFAULT '0',
-    is_minor TINYINT DEFAULT '0',
-    is_new TINYINT DEFAULT '0',
-    is_robot TINYINT DEFAULT '0',
-    is_unpatrolled TINYINT DEFAULT '0',
-    delta INT DEFAULT '0',
-    added INT DEFAULT '0',
-    deleted INT DEFAULT '0'
+    event_time      DATETIME,
+    channel         VARCHAR(32)      DEFAULT '',
+    user            VARCHAR(128)     DEFAULT '',
+    is_anonymous    TINYINT          DEFAULT '0',
+    is_minor        TINYINT          DEFAULT '0',
+    is_new          TINYINT          DEFAULT '0',
+    is_robot        TINYINT          DEFAULT '0',
+    is_unpatrolled  TINYINT          DEFAULT '0',
+    delta           INT              DEFAULT '0',
+    added           INT              DEFAULT '0',
+    deleted         INT              DEFAULT '0'
 )
-DUPLICATE KEY
-(
+DUPLICATE KEY(
     event_time,
-    channel,
-    user,
+    channel,user,
     is_anonymous,
     is_minor,
     is_new,
     is_robot,
     is_unpatrolled
 )
-PARTITION BY RANGE(event_time)
-(
+PARTITION BY RANGE(event_time)(
     PARTITION p06 VALUES LESS THAN ('2015-09-12 06:00:00'),
     PARTITION p12 VALUES LESS THAN ('2015-09-12 12:00:00'),
     PARTITION p18 VALUES LESS THAN ('2015-09-12 18:00:00'),
@@ -126,7 +121,7 @@ VALUES
 
 ## Insert data via INSERT INTO SELECT
 
-You can load the result of a query on a data source table into the target table via INSERT INTO SELECT command. INSERT INTO SELECT command performs ETL operations on the data from the data source table, and loads the data into an internal table in StarRocks. The data source can be one or more internal or external tables, or even data files from an external storage system. The target table MUST be an internal table in StarRocks. For detailed instructions and parameter references, see [SQL Reference - INSERT](../sql-reference/sql-statements/data-manipulation/insert.md).
+You can load the result of a query on a data source table into the target table via INSERT INTO SELECT command. INSERT INTO SELECT command performs ETL operations on the data from the data source table, and loads the data into an internal table in StarRocks. The data source can be one or more internal or external tables, or even data files on cloud storage. The target table MUST be an internal table in StarRocks. For detailed instructions and parameter references, see [SQL Reference - INSERT](../sql-reference/sql-statements/data-manipulation/insert.md).
 
 ### Insert data from an internal or external table into an internal table
 
@@ -187,18 +182,7 @@ SELECT event_time, channel FROM source_wiki_edit;
 
 ### Insert data directly from files in an external source using FILES()
 
-From v3.1 onwards, StarRocks supports directly loading data from files in an external source using the INSERT command and the [FILES()](../sql-reference/sql-functions/table-functions/files.md) function, saving you from the trouble of creating an external table first.
-
-Currently, the FILES() function supports the following data sources and file formats:
-
-- **Data sources:**
-
-  - AWS S3
-
-- **File formats:**
-
-  - Parquet
-  - ORC
+From v3.1 onwards, StarRocks supports directly loading data from files on cloud storage using the INSERT command and the [FILES()](../sql-reference/sql-functions/table-functions/files.md) function, thereby you do not need to create an external catalog or file external table first. Besides, FILES() can automatically infer the table schema of the files, greatly simplifying the process of data loading.
 
 The following example inserts data rows from the Parquet file **parquet/insert_wiki_edit_append.parquet** within the AWS S3 bucket `inserttest` into the table `insert_wiki_edit`:
 
@@ -209,7 +193,7 @@ INSERT INTO insert_wiki_edit
         "format" = "parquet",
         "aws.s3.access_key" = "XXXXXXXXXX",
         "aws.s3.secret_key" = "YYYYYYYYYY",
-        "aws.s3.region" = "ap-southeast-1"
+        "aws.s3.region" = "us-west-2"
 );
 ```
 
@@ -336,7 +320,7 @@ SELECT event_time, channel FROM source_wiki_edit;
 
 ## Insert data into a table with generated columns
 
-A generated column is a special column whose data is derived from a pre-defined expression or evaluation based on other columns. Generated columns are especially useful when your query requests involve evaluations of expensive expressions, for example, querying a certain field from a JSON value, or querying the aggregation results of the ARRAY type. StarRocks evaluates the expression and stores the results in the generated columns while data is being loaded into the table, thereby avoiding the expression evaluation during queries and improving the query performance.
+A generated column is a special column whose value is derived from a pre-defined expression or evaluation based on other columns. Generated columns are especially useful when your query requests involve evaluations of expensive expressions, for example, querying a certain field from a JSON value, or calculating ARRAY data. StarRocks evaluates the expression and stores the results in the generated columns while data is being loaded into the table, thereby avoiding the expression evaluation during queries and improving the query performance.
 
 You can load data into a table with generated columns using INSERT.
 
