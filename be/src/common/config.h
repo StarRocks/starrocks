@@ -595,6 +595,9 @@ CONF_Bool(ignore_rowset_stale_unconsistent_delete, "false");
 // The chunk size for vector query engine
 CONF_Int32(vector_chunk_size, "4096");
 
+// Mem limit for single chunk
+CONF_Int64(chunk_mem_size, "33554432");
+
 // Valid range: [0-1000].
 // `0` will disable late materialization.
 // `1000` will enable late materialization always.
