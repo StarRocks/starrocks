@@ -442,8 +442,7 @@ void PipelineDriver::check_short_circuit() {
 }
 
 bool PipelineDriver::need_report_exec_state() {
-    if (_state == DriverState::NOT_READY || _state == DriverState::FINISH || _state == DriverState::CANCELED ||
-        _state == DriverState::INTERNAL_ERROR) {
+    if (is_finished()) {
         return false;
     }
 
@@ -451,8 +450,7 @@ bool PipelineDriver::need_report_exec_state() {
 }
 
 void PipelineDriver::report_exec_state_if_necessary() {
-    if (_state == DriverState::NOT_READY || _state == DriverState::FINISH || _state == DriverState::CANCELED ||
-        _state == DriverState::INTERNAL_ERROR) {
+    if (is_finished()) {
         return;
     }
 

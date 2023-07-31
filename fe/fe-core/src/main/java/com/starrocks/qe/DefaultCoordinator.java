@@ -185,7 +185,7 @@ public class DefaultCoordinator extends Coordinator {
 
     private Supplier<RuntimeProfile> topProfileSupplier;
     private Supplier<ExecPlan> execPlanSupplier;
-    private final AtomicLong lastRuntimeProfileUpdateTime = new AtomicLong(System.currentTimeMillis() - 1000);
+    private final AtomicLong lastRuntimeProfileUpdateTime = new AtomicLong(System.currentTimeMillis());
 
     public static class Factory implements Coordinator.Factory {
 
