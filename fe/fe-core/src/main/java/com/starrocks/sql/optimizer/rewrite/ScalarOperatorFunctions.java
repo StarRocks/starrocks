@@ -59,6 +59,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.Partition;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
@@ -1058,10 +1059,7 @@ public class ScalarOperatorFunctions {
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName)
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
         ConnectContext connectContext = ConnectContext.get();
-        PrivilegeChecker.checkAnyActionOnTable(
-                connectContext.getCurrentUserIdentity(),
-                connectContext.getCurrentRoleIds(),
-                tableName);
+        PrivilegeChecker.checkTableAction(connectContext, tableName, PrivilegeType.SELECT);
         return table;
     }
 
@@ -1071,10 +1069,7 @@ public class ScalarOperatorFunctions {
         Table table = db.tryGetTable(tableName.getTbl())
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
         ConnectContext connectContext = ConnectContext.get();
-        PrivilegeChecker.checkAnyActionOnTable(
-                connectContext.getCurrentUserIdentity(),
-                connectContext.getCurrentRoleIds(),
-                tableName);
+        PrivilegeChecker.checkTableAction(connectContext, tableName, PrivilegeType.SELECT);
         return Pair.of(db, table);
     }
 
