@@ -358,6 +358,7 @@ echo "Finished patching $GPERFTOOLS_SOURCE"
 cd $TP_SOURCE_DIR/$LIBRDKAFKA_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $LIBRDKAFKA_SOURCE = "librdkafka-2.0.2" ]; then
     patch -p0 < $TP_PATCH_DIR/librdkafka.patch
+    patch -p0 < $TP_PATCH_DIR/librdkafka-v2.0.2-broker-terminating.patch
     touch $PATCHED_MARK
 fi
 cd -

@@ -1,0 +1,13 @@
+diff --git a/src/rdkafka_broker.c b/src/rdkafka_broker.c
+index a32d08d2..cf412440 100644
+--- a/src/rdkafka_broker.c
++++ b/src/rdkafka_broker.c
+@@ -4397,7 +4397,7 @@ static int rd_kafka_broker_thread_main(void *arg) {
+ 
+         rd_rkb_dbg(rkb, BROKER, "BRKMAIN", "Enter main broker thread");
+ 
+-        while (!rd_kafka_broker_terminating(rkb)) {
++        while (!rd_kafka_broker_terminating(rkb) && rd_kafka_terminating(rkb)) {
+                 int backoff;
+                 int r;
+                 rd_kafka_broker_state_t orig_state;
