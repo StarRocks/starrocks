@@ -42,12 +42,13 @@ CacheInputStream::CacheInputStream(const std::shared_ptr<SeekableInputStream>& s
     // The modification time is more appropriate to indicate the different file versions.
     // While some data source, such as Hudi, have no modification time because their files
     // cannot be overwritten. So, if the modification time is unsupported, we use file size instead.
-    // Also, to reduce memory usage, we only use the high four bytes to represent the second timestamp.
+    // Usually the last modification timestamp has 41 bits, to reduce memory usage, we ignore the tail 9
+    // bytes and choose the high 32 bits to represent the second timestamp.
     if (modification_time > 0) {
-        int32_t mtime_s = (modification_time >> 32) & 0x00000000FFFFFFFF;
+        uint32_t mtime_s = (modification_time >> 9) & 0x00000000FFFFFFFF;
         memcpy(data + 8, &mtime_s, sizeof(mtime_s));
     } else {
-        int32_t file_size = _size;
+        uint32_t file_size = _size;
         memcpy(data + 8, &file_size, sizeof(file_size));
     }
     _buffer.reserve(BlockCache::instance()->block_size());
