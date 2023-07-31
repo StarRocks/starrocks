@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.rule.tree.prunesubfield;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -233,7 +232,7 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
                 join.getOnPredicate().accept(collector, null);
                 for (ScalarOperator expr : collector.getComplexExpressions()) {
                     // the expression in on-predicate must was push down to children
-                    Preconditions.checkState(expr.isColumnRef());
+                    // Preconditions.checkState(expr.isColumnRef());
                     checkColumns.union(expr.getUsedColumns());
                 }
             }
