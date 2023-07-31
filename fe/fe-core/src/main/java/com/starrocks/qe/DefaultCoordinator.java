@@ -542,6 +542,8 @@ public class DefaultCoordinator extends Coordinator {
         for (List<ExecutionFragment> concurrentFragments : executionDAG.getFragmentsInTopologicalOrderFromRoot()) {
             deployer.deployFragments(concurrentFragments);
         }
+
+        attachInstanceProfileToFragmentProfile();
     }
 
     private void handleErrorExecution(Status status, FragmentInstanceExecState execution, Throwable failure)
