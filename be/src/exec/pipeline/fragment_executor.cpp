@@ -634,7 +634,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                                              "prepare-pipeline-driver", "FragmentInstancePrepareTime", 10_ms);
             COUNTER_SET(prepare_pipeline_driver_timer, profiler.prepare_runtime_state_time);
         } else {
-            _fail_cleanup();
+            _fail_cleanup(prepare_success);
         }
     });
 
@@ -671,7 +671,7 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     bool prepare_success = false;
     DeferOp defer([this, &prepare_success]() {
         if (!prepare_success) {
-            _fail_cleanup();
+            _fail_cleanup(true);
         }
     });
 
@@ -690,10 +690,12 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     return Status::OK();
 }
 
-void FragmentExecutor::_fail_cleanup() {
+void FragmentExecutor::_fail_cleanup(bool fragment_has_registed) {
     if (_query_ctx) {
         if (_fragment_ctx) {
-            _query_ctx->fragment_mgr()->unregister(_fragment_ctx->fragment_instance_id());
+            if (fragment_has_registed) {
+                _query_ctx->fragment_mgr()->unregister(_fragment_ctx->fragment_instance_id());
+            }
             _fragment_ctx->destroy_pass_through_chunk_buffer();
             _fragment_ctx.reset();
         }
