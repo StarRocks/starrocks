@@ -44,7 +44,6 @@ ARG GROUP=starrocks
 RUN groupadd --gid 1000 $GROUP && useradd --no-create-home --uid 1000 --gid 1000 \
              --shell /usr/sbin/nologin $USER  && \
     chown -R $USER:$GROUP $STARROCKS_ROOT
-ENV USER $USER
 USER $USER
 
 # Copy all artifacts to the runtime container image
@@ -55,3 +54,6 @@ COPY --chown=starrocks:starrocks docker/dockerfiles/be/*.sh $STARROCKS_ROOT/
 
 # Create directory for BE storage, create cn symbolic link to be
 RUN mkdir -p $STARROCKS_ROOT/be/storage && ln -sfT be $STARROCKS_ROOT/cn
+
+# run as root by default
+USER root
