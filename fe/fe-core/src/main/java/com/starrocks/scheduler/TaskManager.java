@@ -56,6 +56,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Queue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -444,8 +445,9 @@ public class TaskManager {
             initialDelay = 0;
         }
         // this operation should only run in master
+        ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), true, task.getProperties());
         ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
-                        executeTask(task.getName()), initialDelay,
+                        executeTask(task.getName(), option), initialDelay,
                 TimeUtils.convertTimeUnitValueToSecond(schedule.getPeriod(), schedule.getTimeUnit()),
                 TimeUnit.SECONDS);
         periodFutureMap.put(task.getId(), future);
@@ -626,33 +628,34 @@ public class TaskManager {
                 pTaskRunQueue.stream()
                         .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
                         .map(TaskRun::getStatus)
-                        .filter(task -> task != null)
+                        .filter(Objects::nonNull)
                         .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
             }
+            taskRunManager.getTaskRunHistory().getAllHistory()
+                    .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
+            // use Map::put to make running task status overwrite the pending task
             taskRunManager.getRunningTaskRunMap().values().stream()
                     .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
                     .map(TaskRun::getStatus)
-                    .filter(task -> task != null)
-                    .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
-            taskRunManager.getTaskRunHistory().getAllHistory().stream()
-                    .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
+                    .filter(Objects::nonNull)
+                    .forEach(task -> mvNameRunStatusMap.put(task.getTaskName(), task));
         } else {
             for (Queue<TaskRun> pTaskRunQueue : taskRunManager.getPendingTaskRunMap().values()) {
                 pTaskRunQueue.stream()
                         .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
                         .map(TaskRun::getStatus)
-                        .filter(task -> task != null)
-                        .filter(u -> u != null && u.getDbName().equals(dbName))
+                        .filter(Objects::nonNull)
+                        .filter(u -> u.getDbName().equals(dbName))
                         .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
             }
+            taskRunManager.getTaskRunHistory().getAllHistory().stream()
+                    .filter(u -> u.getDbName().equals(dbName))
+                    .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
             taskRunManager.getRunningTaskRunMap().values().stream()
                     .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
                     .map(TaskRun::getStatus)
                     .filter(u -> u != null && u.getDbName().equals(dbName))
-                    .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
-            taskRunManager.getTaskRunHistory().getAllHistory().stream()
-                    .filter(u -> u.getDbName().equals(dbName))
-                    .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
+                    .forEach(task -> mvNameRunStatusMap.put(task.getTaskName(), task));
         }
         return mvNameRunStatusMap;
     }
