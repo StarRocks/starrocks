@@ -178,7 +178,7 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         tRoutineLoadTask.setParams(plan(routineLoadJob));
         // When the transaction times out, we reduce the consumption time to lower the BE load.
         if (msg.contains(DatabaseTransactionMgr.TXN_TIMEOUT_BY_MANAGER)) {
-            tRoutineLoadTask.setMax_interval_s(routineLoadJob.getTaskConsumeSecond()/2);
+            tRoutineLoadTask.setMax_interval_s(routineLoadJob.getTaskConsumeSecond() / 2);
         } else {
             tRoutineLoadTask.setMax_interval_s(routineLoadJob.getTaskConsumeSecond());
         }
