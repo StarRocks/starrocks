@@ -21,8 +21,11 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import org.apache.hadoop.conf.Configuration;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -52,7 +55,7 @@ public class HiveMetastoreOperationsTest {
         executor = Executors.newFixedThreadPool(5);
         cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
-        hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true);
+        hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration());
     }
 
     @After
@@ -178,5 +181,54 @@ public class HiveMetastoreOperationsTest {
         Assert.assertEquals(0, columnStatistics2.getTotalSizeBytes());
         Assert.assertEquals(2, columnStatistics2.getNumNulls());
         Assert.assertEquals(5, columnStatistics2.getNdv());
+    }
+
+    @Test
+    public void testDropDb() throws MetaNotFoundException {
+        class MockedTestMetaClient extends HiveMetastoreTest.MockedHiveMetaClient {
+            public org.apache.hadoop.hive.metastore.api.Database getDb(String dbName) throws RuntimeException {
+                if (dbName.equals("not_exist_db")) {
+                    throw new RuntimeException("db not_exist_db not found");
+                }
+                return null;
+            }
+        }
+
+        HiveMetaClient client = new MockedTestMetaClient();
+        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog");
+        ExecutorService executor = Executors.newFixedThreadPool(5);
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        HiveMetastoreOperations hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration());
+
+        HiveMetastoreOperations finalHmsOps = hmsOps;
+        ExceptionChecker.expectThrowsWithMsg(MetaNotFoundException.class,
+                "Failed to access database not_exist_db",
+                () -> finalHmsOps.dropDb("not_exist_db", true));
+
+        ExceptionChecker.expectThrowsWithMsg(MetaNotFoundException.class,
+                "Database location is empty",
+                () -> this.hmsOps.dropDb("db1", true));
+
+        class MockedTestMetaClient1 extends HiveMetastoreTest.MockedHiveMetaClient {
+
+            public org.apache.hadoop.hive.metastore.api.Database getDb(String dbName) throws RuntimeException {
+                if (dbName.equals("db1")) {
+                    org.apache.hadoop.hive.metastore.api.Database database = new org.apache.hadoop.hive.metastore.api.Database();
+                    database.setName("db1");
+                    database.setLocationUri("locationXXX");
+                    return database;
+                }
+                return null;
+            }
+        }
+
+        metastore = new HiveMetastore(new MockedTestMetaClient1(), "hive_catalog");
+        executor = Executors.newFixedThreadPool(5);
+        cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration());
+
+        hmsOps.dropDb("db1", false);
     }
 }

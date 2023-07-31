@@ -185,6 +185,14 @@ public class HiveMetastoreTest {
             return Lists.newArrayList("db1", "db2");
         }
 
+        public void createDatabase(org.apache.hadoop.hive.metastore.api.Database database) {
+
+        }
+
+        public void dropDatabase(String dbName, boolean deleteData) {
+
+        }
+
         public List<String> getAllTableNames(String dbName) {
             return Lists.newArrayList("table1", "table2");
         }

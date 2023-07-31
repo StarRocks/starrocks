@@ -180,6 +180,24 @@ public class CachingHiveMetastore implements IHiveMetastore {
         return metastore.getAllDatabaseNames();
     }
 
+    @Override
+    public void createDb(String dbName, Map<String, String> properties) {
+        try {
+            metastore.createDb(dbName, properties);
+        } finally {
+            invalidateDatabase(dbName);
+        }
+    }
+
+    @Override
+    public void dropDb(String dbName, boolean deleteData) {
+        try {
+            metastore.dropDb(dbName, deleteData);
+        } finally {
+            invalidateDatabase(dbName);
+        }
+    }
+
     public List<String> getAllTableNames(String dbName) {
         return get(tableNamesCache, dbName);
     }
@@ -504,6 +522,11 @@ public class CachingHiveMetastore implements IHiveMetastore {
         partitionCache.invalidateAll();
         tableStatsCache.invalidateAll();
         partitionStatsCache.invalidateAll();
+    }
+
+    public synchronized void invalidateDatabase(String dbName) {
+        databaseCache.invalidate(dbName);
+        databaseNamesCache.invalidateAll();
     }
 
     public synchronized void invalidateTable(String dbName, String tableName) {
