@@ -239,7 +239,7 @@ public class LoadLoadingTask extends LoadTask {
 
                 StringBuilder builder = new StringBuilder();
                 profile.prettyPrint(builder, "");
-                String profileContent = ProfileManager.getInstance().pushProfile(profile);
+                String profileContent = ProfileManager.getInstance().pushProfile(null, profile);
                 if (context.getQueryDetail() != null) {
                     context.getQueryDetail().setProfile(profileContent);
                 }

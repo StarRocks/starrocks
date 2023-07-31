@@ -84,6 +84,12 @@ void AnalyticSinkOperator::close(RuntimeState* state) {
 
 Status AnalyticSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
+
+    // skip processing if cancelled
+    if (state->is_cancelled()) {
+        return Status::OK();
+    }
+
     _analytor->input_eos() = true;
     RETURN_IF_ERROR((this->*_process_by_partition_if_necessary)());
     _analytor->sink_complete();

@@ -38,6 +38,11 @@ void AggregateStreamingSinkOperator::close(RuntimeState* state) {
 Status AggregateStreamingSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 
+    // skip processing if cancelled
+    if (state->is_cancelled()) {
+        return Status::OK();
+    }
+
     if (_aggregator->hash_map_variant().size() == 0) {
         _aggregator->set_ht_eos();
     }
