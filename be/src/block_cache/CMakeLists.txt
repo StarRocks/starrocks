@@ -25,6 +25,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/block_cache")
 set(CACHE_FILES
   block_cache.cpp
   io_buffer.cpp
+  cache_options.cpp
 )
 
 if (${WITH_CACHELIB} STREQUAL "ON")
