@@ -48,9 +48,7 @@ SchemaTablePipeFiles::SchemaTablePipeFiles()
         : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 
 Status SchemaTablePipeFiles::start(RuntimeState* state) {
-    RETURN_IF_ERROR(SchemaScanner::start(state));
-
-    return {};
+    return SchemaScanner::start(state);
 }
 
 Status SchemaTablePipeFiles::_list_pipe_files() {
