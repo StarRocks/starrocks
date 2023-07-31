@@ -394,7 +394,7 @@ public class LoadMgr implements Writable {
         return (currentTimeMs - job.getFinishTimestamp()) / 1000 > Config.label_keep_max_second;
     }
 
-    public void cleanResidualJob() {
+    public void cancelResidualJob() {
         // clean residual insert job
         readLock();
         List<LoadJob> insertJobs;
