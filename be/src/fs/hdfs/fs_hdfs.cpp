@@ -32,11 +32,25 @@ namespace starrocks {
 
 class GetHdfsFileReadOnlyHandle {
 public:
-    GetHdfsFileReadOnlyHandle(std::string path, int buffer_size) : _path(std::move(path)), _buffer_size(buffer_size) {}
-    StatusOr<hdfsFile> getOrCreateFile(hdfsFS fs) {
+    GetHdfsFileReadOnlyHandle(const FSOptions options, std::string path, int buffer_size)
+            : _options(std::move(options)), _path(std::move(path)), _buffer_size(buffer_size) {}
+
+    StatusOr<hdfsFS> getOrCreateFS() {
+        if (_hdfs_client == nullptr) {
+            SCOPED_RAW_TIMER(&_open_time_ns);
+            std::string namenode;
+            RETURN_IF_ERROR(get_namenode_from_path(_path, &namenode));
+            RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, _hdfs_client, _options));
+        }
+        return _hdfs_client->hdfs_fs;
+    }
+
+    StatusOr<hdfsFile> getOrCreateFile() {
         if (_file == nullptr) {
             SCOPED_RAW_TIMER(&_open_time_ns);
-            _file = hdfsOpenFile(fs, _path.c_str(), O_RDONLY, _buffer_size, 0, 0);
+            auto st = getOrCreateFS();
+            if (!st.ok()) return st.status();
+            _file = hdfsOpenFile(st.value(), _path.c_str(), O_RDONLY, _buffer_size, 0, 0);
             if (_file == nullptr) {
                 if (errno == ENOENT) {
                     return Status::RemoteFileNotFound(fmt::format("hdfsOpenFile failed, file={}", _path));
@@ -47,13 +61,18 @@ public:
         }
         return _file;
     }
+
+    hdfsFS getFS() { return _hdfs_client->hdfs_fs; }
     hdfsFile getFile() { return _file; }
-    int64_t open_time_ns() const { return _open_time_ns; }
+    int64_t getOpenTimeNs() const { return _open_time_ns; }
+    const std::string& getPath() const { return _path; }
 
 private:
-    hdfsFile _file = nullptr;
+    const FSOptions _options;
     std::string _path;
     int _buffer_size;
+    std::shared_ptr<HdfsFsClient> _hdfs_client = nullptr;
+    hdfsFile _file = nullptr;
     int64_t _open_time_ns = 0;
 };
 
@@ -64,8 +83,7 @@ private:
 // Now this is not thread-safe.
 class HdfsInputStream : public io::SeekableInputStream {
 public:
-    HdfsInputStream(hdfsFS fs, std::unique_ptr<GetHdfsFileReadOnlyHandle> handle, std::string file_name)
-            : _fs(fs), _handle(std::move(handle)), _file_name(std::move(file_name)) {}
+    HdfsInputStream(std::unique_ptr<GetHdfsFileReadOnlyHandle> handle) : _handle(std::move(handle)) {}
 
     ~HdfsInputStream() override;
 
@@ -77,9 +95,7 @@ public:
     void set_size(int64_t size) override;
 
 private:
-    hdfsFS _fs;
     std::unique_ptr<GetHdfsFileReadOnlyHandle> _handle;
-    std::string _file_name;
     int64_t _offset{0};
     int64_t _file_size{0};
     bool _seek = false;
@@ -91,23 +107,23 @@ HdfsInputStream::~HdfsInputStream() {
         if (file == nullptr) {
             return Status::OK();
         }
-        int r = hdfsCloseFile(this->_fs, file);
+        int r = hdfsCloseFile(_handle->getFS(), file);
         if (r == -1) {
-            auto error_msg = fmt::format("Fail to close file {}: {}", _file_name, get_hdfs_err_msg());
+            auto error_msg = fmt::format("Fail to close file {}: {}", _handle->getPath(), get_hdfs_err_msg());
             LOG(WARNING) << error_msg;
             return Status::IOError(error_msg);
         }
         return Status::OK();
     });
     Status st = ret->get_future().get();
-    PLOG_IF(ERROR, !st.ok()) << "close " << _file_name << " failed";
+    PLOG_IF(ERROR, !st.ok()) << "close " << _handle->getPath() << " failed";
 }
 
 StatusOr<int64_t> HdfsInputStream::read(void* data, int64_t size) {
     if (UNLIKELY(size > std::numeric_limits<tSize>::max())) {
         size = std::numeric_limits<tSize>::max();
     }
-    auto st = _handle->getOrCreateFile(_fs);
+    auto st = _handle->getOrCreateFile();
     if (!st.ok()) {
         return st.status();
     }
@@ -115,15 +131,15 @@ StatusOr<int64_t> HdfsInputStream::read(void* data, int64_t size) {
 
     // tSize r = hdfsPread(_fs, file, _offset, data, static_cast<tSize>(size));
     // if (r == -1) {
-    //     return Status::IOError(fmt::format("fail to hdfsPread {}: {}", _file_name, get_hdfs_err_msg()));
+    //     return Status::IOError(fmt::format("fail to hdfsPread {}: {}", _handle->getPath(), get_hdfs_err_msg()));
     // }
     // _offset += r;
     // return r;
 
     if (!_seek) {
-        int ret = hdfsSeek(_fs, file, _offset);
+        int ret = hdfsSeek(_handle->getFS(), file, _offset);
         if (ret == -1) {
-            return Status::IOError(fmt::format("fail to hdfdSeek {}: {}", _file_name, get_hdfs_err_msg()));
+            return Status::IOError(fmt::format("fail to hdfdSeek {}: {}", _handle->getPath(), get_hdfs_err_msg()));
         }
         _seek = true;
     }
@@ -131,13 +147,13 @@ StatusOr<int64_t> HdfsInputStream::read(void* data, int64_t size) {
     int64_t now = 0;
     uint8_t* buf = static_cast<uint8_t*>(data);
     while (now < size) {
-        tSize r = hdfsRead(_fs, file, buf + now, size - now);
+        tSize r = hdfsRead(_handle->getFS(), file, buf + now, size - now);
         if (r == 0) break;
         if (r == -1) {
             if (errno == EINTR) {
                 continue;
             }
-            return Status::IOError(fmt::format("fail to hdfsRead {}: {}", _file_name, get_hdfs_err_msg()));
+            return Status::IOError(fmt::format("fail to hdfsRead {}: {}", _handle->getPath(), get_hdfs_err_msg()));
         }
         now += r;
     }
@@ -157,9 +173,13 @@ Status HdfsInputStream::seek(int64_t offset) {
 StatusOr<int64_t> HdfsInputStream::get_size() {
     if (_file_size == 0) {
         auto ret = call_hdfs_scan_function_in_pthread([this] {
-            auto info = hdfsGetPathInfo(_fs, _file_name.c_str());
+            auto st = _handle->getOrCreateFS();
+            if (!st.ok()) return st.status();
+            hdfsFS fs = st.value();
+            auto info = hdfsGetPathInfo(fs, _handle->getPath().c_str());
             if (UNLIKELY(info == nullptr)) {
-                return Status::IOError(fmt::format("Fail to get path info of {}: {}", _file_name, get_hdfs_err_msg()));
+                return Status::IOError(
+                        fmt::format("Fail to get path info of {}: {}", _handle->getPath(), get_hdfs_err_msg()));
             }
             this->_file_size = info->mSize;
             hdfsFreeFileInfo(info, 1);
@@ -177,7 +197,7 @@ void HdfsInputStream::set_size(int64_t value) {
 
 StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_statistics() {
     // `GetReadStatistics` is only supported in HDFS input stream
-    if (!fs::is_hdfs_uri(_file_name)) {
+    if (!fs::is_hdfs_uri(_handle->getPath())) {
         return nullptr;
     }
 
@@ -188,7 +208,7 @@ StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_st
         if (file == nullptr) {
             return Status::OK();
         }
-        int64_t open_time_ns = _handle->open_time_ns();
+        int64_t open_time_ns = _handle->getOpenTimeNs();
         int64_t open_time_ms = open_time_ns * 0.000001;
         stats->append("OpenTimeMs", open_time_ms);
 
@@ -555,11 +575,6 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
 
 StatusOr<std::unique_ptr<SequentialFile>> HdfsFileSystem::new_sequential_file(const SequentialFileOptions& opts,
                                                                               const std::string& path) {
-    (void)opts;
-    std::string namenode;
-    RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
-    std::shared_ptr<HdfsFsClient> hdfs_client;
-    RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
     // pass zero to hdfsOpenFile will use the default hdfs_read_buffer_size
     int hdfs_read_buffer_size = 0;
     if (_options.scan_range_params != nullptr && _options.scan_range_params->__isset.hdfs_read_buffer_size_kb) {
@@ -568,18 +583,13 @@ StatusOr<std::unique_ptr<SequentialFile>> HdfsFileSystem::new_sequential_file(co
     if (_options.download != nullptr && _options.download->__isset.hdfs_read_buffer_size_kb) {
         hdfs_read_buffer_size = _options.download->hdfs_read_buffer_size_kb;
     }
-
-    auto handle = std::make_unique<GetHdfsFileReadOnlyHandle>(path, hdfs_read_buffer_size);
-    auto stream = std::make_shared<HdfsInputStream>(hdfs_client->hdfs_fs, std::move(handle), path);
+    auto handle = std::make_unique<GetHdfsFileReadOnlyHandle>(_options, path, hdfs_read_buffer_size);
+    auto stream = std::make_shared<HdfsInputStream>(std::move(handle));
     return std::make_unique<SequentialFile>(std::move(stream), path);
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_file(const RandomAccessFileOptions& opts,
                                                                                    const std::string& path) {
-    std::string namenode;
-    RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
-    std::shared_ptr<HdfsFsClient> hdfs_client;
-    RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
     // pass zero to hdfsOpenFile will use the default hdfs_read_buffer_size
     int hdfs_read_buffer_size = 0;
     if (_options.scan_range_params != nullptr && _options.scan_range_params->__isset.hdfs_read_buffer_size_kb) {
@@ -588,8 +598,8 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_fi
     if (_options.download != nullptr && _options.download->__isset.hdfs_read_buffer_size_kb) {
         hdfs_read_buffer_size = _options.download->hdfs_read_buffer_size_kb;
     }
-    auto handle = std::make_unique<GetHdfsFileReadOnlyHandle>(path, hdfs_read_buffer_size);
-    auto stream = std::make_shared<HdfsInputStream>(hdfs_client->hdfs_fs, std::move(handle), path);
+    auto handle = std::make_unique<GetHdfsFileReadOnlyHandle>(_options, path, hdfs_read_buffer_size);
+    auto stream = std::make_shared<HdfsInputStream>(std::move(handle));
     return std::make_unique<RandomAccessFile>(std::move(stream), path);
 }
 
