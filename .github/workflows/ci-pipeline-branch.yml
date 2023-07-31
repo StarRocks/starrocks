@@ -38,14 +38,14 @@ jobs:
         with:
           name: pr_num
           path: ./pr_num.txt
-          retention-days: 1
+          retention-days: 3
 
       - name: Upload the PR HEAD REF
         uses: actions/upload-artifact@v2
         with:
           name: head_sha
           path: ./head_sha.txt
-          retention-days: 1
+          retention-days: 3
 
       - name: Check
         id: check
