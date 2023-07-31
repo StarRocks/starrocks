@@ -92,6 +92,11 @@ public class ComputeNode implements IComputable, Writable {
     @SerializedName("lastWriteFail")
     private volatile boolean lastWriteFail = false;
 
+    // Indicate there is whether storage_path or not with CN node
+    // It must be true for Backend
+    @SerializedName("isSetStoragePath")
+    private volatile boolean isSetStoragePath = false;
+
     private volatile int numRunningQueries = 0;
     private volatile long memLimitBytes = 0;
     private volatile long memUsedBytes = 0;
@@ -148,6 +153,10 @@ public class ComputeNode implements IComputable, Writable {
     // for test only
     public void setStarletPort(int starletPort) {
         this.starletPort = starletPort;
+    }
+
+    public boolean isSetStoragePath() {
+        return isSetStoragePath;
     }
 
     public long getId() {
@@ -457,6 +466,11 @@ public class ComputeNode implements IComputable, Writable {
             if (RunMode.allowCreateLakeTable() && this.starletPort != hbResponse.getStarletPort()) {
                 isChanged = true;
                 this.starletPort = hbResponse.getStarletPort();
+            }
+
+            if (RunMode.allowCreateLakeTable() && this.isSetStoragePath != hbResponse.isSetStoragePath()) {
+                isChanged = true;
+                this.isSetStoragePath = hbResponse.isSetStoragePath();
             }
 
             this.lastUpdateMs = hbResponse.getHbTime();

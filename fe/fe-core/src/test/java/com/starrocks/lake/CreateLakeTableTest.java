@@ -33,12 +33,15 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.SharedDataStorageVolumeMgr;
 import com.starrocks.server.SharedNothingStorageVolumeMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -285,6 +288,50 @@ public class CreateLakeTableTest {
         ExceptionChecker.expectThrows(AnalysisException.class, () -> createTable(
                 "create table lake_test.auto_partition (key1 date, key2 varchar(10), key3 int)\n" +
                         "partition by day(key1) distributed by hash(key2) buckets 3;"));
+    }
+
+    @Test
+    public void testCreateLakeTableEnablePersistentIndex(@Mocked StarOSAgent agent) throws Exception {
+        new Expectations() {
+            {
+                agent.allocateFilePath(anyString, anyLong);
+                result = getPathInfo();
+                agent.createShardGroup(anyLong, anyLong, anyLong);
+                result = GlobalStateMgr.getCurrentState().getNextId();
+                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong, (Map<String, String>) any);
+                returns(Lists.newArrayList(20001L, 20002L, 20003L),
+                        Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
+                        Lists.newArrayList(20008L), Lists.newArrayList(20009L));
+                agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
+                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+            }
+        };
+
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
+
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.table_with_persistent_index\n" +
+                        "(c0 int, c1 string, c2 int, c3 bigint)\n" +
+                        "PRIMARY KEY(c0)\n" +
+                        "distributed by hash(c0) buckets 2\n" +
+                        "properties('enable_persistent_index' = 'true');"));
+        {
+            LakeTable lakeTable = getLakeTable("lake_test", "table_with_persistent_index");
+            // check table persistentIndex
+            boolean enablePersistentIndex = lakeTable.enablePersistentIndex();
+            Assert.assertTrue(enablePersistentIndex);
+            // check table persistentIndexType
+            String indexType = lakeTable.getPersistentIndexTypeString();
+            Assert.assertEquals(indexType, "LOCAL");
+
+            String sql = "show create table lake_test.table_with_persistent_index";
+            ShowCreateTableStmt showCreateTableStmt =
+                    (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            ShowExecutor executor = new ShowExecutor(connectContext, showCreateTableStmt);
+            ShowResultSet resultSet = executor.execute();
+
+            Assert.assertTrue(resultSet.getResultRows().size() != 0);
+        }
     }
 
     @Test
