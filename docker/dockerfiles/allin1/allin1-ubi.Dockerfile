@@ -31,7 +31,7 @@ ARG DEPLOYDIR=/data/deploy
 ENV SR_HOME=${DEPLOYDIR}/starrocks
 
 RUN yum install -y java-1.8.0-openjdk-devel tzdata openssl curl vim ca-certificates fontconfig gzip tar less hostname procps-ng lsof python3-pip nginx nc && \
-    rpm -ivh https://repo.mysql.com//mysql80-community-release-el8-7.noarch.rpm && \
+    rpm -ivh https://repo.mysql.com/mysql80-community-release-el8-7.noarch.rpm && \
     yum -y install mysql-community-client --nogpgcheck && \
     yum remove -y mysql80-community-release && \
     pip3 install supervisor
