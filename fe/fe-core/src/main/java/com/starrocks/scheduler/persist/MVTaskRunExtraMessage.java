@@ -37,8 +37,14 @@ public class MVTaskRunExtraMessage implements Writable {
     private String partitionStart;
     @SerializedName("partitionEnd")
     private String partitionEnd;
+
+    // refreshed partitions of materialized view in this task run
     @SerializedName("mvPartitionsToRefresh")
     private Set<String> mvPartitionsToRefresh = Sets.newHashSet();
+    // refreshed partitions of the ref base table in this task run which should only have one table for now.
+    @SerializedName("refBaseePartitionsToRefreshMap")
+    private Map<String, Set<String>> refBasePartitionsToRefreshMap = Maps.newHashMap();
+    // refreshed partitions of all the base tables which are optimized by optimizer and the real partitions in executing.
     @SerializedName("basePartitionsToRefreshMap")
     private Map<String, Set<String>> basePartitionsToRefreshMap = Maps.newHashMap();
 
@@ -79,6 +85,15 @@ public class MVTaskRunExtraMessage implements Writable {
 
     public Map<String, Set<String>> getBasePartitionsToRefreshMap() {
         return basePartitionsToRefreshMap;
+    }
+
+    public Map<String, Set<String>> getRefBasePartitionsToRefreshMap() {
+        return refBasePartitionsToRefreshMap;
+    }
+
+    public void setRefBasePartitionsToRefreshMap(
+            Map<String, Set<String>> refBasePartitionsToRefreshMap) {
+        this.refBasePartitionsToRefreshMap = refBasePartitionsToRefreshMap;
     }
 
     public String getMvPartitionsToRefreshString() {
