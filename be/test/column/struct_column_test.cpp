@@ -196,9 +196,9 @@ TEST(StructColumnTest, equals) {
 TEST(StructColumnTest, test_byte_size) {
     auto col = create_test_column();
 
-    ASSERT_EQ(sizeof(uint64_t) * 2 + sizeof(BinaryColumn::Offset) * 3 + 11, col->byte_size());
-    ASSERT_EQ(sizeof(uint64_t) + sizeof(BinaryColumn::Offset) + 6, col->byte_size(1, 1));
-    ASSERT_EQ(sizeof(uint64_t) + sizeof(BinaryColumn::Offset) + 5, col->byte_size(0));
+    ASSERT_EQ(sizeof(uint64_t) * 2 + sizeof(BinaryColumn::Offset) * 2 + 11 + 2, col->byte_size());
+    ASSERT_EQ(sizeof(uint64_t) + sizeof(BinaryColumn::Offset) + 6 + 2, col->byte_size(1, 1));
+    ASSERT_EQ(sizeof(uint64_t) + sizeof(BinaryColumn::Offset) + 5 + 2, col->byte_size(0));
 }
 
 TEST(StructColumnTest, test_resize) {
