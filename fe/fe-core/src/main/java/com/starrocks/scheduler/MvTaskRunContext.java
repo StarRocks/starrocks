@@ -15,10 +15,11 @@
 package com.starrocks.scheduler;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Range;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
-import com.starrocks.sql.common.PartitionRange;
 import com.starrocks.sql.plan.ExecPlan;
 
 import java.util.List;
@@ -32,9 +33,13 @@ public class MvTaskRunContext extends TaskRunContext {
     // all the materialized view's partition name to its intersected RefBaseTable's partition names.
     Map<String, Set<String>> mvRefBaseTableIntersectedPartitions;
     // all the RefBaseTable's partition name to its partition key range.
-    Map<String, PartitionRange> refBaseTableRangePartitionMap;
+    Map<String, Range<PartitionKey>> refBaseTableRangePartitionMap;
     // all the RefBaseTable's partition name to its list partition keys.
     Map<String, List<List<String>>> refBaseTableListPartitionMap;
+    // the external ref base table's mv partition name to original partition names map because external
+    // table supports multi partition columns, one converted partition name(mv partition name) may have
+    // multi original partition names.
+    Map<String, Set<String>> externalRefBaseTableMVPartitionMap;
 
     // The Table which materialized view' partition column comes from is called `RefBaseTable`:
     // - Materialized View's to-refresh partitions is synced from its `refBaseTable`.
@@ -94,11 +99,11 @@ public class MvTaskRunContext extends TaskRunContext {
         this.nextPartitionEnd = nextPartitionEnd;
     }
 
-    public Map<String, PartitionRange> getRefBaseTableRangePartitionMap() {
+    public Map<String, Range<PartitionKey>> getRefBaseTableRangePartitionMap() {
         return refBaseTableRangePartitionMap;
     }
 
-    public void setRefBaseTableRangePartitionMap(Map<String, PartitionRange> refBaseTableRangePartitionMap) {
+    public void setRefBaseTableRangePartitionMap(Map<String, Range<PartitionKey>> refBaseTableRangePartitionMap) {
         this.refBaseTableRangePartitionMap = refBaseTableRangePartitionMap;
     }
 
@@ -108,6 +113,14 @@ public class MvTaskRunContext extends TaskRunContext {
 
     public void setRefBaseTableListPartitionMap(Map<String, List<List<String>>> refBaseTableListPartitionMap) {
         this.refBaseTableListPartitionMap = refBaseTableListPartitionMap;
+    }
+
+    public Map<String, Set<String>> getExternalRefBaseTableMVPartitionMap() {
+        return externalRefBaseTableMVPartitionMap;
+    }
+
+    public void setExternalRefBaseTableMVPartitionMap(Map<String, Set<String>> externalRefBaseTableMVPartitionMap) {
+        this.externalRefBaseTableMVPartitionMap = externalRefBaseTableMVPartitionMap;
     }
 
     public ExecPlan getExecPlan() {

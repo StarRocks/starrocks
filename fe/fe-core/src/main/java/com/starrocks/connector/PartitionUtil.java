@@ -288,35 +288,10 @@ public class PartitionUtil {
      * @param partitionColumn : the ref base table's partition column which mv's partition derives
      */
     @Deprecated
-    public static Map<String, Range<PartitionKey>> getTablePartitionKeyRange(Table table, Column partitionColumn)
+    public static Map<String, Range<PartitionKey>> getPartitionKeyRange(Table table, Column partitionColumn)
             throws UserException {
         if (table.isNativeTableOrMaterializedView()) {
             return ((OlapTable) table).getRangePartitionMap();
-        } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable()) {
-            Map<String, PartitionRange> tablePartitionRangeMap = PartitionUtil.getRangePartitionMapOfExternalTable(table,
-                    partitionColumn, getPartitionNames(table));
-            return tablePartitionRangeMap.entrySet().stream()
-                    .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().getPartitionKeyRange()));
-        } else {
-            throw new DmlException("Can not get partition range from table with type : %s", table.getType());
-        }
-    }
-
-    /**
-     * Return table's partition name to partition range's mapping:
-     * - for native base table, just return its range partition map;
-     * - for external base table, convert external partition to normalized partition.
-     * @param table : the ref base table of materialized view
-     * @param partitionColumn : the ref base table's partition column which mv's partition derives
-     * @return table's partition name and its partition range which is made of partition key and its name.
-     */
-    public static Map<String, PartitionRange> getTablePartitionRange(Table table, Column partitionColumn)
-            throws UserException {
-        if (table.isNativeTableOrMaterializedView()) {
-            Map<String, Range<PartitionKey>> mvPartitionKeyRange = ((OlapTable) table).getRangePartitionMap();
-            return mvPartitionKeyRange.entrySet().stream()
-                    .collect(Collectors.toMap(Map.Entry::getKey,
-                            e -> new PartitionRange(e.getKey(), e.getValue())));
         } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable()) {
             return PartitionUtil.getRangePartitionMapOfExternalTable(table, partitionColumn, getPartitionNames(table));
         } else {
@@ -398,6 +373,33 @@ public class PartitionUtil {
         }
     }
 
+    /**
+     *  NOTE:
+     *  External tables may contain multi partition columns, so the same mv partition name may contain multi external
+     *  table partitions. eg:
+     *   partitionName1 : par_col=0/par_date=2020-01-01 => p20200101
+     *   partitionName2 : par_col=1/par_date=2020-01-01 => p20200101
+     */
+    public static Map<String, Set<String>> getMVPartitionNameMapOfExternalTable(Table table,
+                                                                                Column partitionColumn,
+                                                                                List<String> partitionNames)
+            throws AnalysisException {
+        List<Column> partitionColumns = getPartitionColumns(table);
+        // Get the index of partitionColumn when table has multi partition columns.
+        int partitionColumnIndex = checkAndGetPartitionColumnIndex(partitionColumns, partitionColumn);
+        Map<String, Set<String>> mvPartitionKeySetMap = Maps.newHashMap();
+        for (String partitionName : partitionNames) {
+            List<String> partitionNameValues = toPartitionValues(partitionName);
+            PartitionKey partitionKey = createPartitionKey(
+                    ImmutableList.of(partitionNameValues.get(partitionColumnIndex)),
+                    ImmutableList.of(partitionColumns.get(partitionColumnIndex)),
+                    table.getType());
+            String mvPartitionName = generateMVPartitionName(partitionKey);
+            mvPartitionKeySetMap.computeIfAbsent(mvPartitionName, x -> Sets.newHashSet())
+                    .add(partitionName);
+        }
+        return mvPartitionKeySetMap;
+    }
 
     /**
      *  Map partition values to partition ranges, eg:
@@ -412,18 +414,15 @@ public class PartitionUtil {
      *   partitionName1 : par_col=0/par_date=2020-01-01 => p20200101
      *   partitionName2 : par_col=1/par_date=2020-01-01 => p20200101
      */
-    public static Map<String, PartitionRange> getRangePartitionMapOfExternalTable(Table table,
-                                                                                  Column partitionColumn,
-                                                                                  List<String> partitionNames)
+    public static Map<String, Range<PartitionKey>> getRangePartitionMapOfExternalTable(Table table,
+                                                                                       Column partitionColumn,
+                                                                                       List<String> partitionNames)
             throws AnalysisException {
         List<Column> partitionColumns = getPartitionColumns(table);
 
         // Get the index of partitionColumn when table has multi partition columns.
         int partitionColumnIndex = checkAndGetPartitionColumnIndex(partitionColumns, partitionColumn);
-
         List<PartitionKey> partitionKeys = new ArrayList<>();
-        Map<String, String> mvPartitionNameToOriginalNameMap = Maps.newHashMap();
-
         Map<String, PartitionKey> mvPartitionKeyMap = Maps.newHashMap();
         for (String partitionName : partitionNames) {
             List<String> partitionNameValues = toPartitionValues(partitionName);
@@ -435,7 +434,6 @@ public class PartitionUtil {
             String mvPartitionName = generateMVPartitionName(partitionKey);
             // TODO: check `mvPartitionName` existed.
             mvPartitionKeyMap.put(mvPartitionName, partitionKey);
-            mvPartitionNameToOriginalNameMap.put(mvPartitionName, partitionName);
         }
 
         LinkedHashMap<String, PartitionKey> sortedPartitionLinkMap = mvPartitionKeyMap.entrySet().stream()
@@ -445,7 +443,7 @@ public class PartitionUtil {
         PartitionKey lastPartitionKey = null;
         String lastPartitionName = null;
 
-        Map<String, PartitionRange> mvPartitionRangeMap = new LinkedHashMap<>();
+        Map<String, Range<PartitionKey>> mvPartitionRangeMap = new LinkedHashMap<>();
         for (Map.Entry<String, PartitionKey> entry : sortedPartitionLinkMap.entrySet()) {
             if (index == 0) {
                 lastPartitionName = entry.getKey();
@@ -457,11 +455,8 @@ public class PartitionUtil {
                 ++index;
                 continue;
             }
-            String oldPartitionName = mvPartitionNameToOriginalNameMap.get(lastPartitionName);
-            PartitionRange partitionRange = new PartitionRange(oldPartitionName, Range.closedOpen(lastPartitionKey,
-                    entry.getValue()));
             Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
-            mvPartitionRangeMap.put(lastPartitionName, partitionRange);
+            mvPartitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, entry.getValue()));
             lastPartitionName = entry.getKey();
             lastPartitionKey = entry.getValue();
         }
@@ -470,10 +465,8 @@ public class PartitionUtil {
             endKey.pushColumn(addOffsetForLiteral(lastPartitionKey.getKeys().get(0), 1),
                     partitionColumn.getPrimitiveType());
 
-            String oldPartitionName = mvPartitionNameToOriginalNameMap.get(lastPartitionName);
-            PartitionRange partitionRange = new PartitionRange(oldPartitionName, Range.closedOpen(lastPartitionKey, endKey));
             Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
-            mvPartitionRangeMap.put(lastPartitionName, partitionRange);
+            mvPartitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, endKey));
         }
         return mvPartitionRangeMap;
     }

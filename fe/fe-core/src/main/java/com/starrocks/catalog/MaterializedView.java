@@ -1375,9 +1375,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         mvPartitionNameToRangeMap.putAll(rangePartitionDiff.getAdds());
 
         Map<String, Set<String>> baseToMvNameRef = SyncPartitionUtils
-                .generatePartitionRefMap(basePartitionNameToRangeMap, mvPartitionNameToRangeMap);
+                .getIntersectedPartitions(basePartitionMap, mvPartitionMap);
         Map<String, Set<String>> mvToBaseNameRef = SyncPartitionUtils
-                .generatePartitionRefMap(mvPartitionNameToRangeMap, basePartitionNameToRangeMap);
+                .getIntersectedPartitions(mvPartitionMap, basePartitionMap);
 
         // step2: check ref base table's updated partition names by checking its ref tables recursively.
         Set<String> baseChangedPartitionNames = getUpdatedPartitionNamesOfTable(refBaseTable, true);
