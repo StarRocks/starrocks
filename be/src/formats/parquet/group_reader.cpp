@@ -321,12 +321,10 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
             _collect_field_io_range(field.children[subfield_pos[i]], col_type.children[i], active, ranges, end_offset);
         }
     } else if (field.type.type == LogicalType::TYPE_MAP) {
-        auto index = 0;
-        for (auto& child : field.children) {
-            if ((!col_type.children[index].is_unknown_type())) {
-                _collect_field_io_range(child, col_type.children[index], active, ranges, end_offset);
+        for (size_t i = 0; i < field.children.size(); i++) {
+            if ((!col_type.children[i].is_unknown_type())) {
+                _collect_field_io_range(field.children[i], col_type.children[i], active, ranges, end_offset);
             }
-            ++index;
         }
     } else {
         auto& column = _row_group_metadata->columns[field.physical_column_index].meta_data;
@@ -365,15 +363,11 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
                                     active, ranges, end_offset);
         }
     } else if (field.type.type == LogicalType::TYPE_MAP) {
-        // ParquetFiled Map -> Map<Struct<key,value>>
-        DCHECK(field.children[0].type.type == TYPE_STRUCT);
-        auto index = 0;
-        for (auto& child : field.children[0].children) {
-            if ((!col_type.children[index].is_unknown_type())) {
-                _collect_field_io_range(child, col_type.children[index], &iceberg_schema_field->children[index], active,
-                                        ranges, end_offset);
+        for (size_t i = 0; i < field.children.size(); i++) {
+            if ((!col_type.children[i].is_unknown_type())) {
+                _collect_field_io_range(field.children[i], col_type.children[i], &iceberg_schema_field->children[i],
+                                        active, ranges, end_offset);
             }
-            ++index;
         }
     } else {
         auto& column = _row_group_metadata->columns[field.physical_column_index].meta_data;

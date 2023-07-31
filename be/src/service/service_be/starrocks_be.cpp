@@ -265,6 +265,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     exec_env->destroy();
     delete storage_engine;
 
+    // Unbind with MemTracker
+    tls_mem_tracker = nullptr;
+
     global_env->stop();
     LOG(INFO) << "BE exit step " << exit_step++ << ": global env stop successfully";
 

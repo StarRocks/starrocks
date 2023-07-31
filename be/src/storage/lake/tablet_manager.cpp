@@ -46,6 +46,7 @@
 #include "storage/metadata_util.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_map.h"
+#include "testutil/sync_point.h"
 #include "util/lru_cache.h"
 #include "util/raw_container.h"
 #include "util/trace.h"
@@ -679,10 +680,17 @@ StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, i
     if (txns_size != 1) {
         return Status::NotSupported("does not support publish multiple txns yet");
     }
+
+    auto new_version_metadata_or_error = [=](Status error) -> StatusOr<TabletMetadataPtr> {
+        auto res = tablet->get_metadata(new_version);
+        if (res.ok()) return res;
+        return error;
+    };
+
     // Read base version metadata
     auto res = tablet->get_metadata(base_version);
     if (res.status().is_not_found()) {
-        return tablet->get_metadata(new_version);
+        return new_version_metadata_or_error(res.status());
     }
 
     if (!res.ok()) {
@@ -709,7 +717,7 @@ StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, i
     auto init_st = log_applier->init();
     if (!init_st.ok()) {
         if (init_st.is_already_exist()) {
-            return tablet->get_metadata(new_version);
+            return new_version_metadata_or_error(init_st);
         } else {
             return init_st;
         }
@@ -722,7 +730,7 @@ StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, i
         auto txn_log_st = tablet->get_txn_log(txn_id);
 
         if (txn_log_st.status().is_not_found()) {
-            return tablet->get_metadata(new_version);
+            return new_version_metadata_or_error(txn_log_st.status());
         }
 
         if (!txn_log_st.ok()) {
@@ -750,7 +758,7 @@ StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, i
         for (int64_t v = alter_version + 1; v < new_version; ++v) {
             auto txn_vlog = tablet->get_txn_vlog(v);
             if (txn_vlog.status().is_not_found()) {
-                return tablet->get_metadata(new_version);
+                return new_version_metadata_or_error(txn_vlog.status());
             }
 
             if (!txn_vlog.ok()) {
@@ -775,22 +783,25 @@ StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, i
     auto clear_task = [=]() {
         // Delete txn logs
         auto st = tablet_mgr->delete_txn_log(tablet_id, txn_id);
-        LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet->txn_log_location(txn_id) << ": " << st;
+        TEST_SYNC_POINT_CALLBACK("publish_version:delete_txn_log", &st);
+        LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet_mgr->txn_log_location(tablet_id, txn_id) << ": " << st;
         // Delete vtxn logs
         if (alter_version != -1 && alter_version + 1 < new_version) {
             for (int64_t v = alter_version + 1; v < new_version; ++v) {
-                auto st = tablet_mgr->delete_txn_vlog(tablet_id, v);
-                LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet->txn_vlog_location(v) << ": " << st;
+                auto r = tablet_mgr->delete_txn_vlog(tablet_id, v);
+                LOG_IF(WARNING, !r.ok()) << "Fail to delete " << tablet_mgr->txn_vlog_location(tablet_id, v) << ": "
+                                         << r;
             }
         }
     };
 
-    auto tp = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::DROP);
-    auto st = tp->submit_func(std::move(clear_task));
-    LOG_IF(INFO, !st.ok()) << "Fail to submit clear task of txn " << txn_id << ", ignore this error";
-#ifdef BE_TEST
-    tp->wait();
-#endif
+    auto tp = ExecEnv::GetInstance()->vacuum_thread_pool();
+    if (LIKELY(tp != nullptr)) {
+        auto st = tp->submit_func(std::move(clear_task));
+        LOG_IF(INFO, !st.ok()) << "Fail to submit clear task of txn " << txn_id << ", ignore this error";
+    } else {
+        clear_task();
+    }
     return new_metadata;
 }
 

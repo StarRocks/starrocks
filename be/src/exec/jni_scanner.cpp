@@ -25,10 +25,12 @@
 namespace starrocks {
 
 Status JniScanner::_check_jni_exception(JNIEnv* _jni_env, const std::string& message) {
-    if (_jni_env->ExceptionCheck()) {
+    if (jthrowable thr = _jni_env->ExceptionOccurred(); thr) {
+        std::string jni_error_message = JVMFunctionHelper::getInstance().dumpExceptionString(thr);
         _jni_env->ExceptionDescribe();
         _jni_env->ExceptionClear();
-        return Status::InternalError(message);
+        _jni_env->DeleteLocalRef(thr);
+        return Status::InternalError(message + " java exception details: " + jni_error_message);
     }
     return Status::OK();
 }
@@ -139,10 +141,11 @@ Status JniScanner::_get_next_chunk(JNIEnv* _jni_env, long* chunk_meta) {
     return Status::OK();
 }
 
-template <LogicalType type, typename CppType>
+template <LogicalType type>
 Status JniScanner::_append_primitive_data(const FillColumnArgs& args) {
     char* column_ptr = static_cast<char*>(next_chunk_meta_as_ptr());
     using ColumnType = typename starrocks::RunTimeColumnType<type>;
+    using CppType = typename starrocks::RunTimeCppType<type>;
     auto* runtime_column = down_cast<ColumnType*>(args.column);
     runtime_column->resize_uninitialized(args.num_rows);
     memcpy(runtime_column->get_data().data(), column_ptr, args.num_rows * sizeof(CppType));
@@ -169,12 +172,13 @@ Status JniScanner::_append_string_data(const FillColumnArgs& args) {
     return Status::OK();
 }
 
-template <LogicalType type, typename CppType>
+template <LogicalType type>
 Status JniScanner::_append_decimal_data(const FillColumnArgs& args) {
     int* offset_ptr = static_cast<int*>(next_chunk_meta_as_ptr());
     char* column_ptr = static_cast<char*>(next_chunk_meta_as_ptr());
 
     using ColumnType = typename starrocks::RunTimeColumnType<type>;
+    using CppType = typename starrocks::RunTimeCppType<type>;
     auto* runtime_column = down_cast<ColumnType*>(args.column);
     runtime_column->resize_uninitialized(args.num_rows);
     CppType* runtime_data = runtime_column->get_data().data();
@@ -365,37 +369,41 @@ Status JniScanner::_fill_column(FillColumnArgs* pargs) {
         pargs->column = data_column;
         pargs->nulls = null_data.data();
     } else {
-        // otherwise we skil this chunk meta, because in Java side
-        // we assume every column starswith `null_column`.
+        // otherwise we skip this chunk meta, because in Java side
+        // we assume every column starts with `null_column`.
     }
 
     LogicalType column_type = args.slot_type.type;
     if (column_type == LogicalType::TYPE_BOOLEAN) {
-        RETURN_IF_ERROR((_append_primitive_data<TYPE_BOOLEAN, uint8_t>(args)));
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_BOOLEAN>(args)));
+    } else if (column_type == LogicalType::TYPE_TINYINT) {
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_TINYINT>(args)));
     } else if (column_type == LogicalType::TYPE_SMALLINT) {
-        RETURN_IF_ERROR((_append_primitive_data<TYPE_SMALLINT, int16_t>(args)));
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_SMALLINT>(args)));
     } else if (column_type == LogicalType::TYPE_INT) {
-        RETURN_IF_ERROR((_append_primitive_data<TYPE_INT, int32_t>(args)));
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_INT>(args)));
     } else if (column_type == LogicalType::TYPE_FLOAT) {
-        RETURN_IF_ERROR((_append_primitive_data<TYPE_FLOAT, float>(args)));
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_FLOAT>(args)));
     } else if (column_type == LogicalType::TYPE_BIGINT) {
-        RETURN_IF_ERROR((_append_primitive_data<TYPE_BIGINT, int64_t>(args)));
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_BIGINT>(args)));
     } else if (column_type == LogicalType::TYPE_DOUBLE) {
-        RETURN_IF_ERROR((_append_primitive_data<TYPE_DOUBLE, double>(args)));
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_DOUBLE>(args)));
     } else if (column_type == LogicalType::TYPE_VARCHAR) {
         RETURN_IF_ERROR((_append_string_data<TYPE_VARCHAR>(args)));
     } else if (column_type == LogicalType::TYPE_CHAR) {
         RETURN_IF_ERROR((_append_string_data<TYPE_CHAR>(args)));
+    } else if (column_type == LogicalType::TYPE_VARBINARY) {
+        RETURN_IF_ERROR((_append_string_data<TYPE_VARBINARY>(args)));
     } else if (column_type == LogicalType::TYPE_DATE) {
         RETURN_IF_ERROR((_append_date_data(args)));
     } else if (column_type == LogicalType::TYPE_DATETIME) {
         RETURN_IF_ERROR((_append_datetime_data(args)));
     } else if (column_type == LogicalType::TYPE_DECIMAL32) {
-        RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL32, int32_t>(args)));
+        RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL32>(args)));
     } else if (column_type == LogicalType::TYPE_DECIMAL64) {
-        RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL64, int64_t>(args)));
+        RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL64>(args)));
     } else if (column_type == LogicalType::TYPE_DECIMAL128) {
-        RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL128, int128_t>(args)));
+        RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL128>(args)));
     } else if (column_type == LogicalType::TYPE_ARRAY) {
         RETURN_IF_ERROR((_append_array_data(args)));
     } else if (column_type == LogicalType::TYPE_MAP) {

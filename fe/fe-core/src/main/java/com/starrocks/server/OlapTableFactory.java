@@ -330,9 +330,6 @@ public class OlapTableFactory implements AbstractTableFactory {
                         throw new DdlException(e.getMessage());
                     }
                 }
-                if (partitionInfo.getType() == PartitionType.LIST) {
-                    throw new DdlException("Do not support create list partition Cloud Native table");
-                }
             }
 
             if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
@@ -374,11 +371,6 @@ public class OlapTableFactory implements AbstractTableFactory {
 
                 boolean addedToColocateGroup = colocateTableIndex.addTableToGroup(db, table,
                         colocateGroup, false /* expectLakeTable */);
-                if (!(table instanceof ExternalOlapTable) && addedToColocateGroup) {
-                    // Colocate table should keep the same bucket number across the partitions
-                    DistributionInfo defaultDistributionInfo = table.getDefaultDistributionInfo();
-                    table.inferDistribution(defaultDistributionInfo);
-                }
             }
 
             // get base index storage type. default is COLUMN
