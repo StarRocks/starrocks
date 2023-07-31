@@ -624,4 +624,8 @@ int32_t ExecEnv::calc_pipeline_dop(int32_t pipeline_dop) const {
     return std::max<int32_t>(1, _max_executor_threads / 2);
 }
 
+ThreadPool* ExecEnv::vacuum_thread_pool() {
+    return _agent_server ? _agent_server->get_thread_pool(TTaskType::DROP) : nullptr;
+}
+
 } // namespace starrocks
