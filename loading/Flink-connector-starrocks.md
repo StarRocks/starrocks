@@ -58,7 +58,7 @@ flink-connector-starrocks 的内部实现是通过缓存并批量由 [Stream Loa
         StarRocksSink.sink(
             // the sink options
             StarRocksSinkOptions.builder()
-                .withProperty("jdbc-url", "jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port,xxxxx")
+                .withProperty("jdbc-url", "jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port/xxxxx")
                 .withProperty("load-url", "fe1_ip:http_port;fe2_ip:http_port;fe3_ip:http_port")
                 .withProperty("username", "xxx")
                 .withProperty("password", "xxx")
@@ -128,7 +128,7 @@ flink-connector-starrocks 的内部实现是通过缓存并批量由 [Stream Loa
             "score BIGINT" +
         ") WITH ( " +
             "'connector' = 'starrocks'," +
-            "'jdbc-url'='jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port,xxxxx'," +
+            "'jdbc-url'='jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port/xxxxx'," +
             "'load-url'='fe1_ip:http_port;fe2_ip:http_port;fe3_ip:http_port'," +
             "'database-name' = 'xxx'," +
             "'table-name' = 'xxx'," +

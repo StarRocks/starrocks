@@ -307,7 +307,7 @@ mysql > SELECT * FROM test_tbl3 ORDER BY id;
 
 如果自增列不是主键或者主键的一部分，并且 Stream Load 中未给出自增 ID，则会发生以下情况：
 
-- 如果表中已经存在该行，则 StarRocks 不会更新自增FID。
+- 如果表中已经存在该行，则 StarRocks 不会更新自增ID。
 - 如果表中不存在该行，则 StarRocks 会自动生成新的自增 ID。
 
 该特性可以构建字典表的值，用于加速字符串的精确去重计数。
