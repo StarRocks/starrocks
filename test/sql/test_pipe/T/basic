@@ -16,7 +16,7 @@ create pipe p1 as
 
 [UC]show pipes;
 [UC]desc pipe p1;
-alter pipe p1 pause;
+alter pipe p1 suspend;
 [UC]show pipes;
 alter pipe p1 resume;
 [UC]show pipes;
