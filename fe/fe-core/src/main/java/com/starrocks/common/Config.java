@@ -1035,6 +1035,14 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_materialized_view = true;
 
+    /**
+     * When the materialized view fails to start FE due to metadata problems,
+     * you can try to open this configuration,
+     * and he can ignore some metadata exceptions.
+     */
+    @ConfField(mutable = true)
+    public static boolean ignore_materialized_view_error = false;
+
     @ConfField(mutable = true)
     public static boolean enable_udf = false;
 
