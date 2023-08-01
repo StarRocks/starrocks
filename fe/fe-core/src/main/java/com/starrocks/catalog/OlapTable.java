@@ -880,8 +880,12 @@ public class OlapTable extends Table {
         }
     }
 
-    // partition Name -> Range
+
+    /**
+     * @return  : table's partition name to range partition key mapping.
+     */
     public Map<String, Range<PartitionKey>> getRangePartitionMap() {
+        Preconditions.checkState(partitionInfo instanceof RangePartitionInfo);
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
         Map<String, Range<PartitionKey>> rangePartitionMap = Maps.newHashMap();
         for (Map.Entry<Long, Partition> partitionEntry : idToPartition.entrySet()) {
@@ -896,7 +900,11 @@ public class OlapTable extends Table {
         return rangePartitionMap;
     }
 
+    /**
+     * @return : table's partition name to list partition names.
+     */
     public Map<String, List<List<String>>> getListPartitionMap() {
+        Preconditions.checkState(partitionInfo instanceof ListPartitionInfo);
         ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
         Map<String, List<List<String>>> listPartitionMap = Maps.newHashMap();
         for (Map.Entry<Long, Partition> partitionEntry : idToPartition.entrySet()) {

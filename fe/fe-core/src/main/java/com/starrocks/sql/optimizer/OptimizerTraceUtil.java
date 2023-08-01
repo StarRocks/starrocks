@@ -98,6 +98,8 @@ import com.starrocks.sql.optimizer.rule.Rule;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
+import org.slf4j.helpers.FormattingTuple;
+import org.slf4j.helpers.MessageFormatter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -144,13 +146,15 @@ public class OptimizerTraceUtil {
     public static void logMVPrepare(ConnectContext ctx, MaterializedView mv,
                                     String format, Object... object) {
         if (ctx.getSessionVariable().isEnableMVOptimizerTraceLog()) {
-            LOG.info("[MV TRACE] [PREPARE {}] {}", ctx.getQueryId(), String.format(format, object));
+            LOG.info("[MV TRACE] [PREPARE {}] {}", ctx.getQueryId(),
+                    MessageFormatter.arrayFormat(format, object).getMessage());
         }
         // Only record trace when mv is not null.
         if (mv != null) {
             PlannerProfile.LogTracer tracer = PlannerProfile.getLogTracer(mv.getName());
             if (tracer != null) {
-                tracer.log(String.format(format, object));
+                FormattingTuple ft = MessageFormatter.arrayFormat(format, object);
+                tracer.log(ft.getMessage());
             }
         }
     }
@@ -163,14 +167,15 @@ public class OptimizerTraceUtil {
                     mvContext.getOptimizerContext().getTraceInfo().getQueryId(),
                     mvRewriteContext.getRule().type().name(),
                     mvContext.getMv().getName(),
-                    String.format(format, object));
+                    MessageFormatter.arrayFormat(format, object).getMessage());
         }
 
         // Trace log if needed.
         PlannerProfile.LogTracer tracer = PlannerProfile.getLogTracer(mvContext.getMv().getName());
         if (tracer != null) {
+            FormattingTuple ft = MessageFormatter.arrayFormat(format, object);
             tracer.log(String.format("[%s] %s",   mvRewriteContext.getRule().type().name(),
-                    String.format(format, object)));
+                    ft.getMessage()));
         }
     }
 

@@ -150,7 +150,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
     public static final String PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE = "force_external_table_query_rewrite";
-    public static final String PROPERTIES_OLAP_TABLE_QUERY_REWRITE = "olap_table_query_rewrite_consistency";
+    public static final String PROPERTIES_QUERY_REWRITE_CONSISTENCY = "query_rewrite_consistency";
     public static final String PROPERTIES_RESOURCE_GROUP = "resource_group";
 
     public static final String PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX = "session.";

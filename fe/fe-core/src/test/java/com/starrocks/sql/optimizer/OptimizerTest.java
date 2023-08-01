@@ -268,7 +268,7 @@ public class OptimizerTest {
             Assert.assertEquals("mv_4", materializationContext.getMv().getName());
 
             MaterializedView mv = getMv("test", "mv_4");
-            Pair<Table, Column> partitionTableAndColumn = mv.getPartitionTableAndColumn();
+            Pair<Table, Column> partitionTableAndColumn = mv.getBaseTableAndPartitionColumn();
             Assert.assertEquals("tbl_with_mv", partitionTableAndColumn.first.getName());
 
             ScalarOperator scalarOperator  = materializationContext.getMvPartialPartitionPredicate();
