@@ -57,7 +57,7 @@ public:
     // an array type, and stored value is [1, 2, 3], [4], [5, 6], when the input num_rows is 3,
     // this function will fill (1, 2, 3, 4, 5, 6) into 'dst'.
     Status read_records(size_t* num_rows, ColumnContentType content_type, Column* dst) {
-        reset();
+        reset_levels();
         return do_read_records(num_rows, content_type, dst);
     }
 
@@ -73,9 +73,6 @@ public:
                                    Column* column) {
         return _reader->get_dict_values(dict_codes, nulls, column);
     }
-
-    static size_t get_level_to_decode_batch_size(size_t row, size_t num_values_left_in_cur_page, size_t decoded,
-                                                 size_t parsed);
 
     static size_t count_not_null(level_t* def_levels, size_t num_parsed_levels, level_t max_def_level);
 
