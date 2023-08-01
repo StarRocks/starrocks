@@ -688,7 +688,7 @@ bool SchemaChangeWithSorting::_internal_sorting(std::vector<ChunkPtr>& chunk_arr
         std::iota(sort_key_idxes.begin(), sort_key_idxes.end(), 0);
     }
     ChunkMerger merger(std::move(tablet), std::move(sort_key_idxes));
-    if (merge(chunk_arr, new_rowset_writer)) {
+    if (!merger.merge(chunk_arr, new_rowset_writer)) {
         LOG(WARNING) << "merge chunk arr failed";
         return false;
     }
