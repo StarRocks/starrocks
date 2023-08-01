@@ -1769,6 +1769,12 @@ public class GlobalStateMgr {
             @Override
             protected void runAfterCatalogReady() {
                 globalTransactionMgr.abortTimeoutTxns();
+
+                try {
+                    loadMgr.cancelResidualJob();
+                } catch (Throwable t) {
+                    LOG.warn("load manager cancel residual job failed", t);
+                }
             }
         };
     }
@@ -3549,12 +3555,15 @@ public class GlobalStateMgr {
         }
 
         try {
+<<<<<<< HEAD
             loadManager.cleanResidualJob();
         } catch (Throwable t) {
             LOG.warn("load manager clean residual job failed", t);
         }
 
         try {
+=======
+>>>>>>> d40580018c ([BugFix] Fix memory leak bug caused by label cleaner (#28311))
             exportMgr.removeOldExportJobs();
         } catch (Throwable t) {
             LOG.warn("export manager remove old export jobs failed", t);
