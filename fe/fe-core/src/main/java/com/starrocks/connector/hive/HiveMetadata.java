@@ -24,7 +24,9 @@ import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
@@ -74,19 +76,20 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listTableNames(String dbName) {
-        return hmsOps.getAllTableNames(dbName);
+    public void createDb(String dbName, Map<String, String> properties) throws AlreadyExistsException {
+        if (dbExists(dbName)) {
+            throw new AlreadyExistsException("Database Already Exists");
+        }
+        hmsOps.createDb(dbName, properties);
     }
 
     @Override
-    public List<String> listPartitionNames(String dbName, String tblName) {
-        return hmsOps.getPartitionKeys(dbName, tblName);
-    }
+    public void dropDb(String dbName, boolean isForceDrop) throws MetaNotFoundException {
+        if (listTableNames(dbName).size() != 0) {
+            throw new StarRocksConnectorException("Database %s not empty", dbName);
+        }
 
-    @Override
-    public List<String> listPartitionNamesByValue(String dbName, String tblName,
-                                                  List<Optional<String>> partitionValues) {
-        return hmsOps.getPartitionKeysByValue(dbName, tblName, partitionValues);
+        hmsOps.dropDb(dbName, isForceDrop);
     }
 
     @Override
@@ -100,6 +103,22 @@ public class HiveMetadata implements ConnectorMetadata {
         }
 
         return database;
+    }
+
+    @Override
+    public List<String> listTableNames(String dbName) {
+        return hmsOps.getAllTableNames(dbName);
+    }
+
+    @Override
+    public List<String> listPartitionNames(String dbName, String tblName) {
+        return hmsOps.getPartitionKeys(dbName, tblName);
+    }
+
+    @Override
+    public List<String> listPartitionNamesByValue(String dbName, String tblName,
+                                                  List<Optional<String>> partitionValues) {
+        return hmsOps.getPartitionKeysByValue(dbName, tblName, partitionValues);
     }
 
     @Override
