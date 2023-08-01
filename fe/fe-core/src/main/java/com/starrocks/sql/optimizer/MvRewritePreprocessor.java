@@ -183,7 +183,7 @@ public class MvRewritePreprocessor {
                     .collect(Collectors.toSet());
         }
         if (relatedMvs.isEmpty()) {
-            logMVPrepare(connectContext, "No Related MVs for the query plan");
+            logMVPrepare(connectContext, "There are no related mvs for the query plan");
             return;
         }
 
@@ -197,7 +197,7 @@ public class MvRewritePreprocessor {
             }
         }
         if (relatedMvs.isEmpty()) {
-            logMVPrepare(connectContext, "No Related MVs after process");
+            logMVPrepare(connectContext, "There are no related mvs after process");
             return;
         }
         // all base table related mvs
@@ -206,12 +206,12 @@ public class MvRewritePreprocessor {
         List<String> candidateMvNames = context.getCandidateMvs().stream()
                 .map(materializationContext -> materializationContext.getMv().getName()).collect(Collectors.toList());
 
-        logMVPrepare(connectContext, "RelatedMVs: %s, CandidateMVs: %s", relatedMvNames, candidateMvNames);
+        logMVPrepare(connectContext, "RelatedMVs: {}, CandidateMVs: {}", relatedMvNames, candidateMvNames);
     }
 
     private void preprocessMv(MaterializedView mv, Set<Table> queryTables, Set<ColumnRefOperator> originQueryColumns) {
         if (!mv.isActive()) {
-            logMVPrepare(connectContext, mv, "MV is not active: %s", mv.getName());
+            logMVPrepare(connectContext, mv, "MV is not active: {}", mv.getName());
             return;
         }
 
@@ -234,7 +234,7 @@ public class MvRewritePreprocessor {
             mv.setPlanContext(mvRewriteContextCache);
         }
         if (!mvRewriteContextCache.isValidMvPlan()) {
-            logMVPrepare(connectContext, mv, "MV plan is not valid: %s, plan:\n %s",
+            logMVPrepare(connectContext, mv, "MV plan is not valid: {}, plan:\n {}",
                     mv.getName(), mvRewriteContextCache.getLogicalPlan().explain());
             return;
         }
@@ -248,7 +248,7 @@ public class MvRewritePreprocessor {
                     String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(base.getTable()));
                     sb.append(String.format("base table %s version: %s; ", base, versionInfo));
                 }
-                LOG.info("[MV PREPARE] MV {} is outdated, stale partitions {}, detailed version info: {}",
+                logMVPrepare(connectContext, mv, "MV {} is outdated, stale partitions {}, detailed version info: {}",
                         mv.getName(), partitionNamesToRefresh, sb.toString());
                 return;
             }
@@ -261,7 +261,7 @@ public class MvRewritePreprocessor {
                 String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(base.getTable()));
                 sb.append(String.format("base table %s version: %s; ", base, versionInfo));
             }
-            LOG.info("[MV PREPARE] MV {} is outdated and all its partitions need to be " +
+            logMVPrepare(connectContext, mv, "MV {} is outdated and all its partitions need to be " +
                     "refreshed: {}, detailed info: {}", mv.getName(), partitionNamesToRefresh, sb.toString());
             return;
         }
@@ -273,8 +273,8 @@ public class MvRewritePreprocessor {
             // when should calculate the latest partition range predicates for partition-by base table
             mvPartialPartitionPredicates = getMvPartialPartitionPredicates(mv, mvPlan, partitionNamesToRefresh);
             if (mvPartialPartitionPredicates == null) {
-                logMVPrepare(connectContext, mv, "Partitioned MV %s is outdated which contains some partitions " +
-                        "to be refreshed:%s", mv.getName(), partitionNamesToRefresh);
+                logMVPrepare(connectContext, mv, "Partitioned MV {} is outdated which contains some partitions " +
+                        "to be refreshed: {}", mv.getName(), partitionNamesToRefresh);
                 return;
             }
         }
@@ -314,7 +314,7 @@ public class MvRewritePreprocessor {
         }
         materializationContext.setOutputMapping(outputMapping);
         context.addCandidateMvs(materializationContext);
-        logMVPrepare(connectContext, mv, "Prepare MV %s success", mv.getName());
+        logMVPrepare(connectContext, mv, "Prepare MV {} success", mv.getName());
     }
 
     /**
