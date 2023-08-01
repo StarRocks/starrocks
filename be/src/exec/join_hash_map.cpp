@@ -249,12 +249,8 @@ void JoinHashTable::set_probe_profile(RuntimeProfile::Counter* search_ht_timer,
     _probe_state->output_build_column_timer = output_build_column_timer;
 }
 
-size_t JoinHashTable::get_used_bucket_count() const {
-    size_t count = 0;
-    for (const auto value : _table_items->first) {
-        count += value != 0;
-    }
-    return count;
+float JoinHashTable::get_keys_per_bucket() const {
+    return _table_items->get_keys_per_bucket();
 }
 
 void JoinHashTable::close() {

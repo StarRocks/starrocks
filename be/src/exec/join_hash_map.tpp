@@ -809,7 +809,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_remain(RuntimeState* stat
 }
 
 #define DO_PROBE(X, Y)                                                          \
-    if (state->query_options().experimental_interleaving > 0) {                 \
+    if (enable_interleaving) {                                                  \
         if constexpr (first_probe) {                                            \
             auto group_size = state->query_options().experimental_interleaving; \
             _probe_state->cur_probe_index = 0;                                  \
@@ -828,6 +828,8 @@ template <LogicalType LT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state, const Buffer<CppType>& build_data,
                                                             const Buffer<CppType>& data) {
+    bool enable_interleaving = _table_items->get_keys_per_bucket() > 1.5 && _table_items->row_count > (1 << 20) &&
+                               state->query_options().experimental_interleaving > 0;
     if (!_table_items->with_other_conjunct) {
         switch (_table_items->join_type) {
         case TJoinOp::LEFT_OUTER_JOIN:

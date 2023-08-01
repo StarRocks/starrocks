@@ -156,7 +156,7 @@ struct HashJoinBuildMetrics {
     RuntimeProfile::Counter* build_conjunct_evaluate_timer = nullptr;
     RuntimeProfile::Counter* build_buckets_counter = nullptr;
     RuntimeProfile::Counter* runtime_filter_num = nullptr;
-    RuntimeProfile::Counter* build_buckets_avg_depth = nullptr;
+    RuntimeProfile::Counter* build_keys_per_bucket = nullptr;
 
     void prepare(RuntimeProfile* runtime_profile);
 };
@@ -233,7 +233,7 @@ public:
     Columns string_key_columns() { return _string_key_columns; }
     Status reset_probe(RuntimeState* state);
 
-    double avg_keys_perf_bucket() const;
+    float avg_keys_perf_bucket() const;
 
     const HashJoinBuildMetrics& build_metrics() { return *_build_metrics; }
     const HashJoinProbeMetrics& probe_metrics() { return *_probe_metrics; }

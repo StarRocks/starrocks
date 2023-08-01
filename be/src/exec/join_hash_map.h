@@ -124,6 +124,18 @@ struct JoinHashTableItems {
     bool left_to_nullable = false;
     bool right_to_nullable = false;
     bool has_large_column = false;
+    mutable float keys_per_bucket = 0;
+    mutable size_t used_buckets = 0;
+
+    float get_keys_per_bucket() const {
+        if (used_buckets == 0) {
+            for (const auto value : first) {
+                used_buckets += value != 0;
+            }
+            keys_per_bucket = used_buckets == 0 ? 0 : row_count * 1.0 / used_buckets;
+        }
+        return keys_per_bucket;
+    }
 
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;
 
@@ -749,9 +761,7 @@ public:
     size_t get_probe_column_count() const { return _table_items->probe_column_count; }
     size_t get_build_column_count() const { return _table_items->build_column_count; }
     size_t get_bucket_size() const { return _table_items->bucket_size; }
-    double get_buckets_avg_depth() const;
-    size_t get_used_bucket_count() const;
-
+    float get_keys_per_bucket() const;
     void remove_duplicate_index(Filter* filter);
 
     int64_t mem_usage() const;
