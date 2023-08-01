@@ -107,7 +107,6 @@ public class ColocatedBackendSelector implements BackendSelector {
     // Make sure each host have average bucket to scan
     private void computeExecAddressForBucketSeq(TScanRangeLocations seqLocation, Integer bucketSeq) throws UserException {
         long minWeight = Long.MAX_VALUE;
-        long minTotalWeight = Long.MAX_VALUE;
         long minBackendId = Long.MAX_VALUE;
         for (TScanRangeLocation location : seqLocation.locations) {
             if (!workerProvider.isDataNodeAvailable(location.getBackend_id())) {
@@ -116,9 +115,8 @@ public class ColocatedBackendSelector implements BackendSelector {
 
             long weight = workerStatsTracker.getNumRunningTablets(location.getBackend_id());
             long totalWeight = workerStatsTracker.getNumTotalTablets(location.getBackend_id());
-            if (weight < minWeight || (weight == minWeight && totalWeight < minTotalWeight)) {
+            if (weight < minWeight) {
                 minWeight = weight;
-                minTotalWeight = totalWeight;
                 minBackendId = location.backend_id;
             }
         }
