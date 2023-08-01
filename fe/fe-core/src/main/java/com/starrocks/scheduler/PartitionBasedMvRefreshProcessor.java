@@ -923,7 +923,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                                             TableRelation tableRelation, PartitionInfo mvPartitionInfo)
             throws AnalysisException {
 
-        SlotRef partitionSlot = MaterializedView.getPartitionSlotRef(materializedView);
+        SlotRef partitionSlot = MaterializedView.getRefBaseTablePartitionSlotRef(materializedView);
         List<String> columnOutputNames = queryStatement.getQueryRelation().getColumnOutputNames();
         List<Expr> outputExpressions = queryStatement.getQueryRelation().getOutputExpression();
         Expr outputPartitionSlot = null;
