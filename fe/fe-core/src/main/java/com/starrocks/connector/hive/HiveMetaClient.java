@@ -147,7 +147,7 @@ public class HiveMetaClient {
             return (T) method.invoke(client.hiveClient, args);
         } catch (Exception e) {
             LOG.error(messageIfError, e);
-            connectionException = new StarRocksConnectorException(messageIfError + ", msg: " + e.getMessage());
+            connectionException = new StarRocksConnectorException(messageIfError + ", msg: " + e.getMessage(), e);
             throw connectionException;
         } finally {
             if (client == null && connectionException != null) {
