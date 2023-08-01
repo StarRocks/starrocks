@@ -242,6 +242,7 @@ void JoinHashTable::set_probe_profile(RuntimeProfile::Counter* search_ht_timer,
                                       RuntimeProfile::Counter* output_probe_column_timer,
                                       RuntimeProfile::Counter* output_tuple_column_timer,
                                       RuntimeProfile::Counter* output_build_column_timer) {
+    if (_probe_state == nullptr) return;
     _probe_state->search_ht_timer = search_ht_timer;
     _probe_state->output_probe_column_timer = output_probe_column_timer;
     _probe_state->output_tuple_column_timer = output_tuple_column_timer;
@@ -259,13 +260,21 @@ size_t JoinHashTable::get_used_bucket_count() const {
 void JoinHashTable::close() {
     _table_items.reset();
     _probe_state.reset();
+    _probe_state = nullptr;
+    _table_items = nullptr;
 }
 
 // may be called more than once if spill
 void JoinHashTable::create(const HashTableParam& param) {
     _need_create_tuple_columns = param.need_create_tuple_columns;
     _table_items = std::make_shared<JoinHashTableItems>();
-    _probe_state = std::make_unique<HashTableProbeState>();
+    if (_probe_state == nullptr) {
+        _probe_state = std::make_unique<HashTableProbeState>();
+        _probe_state->search_ht_timer = param.search_ht_timer;
+        _probe_state->output_probe_column_timer = param.output_probe_column_timer;
+        _probe_state->output_tuple_column_timer = param.output_tuple_column_timer;
+        _probe_state->output_build_column_timer = param.output_build_column_timer;
+    }
 
     _table_items->need_create_tuple_columns = _need_create_tuple_columns;
     _table_items->build_chunk = std::make_shared<Chunk>();
@@ -285,10 +294,6 @@ void JoinHashTable::create(const HashTableParam& param) {
         _table_items->right_to_nullable = true;
     }
     _table_items->join_keys = param.join_keys;
-    _probe_state->search_ht_timer = param.search_ht_timer;
-    _probe_state->output_probe_column_timer = param.output_probe_column_timer;
-    _probe_state->output_tuple_column_timer = param.output_tuple_column_timer;
-    _probe_state->output_build_column_timer = param.output_build_column_timer;
 
     const auto& probe_desc = *param.probe_row_desc;
     for (const auto& tuple_desc : probe_desc.tuple_descriptors()) {

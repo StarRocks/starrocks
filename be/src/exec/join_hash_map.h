@@ -750,7 +750,7 @@ private:
     bool _need_create_tuple_columns = true;
 
     std::shared_ptr<JoinHashTableItems> _table_items;
-    std::unique_ptr<HashTableProbeState> _probe_state;
+    std::unique_ptr<HashTableProbeState> _probe_state = std::make_unique<HashTableProbeState>();
 };
 } // namespace starrocks
 
