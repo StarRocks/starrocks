@@ -4,7 +4,7 @@
 
 Returns the difference between two date values in the specified unit. This function returns the value of `expr1 - expr2` expressed in terms of `unit`.
 
-For example, `date_diff('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'second')` returns the difference between the two date values in unit of seconds.
+For example, `date_diff('second',  '2010-11-30 23:59:59', '2010-11-30 20:58:59')` returns the difference between the two date values in unit of seconds.
 
 This function is supported from v3.1.
 
@@ -13,14 +13,14 @@ The difference between date_diff and [datediff](./datediff.md) lies in that date
 ## Syntax
 
 ```Haskell
-BIGINT DATE_DIFF(DATETIME expr1, DATETIME expr2, VARCHAR unit)
+BIGINT DATE_DIFF(VARCHAR unit, DATETIME expr1, DATETIME expr2)
 ```
 
 ## Parameters
 
 - `expr1` and `expr2`: the two datetime values you want to compare, required. Supported data types are DATETIME and DATE.
 
-- `unit`: the unit used to express the time difference, required. The following `unit` values are supported: day, hour, minute, second, millisecond.
+- `unit`: the unit used to express the time difference, required. The following `unit` values are supported: year, quarter, month, day, hour, minute, second, millisecond.
 
 ## Return value
 
@@ -36,30 +36,30 @@ Returns a BIGINT value.
 ## Examples
 
 ```Plain Text
-mysql> select date_diff('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'second');
+mysql> select date_diff('second','2010-11-30 23:59:59', '2010-11-30 20:58:59');
 +-------------------------------------------------------------------+
-| date_diff('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'second') |
+| date_diff('second', '2010-11-30 23:59:59', '2010-11-30 20:58:59') |
 +-------------------------------------------------------------------+
 |                                                             10860 |
 +-------------------------------------------------------------------+
 
-mysql> select date_diff('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'minute');
+mysql> select date_diff('minute','2010-11-30 23:59:59', '2010-11-30 20:58:59');
 +-------------------------------------------------------------------+
-| date_diff('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'minute') |
+| date_diff('minute', '2010-11-30 23:59:59', '2010-11-30 20:58:59') |
 +-------------------------------------------------------------------+
-|                                                              181  |
+|                                                               181 |
 +-------------------------------------------------------------------+
 
-mysql> select date_diff('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'hour');
+mysql> select date_diff('hour','2010-11-30 23:59:59', '2010-11-30 20:58:59');
 +-----------------------------------------------------------------+
-| date_diff('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'hour') |
+| date_diff('hour', '2010-11-30 23:59:59', '2010-11-30 20:58:59') |
 +-----------------------------------------------------------------+
-|                                                              3  |
+|                                                               3 |
 +-----------------------------------------------------------------+
 
-mysql> select date_diff('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'millisecond');
+mysql> select date_diff('millisecond','2010-11-30 23:59:59', '2010-11-30 20:58:59');
 +------------------------------------------------------------------------+
-| date_diff('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'millisecond') |
+| date_diff('millisecond', '2010-11-30 23:59:59', '2010-11-30 20:58:59') |
 +------------------------------------------------------------------------+
 |                                                               10860000 |
 +------------------------------------------------------------------------+

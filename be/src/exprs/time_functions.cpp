@@ -929,6 +929,8 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(years_diff_v2Impl, to_timestamp, from_timestamp
 
     int64_t diff = year2 - year1;
 
+    // too many special cases, need handle it carefully
+    // @TODO(silverbullet233): how to simplify so many if-else
     if (month1 > month2) {
         diff--;
     } else if (month1 == month2) {
@@ -1006,6 +1008,8 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(months_diff_v2Impl, to_timestamp, from_timestam
 
     int64_t diff = (year2 - year1) * 12 + (month2 - month1);
 
+    // too many special cases, need handle it carefully
+    // @TODO(silverbullet233): how to simplify so many if-else
     if (day1 > day2) {
         if (day2 != last_day_of_month2) {
             // the most common cases
@@ -1038,7 +1042,7 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(months_diff_v2Impl, to_timestamp, from_timestam
                 // date_diff('month', '2016-02-28', '2016-01-28 00:00:00.01') should return 0
                 diff--;
             }
-            // date_diff('month', '2016-02-28', '2016-01-28') should return 0
+            // date_diff('month', '2016-02-28', '2016-01-28') should return 1
         }
     }
 
