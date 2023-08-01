@@ -23,7 +23,6 @@ import com.starrocks.qe.scheduler.assignment.WorkerAssignmentStatsMgr;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
-import jline.internal.Log;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -102,7 +101,7 @@ public class ColocatedBackendSelector implements BackendSelector {
             }
         });
 
-        Log.warn("[DEBUG] {}", workerStatsTracker);
+        LOG.warn("[DEBUG] {}", workerStatsTracker);
     }
 
     // Make sure each host have average bucket to scan
