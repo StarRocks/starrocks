@@ -854,7 +854,7 @@ CONF_Int32(starlet_s3_client_max_cache_capacity, "8");
 // number of instances per cache item
 CONF_Int32(starlet_s3_client_num_instances_per_cache, "1");
 // whether turn on read prefetch feature
-CONF_Bool(starlet_fs_read_prefetch_enable, "true");
+CONF_Bool(starlet_fs_read_prefetch_enable, "false");
 // prefetch threadpool size
 CONF_Int32(starlet_fs_read_prefetch_threadpool_size, "128");
 #endif
