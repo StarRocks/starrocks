@@ -46,7 +46,9 @@ public class ConstantExpressionTest extends PlanTestBase {
     public void testInspectMvMeta() throws Exception {
         String db = starRocksAssert.getCtx().getDatabase();
         starRocksAssert.withTable(
-                "create table mv_base_table_9527 (id int, name string) properties('replication_num'='1')");
+                "create table mv_base_table_9527 (id int, name string) " +
+                        "distributed by hash(id) " +
+                        "properties('replication_num'='1')");
         starRocksAssert.withMaterializedView("create materialized view mv1 " +
                 "distributed by hash(id) " +
                 "refresh async " +
