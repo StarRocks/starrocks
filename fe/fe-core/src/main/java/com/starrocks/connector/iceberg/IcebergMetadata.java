@@ -154,9 +154,6 @@ public class IcebergMetadata implements ConnectorMetadata {
     public boolean createTable(CreateTableStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
-        if (isInfoSchemaDb(dbName)) {
-            throw new UnsupportedOperationException("Unable to create table in information schema");
-        }
 
         Schema schema = toIcebergApiSchema(stmt.getColumns());
         PartitionDesc partitionDesc = stmt.getPartitionDesc();
@@ -172,10 +169,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public void dropTable(DropTableStmt stmt) {
-        String dbName = stmt.getDbName();
-        String tableName = stmt.getTableName();
-        boolean isForce = stmt.isForceDrop();
-        icebergCatalog.dropTable(dbName, tableName, isForce);
+        icebergCatalog.dropTable(stmt.getDbName(), stmt.getTableName(), stmt.isForceDrop());
         tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
     }
 

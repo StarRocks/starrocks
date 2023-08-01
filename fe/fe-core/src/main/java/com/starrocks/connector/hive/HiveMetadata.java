@@ -72,8 +72,7 @@ public class HiveMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listDbNames() {
-        List<String> dbs = hmsOps.getAllDatabaseNames();
-        return dbs;
+        return hmsOps.getAllDatabaseNames();
     }
 
     @Override
@@ -233,7 +232,6 @@ public class HiveMetadata implements ConnectorMetadata {
     public void dropTable(DropTableStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
-
         if (isResourceMappingCatalog(catalogName)) {
             HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) GlobalStateMgr.getCurrentState()
                     .getMetadata().getTable(dbName, tableName);
