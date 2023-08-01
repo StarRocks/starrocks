@@ -22,6 +22,13 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.MapExpr;
+
+import java.util.Collections;
+>>>>>>> 83761512f5 ([Enhancement] refactor date_diff function (#28276))
 
 public class ComplexFunctionCallTransformer {
     public static Expr transform(String functionName, Expr... args) {
@@ -60,6 +67,11 @@ public class ComplexFunctionCallTransformer {
         } else if (functionName.equalsIgnoreCase("last_day_of_month")) {
             Expr child = args[0];
             return new FunctionCallExpr("last_day", ImmutableList.of(child, new StringLiteral("month")));
+        } else if (functionName.equalsIgnoreCase("date_diff")) {
+            if (args.length != 3) {
+                throw new SemanticException("date_diff function must have 3 arguments");
+            }
+            return new FunctionCallExpr("date_diff", ImmutableList.of(args[0], args[2], args[1]));
         }
         return null;
     }

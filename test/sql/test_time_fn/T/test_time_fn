@@ -12,6 +12,7 @@ select dayofweek_iso("2023-01-03");
 select dayofweek_iso("");
 select dayofweek_iso(NULL);
 
+<<<<<<< HEAD
 -- name: test_date_diff
 select date_diff("2010-11-30 23:59:59", "2010-11-30 20:58:59", "millisecond");
 select date_diff("2010-11-30 23:59:59", "2010-11-30 20:58:59", "hour");
@@ -36,6 +37,49 @@ values ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'hour'),
        ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'minute'),
        ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'millisecond');
 select date_diff(d0,d1,t) from test_data_diff order by t;
+=======
+-- name: test_makedate
+CREATE TABLE IF NOT EXISTS `makedate_test` (
+  `id` int,
+  `col_year` int,
+  `col_day` int
+)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES(
+  "replication_num" = "1"
+);
+
+INSERT INTO `makedate_test`(id, col_year, col_day)
+VALUES (1, NUll, NUll),
+       (2, 1, NUll),
+       (3, NULL, 1),
+       (4, 0, 1),
+       (5, 2023, 0),
+       (6, 2023, 32),
+       (7, 2023, 365),
+       (8, 2023, 366),
+       (9, 9999, 1),
+       (10, 9999, 365),
+       (11, 9999, 366),
+       (12, 10000, 1),
+       (13, 1, -1);
+
+select makedate(NUll,NUll);
+select makedate(1, NUll);
+select makedate(NULL, 1);
+select makedate(0, 1);
+select makedate(2023, 0);
+select makedate(2023, 32);
+select makedate(2023, 365);
+select makedate(2023, 366);
+select makedate(9999, 1);
+select makedate(9999, 365);
+select makedate(9999, 366);
+select makedate(10000, 1);
+select makedate(1, -1);
+
+select makedate(col_year, col_day) from makedate_test order by id;
+>>>>>>> 83761512f5 ([Enhancement] refactor date_diff function (#28276))
 
 -- name: test_last_day
 select last_day('2023-02-12', 'month');
