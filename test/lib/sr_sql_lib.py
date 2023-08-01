@@ -492,7 +492,7 @@ class StarrocksSQLApiLib(object):
                     )
                 except Exception as e:
                     # if can't be treat as json, cmp as str
-                    if exp_std != act_std and not re.match(exp_std, act_std, flags=re.S):
+                    if exp_std != exp_std:
                         tools.assert_true(False, "shell result str not match,\n[exp]: %s,\n [act]: %s" % (exp_std, act_std))
             else:
                 # str

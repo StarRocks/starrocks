@@ -86,6 +86,16 @@ shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '
 sync;
 -- result:
 -- !result
+shell: curl -X POST '${url}/api/v2/default_catalog/sql' -u 'root:' -d '{"query": "select * from ${db[0]}.duplicate_table_with_null order by k6 limit 1;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
+-- result:
+0
+{"meta":[{"name":"k1","type":"date"},{"name":"k2","type":"datetime"},{"name":"k3","type":"varchar"},{"name":"k4","type":"varchar"},{"name":"k5","type":"boolean"},{"name":"k6","type":"tinyint(4)"},{"name":"k7","type":"smallint(6)"},{"name":"k8","type":"int(11)"},{"name":"k9","type":"bigint(20)"},{"name":"k10","type":"largeint(40)"},{"name":"k11","type":"float"},{"name":"k12","type":"double"},{"name":"k13","type":"decimal128(27, 9)"}]}
+{"data":[null,null,null,null,null,null,null,null,null,null,null,null,null]}
+{"statistics":{"scanRows":4,"scanBytes":428,"returnRows":1}}
+-- !result
+sync;
+-- result:
+-- !result
 shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "show create table duplicate_table_with_null;"}' --header "Content-Type: application/json"  
 -- result:
 0
@@ -109,7 +119,7 @@ use ${db[0]};
 shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sqll' -u 'root:' -d '{"query": "select 1;"}' --header "Content-Type: application/json"
 -- result:
 0
-{"status":"FAILED","msg":"Not implemented"}
+{"status":"FAILED","code":"1","msg":"Not implemented","message":"Not implemented"}
 -- !result
 sync;
 -- result:
@@ -117,7 +127,7 @@ sync;
 shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -d '{"query": "select 1;"}' --header "Content-Type: application/json"  
 -- result:
 0
-{"status":"FAILED","msg":"Need auth information."}
+{"status":"FAILED","code":"1","msg":"Need auth information.","message":"Need auth information."}
 -- !result
 sync;
 -- result:
@@ -141,7 +151,7 @@ sync;
 shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "select 1;", "sessionVariables":{"broadcast":14000000}}' --header "Content-Type: application/json"  
 -- result:
 0
-{"code":"1","message":"Unknown system variable 'broadcast', the most similar variables are {'broadcast_row_limit', 'broadcast_right_table_scale_factor', 'disable_colocate_join'}"}
+{"code":"1","message":"Unknown system variable \u0027broadcast\u0027, the most similar variables are {\u0027broadcast_row_limit\u0027, \u0027broadcast_right_table_scale_factor\u0027, \u0027disable_colocate_join\u0027}"}
 -- !result
 sync;
 -- result:
@@ -149,7 +159,7 @@ sync;
 shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "select from duplicate_table_with_null;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
 -- result:
 0
-{"code":"1","message":"Getting syntax error at line 1, column 7. Detail message: Unexpected input 'from', the most similar input is {a legal identifier}."}
+{"code":"1","message":"Getting syntax error at line 1, column 7. Detail message: Unexpected input \u0027from\u0027, the most similar input is {a legal identifier}."}
 -- !result
 sync;
 -- result:
@@ -157,12 +167,12 @@ sync;
 shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "select * from duplicate_table_with_null;select 1 from duplicate_table_with_null;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
 -- result:
 0
-{"code":"1","message":"/api/v2/<catalog_name>/<database_name>/query does not support execute multiple query"}
+{"code":"1","message":"/api/v2/\u003ccatalog_name\u003e/\u003cdatabase_name\u003e/query does not support execute multiple query"}
 -- !result
 shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "set profile_timeout =60", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
 -- result:
 0
-{"code":"1","message":"/api/v2/<catalog_name>/<database_name>/query only support SELECT, SHOW, EXPLAIN, DESC, KILL statement"}
+{"code":"1","message":"/api/v2/\u003ccatalog_name\u003e/\u003cdatabase_name\u003e/query only support SELECT, SHOW, EXPLAIN, DESC, KILL statement"}
 -- !result
 shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "kill 314159265432222;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
 -- result:
