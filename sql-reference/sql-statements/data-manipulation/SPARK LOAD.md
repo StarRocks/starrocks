@@ -94,7 +94,7 @@ column_separator：
 
 file_type：
 
-用于指定导入文件的类型，目前仅支持csv。
+用于指定导入文件的类型，目前仅支持csv、orc、parquet。
 
 column_list：
 
