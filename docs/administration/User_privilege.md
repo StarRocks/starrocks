@@ -463,25 +463,9 @@ We recommend you customize roles to manage privileges and users. The following e
    SET CATALOG hive_catalog;
    --Grant the SELECT privilege on all tables and views in all databases.
    GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE read_catalog_only;
-   GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE read_catalog_only;
    ```
 
-   Note: You can query only Hive table views (since v3.1).
-
-4. Grant write-only privileges on a specific external catalog
-
-   You can only write data into Iceberg tables (since v3.1).
-
-   ```SQL
-   -- Create a role.
-   CREATE ROLE write_catalog_only;
-   -- Switch to the corresponding catalog.
-   SET CATALOG iceberg_catalog;
-   -- Grant the privilege to write data into Iceberg tables.
-   GRANT INSERT ON ALL TABLES IN ALL DATABASES TO ROLE write_catalog_only;
-   ```
-
-5. Grant privileges to perform backup and restore operations on global, database, table, and partition levels.
+4. Grant privileges to perform backup and restore operations on global, database, table, and partition levels.
 
    - Grant privileges to perform global backup and restore operations:
 
