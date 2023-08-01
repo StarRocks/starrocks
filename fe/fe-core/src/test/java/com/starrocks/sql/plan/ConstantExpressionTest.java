@@ -45,15 +45,17 @@ public class ConstantExpressionTest extends PlanTestBase {
     public void testInspectMvMeta() throws Exception {
         String db = starRocksAssert.getCtx().getDatabase();
         starRocksAssert.withTable(
-                "create table mv_base_table_9527 (id int, name string) properties('replication_num'='1')");
+                "create table mv_base_table_9527 (id int, name string) " +
+                        "distributed by hash(id) " +
+                        "properties('replication_num'='1')");
         starRocksAssert.withMaterializedView("create materialized view mv1 " +
                 "distributed by hash(id) " +
                 "refresh async " +
                 "properties('replication_num'='1') " +
                 "as select * from mv_base_table_9527");
-        testFragmentPlanContains("select inspect_mv_meta('mv1');", "MaterializedView");
+        testFragmentPlanContains("select inspect_mv_meta('mv1');", "refreshScheme");
         String fullName = db + ".mv1";
-        testFragmentPlanContains(String.format("select inspect_mv_meta('%s');", fullName), "MaterializedView");
+        testFragmentPlanContains(String.format("select inspect_mv_meta('%s');", fullName), "refreshScheme");
 
         // wrong arguments
         Assert.assertThrows(StarRocksPlannerException.class,
