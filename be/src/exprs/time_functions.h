@@ -570,7 +570,6 @@ public:
     // Try to process string content, based on uncommon string format
     static StatusOr<ColumnPtr> str_to_date_uncommon(FunctionContext* context, const starrocks::Columns& columns);
 
-    static StatusOr<ColumnPtr> str_to_date_joda(FunctionContext* context, const Columns& columns);
     /**
      *
      * cast string to datetime
@@ -586,6 +585,13 @@ public:
      *
      */
     DEFINE_VECTORIZED_FN(str2date);
+
+    /**
+     * Joda Time parse
+     */
+    DEFINE_VECTORIZED_FN(parse_datetime);
+    static Status parse_joda_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status parse_joda_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     static bool is_date_format(const Slice& slice, char** start);
     static bool is_datetime_format(const Slice& slice, char** start);
@@ -819,9 +825,6 @@ public:
         yyyycMMcdd,
         // for string format like "%Y-%m-%d %H:%i:%s"
         yyyycMMcddcHHcmmcss,
-
-        // any joda format
-        joda,
         None
     };
 

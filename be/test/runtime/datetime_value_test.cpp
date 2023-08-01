@@ -40,6 +40,7 @@
 #include <string>
 
 #include "common/logging.h"
+#include "testutil/assert.h"
 #include "util/logging.h"
 #include "util/timezone_utils.h"
 
@@ -1423,9 +1424,12 @@ class ParseDateTimeTestFixture : public ::testing::TestWithParam<TestParseDateti
 TEST_P(ParseDateTimeTestFixture, parse_datetime) {
     auto& [datetime_str, format] = GetParam();
     DateTimeValue datetime;
-    bool res = datetime.from_joda_format(format, datetime_str);
-    EXPECT_TRUE(res);
     char str[50];
+    // bool res = datetime.from_joda_format(format, datetime_str);
+    // EXPECT_TRUE(res);
+    joda::JodaFormat joda;
+    EXPECT_TRUE(joda.prepare(format));
+    EXPECT_TRUE(joda.parse(datetime_str, &datetime));
 
     // to joda format
     EXPECT_TRUE(datetime.to_joda_format_string(format.data(), format.length(), str));

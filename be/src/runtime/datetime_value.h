@@ -194,15 +194,6 @@ public:
         return from_date_format_str(format, format_len, value, value_len, nullptr);
     }
 
-    bool from_joda_format_str(const char* format, int format_len, const char* value, int value_len);
-    bool from_joda_format(const std::string& format, const char* value, int value_len) {
-        return from_joda_format_str(format.data(), format.length(), value, value_len);
-    }
-
-    bool from_joda_format(const std::string& format, const std::string& value) {
-        return from_joda_format_str(format.data(), format.length(), value.data(), value.length());
-    }
-
     operator int64_t() const { return to_int64(); }
 
     // Given days since 0000-01-01, construct the datetime value.
@@ -537,6 +528,44 @@ private:
 };
 
 } // namespace starrocks
+
+namespace starrocks::joda {
+
+class JodaFormat : public starrocks::DateTimeValue {
+public:
+    JodaFormat() = default;
+    ~JodaFormat() = default;
+
+    bool prepare(std::string_view format);
+    bool parse(std::string_view str, DateTimeValue* output);
+
+private:
+    // Token parsers
+    std::vector<std::function<bool()>> _token_parsers;
+
+    // Cursor
+    const char* val = nullptr;
+    const char* val_end = nullptr;
+
+    bool date_part_used = false;
+    bool time_part_used = false;
+    bool frac_part_used = false;
+
+    int halfday = 0;
+    int weekday = -1;
+    int yearday = -1;
+    int week_num = -1;
+
+    cctz::time_zone ctz; // default UTC
+    bool has_timezone = false;
+
+    const bool strict_week_number = false;
+    const bool sunday_first = false;
+    const bool strict_week_number_year_type = false;
+    const int strict_week_number_year = -1;
+};
+
+} // namespace starrocks::joda
 
 namespace std {
 template <>
