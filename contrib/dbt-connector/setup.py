@@ -58,7 +58,7 @@ setup(
     include_package_data=True,
     install_requires=[
         "dbt-core==1.5.2",
-        "mysql-connector-python>=8.0.0,<8.1",
+        "mysql-connector-python>=8.1",
     ],
     zip_safe=False,
     classifiers=[
@@ -75,5 +75,5 @@ setup(
         'Programming Language :: Python :: 3.9',
         "Programming Language :: Python :: 3.10",
     ],
-    python_requires=">=3.7,<=3.10",
+    python_requires=">=3.7,<3.11",
 )
