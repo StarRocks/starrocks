@@ -36,7 +36,6 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.stream.StreamAggNode;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
-import com.starrocks.qe.scheduler.assignment.WorkerAssignmentStatsMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.system.Backend;
