@@ -415,7 +415,7 @@ GRANT public_sales TO ROLE lineb_query;
 
 建议您通过自定义角色管理权限和用户。以下梳理了一些常见场景所需的权限项。
 
-1. 全局查询权限
+1. StarRocks 内表全局查询权限
 
    ```SQL
    -- 创建自定义角色。
@@ -439,7 +439,7 @@ GRANT public_sales TO ROLE lineb_query;
    GRANT USAGE ON ALL GLOBAL FUNCTIONS TO ROLE read_only;
    ```
 
-2. 全局写权限
+2. StarRocks 内表全局写权限
 
    ```SQL
    -- 创建自定义角色。
@@ -452,7 +452,7 @@ GRANT public_sales TO ROLE lineb_query;
    GRANT REFRESH ON ALL MATERIALIZED VIEWS IN ALL DATABASES TO ROLE write_only;
    ```
 
-3. 指定外部数据目录（EXTERNAL CATALOG）下的读权限
+3. 指定外部数据目录（External Catalog）下的查询权限
 
    ```SQL
    -- 创建自定义角色。
@@ -498,7 +498,7 @@ GRANT public_sales TO ROLE lineb_query;
      -- 赋予角色向任意表导入数据的权限。
      GRANT INSERT ON ALL TABLES IN ALL DATABASES TO ROLE recover_db;
      -- 赋予角色向待备份数据库下所有表的导出权限。
-     GRANT EXPORT ON ALL TABLES IN DATABASE <database_name> TO ROLE recover_db;
+     GRANT EXPORT ON ALL TABLES IN DATABASE <db_name> TO ROLE recover_db;
      ```
 
    - 表级备份恢复权限
@@ -515,7 +515,7 @@ GRANT public_sales TO ROLE lineb_query;
      -- 赋予角色向任意表导入数据的权限。
      GRANT INSERT ON ALL TABLES IN DATABASE <db_name> TO ROLE recover_db;
      -- 赋予角色导出待备份表数据的权限。
-     GRANT EXPORT ON TABLE <talbe_name> TO ROLE recover_tbl;     
+     GRANT EXPORT ON TABLE <table_name> TO ROLE recover_tbl;     
      ```
 
    - 分区级备份恢复权限
@@ -528,5 +528,5 @@ GRANT public_sales TO ROLE lineb_query;
      -- 赋予角色 SYSTEM 级的 REPOSITORY 权限。
      GRANT REPOSITORY ON SYSTEM TO ROLE recover_par;
      -- 赋予角色对对应表进行导入的权限。
-     GRANT INSERT, EXPORT ON TABLE <tbl_name> TO ROLE recover_par;
+     GRANT INSERT, EXPORT ON TABLE <table_name> TO ROLE recover_par;
      ```
