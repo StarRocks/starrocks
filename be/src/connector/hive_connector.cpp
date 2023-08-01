@@ -277,16 +277,36 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
                 ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadCounter", TUnit::UNIT, prefix);
         _profile.block_cache_read_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadBytes", TUnit::BYTES, prefix);
+        _profile.block_cache_read_mem_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadMemBytes", TUnit::BYTES, "BlockCacheReadBytes");
+        _profile.block_cache_read_disk_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadDiskBytes", TUnit::BYTES, "BlockCacheReadBytes");
         _profile.block_cache_read_timer = ADD_CHILD_TIMER(_runtime_profile, "BlockCacheReadTimer", prefix);
+        _profile.block_cache_skip_read_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheSkipReadCounter", TUnit::UNIT, prefix);
+        _profile.block_cache_skip_read_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheSkipReadBytes", TUnit::BYTES, prefix);
         _profile.block_cache_write_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteCounter", TUnit::UNIT, prefix);
         _profile.block_cache_write_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteBytes", TUnit::BYTES, prefix);
+        _profile.block_cache_write_mem_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteMemBytes", TUnit::BYTES, "BlockCacheWriteBytes");
+        _profile.block_cache_write_disk_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteDiskBytes", TUnit::BYTES, "BlockCacheWriteBytes");
         _profile.block_cache_write_timer = ADD_CHILD_TIMER(_runtime_profile, "BlockCacheWriteTimer", prefix);
+        _profile.block_cache_skip_write_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheSkipWriteCounter", TUnit::UNIT, prefix);
+        _profile.block_cache_skip_write_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheSkipWriteBytes", TUnit::BYTES, prefix);
         _profile.block_cache_write_fail_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteFailCounter", TUnit::UNIT, prefix);
         _profile.block_cache_write_fail_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteFailBytes", TUnit::BYTES, prefix);
+        _profile.block_cache_read_block_buffer_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadBlockBufferCounter", TUnit::UNIT, prefix);
+        _profile.block_cache_read_block_buffer_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadBlockBufferBytes", TUnit::BYTES, prefix);
     }
 
     {
@@ -423,6 +443,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.fs = _pool.add(fs.release());
     scanner_params.path = native_file_path;
     scanner_params.file_size = _scan_range.file_length;
+    scanner_params.modification_time = _scan_range.modification_time;
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;
     scanner_params.materialize_index_in_chunk = _materialize_index_in_chunk;

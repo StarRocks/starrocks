@@ -316,6 +316,12 @@ int main(int argc, char** argv) {
     starrocks::init_staros_worker();
 #endif
 
+#if !defined(WITH_CACHELIB) && !defined(WITH_STARCACHE)
+    if (starrocks::config::block_cache_enable) {
+        starrocks::config::block_cache_enable = false;
+    }
+#endif
+
     if (starrocks::config::block_cache_enable) {
         starrocks::BlockCache* cache = starrocks::BlockCache::instance();
         starrocks::CacheOptions cache_options;
@@ -332,6 +338,15 @@ int main(int argc, char** argv) {
             cache_options.disk_spaces.push_back(
                     {.path = p, .size = static_cast<size_t>(starrocks::config::block_cache_disk_size)});
         }
+
+        // Adjust the default engine based on build switches.
+        if (starrocks::config::block_cache_engine == "") {
+#if defined(WITH_STARCACHE)
+            starrocks::config::block_cache_engine = "starcache";
+#else
+            starrocks::config::block_cache_engine = "cachelib";
+#endif
+        }
         cache_options.meta_path = starrocks::config::block_cache_meta_path;
         cache_options.block_size = starrocks::config::block_cache_block_size;
         cache_options.checksum = starrocks::config::block_cache_checksum_enable;
@@ -339,7 +354,11 @@ int main(int argc, char** argv) {
         cache_options.max_concurrent_inserts = starrocks::config::block_cache_max_concurrent_inserts;
         cache_options.lru_insertion_point = starrocks::config::block_cache_lru_insertion_point;
         cache_options.engine = starrocks::config::block_cache_engine;
+        cache_options.enable_cache_adaptor = starrocks::config::block_cache_adaptor_enable;
+        cache_options.enable_page_cache = starrocks::config::block_cache_page_cache_enable;
         EXIT_IF_ERROR(cache->init(cache_options));
+    } else {
+        starrocks::config::file_meta_cache_enable = false;
     }
 
     if (as_cn) {
@@ -357,6 +376,12 @@ int main(int argc, char** argv) {
 
 #ifdef USE_STAROS
     starrocks::shutdown_staros_worker();
+#endif
+
+#if defined(WITH_CACHELIB) || defined(WITH_STARCACHE)
+    if (starrocks::config::block_cache_enable) {
+        starrocks::BlockCache::instance()->shutdown();
+    }
 #endif
 
     Aws::ShutdownAPI(aws_sdk_options);

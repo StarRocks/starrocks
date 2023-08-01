@@ -33,6 +33,9 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
 
     // reader init
     RuntimeProfile::Counter* footer_read_timer = nullptr;
+    RuntimeProfile::Counter* footer_cache_write_counter = nullptr;
+    RuntimeProfile::Counter* footer_cache_read_counter = nullptr;
+    RuntimeProfile::Counter* footer_cache_read_timer = nullptr;
     RuntimeProfile::Counter* column_reader_init_timer = nullptr;
 
     // dict filter
@@ -43,6 +46,10 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile* root = profile->runtime_profile;
     ADD_COUNTER(root, kParquetProfileSectionPrefix, TUnit::UNIT);
     request_bytes_read = ADD_CHILD_COUNTER(root, "RequestBytesRead", TUnit::BYTES, kParquetProfileSectionPrefix);
+
+    footer_cache_write_counter = ADD_CHILD_COUNTER(root, "FooterCacheWriteCount", TUnit::UNIT, kParquetProfileSectionPrefix);
+    footer_cache_read_counter = ADD_CHILD_COUNTER(root, "FooterCacheReadCount", TUnit::UNIT, kParquetProfileSectionPrefix);
+    footer_cache_read_timer = ADD_CHILD_TIMER(root, "FooterCacheReadTimer", kParquetProfileSectionPrefix);
 
     level_decode_timer = ADD_CHILD_TIMER(root, "LevelDecodeTime", kParquetProfileSectionPrefix);
     value_decode_timer = ADD_CHILD_TIMER(root, "ValueDecodeTime", kParquetProfileSectionPrefix);
@@ -60,6 +67,9 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     COUNTER_UPDATE(level_decode_timer, _stats.level_decode_ns);
     COUNTER_UPDATE(page_read_timer, _stats.page_read_ns);
     COUNTER_UPDATE(footer_read_timer, _stats.footer_read_ns);
+    COUNTER_UPDATE(footer_cache_write_counter, _stats.footer_cache_write_count);
+    COUNTER_UPDATE(footer_cache_read_counter, _stats.footer_cache_read_count);
+    COUNTER_UPDATE(footer_cache_read_timer, _stats.footer_cache_read_ns);
     COUNTER_UPDATE(column_reader_init_timer, _stats.column_reader_init_ns);
     COUNTER_UPDATE(group_chunk_read_timer, _stats.group_chunk_read_ns);
     COUNTER_UPDATE(group_dict_filter_timer, _stats.group_dict_filter_ns);
@@ -70,6 +80,7 @@ Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(open_random_access_file());
     // create file reader
     _reader = std::make_shared<parquet::FileReader>(runtime_state->chunk_size(), _file.get(), _file->get_size().value(),
+                                                    _scanner_params.modification_time,
                                                     _shared_buffered_input_stream.get());
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     RETURN_IF_ERROR(_reader->init(&_scanner_ctx));

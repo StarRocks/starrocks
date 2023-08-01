@@ -163,6 +163,7 @@ public:
     bool is_io_error() const { return code() == TStatusCode::IO_ERROR; }
     bool is_not_supported() const { return code() == TStatusCode::NOT_IMPLEMENTED_ERROR; }
     bool is_corruption() const { return code() == TStatusCode::CORRUPTION; }
+    bool is_resource_busy() const { return code() == TStatusCode::RESOURCE_BUSY; }
 
     /// @return @c true if the status indicates Uninitialized.
     bool is_uninitialized() const { return code() == TStatusCode::UNINITIALIZED; }

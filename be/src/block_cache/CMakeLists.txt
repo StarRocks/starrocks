@@ -8,11 +8,16 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/block_cache")
 
 set(CACHE_FILES
   block_cache.cpp
-  starcache_wrapper.cpp
+  io_buffer.cpp
+  #time_based_admission.cpp
 )
 
 if (${WITH_CACHELIB} STREQUAL "ON")
     list(APPEND CACHE_FILES cachelib_wrapper.cpp)
+endif()
+
+if (${WITH_STARCACHE} STREQUAL "ON")
+    list(APPEND CACHE_FILES starcache_wrapper.cpp)
 endif()
 
 add_library(BlockCache STATIC

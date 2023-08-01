@@ -932,8 +932,16 @@ CONF_Bool(block_cache_report_stats, "false");
 // will be inserted 1/2 from the end of the LRU, 2 means 1/4 from the end of the LRU, and so on.
 // It is only useful for the cachelib engine currently.
 CONF_Int64(block_cache_lru_insertion_point, "1");
-// cachelib, starcache
-CONF_String(block_cache_engine, "starcache");
+// Block cache engines, alternatives: cachelib, starcache.
+// Set the default value empty to indicate whether it is manully configured by users.
+// If not, we need to adjust the default engine based on build switches like "WITH_CACHELIB" and "WITH_STARCACHE".
+CONF_String(block_cache_engine, "");
+
+CONF_Bool(block_cache_page_cache_enable, "true");
+CONF_Bool(block_cache_adaptor_enable, "false");
+CONF_Int64(block_cache_skip_read_factor, "1");
+
+CONF_Bool(file_meta_cache_enable, "true");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
