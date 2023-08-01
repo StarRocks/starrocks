@@ -89,7 +89,7 @@ This section describes privileges that are available on different objects.
 | ALTER     | Modifies a table or refreshes metadata in an external table. |
 | DROP      | Drops a table.                                               |
 | SELECT    | Queries data in a table.                                     |
-| INSERT    | Inserts data into a table.                                   |
+| INSERT    | Inserts data into a StarRocks table.                                   |
 | UPDATE    | Updates data in a table.                                     |
 | EXPORT    | Exports data from a StarRocks table.                         |
 | DELETE    | Deletes data from a table based on the specified condition or deletes all the data from a table. |
