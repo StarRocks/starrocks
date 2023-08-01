@@ -213,6 +213,14 @@ public class DynamicPartitionUtilTest {
         Assert.assertEquals("2019-11-27", res);
         partName = DynamicPartitionUtil.getFormattedPartitionName(getCTSTimeZone(), res, "MONTH");
         Assert.assertEquals("201911", partName);
+
+        // 7. 2020-02-29, offset -3
+        property = new DynamicPartitionProperty(getDynamProp("YEAR", -3, 3, -1, -1));
+        res = DynamicPartitionUtil.getPartitionRangeString(property, getZonedDateTimeFromStr("2020-02-29"), -3,
+                FORMAT);
+        Assert.assertEquals("2017-01-01", res);
+        partName = DynamicPartitionUtil.getFormattedPartitionName(getCTSTimeZone(), res, "YEAR");
+        Assert.assertEquals("2017", partName);
     }
 
 }
