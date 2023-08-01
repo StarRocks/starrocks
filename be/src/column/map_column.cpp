@@ -72,7 +72,7 @@ size_t MapColumn::byte_size(size_t from, size_t size) const {
                             _offsets->get_data()[from + size] - _offsets->get_data()[from]) +
            _values->byte_size(_offsets->get_data()[from],
                               _offsets->get_data()[from + size] - _offsets->get_data()[from]) +
-           _offsets->Column::byte_size(from, size);
+           _offsets->byte_size(from, size);
 }
 
 size_t MapColumn::byte_size(size_t idx) const {

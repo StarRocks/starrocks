@@ -82,6 +82,8 @@ public:
 
     size_t byte_size(size_t idx) const override;
 
+    size_t byte_size(size_t from, size_t size) const override;
+
     void reserve(size_t n) override;
 
     void resize(size_t n) override;
