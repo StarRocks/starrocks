@@ -489,6 +489,100 @@ if ("${USE_STAROS}" STREQUAL "ON")
        )
 endif()
 
+# LLVM
+# TODO(yueyang): Once the JIT function is fully implemented and stable, remove unnecessary libraries.
+set (LLVM_LIBRARIES
+    LLVMDWARFLinkerParallel   
+    LLVMFileCheck        
+    LLVMLineEditor        
+    LLVMPasses              
+    LLVMWindowsManifest
+    LLVMAggressiveInstCombine  
+    LLVMDWP                   
+    LLVMFrontendHLSL     
+    LLVMLinker            
+    LLVMProfileData         
+    LLVMX86AsmParser
+    LLVMAnalysis               
+    LLVMDebugInfoCodeView     
+    LLVMFrontendOpenACC  
+    LLVMMC                
+    LLVMRemarks             
+    LLVMX86CodeGen
+    LLVMAsmParser              
+    LLVMDebugInfoDWARF        
+    LLVMFrontendOpenMP   
+    LLVMMCA               
+    LLVMRuntimeDyld         
+    LLVMX86Desc
+    LLVMAsmPrinter             
+    LLVMDebugInfoGSYM         
+    LLVMFuzzMutate       
+    LLVMMCDisassembler    
+    LLVMScalarOpts          
+    LLVMX86Disassembler
+    LLVMBinaryFormat           
+    LLVMDebugInfoLogicalView  
+    LLVMFuzzerCLI        
+    LLVMMCJIT             
+    LLVMSelectionDAG        
+    LLVMX86Info
+    LLVMBitReader              
+    LLVMDebugInfoMSF          
+    LLVMGlobalISel       
+    LLVMMCParser          
+    LLVMSupport             
+    LLVMX86TargetMCA
+    LLVMBitWriter              
+    LLVMDebugInfoPDB          
+    LLVMIRPrinter       
+    LLVMMIRParser         
+    LLVMSymbolize           
+    LLVMXRay
+    LLVMBitstreamReader        
+    LLVMDebuginfod            
+    LLVMIRReader         
+    LLVMObjCARCOpts
+    LLVMTableGen            
+    LLVMipo
+    LLVMCFGuard                
+    LLVMDemangle              
+    LLVMInstCombine      
+    LLVMObjCopy           
+    LLVMTableGenGlobalISel  
+    LLVMCFIVerify              
+    LLVMDiff                  
+    LLVMInstrumentation  
+    LLVMObject            
+    LLVMTarget              
+    LLVMCodeGen                
+    LLVMDlltoolDriver         
+    LLVMInterfaceStub    
+    LLVMObjectYAML        
+    LLVMTargetParser        
+    LLVMCore                   
+    LLVMExecutionEngine       
+    LLVMInterpreter      
+    LLVMOption            
+    LLVMTextAPI             
+    LLVMCoroutines             
+    LLVMExegesis              
+    LLVMJITLink          
+    LLVMOrcJIT            
+    LLVMTransformUtils
+    LLVMCoverage               
+    LLVMExegesisX86           
+    LLVMLTO              
+    LLVMOrcShared         
+    LLVMVectorize
+    LLVMDWARFLinker            
+    LLVMExtensions            
+    LLVMLibDriver        
+    LLVMOrcTargetProcess  
+    LLVMWindowsDriver
+)
+link_directories(${THIRDPARTY_DIR}/llvm/lib)
+
 # Check Clang-Tidy
 include(cmake_modules/FindClangTidy.cmake)
 
@@ -676,6 +770,7 @@ include_directories(
     SYSTEM ${GPERFTOOLS_HOME}/include
     SYSTEM ${THIRDPARTY_DIR}/include/thrift/
     SYSTEM ${THIRDPARTY_DIR}/include/event/
+    SYSTEM ${THIRDPARTY_DIR}/llvm/include/
 )
 
 
@@ -796,6 +891,8 @@ set(STARROCKS_DEPENDENCIES
     avro
     serdes
     fiu
+    libdeflate
+    ${LLVM_LIBRARIES}
     ${WL_END_GROUP}
 )
 

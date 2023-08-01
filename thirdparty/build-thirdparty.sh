@@ -227,23 +227,34 @@ build_llvm() {
     fi
 
     check_if_source_exist $LLVM_SOURCE
-    check_if_source_exist $CLANG_SOURCE
-    check_if_source_exist $COMPILER_RT_SOURCE
+    # check_if_source_exist $CLANG_SOURCE
+    # check_if_source_exist $COMPILER_RT_SOURCE
 
-    if [ ! -d $TP_SOURCE_DIR/$LLVM_SOURCE/tools/clang ]; then
-        cp -rf $TP_SOURCE_DIR/$CLANG_SOURCE $TP_SOURCE_DIR/$LLVM_SOURCE/tools/clang
-    fi
+    # if [ ! -d $TP_SOURCE_DIR/$LLVM_SOURCE/tools/clang ]; then
+    #     cp -rf $TP_SOURCE_DIR/$CLANG_SOURCE $TP_SOURCE_DIR/$LLVM_SOURCE/tools/clang
+    # fi
 
-    if [ ! -d $TP_SOURCE_DIR/$LLVM_SOURCE/projects/compiler-rt ]; then
-        cp -rf $TP_SOURCE_DIR/$COMPILER_RT_SOURCE $TP_SOURCE_DIR/$LLVM_SOURCE/projects/compiler-rt
-    fi
+    # if [ ! -d $TP_SOURCE_DIR/$LLVM_SOURCE/projects/compiler-rt ]; then
+    #     cp -rf $TP_SOURCE_DIR/$COMPILER_RT_SOURCE $TP_SOURCE_DIR/$LLVM_SOURCE/projects/compiler-rt
+    # fi
 
     cd $TP_SOURCE_DIR
     mkdir -p llvm-build
     cd llvm-build
     rm -rf CMakeCache.txt CMakeFiles/
+
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
-    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DLLVM_REQUIRES_RTTI:Bool=True -DLLVM_TARGETS_TO_BUILD=${LLVM_TARGET} -DLLVM_ENABLE_TERMINFO=OFF LLVM_BUILD_LLVM_DYLIB:BOOL=OFF -DLLVM_ENABLE_PIC=true -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE="RELEASE" -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR/llvm ../$LLVM_SOURCE
+    $CMAKE_CMD -S ../${LLVM_SOURCE}/llvm -G "${CMAKE_GENERATOR}" \
+    -DLLVM_ENABLE_EH:Bool=True \
+    -DLLVM_ENABLE_RTTI:Bool=True \
+    -DLLVM_ENABLE_PIC:Bool=True \
+    -DLLVM_TARGETS_TO_BUILD=${LLVM_TARGET} \
+    -DLLVM_ENABLE_TERMINFO=OFF \
+    -DLLVM_BUILD_LLVM_DYLIB:BOOL=OFF \
+    -DBUILD_SHARED_LIBS=OFF \
+    -DCMAKE_BUILD_TYPE="RELEASE" \
+    -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}/llvm ../${LLVM_SOURCE}
+
     ${BUILD_SYSTEM} -j$PARALLEL REQUIRES_RTTI=1
     ${BUILD_SYSTEM} install
 }
