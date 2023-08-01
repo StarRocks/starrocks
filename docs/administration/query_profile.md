@@ -222,6 +222,102 @@ Usually, a noticeable difference between MIN and MAX values indicates the data i
                - __MIN_OF_OperatorTotalTime: 279.170us
 ```
 
+## Runtime Profile
+
+StarRocks v3.1 and later versions support the runtime profile feature, empowering users to access query profiles even before the query completes.
+
+To enable this feature, utilize the existing session variable named `enable_profile`. Additionally, there's another session variable called `runtime_profile_report_interval` that governs the profile report interval, set by default to 10 seconds.
+
+Whenever a query takes longer than 10 seconds, the runtime profile feature will be automatically enabled. Subsequently, you can analyze it just like a regular profile to gain valuable insights into query performance.
+
+There may be dependencies between different parts of the plan execution, which can lead to incomplete runtime profiles. To easily distinguish running operators from finished ones, the running operator will be marked with `Status: Running`.
+
+
+## Text-based profile analysis
+
+Starting from StarRocks v3.1 and later versions, both the Community Edition and Enterprise Edition offer a user-friendly text-based profile analysis feature. This powerful functionality allows users to efficiently identify bottlenecks and opportunities for query optimization.
+
+### List profile
+
+StarRocks offers a statement to list concise information about the existing profiles:
+
+```sql
+SHOW PROFILELIST [limit n]
+```
+
+Following is an example:
+
+```sql
+MySQL root@172.26.94.12:tpch> show profilelist;
++--------------------------------------+---------------------+-------+----------+--------------------------------------------------------------------------------------------------------------------------------------+
+| QueryId                              | StartTime           | Time  | State    | Statement                                                                                                                            |
++--------------------------------------+---------------------+-------+----------+--------------------------------------------------------------------------------------------------------------------------------------+
+| b8289ffc-3049-11ee-838f-00163e0a894b | 2023-08-01 16:59:27 | 86ms  | Finished | SELECT o_orderpriority, COUNT(*) AS order_count\nFROM orders\nWHERE o_orderdate >= DATE '1993-07-01'\n    AND o_orderdate < DAT ...  |
+| b5be2fa8-3049-11ee-838f-00163e0a894b | 2023-08-01 16:59:23 | 67ms  | Finished | SELECT COUNT(*)\nFROM (\n    SELECT l_orderkey, SUM(l_extendedprice * (1 - l_discount)) AS revenue\n        , o_orderdate, o_sh ...  |
+| b36ac9c6-3049-11ee-838f-00163e0a894b | 2023-08-01 16:59:19 | 320ms | Finished | SELECT COUNT(*)\nFROM (\n    SELECT s_acctbal, s_name, n_name, p_partkey, p_mfgr\n        , s_address, s_phone, s_comment\n    F ... |
+| b037b245-3049-11ee-838f-00163e0a894b | 2023-08-01 16:59:14 | 175ms | Finished | SELECT l_returnflag, l_linestatus, SUM(l_quantity) AS sum_qty\n    , SUM(l_extendedprice) AS sum_base_price\n    , SUM(l_exten ...   |
+| a9543cf4-3049-11ee-838f-00163e0a894b | 2023-08-01 16:59:02 | 40ms  | Finished | select count(*) from lineitem                                                                                                        |
++--------------------------------------+---------------------+-------+----------+--------------------------------------------------------------------------------------------------------------------------------------+
+5 rows in set
+Time: 0.006s
+
+
+MySQL root@172.26.94.12:tpch> show profilelist limit 1;
++--------------------------------------+---------------------+------+----------+-------------------------------------------------------------------------------------------------------------------------------------+
+| QueryId                              | StartTime           | Time | State    | Statement                                                                                                                           |
++--------------------------------------+---------------------+------+----------+-------------------------------------------------------------------------------------------------------------------------------------+
+| b8289ffc-3049-11ee-838f-00163e0a894b | 2023-08-01 16:59:27 | 86ms | Finished | SELECT o_orderpriority, COUNT(*) AS order_count\nFROM orders\nWHERE o_orderdate >= DATE '1993-07-01'\n    AND o_orderdate < DAT ... |
++--------------------------------------+---------------------+------+----------+-------------------------------------------------------------------------------------------------------------------------------------+
+1 row in set
+Time: 0.005s
+```
+
+By utilizing this statement, you can easily obtain the QueryId associated with each query. This QueryId serves as a crucial identifier for conducting further profile analysis and investigations.
+
+### Analyze profile
+
+Once you have obtained the QueryId, you can perform a more detailed analysis of the specific query using the analyze profile statement. This command provides deeper insights and facilitates a comprehensive examination of the query's performance characteristics and optimizations.
+
+```sql
+ANALYZE PROFILE FROM '<query_id>' [, <plan_node_id>]...
+```
+
+The analyze profile statement takes the QueryId as its first parameter, which can be obtained from the `show profilelist` statement. By default, the analysis output presents only the most crucial metrics for each operator. However, you have the flexibility to specify one or more plan node IDs if you wish to view all the detailed metrics for enhanced analysis and understanding. This feature allows for a more comprehensive examination of the query's performance and facilitates targeted optimizations.
+
+Here is an example without specifying plan node id list:
+
+![img](../assets/profile-16.png)
+
+Here is another example with plan node id list:
+
+![img](../assets/profile-17.png)
+
+### Explain analyze
+
+StarRocks offers a straightforward and direct approach for analyzing a given query, with a syntax that looks like this:
+
+```sql
+EXPLAIN ANALYZE <sql>
+```
+
+Currently, StarRocks supports analysis for two types of statements: the query statement and the insert into statement, specifically designed for native OLAP tables. It's important to note that when using the insert into statement, no data will actually be inserted. By default, the transaction will be aborted, ensuring that no unintended changes are made to the data in the process of analysis. This safeguard prevents accidental data modifications during the profiling and analysis operations.
+
+Here is an example of normal query:
+
+![img](../assets/profile-18.png)
+
+Here is another example of insert into statement:
+
+![img](../assets/profile-19.png)
+
+### Runtime profile
+
+The `analyze profile` statement offers an enhanced approach to analyze and comprehend the runtime profile. It distinguishes operators with different states, such as blocked, running, and finished. Moreover, this statement provides a comprehensive view of the entire progress. Additionally, it offers insights into the progress of individual operators based on the processed row numbers, enabling a detailed understanding of query execution and performance. This advanced feature facilitates more effective profiling and optimization of queries in StarRocks.
+
+Here is an example of runtime profile analysis:
+
+![img](../assets/profile-20.png)
+
 ## Visualize a query profile
 
 If you are a user of StarRocks Enterprise Edition, you can visualize your query profiles via StarRocks Manager.
