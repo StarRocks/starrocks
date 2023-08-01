@@ -648,6 +648,9 @@ public class AlterJobMgr {
         long dbId = log.getDbId();
         long id = log.getId();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            return;
+        }
         db.writeLock();
         try {
             MaterializedView oldMaterializedView;
