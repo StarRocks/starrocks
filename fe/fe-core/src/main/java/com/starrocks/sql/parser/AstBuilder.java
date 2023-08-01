@@ -3719,18 +3719,40 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitTableFunction(StarRocksParser.TableFunctionContext context) {
+<<<<<<< HEAD
         TableFunctionRelation tableFunctionRelation = new TableFunctionRelation(
                 getQualifiedName(context.qualifiedName()).toString(),
                 new FunctionParams(false, visit(context.expressionList().expression(), Expr.class)));
+=======
+        QualifiedName functionName = getQualifiedName(context.qualifiedName());
+        List<Expr> parameters = visit(context.expressionList().expression(), Expr.class);
+        FunctionCallExpr functionCallExpr =
+                new FunctionCallExpr(FunctionName.createFnName(functionName.toString()), parameters);
+        TableFunctionRelation tableFunctionRelation = new TableFunctionRelation(functionCallExpr);
+>>>>>>> e0f419385a ([BugFix] Fix UDF couldn't be found in upper case DataBase (#28220))
 
         if (context.alias != null) {
             Identifier identifier = (Identifier) visit(context.alias);
             tableFunctionRelation.setAlias(new TableName(null, identifier.getValue()));
         }
 
+<<<<<<< HEAD
         List<Identifier> columns = null;
         if (context.columnAliases() != null) {
             columns = visit(context.columnAliases().identifier(), Identifier.class);
+=======
+    @Override
+    public ParseNode visitNormalizedTableFunction(StarRocksParser.NormalizedTableFunctionContext context) {
+        QualifiedName functionName = getQualifiedName(context.qualifiedName());
+        List<Expr> parameters = visit(context.expressionList().expression(), Expr.class);
+        FunctionCallExpr functionCallExpr =
+                new FunctionCallExpr(FunctionName.createFnName(functionName.toString()), parameters);
+        TableFunctionRelation relation = new TableFunctionRelation(functionCallExpr);
+
+        if (context.alias != null) {
+            Identifier identifier = (Identifier) visit(context.alias);
+            relation.setAlias(new TableName(null, identifier.getValue()));
+>>>>>>> e0f419385a ([BugFix] Fix UDF couldn't be found in upper case DataBase (#28220))
         }
 
         List<String> columnNames = null;
