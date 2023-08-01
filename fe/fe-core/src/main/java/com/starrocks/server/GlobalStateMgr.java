@@ -1769,6 +1769,12 @@ public class GlobalStateMgr {
             @Override
             protected void runAfterCatalogReady() {
                 globalTransactionMgr.abortTimeoutTxns();
+
+                try {
+                    loadManager.cancelResidualJob();
+                } catch (Throwable t) {
+                    LOG.warn("load manager cancel residual job failed", t);
+                }
             }
         };
     }
@@ -3546,12 +3552,6 @@ public class GlobalStateMgr {
             loadManager.removeOldLoadJob();
         } catch (Throwable t) {
             LOG.warn("load manager remove old load jobs failed", t);
-        }
-
-        try {
-            loadManager.cleanResidualJob();
-        } catch (Throwable t) {
-            LOG.warn("load manager clean residual job failed", t);
         }
 
         try {
