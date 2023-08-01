@@ -127,8 +127,6 @@ struct JoinHashTableItems {
 
     std::unique_ptr<MemPool> build_pool = nullptr;
     std::vector<JoinKeyDesc> join_keys;
-
-    RuntimeProfile::Counter* output_build_column_timer = nullptr;
 };
 
 struct HashTableProbeState {
@@ -172,6 +170,7 @@ struct HashTableProbeState {
     RuntimeProfile::Counter* search_ht_timer = nullptr;
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
     RuntimeProfile::Counter* output_tuple_column_timer = nullptr;
+    RuntimeProfile::Counter* output_build_column_timer = nullptr;
 
     HashTableProbeState() = default;
     ~HashTableProbeState() = default;
@@ -516,7 +515,7 @@ private:
         }
     }
     void _build_output(ChunkPtr* chunk) {
-        SCOPED_TIMER(_table_items->output_build_column_timer);
+        SCOPED_TIMER(_probe_state->output_build_column_timer);
         bool to_nullable = _table_items->right_to_nullable;
         for (size_t i = 0; i < _table_items->build_column_count; i++) {
             HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
@@ -685,7 +684,8 @@ public:
     // and the different probe state from this.
     JoinHashTable clone_readable_table();
     void set_probe_profile(RuntimeProfile::Counter* search_ht_timer, RuntimeProfile::Counter* output_probe_column_timer,
-                           RuntimeProfile::Counter* output_tuple_column_timer);
+                           RuntimeProfile::Counter* output_tuple_column_timer,
+                           RuntimeProfile::Counter* output_build_column_timer);
 
     void create(const HashTableParam& param);
     void close();
