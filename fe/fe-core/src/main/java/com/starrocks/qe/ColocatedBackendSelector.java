@@ -112,7 +112,7 @@ public class ColocatedBackendSelector implements BackendSelector {
     // Make sure each host have average bucket to scan
     private void computeExecAddressForBucketSeq(TScanRangeLocations seqLocation, Integer bucketSeq, long numTablets,
                                                 long numTabletRows) throws UserException {
-        final int maxRetryTimes = 5;
+        final int maxRetryTimes = ConnectContext.get().getSessionVariable().getSchedulerCASRetryTimes();
         long minBackendId = Long.MAX_VALUE;
         for (int retryTimes = 0; retryTimes < maxRetryTimes; retryTimes++) {
             long minWeight = Long.MAX_VALUE;

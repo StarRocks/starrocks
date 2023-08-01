@@ -543,6 +543,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = QUERY_TIMEOUT)
     private int queryTimeoutS = 300;
 
+    @VariableMgr.VarAttr(name = "scheduler_cas_retry_times")
+    private int schedulerCASRetryTimes = 10;
+
     @VariableMgr.VarAttr(name = USE_PAGE_CACHE)
     private boolean usePageCache = true;
 
@@ -1583,6 +1586,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void disablePredicateReorder() {
         this.enablePredicateReorder = false;
+    }
+
+    public int getSchedulerCASRetryTimes() {
+        return schedulerCASRetryTimes;
     }
 
     public void enablePredicateReorder() {
