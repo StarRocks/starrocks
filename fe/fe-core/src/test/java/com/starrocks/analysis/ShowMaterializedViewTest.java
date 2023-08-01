@@ -86,7 +86,7 @@ public class ShowMaterializedViewTest {
                 .withMaterializedView("create materialized view test.mv_refresh_priority\n" +
                         "partition by date_trunc('month',k1) \n" +
                         "distributed by hash(k2) buckets 10\n" +
-                        "refresh deferred manual\n" +
+                        "refresh manual\n" +
                         "properties('replication_num' = '1', 'partition_refresh_number'='1')\n" +
                         "as select k1, k2 from tbl6;");
 
