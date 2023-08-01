@@ -38,6 +38,8 @@ public class WorkerAssignmentStatsMgr {
 
         Long getNumRunningTabletRows(Long workerId);
 
+        boolean tryConsume(Long workerId, Long expectedNumRunningTablets, Long numRunningTablets, Long numRunningTabletRows);
+
         void consume(Long workerId, Long numRunningTablets, Long numRunningTabletRows);
 
         void release();
@@ -78,6 +80,21 @@ public class WorkerAssignmentStatsMgr {
                 return 0L;
             }
             return stats.numRunningTabletRows.get();
+        }
+
+        @Override
+        public boolean tryConsume(Long workerId, Long expectedNumRunningTablets, Long numRunningTablets,
+                                  Long numRunningTabletRows) {
+            WorkerStats stats = globalWorkerToStats.computeIfAbsent(workerId, k -> new WorkerStats());
+            boolean ok = stats.tryConsume(expectedNumRunningTablets, numRunningTablets, numRunningTabletRows);
+            if (!ok) {
+                return false;
+            }
+
+            localWorkerToStats.computeIfAbsent(workerId, k -> new WorkerStats())
+                    .consume(numRunningTablets, numRunningTabletRows);
+
+            return true;
         }
 
         @Override
@@ -137,6 +154,24 @@ public class WorkerAssignmentStatsMgr {
             }
             this.numRunningTablets.addAndGet(numRunningTablets);
             this.numRunningTabletRows.addAndGet(numRunningTabletRows);
+        }
+
+        private boolean tryConsume(Long expectedNumRunningTablets, Long numRunningTablets, Long numRunningTabletRows) {
+            if (numRunningTablets <= 0) {
+                consume(numRunningTablets, numRunningTabletRows);
+                return true;
+            }
+
+            boolean ok = this.numRunningTablets.compareAndSet(expectedNumRunningTablets,
+                    expectedNumRunningTablets + numRunningTabletRows);
+            if (!ok) {
+                return false;
+            }
+
+            this.numTotalTablets.addAndGet(numRunningTablets);
+            this.numRunningTabletRows.addAndGet(numRunningTabletRows);
+
+            return true;
         }
 
         @Override

@@ -59,8 +59,15 @@ public class ColocatedBackendSelector implements BackendSelector {
 
         for (Integer bucketSeq : scanNode.bucketSeq2locations.keySet()) {
             List<TScanRangeLocations> locations = scanNode.bucketSeq2locations.get(bucketSeq);
+            long numTablets = 0;
+            long numTabletRows = 0;
+            for (TScanRangeLocations location : locations) {
+                numTablets += 1L;
+                numTabletRows += location.getScan_range().getInternal_scan_range().getRow_count();
+            }
+
             if (!bucketSeqToWorkerId.containsKey(bucketSeq)) {
-                computeExecAddressForBucketSeq(locations.get(0), bucketSeq);
+                computeExecAddressForBucketSeq(locations.get(0), bucketSeq, numTablets, numTabletRows);
             }
 
             List<TScanRangeParams> scanRangeParamsList =
@@ -70,10 +77,6 @@ public class ColocatedBackendSelector implements BackendSelector {
             locations.stream()
                     .map(location -> new TScanRangeParams(location.scan_range))
                     .forEach(scanRangeParamsList::add);
-
-            Long workerId = bucketSeqToWorkerId.get(bucketSeq);
-            locations.forEach(location -> workerStatsTracker.consume(workerId, 1L,
-                    location.getScan_range().getInternal_scan_range().getRow_count()));
         }
         // Because of the right table will not send data to the bucket which has been pruned, the right join or full join will get wrong result.
         // So if this bucket shuffle is right join or full join, we need to add empty bucket scan range which is pruned by predicate.
@@ -105,24 +108,37 @@ public class ColocatedBackendSelector implements BackendSelector {
     }
 
     // Make sure each host have average bucket to scan
-    private void computeExecAddressForBucketSeq(TScanRangeLocations seqLocation, Integer bucketSeq) throws UserException {
-        long minWeight = Long.MAX_VALUE;
+    private void computeExecAddressForBucketSeq(TScanRangeLocations seqLocation, Integer bucketSeq, long numTablets,
+                                                long numTabletRows) throws UserException {
+        final int maxRetryTimes = 5;
         long minBackendId = Long.MAX_VALUE;
-        for (TScanRangeLocation location : seqLocation.locations) {
-            if (!workerProvider.isDataNodeAvailable(location.getBackend_id())) {
-                continue;
+        for (int retryTimes = 0; retryTimes < maxRetryTimes; retryTimes++) {
+            long minWeight = Long.MAX_VALUE;
+            minBackendId = Long.MAX_VALUE;
+            for (TScanRangeLocation location : seqLocation.locations) {
+                if (!workerProvider.isDataNodeAvailable(location.getBackend_id())) {
+                    continue;
+                }
+
+                long weight = workerStatsTracker.getNumRunningTablets(location.getBackend_id());
+                if (weight < minWeight) {
+                    minWeight = weight;
+                    minBackendId = location.backend_id;
+                }
             }
 
-            long weight = workerStatsTracker.getNumRunningTablets(location.getBackend_id());
-            long totalWeight = workerStatsTracker.getNumTotalTablets(location.getBackend_id());
-            if (weight < minWeight) {
-                minWeight = weight;
-                minBackendId = location.backend_id;
+            if (minBackendId == Long.MAX_VALUE) {
+                workerProvider.reportDataNodeNotFoundException();
             }
-        }
 
-        if (minBackendId == Long.MAX_VALUE) {
-            workerProvider.reportDataNodeNotFoundException();
+            if (retryTimes + 1 < maxRetryTimes) {
+                if (workerStatsTracker.tryConsume(minBackendId, minWeight, numTablets, numTabletRows)) {
+                    break;
+                }
+            } else {
+                workerStatsTracker.consume(minBackendId, numTablets, numTabletRows);
+                break;
+            }
         }
 
         workerProvider.selectWorker(minBackendId);
