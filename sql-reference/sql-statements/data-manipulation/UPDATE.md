@@ -71,7 +71,7 @@ UPDATE <table_name>
   反之，则系统自动使用普通模式。
 * `column`，指定使用列模式执行部分更新，比较适用于涉及少数列并且大量行的部分列更新场景。
 
-您可以使用 `EXPALIN UPDATE xxx` 查看执行部分列更新的模式。
+您可以使用 `EXPLAIN UPDATE xxx` 查看执行部分列更新的模式。
 
 ## 示例
 
