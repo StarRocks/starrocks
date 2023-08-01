@@ -130,7 +130,11 @@ public class DateUtils {
     }
 
     public static String formatTimeStampInSeconds(long timestampInSeconds, ZoneId timeZoneId) {
-        ZonedDateTime createTime = Instant.ofEpochMilli(timestampInSeconds * 1000).atZone(timeZoneId);
+        return formatTimeStampInMill(timestampInSeconds * 1000, timeZoneId);
+    }
+
+    public static String formatTimeStampInMill(long timestampInSeconds, ZoneId timeZoneId) {
+        ZonedDateTime createTime = Instant.ofEpochMilli(timestampInSeconds).atZone(timeZoneId);
         return DATE_TIME_FORMATTER_UNIX.format(createTime);
     }
 
