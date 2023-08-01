@@ -201,7 +201,7 @@ REFRESH MATERIALIZED VIEW order_mv WITH SYNC MODE;
 
 You can cancel a refresh task submitted via an asynchronous call using [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL%20REFRESH%20MATERIALIZED%20VIEW.md).
 
-## Query the asynchronous materialized view
+## Query the asynchronous materialized view directly
 
 The asynchronous materialized view you created is essentially a physical table that contains the complete set of pre-computed results in accordance with the query statement. Therefore, you can directly query the materialized view after the materialized view is refreshed for the first time.
 
@@ -221,7 +221,7 @@ MySQL > SELECT * FROM order_mv;
 >
 > You can directly query an asynchronous materialized view, but the results may be inconsistent with what you get from the query on its base tables.
 
-## Rewrite queries with the asynchronous materialized view
+## Rewrite and accelerate queries with the asynchronous materialized view
 
 StarRocks v2.5 supports automatic and transparent query rewrite based on the SPJG-type asynchronous materialized views. The SPJG-type materialized views refer to materialized views whose plan only includes Scan, Filter, Project, and Aggregate types of operators. The SPJG-type materialized views query rewrite includes single table query rewrite, Join query rewrite, aggregation query rewrite, Union query rewrite and query rewrite based on nested materialized views.
 
