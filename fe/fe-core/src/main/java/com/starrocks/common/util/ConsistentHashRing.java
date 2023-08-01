@@ -62,6 +62,10 @@ public class ConsistentHashRing<K, N> implements HashRing<K, N> {
         }
     }
 
+    public int getVirtualNumber() {
+        return virtualNumber;
+    }
+
     @Override
     public String policy() {
         return "ConsistentHash";
