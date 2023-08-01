@@ -38,7 +38,7 @@ public:
         return Status::OK();
     }
 
-    void reset() override;
+    void reset_levels() override;
 
     Status do_read_records(size_t* num_rows, ColumnContentType content_type, Column* dst) override;
 
@@ -101,7 +101,7 @@ public:
     }
 
     // Reset internal state and ready for next read_values
-    void reset() override;
+    void reset_levels() override;
 
     Status do_read_records(size_t* num_records, ColumnContentType content_type, Column* dst) override {
         if (_need_parse_levels) {
@@ -176,7 +176,7 @@ public:
         return Status::OK();
     }
 
-    void reset() override {}
+    void reset_levels() override {}
 
     Status do_read_records(size_t* num_rows, ColumnContentType content_type, Column* dst) override;
 
@@ -193,8 +193,7 @@ private:
     const ParquetField* _field = nullptr;
 };
 
-void RepeatedStoredColumnReader::reset() {
-    _meet_first_record = false;
+void RepeatedStoredColumnReader::reset_levels() {
     size_t num_levels = _levels_decoded - _levels_parsed;
     if (num_levels == 0) {
         _levels_parsed = _levels_decoded = 0;
@@ -311,6 +310,8 @@ void RepeatedStoredColumnReader::_delimit_rows(size_t* num_rows, size_t* num_lev
     if (rows_read == *num_rows) {
         // Notice, ++levels_pos in for-loop will take one step forward, so we need -1
         levels_pos--;
+        // Had read enough rows, reset _meet_first_record for next read
+        _meet_first_record = false;
         DCHECK_EQ(0, _rep_levels[levels_pos]);
     } // else {
       //  means  rows_read < *num_rows, levels_pos >= _levels_decoded,
@@ -356,7 +357,7 @@ Status RepeatedStoredColumnReader::_decode_levels(size_t num_levels) {
     return Status::OK();
 }
 
-void OptionalStoredColumnReader::reset() {
+void OptionalStoredColumnReader::reset_levels() {
     size_t num_levels = _levels_decoded - _levels_parsed;
     if (num_levels == 0) {
         _levels_parsed = _levels_decoded = 0;
@@ -670,7 +671,7 @@ Status StoredColumnReader::_lazy_load_page_rows(size_t batch_size, ColumnContent
         RETURN_IF_ERROR(do_read_records(&to_read, content_type, temp_column.get()));
         // TODO(SmithCruise) Refactor it
         // We need reset def/rep cursor after lazy load
-        reset();
+        reset_levels();
         load_rows -= to_read;
     }
     _opts.context->filter = filter;
@@ -725,8 +726,8 @@ size_t StoredColumnReader::count_not_null(level_t* def_levels, size_t num_parsed
 
 Status StoredColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter,
                                       ColumnContentType content_type, Column* dst) {
-    // reset() to prepare levels for new reading
-    reset();
+    // reset_levels() to prepare levels for new reading
+    reset_levels();
     if (_read_cursor < range.begin()) {
         RETURN_IF_ERROR(_skip(range.begin() - _read_cursor));
     }
@@ -751,8 +752,8 @@ Status StoredColumnReader::_skip(uint64_t rows_to_skip) {
             }
         }
         skipped_row += batch_to_skip;
-        // reset() when batch_skipped completed, avoiding use too much memory
-        reset();
+        // reset_levels() when batch_skipped completed, avoiding use too much memory
+        reset_levels();
     }
     return Status::OK();
 }
@@ -875,8 +876,8 @@ Status OptionalStoredColumnReader::_lazy_skip_values(uint64_t begin) {
         values_to_skip += count_not_null(&_def_levels[_levels_parsed], skip_row, _field->max_def_level());
         _levels_parsed += skip_row;
         row_skipped += skip_row;
-        // reset() to avoiding using too much memory and prepare levels for new reading.
-        reset();
+        // reset_levels() to avoiding using too much memory and prepare levels for new reading.
+        reset_levels();
     }
     return _reader->skip_values(values_to_skip);
 }

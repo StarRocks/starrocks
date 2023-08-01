@@ -50,7 +50,12 @@ public:
 
     Status skip_page();
 
-    Status skip_values(size_t num) { return _cur_decoder->skip(num); }
+    Status skip_values(size_t num) {
+        if (num == 0) {
+            return Status::OK();
+        }
+        return _cur_decoder->skip(num);
+    }
 
     Status next_page();
 

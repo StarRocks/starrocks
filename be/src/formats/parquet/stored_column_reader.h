@@ -43,7 +43,7 @@ public:
     virtual ~StoredColumnReader() = default;
 
     // Reset internal state and ready for next read_values
-    virtual void reset() = 0;
+    virtual void reset_levels() = 0;
 
     // If need_levels is set, client will get all levels through get_levels function.
     // If need_levels is not set, read_records may not records levels information, this will
