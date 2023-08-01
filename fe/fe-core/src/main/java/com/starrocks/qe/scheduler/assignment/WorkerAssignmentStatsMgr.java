@@ -59,7 +59,7 @@ public class WorkerAssignmentStatsMgr {
             if (stats == null) {
                 return 0L;
             }
-            return stats.numRunningTabletRows.get();
+            return stats.numRunningTablets.get();
         }
 
         @Override
