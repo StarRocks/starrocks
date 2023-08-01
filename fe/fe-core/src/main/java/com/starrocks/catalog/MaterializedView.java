@@ -785,7 +785,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             result.addAll(getUpdatedPartitionNamesOfOlapTable(olapBaseTable));
 
             if (withMv && baseTable.isMaterializedView()) {
-                Set<String> partitionNames = ((MaterializedView) baseTable).getMVToRefreshPartitionNames();
+                Set<String> partitionNames = ((MaterializedView) baseTable).getPartitionNamesToRefreshForMv();
                 result.addAll(partitionNames);
             }
             return result;
@@ -1223,14 +1223,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      *
      * @return : Collect all need refreshed partitions of materialized view.
      */
-    public Set<String> getMVToRefreshPartitionNames() {
+    public Set<String> getPartitionNamesToRefreshForMv() {
         // Skip check for sync materialized view.
         if (refreshScheme.isSync()) {
             return Sets.newHashSet();
         }
 
         // check mv's query rewrite consistency mode property
-        TableProperty.QueryRewriteConsistencyMode mvConsistencyRewriteMode = tableProperty.getOlapTableQueryRewrite();
+        TableProperty.QueryRewriteConsistencyMode mvConsistencyRewriteMode = tableProperty.getQueryRewriteConsistencyMode();
         switch (mvConsistencyRewriteMode) {
             case DISABLE:
                 return getPartitionNames();

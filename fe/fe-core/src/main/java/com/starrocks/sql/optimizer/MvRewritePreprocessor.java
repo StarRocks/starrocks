@@ -239,7 +239,7 @@ public class MvRewritePreprocessor {
             return;
         }
 
-        Set<String> partitionNamesToRefresh = mv.getMVToRefreshPartitionNames();
+        Set<String> partitionNamesToRefresh = mv.getPartitionNamesToRefreshForMv();
         PartitionInfo partitionInfo = mv.getPartitionInfo();
         if (partitionInfo instanceof SinglePartitionInfo) {
             if (!partitionNamesToRefresh.isEmpty()) {

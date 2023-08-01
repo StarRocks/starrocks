@@ -215,7 +215,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
             Assert.assertTrue((mvMaxBaseTableRefreshTimestamp - mvRefreshTimeStamp) / 1000 < 60);
             Assert.assertTrue(mv1.isStalenessSatisfied());
 
-            Set<String> partitionsToRefresh = mv1.getMVToRefreshPartitionNames();
+            Set<String> partitionsToRefresh = mv1.getPartitionNamesToRefreshForMv();
             Assert.assertTrue(partitionsToRefresh.isEmpty());
         }
         starRocksAssert.dropMaterializedView("hive_staleness_1");
