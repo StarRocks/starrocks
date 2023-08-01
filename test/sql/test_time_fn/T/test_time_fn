@@ -197,6 +197,7 @@ select dayofweek_iso("2023-01-03");
 select dayofweek_iso("");
 select dayofweek_iso(NULL);
 
+<<<<<<< HEAD
 -- name: test_date_diff
 select date_diff("2010-11-30 23:59:59", "2010-11-30 20:58:59", "millisecond");
 select date_diff("2010-11-30 23:59:59", "2010-11-30 20:58:59", "hour");
@@ -222,6 +223,8 @@ values ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'hour'),
        ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'millisecond');
 select date_diff(d0,d1,t) from test_data_diff order by t;
 
+=======
+>>>>>>> 83761512f5 ([Enhancement] refactor date_diff function (#28276))
 -- name: test_makedate
 CREATE TABLE IF NOT EXISTS `makedate_test` (
   `id` int,

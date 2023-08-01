@@ -397,7 +397,7 @@ vectorized_functions = [
     [50196, 'seconds_diff', 'BIGINT', ['DATETIME', 'DATETIME'], 'TimeFunctions::seconds_diff'],
     [50197, 'datediff', 'INT', ['DATETIME', 'DATETIME'], 'TimeFunctions::date_diff'],
     [50198, 'timediff', 'TIME', ['DATETIME', 'DATETIME'], 'TimeFunctions::time_diff'],
-    [50199, 'date_diff', 'BIGINT', ['DATETIME', 'DATETIME', 'VARCHAR'], 'TimeFunctions::datediff',"TimeFunctions::datediff_prepare", "TimeFunctions::datediff_close"],
+    [50199, 'date_diff', 'BIGINT', ['VARCHAR', 'DATETIME', 'DATETIME'], 'TimeFunctions::datediff',"TimeFunctions::datediff_prepare", "TimeFunctions::datediff_close"],
     [50200, 'now', 'DATETIME', [], 'TimeFunctions::now'],
     [50201, 'current_timestamp', 'DATETIME', [], 'TimeFunctions::now'],
     [50202, 'localtime', 'DATETIME', [], 'TimeFunctions::now'],
