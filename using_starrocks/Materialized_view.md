@@ -197,7 +197,7 @@ REFRESH MATERIALIZED VIEW order_mv WITH SYNC MODE;
 
 您可以通过 [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL%20REFRESH%20MATERIALIZED%20VIEW.md) 取消异步调用的刷新任务。
 
-## 查询异步物化视图
+## 直接查询异步物化视图
 
 异步物化视图本质上是一个物理表，其中存储了根据特定查询语句预先计算的完整结果集。第一次刷新物化视图后，您即可直接查询物化视图。
 
@@ -217,7 +217,7 @@ MySQL > SELECT * FROM order_mv;
 >
 > 您可以直接查询异步物化视图，但由于异步刷新机制，其结果可能与您从基表上查询的结果不一致。
 
-## 使用异步物化视图改写查询
+## 使用异步物化视图改写加速查询
 
 StarRocks 2.5 版本支持 SPJG 类型的异步物化视图查询的自动透明改写。SPJG 类型的物化视图是指在物化视图 Plan 中只包含 Scan、Filter、Project 以及 Aggregate 类型的算子。其查询改写包括单表改写，Join 改写，聚合改写，Union 改写和嵌套物化视图的改写。
 
