@@ -327,6 +327,9 @@ struct THdfsScanRange {
 
     // number of lines at the start of the file to skip
     12: optional i64 skip_header
+
+    // last modification time of the hdfs file, for data cache
+    13: optional i64 modification_time
 }
 
 struct TBinlogScanRange {
