@@ -2641,6 +2641,18 @@ public class GlobalStateMgr {
                         .append(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)
                         .append("\" = \"");
                 sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)).append("\"");
+
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
+                        .append("\" = \"");
+                sb.append(olapTable.enablePersistentIndex()).append("\"");
+
+                if (olapTable.enablePersistentIndex() && !Strings.isNullOrEmpty(olapTable.getPersistentIndexTypeString())) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)
+                            .append("\" = \"");
+                    sb.append(olapTable.getPersistentIndexTypeString()).append("\"");
+                }
             } else {
                 // in memory
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_INMEMORY)
@@ -2997,6 +3009,10 @@ public class GlobalStateMgr {
 
     public Database getDb(String name) {
         return localMetastore.getDb(name);
+    }
+
+    public Optional<Table> mayGetTable(long dbId, long tableId) {
+        return mayGetDb(dbId).flatMap(db -> db.tryGetTable(tableId));
     }
 
     public Optional<Database> mayGetDb(String name) {

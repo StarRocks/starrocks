@@ -1562,6 +1562,12 @@ public class Config extends ConfigBase {
     public static boolean enable_statistic_collect_on_first_load = true;
 
     /**
+     * max await time for collect statistic for loading
+     */
+    @ConfField(mutable = true)
+    public static long semi_sync_collect_statistic_await_seconds = 30;
+
+    /**
      * The start time of day when auto-updates are enabled
      */
     @ConfField(mutable = true)
@@ -1829,7 +1835,7 @@ public class Config extends ConfigBase {
      * or hdfs into smaller files for hive external table
      */
     @ConfField(mutable = true)
-    public static long hive_max_split_size = 64L * 1024L * 1024L;
+    public static long hive_max_split_size = 512L * 1024L * 1024L;
 
     /**
      * Enable background refresh all external tables all partitions metadata on internal catalog.
@@ -2220,9 +2226,6 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int lake_compaction_fail_history_size = 12;
-
-    @ConfField
-    public static int experimental_lake_publish_version_threads = 16;
 
     @ConfField(mutable = true, comment = "the max number of previous version files to keep")
     public static int lake_autovacuum_max_previous_versions = 0;
