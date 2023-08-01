@@ -23,7 +23,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
@@ -98,10 +97,8 @@ public class IcebergMetadata implements ConnectorMetadata {
     private final Map<TableIdentifier, Table> tables = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<IcebergFilter, List<FileScanTask>> tasks = new ConcurrentHashMap<>();
-    private final InfoSchemaDb infoSchemaDb;
 
     public IcebergMetadata(String catalogName, IcebergCatalog icebergCatalog) {
-        this.infoSchemaDb = new InfoSchemaDb(catalogName);
         this.catalogName = catalogName;
         this.icebergCatalog = icebergCatalog;
         new IcebergMetricsReporter().setThreadLocalReporter();
@@ -109,9 +106,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listDbNames() {
-        List<String> dbs = icebergCatalog.listAllDatabases();
-        dbs.add(InfoSchemaDb.DATABASE_NAME);
-        return dbs;
+        return icebergCatalog.listAllDatabases();
     }
 
     @Override
@@ -135,10 +130,6 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public Database getDb(String dbName) {
-        if (isInfoSchemaDb(dbName)) {
-            return this.infoSchemaDb;
-        }
-
         if (databases.containsKey(dbName)) {
             return databases.get(dbName);
         }
@@ -156,10 +147,6 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listTableNames(String dbName) {
-        if (isInfoSchemaDb(dbName)) {
-            return infoSchemaDb.getTables().stream().map(Table::getName).collect(Collectors.toList());
-        }
-
         return icebergCatalog.listTables(dbName);
     }
 
@@ -188,20 +175,12 @@ public class IcebergMetadata implements ConnectorMetadata {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
         boolean isForce = stmt.isForceDrop();
-        if (isInfoSchemaDb(dbName)) {
-            throw new UnsupportedOperationException("Unable to drop table in information schema");
-        }
-
         icebergCatalog.dropTable(dbName, tableName, isForce);
         tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
     }
 
     @Override
     public Table getTable(String dbName, String tblName) {
-        if (isInfoSchemaDb(dbName)) {
-            return this.infoSchemaDb.getTable(tblName);
-        }
-
         TableIdentifier identifier = TableIdentifier.of(dbName, tblName);
         if (tables.containsKey(identifier)) {
             return tables.get(identifier);
@@ -222,10 +201,6 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listPartitionNames(String dbName, String tblName) {
-        if (isInfoSchemaDb(dbName)) {
-            return Lists.newArrayList();
-        }
-
         org.apache.iceberg.Table icebergTable = icebergCatalog.getTable(dbName, tblName);
         IcebergCatalogType nativeType = icebergCatalog.getIcebergCatalogType();
 

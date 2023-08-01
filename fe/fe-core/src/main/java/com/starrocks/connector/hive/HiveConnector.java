@@ -17,6 +17,7 @@ package com.starrocks.connector.hive;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
@@ -33,6 +34,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.starrocks.connector.InfoSchemaWrappedConnectorMetadata.wrapInfoSchema;
+
 public class HiveConnector implements Connector {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     public static final String HIVE_METASTORE_TYPE = "hive.metastore.type";
@@ -42,6 +45,7 @@ public class HiveConnector implements Connector {
     private final String catalogName;
     private final HiveConnectorInternalMgr internalMgr;
     private final HiveMetadataFactory metadataFactory;
+    private final InfoSchemaDb infoSchemaDb;
 
     public HiveConnector(ConnectorContext context) {
         this.properties = context.getProperties();
@@ -50,6 +54,7 @@ public class HiveConnector implements Connector {
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.internalMgr = new HiveConnectorInternalMgr(catalogName, properties, hdfsEnvironment);
         this.metadataFactory = createMetadataFactory();
+        this.infoSchemaDb = new InfoSchemaDb(catalogName);
         validate();
         onCreate();
     }
@@ -69,7 +74,7 @@ public class HiveConnector implements Connector {
 
     @Override
     public ConnectorMetadata getMetadata() {
-        return metadataFactory.create();
+        return wrapInfoSchema(metadataFactory.create(), infoSchemaDb);
     }
 
     private HiveMetadataFactory createMetadataFactory() {

@@ -25,8 +25,9 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class PartitionsSystemTableSystemTable {
-    public static SystemTable create() {
+    public static SystemTable create(String catalogName) {
         return new SystemTable(
+                catalogName,
                 SystemId.PARTITIONS_ID,
                 "partitions",
                 Table.TableType.SCHEMA,

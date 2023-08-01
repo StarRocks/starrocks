@@ -23,7 +23,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.RemoteFileInfo;
@@ -47,9 +46,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.system.information.InfoSchemaDb.isInfoSchemaDb;
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
@@ -60,14 +57,12 @@ public class HudiMetadata implements ConnectorMetadata {
     private final RemoteFileOperations fileOps;
     private final HiveStatisticsProvider statisticsProvider;
     private final Optional<CacheUpdateProcessor> cacheUpdateProcessor;
-    private final InfoSchemaDb infoSchemaDb;
 
     public HudiMetadata(String catalogName,
                         HiveMetastoreOperations hmsOps,
                         RemoteFileOperations fileOperations,
                         HiveStatisticsProvider statisticsProvider,
                         Optional<CacheUpdateProcessor> cacheUpdateProcessor) {
-        this.infoSchemaDb = new InfoSchemaDb(catalogName);
         this.catalogName = catalogName;
         this.hmsOps = hmsOps;
         this.fileOps = fileOperations;
@@ -77,45 +72,27 @@ public class HudiMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listDbNames() {
-        List<String> dbs = hmsOps.getAllDatabaseNames();
-        dbs.add(InfoSchemaDb.DATABASE_NAME);
-        return dbs;
+        return hmsOps.getAllDatabaseNames();
     }
 
     @Override
     public List<String> listTableNames(String dbName) {
-        if (isInfoSchemaDb(dbName)) {
-            return infoSchemaDb.getTables().stream().map(Table::getName).collect(Collectors.toList());
-        }
-
         return hmsOps.getAllTableNames(dbName);
     }
 
     @Override
     public List<String> listPartitionNames(String dbName, String tblName) {
-        if (isInfoSchemaDb(dbName)) {
-            return Lists.newArrayList();
-        }
-
         return hmsOps.getPartitionKeys(dbName, tblName);
     }
 
     @Override
     public List<String> listPartitionNamesByValue(String databaseName, String tableName,
                                                   List<Optional<String>> partitionValues) {
-        if (isInfoSchemaDb(databaseName)) {
-            return Lists.newArrayList();
-        }
-
         return hmsOps.getPartitionKeysByValue(databaseName, tableName, partitionValues);
     }
 
     @Override
     public Database getDb(String dbName) {
-        if (isInfoSchemaDb(dbName)) {
-            return this.infoSchemaDb;
-        }
-
         Database database;
         try {
             database = hmsOps.getDb(dbName);
@@ -129,10 +106,6 @@ public class HudiMetadata implements ConnectorMetadata {
 
     @Override
     public Table getTable(String dbName, String tblName) {
-        if (isInfoSchemaDb(dbName)) {
-            return this.infoSchemaDb.getTable(tblName);
-        }
-
         Table table;
         try {
             table = hmsOps.getTable(dbName, tblName);
@@ -219,10 +192,6 @@ public class HudiMetadata implements ConnectorMetadata {
     public void dropTable(DropTableStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
-        if (isInfoSchemaDb(dbName)) {
-            throw new UnsupportedOperationException("Unable to drop table in information schema");
-        }
-
         if (isResourceMappingCatalog(catalogName)) {
             HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) GlobalStateMgr.getCurrentState()
                     .getMetadata().getTable(dbName, tableName);

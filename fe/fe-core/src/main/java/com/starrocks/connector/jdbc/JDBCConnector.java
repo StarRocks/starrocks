@@ -16,6 +16,7 @@
 package com.starrocks.connector.jdbc;
 
 import com.starrocks.catalog.JDBCResource;
+import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
@@ -31,6 +32,8 @@ import java.net.URLConnection;
 import java.security.MessageDigest;
 import java.util.Map;
 
+import static com.starrocks.connector.InfoSchemaWrappedConnectorMetadata.wrapInfoSchema;
+
 public class JDBCConnector implements Connector {
 
     private static final Logger LOG = LogManager.getLogger(JDBCConnector.class);
@@ -39,10 +42,12 @@ public class JDBCConnector implements Connector {
     private final String catalogName;
 
     private ConnectorMetadata metadata;
+    private final InfoSchemaDb infoSchemaDb;
 
     public JDBCConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
         this.properties = context.getProperties();
+        this.infoSchemaDb = new InfoSchemaDb(catalogName);
         validate(JDBCResource.DRIVER_CLASS);
         validate(JDBCResource.URI);
         validate(JDBCResource.USER);
@@ -101,6 +106,6 @@ public class JDBCConnector implements Connector {
                 throw e;
             }
         }
-        return metadata;
+        return wrapInfoSchema(metadata, infoSchemaDb);
     }
 }
