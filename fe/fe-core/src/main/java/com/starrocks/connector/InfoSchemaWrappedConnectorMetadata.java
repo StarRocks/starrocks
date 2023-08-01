@@ -14,6 +14,7 @@
 
 package com.starrocks.connector;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -81,18 +82,18 @@ public class InfoSchemaWrappedConnectorMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listDbNames() {
-        List<String> dbNames = metadata.listDbNames();
-        dbNames.add(InfoSchemaDb.DATABASE_NAME);
-        return dbNames;
+        ImmutableList.Builder<String> builder = ImmutableList.builder();
+        return builder.addAll(metadata.listDbNames())
+                .add(InfoSchemaDb.DATABASE_NAME)
+                .build();
     }
 
     @Override
     public List<String> listTableNames(String dbName) {
-        List<String> tableNames = metadata.listTableNames(dbName);
-        List<String> infoSchemaTableNames = infoSchemaDb.getTables().stream()
-                .map(Table::getName).collect(Collectors.toList());
-        tableNames.addAll(infoSchemaTableNames);
-        return tableNames;
+        if (isInfoSchemaDb(dbName)) {
+            return infoSchemaDb.getTables().stream().map(Table::getName).collect(Collectors.toList());
+        }
+        return metadata.listTableNames(dbName);
     }
 
     @Override

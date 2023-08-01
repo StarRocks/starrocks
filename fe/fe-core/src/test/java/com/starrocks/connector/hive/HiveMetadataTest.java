@@ -116,9 +116,9 @@ public class HiveMetadataTest {
     @Test
     public void testListDbNames() {
         List<String> databaseNames = hiveMetadata.listDbNames();
-        Assert.assertEquals(Lists.newArrayList("db1", "db2", "information_schema"), databaseNames);
+        Assert.assertEquals(Lists.newArrayList("db1", "db2"), databaseNames);
         CachingHiveMetastore queryLevelCache = CachingHiveMetastore.createQueryLevelInstance(cachingHiveMetastore, 100);
-        Assert.assertEquals(Lists.newArrayList("db1", "db2", "information_schema"), queryLevelCache.getAllDatabaseNames());
+        Assert.assertEquals(Lists.newArrayList("db1", "db2"), queryLevelCache.getAllDatabaseNames());
     }
 
     @Test

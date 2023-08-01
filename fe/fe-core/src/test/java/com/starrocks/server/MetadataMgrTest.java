@@ -92,7 +92,8 @@ public class MetadataMgrTest {
 
         List<String> externalTables = metadataMgr.listTableNames("hive_catalog", "db2");
         Assert.assertTrue(externalTables.contains("tbl2"));
-        Assert.assertTrue(metadataMgr.listTableNames("hive_catalog", "db3").isEmpty());
+        externalTables = metadataMgr.listTableNames("hive_catalog", "db3");
+        Assert.assertTrue(externalTables.isEmpty());
     }
 
     @Test

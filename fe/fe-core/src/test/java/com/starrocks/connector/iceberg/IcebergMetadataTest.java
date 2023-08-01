@@ -74,7 +74,7 @@ public class IcebergMetadataTest extends TableTestBase {
         };
 
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, icebergCatalog);
-        List<String> expectResult = Lists.newArrayList("db1", "db2", "information_schema");
+        List<String> expectResult = Lists.newArrayList("db1", "db2");
         Assert.assertEquals(expectResult, metadata.listDbNames());
     }
 
