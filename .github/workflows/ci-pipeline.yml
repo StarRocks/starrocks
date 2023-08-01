@@ -49,6 +49,14 @@ jobs:
           name: head_sha
           path: ./head_sha.txt
           retention-days: 3
+          
+      - uses: dorny/paths-filter@v2
+        id: thirdparty-checker
+        with:
+          filters: |
+            thirdparty:
+            - 'thirdparty/**'
+            - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
 
       - name: clean
         run: |
@@ -57,35 +65,27 @@ jobs:
 
       - name: Checkout Code
         uses: actions/checkout@v3
+        if: >
+          !contains(github.event.pull_request.title, '(sync #') &&
+          !contains(github.event.pull_request.labels.*.name, 'sync') &&
+          (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
         with:
           fetch-depth: 0
 
       - name: Checkout PR
-        run: |
-          cd /var/lib/ci-tool/ && git pull && ./bin/checkout.sh check
-
-      - name: Clean ENV
-        if: always()
-        run: |
-          rm -rf ${{ github.workspace }}/*
-
-      - name: Check
         id: check
         if: >
           !contains(github.event.pull_request.title, '(sync #') &&
           !contains(github.event.pull_request.labels.*.name, 'sync') &&
           (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
         run: |
+          cd /var/lib/ci-tool/ && git pull && ./bin/checkout.sh check
           echo "pass=true" >> $GITHUB_OUTPUT
 
-      - uses: dorny/paths-filter@v2
-        id: thirdparty-checker
+      - name: Clean ENV
         if: always()
-        with:
-          filters: |
-            thirdparty:
-            - 'thirdparty/**'
-            - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+        run: |
+          rm -rf ${{ github.workspace }}/*
 
   be-checker:
     runs-on: ubuntu-latest
@@ -303,7 +303,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: sync-checker
     name: FE FILTER
-    if: needs.sync-checker.outputs.PASS == 'true' || needs.sync-checker.outputs.THIRDPARTY == 'true'
+    if: needs.sync-checker.outputs.PASS == 'true'
     outputs:
       output1: ${{ steps.fe-changes-info.outputs.fe }}
     steps:

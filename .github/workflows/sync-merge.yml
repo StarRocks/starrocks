@@ -1,4 +1,4 @@
-name: MERGED PIPELINE
+name: SYNC MERGE PIPELINE
 
 on:
   pull_request:

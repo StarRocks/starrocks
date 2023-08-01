@@ -106,19 +106,27 @@ jobs:
           destination_branch: ${{ inputs.BRANCH }}-sync-${{ inputs.PR_ID }}
           github_token: ${{ secrets.SYNC_PAT }}
 
-      - name: pr branch
-        run: |
-          pr_branch=${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
-          git branch ${pr_branch} ${{ inputs.BRANCH }}
-          git checkout ${pr_branch}
-          git push -u origin ${pr_branch}
-
       - name: checkout tools
         uses: actions/checkout@v3
         with:
           repository: StarRocks/elastic-service
           path: './elastic-service'
           token: ${{ secrets.SYNC_PAT }}
+          
+      - name: wait previous prs merged
+        env:
+          GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
+        run: |
+          cd ${{ github.workspace }}/elastic-service
+          python3 lib/pr_sequence_checker.py wait   
+          
+      - name: pr branch
+        run: |
+          git pull
+          pr_branch=${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
+          git branch ${pr_branch} ${{ inputs.BRANCH }}
+          git checkout ${pr_branch}
+          git push -u origin ${pr_branch}
 
       - name: previous check
         id: previous-check
