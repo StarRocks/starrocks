@@ -84,8 +84,8 @@ GRANT
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 
 * You must first run SET CATALOG before you run this command. 
-* You can also use db.tbl to represent a table.
-GRANT <priv> ON TABLE db.tbl TO {ROLE <role_name> | USER <user_name>}
+* You can also use <db_name>.<table_name> to represent a table.
+GRANT <priv> ON TABLE <db_name>.<table_name> TO {ROLE <role_name> | USER <user_name>}
 
 # View
 
@@ -97,8 +97,8 @@ GRANT
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
     
 * You must first run SET CATALOG before you run this command. 
-* You can also use db.view to represent a view.
-GRANT <priv> ON VIEW db.view TO {ROLE <role_name> | USER <user_name>}
+* You can also use <db_name>.<view_name> to represent a view.
+GRANT <priv> ON VIEW <db_name>.<view_name> TO {ROLE <role_name> | USER <user_name>}
 
 # Materialized view
 
@@ -110,8 +110,8 @@ GRANT
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
     
 * You must first run SET CATALOG before you run this command. 
-* You can also use db.mv to represent an mv.
-GRANT <priv> ON MATERIALIZED_VIEW db.mv TO {ROLE <role_name> | USER <user_name>}
+* You can also use <db_name>.<mv_name> to represent an mv.
+GRANT <priv> ON MATERIALIZED_VIEW <db_name>.<mv_name> TO {ROLE <role_name> | USER <user_name>}
 
 # Function
 
@@ -123,8 +123,8 @@ GRANT
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
     
 * You must first run SET CATALOG before you run this command. 
-* You can also use db.function to represent a function.
-GRANT <priv> ON FUNCTION db.function TO {ROLE <role_name> | USER <user_name>}
+* You can also use <db_name>.<function_name> to represent a function.
+GRANT <priv> ON FUNCTION <db_name>.<function_name> TO {ROLE <role_name> | USER <user_name>}
 
 # User
 
