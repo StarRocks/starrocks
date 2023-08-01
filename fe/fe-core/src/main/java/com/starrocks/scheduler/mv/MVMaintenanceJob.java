@@ -28,12 +28,14 @@ import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
-import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.scheduler.TFragmentInstanceFactory;
+import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
@@ -60,11 +62,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 
 /**
  * Long-running job responsible for MV incremental maintenance.
@@ -272,10 +272,8 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         }
         queryCoordinator.prepareExec();
 
-        Map<PlanFragmentId, CoordinatorPreprocessor.FragmentExecParams> fragmentExecParams =
-                queryCoordinator.getFragmentExecParamsMap();
+        List<ExecutionFragment> execFragments = queryCoordinator.getFragmentsInPreorder();
         TDescriptorTable descTable = queryCoordinator.getDescriptorTable();
-        boolean enablePipeline = true;
         int tabletSinkDop = 1;
 
         // Group all fragment instances by BE id, and package them into a task
@@ -284,19 +282,14 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         Map<Long, MVMaintenanceTask> tasksByBe = new HashMap<>();
         long taskIdGen = 0;
         int backendIdGen = 0;
-        for (Map.Entry<PlanFragmentId, CoordinatorPreprocessor.FragmentExecParams> kv : fragmentExecParams.entrySet()) {
-            CoordinatorPreprocessor.FragmentExecParams execParams = kv.getValue();
-            Set<TUniqueId> inflightInstanceSet =
-                    execParams.instanceExecParams.stream()
-                            .map(CoordinatorPreprocessor.FInstanceExecParam::getInstanceId)
-                            .collect(Collectors.toSet());
-            List<TExecPlanFragmentParams> tParams =
-                    execParams.toThrift(inflightInstanceSet, descTable, enablePipeline, tabletSinkDop,
-                            tabletSinkDop, true);
-            for (int i = 0; i < execParams.instanceExecParams.size(); i++) {
-                CoordinatorPreprocessor.FInstanceExecParam instanceParam = execParams.instanceExecParams.get(i);
+        TFragmentInstanceFactory execPlanFragmentParamsFactory = queryCoordinator.createTFragmentInstanceFactory();
+        for (ExecutionFragment execFragment : execFragments) {
+            List<TExecPlanFragmentParams> tParams = execPlanFragmentParamsFactory.create(
+                    execFragment, execFragment.getInstances(), descTable, tabletSinkDop, tabletSinkDop);
+            for (int i = 0; i < execFragment.getInstances().size(); i++) {
+                FragmentInstance instance = execFragment.getInstances().get(i);
                 // Get brpc address instead of the default address
-                TNetworkAddress beRpcAddr = queryCoordinator.getBrpcAddress(instanceParam.getWorkerId());
+                TNetworkAddress beRpcAddr = queryCoordinator.getBrpcAddress(instance.getWorkerId());
                 Long taskId = addr2TaskId.get(beRpcAddr);
                 MVMaintenanceTask task;
                 if (taskId == null) {
@@ -310,7 +303,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
 
                 // TODO(murphy) is this necessary
                 int backendId = backendIdGen++;
-                instanceParam.setBackendNum(backendId);
+                instance.setIndexInJob(backendId);
                 task.addFragmentInstance(tParams.get(i));
             }
         }

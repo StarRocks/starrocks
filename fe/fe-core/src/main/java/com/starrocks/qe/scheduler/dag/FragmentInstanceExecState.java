@@ -80,7 +80,7 @@ public class FragmentInstanceExecState {
     private TExecPlanFragmentParams requestToDeploy;
     private Future<PExecPlanFragmentResult> deployFuture = null;
 
-    private final int profileFragmentId;
+    private final int fragmentIndex;
     private final RuntimeProfile profile;
 
     private final ComputeNode worker;
@@ -96,13 +96,13 @@ public class FragmentInstanceExecState {
         RuntimeProfile profile = new RuntimeProfile(name);
         profile.addInfoString("Address", String.format("%s:%s", address.hostname, address.port));
 
-        return new FragmentInstanceExecState(null, null, fragmentInstanceId, 0, null, 0, profile, null, null, -1);
+        return new FragmentInstanceExecState(null, null, 0, fragmentInstanceId, 0, null, profile, null, null, -1);
     }
 
     public static FragmentInstanceExecState createExecution(JobSpec jobSpec,
                                                             PlanFragmentId fragmentId,
+                                                            int fragmentIndex,
                                                             TExecPlanFragmentParams request,
-                                                            int profileFragmentId,
                                                             ComputeNode worker) {
         TNetworkAddress address = worker.getAddress();
         String name = "Instance " + DebugUtil.printId(request.params.fragment_instance_id) + " (host=" + address + ")";
@@ -110,31 +110,32 @@ public class FragmentInstanceExecState {
         profile.addInfoString("Address", String.format("%s:%s", address.hostname, address.port));
 
         return new FragmentInstanceExecState(jobSpec,
-                fragmentId, request.params.getFragment_instance_id(), request.getBackend_num(),
+                fragmentId, fragmentIndex,
+                request.params.getFragment_instance_id(), request.getBackend_num(),
                 request,
-                profileFragmentId, profile,
+                profile,
                 worker, address, worker.getLastMissingHeartbeatTime());
 
     }
 
     private FragmentInstanceExecState(JobSpec jobSpec,
                                       PlanFragmentId fragmentId,
+                                      int fragmentIndex,
                                       TUniqueId instanceId,
                                       int indexInJob,
                                       TExecPlanFragmentParams requestToDeploy,
-                                      int profileFragmentId,
                                       RuntimeProfile profile,
                                       ComputeNode worker,
                                       TNetworkAddress address,
                                       long lastMissingHeartbeatTime) {
         this.jobSpec = jobSpec;
         this.fragmentId = fragmentId;
+        this.fragmentIndex = fragmentIndex;
         this.instanceId = instanceId;
         this.indexInJob = indexInJob;
 
         this.requestToDeploy = requestToDeploy;
 
-        this.profileFragmentId = profileFragmentId;
         this.profile = profile;
 
         this.address = address;
@@ -371,8 +372,8 @@ public class FragmentInstanceExecState {
         return address;
     }
 
-    public int getProfileFragmentId() {
-        return profileFragmentId;
+    public int getFragmentIndex() {
+        return fragmentIndex;
     }
 
     public RuntimeProfile getProfile() {
@@ -385,8 +386,8 @@ public class FragmentInstanceExecState {
     }
 
     public synchronized boolean computeTimeInProfile(int maxFragmentId) {
-        if (this.profileFragmentId < 0 || this.profileFragmentId > maxFragmentId) {
-            LOG.warn("profileFragmentId {} should be in [0, {})", profileFragmentId, maxFragmentId);
+        if (this.fragmentIndex < 0 || this.fragmentIndex > maxFragmentId) {
+            LOG.warn("profileFragmentId {} should be in [0, {})", fragmentIndex, maxFragmentId);
             return false;
         }
         profile.computeTimeInProfile();
