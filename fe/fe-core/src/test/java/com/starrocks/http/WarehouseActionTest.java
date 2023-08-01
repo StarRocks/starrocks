@@ -189,8 +189,8 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
 
         // Add statistics insert jobs.
         Thread.sleep(10L); // Make the finished timestamps of statistic jobs are different from the above jobs.
-        addInsertLoadJobs(whs.get(0).getFullName(), 13, false, true);
-        addInsertLoadJobs(whs.get(1).getFullName(), 12, true, true);
+        addInsertLoadJobs(whs.get(0).getName(), 13, false, true);
+        addInsertLoadJobs(whs.get(1).getName(), 12, true, true);
 
         // ------------------------------------------------------------------------------------
         // Case 1. The warehouse#1 is not in the warehouse manager.
@@ -208,12 +208,12 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
             expectedWhToWhInfo.get(wh).updateLastFinishedJobTimeMs(whInfo.getLastFinishedJobTimestampMs());
         });
         // The warehouse#1 hasn't been in the warehouse manager, so WarehouseInfo.id is ABSENT_ID.
-        assertThat(whToWhInfo.get(whs.get(1).getFullName()).getId()).isEqualTo(WarehouseInfo.ABSENT_ID);
+        assertThat(whToWhInfo.get(whs.get(1).getName()).getId()).isEqualTo(WarehouseInfo.ABSENT_ID);
         // Set id of warehouse#1 to ABSENT_ID temporarily, to compare the whole info below.
-        expectedWhToWhInfo.get(whs.get(1).getFullName()).setId(WarehouseInfo.ABSENT_ID);
+        expectedWhToWhInfo.get(whs.get(1).getName()).setId(WarehouseInfo.ABSENT_ID);
         assertThat(whToWhInfo).containsExactlyInAnyOrderEntriesOf(expectedWhToWhInfo);
         // Reset id of warehouse#1.
-        expectedWhToWhInfo.get(whs.get(1).getFullName()).setId(1);
+        expectedWhToWhInfo.get(whs.get(1).getName()).setId(1);
 
         // ------------------------------------------------------------------------------------
         // Case 2. All the warehouses are in the warehouse manager.
@@ -414,7 +414,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
     private Map<String, WarehouseInfo> prepareWarehouseJobExecutingInfo(Map<Warehouse, JobExecutingInfo> whToInfo)
             throws UserException {
         Map<String, WarehouseInfo> whToWhInfo = whToInfo.keySet().stream().collect(Collectors.toMap(
-                Warehouse::getFullName,
+                Warehouse::getName,
                 WarehouseInfo::fromWarehouse
         ));
         WarehouseInfo defaultWhInfo = whToWhInfo.get(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
@@ -423,7 +423,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
             Warehouse wh = whAndJobInfo.getKey();
             JobExecutingInfo jobInfo = whAndJobInfo.getValue();
 
-            WarehouseInfo whInfo = whToWhInfo.get(wh.getFullName());
+            WarehouseInfo whInfo = whToWhInfo.get(wh.getName());
 
             prepareJobInfo(whInfo, defaultWhInfo, wh, jobInfo.finishedInfo, true);
             prepareJobInfo(whInfo, defaultWhInfo, wh, jobInfo.unfinishedInfo, false);
@@ -447,14 +447,14 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
         }
 
         // Add job info to metric and manager.
-        WarehouseMetricMgr.increaseUnfinishedQueries(wh.getFullName(), jobInfo.numQueryJobs * deltaFactor);
-        WarehouseMetricMgr.increaseUnfinishedBackupJobs(wh.getFullName(), jobInfo.numBackupJobs * deltaFactor);
-        WarehouseMetricMgr.increaseUnfinishedRestoreJobs(wh.getFullName(), jobInfo.numRestoreJobs * deltaFactor);
-        addLoadJobs(wh.getFullName(), jobInfo.numBrokerLoadJobs, isFinished, this::genBrokerLoadJob);
-        addLoadJobs(wh.getFullName(), jobInfo.numSparkLoadJobs, isFinished, this::genSparkLoadJob);
-        addInsertLoadJobs(wh.getFullName(), jobInfo.numInsertLoadJobs, isFinished, false);
-        addRoutineJobs(wh.getFullName(), jobInfo.numRoutineLoadJobs, isFinished);
-        addStreamJobs(wh.getFullName(), jobInfo.numStreamLoadJobs, isFinished);
+        WarehouseMetricMgr.increaseUnfinishedQueries(wh.getName(), jobInfo.numQueryJobs * deltaFactor);
+        WarehouseMetricMgr.increaseUnfinishedBackupJobs(wh.getName(), jobInfo.numBackupJobs * deltaFactor);
+        WarehouseMetricMgr.increaseUnfinishedRestoreJobs(wh.getName(), jobInfo.numRestoreJobs * deltaFactor);
+        addLoadJobs(wh.getName(), jobInfo.numBrokerLoadJobs, isFinished, this::genBrokerLoadJob);
+        addLoadJobs(wh.getName(), jobInfo.numSparkLoadJobs, isFinished, this::genSparkLoadJob);
+        addInsertLoadJobs(wh.getName(), jobInfo.numInsertLoadJobs, isFinished, false);
+        addRoutineJobs(wh.getName(), jobInfo.numRoutineLoadJobs, isFinished);
+        addStreamJobs(wh.getName(), jobInfo.numStreamLoadJobs, isFinished);
     }
 
     private BrokerLoadJob genBrokerLoadJob(String wh) throws MetaNotFoundException {
