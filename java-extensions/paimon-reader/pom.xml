@@ -20,7 +20,7 @@
         <hive.version>2.3.9</hive.version>
         <hadoop.version>3.3.4</hadoop.version>
         <zstd.version>1.5.5-5</zstd.version>
-        <lzo.verion>0.4.20</lzo.verion>
+        <lzo.verion>1.0.6</lzo.verion>
     </properties>
 
     <dependencies>
@@ -161,8 +161,8 @@
         </dependency>
 
         <dependency>
-            <groupId>com.hadoop.gplcompression</groupId>
-            <artifactId>hadoop-lzo</artifactId>
+            <groupId>org.anarres.lzo</groupId>
+            <artifactId>lzo-hadoop</artifactId>
             <version>${lzo.verion}</version>
         </dependency>
     </dependencies>
