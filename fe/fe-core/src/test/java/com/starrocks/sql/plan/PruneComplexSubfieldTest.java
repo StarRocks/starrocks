@@ -596,7 +596,20 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         String plan = getVerboseExplain(sql);
         assertContains(plan, "  5:NESTLOOP JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN\n" +
-                "  |  other join predicates: cast(6: st3.s1 as BIGINT) + 1 >= [1: v1, BIGINT, true] + 2");
-        assertContains(plan, "ColumnAccessPath: [/st2/s2, /st4/ss3/s31]");
+                "  |  other join predicates: cast([14: expr, INT, true] as BIGINT) + 1 >= [1: v1, BIGINT, true] + 2");
+        assertContains(plan, "ColumnAccessPath: [/st2/s2, /st3/s1, /st4/ss3/s31]");
+    }
+
+    @Test
+    public void testNoEqualsJoinHaving() throws Exception {
+        String sql = "select st2.s2, st4.ss3.s31 from t0" +
+                " left join " +
+                "sc0 x on x.st3.s1 + 1 >= t0.v1 + 2 where x.st1.s2 = 2";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  5:NESTLOOP JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN\n" +
+                "  |  other join predicates: cast([14: expr, INT, true] as BIGINT) + 1 >= [1: v1, BIGINT, true] + 2\n" +
+                "  |  other predicates: [15: expr, INT, true] = 2");
+        assertContains(plan, "ColumnAccessPath: [/st1/s2, /st2/s2, /st3/s1, /st4/ss3/s31]");
     }
 }
