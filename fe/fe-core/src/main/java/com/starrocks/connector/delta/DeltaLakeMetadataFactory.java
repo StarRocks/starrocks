@@ -41,7 +41,9 @@ public class DeltaLakeMetadataFactory {
 
     public DeltaLakeMetadata create() {
         HiveMetastoreOperations hiveMetastoreOperations = new HiveMetastoreOperations(
-                createQueryLevelInstance(metastore, perQueryMetastoreMaxNum), metastore instanceof CachingHiveMetastore);
+                createQueryLevelInstance(metastore, perQueryMetastoreMaxNum),
+                metastore instanceof CachingHiveMetastore,
+                hdfsEnvironment.getConfiguration());
 
         return new DeltaLakeMetadata(hdfsEnvironment.getConfiguration(), catalogName, hiveMetastoreOperations);
     }

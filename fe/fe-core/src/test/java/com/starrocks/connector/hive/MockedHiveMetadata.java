@@ -830,7 +830,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         HiveMetastore metastore = new HiveMetastore(metaClient, MOCKED_HIVE_CATALOG_NAME);
         CachingHiveMetastore cachingHiveMetastore = createCatalogLevelInstance(
                 metastore, Executors.newSingleThreadExecutor(), 0, 0, 0, false);
-        HiveMetastoreOperations hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, false);
+        HiveMetastoreOperations hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, false, new Configuration());
         RemoteFileIO remoteFileIO = new HiveRemoteFileIO(new Configuration());
         CachingRemoteFileIO cacheIO = CachingRemoteFileIO.createCatalogLevelInstance(remoteFileIO,
                 Executors.newSingleThreadExecutor(), 0, 0, 0);

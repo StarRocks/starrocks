@@ -28,9 +28,14 @@ public interface IHiveMetastore {
 
     List<String> getAllDatabaseNames();
 
-    List<String> getAllTableNames(String dbName);
+    void createDb(String dbName, Map<String, String> properties);
+
+    void dropDb(String dbName, boolean deleteData);
 
     Database getDb(String dbName);
+
+
+    List<String> getAllTableNames(String dbName);
 
     Table getTable(String dbName, String tableName);
 

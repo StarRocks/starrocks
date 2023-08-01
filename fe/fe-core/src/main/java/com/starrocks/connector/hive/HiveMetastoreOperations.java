@@ -15,12 +15,22 @@
 
 package com.starrocks.connector.hive;
 
+import com.google.common.base.Strings;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
+import java.net.URI;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -30,17 +40,73 @@ import static com.google.common.base.Preconditions.checkState;
 import static com.starrocks.connector.PartitionUtil.executeInNewThread;
 
 public class HiveMetastoreOperations {
+    private static final Logger LOG = LogManager.getLogger(HiveMetastoreOperations.class);
     public static String BACKGROUND_THREAD_NAME_PREFIX = "background-get-partitions-statistics-";
+    public static final String LOCATION_PROPERTY = "location";
     private final CachingHiveMetastore metastore;
     private final boolean enableCatalogLevelCache;
+    private final Configuration hadoopConf;
 
-    public HiveMetastoreOperations(CachingHiveMetastore cachingHiveMetastore, boolean enableCatalogLevelCache) {
+    public HiveMetastoreOperations(CachingHiveMetastore cachingHiveMetastore,
+                                   boolean enableCatalogLevelCache,
+                                   Configuration hadoopConf) {
         this.metastore = cachingHiveMetastore;
         this.enableCatalogLevelCache = enableCatalogLevelCache;
+        this.hadoopConf = hadoopConf;
     }
 
     public List<String> getAllDatabaseNames() {
         return metastore.getAllDatabaseNames();
+    }
+
+    public void createDb(String dbName, Map<String, String> properties) {
+        properties = properties == null ? new HashMap<>() : properties;
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            String key = entry.getKey();
+            String value = entry.getValue();
+            if (key.equalsIgnoreCase(LOCATION_PROPERTY)) {
+                try {
+                    URI uri = new Path(value).toUri();
+                    FileSystem fileSystem = FileSystem.get(uri, hadoopConf);
+                    fileSystem.exists(new Path(value));
+                } catch (Exception e) {
+                    LOG.error("Invalid location URI: {}", value, e);
+                    throw new StarRocksConnectorException("Invalid location URI: %s. msg: %s", value, e.getMessage());
+                }
+            } else {
+                throw new IllegalArgumentException("Unrecognized property: " + key);
+            }
+        }
+
+        metastore.createDb(dbName, properties);
+    }
+
+    public void dropDb(String dbName, boolean force) throws MetaNotFoundException {
+        Database database;
+        try {
+            database = getDb(dbName);
+        } catch (Exception e) {
+            LOG.error("Failed to access database {}", dbName, e);
+            throw new MetaNotFoundException("Failed to access database " + dbName);
+        }
+
+        if (database == null) {
+            throw new MetaNotFoundException("Not found database " + dbName);
+        }
+
+        String dbLocation = database.getLocation();
+        if (Strings.isNullOrEmpty(dbLocation)) {
+            throw new MetaNotFoundException("Database location is empty");
+        }
+        boolean deleteData = false;
+        try {
+            deleteData = !FileSystem.get(URI.create(dbLocation), hadoopConf)
+                    .listLocatedStatus(new Path(dbLocation)).hasNext();;
+        } catch (Exception e) {
+            LOG.error("Failed to check database directory", e);
+        }
+
+        metastore.dropDb(dbName, deleteData);
     }
 
     public List<String> getAllTableNames(String dbName) {

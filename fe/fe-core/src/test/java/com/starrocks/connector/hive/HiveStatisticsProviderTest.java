@@ -80,7 +80,7 @@ public class HiveStatisticsProviderTest {
         metastore = new HiveMetastore(client, "hive_catalog");
         cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executorForHmsRefresh, 100, 10, 1000, false);
-        hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true);
+        hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration());
 
         hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
         FileSystem fs = new MockedRemoteFileSystem(TEST_FILES);
