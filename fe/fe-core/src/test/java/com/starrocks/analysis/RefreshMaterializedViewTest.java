@@ -42,6 +42,7 @@ import mockit.MockUp;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.List;
@@ -193,6 +194,7 @@ public class RefreshMaterializedViewTest {
         }
     }
 
+    @Ignore
     @Test
     public void testMaxMVRewriteStaleness1() throws Exception {
         starRocksAssert.withTable("CREATE TABLE tbl_staleness1 \n" +

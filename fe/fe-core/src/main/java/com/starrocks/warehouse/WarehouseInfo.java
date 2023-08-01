@@ -137,7 +137,7 @@ public class WarehouseInfo {
     }
 
     public static WarehouseInfo fromWarehouse(Warehouse wh) {
-        return new WarehouseInfo(wh.getFullName(), wh.getId());
+        return new WarehouseInfo(wh.getName(), wh.getId());
     }
 
     @Override

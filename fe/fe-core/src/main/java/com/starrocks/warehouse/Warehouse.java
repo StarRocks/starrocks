@@ -56,7 +56,7 @@ public abstract class Warehouse implements Writable {
         return id;
     }
 
-    public String getFullName() {
+    public String getName() {
         return name;
     }
 
