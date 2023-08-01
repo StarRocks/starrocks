@@ -170,7 +170,7 @@ public class WorkerAssignmentStatsMgr {
             }
 
             boolean ok = this.numRunningTablets.compareAndSet(expectedNumRunningTablets,
-                    expectedNumRunningTablets + numRunningTabletRows);
+                    expectedNumRunningTablets + numRunningTablets);
             if (!ok) {
                 return false;
             }
