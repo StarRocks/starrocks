@@ -965,18 +965,31 @@ Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string&
     }
 
     auto fs = FileSystem::Default();
+    std::set<std::string> tablet_files;
     for (const std::string& filename : clone_files) {
         std::string from = clone_dir + "/" + filename;
         std::string to = tablet_dir + "/" + filename;
+        tablet_files.insert(to);
         RETURN_IF_ERROR(fs->link_file(from, to));
     }
     LOG(INFO) << "Linked " << clone_files.size() << " files from " << clone_dir << " to " << tablet_dir;
     // Note that |snapshot_meta| may be modified by `load_snapshot`.
-    RETURN_IF_ERROR(tablet->updates()->load_snapshot(snapshot_meta));
+    Status st = tablet->updates()->load_snapshot(snapshot_meta);
+    if (!st.ok()) {
+        Status clear_st;
+        for (const std::string& filename : tablet_files) {
+            clear_st = fs::delete_file(filename);
+            if (!st.ok()) {
+                LOG(WARNING) << "remove tablet file:" << filename << " failed, status:" << clear_st;
+            }
+        }
+    }
+
+    //RETURN_IF_ERROR(tablet->updates()->load_snapshot(snapshot_meta));
     int64_t expired_stale_sweep_endtime = UnixSeconds() - config::tablet_rowset_stale_sweep_time_sec;
     tablet->updates()->remove_expired_versions(expired_stale_sweep_endtime);
     LOG(INFO) << "Loaded snapshot of tablet " << tablet->tablet_id() << ", removing directory " << clone_dir;
-    auto st = fs::remove_all(clone_dir);
+    st = fs::remove_all(clone_dir);
     LOG_IF(WARNING, !st.ok()) << "Fail to remove clone directory " << clone_dir << ": " << st;
     return Status::OK();
 }
