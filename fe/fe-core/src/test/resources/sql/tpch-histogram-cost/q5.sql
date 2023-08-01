@@ -89,11 +89,11 @@ OutPut Exchange Id: 24
 |
 21:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
-|  equal join conjunct: [20: L_ORDERKEY, INT, false] = [10: O_ORDERKEY, INT, false]
 |  equal join conjunct: [40: S_NATIONKEY, INT, false] = [4: C_NATIONKEY, INT, false]
+|  equal join conjunct: [20: L_ORDERKEY, INT, false] = [10: O_ORDERKEY, INT, false]
 |  build runtime filters:
-|  - filter_id = 4, build_expr = (10: O_ORDERKEY), remote = false
-|  - filter_id = 5, build_expr = (4: C_NATIONKEY), remote = false
+|  - filter_id = 4, build_expr = (4: C_NATIONKEY), remote = false
+|  - filter_id = 5, build_expr = (10: O_ORDERKEY), remote = false
 |  output columns: 25, 26, 46
 |  cardinality: 16381891
 |  column statistics:
@@ -143,7 +143,7 @@ OutPut Exchange Id: 24
 |       distribution type: BROADCAST
 |       cardinality: 200000
 |       probe runtime filters:
-|       - filter_id = 5, probe_expr = (40: S_NATIONKEY)
+|       - filter_id = 4, probe_expr = (40: S_NATIONKEY)
 |
 0:OlapScanNode
 table: lineitem, rollup: lineitem
@@ -153,7 +153,7 @@ actualRows=0, avgRowSize=28.0
 cardinality: 600000000
 probe runtime filters:
 - filter_id = 2, probe_expr = (22: L_SUPPKEY)
-- filter_id = 4, probe_expr = (20: L_ORDERKEY)
+- filter_id = 5, probe_expr = (20: L_ORDERKEY)
 column statistics:
 * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
