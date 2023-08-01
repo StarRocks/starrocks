@@ -79,12 +79,16 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         PHYSICAL,
         LOGICAL
     }
+
     @SerializedName(value = "metaIndexType")
     private MetaIndexType metaIndexType = MetaIndexType.PHYSICAL;
     @SerializedName(value = "targetTableId")
     private long targetTableId = 0;
     @SerializedName(value = "targetTableIndexId")
     private long targetTableIndexId = 0;
+
+    @SerializedName(value = "whereCluase")
+    private Expr whereClause = null;
 
     public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
                                  short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
@@ -217,6 +221,9 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         if (indexMeta.targetTableIndexId != this.targetTableIndexId) {
             return false;
         }
+        if (indexMeta.whereClause != this.whereClause) {
+            return false;
+        }
         return true;
     }
 
@@ -226,6 +233,14 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
 
     public void setTargetTableId(long targetTableId) {
         this.targetTableId = targetTableId;
+    }
+
+    public void setWhereClause(Expr whereClause) {
+        this.whereClause = whereClause;
+    }
+
+    public Expr getWhereClause() {
+        return whereClause;
     }
 
     public MetaIndexType getMetaIndexType() {

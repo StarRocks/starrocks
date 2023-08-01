@@ -388,7 +388,7 @@ public class OlapTableFactory implements AbstractTableFactory {
         int schemaHash = Util.schemaHash(schemaVersion, baseSchema, bfColumns, bfFpp);
 
         if (stmt.getSortKeys() != null) {
-            table.setIndexMeta(baseIndexId, tableName, baseSchema, schemaVersion, schemaHash,
+            table.setIndexMeta(baseIndexId, tableName, baseSchema, null, schemaVersion, schemaHash,
                     shortKeyColumnCount, baseIndexStorageType, keysType, null, sortKeyIdxes);
         } else {
             table.setIndexMeta(baseIndexId, tableName, baseSchema, schemaVersion, schemaHash,

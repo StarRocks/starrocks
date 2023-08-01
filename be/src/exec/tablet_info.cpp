@@ -78,7 +78,7 @@ Status OlapTableSchemaParam::init(const POlapTableSchemaParam& pschema) {
     return Status::OK();
 }
 
-Status OlapTableSchemaParam::init(const TOlapTableSchemaParam& tschema) {
+Status OlapTableSchemaParam::init(const TOlapTableSchemaParam& tschema, RuntimeState* state) {
     VLOG(2) << "OlapTablePartitionParam schema init:\n" << apache::thrift::ThriftDebugString(tschema);
     _db_id = tschema.db_id;
     _table_id = tschema.table_id;
@@ -99,6 +99,9 @@ Status OlapTableSchemaParam::init(const TOlapTableSchemaParam& tschema) {
             if (it != std::end(slots_map)) {
                 index->slots.emplace_back(it->second);
             }
+        }
+        if (t_index.__isset.where_clause) {
+            Expr::create_expr_tree(&_obj_pool, t_index.where_clause, &index->where_clause, state);
         }
         _indexes.emplace_back(index);
     }

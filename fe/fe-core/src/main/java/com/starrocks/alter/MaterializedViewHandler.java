@@ -387,14 +387,16 @@ public class MaterializedViewHandler extends AlterHandler {
         try {
             // get short key column count
             short mvShortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(mvColumns, stmt.getProperties());
-            baseTable.setIndexMeta(mvIndexId, stmt.getMVName(), mvColumns, 0 /* initial schema version */,
+            baseTable.setIndexMeta(mvIndexId, stmt.getMVName(), mvColumns, stmt.getWhereClause(),
+                    0 /* initial schema version */,
                     mvSchemaHash, mvShortKeyColumnCount, TStorageType.COLUMN,
-                    stmt.getMVKeysType(), stmt.getOrigStmt());
+                    stmt.getMVKeysType(), stmt.getOrigStmt(), null);
             MaterializedIndexMeta mvIndexMeta = baseTable.getIndexMetaByIndexId(mvIndexId);
             Preconditions.checkState(mvIndexMeta != null);
             mvIndexMeta.setTargetTableId(targetTableId);
             mvIndexMeta.setTargetTableIndexId(targetOlapTable.getBaseIndexId());
             mvIndexMeta.setMetaIndexType(MaterializedIndexMeta.MetaIndexType.LOGICAL);
+            mvIndexMeta.setWhereClause(stmt.getWhereClause());
 
             // colocate base table and target table.
             ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();

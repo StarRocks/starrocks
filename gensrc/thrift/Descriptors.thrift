@@ -256,6 +256,7 @@ struct TOlapTableIndexSchema {
     1: required i64 id
     2: required list<string> columns
     3: required i32 schema_hash
+    4: optional Exprs.TExpr where_clause
 }
 
 struct TOlapTableSchemaParam {

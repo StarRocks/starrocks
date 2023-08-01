@@ -103,7 +103,7 @@ struct AddBatchCounter {
 
 class NodeChannel {
 public:
-    NodeChannel(OlapTableSink* parent, int64_t node_id, bool is_incremental);
+    NodeChannel(OlapTableSink* parent, int64_t node_id, bool is_incremental, ExprContext* where_clause = nullptr);
     ~NodeChannel() noexcept;
 
     // called before open, used to add tablet loacted in this backend
@@ -231,11 +231,14 @@ private:
     WriteQuorumTypePB _write_quorum_type = WriteQuorumTypePB::MAJORITY;
 
     bool _is_incremental;
+
+    ExprContext* _where_clause = nullptr;
 };
 
 class IndexChannel {
 public:
-    IndexChannel(OlapTableSink* parent, int64_t index_id) : _parent(parent), _index_id(index_id) {}
+    IndexChannel(OlapTableSink* parent, int64_t index_id, ExprContext* where_clause)
+            : _parent(parent), _index_id(index_id), _where_clause(where_clause) {}
     ~IndexChannel();
 
     Status init(RuntimeState* state, const std::vector<PTabletWithPartition>& tablets, bool is_incremental);
@@ -288,6 +291,8 @@ private:
     TWriteQuorumType::type _write_quorum_type = TWriteQuorumType::MAJORITY;
 
     bool _has_incremental_node_channel = false;
+
+    ExprContext* _where_clause = nullptr;
 };
 
 } // namespace stream_load

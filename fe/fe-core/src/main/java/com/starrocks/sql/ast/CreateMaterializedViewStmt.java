@@ -131,7 +131,8 @@ public class CreateMaterializedViewStmt extends DdlStmt {
      * This order of mvColumnItemList is meaningful.
      */
     private List<MVColumnItem> mvColumnItemList = Lists.newArrayList();
-    MVColumnItem whereClauseItem;
+
+    Expr whereClause;
     private String baseIndexName;
     private String dbName;
     private KeysType mvKeysType = KeysType.DUP_KEYS;
@@ -140,6 +141,10 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     // If the process is replaying log, isReplay is true, otherwise is false,
     // avoid replay process error report, only in Rollup or MaterializedIndexMeta is true
     private boolean isReplay = false;
+
+    public Expr getWhereClause() {
+        return whereClause;
+    }
 
     public CreateMaterializedViewStmt(String mvName, QueryStatement queryStatement, Map<String, String> properties,
                                       TableName targetTable) {
@@ -321,9 +326,14 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             this.setMvKeysType(KeysType.AGG_KEYS);
         }
         if (selectRelation.hasWhereClause()) {
-            throw new SemanticException("The where clause is not supported in add materialized view clause, expr:"
-                    + selectRelation.getWhereClause().toSql());
+            if (getTargetTableName() != null) {
+                whereClause = selectRelation.getWhereClause();
+            } else {
+                throw new SemanticException("The where clause is not supported in add materialized view clause, expr:"
+                        + selectRelation.getWhereClause().toSql());
+            }
         }
+
         if (selectRelation.hasHavingClause()) {
             throw new SemanticException("The having clause is not supported in add materialized view clause, expr:"
                     + selectRelation.getHavingClause().toSql());

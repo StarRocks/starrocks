@@ -449,18 +449,18 @@ public class OlapTable extends Table {
 
     public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
                              int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType) {
-        setIndexMeta(indexId, indexName, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType,
-                null, null);
+        setIndexMeta(indexId, indexName, schema, null, schemaVersion, schemaHash, shortKeyColumnCount,
+                storageType, keysType, null, null);
     }
 
     public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
                              int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
                              OriginStatement origStmt) {
-        setIndexMeta(indexId, indexName, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType,
-                origStmt, null);
+        setIndexMeta(indexId, indexName, schema, null, schemaVersion, schemaHash, shortKeyColumnCount,
+                storageType, keysType, origStmt, null);
     }
 
-    public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
+    public void setIndexMeta(long indexId, String indexName, List<Column> schema, Expr whereClause, int schemaVersion,
                              int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
                              OriginStatement origStmt, List<Integer> sortColumns) {
         // Nullable when meta comes from schema change log replay.
@@ -486,6 +486,9 @@ public class OlapTable extends Table {
 
         MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(indexId, schema, schemaVersion,
                 schemaHash, shortKeyColumnCount, storageType, keysType, origStmt, sortColumns);
+        if (whereClause != null) {
+            indexMeta.setWhereClause(whereClause);
+        }
         addMaterializedIndexMeta(indexName, indexMeta);
     }
 
