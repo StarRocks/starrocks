@@ -19,6 +19,8 @@
         <slf4j.version>1.7.32</slf4j.version>
         <hive.version>2.3.9</hive.version>
         <hadoop.version>3.3.4</hadoop.version>
+        <zstd.version>1.5.5-5</zstd.version>
+        <lzo.verion>0.4.20</lzo.verion>
     </properties>
 
     <dependencies>
@@ -150,6 +152,18 @@
                     <artifactId>slf4j-log4j12</artifactId>
                 </exclusion>
             </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>com.github.luben</groupId>
+            <artifactId>zstd-jni</artifactId>
+            <version>${zstd.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.hadoop.gplcompression</groupId>
+            <artifactId>hadoop-lzo</artifactId>
+            <version>${lzo.verion}</version>
         </dependency>
     </dependencies>
 
