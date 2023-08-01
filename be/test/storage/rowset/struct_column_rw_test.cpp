@@ -199,7 +199,7 @@ protected:
                 ASSERT_TRUE(st.ok());
                 ASSERT_EQ(src_column->size(), rows_read);
 
-                ASSERT_EQ("{f1:1,f2:''}", dst_column->debug_item(0));
+                ASSERT_EQ("{f1:1,f2:CONST: ''}", dst_column->debug_item(0));
             }
         }
 
@@ -238,7 +238,7 @@ protected:
                 ASSERT_TRUE(st.ok());
                 ASSERT_EQ(src_column->size(), rows_read);
 
-                ASSERT_EQ("{f1:0,f2:'Column2'}", dst_column->debug_item(0));
+                ASSERT_EQ("{f1:CONST: 0,f2:'Column2'}", dst_column->debug_item(0));
             }
         }
     }

@@ -162,6 +162,7 @@ private:
         // index the column which only be used for filter
         // thus its not need do dict_decode_code
         std::vector<size_t> _skip_dict_decode_indexes;
+        // index: output schema index, values: read schema index
         std::vector<size_t> _read_index_map;
 
         std::shared_ptr<Chunk> _read_chunk;
@@ -608,6 +609,10 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
 }
 
 bool SegmentIterator::need_early_materialize_subfield(const FieldPtr& field) {
+    if (!config::late_materialization_subfield) {
+        return false;
+    }
+
     if (field->type()->type() != LogicalType::TYPE_STRUCT) {
         // @Todo: support json/map/array when support flat-column,
         // the performance improvement scenarios are too few now
@@ -1384,18 +1389,28 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
 
     // build index map
     DCHECK_LE(output_schema().num_fields(), _schema.num_fields());
-    // map _read_schema[cid, index] to output_schema[cid index]
+
     // skip dict_decode column in _read_schema would not be mapping
-    std::unordered_map<ColumnId, size_t> read_indexes;
+    std::unordered_map<ColumnId, size_t> read_indexes;   // fid -> read schema index
+    std::unordered_map<ColumnId, size_t> output_indexes; // fid -> output schema index
     for (size_t i = 0; i < build_read_index_size; i++) {
         if (!ctx->_skip_dict_decode_indexes[i]) {
             read_indexes[ctx->_read_schema.field(i)->id()] = i;
         }
     }
 
+    // map output_schema[cid, index] to read_schema[cid index]
     ctx->_read_index_map.resize(read_indexes.size());
     for (size_t i = 0; i < read_indexes.size(); i++) {
         ctx->_read_index_map[i] = read_indexes[output_schema().field(i)->id()];
+        output_indexes[output_schema().field(i)->id()] = i;
+    }
+
+    // convert the read schema index to output scheam index for subfield
+    for (size_t i = 0; i < ctx->_subfield_columns.size(); i++) {
+        auto read_index = ctx->_subfield_columns[i];
+        auto fid = ctx->_read_schema.field(read_index)->id();
+        ctx->_subfield_columns[i] = output_indexes[fid];
     }
 
     return Status::OK();
@@ -1566,9 +1581,8 @@ Status SegmentIterator::_finish_late_materialization(ScanContext* ctx) {
 
     // fill subfield of early materialization columns
     for (size_t i = 0; i < ctx->_subfield_columns.size(); i++) {
-        auto cid = ctx->_subfield_columns[i];
-        auto f = _schema.field(cid);
-        ColumnPtr& col = ctx->_final_chunk->get_column_by_index(cid);
+        auto output_index = ctx->_subfield_columns[i];
+        ColumnPtr& col = ctx->_final_chunk->get_column_by_index(output_index);
         // FillSubfieldIterator
         RETURN_IF_ERROR(ctx->_subfield_iterators[i]->fetch_values_by_rowid(*ordinals, col.get()));
         DCHECK_EQ(ordinals->size(), col->size());
