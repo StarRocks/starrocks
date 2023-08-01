@@ -78,7 +78,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.system.information.InfoSchemaDb.isInfoSchemaDb;
 import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.parsePartitionFields;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.toIcebergApiSchema;
