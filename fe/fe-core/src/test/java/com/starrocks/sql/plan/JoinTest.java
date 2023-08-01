@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.Database;
@@ -2761,7 +2760,7 @@ public class JoinTest extends PlanTestBase {
                 "  PARTITION: HASH_PARTITIONED: 2: v2\n" +
                 "\n" +
                 "  RESULT SINK");
-        
+
         try {
             connectContext.getSessionVariable().setPreferComputeNode(true);
             plan = getFragmentPlan(sql);
