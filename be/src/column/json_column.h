@@ -34,7 +34,15 @@ public:
     std::string debug_item(uint32_t idx) const override;
     std::string get_name() const override;
 
+<<<<<<< HEAD
 private:
+=======
+    const uint8_t* deserialize_and_append(const uint8_t* pos) override;
+    uint32_t serialize_size(size_t idx) const override;
+    uint32_t serialize(size_t idx, uint8_t* pos) override;
+    void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
+                         uint32_t max_one_row_size) override;
+>>>>>>> ff04bda779 ([Enhancement] Fix StructColumn::byte_size memory estimation error (#28283))
 };
 
 } // namespace starrocks::vectorized
