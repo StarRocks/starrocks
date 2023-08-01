@@ -1978,7 +1978,7 @@ public class GlobalStateMgr {
                 globalTransactionMgr.abortTimeoutTxns();
 
                 try {
-                    loadManager.cancelResidualJob();
+                    loadMgr.cancelResidualJob();
                 } catch (Throwable t) {
                     LOG.warn("load manager cancel residual job failed", t);
                 }
