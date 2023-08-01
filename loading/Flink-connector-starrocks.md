@@ -153,7 +153,7 @@ flink-connector-starrocks 的内部实现是通过缓存并批量由 [Stream Loa
 | -------------------------------- | -------- | ------------- | -------- | ------------------------------------------------------------ |
 | connector                        | 是       | 无          | String   | 固定设置为 `starrocks`。                                     |
 | jdbc-url                         | 是      | 无          | String   | FE 的 MySQL Server 连接地址。格式为 `jdbc:mysql://<fe_host>:<fe_query_port>`。 |
-| load-url                         | 是      | 无          | String   | FE 的 HTTP Server 连接地址。格式为 `<fe_host1>:<fe_http_port1>,<fe_host2>:<fe_http_port2>`，可以提供多个地址，使用英文逗号 (,) 分隔。例如 `192.168.xxx.xxx:8030,192.168.xxx.xxx:8030`。 |
+| load-url                         | 是      | 无          | String   | FE 的 HTTP Server 连接地址。格式为 `<fe_host1>:<fe_http_port1>;<fe_host2>:<fe_http_port2>`，可以提供多个地址，使用英文分号 (;) 分隔。例如 `192.168.xxx.xxx:8030;192.168.xxx.xxx:8030`。 |
 | database-name                    | 是      | 无          | String   | StarRocks 目标数据库的名称。                                 |
 | table-name                       | 是      | 无          | String   | StarRocks 目标数据表的名称。                                 |
 | username                         | 是      | 无          | String   | 用于访问 StarRocks 集群的用户名。该账号需具备 StarRocks 目标数据表的写权限。有关用户权限的说明，请参见[用户权限](https://docs.starrocks.io/zh-cn/latest/administration/User_privilege)。 |
