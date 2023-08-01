@@ -21,6 +21,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
@@ -81,7 +82,7 @@ public class PlanTestNoneDBBase {
         FeConstants.default_scheduler_interval_millisecond = 1;
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
-        connectContext = UtFrameUtils.createDefaultCtx();
+        connectContext = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
         starRocksAssert = new StarRocksAssert(connectContext);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
     }
