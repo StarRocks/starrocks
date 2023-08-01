@@ -40,7 +40,7 @@ public class AnalyzeDropDbTest {
                 "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
         starRocksAssert.withCatalog(createIcebergCatalogStmt);
 
-        createIcebergCatalogStmt = "create external catalog hive_catalog properties (\"type\"=\"hive\", " +
+        createIcebergCatalogStmt = "create external catalog hudi_catalog properties (\"type\"=\"hudi\", " +
                 "\"hive.metastore.uris\"=\"thrift://hms:9083\")";
         starRocksAssert.withCatalog(createIcebergCatalogStmt);
     }
@@ -56,10 +56,11 @@ public class AnalyzeDropDbTest {
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e instanceof AnalysisException);
-            Assert.assertTrue(e.getMessage().contains("Getting analyzing error. Detail message: Unknown catalog"));
+            Assert.assertTrue(e.getMessage().contains("Getting analyzing error." +
+                    " Detail message: Unknown catalog 'not_exist_catalog'."));
         }
 
-        String stmt = "DROP DATABASE hive_catalog.iceberg_db";
+        String stmt = "DROP DATABASE hudi_catalog.iceberg_db";
         DropDbStmt dropDbStmt =
                 (DropDbStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
 

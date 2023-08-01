@@ -178,6 +178,20 @@ public class HiveMetaClient {
         }
     }
 
+    public void createDatabase(Database database) {
+        Class<?>[] argClasses = {Database.class};
+
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.createDatabase")) {
+            callRPC("createDatabase", "Failed to create database " + database.getName(), argClasses, database);
+        }
+    }
+
+    public void dropDatabase(String dbName, boolean deleteData) {
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.dropDatabase")) {
+            callRPC("dropDatabase", "Failed to drop database " + dbName, dbName, deleteData, false, false);
+        }
+    }
+
     public List<String> getAllTableNames(String dbName) {
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getAllTables")) {
             return callRPC("getAllTables", "Failed to get all table names on database: " + dbName, dbName);
