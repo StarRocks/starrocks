@@ -328,14 +328,11 @@ public class AstToStringBuilder {
         @Override
         public String visitCreateRoutineLoadStatement(CreateRoutineLoadStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
-            String dbName;
-            String jobName;
+            String dbName = null;
+            String jobName = null;
             if (stmt.getLabelName() != null) {
                 dbName = stmt.getLabelName().getDbName();
                 jobName = stmt.getLabelName().getLabelName();
-            } else {
-                dbName = stmt.getDBName();
-                jobName = stmt.getName();
             }
             if (dbName != null) {
                 sb.append("CREATE ROUTINE LOAD ").append(dbName).append(".")
