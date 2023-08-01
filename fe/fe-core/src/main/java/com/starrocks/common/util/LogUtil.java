@@ -14,6 +14,7 @@
 
 package com.starrocks.common.util;
 
+import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlAuthPacket;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.qe.ConnectContext;
@@ -27,6 +28,18 @@ import java.util.stream.Collectors;
 public class LogUtil {
 
     public static void logConnectionInfoToAuditLogAndQueryQueue(ConnectContext ctx, MysqlAuthPacket authPacket) {
+        boolean enableConnectionLog = false;
+        if (Config.audit_log_modules != null) {
+            for (String module : Config.audit_log_modules) {
+                if ("connection".equals(module)) {
+                    enableConnectionLog = true;
+                    break;
+                }
+            }
+        }
+        if (!enableConnectionLog) {
+            return;
+        }
         AuditEvent.AuditEventBuilder builder = new AuditEvent.AuditEventBuilder()
                 .setEventType(AuditEvent.EventType.CONNECTION)
                 .setUser(authPacket == null ? "null" : authPacket.getUser())
