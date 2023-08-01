@@ -20,7 +20,7 @@ BIGINT DATE_DIFF(VARCHAR unit, DATETIME expr1, DATETIME expr2)
 
 - `expr1` and `expr2`: the two datetime values you want to compare, required. Supported data types are DATETIME and DATE.
 
-- `unit`: the unit used to express the time difference, required. The following `unit` values are supported: year, quarter, month, day, hour, minute, second, millisecond.
+- `unit`: the unit used to express the time difference, required. The following `unit` values are supported: year, quarter, month, week, day, hour, minute, second, millisecond.
 
 ## Return value
 

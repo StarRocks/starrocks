@@ -159,6 +159,9 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select date_diff('month', timestamp '2023-07-31', timestamp '2023-08-01');";
         assertPlanContains(sql, "date_diff('month', '2023-08-01 00:00:00', '2023-07-31 00:00:00')");
+
+        sql = "select date_diff('month', timestamp '2023-07-31')";
+        analyzeFail(sql, "date_diff function must have 3 arguments");
     }
 
     @Test
