@@ -45,6 +45,7 @@ import com.starrocks.planner.SchemaScanNode;
 import com.starrocks.qe.scheduler.DefaultWorkerProvider;
 import com.starrocks.qe.scheduler.TFragmentInstanceFactory;
 import com.starrocks.qe.scheduler.WorkerProvider;
+import com.starrocks.qe.scheduler.assignment.WorkerAssignmentStatsMgr;
 import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
@@ -628,10 +629,10 @@ public class CoordinatorPreprocessor {
 
             ExecutionFragment execFragment = executionDAG.getFragment(scanNode.getFragmentId());
             FragmentScanRangeAssignment assignment = execFragment.getScanRangeAssignment();
-
+            WorkerAssignmentStatsMgr.WorkerStatsTracker workerStatsTracker = execFragment.getWorkerStatsTracker();
             if (scanNode instanceof SchemaScanNode) {
-                BackendSelector selector =
-                        new NormalBackendSelector(scanNode, locations, assignment, workerProvider, false);
+                BackendSelector selector = new NormalBackendSelector(scanNode, locations, assignment, workerProvider,
+                        workerStatsTracker, false);
                 selector.computeScanRangeAssignment();
             } else if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
                     scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode ||
@@ -656,11 +657,12 @@ public class CoordinatorPreprocessor {
                             execFragment.getOrCreateColocatedAssignment((OlapScanNode) scanNode);
                     boolean isRightOrFullBucketShuffleFragment = execFragment.isRightOrFullBucketShuffle();
                     BackendSelector selector = new ColocatedBackendSelector((OlapScanNode) scanNode, assignment,
-                            colocatedAssignment, isRightOrFullBucketShuffleFragment, workerProvider);
+                            colocatedAssignment, isRightOrFullBucketShuffleFragment, workerProvider,
+                            workerStatsTracker);
                     selector.computeScanRangeAssignment();
                 } else {
-                    BackendSelector selector =
-                            new NormalBackendSelector(scanNode, locations, assignment, workerProvider, isLoadType());
+                    BackendSelector selector = new NormalBackendSelector(scanNode, locations, assignment, workerProvider,
+                            workerStatsTracker, isLoadType());
                     selector.computeScanRangeAssignment();
                 }
             }

@@ -25,6 +25,8 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.scheduler.assignment.WorkerAssignmentStatsMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDescriptorTable;
@@ -57,6 +59,7 @@ public class JobSpec {
      */
     private final TDescriptorTable descTable;
 
+    private final ConnectContext context;
     private final boolean enablePipeline;
     private final boolean enableStreamPipeline;
     private final boolean isBlockQuery;
@@ -69,7 +72,10 @@ public class JobSpec {
      */
     private final TQueryGlobals queryGlobals;
     private final TQueryOptions queryOptions;
+
     private final TWorkGroup resourceGroup;
+
+    private final WorkerAssignmentStatsMgr workerAssignmentStatsMgr;
 
     public static class Factory {
         private Factory() {
@@ -323,7 +329,10 @@ public class JobSpec {
 
         this.queryGlobals = builder.queryGlobals;
         this.queryOptions = builder.queryOptions;
+
         this.resourceGroup = builder.resourceGroup;
+        this.workerAssignmentStatsMgr = builder.workerAssignmentStatsMgr;
+        this.context = builder.context;
     }
 
     @Override
@@ -406,6 +415,12 @@ public class JobSpec {
         return resourceGroup;
     }
 
+    public WorkerAssignmentStatsMgr.WorkerStatsTracker createWorkerStatsTracker() {
+        return context.getSessionVariable().isEnableScheduleWithGlobalAssignments() ?
+                workerAssignmentStatsMgr.createGlobalWorkerStatsTracker() :
+                workerAssignmentStatsMgr.createLocalWorkerStatsTracker();
+    }
+
     public boolean isBlockQuery() {
         return isBlockQuery;
     }
@@ -432,17 +447,27 @@ public class JobSpec {
 
         private TQueryGlobals queryGlobals;
         private TQueryOptions queryOptions;
+
         private TWorkGroup resourceGroup;
+
+        private WorkerAssignmentStatsMgr workerAssignmentStatsMgr;
+
+        private ConnectContext context;
 
         public JobSpec build() {
             return new JobSpec(this);
         }
 
         public Builder commonProperties(ConnectContext context) {
+            this.context = context;
+
+            this.enablePipeline(isEnablePipeline(context, fragments));
+
             TWorkGroup newResourceGroup = prepareResourceGroup(
                     context, ResourceGroupClassifier.QueryType.fromTQueryType(queryOptions.getQuery_type()));
-            this.enablePipeline(isEnablePipeline(context, fragments))
-                    .resourceGroup(newResourceGroup);
+            this.resourceGroup(newResourceGroup);
+
+            this.workerAssignmentStatsMgr = GlobalStateMgr.getCurrentState().getWorkerAssignmentStatsMgr();
 
             return this;
         }

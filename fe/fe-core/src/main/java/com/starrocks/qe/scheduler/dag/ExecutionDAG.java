@@ -108,7 +108,8 @@ public class ExecutionDAG {
 
     public void attachFragments(List<PlanFragment> planFragments) {
         for (PlanFragment planFragment : planFragments) {
-            ExecutionFragment fragment = new ExecutionFragment(this, planFragment, fragments.size());
+            ExecutionFragment fragment = new ExecutionFragment(this, planFragment, fragments.size(),
+                    jobSpec.createWorkerStatsTracker());
             fragments.add(fragment);
             idToFragment.put(planFragment.getFragmentId(), fragment);
         }

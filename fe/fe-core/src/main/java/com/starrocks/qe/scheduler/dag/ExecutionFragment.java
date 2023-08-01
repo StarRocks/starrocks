@@ -30,6 +30,7 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ColocatedBackendSelector;
 import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.qe.FragmentScanRangeAssignment;
+import com.starrocks.qe.scheduler.assignment.WorkerAssignmentStatsMgr;
 import com.starrocks.thrift.TEsScanRange;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TInternalScanRange;
@@ -64,6 +65,7 @@ public class ExecutionFragment {
 
     private final List<FragmentInstance> instances;
 
+    private final WorkerAssignmentStatsMgr.WorkerStatsTracker workerStatsTracker;
     private final FragmentScanRangeAssignment scanRangeAssignment;
     private ColocatedBackendSelector.Assignment colocatedAssignment = null;
 
@@ -78,7 +80,8 @@ public class ExecutionFragment {
 
     private boolean isRightOrFullBucketShuffle = false;
 
-    public ExecutionFragment(ExecutionDAG executionDAG, PlanFragment planFragment, int fragmentIndex) {
+    public ExecutionFragment(ExecutionDAG executionDAG, PlanFragment planFragment, int fragmentIndex,
+                             WorkerAssignmentStatsMgr.WorkerStatsTracker workerStatsTracker) {
         this.executionDAG = executionDAG;
         this.fragmentIndex = fragmentIndex;
         this.planFragment = planFragment;
@@ -88,6 +91,8 @@ public class ExecutionFragment {
         this.numSendersPerExchange = Maps.newHashMap();
 
         this.instances = Lists.newArrayList();
+
+        this.workerStatsTracker = workerStatsTracker;
         this.scanRangeAssignment = new FragmentScanRangeAssignment();
     }
 
@@ -128,6 +133,10 @@ public class ExecutionFragment {
             }
             rf.setBucketSeqToInstance(seqToInstance);
         }
+    }
+
+    public WorkerAssignmentStatsMgr.WorkerStatsTracker getWorkerStatsTracker() {
+        return workerStatsTracker;
     }
 
     public FragmentScanRangeAssignment getScanRangeAssignment() {

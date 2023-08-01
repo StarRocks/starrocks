@@ -228,6 +228,7 @@ import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.scheduler.assignment.WorkerAssignmentStatsMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVJobExecutor;
@@ -435,6 +436,8 @@ public class GlobalStateMgr {
     private MetaReplayState metaReplayState;
 
     private ResourceMgr resourceMgr;
+
+    private final WorkerAssignmentStatsMgr workerAssignmentStatsMgr;
 
     private GlobalTransactionMgr globalTransactionMgr;
 
@@ -786,6 +789,8 @@ public class GlobalStateMgr {
                 LOG.warn("check config failed", e);
             }
         });
+
+        this.workerAssignmentStatsMgr = new WorkerAssignmentStatsMgr();
     }
 
     public static void destroyCheckpoint() {
@@ -831,6 +836,10 @@ public class GlobalStateMgr {
 
     public ResourceMgr getResourceMgr() {
         return resourceMgr;
+    }
+
+    public WorkerAssignmentStatsMgr getWorkerAssignmentStatsMgr() {
+        return workerAssignmentStatsMgr;
     }
 
     public GlobalFunctionMgr getGlobalFunctionMgr() {
@@ -3380,11 +3389,9 @@ public class GlobalStateMgr {
         this.alterJobMgr.replayAlterMaterializedViewProperties(opCode, log);
     }
 
-
     public void replayAlterMaterializedViewStatus(AlterMaterializedViewStatusLog log) {
         this.alterJobMgr.replayAlterMaterializedViewStatus(log);
     }
-
 
     /*
      * used for handling CancelAlterStmt (for client is the CANCEL ALTER

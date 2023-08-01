@@ -186,6 +186,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
 
+    public static final String ENABLE_SCHEDULE_WITH_GLOBAL_ASSIGNMENT = "enable_schedule_with_global_assignment";
+
     public static final String ENABLE_MV_PLANNER = "enable_mv_planner";
     public static final String ENABLE_INCREMENTAL_REFRESH_MV = "enable_incremental_mv";
 
@@ -477,6 +479,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_RUNTIME_ADAPTIVE_DOP)
     private boolean enableRuntimeAdaptiveDop = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_SCHEDULE_WITH_GLOBAL_ASSIGNMENT)
+    private boolean enableScheduleWithGlobalAssignments = false;
 
     @VariableMgr.VarAttr(name = ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ, flag = VariableMgr.INVISIBLE)
     private long adaptiveDopMaxBlockRowsPerDriverSeq = 4096L * 4;
@@ -1754,6 +1759,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableRuntimeAdaptiveDop() {
         return enablePipelineEngine && enableRuntimeAdaptiveDop;
+    }
+
+    public boolean isEnableScheduleWithGlobalAssignments() {
+        return enableScheduleWithGlobalAssignments;
     }
 
     public long getAdaptiveDopMaxBlockRowsPerDriverSeq() {

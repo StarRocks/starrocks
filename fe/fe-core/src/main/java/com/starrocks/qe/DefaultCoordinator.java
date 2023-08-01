@@ -443,7 +443,7 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public void onFinished() {
-        // Do nothing.
+        getFragmentExecParamsMap().values().forEach(execFragment -> execFragment.getWorkerStatsTracker().release());
     }
 
     public CoordinatorPreprocessor getPrepareInfo() {

@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.UserException;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.qe.scheduler.WorkerProvider;
+import com.starrocks.qe.scheduler.assignment.WorkerAssignmentStatsMgr;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
@@ -28,28 +29,29 @@ import java.util.List;
 import java.util.Map;
 
 public class ColocatedBackendSelector implements BackendSelector {
-
     private final OlapScanNode scanNode;
     private final FragmentScanRangeAssignment assignment;
     private final ColocatedBackendSelector.Assignment colocatedAssignment;
     private final boolean isRightOrFullBucketShuffleFragment;
     private final WorkerProvider workerProvider;
+    private final WorkerAssignmentStatsMgr.WorkerStatsTracker workerStatsTracker;
 
     public ColocatedBackendSelector(OlapScanNode scanNode, FragmentScanRangeAssignment assignment,
                                     ColocatedBackendSelector.Assignment colocatedAssignment,
-                                    boolean isRightOrFullBucketShuffleFragment, WorkerProvider workerProvider) {
+                                    boolean isRightOrFullBucketShuffleFragment, WorkerProvider workerProvider,
+                                    WorkerAssignmentStatsMgr.WorkerStatsTracker workerStatsTracker) {
         this.scanNode = scanNode;
         this.assignment = assignment;
         this.colocatedAssignment = colocatedAssignment;
         this.isRightOrFullBucketShuffleFragment = isRightOrFullBucketShuffleFragment;
         this.workerProvider = workerProvider;
+        this.workerStatsTracker = workerStatsTracker;
     }
 
     @Override
     public void computeScanRangeAssignment() throws UserException {
         Map<Integer, Long> bucketSeqToWorkerId = colocatedAssignment.seqToWorkerId;
-        ColocatedBackendSelector.BucketSeqToScanRange bucketSeqToScanRange =
-                colocatedAssignment.seqToScanRange;
+        ColocatedBackendSelector.BucketSeqToScanRange bucketSeqToScanRange = colocatedAssignment.seqToScanRange;
 
         for (Integer bucketSeq : scanNode.bucketSeq2locations.keySet()) {
             List<TScanRangeLocations> locations = scanNode.bucketSeq2locations.get(bucketSeq);
@@ -64,6 +66,10 @@ public class ColocatedBackendSelector implements BackendSelector {
             locations.stream()
                     .map(location -> new TScanRangeParams(location.scan_range))
                     .forEach(scanRangeParamsList::add);
+
+            Long workerId = bucketSeqToWorkerId.get(bucketSeq);
+            locations.forEach(location -> workerStatsTracker.consume(workerId, 1L,
+                    location.getScan_range().getInternal_scan_range().getRow_count()));
         }
         // Because of the right table will not send data to the bucket which has been pruned, the right join or full join will get wrong result.
         // So if this bucket shuffle is right join or full join, we need to add empty bucket scan range which is pruned by predicate.
@@ -93,19 +99,20 @@ public class ColocatedBackendSelector implements BackendSelector {
     }
 
     // Make sure each host have average bucket to scan
-    private void computeExecAddressForBucketSeq(TScanRangeLocations seqLocation, Integer bucketSeq)
-            throws UserException {
-        Map<Long, Integer> buckendIdToBucketCountMap = colocatedAssignment.backendIdToBucketCount;
-        int minBucketNum = Integer.MAX_VALUE;
+    private void computeExecAddressForBucketSeq(TScanRangeLocations seqLocation, Integer bucketSeq) throws UserException {
+        long minWeight = Long.MAX_VALUE;
+        long minTotalWeight = Long.MAX_VALUE;
         long minBackendId = Long.MAX_VALUE;
         for (TScanRangeLocation location : seqLocation.locations) {
             if (!workerProvider.isDataNodeAvailable(location.getBackend_id())) {
                 continue;
             }
 
-            Integer bucketNum = buckendIdToBucketCountMap.getOrDefault(location.backend_id, 0);
-            if (bucketNum < minBucketNum) {
-                minBucketNum = bucketNum;
+            long weight = workerStatsTracker.getNumRunningTablets(location.getBackend_id());
+            long totalWeight = workerStatsTracker.getNumTotalTablets(location.getBackend_id());
+            if (weight < minWeight || (weight == minWeight && totalWeight < minTotalWeight)) {
+                minWeight = weight;
+                minTotalWeight = totalWeight;
                 minBackendId = location.backend_id;
             }
         }
@@ -114,7 +121,6 @@ public class ColocatedBackendSelector implements BackendSelector {
             workerProvider.reportDataNodeNotFoundException();
         }
 
-        buckendIdToBucketCountMap.put(minBackendId, minBucketNum + 1);
         workerProvider.selectWorker(minBackendId);
         colocatedAssignment.seqToWorkerId.put(bucketSeq, minBackendId);
     }
@@ -128,7 +134,6 @@ public class ColocatedBackendSelector implements BackendSelector {
         // < bucket_seq -> < scannode_id -> scan_range_params >>
         private final ColocatedBackendSelector.BucketSeqToScanRange seqToScanRange =
                 new ColocatedBackendSelector.BucketSeqToScanRange();
-        private final Map<Long, Integer> backendIdToBucketCount = Maps.newHashMap();
         private final int bucketNum;
 
         public Assignment(OlapScanNode scanNode) {
