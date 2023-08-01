@@ -736,6 +736,21 @@ public class DatabaseTransactionMgr {
         }
     }
 
+    public TransactionState getLabelTransactionState(String label) {
+        readLock();
+        try {
+            Set<Long> existingTxnIds = unprotectedGetTxnIdsByLabel(label);
+            if (existingTxnIds == null || existingTxnIds.isEmpty()) {
+                return null;
+            }
+            // find the latest txn (which id is largest)
+            long maxTxnId = existingTxnIds.stream().max(Comparator.comparingLong(Long::valueOf)).orElse(Long.MIN_VALUE);
+            return unprotectedGetTransactionState(maxTxnId);
+        } finally {
+            readUnlock();
+        }
+    }
+
     public Long getLabelTxnID(String label) {
         readLock();
         try {
