@@ -79,7 +79,7 @@ public:
     virtual ~StoredColumnReaderImpl() = default;
 
     // Reset internal state and ready for next read_values
-    virtual void reset() = 0;
+    virtual void reset_levels() = 0;
 
     Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
                       Column* dst) override;
