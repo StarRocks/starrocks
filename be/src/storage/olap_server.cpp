@@ -48,6 +48,7 @@
 #include "storage/lake/update_manager.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
+#include "storage/persistent_index_compaction_manager.h"
 #include "storage/publish_version_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
@@ -92,14 +93,12 @@ Status StorageEngine::start_bg_threads() {
     _disk_stat_monitor_thread = std::thread([this] { _disk_stat_monitor_thread_callback(nullptr); });
     Thread::set_thread_name(_disk_stat_monitor_thread, "disk_monitor");
 
-<<<<<<< HEAD
     _pk_index_major_compaction_thread = std::thread([this] { _pk_index_major_compaction_thread_callback(nullptr); });
     Thread::set_thread_name(_pk_index_major_compaction_thread, "pk_index_compaction_scheduler");
-=======
+
     // start thread for check finish publish version
     _finish_publish_version_thread = std::thread([this] { _finish_publish_version_thread_callback(nullptr); });
     Thread::set_thread_name(_finish_publish_version_thread, "finish_publish_version");
->>>>>>> 3a79883e80 (Enhancement: return publish version success until version is queryable)
 
     // convert store map to vector
     std::vector<DataDir*> data_dirs;
@@ -616,16 +615,16 @@ void* StorageEngine::_disk_stat_monitor_thread_callback(void* arg) {
 
 void* StorageEngine::_finish_publish_version_thread_callback(void* arg) {
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
-        int32_t interval = config::finish_publish_vesion_internal;
+        int32_t interval = config::finish_publish_version_internal;
         {
             std::unique_lock<std::mutex> wl(_finish_publish_version_mutex);
             while (!_publish_version_manager->has_pending_task() &&
                    !_bg_worker_stopped.load(std::memory_order_consume)) {
                 _finish_publish_version_cv.wait(wl);
             }
-            _publish_version_manager->submit_finish_task();
+            _publish_version_manager->finish_publish_version_task();
             if (interval <= 0) {
-                LOG(WARNING) << "finish_publish_vesion_internal config is illegal: " << interval << ", force set to 1";
+                LOG(WARNING) << "finish_publish_version_internal config is illegal: " << interval << ", force set to 1";
                 interval = 1000;
             }
         }

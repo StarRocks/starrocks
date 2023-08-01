@@ -109,7 +109,7 @@ bool PublishVersionManager::_left_task_applied(const TFinishTaskRequest& finish_
     return applied;
 }
 
-Status PublishVersionManager::finish_publish_task(std::vector<TFinishTaskRequest> finish_task_requests) {
+Status PublishVersionManager::wait_publish_task_apply_finish(std::vector<TFinishTaskRequest> finish_task_requests) {
     std::lock_guard wl(_lock);
     for (size_t i = 0; i < finish_task_requests.size(); i++) {
         if (_all_task_applied(finish_task_requests[i])) {
@@ -133,7 +133,7 @@ void PublishVersionManager::update_tablet_version(TFinishTaskRequest& finish_tas
     }
 }
 
-Status PublishVersionManager::submit_finish_task() {
+Status PublishVersionManager::finish_publish_version_task() {
     std::vector<int64_t> erase_finish_task_signature;
     std::vector<int64_t> erase_waitting_finish_task_signature;
     {

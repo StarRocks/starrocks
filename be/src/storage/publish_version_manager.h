@@ -31,9 +31,9 @@ class PublishVersionManager {
 public:
     Status init();
     ~PublishVersionManager();
-    Status finish_publish_task(std::vector<TFinishTaskRequest> finish_task_requests);
+    Status wait_publish_task_apply_finish(std::vector<TFinishTaskRequest> finish_task_requests);
     bool has_pending_task() { return !_finish_task_requests.empty() || !_waitting_finish_task_requests.empty(); }
-    Status submit_finish_task();
+    Status finish_publish_version_task();
     void update_tablet_version(TFinishTaskRequest& finish_task_request);
 
     size_t finish_task_requests_size() { return _finish_task_requests.size(); }

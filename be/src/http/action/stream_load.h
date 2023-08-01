@@ -73,7 +73,6 @@ private:
 private:
     ExecEnv* _exec_env;
     ConcurrentLimiter* _http_concurrent_limiter = nullptr;
-    int64_t _load_dead_line_second = -1;
 };
 
 } // namespace starrocks

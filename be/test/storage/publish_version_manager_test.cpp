@@ -151,16 +151,16 @@ public:
 
     void* _finish_publish_version_thread_callback(void* arg) {
         while (!_stopped.load(std::memory_order_consume)) {
-            int32_t interval = config::finish_publish_vesion_internal;
+            int32_t interval = config::finish_publish_version_internal;
             {
                 std::unique_lock<std::mutex> wl(_finish_publish_version_mutex);
                 CHECK(_publish_version_manager != nullptr);
                 while (!_publish_version_manager->has_pending_task() && !_stopped.load(std::memory_order_consume)) {
                     _finish_publish_version_cv.wait(wl);
                 }
-                _publish_version_manager->submit_finish_task();
+                _publish_version_manager->finish_publish_version_task();
                 if (interval <= 0) {
-                    LOG(WARNING) << "finish_publish_vesion_internal config is illegal: " << interval
+                    LOG(WARNING) << "finish_publish_version_internal config is illegal: " << interval
                                  << ", force set to 1";
                     interval = 1000;
                 }
@@ -245,7 +245,7 @@ TEST_F(PublishVersionManagerTest, test_publish_task) {
     auto& pair = tablet_publish_versions.emplace_back();
     pair.__set_tablet_id(_tablet->tablet_id());
     pair.__set_version(3);
-    _publish_version_manager->finish_publish_task(std::move(finish_task_requests));
+    _publish_version_manager->wait_publish_task_apply_finish(std::move(finish_task_requests));
     _finish_publish_version_cv.notify_one();
 
     ASSERT_EQ(0, _publish_version_manager->finish_task_requests_size());
