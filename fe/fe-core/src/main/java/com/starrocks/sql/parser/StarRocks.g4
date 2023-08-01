@@ -144,6 +144,9 @@ statement
     | showHistogramMetaStatement
     | killAnalyzeStatement
 
+    // Profile Statement
+    | analyzeProfileStatement
+
     // Resource Group Statement
     | createResourceGroupStatement
     | dropResourceGroupStatement
@@ -186,6 +189,7 @@ statement
     | showProcedureStatement
     | showProcStatement
     | showProcesslistStatement
+    | showProfilelistStatement
     | showStatusStatement
     | showTabletStatement
     | showTransactionStatement
@@ -1120,6 +1124,13 @@ killAnalyzeStatement
     : KILL ANALYZE INTEGER_VALUE
     ;
 
+// ----------------------------------------- Analyze Profile Statement -------------------------------------------------
+
+analyzeProfileStatement
+    : ANALYZE PROFILE FROM string
+    | ANALYZE PROFILE FROM string ',' INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+
 // ------------------------------------------- Work Group Statement ----------------------------------------------------
 
 createResourceGroupStatement
@@ -1333,6 +1344,10 @@ showProcStatement
 
 showProcesslistStatement
     : SHOW FULL? PROCESSLIST
+    ;
+
+showProfilelistStatement
+    : SHOW PROFILELIST (LIMIT limit =INTEGER_VALUE)?
     ;
 
 showStatusStatement
@@ -2213,7 +2228,7 @@ restoreTableDesc
     ;
 
 explainDesc
-    : (DESC | DESCRIBE | EXPLAIN) (LOGICAL | VERBOSE | COSTS)?
+    : (DESC | DESCRIBE | EXPLAIN) (LOGICAL | ANALYZE |VERBOSE | COSTS)?
     ;
 
 optimizerTrace
@@ -2510,7 +2525,7 @@ nonReserved
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PLUGIN | PLUGINS | POLICY | POLICIES
-    | PERCENT_RANK | PRECEDING | PROC | PROCESSLIST | PRIVILEGES | PROPERTIES | PROPERTY
+    | PERCENT_RANK | PRECEDING | PROC | PROCESSLIST | PROFILE | PROFILELIST | PRIVILEGES | PROPERTIES | PROPERTY
     | QUARTER | QUERY | QUEUE | QUOTA | QUALIFY
     | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
     | REPOSITORIES
