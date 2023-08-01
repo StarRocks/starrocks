@@ -31,16 +31,16 @@ public class MockedRemoteFileSystem extends FileSystem {
     }
 
     public static LocatedFileStatus locatedFileStatus(Path path) {
-        return locatedFileStatus(path, 20);
+        return locatedFileStatus(path, 20, 1234567890);
     }
 
-    public static LocatedFileStatus locatedFileStatus(Path path, long fileLength) {
+    public static LocatedFileStatus locatedFileStatus(Path path, long fileLength, long modificationTime) {
         return new LocatedFileStatus(
                 fileLength,
                 false,
                 0,
                 0L,
-                0L,
+                modificationTime,
                 0L,
                 null,
                 null,

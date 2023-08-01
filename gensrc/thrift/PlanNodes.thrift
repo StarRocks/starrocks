@@ -298,7 +298,27 @@ struct THdfsScanRange {
     // whether to use JNI scanner to read data of hudi MOR table for snapshot queries
     10: optional bool use_hudi_jni_reader;
 
+<<<<<<< HEAD
     11: optional list<TIcebergDeleteFile> delete_files;
+=======
+    11: optional list<TIcebergDeleteFile> delete_files
+
+    // number of lines at the start of the file to skip
+    12: optional i64 skip_header
+
+    // last modification time of the hdfs file, for data cache
+    13: optional i64 modification_time
+}
+
+struct TBinlogScanRange {
+  1: optional string db_name
+  2: optional Types.TTableId table_id
+  3: optional Types.TPartitionId partition_id
+  4: optional Types.TTabletId tablet_id
+  
+  // Start offset of binlog consumption
+  11: optional Types.TBinlogOffset offset
+>>>>>>> ac5ad44c6 ([Enhancement] Encode file modification time to data cache key. (#27755) (#28136))
 }
 
 // Specification of an individual data range which is held in its entirety
