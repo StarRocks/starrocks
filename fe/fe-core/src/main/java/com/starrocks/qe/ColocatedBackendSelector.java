@@ -23,12 +23,17 @@ import com.starrocks.qe.scheduler.assignment.WorkerAssignmentStatsMgr;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
+import jline.internal.Log;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class ColocatedBackendSelector implements BackendSelector {
+    private static final Logger LOG = LogManager.getLogger(ColocatedBackendSelector.class);
+
     private final OlapScanNode scanNode;
     private final FragmentScanRangeAssignment assignment;
     private final ColocatedBackendSelector.Assignment colocatedAssignment;
@@ -96,6 +101,8 @@ public class ColocatedBackendSelector implements BackendSelector {
                 assignment.putAll(bucketSeqToWorkerId.get(seq), scanNodeId, nodeId2ScanRanges.get(scanNodeId));
             }
         });
+
+        Log.warn("[DEBUG] {}", workerStatsTracker);
     }
 
     // Make sure each host have average bucket to scan
