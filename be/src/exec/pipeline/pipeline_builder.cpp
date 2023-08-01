@@ -124,10 +124,6 @@ void PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange_for_si
                                                                                    OpFactoryPtr table_sink_operator,
                                                                                    int32_t source_operator_dop,
                                                                                    int32_t desired_sink_dop) {
-    if (source_operator_dop == desired_sink_dop) {
-        return;
-    }
-
     auto* source_operator =
             down_cast<SourceOperatorFactory*>(_fragment_context->pipelines().back()->source_operator_factory());
     auto pseudo_plan_node_id = next_pseudo_plan_node_id();

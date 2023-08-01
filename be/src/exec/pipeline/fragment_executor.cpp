@@ -921,12 +921,8 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
                 thrift_sink.iceberg_table_sink, partition_expr_ctxs);
 
         if (iceberg_table_desc->is_unpartitioned_table() || thrift_sink.iceberg_table_sink.is_static_partition_sink) {
-            if (desired_iceberg_sink_dop != source_operator_dop) {
-                context->maybe_interpolate_local_passthrough_exchange_for_sink(
-                        runtime_state, iceberg_table_sink_op, source_operator_dop, desired_iceberg_sink_dop);
-            } else {
-                fragment_ctx->pipelines().back()->get_op_factories().emplace_back(std::move(iceberg_table_sink_op));
-            }
+            context->maybe_interpolate_local_passthrough_exchange_for_sink(
+                    runtime_state, iceberg_table_sink_op, source_operator_dop, desired_iceberg_sink_dop);
         } else {
             context->maybe_interpolate_local_key_partition_exchange_for_sink(runtime_state, iceberg_table_sink_op,
                                                                              partition_expr_ctxs, source_operator_dop,
