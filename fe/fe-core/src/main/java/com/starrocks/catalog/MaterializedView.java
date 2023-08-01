@@ -1352,7 +1352,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
         Map<String, Range<PartitionKey>> basePartitionNameToRangeMap;
         try {
-            basePartitionNameToRangeMap = PartitionUtil.getPartitionRange(refBaseTable, refBasePartitionCol);
+            basePartitionNameToRangeMap = PartitionUtil.getPartitionKeyRange(refBaseTable, refBasePartitionCol);
         } catch (UserException e) {
             LOG.warn("Materialized view compute partition difference with base table failed.", e);
             return getPartitionNames();
@@ -1375,9 +1375,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         mvPartitionNameToRangeMap.putAll(rangePartitionDiff.getAdds());
 
         Map<String, Set<String>> baseToMvNameRef = SyncPartitionUtils
-                .getIntersectedPartitions(basePartitionMap, mvPartitionMap);
+                .getIntersectedPartitions(basePartitionNameToRangeMap, mvPartitionNameToRangeMap);
         Map<String, Set<String>> mvToBaseNameRef = SyncPartitionUtils
-                .getIntersectedPartitions(mvPartitionMap, basePartitionMap);
+                .getIntersectedPartitions(mvPartitionNameToRangeMap, basePartitionNameToRangeMap);
 
         // step2: check ref base table's updated partition names by checking its ref tables recursively.
         Set<String> baseChangedPartitionNames = getUpdatedPartitionNamesOfTable(refBaseTable, true);

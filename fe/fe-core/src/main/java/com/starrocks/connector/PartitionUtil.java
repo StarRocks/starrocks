@@ -54,7 +54,6 @@ import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
-import com.starrocks.sql.common.PartitionRange;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.iceberg.PartitionField;
@@ -287,7 +286,6 @@ public class PartitionUtil {
      * @param table : the ref base table of materialized view
      * @param partitionColumn : the ref base table's partition column which mv's partition derives
      */
-    @Deprecated
     public static Map<String, Range<PartitionKey>> getPartitionKeyRange(Table table, Column partitionColumn)
             throws UserException {
         if (table.isNativeTableOrMaterializedView()) {
@@ -566,11 +564,11 @@ public class PartitionUtil {
                                                       Map<String, Range<PartitionKey>> basePartitionMap,
                                                       Map<String, Range<PartitionKey>> mvPartitionMap) {
         if (partitionExpr instanceof SlotRef) {
-            return SyncPartitionUtils.calcSyncSameRangePartition(basePartitionMap, mvPartitionMap);
+            return SyncPartitionUtils.getRangePartitionDiffOfSlotRef(basePartitionMap, mvPartitionMap);
         } else if (partitionExpr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
             String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
-            return SyncPartitionUtils.calcSyncRollupPartition(basePartitionMap, mvPartitionMap,
+            return SyncPartitionUtils.getRangePartitionDiffOfExpr(basePartitionMap, mvPartitionMap,
                     granularity, partitionColumn.getPrimitiveType());
         } else {
             throw UnsupportedException.unsupportedException("unsupported partition expr:" + partitionExpr);
