@@ -340,6 +340,7 @@
       + [bitmap](./sql-reference/sql-functions/aggregate-functions/bitmap.md)
       + [bitmap_agg](./sql-reference/sql-functions/bitmap-functions/bitmap_agg.md)
       + [count](./sql-reference/sql-functions/aggregate-functions/count.md)
+      + [count_if](./sql-reference/sql-functions/aggregate-functions/count_if.md)
       + [grouping](./sql-reference/sql-functions/aggregate-functions/grouping.md)
       + [grouping_id](./sql-reference/sql-functions/aggregate-functions/grouping_id.md)
       + [hll_empty](./sql-reference/sql-functions/aggregate-functions/hll_empty.md)

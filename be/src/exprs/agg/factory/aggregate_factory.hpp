@@ -30,6 +30,7 @@
 #include "exprs/agg/bitmap_union_count.h"
 #include "exprs/agg/bitmap_union_int.h"
 #include "exprs/agg/count.h"
+#include "exprs/agg/count_if.h"
 #include "exprs/agg/distinct.h"
 #include "exprs/agg/exchange_perf.h"
 #include "exprs/agg/group_concat.h"
@@ -97,6 +98,9 @@ public:
     static AggregateFunctionPtr MakeCountDistinctAggregateFunction();
     template <LogicalType LT>
     static AggregateFunctionPtr MakeCountDistinctAggregateFunctionV2();
+
+    template <LogicalType LT>
+    static AggregateFunctionPtr MakeCountIfAggregateFunction();
 
     template <LogicalType LT>
     static AggregateFunctionPtr MakeGroupConcatAggregateFunction();
@@ -249,6 +253,11 @@ AggregateFunctionPtr AggregateFactory::MakeCountDistinctAggregateFunction() {
 template <LogicalType LT>
 AggregateFunctionPtr AggregateFactory::MakeCountDistinctAggregateFunctionV2() {
     return std::make_shared<DistinctAggregateFunctionV2<LT, AggDistinctType::COUNT>>();
+}
+
+template <LogicalType LT>
+AggregateFunctionPtr AggregateFactory::MakeCountIfAggregateFunction() {
+    return std::make_shared<CountIfAggregateFunction<LT>>();
 }
 
 template <LogicalType LT>

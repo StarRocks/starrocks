@@ -225,6 +225,7 @@ public class FunctionSet {
     public static final String APPROX_COUNT_DISTINCT = "approx_count_distinct";
     public static final String AVG = "avg";
     public static final String COUNT = "count";
+    public static final String COUNT_IF = "count_if";
     public static final String HLL_UNION_AGG = "hll_union_agg";
     public static final String MAX = "max";
     public static final String MAX_BY = "max_by";
@@ -511,6 +512,7 @@ public class FunctionSet {
     public static final Set<String> alwaysReturnNonNullableFunctions =
             ImmutableSet.<String>builder()
                     .add(FunctionSet.COUNT)
+                    .add(FunctionSet.COUNT_IF)
                     .add(FunctionSet.MULTI_DISTINCT_COUNT)
                     .add(FunctionSet.NULL_OR_EMPTY)
                     .add(FunctionSet.HLL_HASH)
@@ -825,6 +827,10 @@ public class FunctionSet {
             if (t.isPseudoType()) {
                 continue; // Only function `Count` support pseudo types now.
             }
+
+            // COUNT_IF
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.COUNT_IF,
+                    Lists.newArrayList(t), Type.BIGINT, Type.BIGINT, true, true, true));
 
             // Min
             addBuiltin(AggregateFunction.createBuiltin(MIN,
