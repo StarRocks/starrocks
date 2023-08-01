@@ -33,13 +33,8 @@ GRANT
 
 GRANT
     { ALTER | DROP | ALL [PRIVILEGES] } 
-<<<<<<< HEAD
-    ON { RESOURCE GROUP <resource_name> [, < resource_name >,...] ｜ ALL RESOURCE GROUPS} 
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
-=======
     ON { RESOURCE GROUP <resource_group_name> [, <resource_group_name >,...] ｜ ALL RESOURCE GROUPS} 
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
->>>>>>> b6d9598f13 ([Doc] add general scenario example to grant (#28325))
 
 # Resource
 
@@ -74,13 +69,8 @@ GRANT
 
 GRANT
     { ALTER | DROP | CREATE TABLE | CREATE VIEW | CREATE FUNCTION | CREATE MATERIALIZED VIEW | ALL [PRIVILEGES] } 
-<<<<<<< HEAD
-    ON { DATABASE <database_name> [, <database_name>,...] | ALL DATABASES }
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ] ;
-=======
     ON { DATABASE <db_name> [, <db_name>,...] | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
->>>>>>> b6d9598f13 ([Doc] add general scenario example to grant (#28325))
   
 * You must first run SET CATALOG before you run this command.
 
@@ -94,13 +84,8 @@ GRANT
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 
 * You must first run SET CATALOG before you run this command. 
-<<<<<<< HEAD
-* You can also use db.tbl to represent a table.
-GRANT <priv> ON TABLE db.tbl TO {ROLE <rolename> | USER <username>};
-=======
 * You can also use <db_name>.<table_name> to represent a table.
 GRANT <priv> ON TABLE <db_name>.<table_name> TO {ROLE <role_name> | USER <user_name>}
->>>>>>> b6d9598f13 ([Doc] add general scenario example to grant (#28325))
 
 # View
 
@@ -112,13 +97,8 @@ GRANT
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
     
 * You must first run SET CATALOG before you run this command. 
-<<<<<<< HEAD
-* You can also use db.view to represent a view.
-GRANT <priv> ON VIEW db.view TO {ROLE <rolename> | USER <username>};
-=======
 * You can also use <db_name>.<view_name> to represent a view.
 GRANT <priv> ON VIEW <db_name>.<view_name> TO {ROLE <role_name> | USER <user_name>}
->>>>>>> b6d9598f13 ([Doc] add general scenario example to grant (#28325))
 
 # Materialized view
 
@@ -130,13 +110,8 @@ GRANT {
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
     
 * You must first run SET CATALOG before you run this command. 
-<<<<<<< HEAD
-* You can also use db.mv to represent an mv.
-GRANT <priv> ON MATERIALIZED_VIEW db.mv TO {ROLE <rolename> | USER <username>};
-=======
 * You can also use <db_name>.<mv_name> to represent an mv.
 GRANT <priv> ON MATERIALIZED_VIEW <db_name>.<mv_name> TO {ROLE <role_name> | USER <user_name>}
->>>>>>> b6d9598f13 ([Doc] add general scenario example to grant (#28325))
 
 # Function
 
@@ -148,13 +123,8 @@ GRANT {
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
     
 * You must first run SET CATALOG before you run this command. 
-<<<<<<< HEAD
-* You can also use db.function to represent a function.
-GRANT <priv> ON FUNCTION db.function TO {ROLE <rolename> | USER <username>};
-=======
 * You can also use <db_name>.<function_name> to represent a function.
 GRANT <priv> ON FUNCTION <db_name>.<function_name> TO {ROLE <role_name> | USER <user_name>}
->>>>>>> b6d9598f13 ([Doc] add general scenario example to grant (#28325))
 
 # User
 
@@ -272,24 +242,8 @@ We recommend you customize roles to manage privileges and users. The following e
    CREATE ROLE read_catalog_only;
    -- Switch to the corresponding catalog.
    SET CATALOG hive_catalog;
-   -- Grant the privileges query all tables and all views in all databases.
+   -- Grant the privileges to query all tables and all views in all databases.
    GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE read_catalog_only;
-   GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE read_catalog_only;
-   ```
-
-   Note: You can query only Hive table views (since v3.1).
-
-### Grant write-only privileges on a specific external catalog
-
-You can only write data into Iceberg tables (since v3.1).
-
-   ```SQL
-   -- Create a role.
-   CREATE ROLE write_catalog_only;
-   -- Switch to the corresponding catalog.
-   SET CATALOG iceberg_catalog;
-   -- Grant the privilege to write data into Iceberg tables.
-   GRANT INSERT ON ALL TABLES IN ALL DATABASES TO ROLE write_catalog_only;
    ```
 
 ### Grant privileges to perform backup and restore operations on global, database, table, and partition levels
