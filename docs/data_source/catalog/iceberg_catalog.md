@@ -832,7 +832,7 @@ You can use one of the following syntaxes to view the schema of an Iceberg table
 
 ## Create an Iceberg database
 
-Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](../../administration/privilege_item.md#catalog) privilege on an Iceberg catalog, you can use the [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE%20DATABASE.md) statement to create databases in that Iceberg catalog. This feature is supported from v3.1 onwards.
+Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](../../administration/privilege_item.md#catalog) privilege on an Iceberg catalog, you can use the [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE%20DATABASE.md) statement to create databases in that catalog. This feature is supported from v3.1 onwards.
 
 > **NOTE**
 >
@@ -847,13 +847,13 @@ You can use the `location` parameter to specify the file path in which you want 
 
 ## Drop an Iceberg database
 
-Similar to the internal databases of StarRocks, if you have the [DROP](../../administration/privilege_item.md#database) privilege on an Iceberg database, you can use the [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP%20DATABASE.md) privilege to drop that database. This feature is supported from v3.1 onwards. You can only drop empty databases.
+Similar to the internal databases of StarRocks, if you have the [DROP](../../administration/privilege_item.md#database) privilege on an Iceberg database, you can use the [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP%20DATABASE.md) statement to drop that database. This feature is supported from v3.1 onwards. You can only drop empty databases.
 
 > **NOTE**
 >
 > You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
 
-When you drop a database, the database's file path on your HDFS cluster or cloud storage will not be dropped along with the database.
+When you drop an Iceberg database, the database's file path on your HDFS cluster or cloud storage will not be dropped along with the database.
 
 ```SQL
 DROP DATABASE <database_name>;
@@ -897,7 +897,7 @@ The following table describes the parameters.
 
 > **NOTICE**
 >
-> All non-partition columns must use `NULL` as the default value. This means you must specify `DEFAULT "NULL"` for each of the non-partition columns in the table creation statement. Additionally, partition columns must be defined following non-partition columns and cannot use `NULL` as the default value.
+> All non-partition columns must use `NULL` as the default value. This means that you must specify `DEFAULT "NULL"` for each of the non-partition columns in the table creation statement. Additionally, partition columns must be defined following non-partition columns and cannot use `NULL` as the default value.
 
 #### partition_desc
 
@@ -907,7 +907,7 @@ The syntax of `partition_desc` is as follows:
 PARTITION BY (par_col1[, par_col2...])
 ```
 
-Currently StarRocks only supports [identity transform](https://iceberg.apache.org/spec/#partitioning), which means that StarRocks creates a partition for each unique partition value.
+Currently StarRocks only supports [identity transforms](https://iceberg.apache.org/spec/#partitioning), which means that StarRocks creates a partition for each unique partition value.
 
 > **NOTICE**
 >
@@ -986,13 +986,13 @@ PARTITION (par_col1=<value> [, par_col2=<value>...]) ]
 
 | Parameter   | Description                                                         |
 | ----------- | ------------------------------------------------------------ |
-| INTO        | To append data to the Iceberg table.                                       |
-| OVERWRITE   | To overwrite the Iceberg table with data.                                       |
+| INTO        | To append the data of the StarRocks table to the Iceberg table.                                       |
+| OVERWRITE   | To overwrite the existing data of the Iceberg table with the data of the StarRocks table.                                       |
 | column_name | The name of the destination column to which you want to load data. You can specify one or more columns. If specify multiple columns, separate them with commas (`,`). You can only specify columns that actually exist in the Iceberg table, and the destination columns that you specify must include the partition columns of the Iceberg table. The destination columns you specify are mapped one on one in sequence to the columns of the StarRocks table, regardless of what the destination column names are. If no destination columns are specified, the data is loaded into all columns of the Iceberg table. If a non-partition column of the StarRocks table cannot be mapped to any column of the Iceberg table, StarRocks writes the default value `NULL` to the Iceberg table column. If the INSERT statement contains a query statement whose returned column types differ from the data types of the destination columns, StarRocks performs an implicit conversion on the mismatched columns. If the conversion fails, a syntax parsing error will be returned. |
 | expression  | Expression that assigns values to the destination column.                                   |
 | DEFAULT     | Assigns a default value to the destination column.                                         |
 | query       | Query statement whose result will be loaded into the Iceberg table. It can be any SQL statement supported by StarRocks. |
-| PARTITION   | The partitions into which you want to load data. You must specify all partition columns from the Iceberg table. The partition columns that you specify in this property can be in a different sequence than the partition columns that you have defined in the table creation statement. If you specify this property, you cannot specify the `column_name` property. |
+| PARTITION   | The partitions into which you want to load data. You must specify all partition columns of the Iceberg table in this property. The partition columns that you specify in this property can be in a different sequence than the partition columns that you have defined in the table creation statement. If you specify this property, you cannot specify the `column_name` property. |
 
 ### Examples
 
@@ -1021,7 +1021,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...]) ]
    INSERT INTO partition_table (dt='2023-07-21',id=1) SELECT 'order';
    ```
 
-5. Overwrite all `action` column values in the partitions that meet two conditions, `dt=‘2023-07-21’` and `id=1` of the `partition_table` table with `close`:
+5. Overwrite all `action` column values in the partitions that meet two conditions, `dt=‘2023-07-21’` and `id=1`, of the `partition_table` table with `close`:
 
    ```SQL
    INSERT OVERWRITE partition_table SELECT 'close', 1, '2023-07-21';
@@ -1036,9 +1036,9 @@ Similar to the internal tables of StarRocks, if you have the [DROP](../../admini
 >
 > You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
 
-When you drop an Iceberg table, the Iceberg table's file path and data on your HDFS cluster or cloud storage will not be dropped along with the Iceberg table.
+When you drop an Iceberg table, the table's file path and data on your HDFS cluster or cloud storage will not be dropped along with the table.
 
-When you forcibly drop an Iceberg table (namely, with the `FORCE` keyword specified in the table drop statement), the Iceberg table's data on your HDFS cluster or cloud storage will be dropped along with the Iceberg table, but the Iceberg table's file path is retained.
+When you forcibly drop an Iceberg table (namely, with the `FORCE` keyword specified in the table drop statement), the table's data on your HDFS cluster or cloud storage will be dropped along with the table, but the table's file path is retained.
 
 ```SQL
 DROP TABLE <table_name> [FORCE];
