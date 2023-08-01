@@ -621,6 +621,10 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
             // Using get_table() first, if user's Hive forbidden this request,
             // then fail over to use get_table_req() instead.
             return client.get_table(dbName, tableName);
+        } catch (NoSuchObjectException e) {
+            // NoSuchObjectException need to be thrown when creating iceberg table.
+            LOG.warn("Failed to get table {}.{}", dbName, tableName, e);
+            throw e;
         } catch (Exception e) {
             LOG.warn("Using get_table() failed, fail over to use get_table_req()", e);
             GetTableRequest req = new GetTableRequest(dbName, tableName);
