@@ -14,6 +14,9 @@
 
 package com.starrocks.common.util;
 
+import com.starrocks.common.Config;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryDetailQueue;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -21,9 +24,14 @@ public class LogUtilTest {
     @Test
     public void testGetCurrentStackTrace() {
         String trace = LogUtil.getCurrentStackTrace();
-        System.out.println(trace);
         Assert.assertTrue(trace.startsWith("\n        "));
         Assert.assertTrue(trace.contains("java.lang.Thread.getStackTrace"));
-        System.out.println("current stack trace: " + trace);
+    }
+
+    @Test
+    public void testLogConnectionInfoToAuditLogAndQueryQueue() {
+        Config.audit_log_modules = new String[] {"slow_query", "query", "connection"};
+        LogUtil.logConnectionInfoToAuditLogAndQueryQueue(new ConnectContext(), null);
+        Assert.assertTrue(QueryDetailQueue.getQueryDetailsAfterTime(0L).size() > 0);
     }
 }
