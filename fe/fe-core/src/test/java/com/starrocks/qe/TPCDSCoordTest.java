@@ -15,8 +15,8 @@
 package com.starrocks.qe;
 
 import com.starrocks.common.FeConstants;
-import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.RuntimeFilterDescription;
+import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.TPCDSPlanTest;
 import com.starrocks.sql.plan.TPCDSPlanTestBase;
@@ -91,9 +91,8 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
                 ctx, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
         coord.prepareExec();
 
-        PlanFragmentId topFragmentId = coord.getFragments().get(0).getFragmentId();
-        CoordinatorPreprocessor.FragmentExecParams params = coord.getFragmentExecParamsMap().get(topFragmentId);
-        Assert.assertEquals(params.runtimeFilterParams.id_to_prober_params.get(1).size(), 10);
+        ExecutionFragment execFragment = coord.getExecutionDAG().getRootFragment();
+        Assert.assertEquals(10, execFragment.getRuntimeFilterParams().id_to_prober_params.get(1).size());
     }
 
     @Test
@@ -141,8 +140,8 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
 
         int filterId = 2;
         boolean rfExists = false;
-        for (CoordinatorPreprocessor.FragmentExecParams params : coord.getFragmentExecParamsMap().values()) {
-            Map<Integer, RuntimeFilterDescription> buildRfFilters = params.fragment.getBuildRuntimeFilters();
+        for (ExecutionFragment execFragment : coord.getExecutionDAG().getFragmentsInPreorder()) {
+            Map<Integer, RuntimeFilterDescription> buildRfFilters = execFragment.getPlanFragment().getBuildRuntimeFilters();
             if (buildRfFilters == null || !buildRfFilters.containsKey(filterId)) {
                 continue;
             }

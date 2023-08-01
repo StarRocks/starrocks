@@ -147,7 +147,7 @@ public class MVMaintenanceJobTest extends PlanTestBase {
         List<TExecPlanFragmentParams> instances = task.getFragmentInstances();
         assertEquals(4, instances.size());
 
-        TExecPlanFragmentParams firstInstance = instances.get(0);
+        TExecPlanFragmentParams firstInstance = instances.get(2);
         System.err.println(firstInstance);
         List<TPlanNode> planNodes = firstInstance.getFragment().getPlan().getNodes();
         assertEquals(5, planNodes.size());
