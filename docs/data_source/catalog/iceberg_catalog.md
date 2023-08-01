@@ -1,10 +1,10 @@
 # Iceberg catalog
 
-An Iceberg catalog is a kind of external catalog that is supported by StarRocks from v2.4 onwards. With Iceberg catalogs, you can:
+An Iceberg catalog is a type of external catalog that is supported by StarRocks from v2.4 onwards. With Iceberg catalogs, you can:
 
 - Directly query data stored in Iceberg without the need to manually create tables.
 - Use [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) or asynchronous materialized views (which are supported from v2.5 onwards) to process data stored in Iceberg and load the data into StarRocks.
-- Perform operations on StarRocks to create or drop Iceberg databases and tables, or sink the data from StarRocks tables to Parquet-formatted Iceberg tables by using [INSERT INTO](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md) (this feature is supported from v3.1 onwards).
+- Perform operations on StarRocks to create or drop Iceberg databases and tables, or sink data from StarRocks tables to Parquet-formatted Iceberg tables by using [INSERT INTO](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md) (this feature is supported from v3.1 onwards).
 
 To ensure successful SQL workloads on your Iceberg cluster, your StarRocks cluster needs to integrate with two important components:
 
@@ -172,9 +172,9 @@ If you use Tabular Iceberg Catalog, you must choose REST as metastore and config
 
 ```SQL
 "iceberg.catalog.type" = "rest",
-"iceberg.catalog.uri" = "<rest-server-api-endpoint>",
+"iceberg.catalog.uri" = "<rest_server_api_endpoint>",
 "iceberg.catalog.credential" = "<credential>",
-"iceberg.catalog.warehouse" = "<identifier-or-path-to-warehouse>"
+"iceberg.catalog.warehouse" = "<identifier_or_path_to_warehouse>"
 ```
 
 The following table describes the parameters you need to configure in `MetastoreParams`.
@@ -992,7 +992,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...]) ]
 | expression  | Expression that assigns values to the destination column.                                   |
 | DEFAULT     | Assigns a default value to the destination column.                                         |
 | query       | Query statement whose result will be loaded into the Iceberg table. It can be any SQL statement supported by StarRocks. |
-| PARTITION   | The partitions into which you want to load data. You can specify one or more partitions. If you specify multiple partitions, separate them with commas (`,`). You can only specify partitions that actually exist in the Iceberg table. If you specify this parameter, the data will be inserted only into the specified partitions. If you do not specify this parameter, the data will be inserted into all partitions. |
+| PARTITION   | The partitions into which you want to load data. You must specify all partition columns from the Iceberg table. The partition columns that you specify in this property can be in a different sequence than the partition columns that you have defined in the table creation statement. If you specify this property, you cannot specify the `column_name` property. |
 
 ### Examples
 
