@@ -27,7 +27,7 @@ public:
     SortedStreamingAggregator(AggregatorParamsPtr params);
     ~SortedStreamingAggregator() override;
 
-    Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) override;
+    virtual Status open(RuntimeState* state) override;
 
     StatusOr<ChunkPtr> streaming_compute_agg_state(size_t chunk_size, bool is_update_phase = true);
 
