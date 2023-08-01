@@ -15,7 +15,6 @@
 #include "formats/parquet/column_reader.h"
 
 #include <boost/algorithm/string.hpp>
-#include <cstddef>
 
 #include "column/array_column.h"
 #include "column/map_column.h"
@@ -23,6 +22,7 @@
 #include "exec/hdfs_scanner.h"
 #include "formats/parquet/column_converter.h"
 #include "formats/parquet/stored_column_reader.h"
+#include "gutil/strings/substitute.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -113,11 +113,6 @@ public:
     Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
                            Column* column) override {
         return _reader->get_dict_values(dict_codes, nulls, column);
-    }
-
-    Status get_dict_codes(const std::vector<Slice>& dict_values, const NullableColumn& nulls,
-                          std::vector<int32_t>* dict_codes) override {
-        return _reader->get_dict_codes(dict_values, nulls, dict_codes);
     }
 
     void set_need_parse_levels(bool need_parse_levels) override { _reader->set_need_parse_levels(need_parse_levels); }
@@ -562,6 +557,11 @@ void ColumnReader::get_subfield_pos_with_pruned_type(const ParquetField& field, 
 
 Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
                             std::unique_ptr<ColumnReader>* output) {
+    // We will only set a complex type in ParquetField
+    if ((field->type.is_complex_type() || col_type.is_complex_type()) && (field->type.type != col_type.type)) {
+        return Status::InternalError(strings::Substitute("ParquetField's type $0 is different from table's type $1",
+                                                         field->type.type, col_type.type));
+    }
     if (field->type.type == LogicalType::TYPE_ARRAY) {
         std::unique_ptr<ColumnReader> child_reader;
         RETURN_IF_ERROR(ColumnReader::create(opts, &field->children[0], col_type.children[0], &child_reader));
@@ -571,17 +571,12 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
     } else if (field->type.type == LogicalType::TYPE_MAP) {
         std::unique_ptr<ColumnReader> key_reader = nullptr;
         std::unique_ptr<ColumnReader> value_reader = nullptr;
-        // ParquetFiled Map -> Map<Struct<key,value>>
-        DCHECK(field->children[0].type.is_struct_type());
-        DCHECK(field->children[0].children.size() == 2);
 
         if (!col_type.children[0].is_unknown_type()) {
-            RETURN_IF_ERROR(
-                    ColumnReader::create(opts, &(field->children[0].children[0]), col_type.children[0], &key_reader));
+            RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[0]), col_type.children[0], &key_reader));
         }
         if (!col_type.children[1].is_unknown_type()) {
-            RETURN_IF_ERROR(
-                    ColumnReader::create(opts, &(field->children[0].children[1]), col_type.children[1], &value_reader));
+            RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[1]), col_type.children[1], &value_reader));
         }
 
         std::unique_ptr<MapColumnReader> reader(new MapColumnReader(opts));
@@ -618,6 +613,11 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
 
 Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
                             const TIcebergSchemaField* iceberg_schema_field, std::unique_ptr<ColumnReader>* output) {
+    // We will only set a complex type in ParquetField
+    if ((field->type.is_complex_type() || col_type.is_complex_type()) && (field->type.type != col_type.type)) {
+        return Status::InternalError(strings::Substitute("ParquetField's type $0 is different from table's type $1",
+                                                         field->type.type, col_type.type));
+    }
     DCHECK(iceberg_schema_field != nullptr);
     if (field->type.type == LogicalType::TYPE_ARRAY) {
         std::unique_ptr<ColumnReader> child_reader;
@@ -630,19 +630,16 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
     } else if (field->type.type == LogicalType::TYPE_MAP) {
         std::unique_ptr<ColumnReader> key_reader = nullptr;
         std::unique_ptr<ColumnReader> value_reader = nullptr;
-        // ParquetFiled Map -> Map<Struct<key,value>>
-        DCHECK(field->children[0].type.is_struct_type());
-        DCHECK(field->children[0].children.size() == 2);
 
         const TIcebergSchemaField* key_iceberg_schema = &iceberg_schema_field->children[0];
         const TIcebergSchemaField* value_iceberg_schema = &iceberg_schema_field->children[1];
 
         if (!col_type.children[0].is_unknown_type()) {
-            RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[0].children[0]), col_type.children[0],
-                                                 key_iceberg_schema, &key_reader));
+            RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[0]), col_type.children[0], key_iceberg_schema,
+                                                 &key_reader));
         }
         if (!col_type.children[1].is_unknown_type()) {
-            RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[0].children[1]), col_type.children[1],
+            RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[1]), col_type.children[1],
                                                  value_iceberg_schema, &value_reader));
         }
 

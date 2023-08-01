@@ -43,6 +43,7 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
@@ -73,6 +74,8 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
+import com.starrocks.http.HttpConnectContext;
+import com.starrocks.http.HttpResultSender;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.load.InsertOverwriteJobMgr;
@@ -81,6 +84,7 @@ import com.starrocks.meta.SqlBlackList;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
+import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlSerializer;
@@ -91,23 +95,26 @@ import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
-import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.qe.QueryState.MysqlStateType;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ExplainAnalyzer;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
+import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.DdlStmt;
@@ -128,11 +135,11 @@ import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetStmt;
-import com.starrocks.sql.ast.SetWarehouseStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UnsupportedStmt;
+import com.starrocks.sql.ast.UpdateFailPointStatusStatement;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
@@ -143,6 +150,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
@@ -158,7 +166,6 @@ import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TQueryOptions;
-import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TUniqueId;
@@ -189,7 +196,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.ast.StatementBase.ExplainLevel.OPTIMIZER;
+import static com.starrocks.sql.ast.StatementBase.ExplainLevel.REWRITE;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
+import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
 
 // Do one COM_QUERY process.
 // first: Parse receive byte array to statement struct.
@@ -212,6 +221,8 @@ public class StmtExecutor {
     private ShowResultSet proxyResultSet = null;
     private PQueryStatistics statisticsForAuditLog;
     private List<StmtExecutor> subStmtExecutors;
+
+    private HttpResultSender httpResultSender;
 
     // this constructor is mainly for proxy
     public StmtExecutor(ConnectContext context, OriginStatement originStmt, boolean isProxy) {
@@ -300,7 +311,8 @@ public class StmtExecutor {
         profile = buildTopLevelProfile();
         if (coord != null) {
             if (coord.getQueryProfile() != null) {
-                coord.getQueryProfile().getCounterTotalTime().setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
+                coord.getQueryProfile().getCounterTotalTime()
+                        .setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
                 coord.endProfile();
                 profile.addChild(coord.buildMergedQueryProfile(getQueryStatisticsForAuditLog()));
             }
@@ -370,6 +382,12 @@ public class StmtExecutor {
         UUID uuid = context.getQueryId();
         context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
         SessionVariable sessionVariableBackup = context.getSessionVariable();
+
+        // if use http protocal, use httpResultSender to send result to netty channel
+        if (context instanceof HttpConnectContext) {
+            httpResultSender = new HttpResultSender((HttpConnectContext) context);
+        }
+
         try {
             // parsedStmt may already by set when constructing this StmtExecutor();
             resolveParseStmtForForward();
@@ -391,13 +409,17 @@ public class StmtExecutor {
                     }
                     context.setSessionVariable(sessionVariable);
                 }
+
+                if (parsedStmt.isExplain()) {
+                    context.setExplainLevel(parsedStmt.getExplainLevel());
+                }
             }
 
             // execPlan is the output of new planner
             ExecPlan execPlan = null;
             boolean execPlanBuildByNewPlanner = false;
 
-            try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Total")) {
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Total")) {
                 redirectStatus = parsedStmt.getRedirectStatus();
                 if (!isForwardToLeader()) {
                     if (context.shouldDumpQuery()) {
@@ -450,6 +472,10 @@ public class StmtExecutor {
 
             if (parsedStmt instanceof QueryStatement) {
                 context.getState().setIsQuery(true);
+                final boolean isStatisticsJob = isStatisticsJob(parsedStmt);
+                if (!isStatisticsJob) {
+                    WarehouseMetricMgr.increaseUnfinishedQueries(context.getCurrentWarehouse(), 1L);
+                }
 
                 // sql's blacklist is enabled through enable_sql_blacklist.
                 if (Config.enable_sql_blacklist && !parsedStmt.isExplain()) {
@@ -532,7 +558,8 @@ public class StmtExecutor {
                         // When enable_collect_query_detail_info is set to true, the plan will be recorded in the query detail,
                         // and hence there is no need to log it here.
                         if (i == 0 && context.getQueryDetail() == null && Config.log_plan_cancelled_by_crash_be) {
-                            LOG.warn("Query cancelled by crash of backends or RpcException, [QueryId={}] [SQL={}] [Plan={}]",
+                            LOG.warn(
+                                    "Query cancelled by crash of backends or RpcException, [QueryId={}] [SQL={}] [Plan={}]",
                                     DebugUtil.printId(context.getExecutionId()),
                                     originStmt == null ? "" : originStmt.originStmt,
                                     execPlan.getExplainString(TExplainLevel.COSTS),
@@ -554,8 +581,17 @@ public class StmtExecutor {
                             throw e;
                         }
                     } finally {
-                        if (!needRetry && context.getSessionVariable().isEnableProfile()) {
-                            writeProfile(beginTimeInNanoSecond);
+                        if (!needRetry) {
+                            if (context.getSessionVariable().isEnableProfile()) {
+                                writeProfile(execPlan, beginTimeInNanoSecond);
+                                if (parsedStmt.isExplain() &&
+                                        StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
+                                    handleExplainStmt(ExplainAnalyzer.analyze(execPlan, profile, null));
+                                }
+                            }
+                            if (!isStatisticsJob) {
+                                WarehouseMetricMgr.increaseUnfinishedQueries(context.getCurrentWarehouse(), -1L);
+                            }
                         }
                         QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
                     }
@@ -564,8 +600,6 @@ public class StmtExecutor {
                 handleSetStmt();
             } else if (parsedStmt instanceof UseDbStmt) {
                 handleUseDbStmt();
-            } else if (parsedStmt instanceof SetWarehouseStmt) {
-                handleSetWarehouseStmt();
             } else if (parsedStmt instanceof UseCatalogStmt) {
                 handleUseCatalogStmt();
             } else if (parsedStmt instanceof SetCatalogStmt) {
@@ -590,6 +624,8 @@ public class StmtExecutor {
                 handleUnsupportedStmt();
             } else if (parsedStmt instanceof AnalyzeStmt) {
                 handleAnalyzeStmt();
+            } else if (parsedStmt instanceof AnalyzeProfileStmt) {
+                handleAnalyzeProfileStmt();
             } else if (parsedStmt instanceof DropHistogramStmt) {
                 handleDropHistogramStmt();
             } else if (parsedStmt instanceof DropStatsStmt) {
@@ -608,6 +644,8 @@ public class StmtExecutor {
                 handleSetRole();
             } else if (parsedStmt instanceof SetDefaultRoleStmt) {
                 handleSetDefaultRole();
+            } else if (parsedStmt instanceof UpdateFailPointStatusStatement) {
+                handleUpdateFailPointStatusStmt();
             } else {
                 context.getState().setError("Do not support this query.");
             }
@@ -652,6 +690,11 @@ public class StmtExecutor {
 
             context.setSessionVariable(sessionVariableBackup);
         }
+    }
+
+    private boolean isStatisticsJob(StatementBase stmt) {
+        Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(context, stmt);
+        return dbs.values().stream().anyMatch(db -> STATISTICS_DB_NAME.equals(db.getFullName()));
     }
 
     private void handleCreateTableAsSelectStmt(long beginTimeInNanoSecond) throws Exception {
@@ -704,7 +747,7 @@ public class StmtExecutor {
         leaderOpExecutor.execute();
     }
 
-    private void writeProfile(long beginTimeInNanoSecond) {
+    private void writeProfile(ExecPlan plan, long beginTimeInNanoSecond) {
         long profileBeginTime = System.currentTimeMillis();
         initProfile(beginTimeInNanoSecond);
         profile.computeTimeInChildProfile();
@@ -714,7 +757,7 @@ public class StmtExecutor {
                         DebugUtil.getPrettyStringMs(profileEndTime - profileBeginTime));
         StringBuilder builder = new StringBuilder();
         profile.prettyPrint(builder, "");
-        String profileContent = ProfileManager.getInstance().pushProfile(profile);
+        String profileContent = ProfileManager.getInstance().pushProfile(plan, profile);
         if (context.getQueryDetail() != null) {
             context.getQueryDetail().setProfile(profileContent);
         }
@@ -789,13 +832,14 @@ public class StmtExecutor {
         if (killCtx == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_NO_SUCH_THREAD, id);
         }
+        Preconditions.checkNotNull(killCtx);
         if (context == killCtx) {
             // Suicide
             context.setKilled();
         } else {
-            if (!Objects.equals(killCtx.getQualifiedUser(), context.getQualifiedUser()) &&
-                    !PrivilegeActions.checkSystemAction(context, PrivilegeType.OPERATE)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "OPERATE");
+            if (!Objects.equals(killCtx.getQualifiedUser(), context.getQualifiedUser())) {
+                PrivilegeChecker.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.OPERATE);
             }
             killCtx.kill(killStmt.isConnectionKill());
         }
@@ -816,12 +860,23 @@ public class StmtExecutor {
         context.getState().setOk();
     }
 
+    private Coordinator.Factory getCoordinatorFactory() {
+        return new DefaultCoordinator.Factory();
+    }
+
     // Process a select statement.
     private void handleQueryStmt(ExecPlan execPlan) throws Exception {
         // Every time set no send flag and clean all data in buffer
         context.getMysqlChannel().reset();
 
-        if (parsedStmt.isExplain()) {
+        boolean isExplainAnalyze = parsedStmt.isExplain()
+                && StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel());
+
+        if (isExplainAnalyze) {
+            context.getSessionVariable().setEnableProfile(true);
+            context.getSessionVariable().setPipelineProfileLevel(1);
+            context.getSessionVariable().setProfileLimitFold(false);
+        } else if (parsedStmt.isExplain()) {
             handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT));
             return;
         }
@@ -836,63 +891,66 @@ public class StmtExecutor {
         List<String> colNames = execPlan.getColNames();
         List<Expr> outputExprs = execPlan.getOutputExprs();
 
-        coord = new Coordinator(context, fragments, scanNodes, descTable);
+        coord = getCoordinatorFactory().createQueryScheduler(context, fragments, scanNodes, descTable);
 
         QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(),
                 new QeProcessorImpl.QueryInfo(context, originStmt.originStmt, coord));
 
         coord.exec();
         coord.setTopProfileSupplier(this::buildTopLevelProfile);
+        coord.setExecPlanSupplier(() -> execPlan);
 
-        // send result
-        // 1. If this is a query with OUTFILE clause, eg: select * from tbl1 into outfile xxx,
-        //    We will not send real query result to client. Instead, we only send OK to client with
-        //    number of rows selected. For example:
-        //          mysql> select * from tbl1 into outfile xxx;
-        //          Query OK, 10 rows affected (0.01 sec)
-        //
-        // 2. If this is a query, send the result expr fields first, and send result data back to client.
         RowBatch batch;
-        MysqlChannel channel = context.getMysqlChannel();
         boolean isOutfileQuery = false;
         if (queryStmt instanceof QueryStatement) {
             isOutfileQuery = ((QueryStatement) queryStmt).hasOutFileClause();
         }
-        boolean isSendFields = false;
-        while (true) {
-            batch = coord.getNext();
-            // for outfile query, there will be only one empty batch send back with eos flag
-            if (batch.getBatch() != null && !isOutfileQuery) {
-                // For some language driver, getting error packet after fields packet will be recognized as a success result
-                // so We need to send fields after first batch arrived
-                if (!isSendFields) {
-                    sendFields(colNames, outputExprs);
-                    isSendFields = true;
-                }
-                if (!isProxy && channel.isSendBufferNull()) {
-                    int bufferSize = 0;
-                    for (ByteBuffer row : batch.getBatch().getRows()) {
-                        bufferSize += (row.position() - row.limit());
-                    }
-                    // +8 for header size
-                    channel.initBuffer(bufferSize + 8);
-                }
 
-                for (ByteBuffer row : batch.getBatch().getRows()) {
-                    if (isProxy) {
-                        proxyResultBuffer.add(row);
-                    } else {
-                        channel.sendOnePacket(row);
+        if (context instanceof HttpConnectContext) {
+            batch = httpResultSender.sendQueryResult(coord, execPlan);
+        } else {
+            // send mysql result
+            // 1. If this is a query with OUTFILE clause, eg: select * from tbl1 into outfile xxx,
+            //    We will not send real query result to client. Instead, we only send OK to client with
+            //    number of rows selected. For example:
+            //          mysql> select * from tbl1 into outfile xxx;
+            //          Query OK, 10 rows affected (0.01 sec)
+            //
+            // 2. If this is a query, send the result expr fields first, and send result data back to client.
+            MysqlChannel channel = context.getMysqlChannel();
+            boolean isSendFields = false;
+            do {
+                batch = coord.getNext();
+                // for outfile query, there will be only one empty batch send back with eos flag
+                if (batch.getBatch() != null && !isOutfileQuery && !isExplainAnalyze) {
+                    // For some language driver, getting error packet after fields packet will be recognized as a success result
+                    // so We need to send fields after first batch arrived
+                    if (!isSendFields) {
+                        sendFields(colNames, outputExprs);
+                        isSendFields = true;
                     }
+                    if (!isProxy && channel.isSendBufferNull()) {
+                        int bufferSize = 0;
+                        for (ByteBuffer row : batch.getBatch().getRows()) {
+                            bufferSize += (row.position() - row.limit());
+                        }
+                        // +8 for header size
+                        channel.initBuffer(bufferSize + 8);
+                    }
+
+                    for (ByteBuffer row : batch.getBatch().getRows()) {
+                        if (isProxy) {
+                            proxyResultBuffer.add(row);
+                        } else {
+                            channel.sendOnePacket(row);
+                        }
+                    }
+                    context.updateReturnRows(batch.getBatch().getRows().size());
                 }
-                context.updateReturnRows(batch.getBatch().getRows().size());
+            } while (!batch.isEos());
+            if (!isSendFields && !isOutfileQuery && !isExplainAnalyze) {
+                sendFields(colNames, outputExprs);
             }
-            if (batch.isEos()) {
-                break;
-            }
-        }
-        if (!isSendFields && !isOutfileQuery) {
-            sendFields(colNames, outputExprs);
         }
 
         statisticsForAuditLog = batch.getQueryStatistics();
@@ -1001,6 +1059,15 @@ public class StmtExecutor {
         sendShowResult(resultSet);
     }
 
+    private void handleAnalyzeProfileStmt() throws IOException {
+        AnalyzeProfileStmt analyzeProfileStmt = (AnalyzeProfileStmt) parsedStmt;
+        String queryId = analyzeProfileStmt.getQueryId();
+        List<Integer> planNodeIds = analyzeProfileStmt.getPlanNodeIds();
+        ProfileManager.ProfileElement profileElement = ProfileManager.getInstance().getProfileElement(queryId);
+        Preconditions.checkNotNull(profileElement, "query not exists");
+        handleExplainStmt(ExplainAnalyzer.analyze(profileElement.plan, profileElement.profile, planNodeIds));
+    }
+
     private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
         // from current session, may execute analyze stmt
@@ -1083,9 +1150,43 @@ public class StmtExecutor {
         KillAnalyzeStmt killAnalyzeStmt = (KillAnalyzeStmt) parsedStmt;
         long analyzeId = killAnalyzeStmt.getAnalyzeId();
         AnalyzeMgr analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
-        PrivilegeChecker.checkPrivilegeForKillAnalyzeStmt(context, analyzeId);
+        checkPrivilegeForKillAnalyzeStmt(context, analyzeId);
         // Try to kill the job anyway.
         analyzeManager.killConnection(analyzeId);
+    }
+
+    private void checkTblPrivilegeForKillAnalyzeStmt(ConnectContext context, String catalogName, String dbName,
+                                                     String tableName, long analyzeId) {
+        MetaUtils.getDatabase(catalogName, dbName);
+        MetaUtils.getTable(catalogName, dbName, tableName);
+
+        PrivilegeChecker.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                catalogName, dbName, tableName, PrivilegeType.SELECT);
+        PrivilegeChecker.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                catalogName, dbName, tableName, PrivilegeType.INSERT);
+    }
+
+    public void checkPrivilegeForKillAnalyzeStmt(ConnectContext context, long analyzeId) {
+        AnalyzeMgr analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
+        AnalyzeStatus analyzeStatus = analyzeManager.getAnalyzeStatus(analyzeId);
+        AnalyzeJob analyzeJob = analyzeManager.getAnalyzeJob(analyzeId);
+        if (analyzeStatus != null) {
+            try {
+                String catalogName = analyzeStatus.getCatalogName();
+                String dbName = analyzeStatus.getDbName();
+                String tableName = analyzeStatus.getTableName();
+                checkTblPrivilegeForKillAnalyzeStmt(context, catalogName, dbName, tableName, analyzeId);
+            } catch (MetaNotFoundException ignore) {
+                // If the db or table doesn't exist anymore, we won't check privilege on it
+            }
+        } else if (analyzeJob != null) {
+            Set<TableName> tableNames = AnalyzerUtils.getAllTableNamesForAnalyzeJobStmt(analyzeJob.getDbId(),
+                    analyzeJob.getTableId());
+            tableNames.forEach(tableName -> {
+                checkTblPrivilegeForKillAnalyzeStmt(context, tableName.getCatalog(), tableName.getDb(),
+                        tableName.getTbl(), analyzeId);
+            });
+        }
     }
 
     private void handleAddSqlBlackListStmt() {
@@ -1168,18 +1269,6 @@ public class StmtExecutor {
         context.getState().setOk();
     }
 
-    // Process use warehouse statement
-    private void handleSetWarehouseStmt() throws AnalysisException {
-        SetWarehouseStmt setWarehouseStmt = (SetWarehouseStmt) parsedStmt;
-        try {
-            context.getGlobalStateMgr().changeWarehouse(context, setWarehouseStmt.getWarehouseName());
-        } catch (Exception e) {
-            context.getState().setError(e.getMessage());
-            return;
-        }
-        context.getState().setOk();
-    }
-
     private void sendMetaData(ShowResultSetMetaData metaData) throws IOException {
         // sends how many columns
         serializer.reset();
@@ -1231,6 +1320,12 @@ public class StmtExecutor {
 
     public void sendShowResult(ShowResultSet resultSet) throws IOException {
         context.updateReturnRows(resultSet.getResultRows().size());
+        // Send result set for http.
+        if (context instanceof HttpConnectContext) {
+            httpResultSender.sendShowResult(resultSet);
+            return;
+        }
+
         // Send meta data.
         sendMetaData(resultSet.getMetaData());
 
@@ -1268,6 +1363,11 @@ public class StmtExecutor {
     }
 
     private void handleExplainStmt(String explainString) throws IOException {
+        if (context instanceof HttpConnectContext) {
+            httpResultSender.sendExplainResult(explainString);
+            return;
+        }
+
         if (context.getQueryDetail() != null) {
             context.getQueryDetail().setExplain(explainString);
         }
@@ -1300,7 +1400,9 @@ public class StmtExecutor {
             explainString += "NOT AVAILABLE";
         } else {
             if (parsedStmt.getExplainLevel() == OPTIMIZER) {
-                explainString += PlannerProfile.printPlannerTimeCost(context.getPlannerProfile());
+                explainString += PlannerProfile.printPlannerTimer(context.getPlannerProfile());
+            } else if (parsedStmt.getExplainLevel() == REWRITE) {
+                explainString += PlannerProfile.printPlannerTrace(context.getPlannerProfile());
             } else {
                 explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
             }
@@ -1345,6 +1447,11 @@ public class StmtExecutor {
         ExportStmt exportStmt = (ExportStmt) parsedStmt;
         exportStmt.setExportStartTime(context.getStartTime());
         context.getGlobalStateMgr().getExportMgr().addExportJob(queryId, exportStmt);
+    }
+
+    private void handleUpdateFailPointStatusStmt() throws Exception {
+        FailPointExecutor executor = new FailPointExecutor(context, parsedStmt);
+        executor.execute();
     }
 
     public PQueryStatistics getQueryStatisticsForAuditLog() {
@@ -1403,7 +1510,11 @@ public class StmtExecutor {
             handleDMLStmt(execPlan, stmt);
             // TODO: Support write profile even dml aborted.
             if (context.getSessionVariable().isEnableProfile()) {
-                writeProfile(beginTimeInNanoSecond);
+                writeProfile(execPlan, beginTimeInNanoSecond);
+                if (parsedStmt.isExplain() &&
+                        StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
+                    handleExplainStmt(ExplainAnalyzer.analyze(execPlan, profile, null));
+                }
             }
         } catch (Throwable t) {
             LOG.warn("DML statement(" + originStmt.originStmt + ") process failed.", t);
@@ -1417,7 +1528,14 @@ public class StmtExecutor {
      * `handleDMLStmt` only executes DML statement and no write profile at the end.
      */
     public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
-        if (stmt.isExplain()) {
+        boolean isExplainAnalyze = parsedStmt.isExplain()
+                && StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel());
+
+        if (isExplainAnalyze) {
+            context.getSessionVariable().setEnableProfile(true);
+            context.getSessionVariable().setPipelineProfileLevel(1);
+            context.getSessionVariable().setProfileLimitFold(false);
+        } else if (stmt.isExplain()) {
             handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.INSERT));
             return;
         }
@@ -1444,11 +1562,15 @@ public class StmtExecutor {
         String dbName = stmt.getTableName().getDb();
         String tableName = stmt.getTableName().getTbl();
         Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
-        Table targetTable;
+        final Table targetTable;
         if (stmt instanceof InsertStmt && ((InsertStmt) stmt).getTargetTable() != null) {
             targetTable = ((InsertStmt) stmt).getTargetTable();
         } else {
             targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        }
+        if (isExplainAnalyze) {
+            Preconditions.checkState(targetTable instanceof OlapTable,
+                    "explain analyze only supports insert into olap native table");
         }
 
         if (parsedStmt instanceof InsertStmt && ((InsertStmt) parsedStmt).isOverwrite() &&
@@ -1524,6 +1646,7 @@ public class StmtExecutor {
 
         long loadedRows = 0;
         int filteredRows = 0;
+        long loadedBytes = 0;
         long jobId = -1;
         long estimateScanRows = -1;
         TransactionStatus txnStatus = TransactionStatus.ABORTED;
@@ -1540,9 +1663,8 @@ public class StmtExecutor {
                 dataSink.complete();
             }
 
-            coord = new Coordinator(context, execPlan.getFragments(), execPlan.getScanNodes(),
-                    execPlan.getDescTbl().toThrift());
-            coord.setQueryType(TQueryType.LOAD);
+            coord = getCoordinatorFactory().createInsertScheduler(
+                    context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
 
             List<ScanNode> scanNodes = execPlan.getScanNodes();
 
@@ -1554,7 +1676,7 @@ public class StmtExecutor {
                 }
             }
 
-            TLoadJobType type = null;
+            TLoadJobType type;
             if (containOlapScanNode) {
                 coord.setLoadJobType(TLoadJobType.INSERT_QUERY);
                 type = TLoadJobType.INSERT_QUERY;
@@ -1573,15 +1695,19 @@ public class StmtExecutor {
                         createTime,
                         estimateScanRows,
                         type,
-                        ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+                        ConnectContext.get().getSessionVariable().getQueryTimeoutS(),
+                        context.getCurrentWarehouse(),
+                        isStatisticsJob(parsedStmt));
             }
 
-            coord.setJobId(jobId);
+            coord.setLoadJobId(jobId);
             trackingSql = "select tracking_log from information_schema.load_tracking_logs where job_id=" + jobId;
 
             QeProcessorImpl.QueryInfo queryInfo = new QeProcessorImpl.QueryInfo(context, originStmt.originStmt, coord);
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), queryInfo);
             coord.exec();
+            coord.setTopProfileSupplier(this::buildTopLevelProfile);
+            coord.setExecPlanSupplier(() -> execPlan);
 
             coord.join(context.getSessionVariable().getQueryTimeoutS());
             if (!coord.isDone()) {
@@ -1636,6 +1762,10 @@ public class StmtExecutor {
                 filteredRows = Integer.parseInt(coord.getLoadCounters().get(LoadEtlTask.DPP_ABNORMAL_ALL));
             }
 
+            if (coord.getLoadCounters().get(LoadJob.LOADED_BYTES) != null) {
+                loadedBytes = Long.parseLong(coord.getLoadCounters().get(LoadJob.LOADED_BYTES));
+            }
+
             // if in strict mode, insert will fail if there are filtered rows
             if (context.getSessionVariable().getEnableInsertStrict()) {
                 if (filteredRows > 0) {
@@ -1645,7 +1775,8 @@ public class StmtExecutor {
                                 externalTable.getSourceTableDbId(), transactionId,
                                 externalTable.getSourceTableHost(),
                                 externalTable.getSourceTablePort(),
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " + trackingSql
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
+                                        trackingSql
                         );
                     } else if (targetTable instanceof SystemTable || targetTable instanceof IcebergTable) {
                         // schema table does not need txn
@@ -1653,7 +1784,8 @@ public class StmtExecutor {
                         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                                 database.getId(),
                                 transactionId,
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " + trackingSql,
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
+                                        trackingSql,
                                 TabletFailInfo.fromThrift(coord.getFailInfos())
                         );
                     }
@@ -1662,29 +1794,6 @@ public class StmtExecutor {
                     insertError = true;
                     return;
                 }
-            }
-
-            if (loadedRows == 0 && filteredRows == 0 && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt
-                    || stmt instanceof UpdateStmt)) {
-                if (targetTable instanceof ExternalOlapTable) {
-                    ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
-                            externalTable.getSourceTableDbId(), transactionId,
-                            externalTable.getSourceTableHost(),
-                            externalTable.getSourceTablePort(),
-                            TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
-                } else if (targetTable instanceof SystemTable || targetTable instanceof IcebergTable) {
-                    // schema table does not need txn
-                } else {
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
-                            database.getId(),
-                            transactionId,
-                            TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG
-                    );
-                }
-                context.getState().setOk();
-                insertError = true;
-                return;
             }
 
             if (targetTable instanceof ExternalOlapTable) {
@@ -1715,7 +1824,11 @@ public class StmtExecutor {
                 txnStatus = TransactionStatus.VISIBLE;
                 label = "FAKE_ICEBERG_SINK_LABEL";
             } else {
-                if (GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
+                if (isExplainAnalyze) {
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr()
+                            .abortTransaction(database.getId(), transactionId, "Explain Analyze");
+                    txnStatus = TransactionStatus.ABORTED;
+                } else if (GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
                         database,
                         transactionId,
                         TabletCommitInfo.fromThrift(coord.getCommitInfos()),
@@ -1730,8 +1843,7 @@ public class StmtExecutor {
                                 TableMetricsRegistry.getInstance().getMetricsEntity(targetTable.getId());
                         entity.counterInsertLoadFinishedTotal.increase(1L);
                         entity.counterInsertLoadRowsTotal.increase(loadedRows);
-                        entity.counterInsertLoadBytesTotal
-                                .increase(Long.valueOf(coord.getLoadCounters().get(LoadJob.LOADED_BYTES)));
+                        entity.counterInsertLoadBytesTotal.increase(loadedBytes);
                     }
                 } else {
                     txnStatus = TransactionStatus.COMMITTED;
@@ -1850,7 +1962,9 @@ public class StmtExecutor {
         try {
             UUID uuid = context.getQueryId();
             context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
-            coord = new Coordinator(context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift());
+
+            coord = getCoordinatorFactory().createQueryScheduler(
+                    context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift());
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
 
             coord.exec();
@@ -1863,7 +1977,7 @@ public class StmtExecutor {
             } while (!batch.isEos());
         } catch (Exception e) {
             LOG.warn(e);
-            coord.getExecStatus().setStatus(e.getMessage());
+            coord.getExecStatus().setInternalErrorStatus(e.getMessage());
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
         }

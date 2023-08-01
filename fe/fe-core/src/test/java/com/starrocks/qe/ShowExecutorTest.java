@@ -1064,7 +1064,7 @@ public class ShowExecutorTest {
         Assert.assertEquals("testMv", resultSet.getString(2));
         Assert.assertEquals("ASYNC", resultSet.getString(3));
         Assert.assertEquals("true", resultSet.getString(4));
-        Assert.assertEquals("null", resultSet.getString(5));
+        Assert.assertEquals(null, resultSet.getString(5));
         Assert.assertEquals("RANGE", resultSet.getString(6));
         for (int i = 6; i < mvSchemaTable.size() - 2; i++) {
             Assert.assertEquals("", resultSet.getString(7));
@@ -1233,6 +1233,7 @@ public class ShowExecutorTest {
                 properties.put("type", "hive");
                 properties.put("aws.s3.access_key", "iam_user_access_key");
                 properties.put("aws.s3.secret_key", "iam_user_secret_key");
+                properties.put("password", "password");
                 return new Catalog(1, "test_hive", properties, "hive_test");
             }
         };

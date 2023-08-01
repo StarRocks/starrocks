@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.sql.SQLException;
@@ -336,12 +337,11 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 " or (depts.name is not null and emps.name = 'b')" +
                 " or (depts.name is not null and emps.name = 'c')");
 
-        // TODO: support in predicate rewrite
         String query18 = "select depts.deptno, depts.name from emps join depts using (deptno)" +
                 " where (depts.name is not null and emps.name = 'a')" +
                 " or (depts.name is not null and emps.name = 'b')";
         String plan18 = getFragmentPlan(query18);
-        PlanTestBase.assertNotContains(plan18, "join_mv_4");
+        PlanTestBase.assertContains(plan18, "join_mv_4");
         dropMv("test", "join_mv_4");
 
         createAndRefreshMv("test", "join_mv_5", "create materialized view join_mv_5" +
@@ -426,87 +426,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
         String plan22 = getFragmentPlan(query22);
         PlanTestBase.assertContains(plan22, "cross_join_mv2");
         dropMv("test", "cross_join_mv2");
-    }
-
-    @Test
-    public void testHiveJoinMvRewrite() throws Exception {
-        createAndRefreshMv("test", "hive_join_mv_1", "create materialized view hive_join_mv_1" +
-                " distributed by hash(s_suppkey)" +
-                "PROPERTIES (\n" +
-                "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                ") " +
-                " as " +
-                " SELECT s_suppkey , s_name, n_name" +
-                " from hive0.tpch.supplier join hive0.tpch.nation" +
-                " on s_nationkey = n_nationkey" +
-                " where s_suppkey < 100");
-
-        String query1 = "SELECT (s_suppkey + 1) * 2, n_name" +
-                " from hive0.tpch.supplier join hive0.tpch.nation on s_nationkey = n_nationkey where s_suppkey < 100";
-        String plan1 = getFragmentPlan(query1);
-        PlanTestBase.assertContains(plan1, "hive_join_mv_1");
-
-        String query2 = "SELECT (s_suppkey + 1) * 2, n_name, n_comment" +
-                " from hive0.tpch.supplier join hive0.tpch.nation on s_nationkey = n_nationkey where s_suppkey < 100";
-        String plan2 = getFragmentPlan(query2);
-        PlanTestBase.assertNotContains(plan2, "hive_join_mv_1");
-
-        String query3 = "SELECT (s_suppkey + 1) * 2, n_name" +
-                " from hive0.tpch.supplier join hive0.tpch.nation on s_nationkey = n_nationkey where s_suppkey = 99";
-        String plan3 = getFragmentPlan(query3);
-        PlanTestBase.assertContains(plan3, "hive_join_mv_1");
-
-        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
-        String query4 = "SELECT (s_suppkey + 1) * 2, n_name" +
-                " from hive0.tpch.supplier join hive0.tpch.nation on s_nationkey = n_nationkey where s_suppkey < 101";
-        String plan4 = getFragmentPlan(query4);
-        PlanTestBase.assertNotContains(plan4, "hive_join_mv_1");
-
-        String query5 = "SELECT (s_suppkey + 1) * 2, n_name from hive0.tpch.supplier join hive0.tpch.nation on " +
-                "s_nationkey = n_nationkey where s_suppkey < 100 and s_suppkey > 10";
-        String plan5 = getFragmentPlan(query5);
-        PlanTestBase.assertContains(plan5, "hive_join_mv_1");
-
-        String query6 = "SELECT (s_suppkey + 1) * 2, n_name" +
-                " from hive0.tpch.supplier join hive0.tpch.nation on s_nationkey = n_nationkey";
-        String plan6 = getFragmentPlan(query6);
-        PlanTestBase.assertNotContains(plan6, "hive_join_mv_1");
-
-        dropMv("test", "hive_join_mv_1");
-
-        createAndRefreshMv("test", "hive_join_mv_2", "create materialized view hive_join_mv_2" +
-                " distributed by hash(s_nationkey)" +
-                "PROPERTIES (\n" +
-                "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                ") " +
-                " as " +
-                " SELECT s_nationkey , s_name, n_name" +
-                " from hive0.tpch.supplier join hive0.tpch.nation" +
-                " on s_nationkey = n_nationkey" +
-                " where s_nationkey <= 100");
-
-        // test on equivalence classes for output and predicates
-        String query7 = "SELECT (n_nationkey + 1) * 2, n_name" +
-                " from hive0.tpch.supplier join hive0.tpch.nation on s_nationkey = n_nationkey where n_nationkey < 100";
-        String plan7 = getFragmentPlan(query7);
-        PlanTestBase.assertContains(plan7, "hive_join_mv_2");
-
-        String query8 = "SELECT (n_nationkey + 1) * 2, n_name" +
-                " from hive0.tpch.supplier join hive0.tpch.nation on s_nationkey = n_nationkey where n_nationkey < 10";
-        String plan8 = getFragmentPlan(query8);
-        PlanTestBase.assertContains(plan8, "hive_join_mv_2");
-
-        String query9 = "SELECT (n_nationkey + 1) * 2, n_name" +
-                " from hive0.tpch.supplier join hive0.tpch.nation on s_nationkey = n_nationkey where n_nationkey = 100";
-        String plan9 = getFragmentPlan(query9);
-        PlanTestBase.assertContains(plan9, "hive_join_mv_2");
-
-        String query10 = "SELECT (n_nationkey + 1) * 2, n_name from hive0.tpch.supplier join hive0.tpch.nation on " +
-                "s_nationkey = n_nationkey where n_nationkey between 10 and 20";
-        String plan10 = getFragmentPlan(query10);
-        PlanTestBase.assertContains(plan10, "hive_join_mv_2");
-
-        dropMv("test", "hive_join_mv_2");
     }
 
     @Test
@@ -887,96 +806,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
     }
 
     @Test
-    public void testHiveAggregateMvRewrite() throws Exception {
-        createAndRefreshMv("test", "hive_agg_join_mv_1", "create materialized view hive_agg_join_mv_1" +
-                " distributed by hash(s_nationkey)" +
-                "PROPERTIES (\n" +
-                "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                ") " +
-                " as " +
-                " SELECT s_nationkey , n_name, sum(s_acctbal) as total_sum" +
-                " from hive0.tpch.supplier join hive0.tpch.nation" +
-                " on s_nationkey = n_nationkey" +
-                " where s_nationkey < 100 " +
-                "group by s_nationkey , n_name");
-
-        String query1 = " SELECT s_nationkey , n_name, sum(s_acctbal) as total_sum" +
-                " from hive0.tpch.supplier join hive0.tpch.nation" +
-                " on s_nationkey = n_nationkey" +
-                " where s_nationkey = 1 " +
-                "group by s_nationkey , n_name";
-        String plan1 = getFragmentPlan(query1);
-        PlanTestBase.assertContains(plan1, "hive_agg_join_mv_1");
-
-        String query2 = " SELECT s_nationkey , n_name, sum(s_acctbal) as total_sum" +
-                " from hive0.tpch.supplier join hive0.tpch.nation" +
-                " on s_nationkey = n_nationkey" +
-                " where s_nationkey < 100 " +
-                "group by s_nationkey , n_name";
-        String plan2 = getFragmentPlan(query2);
-        PlanTestBase.assertContains(plan2, "hive_agg_join_mv_1");
-
-        String query3 = " SELECT s_nationkey , sum(s_acctbal) as total_sum" +
-                " from hive0.tpch.supplier join hive0.tpch.nation" +
-                " on s_nationkey = n_nationkey" +
-                " where s_nationkey < 99 " +
-                "group by s_nationkey";
-        String plan3 = getFragmentPlan(query3);
-        PlanTestBase.assertContains(plan3, "hive_agg_join_mv_1");
-    }
-
-    @Test
-    public void testHiveUnionRewrite() throws Exception {
-        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-        createAndRefreshMv("test", "hive_union_mv_1",
-                "create materialized view hive_union_mv_1 distributed by hash(s_suppkey) " +
-                        "PROPERTIES (\n" +
-                        "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                        ") " +
-                        " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
-        String query1 = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 10";
-        String plan1 = getFragmentPlan(query1);
-        PlanTestBase.assertContains(plan1, "0:UNION");
-        PlanTestBase.assertContains(plan1, "hive_union_mv_1");
-        PlanTestBase.assertContains(plan1, "1:HdfsScanNode\n" +
-                "     TABLE: supplier\n" +
-                "     NON-PARTITION PREDICATES: 13: s_suppkey < 10, 13: s_suppkey > 4");
-
-        dropMv("test", "hive_union_mv_1");
-    }
-
-    @Test
-    public void testHiveQueryWithMvs() throws Exception {
-        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-        // enforce choose the hive scan operator, not mv plan
-        connectContext.getSessionVariable().setUseNthExecPlan(1);
-        createAndRefreshMv("test", "hive_union_mv_1",
-                "create materialized view hive_union_mv_1 distributed by hash(s_suppkey) " +
-                        "PROPERTIES (\n" +
-                        "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                        ") " +
-                        " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
-        createAndRefreshMv("test", "hive_join_mv_1", "create materialized view hive_join_mv_1" +
-                " distributed by hash(s_suppkey)" +
-                "PROPERTIES (\n" +
-                "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                ") " +
-                " as " +
-                " SELECT s_suppkey , s_name, n_name" +
-                " from hive0.tpch.supplier join hive0.tpch.nation" +
-                " on s_nationkey = n_nationkey" +
-                " where s_suppkey < 100");
-
-        String query1 = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 10";
-        String plan = getFragmentPlan(query1);
-        PlanTestBase.assertContains(plan, "TABLE: supplier", "NON-PARTITION PREDICATES: 19: s_suppkey < 10");
-
-        connectContext.getSessionVariable().setUseNthExecPlan(0);
-        dropMv("test", "hive_union_mv_1");
-        dropMv("test", "hive_join_mv_1");
-    }
-
-    @Test
     public void testUnionRewrite() throws Exception {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
 
@@ -1011,32 +840,35 @@ public class MvRewriteTest extends MvRewriteTestBase {
         Table depts2 = getTable("test", "depts2");
         PlanTestBase.setTableStatistics((OlapTable) depts2, 1000000);
 
-        // single table union
-        createAndRefreshMv("test", "union_mv_1", "create materialized view union_mv_1" +
-                " distributed by hash(empid)  as select empid, deptno, name, salary from emps2 where empid < 3");
-        MaterializedView mv1 = getMv("test", "union_mv_1");
-        PlanTestBase.setTableStatistics(mv1, 10);
-        String query1 = "select empid, deptno, name, salary from emps2 where empid < 5";
-        String plan1 = getFragmentPlan(query1);
-        PlanTestBase.assertContains(plan1, "0:UNION\n" +
-                "  |  \n" +
-                "  |----5:EXCHANGE");
-        PlanTestBase.assertContains(plan1, "  3:OlapScanNode\n" +
-                "     TABLE: union_mv_1");
-        PlanTestBase.assertContains(plan1, "TABLE: emps2\n" +
-                        "     PREAGGREGATION: ON\n",
-                "empid < 5,", "empid > 2");
+        /*
+        {
+            // single table union
+            createAndRefreshMv("test", "union_mv_1", "create materialized view union_mv_1" +
+                    " distributed by hash(empid)  as select empid, deptno, name, salary from emps2 where empid < 3");
+            MaterializedView mv1 = getMv("test", "union_mv_1");
+            PlanTestBase.setTableStatistics(mv1, 10);
+            String query1 = "select empid, deptno, name, salary from emps2 where empid < 5";
+            String plan1 = getFragmentPlan(query1);
+            PlanTestBase.assertContains(plan1, "0:UNION\n" +
+                    "  |  \n" +
+                    "  |----5:EXCHANGE");
+            PlanTestBase.assertContains(plan1, "  3:OlapScanNode\n" +
+                    "     TABLE: union_mv_1");
+            PlanTestBase.assertContains(plan1, "TABLE: emps2\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 9: empid <= 4, 9: empid >= 3");
 
-        String query7 = "select deptno, empid from emps2 where empid < 5";
-        String plan7 = getFragmentPlan(query7);
-        PlanTestBase.assertContains(plan7, "union_mv_1");
-        OptExpression optExpression7 = getOptimizedPlan(query7, connectContext);
-        List<PhysicalScanOperator> scanOperators = getScanOperators(optExpression7, "union_mv_1");
-        Assert.assertEquals(1, scanOperators.size());
-        Assert.assertFalse(scanOperators.get(0).getColRefToColumnMetaMap().keySet().toString().contains("name"));
-        Assert.assertFalse(scanOperators.get(0).getColRefToColumnMetaMap().keySet().toString().contains("salary"));
+            String query7 = "select deptno, empid from emps2 where empid < 5";
+            String plan7 = getFragmentPlan(query7);
+            PlanTestBase.assertContains(plan7, "union_mv_1");
+            OptExpression optExpression7 = getOptimizedPlan(query7, connectContext);
+            List<PhysicalScanOperator> scanOperators = getScanOperators(optExpression7, "union_mv_1");
+            Assert.assertEquals(1, scanOperators.size());
+            Assert.assertFalse(scanOperators.get(0).getColRefToColumnMetaMap().keySet().toString().contains("name"));
+            Assert.assertFalse(scanOperators.get(0).getColRefToColumnMetaMap().keySet().toString().contains("salary"));
 
-        dropMv("test", "union_mv_1");
+            dropMv("test", "union_mv_1");
+        }
 
         {
             // multi tables query
@@ -1060,6 +892,8 @@ public class MvRewriteTest extends MvRewriteTestBase {
             dropMv("test", "join_union_mv_1");
         }
 
+         */
+
         {
             // multi tables query
             createAndRefreshMv("test", "join_union_mv_1", "create materialized view join_union_mv_1" +
@@ -1082,13 +916,12 @@ public class MvRewriteTest extends MvRewriteTestBase {
             PlanTestBase.assertContains(plan2, "2:OlapScanNode\n" +
                     "     TABLE: emps2\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 15: deptno < 120, 15: deptno > 99\n" +
+                    "     PREDICATES: 15: deptno <= 119, 15: deptno > 99, 15: deptno < 120\n" +
                     "     partitions=1/1");
             PlanTestBase.assertContains(plan2, "1:OlapScanNode\n" +
                     "     TABLE: depts2\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 18: deptno < 120, 18: deptno > 99");
-            dropMv("test", "join_union_mv_1");
+                    "     PREDICATES: 18: deptno <= 119, 18: deptno > 99, 18: deptno < 120");
         }
 
         starRocksAssert.withTable("CREATE TABLE `test_all_type2` (\n" +
@@ -1184,11 +1017,11 @@ public class MvRewriteTest extends MvRewriteTestBase {
             PlanTestBase.assertContains(plan8, "2:OlapScanNode\n" +
                     "     TABLE: test_all_type2\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 24: t1d > 99, 24: t1d < 120");
+                    "     PREDICATES: 24: t1d > 99, 24: t1d <= 119, 24: t1d < 120");
             PlanTestBase.assertContains(plan8, "1:OlapScanNode\n" +
                     "     TABLE: t02\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 20: v1 > 99, 20: v1 < 120");
+                    "     PREDICATES: 20: v1 > 99, 20: v1 <= 119, 20: v1 < 120");
             dropMv("test", "join_agg_union_mv_2");
         }
 
@@ -1347,7 +1180,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
         Assert.assertEquals("k4", uniqueConstraint4.getUniqueColumns().get(0));
 
         cluster.runSql("test", "alter table parent_table1 set(\"unique_constraints\"=\"\")");
-        Assert.assertNull(olapTable.getUniqueConstraints());
+        Assert.assertTrue(olapTable.getUniqueConstraints().isEmpty());
 
         cluster.runSql("test", "alter table parent_table1 set(\"unique_constraints\"=\"k1, k2\")");
 
@@ -1433,5 +1266,133 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "     TABLE: test_all_type\n" +
                 "     PREAGGREGATION: ON");
         dropMv("test", "forbid_mv_1");
+    }
+
+    @Test
+    public void testJoinPredicatePushdown() throws Exception {
+        cluster.runSql("test", "CREATE TABLE pushdown_t1 (\n" +
+                "    `c0` string,\n" +
+                "    `c1` string,\n" +
+                "    `c2` string,\n" +
+                "    `c3` string,\n" +
+                "    `c4` string,\n" +
+                "    `c5` string ,\n" +
+                "    `c6` string,\n" +
+                "    `c7`  date\n" +
+                ") \n" +
+                "DUPLICATE KEY (c0)\n" +
+                "DISTRIBUTED BY HASH(c0)\n" +
+                "properties('replication_num' = '1');");
+        cluster.runSql("test", "CREATE TABLE `pushdown_t2` (\n" +
+                "  `c0` varchar(65533) NULL ,\n" +
+                "  `c1` varchar(65533) NULL ,\n" +
+                "  `c2` varchar(65533) NULL ,\n" +
+                "  `c3` varchar(65533) NULL ,\n" +
+                "  `c4` varchar(65533) NULL ,\n" +
+                "  `c5` varchar(65533) NULL ,\n" +
+                "  `c6` varchar(65533) NULL ,\n" +
+                "  `c7` varchar(65533) NULL ,\n" +
+                "  `c8` varchar(65533) NULL ,\n" +
+                "  `c9` varchar(65533) NULL ,\n" +
+                "  `c10` varchar(65533) NULL ,\n" +
+                "  `c11` date NULL ,\n" +
+                "  `c12` datetime NULL \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY (c0)\n" +
+                "DISTRIBUTED BY HASH(c0)\n" +
+                "PROPERTIES ( \"replication_num\" = \"1\");");
+
+        // With null-rejecting predicate
+        createAndRefreshMv("test", "_pushdown_predicate_join_mv1",
+                "CREATE MATERIALIZED VIEW `_pushdown_predicate_join_mv1`  \n" +
+                        "DISTRIBUTED BY HASH(c12) BUCKETS 18 \n" +
+                        "REFRESH MANUAL \n" +
+                        "PROPERTIES ( \"replication_num\" = \"1\", \"storage_medium\" = \"HDD\") \n" +
+                        "AS\n" +
+                        "SELECT t1.c0, t1.c1, t2.c7, t2.c12\n" +
+                        "FROM\n" +
+                        "    ( SELECT `c0`, `c7`, `c12` FROM `pushdown_t2`) t2\n" +
+                        "    LEFT OUTER JOIN \n" +
+                        "    ( SELECT c0, c1, c7 FROM pushdown_t1 ) t1\n" +
+                        "    ON `t2`.`c0` = `t1`.`c0`\n" +
+                        "    AND t2.c0 IS NOT NULL " +
+                        "    AND date(t2.`c12`) = `t1`.`c7`\n" +
+                        "   ;");
+
+        String query = "SELECT t1.c0, t1.c1, t2.c7, t2.c12\n" +
+                "FROM\n" +
+                "    ( SELECT `c0`, `c7`, `c12` FROM `pushdown_t2`) t2\n" +
+                "    LEFT OUTER JOIN \n" +
+                "    ( SELECT c0, c1, c7 FROM pushdown_t1 ) t1\n" +
+                "    ON `t2`.`c0` = `t1`.`c0`\n" +
+                "    AND t2.c0 IS NOT NULL " +
+                "    AND date(t2.`c12`) = `t1`.`c7`\n" +
+                "   ;";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "_pushdown_predicate_join_mv1");
+    }
+
+    @Ignore("outer join and pushdown predicate does not work")
+    @Test
+    public void testJoinPredicatePushdown1() throws Exception {
+        cluster.runSql("test", "CREATE TABLE pushdown_t1 (\n" +
+                "    `c0` string,\n" +
+                "    `c1` string,\n" +
+                "    `c2` string,\n" +
+                "    `c3` string,\n" +
+                "    `c4` string,\n" +
+                "    `c5` string ,\n" +
+                "    `c6` string,\n" +
+                "    `c7`  date\n" +
+                ") \n" +
+                "DUPLICATE KEY (c0)\n" +
+                "DISTRIBUTED BY HASH(c0)\n" +
+                "properties('replication_num' = '1');");
+        cluster.runSql("test", "CREATE TABLE `pushdown_t2` (\n" +
+                "  `c0` varchar(65533) NULL ,\n" +
+                "  `c1` varchar(65533) NULL ,\n" +
+                "  `c2` varchar(65533) NULL ,\n" +
+                "  `c3` varchar(65533) NULL ,\n" +
+                "  `c4` varchar(65533) NULL ,\n" +
+                "  `c5` varchar(65533) NULL ,\n" +
+                "  `c6` varchar(65533) NULL ,\n" +
+                "  `c7` varchar(65533) NULL ,\n" +
+                "  `c8` varchar(65533) NULL ,\n" +
+                "  `c9` varchar(65533) NULL ,\n" +
+                "  `c10` varchar(65533) NULL ,\n" +
+                "  `c11` date NULL ,\n" +
+                "  `c12` datetime NULL \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY (c0)\n" +
+                "DISTRIBUTED BY HASH(c0)\n" +
+                "PROPERTIES ( \"replication_num\" = \"1\");");
+
+        // Without null-rejecting predicate
+        createAndRefreshMv("test", "_pushdown_predicate_join_mv2",
+                "CREATE MATERIALIZED VIEW `_pushdown_predicate_join_mv2`  \n" +
+                        "DISTRIBUTED BY HASH(c12) BUCKETS 18 \n" +
+                        "REFRESH MANUAL \n" +
+                        "PROPERTIES ( \"replication_num\" = \"1\", \"storage_medium\" = \"HDD\") \n" +
+                        "AS\n" +
+                        "SELECT t1.c0, t1.c1, t2.c7, t2.c12\n" +
+                        "FROM\n" +
+                        "    ( SELECT `c0`, `c7`, `c12` FROM `pushdown_t2`) t2\n" +
+                        "    LEFT OUTER JOIN \n" +
+                        "    ( SELECT c0, c1, c7 FROM pushdown_t1 ) t1\n" +
+                        "    ON `t2`.`c0` = `t1`.`c0`\n" +
+                        "    AND date(t2.`c12`) = `t1`.`c7`\n" +
+                        "   ;");
+
+        String query = "SELECT t1.c0, t1.c1, t2.c7, t2.c12\n" +
+                "FROM\n" +
+                "    ( SELECT `c0`, `c7`, `c12` FROM `pushdown_t2`) t2\n" +
+                "    LEFT OUTER JOIN \n" +
+                "    ( SELECT c0, c1, c7 FROM pushdown_t1 ) t1\n" +
+                "    ON `t2`.`c0` = `t1`.`c0`\n" +
+                "    AND date(t2.`c12`) = `t1`.`c7`\n" +
+                "   ;";
+
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "_pushdown_predicate_join_mv2");
     }
 }

@@ -85,7 +85,7 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     _bytes_read_counter = ADD_COUNTER(_runtime_profile, "BytesRead", TUnit::BYTES);
     _rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
 
-    _create_seg_iter_timer = ADD_TIMER(_runtime_profile, "CreateSegmentIter");
+    _create_seg_iter_timer = ADD_CHILD_TIMER(_runtime_profile, "CreateSegmentIter", "IOTaskExecTime");
 
     _read_compressed_counter = ADD_COUNTER(_runtime_profile, "CompressedBytesRead", TUnit::BYTES);
     _read_uncompressed_counter = ADD_COUNTER(_runtime_profile, "UncompressedBytesRead", TUnit::BYTES);
@@ -96,13 +96,13 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     _pushdown_predicates_counter =
             ADD_COUNTER_SKIP_MERGE(_runtime_profile, "PushdownPredicates", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
 
-    _get_rowsets_timer = ADD_TIMER(_runtime_profile, "GetRowsets");
-    _get_delvec_timer = ADD_TIMER(_runtime_profile, "GetDelVec");
-    _get_delta_column_group_timer = ADD_TIMER(_runtime_profile, "GetDeltaColumnGroup");
-    _read_pk_index_timer = ADD_TIMER(_runtime_profile, "ReadPKIndex");
+    _get_rowsets_timer = ADD_CHILD_TIMER(_runtime_profile, "GetRowsets", "IOTaskExecTime");
+    _get_delvec_timer = ADD_CHILD_TIMER(_runtime_profile, "GetDelVec", "IOTaskExecTime");
+    _get_delta_column_group_timer = ADD_CHILD_TIMER(_runtime_profile, "GetDeltaColumnGroup", "IOTaskExecTime");
+    _read_pk_index_timer = ADD_CHILD_TIMER(_runtime_profile, "ReadPKIndex", "IOTaskExecTime");
 
     // SegmentInit
-    _seg_init_timer = ADD_TIMER(_runtime_profile, "SegmentInit");
+    _seg_init_timer = ADD_CHILD_TIMER(_runtime_profile, "SegmentInit", "IOTaskExecTime");
     _bi_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BitmapIndexFilter", "SegmentInit");
     _bi_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BitmapIndexFilterRows", TUnit::UNIT, "SegmentInit");
     _bf_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BloomFilterFilterRows", TUnit::UNIT, "SegmentInit");
@@ -112,9 +112,14 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
             ADD_CHILD_COUNTER(_runtime_profile, "SegmentRuntimeZoneMapFilterRows", TUnit::UNIT, "SegmentInit");
     _zm_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "ZoneMapIndexFilterRows", TUnit::UNIT, "SegmentInit");
     _sk_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "ShortKeyFilterRows", TUnit::UNIT, "SegmentInit");
+    _column_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "ColumnIteratorInit", "SegmentInit");
+    _bitmap_index_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "BitmapIndexIteratorInit", "SegmentInit");
+    _zone_map_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ZoneMapIndexFiter", "SegmentInit");
+    _rows_key_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ShortKeyFilter", "SegmentInit");
+    _bf_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BloomFilterFilter", "SegmentInit");
 
     // SegmentRead
-    _block_load_timer = ADD_TIMER(_runtime_profile, "SegmentRead");
+    _block_load_timer = ADD_CHILD_TIMER(_runtime_profile, "SegmentRead", "IOTaskExecTime");
     _block_fetch_timer = ADD_CHILD_TIMER(_runtime_profile, "BlockFetch", "SegmentRead");
     _block_load_counter = ADD_CHILD_COUNTER(_runtime_profile, "BlockFetchCount", TUnit::UNIT, "SegmentRead");
     _block_seek_timer = ADD_CHILD_TIMER(_runtime_profile, "BlockSeek", "SegmentRead");
@@ -130,7 +135,7 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
             ADD_CHILD_COUNTER(_runtime_profile, "TotalColumnsDataPageCount", TUnit::UNIT, "SegmentRead");
 
     // IOTime
-    _io_timer = ADD_TIMER(_runtime_profile, "IOTime");
+    _io_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTime", "IOTaskExecTime");
 }
 
 Status OlapChunkSource::_get_tablet(const TInternalScanRange* scan_range) {
@@ -184,7 +189,7 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     {
         GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(_not_push_down_predicates,
                                                                      *_params.global_dictmaps);
-        not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool);
+        RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool));
     }
 
     // Range
@@ -267,12 +272,12 @@ Status OlapChunkSource::_init_column_access_paths(Schema* schema) {
     for (const auto& path : *paths) {
         auto& root = path->path();
         int32_t index = _tablet->field_index(root);
-        auto filed = schema->get_field_by_name(root);
+        auto field = schema->get_field_by_name(root);
         if (index >= 0) {
-            auto res = path->convert_by_index(filed.get(), index);
+            auto res = path->convert_by_index(field.get(), index);
             // read whole data, doesn't effect query
             if (res.ok()) {
-                _column_access_paths[index] = std::move(res.value());
+                _column_access_paths.emplace_back(std::move(res.value()));
             }
         }
     }
@@ -307,7 +312,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     }
 
     if (!_scan_ctx->not_push_down_conjuncts().empty() || !_not_push_down_predicates.empty()) {
-        _expr_filter_timer = ADD_TIMER(_runtime_profile, "ExprFilterTime");
+        _expr_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ExprFilterTime", "IOTaskExecTime");
     }
 
     DCHECK(_params.global_dictmaps != nullptr);
@@ -374,7 +379,7 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, Chunk* chu
             SCOPED_TIMER(_expr_filter_timer);
             size_t nrows = chunk->num_rows();
             _selection.resize(nrows);
-            _not_push_down_predicates.evaluate(chunk, _selection.data(), 0, nrows);
+            RETURN_IF_ERROR(_not_push_down_predicates.evaluate(chunk, _selection.data(), 0, nrows));
             chunk->filter(_selection);
             DCHECK_CHUNK(chunk);
         }
@@ -432,6 +437,11 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_get_delvec_timer, _reader->stats().get_delvec_ns);
     COUNTER_UPDATE(_get_delta_column_group_timer, _reader->stats().get_delta_column_group_ns);
     COUNTER_UPDATE(_seg_init_timer, _reader->stats().segment_init_ns);
+    COUNTER_UPDATE(_column_iterator_init_timer, _reader->stats().column_iterator_init_ns);
+    COUNTER_UPDATE(_bitmap_index_iterator_init_timer, _reader->stats().bitmap_index_iterator_init_ns);
+    COUNTER_UPDATE(_zone_map_filter_timer, _reader->stats().zone_map_filter_ns);
+    COUNTER_UPDATE(_rows_key_range_filter_timer, _reader->stats().rows_key_range_filter_ns);
+    COUNTER_UPDATE(_bf_filter_timer, _reader->stats().bf_filter_ns);
     COUNTER_UPDATE(_read_pk_index_timer, _reader->stats().read_pk_index_ns);
 
     COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);
@@ -469,15 +479,15 @@ void OlapChunkSource::_update_counter() {
     StarRocksMetrics::instance()->query_scan_rows.increment(_scan_rows_num);
 
     if (_reader->stats().decode_dict_ns > 0) {
-        RuntimeProfile::Counter* c = ADD_TIMER(_runtime_profile, "DictDecode");
+        RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "DictDecode", "IOTaskExecTime");
         COUNTER_UPDATE(c, _reader->stats().decode_dict_ns);
     }
     if (_reader->stats().late_materialize_ns > 0) {
-        RuntimeProfile::Counter* c = ADD_TIMER(_runtime_profile, "LateMaterialize");
+        RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "LateMaterialize", "IOTaskExecTime");
         COUNTER_UPDATE(c, _reader->stats().late_materialize_ns);
     }
     if (_reader->stats().del_filter_ns > 0) {
-        RuntimeProfile::Counter* c1 = ADD_TIMER(_runtime_profile, "DeleteFilter");
+        RuntimeProfile::Counter* c1 = ADD_CHILD_TIMER(_runtime_profile, "DeleteFilter", "IOTaskExecTime");
         RuntimeProfile::Counter* c2 = ADD_COUNTER(_runtime_profile, "DeleteFilterRows", TUnit::UNIT);
         COUNTER_UPDATE(c1, _reader->stats().del_filter_ns);
         COUNTER_UPDATE(c2, _reader->stats().rows_del_filtered);

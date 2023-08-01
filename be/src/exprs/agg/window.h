@@ -638,7 +638,7 @@ struct AllocateSessionState {
 };
 
 template <LogicalType LT, typename T = RunTimeCppType<LT>>
-class AllocateSessionWindowFunction final : public WindowFunction<AllocateSessionState<LT>> {
+class SessionNumberWindowFunction final : public WindowFunction<AllocateSessionState<LT>> {
 public:
     using InputColumnType = RunTimeColumnType<LT>;
 
@@ -703,7 +703,7 @@ public:
         }
     }
 
-    std::string get_name() const override { return "allocate_session"; }
+    std::string get_name() const override { return "session_number"; }
 };
 
 } // namespace starrocks

@@ -16,12 +16,18 @@ package com.starrocks.server;
 
 import com.staros.proto.FileStoreInfo;
 import com.staros.util.LockCloseable;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.InvalidConfException;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.storagevolume.StorageVolume;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -33,6 +39,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
+    private static final Logger LOG = LogManager.getLogger(SharedDataStorageVolumeMgr.class);
+
     @Override
     public StorageVolume getStorageVolumeByName(String svName) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
@@ -49,10 +57,10 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     @Override
-    public StorageVolume getStorageVolume(String storageVolumeId) {
+    public StorageVolume getStorageVolume(String svId) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             try {
-                FileStoreInfo fileStoreInfo = GlobalStateMgr.getCurrentState().getStarOSAgent().getFileStore(storageVolumeId);
+                FileStoreInfo fileStoreInfo = GlobalStateMgr.getCurrentState().getStarOSAgent().getFileStore(svId);
                 if (fileStoreInfo == null) {
                     return null;
                 }
@@ -100,20 +108,20 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         }
     }
 
-    private String getStorageVolumeIdOfDb(String svKey) throws DdlException {
+    private StorageVolume getStorageVolumeOfDb(String svName) throws DdlException {
         StorageVolume sv = null;
-        if (svKey.equals(StorageVolumeMgr.DEFAULT)) {
+        if (svName.equals(StorageVolumeMgr.DEFAULT)) {
             sv = getDefaultStorageVolume();
             if (sv == null) {
                 throw new DdlException("Default storage volume not exists, it should be created first");
             }
         } else {
-            sv = getStorageVolumeByName(svKey);
+            sv = getStorageVolumeByName(svName);
             if (sv == null) {
-                throw new DdlException("Unknown storage volume \"" + svKey + "\"");
+                throw new DdlException("Unknown storage volume \"" + svName + "\"");
             }
         }
-        return sv.getId();
+        return sv;
     }
 
     // In replay phase, the check of storage volume existence can be skipped.
@@ -132,9 +140,14 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     @Override
-    public boolean bindDbToStorageVolume(String svKey, long dbId) throws DdlException {
-        String svId = getStorageVolumeIdOfDb(svKey);
-        return bindDbToStorageVolume(svId, dbId, false);
+    public boolean bindDbToStorageVolume(String svName, long dbId) throws DdlException {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            StorageVolume sv = getStorageVolumeOfDb(svName);
+            if (!sv.getEnabled()) {
+                throw new DdlException(String.format("Storage volume %s is disabled", svName));
+            }
+            return bindDbToStorageVolume(sv.getId(), dbId, false);
+        }
     }
 
     @Override
@@ -157,36 +170,50 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         }
     }
 
-    private String getStorageVolumeIdOfTable(String svKey, long dbId) throws DdlException {
+    private StorageVolume getStorageVolumeOfTable(String svName, long dbId) throws DdlException {
         StorageVolume sv = null;
-        if (svKey.isEmpty()) {
+        if (svName.isEmpty()) {
             String dbStorageVolumeId = getStorageVolumeIdOfDb(dbId);
             if (dbStorageVolumeId != null) {
-                return dbStorageVolumeId;
+                return getStorageVolume(dbStorageVolumeId);
             } else {
                 sv = getStorageVolumeByName(BUILTIN_STORAGE_VOLUME);
                 if (sv == null) {
-                    throw new DdlException("Builtin storage volume not exists, please check the params in config");
+                    if (Config.enable_load_volume_from_conf) {
+                        LOG.error("Failed to get builtin storage volume, svName: {}, dbId: {}, current stack trace: {}",
+                                svName, dbId, LogUtil.getCurrentStackTrace());
+                        throw new DdlException(String.format("Failed to get builtin storage volume, svName: %s, dbId: %d",
+                                svName, dbId));
+                    } else {
+                        throw new DdlException("Cannot find a suitable storage volume. " +
+                                "Try setting 'enable_load_volume_from_conf' to true " +
+                                "and ensure the related storage volume settings are correct");
+                    }
                 }
             }
-        } else if (svKey.equals(StorageVolumeMgr.DEFAULT)) {
+        } else if (svName.equals(StorageVolumeMgr.DEFAULT)) {
             sv = getDefaultStorageVolume();
             if (sv == null) {
                 throw new DdlException("Default storage volume not exists, it should be created first");
             }
         } else {
-            sv = getStorageVolumeByName(svKey);
+            sv = getStorageVolumeByName(svName);
             if (sv == null) {
-                throw new DdlException("Unknown storage volume \"" + svKey + "\"");
+                throw new DdlException("Unknown storage volume \"" + svName + "\"");
             }
         }
-        return sv.getId();
+        return sv;
     }
 
     @Override
-    public boolean bindTableToStorageVolume(String svKey, long dbId, long tableId) throws DdlException {
-        String svId = getStorageVolumeIdOfTable(svKey, dbId);
-        return bindTableToStorageVolume(svId, tableId, false);
+    public boolean bindTableToStorageVolume(String svName, long dbId, long tableId) throws DdlException {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            StorageVolume sv = getStorageVolumeOfTable(svName, dbId);
+            if (!sv.getEnabled()) {
+                throw new DdlException(String.format("Storage volume %s is disabled", sv.getName()));
+            }
+            return bindTableToStorageVolume(sv.getId(), tableId, false);
+        }
     }
 
     @Override
@@ -227,28 +254,138 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     @Override
-    public String createOrUpdateBuiltinStorageVolume() throws DdlException, AlreadyExistsException {
-        if (Config.cloud_native_storage_type.isEmpty()) {
+    public String createBuiltinStorageVolume() throws DdlException, AlreadyExistsException {
+        if (!Config.enable_load_volume_from_conf) {
             return "";
         }
-
-        List<String> locations = parseLocationsFromConfig();
-        Map<String, String> params = parseParamsFromConfig();
 
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             StorageVolume sv = getStorageVolumeByName(BUILTIN_STORAGE_VOLUME);
             if (sv != null) {
-                updateStorageVolume(BUILTIN_STORAGE_VOLUME, params, Optional.empty(), "");
                 return sv.getId();
-            } else {
-                String svId = createStorageVolume(BUILTIN_STORAGE_VOLUME,
-                        Config.cloud_native_storage_type, locations, params, Optional.of(true), "");
-                if (getDefaultStorageVolumeId().isEmpty()) {
-                    setDefaultStorageVolume(BUILTIN_STORAGE_VOLUME);
+            }
+
+            validateStorageVolumeConfig();
+            List<String> locations = parseLocationsFromConfig();
+            Map<String, String> params = parseParamsFromConfig();
+
+            FileStoreInfo fileStoreInfo = StorageVolume.createFileStoreInfo(BUILTIN_STORAGE_VOLUME,
+                    Config.cloud_native_storage_type, locations, params, true, "");
+            String fsKey = parseBuiltinFsKeyFromConfig();
+            fileStoreInfo = fileStoreInfo.toBuilder().setFsKey(fsKey).build();
+
+            String svId = GlobalStateMgr.getCurrentState().getStarOSAgent().addFileStore(fileStoreInfo);
+
+            if (getDefaultStorageVolumeId().isEmpty()) {
+                setDefaultStorageVolume(BUILTIN_STORAGE_VOLUME);
+            }
+            return svId;
+        }
+    }
+
+    public void validateStorageVolumeConfig() throws InvalidConfException {
+        switch (Config.cloud_native_storage_type.toLowerCase()) {
+            case "s3":
+                String[] bucketAndPrefix = getBucketAndPrefix();
+                String bucket = bucketAndPrefix[0];
+                if (bucket.isEmpty()) {
+                    throw new InvalidConfException(
+                            String.format("The configuration item \"aws_s3_path = %s\" is invalid, s3 bucket is empty.",
+                                    Config.aws_s3_path));
                 }
-                return svId;
+                if (Config.aws_s3_region.isEmpty() && Config.aws_s3_endpoint.isEmpty()) {
+                    throw new InvalidConfException(
+                            "Both configuration item \"aws_s3_region\" and \"aws_s3_endpoint\" are empty");
+                }
+                String credentialType = getAwsCredentialType();
+                if (credentialType == null) {
+                    throw new InvalidConfException("Invalid aws credential configuration.");
+                }
+                break;
+            case "hdfs":
+                if (Config.cloud_native_hdfs_url.isEmpty()) {
+                    throw new InvalidConfException("The configuration item \"cloud_native_hdfs_url\" is empty.");
+                }
+                break;
+            case "azblob":
+                if (Config.azure_blob_endpoint.isEmpty()) {
+                    throw new InvalidConfException("The configuration item \"azure_blob_endpoint\" is empty.");
+                }
+                if (Config.azure_blob_path.isEmpty()) {
+                    throw new InvalidConfException("The configuration item \"azure_blob_path\" is empty.");
+                }
+                break;
+            default:
+                throw new InvalidConfException(String.format(
+                        "The configuration item \"cloud_native_storage_type = %s\" is invalid, must be HDFS or S3 or AZBLOB.",
+                        Config.cloud_native_storage_type));
+        }
+    }
+
+    @Override
+    protected List<List<Long>> getBindingsOfBuiltinStorageVolume() {
+        List<List<Long>> bindings = new ArrayList<>();
+        List<Long> tableBindings = new ArrayList<>();
+        List<Long> dbBindings = new ArrayList<>();
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIdsIncludeRecycleBin();
+        for (Long dbId : dbIds) {
+            Database db = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(dbId);
+            db.readLock();
+            if (dbToStorageVolume.containsKey(dbId)) {
+                continue;
+            }
+            dbBindings.add(dbId);
+            try {
+                List<Table> tables = GlobalStateMgr.getCurrentState().getTablesIncludeRecycleBin(db);
+                for (Table table : tables) {
+                    Long tableId = table.getId();
+                    if (!tableToStorageVolume.containsKey(tableId) && table.isCloudNativeTableOrMaterializedView()) {
+                        tableBindings.add(tableId);
+                    }
+                }
+            } finally {
+                db.readUnlock();
             }
         }
+        bindings.add(dbBindings);
+        bindings.add(tableBindings);
+        return bindings;
+    }
+
+    private String[] getBucketAndPrefix() {
+        int index = Config.aws_s3_path.indexOf('/');
+        if (index < 0) {
+            return new String[] {Config.aws_s3_path, ""};
+        }
+
+        return new String[] {Config.aws_s3_path.substring(0, index),
+                Config.aws_s3_path.substring(index + 1)};
+    }
+
+    private String getAwsCredentialType() {
+        if (Config.aws_s3_use_aws_sdk_default_behavior) {
+            return "default";
+        }
+
+        if (Config.aws_s3_use_instance_profile) {
+            if (Config.aws_s3_iam_role_arn.isEmpty()) {
+                return "instance_profile";
+            }
+
+            return "assume_role";
+        }
+
+        if (Config.aws_s3_access_key.isEmpty() || Config.aws_s3_secret_key.isEmpty()) {
+            // invalid credential configuration
+            return null;
+        }
+
+        if (Config.aws_s3_iam_role_arn.isEmpty()) {
+            return "simple";
+        }
+
+        //assume_role with ak sk, not supported now, just return null
+        return null;
     }
 
     private List<String> parseLocationsFromConfig() {
@@ -296,5 +433,21 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 return params;
         }
         return params;
+    }
+
+    private String parseBuiltinFsKeyFromConfig() {
+        switch (Config.cloud_native_storage_type.toLowerCase()) {
+            case "s3":
+                String[] bucketAndPrefix = getBucketAndPrefix();
+                return bucketAndPrefix[0];
+            case "hdfs":
+                return Config.cloud_native_hdfs_url;
+            case "azblob":
+                // Since azblob is not supported in 3.0. Its fskey can not be specified.
+                // Its fskey will be generated by staros.
+                return "";
+            default:
+                return "";
+        }
     }
 }

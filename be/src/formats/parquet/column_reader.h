@@ -38,7 +38,7 @@ struct ColumnReaderOptions {
     int chunk_size = 0;
     HdfsScanStats* stats = nullptr;
     RandomAccessFile* file = nullptr;
-    tparquet::RowGroup* row_group_meta = nullptr;
+    const tparquet::RowGroup* row_group_meta = nullptr;
     ColumnReaderContext* context = nullptr;
 };
 
@@ -82,11 +82,6 @@ public:
     virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
                                    Column* column) {
         return Status::NotSupported("get_dict_values is not supported");
-    }
-
-    virtual Status get_dict_codes(const std::vector<Slice>& dict_values, const NullableColumn& nulls,
-                                  std::vector<int32_t>* dict_codes) {
-        return Status::NotSupported("get_dict_codes is not supported");
     }
 
     std::unique_ptr<ColumnConverter> converter;

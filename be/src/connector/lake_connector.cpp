@@ -117,7 +117,14 @@ private:
     RuntimeProfile::Counter* _del_vec_filter_counter = nullptr;
     RuntimeProfile::Counter* _pred_filter_timer = nullptr;
     RuntimeProfile::Counter* _chunk_copy_timer = nullptr;
+    RuntimeProfile::Counter* _get_delvec_timer = nullptr;
+    RuntimeProfile::Counter* _get_delta_column_group_timer = nullptr;
     RuntimeProfile::Counter* _seg_init_timer = nullptr;
+    RuntimeProfile::Counter* _column_iterator_init_timer = nullptr;
+    RuntimeProfile::Counter* _bitmap_index_iterator_init_timer = nullptr;
+    RuntimeProfile::Counter* _zone_map_filter_timer = nullptr;
+    RuntimeProfile::Counter* _rows_key_range_filter_timer = nullptr;
+    RuntimeProfile::Counter* _bf_filter_timer = nullptr;
     RuntimeProfile::Counter* _zm_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bf_filtered_counter = nullptr;
     RuntimeProfile::Counter* _seg_zm_filtered_counter = nullptr;
@@ -134,6 +141,7 @@ private:
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
     RuntimeProfile::Counter* _segments_read_count = nullptr;
     RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;
+    RuntimeProfile::Counter* _read_pk_index_timer = nullptr;
 
     // IO statistics
     RuntimeProfile::Counter* _io_statistics_timer = nullptr;
@@ -277,7 +285,7 @@ Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
             SCOPED_TIMER(_expr_filter_timer);
             size_t nrows = chunk_ptr->num_rows();
             _selection.resize(nrows);
-            _not_push_down_predicates.evaluate(chunk_ptr, _selection.data(), 0, nrows);
+            RETURN_IF_ERROR(_not_push_down_predicates.evaluate(chunk_ptr, _selection.data(), 0, nrows));
             chunk_ptr->filter(_selection);
             DCHECK_CHUNK(chunk_ptr);
         }
@@ -401,7 +409,7 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     {
         GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(_not_push_down_predicates,
                                                                      *_params.global_dictmaps);
-        not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool);
+        RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool));
     }
 
     // Range
@@ -462,7 +470,7 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     }
 
     if (!_not_push_down_conjuncts.empty() || !_not_push_down_predicates.empty()) {
-        _expr_filter_timer = ADD_TIMER(_runtime_profile, "ExprFilterTime");
+        _expr_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ExprFilterTime", "IOTaskExecTime");
     }
 
     DCHECK(_params.global_dictmaps != nullptr);
@@ -499,7 +507,7 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _bytes_read_counter = ADD_COUNTER(_runtime_profile, "BytesRead", TUnit::BYTES);
     _rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
 
-    _create_seg_iter_timer = ADD_TIMER(_runtime_profile, "CreateSegmentIter");
+    _create_seg_iter_timer = ADD_CHILD_TIMER(_runtime_profile, "CreateSegmentIter", "IOTaskExecTime");
 
     _read_compressed_counter = ADD_COUNTER(_runtime_profile, "CompressedBytesRead", TUnit::BYTES);
     _read_uncompressed_counter = ADD_COUNTER(_runtime_profile, "UncompressedBytesRead", TUnit::BYTES);
@@ -508,8 +516,12 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _pushdown_predicates_counter =
             ADD_COUNTER_SKIP_MERGE(_runtime_profile, "PushdownPredicates", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
 
+    _get_delvec_timer = ADD_CHILD_TIMER(_runtime_profile, "GetDelVec", "IOTaskExecTime");
+    _get_delta_column_group_timer = ADD_CHILD_TIMER(_runtime_profile, "GetDeltaColumnGroup", "IOTaskExecTime");
+    _read_pk_index_timer = ADD_CHILD_TIMER(_runtime_profile, "ReadPKIndex", "IOTaskExecTime");
+
     // SegmentInit
-    _seg_init_timer = ADD_TIMER(_runtime_profile, "SegmentInit");
+    _seg_init_timer = ADD_CHILD_TIMER(_runtime_profile, "SegmentInit", "IOTaskExecTime");
     _bi_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BitmapIndexFilter", "SegmentInit");
     _bi_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BitmapIndexFilterRows", TUnit::UNIT, "SegmentInit");
     _bf_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BloomFilterFilterRows", TUnit::UNIT, "SegmentInit");
@@ -519,9 +531,14 @@ void LakeDataSource::init_counter(RuntimeState* state) {
             ADD_CHILD_COUNTER(_runtime_profile, "SegmentRuntimeZoneMapFilterRows", TUnit::UNIT, "SegmentInit");
     _zm_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "ZoneMapIndexFilterRows", TUnit::UNIT, "SegmentInit");
     _sk_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "ShortKeyFilterRows", TUnit::UNIT, "SegmentInit");
+    _column_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "ColumnIteratorInit", "SegmentInit");
+    _bitmap_index_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "BitmapIndexIteratorInit", "SegmentInit");
+    _zone_map_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ZoneMapIndexFiter", "SegmentInit");
+    _rows_key_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ShortKeyFilter", "SegmentInit");
+    _bf_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BloomFilterFilter", "SegmentInit");
 
     // SegmentRead
-    _block_load_timer = ADD_TIMER(_runtime_profile, "SegmentRead");
+    _block_load_timer = ADD_CHILD_TIMER(_runtime_profile, "SegmentRead", "IOTaskExecTime");
     _block_fetch_timer = ADD_CHILD_TIMER(_runtime_profile, "BlockFetch", "SegmentRead");
     _block_load_counter = ADD_CHILD_COUNTER(_runtime_profile, "BlockFetchCount", TUnit::UNIT, "SegmentRead");
     _block_seek_timer = ADD_CHILD_TIMER(_runtime_profile, "BlockSeek", "SegmentRead");
@@ -538,8 +555,8 @@ void LakeDataSource::init_counter(RuntimeState* state) {
 
     // IO statistics
     // IOTime
-    _io_timer = ADD_TIMER(_runtime_profile, "IOTime");
-    _io_statistics_timer = ADD_TIMER(_runtime_profile, "IOStatistics");
+    _io_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTime", "IOTaskExecTime");
+    _io_statistics_timer = ADD_CHILD_TIMER(_runtime_profile, "IOStatistics", "IOTaskExecTime");
     // Page count
     _pages_count_memory_counter = ADD_CHILD_COUNTER(_runtime_profile, "PagesCountMemory", TUnit::UNIT, "IOStatistics");
     _pages_count_local_disk_counter =
@@ -590,7 +607,15 @@ void LakeDataSource::update_counter() {
     COUNTER_UPDATE(_block_seek_timer, _reader->stats().block_seek_ns);
 
     COUNTER_UPDATE(_chunk_copy_timer, _reader->stats().vec_cond_chunk_copy_ns);
+    COUNTER_UPDATE(_get_delvec_timer, _reader->stats().get_delvec_ns);
+    COUNTER_UPDATE(_get_delta_column_group_timer, _reader->stats().get_delta_column_group_ns);
     COUNTER_UPDATE(_seg_init_timer, _reader->stats().segment_init_ns);
+    COUNTER_UPDATE(_column_iterator_init_timer, _reader->stats().column_iterator_init_ns);
+    COUNTER_UPDATE(_bitmap_index_iterator_init_timer, _reader->stats().bitmap_index_iterator_init_ns);
+    COUNTER_UPDATE(_zone_map_filter_timer, _reader->stats().zone_map_filter_ns);
+    COUNTER_UPDATE(_rows_key_range_filter_timer, _reader->stats().rows_key_range_filter_ns);
+    COUNTER_UPDATE(_bf_filter_timer, _reader->stats().bf_filter_ns);
+    COUNTER_UPDATE(_read_pk_index_timer, _reader->stats().read_pk_index_ns);
 
     COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);
 
@@ -624,15 +649,15 @@ void LakeDataSource::update_counter() {
     StarRocksMetrics::instance()->query_scan_rows.increment(_raw_rows_read);
 
     if (_reader->stats().decode_dict_ns > 0) {
-        RuntimeProfile::Counter* c = ADD_TIMER(_runtime_profile, "DictDecode");
+        RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "DictDecode", "IOTaskExecTime");
         COUNTER_UPDATE(c, _reader->stats().decode_dict_ns);
     }
     if (_reader->stats().late_materialize_ns > 0) {
-        RuntimeProfile::Counter* c = ADD_TIMER(_runtime_profile, "LateMaterialize");
+        RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "LateMaterialize", "IOTaskExecTime");
         COUNTER_UPDATE(c, _reader->stats().late_materialize_ns);
     }
     if (_reader->stats().del_filter_ns > 0) {
-        RuntimeProfile::Counter* c1 = ADD_TIMER(_runtime_profile, "DeleteFilter");
+        RuntimeProfile::Counter* c1 = ADD_CHILD_TIMER(_runtime_profile, "DeleteFilter", "IOTaskExecTime");
         RuntimeProfile::Counter* c2 = ADD_COUNTER(_runtime_profile, "DeleteFilterRows", TUnit::UNIT);
         COUNTER_UPDATE(c1, _reader->stats().del_filter_ns);
         COUNTER_UPDATE(c2, _reader->stats().rows_del_filtered);

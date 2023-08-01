@@ -294,6 +294,7 @@ private:
     bool _support_cumulative_algo = false;
 
 private:
+    // if src_column is const, but dst is not, unpack src_column then append. Otherwise just append
     void _append_column(size_t chunk_size, Column* dst_column, ColumnPtr& src_column);
     void _update_window_batch_normal(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                      int64_t frame_end);

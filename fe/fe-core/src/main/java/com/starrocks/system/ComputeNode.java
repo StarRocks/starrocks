@@ -87,10 +87,15 @@ public class ComputeNode implements IComputable, Writable {
 
     // port of starlet on BE
     @SerializedName("starletPort")
-    private volatile int starletPort;
+    private volatile int starletPort = 0;
 
     @SerializedName("lastWriteFail")
     private volatile boolean lastWriteFail = false;
+
+    // Indicate there is whether storage_path or not with CN node
+    // It must be true for Backend
+    @SerializedName("isSetStoragePath")
+    private volatile boolean isSetStoragePath = false;
 
     private volatile int numRunningQueries = 0;
     private volatile long memLimitBytes = 0;
@@ -150,6 +155,10 @@ public class ComputeNode implements IComputable, Writable {
         this.starletPort = starletPort;
     }
 
+    public boolean isSetStoragePath() {
+        return isSetStoragePath;
+    }
+
     public long getId() {
         return id;
     }
@@ -182,8 +191,20 @@ public class ComputeNode implements IComputable, Writable {
         return brpcPort;
     }
 
+    public TNetworkAddress getAddress() {
+        return new TNetworkAddress(host, bePort);
+    }
+
     public TNetworkAddress getBrpcAddress() {
         return new TNetworkAddress(host, brpcPort);
+    }
+
+    public TNetworkAddress getBeRpcAddress() {
+        return new TNetworkAddress(host, beRpcPort);
+    }
+
+    public TNetworkAddress getHttpAddress() {
+        return new TNetworkAddress(host, httpPort);
     }
 
     public String getHeartbeatErrMsg() {
@@ -396,10 +417,6 @@ public class ComputeNode implements IComputable, Writable {
         this.isAlive = isAlive;
     }
 
-    public AtomicBoolean getIsDecommissioned() {
-        return isDecommissioned;
-    }
-
     public void setDecommissionType(int decommissionType) {
         this.decommissionType = decommissionType;
     }
@@ -457,6 +474,11 @@ public class ComputeNode implements IComputable, Writable {
             if (RunMode.allowCreateLakeTable() && this.starletPort != hbResponse.getStarletPort()) {
                 isChanged = true;
                 this.starletPort = hbResponse.getStarletPort();
+            }
+
+            if (RunMode.allowCreateLakeTable() && this.isSetStoragePath != hbResponse.isSetStoragePath()) {
+                isChanged = true;
+                this.isSetStoragePath = hbResponse.isSetStoragePath();
             }
 
             this.lastUpdateMs = hbResponse.getHbTime();

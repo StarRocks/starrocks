@@ -204,14 +204,14 @@ Status TopNNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     return Status::OK();
 }
 
-Status TopNNode::close(RuntimeState* state) {
+void TopNNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
     _chunks_sorter = nullptr;
 
     _sort_exec_exprs.close(state);
-    return ExecNode::close(state);
+    ExecNode::close(state);
 }
 
 Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {

@@ -140,7 +140,11 @@ public:
     void set_index_length(ColumnIndexLength index_length) { _index_length = index_length; }
 
     bool has_default_value() const { return _extra_fields && _extra_fields->has_default_value; }
-    std::string default_value() const { return _extra_fields ? _extra_fields->default_value : ""; }
+
+    const std::string& default_value() const {
+        return _extra_fields ? _extra_fields->default_value : kEmptyDefaultValue;
+    }
+
     void set_default_value(std::string value) {
         ExtraFields* ext = _get_or_alloc_extra_fields();
         ext->has_default_value = true;
@@ -169,6 +173,7 @@ public:
     }
 
 private:
+    inline static const std::string kEmptyDefaultValue;
     constexpr static uint8_t kIsKeyShift = 0;
     constexpr static uint8_t kIsNullableShift = 1;
     constexpr static uint8_t kIsBfColumnShift = 2;
@@ -259,10 +264,6 @@ public:
     bool has_bf_fpp() const { return _has_bf_fpp; }
     double bf_fpp() const { return _bf_fpp; }
     CompressionTypePB compression_type() const { return _compression_type; }
-
-    // The in-memory property is no longer supported, but leave this API for compatibility.
-    // Newly-added code should not rely on this method, it may be removed at any time.
-    static bool is_in_memory() { return false; }
 
     std::string debug_string() const;
 

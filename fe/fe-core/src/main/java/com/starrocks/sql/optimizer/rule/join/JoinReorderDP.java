@@ -25,6 +25,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.IntStream;
 
@@ -87,12 +88,15 @@ public class JoinReorderDP extends JoinOrder {
                     continue;
                 }
 
-                ExpressionInfo joinExpr = buildJoinExpr(leftGroup, rightGroup);
+                Optional<ExpressionInfo> joinExpr = buildJoinExpr(leftGroup, rightGroup);
+                if (!joinExpr.isPresent())  {
+                    continue;
+                }
 
-                joinExpr.expr.deriveLogicalPropertyItself();
-                calculateStatistics(joinExpr.expr);
-                computeCost(joinExpr);
-                results.add(joinExpr);
+                joinExpr.get().expr.deriveLogicalPropertyItself();
+                calculateStatistics(joinExpr.get().expr);
+                computeCost(joinExpr.get());
+                results.add(joinExpr.get());
             }
             ExpressionInfo minCostPlan = resultComparator.min(results);
 

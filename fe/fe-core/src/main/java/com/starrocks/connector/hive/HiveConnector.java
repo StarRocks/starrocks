@@ -53,7 +53,7 @@ public class HiveConnector implements Connector {
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.internalMgr = new HiveConnectorInternalMgr(catalogName, properties, hdfsEnvironment);
-        this.metadataFactory = createMetadataFactory();
+        this.metadataFactory = createMetadataFactory(hdfsEnvironment);
         this.infoSchemaDb = new InfoSchemaDb(catalogName);
         validate();
         onCreate();
@@ -77,7 +77,7 @@ public class HiveConnector implements Connector {
         return wrapInfoSchema(metadataFactory.create(), infoSchemaDb);
     }
 
-    private HiveMetadataFactory createMetadataFactory() {
+    private HiveMetadataFactory createMetadataFactory(HdfsEnvironment hdfsEnvironment) {
         IHiveMetastore metastore = internalMgr.createHiveMetastore();
         RemoteFileIO remoteFileIO = internalMgr.createRemoteFileIO();
 
@@ -89,7 +89,8 @@ public class HiveConnector implements Connector {
                 internalMgr.getRemoteFileConf(),
                 internalMgr.getPullRemoteFileExecutor(),
                 internalMgr.isSearchRecursive(),
-                internalMgr.enableHmsEventsIncrementalSync()
+                internalMgr.enableHmsEventsIncrementalSync(),
+                hdfsEnvironment.getConfiguration()
         );
     }
 

@@ -274,14 +274,14 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
     return Status::OK();
 }
 
-Status SchemaScanNode::close(RuntimeState* state) {
+void SchemaScanNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        Status::OK();
     }
     exec_debug_action(TExecNodePhase::CLOSE);
     SCOPED_TIMER(_runtime_profile->total_time_counter());
 
-    return ScanNode::close(state);
+    ScanNode::close(state);
 }
 
 void SchemaScanNode::debug_string(int indentation_level, std::stringstream* out) const {

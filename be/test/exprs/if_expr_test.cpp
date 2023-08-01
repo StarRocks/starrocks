@@ -41,7 +41,7 @@ public:
         ttype_desc.types.emplace_back();
         ttype_desc.types.back().__set_type(TTypeNodeType::SCALAR);
         ttype_desc.types.back().__set_scalar_type(TScalarType());
-        ttype_desc.types.back().scalar_type.__set_type(TPrimitiveType::VARCHAR);
+        ttype_desc.types.back().scalar_type.__set_type(TPrimitiveType::INT);
         ttype_desc.types.back().scalar_type.__set_len(10);
         tttype_desc.push_back(ttype_desc);
     }
@@ -97,6 +97,7 @@ TEST_F(VectorizedIfExprTest, ifConstTrue) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
+        expr->set_type(TypeDescriptor(TYPE_BIGINT));
 
         MockConstVectorizedExpr<TYPE_BOOLEAN> bol(expr_node, true);
         MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
@@ -122,6 +123,7 @@ TEST_F(VectorizedIfExprTest, ifAllFalse) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
+        expr->set_type(TypeDescriptor(TYPE_BIGINT));
 
         MockVectorizedExpr<TYPE_BOOLEAN> bol(expr_node, 10, false);
         MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
@@ -147,6 +149,7 @@ TEST_F(VectorizedIfExprTest, ifNull) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
+        expr->set_type(TypeDescriptor(TYPE_BIGINT));
 
         MockMultiVectorizedExpr<TYPE_BOOLEAN> bol(expr_node, 10, true, false);
         MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
@@ -179,6 +182,7 @@ TEST_F(VectorizedIfExprTest, ifNullRightConst) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
+        expr->set_type(TypeDescriptor(TYPE_BIGINT));
 
         MockMultiVectorizedExpr<TYPE_BOOLEAN> bol(expr_node, 10, true, false);
         MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);

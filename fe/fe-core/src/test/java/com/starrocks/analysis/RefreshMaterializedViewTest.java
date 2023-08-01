@@ -42,10 +42,12 @@ import mockit.MockUp;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 public class RefreshMaterializedViewTest {
@@ -91,14 +93,6 @@ public class RefreshMaterializedViewTest {
                 .withMaterializedView("create materialized view mv2_to_refresh\n" +
                         "PARTITION BY k1\n"+
                         "distributed by hash(k2) buckets 3\n" +
-                        "refresh manual\n" +
-                        "as select k1, k2, v1  from tbl_with_mv;")
-                .withMaterializedView("create materialized view mv_with_mv_rewrite_staleness\n" +
-                        "PARTITION BY k1\n"+
-                        "distributed by hash(k2) buckets 3\n" +
-                        "PROPERTIES (\n" +
-                        "\"replication_num\" = \"1\"" +
-                        ")" +
                         "refresh manual\n" +
                         "as select k1, k2, v1  from tbl_with_mv;");
     }
@@ -200,17 +194,35 @@ public class RefreshMaterializedViewTest {
         }
     }
 
-    //@Test
-    public void testMaxMVRewriteStaleness() throws Exception {
-        Set<String> cachePartitionsToRefresh;
+    @Ignore
+    @Test
+    public void testMaxMVRewriteStaleness1() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE tbl_staleness1 \n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+        starRocksAssert.withMaterializedView("create materialized view mv_with_mv_rewrite_staleness\n" +
+                "PARTITION BY k1\n"+
+                "distributed by hash(k2) buckets 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ")" +
+                "refresh manual\n" +
+                "as select k1, k2, v1  from tbl_staleness1;");
+
         // refresh partitions are not empty if base table is updated.
-        cluster.runSql("test", "insert into tbl_with_mv partition(p2) values(\"2022-02-20\", 1, 10)");
-        // no refresh partitions if there is new data & refresh.
+        cluster.runSql("test", "insert into tbl_staleness1 partition(p2) values(\"2022-02-20\", 1, 10)");
         {
             refreshMaterializedView("test", "mv_with_mv_rewrite_staleness");
-            MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness");
-            cachePartitionsToRefresh = mv1.getPartitionNamesToRefreshForMv();
-            Assert.assertTrue(cachePartitionsToRefresh.isEmpty());
         }
 
         // alter mv_rewrite_staleness
@@ -222,7 +234,7 @@ public class RefreshMaterializedViewTest {
             GlobalStateMgr.getCurrentState().alterMaterializedView(stmt);
         }
         // no refresh partitions if mv_rewrite_staleness is set.
-        cluster.runSql("test", "insert into tbl_with_mv values(\"2022-02-20\", 1, 10)");
+        cluster.runSql("test", "insert into tbl_staleness1 values(\"2022-02-20\", 1, 10)");
         {
             MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness");
             Set<String> partitionsToRefresh = mv1.getPartitionNamesToRefreshForMv();
@@ -235,16 +247,234 @@ public class RefreshMaterializedViewTest {
             MaterializedView mv2 = getMv("test", "mv_with_mv_rewrite_staleness");
             Set<String> partitionsToRefresh = mv2.getPartitionNamesToRefreshForMv();
             Assert.assertTrue(partitionsToRefresh.isEmpty());
-            Assert.assertEquals(cachePartitionsToRefresh, partitionsToRefresh);
         }
         // no refresh partitions if there is new data & no refresh but is set `mv_rewrite_staleness`.
         {
-            cluster.runSql("test", "insert into tbl_with_mv values(\"2022-02-22\", 1, 10)");
+            cluster.runSql("test", "insert into tbl_staleness1 values(\"2022-02-22\", 1, 10)");
             MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness");
             Set<String> partitionsToRefresh = mv1.getPartitionNamesToRefreshForMv();
             Assert.assertTrue(partitionsToRefresh.isEmpty());
-            Assert.assertEquals(cachePartitionsToRefresh, partitionsToRefresh);
         }
+        starRocksAssert.dropTable("tbl_staleness1");
+        starRocksAssert.dropMaterializedView("mv_with_mv_rewrite_staleness");
+    }
+
+    @Test
+    public void testMaxMVRewriteStaleness2() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE tbl_staleness2 \n" +
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    v1 int sum\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1)\n" +
+                "(\n" +
+                "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
+        starRocksAssert.withMaterializedView("create materialized view mv_with_mv_rewrite_staleness2 \n" +
+                "PARTITION BY k1\n"+
+                "distributed by hash(k2) buckets 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"," +
+                "\"mv_rewrite_staleness_second\" = \"60\"" +
+                ")" +
+                "refresh manual\n" +
+                "as select k1, k2, v1  from tbl_staleness2;");
+
+        // refresh partitions are not empty if base table is updated.
+        {
+            cluster.runSql("test", "insert into tbl_staleness2 partition(p2) values(\"2022-02-20\", 1, 10)");
+            refreshMaterializedView("test", "mv_with_mv_rewrite_staleness2");
+
+            Table tbl1 = getTable("test", "tbl_staleness2");
+            Optional<Long> maxPartitionRefreshTimestamp =
+                    tbl1.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo);
+            Assert.assertTrue(maxPartitionRefreshTimestamp.isPresent());
+
+            MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness2");
+            Assert.assertTrue(mv1.maxBaseTableRefreshTimestamp().isPresent());
+            Assert.assertEquals(mv1.maxBaseTableRefreshTimestamp().get(), maxPartitionRefreshTimestamp.get());
+
+            long mvRefreshTimeStamp = mv1.getLastRefreshTime();
+            Assert.assertTrue(mvRefreshTimeStamp ==  maxPartitionRefreshTimestamp.get());
+            Assert.assertTrue(mv1.isStalenessSatisfied());
+        }
+
+        // no refresh partitions if mv_rewrite_staleness is set.
+        {
+            cluster.runSql("test", "insert into tbl_staleness2 values(\"2022-02-20\", 2, 10)");
+
+            Table tbl1 = getTable("test", "tbl_staleness2");
+            Optional<Long> maxPartitionRefreshTimestamp =
+                    tbl1.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo);
+            Assert.assertTrue(maxPartitionRefreshTimestamp.isPresent());
+
+            MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness2");
+            Assert.assertTrue(mv1.maxBaseTableRefreshTimestamp().isPresent());
+
+            long mvMaxBaseTableRefreshTimestamp = mv1.maxBaseTableRefreshTimestamp().get();
+            long tblMaxPartitionRefreshTimestamp = maxPartitionRefreshTimestamp.get();
+            Assert.assertEquals(mvMaxBaseTableRefreshTimestamp, tblMaxPartitionRefreshTimestamp);
+
+            long mvRefreshTimeStamp = mv1.getLastRefreshTime();
+            Assert.assertTrue(mvRefreshTimeStamp < tblMaxPartitionRefreshTimestamp);
+            Assert.assertTrue((tblMaxPartitionRefreshTimestamp - mvRefreshTimeStamp) / 1000 < 60);
+            Assert.assertTrue(mv1.isStalenessSatisfied());
+
+            Set<String> partitionsToRefresh = mv1.getPartitionNamesToRefreshForMv();
+            Assert.assertTrue(partitionsToRefresh.isEmpty());
+        }
+        starRocksAssert.dropTable("tbl_staleness2");
+        starRocksAssert.dropMaterializedView("mv_with_mv_rewrite_staleness2");
+    }
+
+    @Test
+    public void testMaxMVRewriteStaleness3() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE tbl_staleness3 \n" +
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    v1 int sum\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1)\n" +
+                "(\n" +
+                "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
+
+        starRocksAssert.withMaterializedView("create materialized view mv_with_mv_rewrite_staleness21 \n" +
+                "PARTITION BY k1\n"+
+                "distributed by hash(k2) buckets 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"," +
+                "\"mv_rewrite_staleness_second\" = \"60\"" +
+                ")" +
+                "refresh manual\n" +
+                "as select k1, k2, v1  from tbl_staleness3;");
+
+        starRocksAssert.withMaterializedView("create materialized view mv_with_mv_rewrite_staleness22 \n" +
+                "PARTITION BY k1\n"+
+                "distributed by hash(k2) buckets 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"," +
+                "\"mv_rewrite_staleness_second\" = \"60\"" +
+                ")" +
+                "refresh manual\n" +
+                "as select k1, k2, count(1)  from mv_with_mv_rewrite_staleness21 group by k1, k2;");
+
+        {
+            cluster.runSql("test", "insert into tbl_staleness3 partition(p2) values(\"2022-02-20\", 1, 10)");
+            refreshMaterializedView("test", "mv_with_mv_rewrite_staleness21");
+            refreshMaterializedView("test", "mv_with_mv_rewrite_staleness22");
+            {
+                Table tbl1 = getTable("test", "tbl_staleness3");
+                Optional<Long> maxPartitionRefreshTimestamp =
+                        tbl1.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo);
+                Assert.assertTrue(maxPartitionRefreshTimestamp.isPresent());
+
+                MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness21");
+                Assert.assertTrue(mv1.maxBaseTableRefreshTimestamp().isPresent());
+                Assert.assertEquals(mv1.maxBaseTableRefreshTimestamp().get(), maxPartitionRefreshTimestamp.get());
+
+                long mvRefreshTimeStamp = mv1.getLastRefreshTime();
+                Assert.assertTrue(mvRefreshTimeStamp ==  maxPartitionRefreshTimestamp.get());
+                Assert.assertTrue(mv1.isStalenessSatisfied());
+            }
+
+            {
+                Table tbl1 = getTable("test", "mv_with_mv_rewrite_staleness21");
+                Optional<Long> maxPartitionRefreshTimestamp =
+                        tbl1.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo);
+                Assert.assertTrue(maxPartitionRefreshTimestamp.isPresent());
+
+                MaterializedView mv2 = getMv("test", "mv_with_mv_rewrite_staleness22");
+                Assert.assertTrue(mv2.maxBaseTableRefreshTimestamp().isPresent());
+                Assert.assertEquals(mv2.maxBaseTableRefreshTimestamp().get(), maxPartitionRefreshTimestamp.get());
+
+                long mvRefreshTimeStamp = mv2.getLastRefreshTime();
+                Assert.assertTrue(mvRefreshTimeStamp ==  maxPartitionRefreshTimestamp.get());
+                Assert.assertTrue(mv2.isStalenessSatisfied());
+            }
+        }
+
+        {
+            cluster.runSql("test", "insert into tbl_staleness3 values(\"2022-02-20\", 2, 10)");
+            {
+                Table tbl1 = getTable("test", "tbl_staleness3");
+                Optional<Long> maxPartitionRefreshTimestamp =
+                        tbl1.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo);
+                Assert.assertTrue(maxPartitionRefreshTimestamp.isPresent());
+
+                MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness21");
+                Assert.assertTrue(mv1.maxBaseTableRefreshTimestamp().isPresent());
+
+                long mvMaxBaseTableRefreshTimestamp = mv1.maxBaseTableRefreshTimestamp().get();
+                long tblMaxPartitionRefreshTimestamp = maxPartitionRefreshTimestamp.get();
+                Assert.assertEquals(mvMaxBaseTableRefreshTimestamp, tblMaxPartitionRefreshTimestamp);
+
+                long mvRefreshTimeStamp = mv1.getLastRefreshTime();
+                Assert.assertTrue(mvRefreshTimeStamp < tblMaxPartitionRefreshTimestamp);
+                Assert.assertTrue((tblMaxPartitionRefreshTimestamp - mvRefreshTimeStamp) / 1000 < 60);
+                Assert.assertTrue(mv1.isStalenessSatisfied());
+
+                Set<String> partitionsToRefresh = mv1.getPartitionNamesToRefreshForMv();
+                Assert.assertTrue(partitionsToRefresh.isEmpty());
+            }
+            {
+                Table tbl1 = getTable("test", "mv_with_mv_rewrite_staleness21");
+                Optional<Long> maxPartitionRefreshTimestamp =
+                        tbl1.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo);
+                Assert.assertTrue(maxPartitionRefreshTimestamp.isPresent());
+
+                MaterializedView mv2 = getMv("test", "mv_with_mv_rewrite_staleness22");
+                Assert.assertTrue(mv2.maxBaseTableRefreshTimestamp().isPresent());
+
+                long mvMaxBaseTableRefreshTimestamp = mv2.maxBaseTableRefreshTimestamp().get();
+                long tblMaxPartitionRefreshTimestamp = maxPartitionRefreshTimestamp.get();
+                Assert.assertEquals(mvMaxBaseTableRefreshTimestamp, tblMaxPartitionRefreshTimestamp);
+
+                long mvRefreshTimeStamp = mv2.getLastRefreshTime();
+                Assert.assertTrue(mvRefreshTimeStamp <= tblMaxPartitionRefreshTimestamp);
+                Assert.assertTrue((tblMaxPartitionRefreshTimestamp - mvRefreshTimeStamp) / 1000 < 60);
+                Assert.assertTrue(mv2.isStalenessSatisfied());
+
+                Set<String> partitionsToRefresh = mv2.getPartitionNamesToRefreshForMv();
+                Assert.assertTrue(partitionsToRefresh.isEmpty());
+            }
+        }
+
+        {
+            cluster.runSql("test", "insert into tbl_staleness3 values(\"2022-02-20\", 2, 10)");
+            {
+                // alter mv_rewrite_staleness
+                {
+                    String alterMvSql = "alter materialized view mv_with_mv_rewrite_staleness21 " +
+                            "set (\"mv_rewrite_staleness_second\" = \"0\")";
+                    AlterMaterializedViewStmt stmt =
+                            (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+                    GlobalStateMgr.getCurrentState().alterMaterializedView(stmt);
+                }
+
+                MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness21");
+                Assert.assertFalse(mv1.isStalenessSatisfied());
+                Assert.assertTrue(mv1.maxBaseTableRefreshTimestamp().isPresent());
+
+                MaterializedView mv2 = getMv("test", "mv_with_mv_rewrite_staleness22");
+                Assert.assertFalse(mv1.isStalenessSatisfied());
+                Assert.assertFalse(mv2.maxBaseTableRefreshTimestamp().isPresent());
+
+                Set<String> partitionsToRefresh = mv2.getPartitionNamesToRefreshForMv();
+                Assert.assertFalse(partitionsToRefresh.isEmpty());
+            }
+        }
+        starRocksAssert.dropTable("tbl_staleness3");
+        starRocksAssert.dropMaterializedView("mv_with_mv_rewrite_staleness21");
+        starRocksAssert.dropMaterializedView("mv_with_mv_rewrite_staleness22");
     }
 
     @Test

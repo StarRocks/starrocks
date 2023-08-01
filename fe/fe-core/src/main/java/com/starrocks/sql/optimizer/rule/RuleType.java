@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule;
 
 public enum RuleType {
@@ -28,6 +27,7 @@ public enum RuleType {
     TF_MULTI_JOIN_ORDER,
     TF_PARTITION_PRUNE,
     TF_DISTRIBUTION_PRUNE,
+    TF_CBO_TABLE_PRUNE_RULE,
     TF_LIMIT_TABLETS_PRUNE,
     TF_SPLIT_AGGREGATE,
     TF_SPLIT_TOPN,
@@ -87,6 +87,7 @@ public enum RuleType {
     TF_PRUNE_TABLE_FUNCTION_COLUMNS,
     TF_PRUNE_CTE_CONSUME_COLUMNS,
     TF_PRUNE_GROUP_BY_KEYS,
+    TF_PRUNE_SUBFIELD,
 
     TF_SCALAR_OPERATORS_REUSE,
     TF_PRUNE_EMPTY_WINDOW,
@@ -127,6 +128,7 @@ public enum RuleType {
     TF_REMOVE_AGGREGATION_BY_AGG_TABLE,
     TF_REWRITE_GROUPING_SET,
     TF_REWRITE_SIMPLE_AGG,
+    TF_REWRITE_MIN_MAX_COUNT_AGG,
     TF_REWRITE_SUM_BY_ASSOCIATIVE_RULE,
 
     TF_INTERSECT_REORDER,

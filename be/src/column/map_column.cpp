@@ -72,7 +72,7 @@ size_t MapColumn::byte_size(size_t from, size_t size) const {
                             _offsets->get_data()[from + size] - _offsets->get_data()[from]) +
            _values->byte_size(_offsets->get_data()[from],
                               _offsets->get_data()[from + size] - _offsets->get_data()[from]) +
-           _offsets->Column::byte_size(from, size);
+           _offsets->byte_size(from, size);
 }
 
 size_t MapColumn::byte_size(size_t idx) const {
@@ -176,7 +176,7 @@ void MapColumn::fill_default(const Filter& filter) {
     update_rows(*default_column, indexes.data());
 }
 
-Status MapColumn::update_rows(const Column& src, const uint32_t* indexes) {
+void MapColumn::update_rows(const Column& src, const uint32_t* indexes) {
     const auto& map_column = down_cast<const MapColumn&>(src);
 
     const UInt32Column& src_offsets = map_column.offsets();
@@ -199,8 +199,8 @@ Status MapColumn::update_rows(const Column& src, const uint32_t* indexes) {
                 element_idxes.emplace_back(element_offset + j);
             }
         }
-        RETURN_IF_ERROR(_keys->update_rows(map_column.keys(), element_idxes.data()));
-        RETURN_IF_ERROR(_values->update_rows(map_column.values(), element_idxes.data()));
+        _keys->update_rows(map_column.keys(), element_idxes.data());
+        _values->update_rows(map_column.values(), element_idxes.data());
     } else {
         MutableColumnPtr new_map_column = clone_empty();
         size_t idx_begin = 0;
@@ -216,8 +216,6 @@ Status MapColumn::update_rows(const Column& src, const uint32_t* indexes) {
         }
         swap_column(*new_map_column.get());
     }
-
-    return Status::OK();
 }
 
 void MapColumn::remove_first_n_values(size_t count) {

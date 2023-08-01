@@ -55,16 +55,6 @@ CONF_Int32(brpc_num_threads, "-1");
 // If no ip match this rule, will choose one randomly.
 CONF_String(priority_networks, "");
 
-////
-//// tcmalloc gc parameter
-////
-// Min memory for TCmalloc, when used memory is smaller than this, do not returned to OS.
-CONF_mInt64(tc_use_memory_min, "0");
-// free memory rate.[0-100]
-CONF_mInt64(tc_free_memory_rate, "0");
-// tcmalloc gc period, default 60, it should be between [1, 180]
-CONF_mInt64(tc_gc_period, "60");
-
 CONF_mBool(enable_auto_adjust_pagecache, "true");
 // Memory urget water level, if the memory usage exceeds this level, reduce the size of
 // the Pagecache immediately, it should be between (memory_high_level, 100].
@@ -76,17 +66,6 @@ CONF_mInt64(memory_high_level, "75");
 CONF_mInt64(pagecache_adjust_period, "20");
 // Sleep time in seconds between pagecache adjust iterations.
 CONF_mInt64(auto_adjust_pagecache_interval_seconds, "10");
-
-// Bound on the total amount of bytes allocated to thread caches.
-// This bound is not strict, so it is possible for the cache to go over this bound
-// in certain circumstances. The maximum value of this flag is capped to 1GB.
-// This value defaults to 1GB.
-// If you suspect your application is not scaling to many threads due to lock contention in TCMalloc,
-// you can try increasing this value. This may improve performance, at a cost of extra memory
-// use by TCMalloc.
-// reference: https://gperftools.github.io/gperftools/tcmalloc.html: TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES
-//            https://github.com/gperftools/gperftools/issues/1111
-CONF_Int64(tc_max_total_thread_cache_bytes, "1073741824");
 
 // process memory limit specified as number of bytes
 // ('<int>[bB]?'), megabytes ('<float>[mM]'), gigabytes ('<float>[gG]'),
@@ -507,6 +486,10 @@ CONF_mBool(sync_tablet_meta, "false");
 // Default thrift rpc timeout ms.
 CONF_mInt32(thrift_rpc_timeout_ms, "5000");
 
+CONF_Bool(thrift_rpc_strict_mode, "true");
+// rpc max string body size. 0 means unlimited
+CONF_Int32(thrift_rpc_max_body_size, "0");
+
 // txn commit rpc timeout
 CONF_mInt32(txn_commit_rpc_timeout_ms, "20000");
 
@@ -792,7 +775,7 @@ CONF_mDouble(scan_use_query_mem_ratio, "0.25");
 CONF_Double(connector_scan_use_query_mem_ratio, "0.3");
 
 // hdfs hedged read
-CONF_mBool(hdfs_client_enable_hedged_read, "true");
+CONF_mBool(hdfs_client_enable_hedged_read, "false");
 // dfs.client.hedged.read.threadpool.size
 CONF_Int32(hdfs_client_hedged_read_threadpool_size, "128");
 // dfs.client.hedged.read.threshold.millis
@@ -864,6 +847,16 @@ CONF_Int32(starlet_star_cache_mem_size_percent, "0");
 CONF_Int32(starlet_star_cache_disk_size_percent, "60");
 CONF_Int64(starlet_star_cache_disk_size_bytes, "0");
 CONF_Int32(starlet_star_cache_block_size_bytes, "1048576");
+// domain list separated by comma, e.g. '.example.com,.helloworld.com'
+CONF_String(starlet_s3_virtual_address_domainlist, "");
+// number of caches allowed from s3client factory
+CONF_Int32(starlet_s3_client_max_cache_capacity, "8");
+// number of instances per cache item
+CONF_Int32(starlet_s3_client_num_instances_per_cache, "1");
+// whether turn on read prefetch feature
+CONF_Bool(starlet_fs_read_prefetch_enable, "false");
+// prefetch threadpool size
+CONF_Int32(starlet_fs_read_prefetch_threadpool_size, "128");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
@@ -875,6 +868,7 @@ CONF_mInt64(experimental_lake_wait_per_put_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
+CONF_mBool(lake_enable_publish_version_trace_log, "false");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -908,10 +902,6 @@ CONF_mInt32(spill_init_partition, "16");
 // The maximum size of a single log block container file, this is not a hard limit.
 // If the file size exceeds this limit, a new file will be created to store the block.
 CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
-
-// Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
-// The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
-CONF_Int32(internal_service_async_thread_num, "10");
 
 CONF_Int32(internal_service_query_rpc_thread_num, "-1");
 
@@ -1020,5 +1010,7 @@ CONF_mInt32(primary_key_limit_size, "128");
 CONF_mBool(enable_short_key_for_one_column_filter, "false");
 
 CONF_mBool(enable_http_stream_load_limit, "false");
+
+CONF_mBool(dump_metrics_with_bvar, "true");
 
 } // namespace starrocks::config

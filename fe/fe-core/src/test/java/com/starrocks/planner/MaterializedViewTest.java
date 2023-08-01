@@ -17,6 +17,7 @@ package com.starrocks.planner;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
@@ -32,6 +33,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         MaterializedViewTestBase.setUp();
 
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
+        Config.default_replication_num = 1;
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer_unique` (\n" +
                 "    `c_custkey` int(11) NOT NULL COMMENT \"\",\n" +
@@ -510,6 +512,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     public void testLeftOuterJoinQueryComplete() {
         String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
                 " left join locations on emps.locationid = locations.locationid";
+
         testRewriteOK(mv, "select count(*) from " +
                 "emps  left join locations on emps.locationid = locations.locationid");
         testRewriteOK(mv, "select empid as col2, emps.locationid from " +
@@ -518,7 +521,8 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "select count(*) from " +
                 "emps  left join locations on emps.locationid = locations.locationid " +
                 "where emps.deptno > 10");
-        testRewriteOK(mv, "select empid as col2, locations.locationid from " +
+
+        testRewriteOK(mv, "select empid as col2, emps.locationid from " +
                 "emps left join locations on emps.locationid = locations.locationid " +
                 "where emps.locationid > 10");
         // TODO: Query's left outer join will be converted to Inner Join.
@@ -547,7 +551,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "select count(*) from " +
                 "emps  right join locations on emps.locationid = locations.locationid " +
                 "where emps.deptno > 10");
-        testRewriteOK(mv, "select empid as col2, locations.locationid from " +
+        testRewriteFail(mv, "select empid as col2, locations.locationid from " +
                 "emps  right join locations on emps.locationid = locations.locationid " +
                 "where locations.locationid > 10");
         testRewriteOK(mv, "select empid as col2, locations.locationid from " +
@@ -662,6 +666,158 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                         " sum(salary) as total, count(salary) + 1 as cnt" +
                         " from emps group by empid, deptno ",
                 "select sum(salary), count(salary) + 1 from emps");
+    }
+
+    @Test
+    public void testAggregate10() {
+        String mv = "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno ";
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno having sum(salary) > 10");
+        testRewriteOK(mv, "select empid,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid having sum(salary) > 10");
+    }
+
+    @Test
+    public void testAggregate11() throws Exception {
+        String sql = "CREATE TABLE test_agg_with_having_tbl (\n" +
+                "dt date NULL,\n" +
+                "col1 varchar(240) NULL,\n" +
+                "col2 varchar(30) NULL,\n" +
+                "col3 varchar(60) NULL,\n" +
+                "col4 decimal128(22, 2) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(dt, col1)\n" +
+                "DISTRIBUTED BY HASH(dt, col1) BUCKETS 1 " +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";;
+        String mv = "CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1\n" +
+                "DISTRIBUTED BY HASH(col1) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")" +
+                "as select " +
+                " col1,col2, col3,\n" +
+                "      sum(col4) as sum_amt\n" +
+                "    from\n" +
+                "      test_agg_with_having_tbl p1\n" +
+                "    group by\n" +
+                "      1, 2, 3";
+        starRocksAssert.withTable(sql);
+        starRocksAssert.withMaterializedView(mv);
+        sql("select col1 from test_agg_with_having_tbl p1\n" +
+                "    where p1.col2 = '02' and p1.col3 = \"2023-03-31\"\n" +
+                "    group by 1\n" +
+                "    having sum(p1.col4) >= 500000\n")
+                .contains("test_mv1");
+    }
+
+    @Test
+    public void testAggregate12() {
+        String mv = "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary) as cnt \n" +
+                " from emps group by empid, deptno ";
+        // count(salary): salary is nullable
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno");
+        testRewriteOK(mv, "select empid,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid");
+        testRewriteFail(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(1)  as cnt\n" +
+                " from emps group by empid, deptno");
+        testRewriteFail(mv, "select empid,\n" +
+                " sum(salary) as total, count(1)  as cnt\n" +
+                " from emps group by empid");
+    }
+
+    @Test
+    public void testAggregate13() {
+        String mv = "select empid, deptno,\n" +
+                " sum(salary) as total, count(empid) as cnt \n" +
+                " from emps group by empid, deptno ";
+        // count(empid): empid is not nullable
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(empid)  as cnt\n" +
+                " from emps group by empid, deptno");
+        testRewriteOK(mv, "select empid,\n" +
+                " sum(salary) as total, count(empid)  as cnt\n" +
+                " from emps group by empid");
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(1) as cnt\n" +
+                " from emps group by empid, deptno");
+        testRewriteOK(mv, "select empid,\n" +
+                " sum(salary) as total, count(1)  as cnt\n" +
+                " from emps group by empid");
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(*) as cnt\n" +
+                " from emps group by empid, deptno");
+        testRewriteOK(mv, "select empid,\n" +
+                " sum(salary) as total, count(*)  as cnt\n" +
+                " from emps group by empid");
+    }
+
+    @Test
+    public void testAggregate14() {
+        String mv = "select empid, deptno,\n" +
+                " sum(salary) as total, count(1)  as cnt\n" +
+                " from emps group by empid, deptno ";
+        // count(salary): salary is nullable
+        testRewriteFail(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno");
+        testRewriteFail(mv, "select empid,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid");
+
+        // count(empid): empid is not nullable
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(empid)  as cnt\n" +
+                " from emps group by empid, deptno");
+        testRewriteOK(mv, "select empid,\n" +
+                " sum(salary) as total, count(empid)  as cnt\n" +
+                " from emps group by empid");
+
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(1)  as cnt\n" +
+                " from emps group by empid, deptno");
+        testRewriteOK(mv, "select empid,\n" +
+                " sum(salary) as total, count(1)  as cnt\n" +
+                " from emps group by empid");
+    }
+
+    @Test
+    public void testAggregate15() {
+        String mv = "select empid, deptno,\n" +
+                " sum(salary) as total, count(*)  as cnt\n" +
+                " from emps group by empid, deptno ";
+        // count(salary): salary is nullable
+        testRewriteFail(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno");
+        testRewriteFail(mv, "select empid,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid");
+
+        // count(empid): empid is not nullable
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(empid)  as cnt\n" +
+                " from emps group by empid, deptno");
+        testRewriteOK(mv, "select empid,\n" +
+                " sum(salary) as total, count(empid)  as cnt\n" +
+                " from emps group by empid");
+
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(1)  as cnt\n" +
+                " from emps group by empid, deptno");
+        testRewriteOK(mv, "select empid,\n" +
+                " sum(salary) as total, count(1)  as cnt\n" +
+                " from emps group by empid");
     }
 
     @Test
@@ -1527,46 +1683,49 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testOuterJoinViewDelta() {
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
-        String mv = "SELECT" +
-                " `l`.`LO_ORDERKEY` as col1, `l`.`LO_ORDERDATE`, `l`.`LO_LINENUMBER`, `l`.`LO_CUSTKEY`, `l`.`LO_PARTKEY`," +
-                " `l`.`LO_SUPPKEY`, `l`.`LO_ORDERPRIORITY`, `l`.`LO_SHIPPRIORITY`, `l`.`LO_QUANTITY`," +
-                " `l`.`LO_EXTENDEDPRICE`, `l`.`LO_ORDTOTALPRICE`, `l`.`LO_DISCOUNT`, `l`.`LO_REVENUE`," +
-                " `l`.`LO_SUPPLYCOST`, `l`.`LO_TAX`, `l`.`LO_COMMITDATE`, `l`.`LO_SHIPMODE`," +
-                " `c`.`C_NAME`, `c`.`C_ADDRESS`, `c`.`C_CITY`, `c`.`C_NATION`, `c`.`C_REGION`, `c`.`C_PHONE`," +
-                " `c`.`C_MKTSEGMENT`, `s`.`S_NAME`, `s`.`S_ADDRESS`, `s`.`S_CITY`, `s`.`S_NATION`, `s`.`S_REGION`," +
-                " `s`.`S_PHONE`, `p`.`P_NAME`, `p`.`P_MFGR`, `p`.`P_CATEGORY`, `p`.`P_BRAND`, `p`.`P_COLOR`," +
-                " `p`.`P_TYPE`, `p`.`P_SIZE`, `p`.`P_CONTAINER`\n" +
-                "FROM `lineorder` AS `l` " +
-                " LEFT OUTER JOIN `customer` AS `c` ON `c`.`C_CUSTKEY` = `l`.`LO_CUSTKEY`" +
-                " LEFT OUTER JOIN `supplier` AS `s` ON `s`.`S_SUPPKEY` = `l`.`LO_SUPPKEY`" +
-                " LEFT OUTER JOIN `part` AS `p` ON `p`.`P_PARTKEY` = `l`.`LO_PARTKEY`;";
+        {
+            String mv = "SELECT" +
+                    " `l`.`LO_ORDERKEY` as col1, `l`.`LO_ORDERDATE`, `l`.`LO_LINENUMBER`, `l`.`LO_CUSTKEY`, `l`.`LO_PARTKEY`," +
+                    " `l`.`LO_SUPPKEY`, `l`.`LO_ORDERPRIORITY`, `l`.`LO_SHIPPRIORITY`, `l`.`LO_QUANTITY`," +
+                    " `l`.`LO_EXTENDEDPRICE`, `l`.`LO_ORDTOTALPRICE`, `l`.`LO_DISCOUNT`, `l`.`LO_REVENUE`," +
+                    " `l`.`LO_SUPPLYCOST`, `l`.`LO_TAX`, `l`.`LO_COMMITDATE`, `l`.`LO_SHIPMODE`," +
+                    " `c`.`C_NAME`, `c`.`C_ADDRESS`, `c`.`C_CITY`, `c`.`C_NATION`, `c`.`C_REGION`, `c`.`C_PHONE`," +
+                    " `c`.`C_MKTSEGMENT`, `s`.`S_NAME`, `s`.`S_ADDRESS`, `s`.`S_CITY`, `s`.`S_NATION`, `s`.`S_REGION`," +
+                    " `s`.`S_PHONE`, `p`.`P_NAME`, `p`.`P_MFGR`, `p`.`P_CATEGORY`, `p`.`P_BRAND`, `p`.`P_COLOR`," +
+                    " `p`.`P_TYPE`, `p`.`P_SIZE`, `p`.`P_CONTAINER`\n" +
+                    "FROM `lineorder` AS `l` " +
+                    " LEFT OUTER JOIN `customer` AS `c` ON `c`.`C_CUSTKEY` = `l`.`LO_CUSTKEY`" +
+                    " LEFT OUTER JOIN `supplier` AS `s` ON `s`.`S_SUPPKEY` = `l`.`LO_SUPPKEY`" +
+                    " LEFT OUTER JOIN `part` AS `p` ON `p`.`P_PARTKEY` = `l`.`LO_PARTKEY`;";
 
-        String query = "SELECT `lineorder`.`lo_orderkey`, `lineorder`.`lo_orderdate`, `customer`.`c_custkey` AS `cd`\n" +
-                "FROM `lineorder` LEFT OUTER JOIN `customer` ON `lineorder`.`lo_custkey` = `customer`.`c_custkey`\n" +
-                "WHERE `lineorder`.`lo_orderkey` = 100;";
+            String query = "SELECT `lineorder`.`lo_orderkey`, `lineorder`.`lo_orderdate`, `lineorder`.`lo_custkey` AS `cd`\n" +
+                    "FROM `lineorder` LEFT OUTER JOIN `customer` ON `lineorder`.`lo_custkey` = `customer`.`c_custkey`\n" +
+                    "WHERE `lineorder`.`lo_orderkey` = 100;";
 
-        testRewriteOK(mv, query);
+            testRewriteOK(mv, query);
+        }
 
-        String mv2 = "SELECT" +
-                " `l`.`LO_ORDERKEY` as col1, `l`.`LO_ORDERDATE`, `l`.`LO_LINENUMBER`, `l`.`LO_CUSTKEY`, `l`.`LO_PARTKEY`," +
-                " `l`.`LO_SUPPKEY`, `l`.`LO_ORDERPRIORITY`, `l`.`LO_SHIPPRIORITY`, `l`.`LO_QUANTITY`," +
-                " `l`.`LO_EXTENDEDPRICE`, `l`.`LO_ORDTOTALPRICE`, `l`.`LO_DISCOUNT`, `l`.`LO_REVENUE`," +
-                " `l`.`LO_SUPPLYCOST`, `l`.`LO_TAX`, `l`.`LO_COMMITDATE`, `l`.`LO_SHIPMODE`," +
-                " `c`.`C_NAME`, `c`.`C_ADDRESS`, `c`.`C_CITY`, `c`.`C_NATION`, `c`.`C_REGION`, `c`.`C_PHONE`," +
-                " `c`.`C_MKTSEGMENT`, `s`.`S_NAME`, `s`.`S_ADDRESS`, `s`.`S_CITY`, `s`.`S_NATION`, `s`.`S_REGION`," +
-                " `s`.`S_PHONE`, `p`.`P_NAME`, `p`.`P_MFGR`, `p`.`P_CATEGORY`, `p`.`P_BRAND`, `p`.`P_COLOR`," +
-                " `p`.`P_TYPE`, `p`.`P_SIZE`, `p`.`P_CONTAINER`\n" +
-                "FROM `lineorder_null` AS `l` " +
-                " LEFT OUTER JOIN `customer` AS `c` ON `c`.`C_CUSTKEY` = `l`.`LO_CUSTKEY`" +
-                " LEFT OUTER JOIN `supplier` AS `s` ON `s`.`S_SUPPKEY` = `l`.`LO_SUPPKEY`" +
-                " LEFT OUTER JOIN `part` AS `p` ON `p`.`P_PARTKEY` = `l`.`LO_PARTKEY`;";
+        {
+            String mv2 = "SELECT" +
+                    " `l`.`LO_ORDERKEY` as col1, `l`.`LO_ORDERDATE`, `l`.`LO_LINENUMBER`, `l`.`LO_CUSTKEY`, `l`.`LO_PARTKEY`," +
+                    " `l`.`LO_SUPPKEY`, `l`.`LO_ORDERPRIORITY`, `l`.`LO_SHIPPRIORITY`, `l`.`LO_QUANTITY`," +
+                    " `l`.`LO_EXTENDEDPRICE`, `l`.`LO_ORDTOTALPRICE`, `l`.`LO_DISCOUNT`, `l`.`LO_REVENUE`," +
+                    " `l`.`LO_SUPPLYCOST`, `l`.`LO_TAX`, `l`.`LO_COMMITDATE`, `l`.`LO_SHIPMODE`," +
+                    " `c`.`C_NAME`, `c`.`C_ADDRESS`, `c`.`C_CITY`, `c`.`C_NATION`, `c`.`C_REGION`, `c`.`C_PHONE`," +
+                    " `c`.`C_MKTSEGMENT`, `s`.`S_NAME`, `s`.`S_ADDRESS`, `s`.`S_CITY`, `s`.`S_NATION`, `s`.`S_REGION`," +
+                    " `s`.`S_PHONE`, `p`.`P_NAME`, `p`.`P_MFGR`, `p`.`P_CATEGORY`, `p`.`P_BRAND`, `p`.`P_COLOR`," +
+                    " `p`.`P_TYPE`, `p`.`P_SIZE`, `p`.`P_CONTAINER`\n" +
+                    "FROM `lineorder_null` AS `l` " +
+                    " LEFT OUTER JOIN `customer` AS `c` ON `c`.`C_CUSTKEY` = `l`.`LO_CUSTKEY`" +
+                    " LEFT OUTER JOIN `supplier` AS `s` ON `s`.`S_SUPPKEY` = `l`.`LO_SUPPKEY`" +
+                    " LEFT OUTER JOIN `part` AS `p` ON `p`.`P_PARTKEY` = `l`.`LO_PARTKEY`;";
 
-        String query2 = "SELECT `lineorder_null`.`lo_orderkey`, `lineorder_null`.`lo_orderdate`, `customer`.`c_custkey` AS `cd`\n" +
-                "FROM `lineorder_null` LEFT OUTER JOIN `customer` ON `lineorder_null`.`lo_custkey` = `customer`.`c_custkey`\n" +
-                "WHERE `lineorder_null`.`lo_orderkey` = 100;";
+            String query2 = "SELECT `lineorder_null`.`lo_orderkey`, `lineorder_null`.`lo_orderdate`, `lineorder_null`.`lo_custkey` AS `cd`\n" +
+                    "FROM `lineorder_null` LEFT OUTER JOIN `customer` ON `lineorder_null`.`lo_custkey` = `customer`.`c_custkey`\n" +
+                    "WHERE `lineorder_null`.`lo_orderkey` = 100;";
 
-        testRewriteOK(mv2, query2);
+            testRewriteOK(mv2, query2);
+        }
     }
 
     @Test
@@ -1944,7 +2103,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "\"foreign_key_constraints\" = \"emps(empid) references dependents(empid)\" ";
         testRewriteOK(mv, query, constraint).
                 contains("0:OlapScanNode\n" +
-                "     TABLE: mv0");
+                        "     TABLE: mv0");
     }
 
     @Test
@@ -2788,8 +2947,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         {
             String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
                     " left join locations on emps.locationid = locations.locationid where emps.deptno != 10";
+
             testRewriteOK(mv, "select count(*) from " +
                     "emps  left join locations on emps.locationid = locations.locationid where emps.deptno != 10");
+
             testRewriteFail(mv, "select count(*) from " +
                     "emps  left join locations on emps.locationid = locations.locationid where emps.deptno = 10");
             testRewriteOK(mv, "select count(*) from " +
@@ -2825,7 +2986,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select c1, c2, c3 from t1 where c1 > 0 or c2 > 0 or c3 > 0";
             String query = "select c1, c2, c3 from t1 where c1 > 0 or c2 > 5";
             // TODO multi column OR predicate as range
-            testRewriteFail(mv, query);
+            testRewriteOK(mv, query);
         }
 
         // multi range same column
@@ -2835,11 +2996,11 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             testRewriteOK(mv, query);
         }
 
-        // TODO support IN
+        // test IN
         {
             String mv = "select c1, c2 from t1 where c1 IN (1, 2, 3)";
             String query = "select c1, c2 from t1 where c1 IN (1, 2)";
-            testRewriteFail(mv, query);
+            testRewriteOK(mv, query);
         }
 
     }
@@ -3018,7 +3179,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey" +
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue" +
                     " from lineorder left anti join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3511,5 +3672,238 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                             + "right anti join emps on (emps.deptno = depts.deptno)\n"
                             + "where emps.empid > 10");
         }
+    }
+
+    @Test
+    public void testNestedAggregateBelowJoin2() throws Exception {
+        {
+            String mv1 = "create materialized view mv1 \n" +
+                    "distributed by random \n" +
+                    "refresh async\n" +
+                    "as select empid, deptno, locationid, \n" +
+                    " sum(salary) as total, count(salary)  as cnt\n" +
+                    " from emps group by empid, deptno, locationid ";
+            String mv2 = "create materialized view mv2 \n" +
+                    "distributed by random \n" +
+                    "refresh async\n" +
+                    "as select sum(total) as sum, t2.locationid, t2.empid, t2.deptno  from \n" +
+                    "(select empid, deptno, t.locationid, total, cnt from mv1 t join locations \n" +
+                    "on t.locationid = locations.locationid) t2\n" +
+                    "group by t2.locationid, t2.empid, t2.deptno";
+            starRocksAssert.withMaterializedView(mv1);
+            starRocksAssert.withMaterializedView(mv2);
+
+            sql("select sum(total) as sum, t.locationid  from \n" +
+                    "(select locationid, \n" +
+                    " sum(salary) as total, count(salary)  as cnt\n" +
+                    " from emps where empid = 2 and deptno = 10 group by locationid) t join locations \n" +
+                    "on t.locationid = locations.locationid\n" +
+                    "group by t.locationid")
+                    .match("mv2");
+            starRocksAssert.dropMaterializedView("mv1");
+            starRocksAssert.dropMaterializedView("mv2");
+        }
+    }
+
+    @Test
+    public void testOrPredicates() {
+        {
+            String mv = "select * from lineorder where not (lo_orderkey > 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey <= 10000 and lo_linenumber <= 5000";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where not (lo_orderkey > 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey <= 1000 and lo_linenumber <= 500";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("PREDICATES: 18: lo_orderkey <= 1000, 19: lo_linenumber <= 500");
+        }
+
+        {
+            String mv = "select * from lineorder where lo_orderkey > 10000 or lo_linenumber > 5000";
+            String query = "select * from lineorder where not( lo_orderkey <= 10000 and lo_linenumber <= 5000)";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where lo_orderkey > 10000 or lo_linenumber > 5000";
+            String query = "select * from lineorder where not( lo_orderkey <= 20000 and lo_linenumber <= 10000)";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("PREDICATES: (18: lo_orderkey >= 20001) OR (19: lo_linenumber >= 10001)");
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey > 10000";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("lo_orderkey >= 10001");
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey > 10000 or lo_linenumber > 5000";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.notContain("PREDICATES");
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey > 15000";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey > 10001";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey > 9999";
+            testRewriteFail(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey >= 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey >= 10000";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey >= 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey > 10000";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey >= 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey = 10000";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey > 15000 and lo_linenumber > 6000";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where lo_orderkey > 10000";
+            String query = "select * from lineorder where lo_orderkey > 15000 and lo_linenumber > 6000";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 and lo_linenumber > 5000) or (lo_orderkey < 1000 and lo_linenumber < 2000)";
+            String query = "select * from lineorder where lo_orderkey > 15000 and lo_linenumber > 6000";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 and lo_linenumber > 5000) or (lo_orderkey < 1000 and lo_linenumber < 2000)";
+            String query = "select * from lineorder where lo_orderkey < 1000 and lo_linenumber < 2000";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("PREDICATES: 18: lo_orderkey <= 999, 19: lo_linenumber <= 1999");
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000) and (lo_orderkey < 1000 or lo_linenumber < 2000)";
+            String query = "select * from lineorder where lo_orderkey > 15000 and lo_linenumber < 1000";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("PREDICATES: 18: lo_orderkey >= 15001, 19: lo_linenumber <= 999");
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_orderkey < 5000) and (lo_linenumber > 10000 or lo_linenumber < 2000)";
+            String query = "select * from lineorder where lo_orderkey > 15000 and lo_linenumber < 1000";
+            testRewriteOK(mv, query);
+        }
+    }
+
+    @Test
+    public void testJoinWithTypeCast() throws Exception {
+        String sql1 = "create table test.dim_tbl1 (\n" +
+                "    col1 string,\n" +
+                "    col1_name string\n" +
+                ")DISTRIBUTED BY HASH(col1)" +
+                ";\n";
+        String sql2 = "CREATE TABLE test.fact_tbl1( \n" +
+                "          fdate  int,\n" +
+                "          fqqid STRING ,\n" +
+                "          col1 BIGINT  ,\n" +
+                "          flcnt BIGINT\n" +
+                " )PARTITION BY range(fdate) (\n" +
+                "    PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                "    PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                "    PARTITION p3 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                " )\n" +
+                " DISTRIBUTED BY HASH(fqqid);";
+        String mv = "create MATERIALIZED VIEW test.test_mv1\n" +
+                "DISTRIBUTED BY HASH(fdate,col1_name)\n" +
+                "REFRESH MANUAL\n" +
+                "AS \n" +
+                "    select t1.fdate, t2.col1_name,  count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                "    FROM test.fact_tbl1 t1 \n" +
+                "    LEFT JOIN test.dim_tbl1 t2\n" +
+                "    ON t1.`col1` = t2.`col1`\n" +
+                "    WHERE t1.`fdate` >= 20230701 and t1.fdate <= 20230705\n" +
+                "    GROUP BY  fdate, `col1_name`;";
+        starRocksAssert.withTable(sql1);
+        starRocksAssert.withTable(sql2);
+        starRocksAssert.withMaterializedView(mv);
+        sql("select t1.fdate, t2.col1_name,  count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                "    FROM test.fact_tbl1 t1 \n" +
+                "    LEFT JOIN test.dim_tbl1 t2\n" +
+                "    ON t1.`col1` = t2.`col1`\n" +
+                "    WHERE t1.`fdate` >= 20230702 and t1.fdate <= 20230705\n" +
+                "    GROUP BY  fdate, `col1_name`;")
+                .match("test_mv1");
+        sql("select t2.col1_name,  count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                "    FROM test.fact_tbl1 t1 \n" +
+                "    LEFT JOIN test.dim_tbl1 t2\n" +
+                "    ON t1.`col1` = t2.`col1`\n" +
+                "    WHERE t1.`fdate` = 20230705\n" +
+                "    GROUP BY   `col1_name`;")
+                .match("test_mv1");
+        sql("select t2.col1_name,  sum(t1.flcnt)as index_xxx\n" +
+                "    FROM test.fact_tbl1 t1 \n" +
+                "    LEFT JOIN test.dim_tbl1 t2\n" +
+                "    ON t1.`col1` = t2.`col1`\n" +
+                "    WHERE t1.`fdate` = 20230705\n" +
+                "    GROUP BY   `col1_name`;")
+                .match("test_mv1");
+        sql("select t2.col1_name,  sum(t1.flcnt)as index_xxx\n" +
+                "    FROM test.fact_tbl1 t1 \n" +
+                "    LEFT JOIN test.dim_tbl1 t2\n" +
+                "    ON t1.`col1` = t2.`col1`\n" +
+                "    WHERE t1.`fdate` >= 20230702 and t1.fdate <= 20230705\n" +
+                "    GROUP BY   `col1_name`;")
+                .match("test_mv1");
+    }
+
+    @Test
+    public void testJoinDerive() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE t5 (\n" +
+                "                k1 int,\n" +
+                "                k2 int not null\n" +
+                "            )\n" +
+                "            DUPLICATE KEY(k1) " +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"in_memory\" = \"false\"\n" +
+                ")\n");
+        starRocksAssert.withTable("CREATE TABLE t4 (\n" +
+                "                a int,\n" +
+                "                b int not null\n" +
+                "            )\n" +
+                "            DUPLICATE KEY(a) " +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"in_memory\" = \"false\"\n" +
+                ")\n");
+        testRewriteOK("select * from t5 full outer join t4 on k1=a",
+                "select * from t5 left outer join t4 on k1=a where k1=3;");
     }
 }

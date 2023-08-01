@@ -47,17 +47,41 @@ import java.util.stream.Collectors;
  *
  */
 public class ColumnAccessPath {
+    public static final String PATH_PLACEHOLDER = "P";
     // The top one must be ROOT
-    private final TAccessPathType type;
+    private TAccessPathType type;
 
-    private final String path;
+    private String path;
 
     private final List<ColumnAccessPath> children;
+
+    private boolean fromPredicate;
 
     public ColumnAccessPath(TAccessPathType type, String path) {
         this.type = type;
         this.path = path;
         this.children = Lists.newArrayList();
+        this.fromPredicate = false;
+    }
+
+    public void setType(TAccessPathType type) {
+        this.type = type;
+    }
+
+    public TAccessPathType getType() {
+        return type;
+    }
+
+    public boolean onlyRoot() {
+        return type == TAccessPathType.ROOT && children.isEmpty();
+    }
+
+    public void setFromPredicate(boolean fromPredicate) {
+        this.fromPredicate = fromPredicate;
+    }
+
+    public boolean isFromPredicate() {
+        return fromPredicate;
     }
 
     public boolean hasChildPath(String path) {
@@ -81,7 +105,8 @@ public class ColumnAccessPath {
     }
 
     private void explainImpl(String parent, List<String> allPaths) {
-        String cur = parent + "/" + path;
+        boolean hasName = type == TAccessPathType.FIELD || type == TAccessPathType.ROOT;
+        String cur = parent + "/" + (hasName ? path : type.name());
         if (children.isEmpty()) {
             allPaths.add(cur);
         }
@@ -93,6 +118,7 @@ public class ColumnAccessPath {
     public String explain() {
         List<String> allPaths = Lists.newArrayList();
         explainImpl("", allPaths);
+        allPaths.sort(String::compareTo);
         return String.join(", ", allPaths);
     }
 
@@ -106,6 +132,7 @@ public class ColumnAccessPath {
         tColumnAccessPath.setType(type);
         tColumnAccessPath.setPath(new StringLiteral(path).treeToThrift());
         tColumnAccessPath.setChildren(children.stream().map(ColumnAccessPath::toThrift).collect(Collectors.toList()));
+        tColumnAccessPath.setFrom_predicate(fromPredicate);
         return tColumnAccessPath;
     }
 }

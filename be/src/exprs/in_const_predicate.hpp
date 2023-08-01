@@ -106,7 +106,7 @@ public:
     }
 
     Status prepare(RuntimeState* state, ExprContext* context) override {
-        Expr::prepare(state, context);
+        RETURN_IF_ERROR(Expr::prepare(state, context));
 
         if (_is_prepare) {
             return Status::OK();
@@ -128,48 +128,49 @@ public:
 
     Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override {
         RETURN_IF_ERROR(Expr::open(state, context, scope));
-
-        if (Type != _children[0]->type().type) {
-            if (!isSliceLT<Type> || !_children[0]->type().is_string_type()) {
-                return Status::InternalError("VectorizedInPredicate type is error");
-            }
-        }
-
-        bool use_array = is_use_array();
-        for (int i = 1; i < _children.size(); ++i) {
-            if ((_children[0]->type().is_string_type() && _children[i]->type().is_string_type()) ||
-                (_children[0]->type().type == _children[i]->type().type) ||
-                (LogicalType::TYPE_NULL == _children[i]->type().type)) {
-                // pass
-            } else {
-                return Status::InternalError("VectorizedInPredicate type not same");
-            }
-
-            ASSIGN_OR_RETURN(ColumnPtr value, _children[i]->evaluate_checked(context, nullptr));
-            if (!value->is_constant() && !value->only_null()) {
-                return Status::InternalError("VectorizedInPredicate value not const");
-            }
-
-            ColumnViewer<Type> viewer(value);
-            if (viewer.is_null(0)) {
-                _null_in_set = true;
-                continue;
-            }
-
-            // insert into set
-            if constexpr (isSliceLT<Type>) {
-                if (_hash_set.emplace(viewer.value(0)).second) {
-                    _string_values.emplace_back(value);
+        if (scope == FunctionContext::FRAGMENT_LOCAL) {
+            if (Type != _children[0]->type().type) {
+                if (!isSliceLT<Type> || !_children[0]->type().is_string_type()) {
+                    return Status::InternalError("VectorizedInPredicate type is error");
                 }
-                continue;
             }
 
-            if (use_array) {
-                if constexpr (can_use_array()) {
-                    _set_array_index(viewer.value(0));
+            bool use_array = is_use_array();
+            for (int i = 1; i < _children.size(); ++i) {
+                if ((_children[0]->type().is_string_type() && _children[i]->type().is_string_type()) ||
+                    (_children[0]->type().type == _children[i]->type().type) ||
+                    (LogicalType::TYPE_NULL == _children[i]->type().type)) {
+                    // pass
+                } else {
+                    return Status::InternalError("VectorizedInPredicate type not same");
                 }
-            } else {
-                _hash_set.emplace(viewer.value(0));
+
+                ASSIGN_OR_RETURN(ColumnPtr value, _children[i]->evaluate_checked(context, nullptr));
+                if (!value->is_constant() && !value->only_null()) {
+                    return Status::InternalError("VectorizedInPredicate value not const");
+                }
+
+                ColumnViewer<Type> viewer(value);
+                if (viewer.is_null(0)) {
+                    _null_in_set = true;
+                    continue;
+                }
+
+                // insert into set
+                if constexpr (isSliceLT<Type>) {
+                    if (_hash_set.emplace(viewer.value(0)).second) {
+                        _string_values.emplace_back(value);
+                    }
+                    continue;
+                }
+
+                if (use_array) {
+                    if constexpr (can_use_array()) {
+                        _set_array_index(viewer.value(0));
+                    }
+                } else {
+                    _hash_set.emplace(viewer.value(0));
+                }
             }
         }
         return Status::OK();
@@ -405,7 +406,7 @@ public:
             : Predicate(node), _is_not_in(node.in_predicate.is_not_in) {}
 
     VectorizedInConstPredicateGeneric(const VectorizedInConstPredicateGeneric& other)
-            : Predicate(other), _is_not_in(other._is_not_in) {}
+            : Predicate(other), _is_not_in(other._is_not_in), _const_input(other._const_input) {}
 
     ~VectorizedInConstPredicateGeneric() override = default;
 
@@ -413,19 +414,24 @@ public:
 
     Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override {
         RETURN_IF_ERROR(Expr::open(state, context, scope));
-        _const_input.resize(_children.size());
-        for (auto i = 0; i < _children.size(); ++i) {
-            if (_children[i]->is_constant()) {
-                // _const_input[i] maybe not be of ConstColumn
-                ASSIGN_OR_RETURN(_const_input[i], _children[i]->evaluate_checked(context, nullptr));
-            } else {
-                _const_input[i] = nullptr;
+        if (scope == FunctionContext::FRAGMENT_LOCAL) {
+            _const_input.resize(_children.size());
+            for (auto i = 0; i < _children.size(); ++i) {
+                if (_children[i]->is_constant()) {
+                    // _const_input[i] maybe not be of ConstColumn
+                    ASSIGN_OR_RETURN(_const_input[i], _children[i]->evaluate_checked(context, nullptr));
+                } else {
+                    _const_input[i] = nullptr;
+                }
             }
+        } else {
+            DCHECK_EQ(_const_input.size(), _const_input.size());
         }
         return Status::OK();
     }
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+        DCHECK_EQ(_const_input.size(), _children.size());
         auto child_size = _children.size();
         Columns input_data(child_size);
         std::vector<NullColumnPtr> input_null(child_size);
@@ -437,8 +443,8 @@ public:
             value = _const_input[i];
             if (value == nullptr) {
                 ASSIGN_OR_RETURN(value, _children[i]->evaluate_checked(context, ptr));
-                is_const[i] = false;
-                all_const = false;
+                is_const[i] = value->is_constant();
+                all_const &= is_const[i];
             }
             if (i == 0) {
                 RETURN_IF_COLUMNS_ONLY_NULL({value});

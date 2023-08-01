@@ -49,7 +49,7 @@ public:
 
     static constexpr bool can_vectorized() { return true; }
 
-    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const {
         return Status::Cancelled("not implemented");
     }
 

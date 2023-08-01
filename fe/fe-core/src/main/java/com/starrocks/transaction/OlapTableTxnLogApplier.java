@@ -12,10 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.transaction;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -25,6 +23,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.clone.TabletScheduler;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -146,7 +145,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                 } // end for tablets
             } // end for indices
             long versionTime = partitionCommitInfo.getVersionTime();
-            partition.updateVisibleVersion(version, versionTime);
+            partition.updateVisibleVersion(version, versionTime, txnState.getTransactionId());
             if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {
                 for (String column : partitionCommitInfo.getInvalidDictCacheColumns()) {
                     IDictManager.getInstance().removeGlobalDict(tableId, column);
@@ -162,11 +161,13 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
         }
 
         table.lastVersionUpdateEndTime.set(System.currentTimeMillis());
-        Preconditions.checkState(dictCollectedVersions.size() == validDictCacheColumns.size());
-        for (int i = 0; i < validDictCacheColumns.size(); i++) {
-            String columnName = validDictCacheColumns.get(i);
-            long collectedVersion = dictCollectedVersions.get(i);
-            IDictManager.getInstance().updateGlobalDict(tableId, columnName, collectedVersion, maxPartitionVersionTime);
+        if (!GlobalStateMgr.isCheckpointThread() && dictCollectedVersions.size() == validDictCacheColumns.size()) {
+            for (int i = 0; i < validDictCacheColumns.size(); i++) {
+                String columnName = validDictCacheColumns.get(i);
+                long collectedVersion = dictCollectedVersions.get(i);
+                IDictManager.getInstance()
+                        .updateGlobalDict(tableId, columnName, collectedVersion, maxPartitionVersionTime);
+            }
         }
     }
 

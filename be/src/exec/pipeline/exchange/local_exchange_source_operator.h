@@ -90,15 +90,17 @@ public:
     LocalExchangeSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                                 const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager)
             : SourceOperator(factory, id, "local_exchange_source", plan_node_id, driver_sequence),
-              _memory_manager(memory_manager) {}
+              _memory_manager(memory_manager) {
+        _local_memory_limit = _memory_manager->get_memory_limit_per_driver() * 0.8;
+    }
 
     Status add_chunk(ChunkPtr chunk);
 
-    Status add_chunk(ChunkPtr chunk, std::shared_ptr<std::vector<uint32_t>> indexes, uint32_t from, uint32_t size,
-                     size_t memory_bytes);
+    Status add_chunk(ChunkPtr chunk, const std::shared_ptr<std::vector<uint32_t>>& indexes, uint32_t from,
+                     uint32_t size, size_t memory_bytes);
 
-    Status add_chunk(ChunkPtr chunk, std::shared_ptr<std::vector<uint32_t>> indexes, uint32_t from, uint32_t size,
-                     Columns& partition_columns, const std::vector<ExprContext*>& _partition_expr_ctxs,
+    Status add_chunk(ChunkPtr chunk, const std::shared_ptr<std::vector<uint32_t>>& indexes, uint32_t from,
+                     uint32_t size, Columns& partition_columns, const std::vector<ExprContext*>& _partition_expr_ctxs,
                      size_t memory_bytes);
 
     bool has_output() const override;
@@ -128,6 +130,11 @@ public:
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
+    bool releaseable() const override { return true; }
+
+    void enter_release_memory_mode() override;
+    void set_execute_mode(int performance_level) override;
+
 private:
     ChunkPtr _pull_passthrough_chunk(RuntimeState* state);
 
@@ -139,9 +146,7 @@ private:
 
     PendingPartitionChunks& _max_row_partition_chunks();
 
-    bool _local_buffer_almost_full() const {
-        return _local_memory_usage >= _memory_manager->get_memory_limit_per_driver() * 0.8;
-    }
+    bool _local_buffer_almost_full() const { return _local_memory_usage >= _local_memory_limit; }
 
     bool _key_partition_pending_chunk_empty() const {
         for (const auto& pending_chunks : _partitions) {
@@ -157,6 +162,7 @@ private:
     std::queue<PartitionChunk> _partition_chunk_queue;
     size_t _partition_rows_num = 0;
     size_t _local_memory_usage = 0;
+    size_t _local_memory_limit = 0;
 
     // TODO(KKS): make it lock free
     mutable std::mutex _chunk_lock;

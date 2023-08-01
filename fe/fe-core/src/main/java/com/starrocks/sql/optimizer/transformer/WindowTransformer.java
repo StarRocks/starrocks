@@ -120,7 +120,6 @@ public class WindowTransformer {
                     firstType = callExpr.getFn().getArgs()[0];
                 }
 
-
                 if (callExpr.getChildren().size() == 1) {
                     callExpr.addChild(new IntLiteral("1", Type.BIGINT));
                     callExpr.addChild(NullLiteral.create(firstType));
@@ -187,6 +186,12 @@ public class WindowTransformer {
         // Set the default window.
         if (!orderByElements.isEmpty() && windowFrame == null) {
             windowFrame = AnalyticWindow.DEFAULT_WINDOW;
+        }
+
+        // Check if range window has order by clause
+        if (windowFrame != null
+                && AnalyticWindow.Type.RANGE.equals(windowFrame.getType())) {
+            Preconditions.checkState(!orderByElements.isEmpty(), "Range window frame requires order by columns");
         }
 
         // Change first_value/last_value RANGE windows to ROWS

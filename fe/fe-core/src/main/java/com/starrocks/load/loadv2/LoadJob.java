@@ -62,12 +62,13 @@ import com.starrocks.load.EtlStatus;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.load.Load;
+import com.starrocks.load.LoadJobWithWarehouse;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
@@ -97,7 +98,8 @@ import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
-public abstract class LoadJob extends AbstractTxnStateChangeCallback implements LoadTaskCallback, Writable {
+public abstract class LoadJob extends AbstractTxnStateChangeCallback implements LoadTaskCallback, Writable,
+        LoadJobWithWarehouse {
 
     private static final Logger LOG = LogManager.getLogger(LoadJob.class);
 
@@ -217,6 +219,16 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     protected void writeUnlock() {
         lock.writeLock().unlock();
+    }
+
+    @Override
+    public boolean isFinal() {
+        return isCompleted();
+    }
+
+    @Override
+    public long getFinishTimestampMs() {
+        return getFinishTimestamp();
     }
 
     public long getId() {

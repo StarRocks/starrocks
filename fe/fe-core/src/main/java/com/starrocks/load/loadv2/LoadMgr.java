@@ -68,7 +68,10 @@ import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+import com.starrocks.warehouse.WarehouseLoadInfoBuilder;
+import com.starrocks.warehouse.WarehouseLoadStatusInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -109,6 +112,9 @@ public class LoadMgr implements Writable {
     private final LoadJobScheduler loadJobScheduler;
 
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+
+    private final WarehouseLoadInfoBuilder warehouseLoadInfoBuilder =
+            new WarehouseLoadInfoBuilder();
 
     public LoadMgr(LoadJobScheduler loadJobScheduler) {
         this.loadJobScheduler = loadJobScheduler;
@@ -211,11 +217,12 @@ public class LoadMgr implements Writable {
             throws UserException {
         LoadJob loadJob = getLoadJob(jobId);
         if (loadJob.isTxnDone() && !Strings.isNullOrEmpty(failMsg)) {
-            throw new LoadException("LoadJob " + jobId + " state " + loadJob.getState().name() + ", can not be cancal");
+            throw new LoadException("LoadJob " + jobId + " state " + loadJob.getState().name()
+                    + ", can not be cancelled");
         }
         if (loadJob.isCompleted()) {
             throw new LoadException(
-                    "LoadJob " + jobId + " state " + loadJob.getState().name() + ", can not be cancal/publish");
+                    "LoadJob " + jobId + " state " + loadJob.getState().name() + ", can not be cancelled/publish");
         }
         if (Objects.requireNonNull(jobType) == EtlJobType.INSERT) {
             InsertLoadJob insertLoadJob = (InsertLoadJob) loadJob;
@@ -226,7 +233,8 @@ public class LoadMgr implements Writable {
     }
 
     public long registerLoadJob(String label, String dbName, long tableId, EtlJobType jobType,
-                                long createTimestamp, long estimateScanRows, TLoadJobType type, long timeout)
+                                long createTimestamp, long estimateScanRows, TLoadJobType type, long timeout,
+                                String warehouse, boolean isStatisticsJob)
             throws UserException {
 
         // get db id
@@ -237,8 +245,9 @@ public class LoadMgr implements Writable {
 
         LoadJob loadJob;
         if (Objects.requireNonNull(jobType) == EtlJobType.INSERT) {
-            loadJob =
-                    new InsertLoadJob(label, db.getId(), tableId, createTimestamp, estimateScanRows, type, timeout);
+            loadJob = new InsertLoadJob(
+                    label, db.getId(), tableId, createTimestamp, estimateScanRows, type, timeout, warehouse,
+                    isStatisticsJob);
         } else {
             throw new LoadException("Unknown job type [" + jobType.name() + "]");
         }
@@ -376,6 +385,8 @@ public class LoadMgr implements Writable {
         if (job instanceof SparkLoadJob) {
             ((SparkLoadJob) job).clearSparkLauncherLog();
         }
+
+        warehouseLoadInfoBuilder.withRemovedJob(job);
     }
 
     private boolean isJobExpired(LoadJob job, long currentTimeMs) {
@@ -385,8 +396,8 @@ public class LoadMgr implements Writable {
         return (currentTimeMs - job.getFinishTimestamp()) / 1000 > Config.label_keep_max_second;
     }
 
-    public void cleanResidualJob() {
-        // clean residual insert job
+    public void cancelResidualJob() {
+        // cancel residual insert job
         readLock();
         List<LoadJob> insertJobs;
         try {
@@ -398,13 +409,13 @@ public class LoadMgr implements Writable {
         }
 
         insertJobs.forEach(job -> {
-            TransactionStatus st = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelState(
+            TransactionState state = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelTransactionState(
                     job.getDbId(), job.getLabel());
-            if (st == TransactionStatus.UNKNOWN) {
+            if (state != null && state.getTransactionStatus() == TransactionStatus.UNKNOWN) {
                 try {
                     recordFinishedOrCacnelledLoadJob(
                             job.getId(), EtlJobType.INSERT, "Cancelled since transaction status unknown", "");
-                    LOG.info("abort job: {} since transaction status unknown", job.getLabel());
+                    LOG.warn("abort job: {}-{} since transaction status unknown", job.getLabel(), job.getId());
                 } catch (UserException e) {
                     LOG.warn("failed to abort job: {}", job.getLabel(), e);
                 }
@@ -779,6 +790,15 @@ public class LoadMgr implements Writable {
             }
 
             putLoadJob(loadJob);
+        }
+    }
+
+    public Map<String, WarehouseLoadStatusInfo> getWarehouseLoadInfo() {
+        readLock();
+        try {
+            return warehouseLoadInfoBuilder.buildFromJobs(idToLoadJob.values());
+        } finally {
+            readUnlock();
         }
     }
 

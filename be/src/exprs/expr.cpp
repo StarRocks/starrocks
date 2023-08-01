@@ -70,6 +70,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
+#include "util/failpoint/fail_point.h"
 
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
@@ -261,6 +262,7 @@ Status Expr::create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNo
 
 Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks::TExprNode& texpr_node,
                                     starrocks::Expr** expr, RuntimeState* state) {
+    FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
     switch (texpr_node.node_type) {
     case TExprNodeType::BOOL_LITERAL:
     case TExprNodeType::INT_LITERAL:
@@ -433,6 +435,7 @@ Status Expr::prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state)
 }
 
 Status Expr::prepare(RuntimeState* state, ExprContext* context) {
+    FAIL_POINT_TRIGGER_RETURN_ERROR(randome_error);
     DCHECK(_type.type != TYPE_UNKNOWN);
     for (auto& i : _children) {
         RETURN_IF_ERROR(i->prepare(state, context));
@@ -448,6 +451,7 @@ Status Expr::open(const std::vector<ExprContext*>& ctxs, RuntimeState* state) {
 }
 
 Status Expr::open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
+    FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
     DCHECK(_type.type != TYPE_UNKNOWN);
     for (auto& i : _children) {
         RETURN_IF_ERROR(i->open(state, context, scope));

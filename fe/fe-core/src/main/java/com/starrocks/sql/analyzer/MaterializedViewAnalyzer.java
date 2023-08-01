@@ -54,7 +54,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
@@ -106,7 +105,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
-import static com.starrocks.server.CatalogMgr.isInternalCatalog;
 
 public class MaterializedViewAnalyzer {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewAnalyzer.class);
@@ -124,31 +122,36 @@ public class MaterializedViewAnalyzer {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
     }
 
-    public static List<BaseTableInfo> getAndCheckBaseTables(QueryStatement queryStatement) {
+    public static List<BaseTableInfo> getBaseTableInfos(QueryStatement queryStatement, boolean withCheck) {
         List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
-        processBaseTables(queryStatement, baseTableInfos);
+        processBaseTables(queryStatement, baseTableInfos, withCheck);
         Set<BaseTableInfo> baseTableInfoSet = Sets.newHashSet(baseTableInfos);
         baseTableInfos.clear();
         baseTableInfos.addAll(baseTableInfoSet);
         return baseTableInfos;
     }
 
-    private static void processBaseTables(QueryStatement queryStatement, List<BaseTableInfo> baseTableInfos) {
+    private static void processBaseTables(QueryStatement queryStatement, List<BaseTableInfo> baseTableInfos,
+                                          boolean withCheck) {
         Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllConnectorTableAndView(queryStatement);
-        tableNameTableMap.forEach((tableNameInfo, table) -> {
-            Preconditions.checkState(table != null, "Materialized view base table is null");
-            if (!isSupportBasedOnTable(table)) {
-                throw new SemanticException("Create materialized view do not support the table type: " +
-                        table.getType(), tableNameInfo.getPos());
-            }
-            if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
-                throw new SemanticException(
-                        "Create materialized view from inactive materialized view: " + table.getName(),
-                        tableNameInfo.getPos());
+        for (Map.Entry<TableName, Table> entry : tableNameTableMap.entrySet()) {
+            TableName tableNameInfo = entry.getKey();
+            Table table = entry.getValue();
+            if (withCheck) {
+                Preconditions.checkState(table != null, "Materialized view base table is null");
+                if (!isSupportBasedOnTable(table)) {
+                    throw new SemanticException("Create/Rebuild materialized view do not support the table type: " +
+                            table.getType(), tableNameInfo.getPos());
+                }
+                if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
+                    throw new SemanticException(
+                            "Create/Rebuild materialized view from inactive materialized view: " + table.getName(),
+                            tableNameInfo.getPos());
+                }
             }
 
             if (table.isView()) {
-                return;
+                continue;
             }
 
             if (!FeConstants.isReplayFromQueryDump && isExternalTableFromResource(table)) {
@@ -156,17 +159,9 @@ public class MaterializedViewAnalyzer {
                         "Only supports creating materialized views based on the external table " +
                                 "which created by catalog", tableNameInfo.getPos());
             }
-            Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableNameInfo.getCatalog(),
-                    tableNameInfo.getDb());
-            if (isInternalCatalog(tableNameInfo.getCatalog())) {
-                baseTableInfos.add(new BaseTableInfo(database.getId(), database.getFullName(),
-                        table.getId()));
-            } else {
-                baseTableInfos.add(new BaseTableInfo(tableNameInfo.getCatalog(),
-                        tableNameInfo.getDb(), table.getTableIdentifier()));
-            }
-        });
-        processViews(queryStatement, baseTableInfos);
+            baseTableInfos.add(BaseTableInfo.fromTableName(tableNameInfo, table));
+        }
+        processViews(queryStatement, baseTableInfos, withCheck);
     }
 
     private static boolean isSupportBasedOnTable(Table table) {
@@ -191,14 +186,19 @@ public class MaterializedViewAnalyzer {
         }
     }
 
-    private static void processViews(QueryStatement queryStatement, List<BaseTableInfo> baseTableInfos) {
+    private static void processViews(QueryStatement queryStatement, List<BaseTableInfo> baseTableInfos,
+                                     boolean withCheck) {
         List<ViewRelation> viewRelations = AnalyzerUtils.collectViewRelations(queryStatement);
         if (viewRelations.isEmpty()) {
             return;
         }
         Set<ViewRelation> viewRelationSet = Sets.newHashSet(viewRelations);
         for (ViewRelation viewRelation : viewRelationSet) {
-            processBaseTables(viewRelation.getQueryStatement(), baseTableInfos);
+            // base tables of view
+            processBaseTables(viewRelation.getQueryStatement(), baseTableInfos, withCheck);
+
+            // view itself is considered as base-table
+            baseTableInfos.add(BaseTableInfo.fromTableName(viewRelation.getName(), viewRelation.getView()));
         }
     }
 
@@ -240,7 +240,7 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("Can not find database:" + statement.getTableName().getDb(),
                         statement.getTableName().getPos());
             }
-            List<BaseTableInfo> baseTableInfos = getAndCheckBaseTables(queryStatement);
+            List<BaseTableInfo> baseTableInfos = getBaseTableInfos(queryStatement, true);
             // now do not support empty base tables
             // will be relaxed after test
             if (baseTableInfos.isEmpty()) {

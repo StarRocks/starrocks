@@ -34,12 +34,14 @@
 
 package com.starrocks.qe;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.http.HttpConnectContext;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
@@ -111,6 +113,7 @@ public class ConnectContext {
 
     // mysql net
     protected MysqlChannel mysqlChannel;
+
     // state
     protected QueryState state;
     protected long returnRows;
@@ -190,6 +193,7 @@ public class ConnectContext {
     protected Set<Long> currentSqlDbIds = Sets.newHashSet();
 
     protected PlannerProfile plannerProfile;
+    protected StatementBase.ExplainLevel explainLevel;
 
     protected TWorkGroup resourceGroup;
 
@@ -461,7 +465,7 @@ public class ConnectContext {
     }
 
     public void setErrorCodeOnce(String errorCode) {
-        if (this.errorCode == null || this.errorCode.isEmpty()) {
+        if (Strings.isNullOrEmpty(this.errorCode)) {
             this.errorCode = errorCode;
         }
     }
@@ -579,6 +583,14 @@ public class ConnectContext {
 
     public PlannerProfile getPlannerProfile() {
         return plannerProfile;
+    }
+
+    public StatementBase.ExplainLevel getExplainLevel() {
+        return explainLevel;
+    }
+
+    public void setExplainLevel(StatementBase.ExplainLevel explainLevel) {
+        this.explainLevel = explainLevel;
     }
 
     public TWorkGroup getResourceGroup() {
@@ -774,7 +786,13 @@ public class ConnectContext {
             List<String> row = Lists.newArrayList();
             row.add("" + connectionId);
             row.add(ClusterNamespace.getNameFromFullName(qualifiedUser));
-            row.add(getMysqlChannel().getRemoteHostPortString());
+            // Ip + port
+            if (ConnectContext.this instanceof HttpConnectContext) {
+                String remoteAddress = ((HttpConnectContext) (ConnectContext.this)).getRemoteAddres();
+                row.add(remoteAddress);
+            } else {
+                row.add(getMysqlChannel().getRemoteHostPortString());
+            }
             row.add(ClusterNamespace.getNameFromFullName(currentDb));
             // Command
             row.add(command.toString());

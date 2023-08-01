@@ -142,6 +142,8 @@ fi
 
 source ${STARROCKS_HOME}/bin/common.sh
 
+update_submodules
+
 cd ${CMAKE_BUILD_DIR}
 if [ "${USE_STAROS}" == "ON"  ]; then
   if [ -z "$STARLET_INSTALL_DIR" ] ; then
@@ -250,7 +252,7 @@ if [[ $TEST_MODULE == '.*'  || $TEST_MODULE == 'starrocks_test' ]]; then
   fi
 fi
 
-for test in ${test_files[@]}
+for test in $test_files
 do
     echo "Run test: $test"
     if [ ${DRY_RUN} -eq 0 ]; then

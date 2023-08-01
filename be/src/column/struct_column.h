@@ -82,6 +82,8 @@ public:
 
     size_t byte_size(size_t idx) const override;
 
+    size_t byte_size(size_t from, size_t size) const override;
+
     void reserve(size_t n) override;
 
     void resize(size_t n) override;
@@ -102,7 +104,7 @@ public:
 
     void fill_default(const Filter& filter) override;
 
-    Status update_rows(const Column& src, const uint32_t* indexes) override;
+    void update_rows(const Column& src, const uint32_t* indexes) override;
 
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 

@@ -417,6 +417,11 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                     throw new UnsupportedMVException("Any single column should be before agg column. " +
                             "Column %s at wrong location", selectListItemExpr.toMySql());
                 }
+                // NOTE: If `selectListItemExpr` contains aggregate function, we can not support it.
+                if (selectListItemExpr.containsAggregate()) {
+                    throw new UnsupportedMVException("Aggregate function with function expr is not supported yet",
+                            selectListItemExpr.toMySql());
+                }
 
                 mvColumnItem = buildNonAggColumnItem(selectListItem, slots);
                 if (!mvColumnNameSet.add(mvColumnItem.getName())) {
@@ -461,6 +466,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                         selectListItem);
             }
             columnName = MVUtils.getMVColumnName(selectListItem.getAlias());
+            type = AnalyzerUtils.transformTableColumnType(type, false);
         }
         Set<String> baseColumnNames = baseSlotRefs.stream().map(slot -> slot.getColumnName().toLowerCase()).
                 collect(Collectors.toSet());
@@ -620,7 +626,9 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 if (mvColumnItem.getAggregationType() != null) {
                     break;
                 }
-                Preconditions.checkArgument(mvColumnItem.getType().isScalarType(), "non scalar type");
+                if (!mvColumnItem.getType().isScalarType()) {
+                    throw new SemanticException("Key column must be scalar type: " + mvColumnItem.getName());
+                }
                 mvColumnItem.setIsKey(true);
             }
         } else if (getMVKeysType() == KeysType.DUP_KEYS) {

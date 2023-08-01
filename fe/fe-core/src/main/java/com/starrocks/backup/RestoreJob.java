@@ -81,6 +81,7 @@ import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -433,6 +434,7 @@ public class RestoreJob extends AbstractJob {
      */
     private void checkAndPrepareMeta() {
         MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB.increase(1L);
+        WarehouseMetricMgr.increaseUnfinishedRestoreJobs(getCurrentWarehouse(), 1L);
         Database db = globalStateMgr.getDb(dbId);
         if (db == null) {
             status = new Status(ErrCode.NOT_FOUND, "database " + dbId + " does not exist");
@@ -514,9 +516,34 @@ public class RestoreJob extends AbstractJob {
                     if (localOlapTbl.getSignature(BackupHandler.SIGNATURE_VERSION, intersectPartNames, true)
                             != remoteOlapTbl.getSignature(BackupHandler.SIGNATURE_VERSION, intersectPartNames, true) ||
                                 localOlapTbl.getBaseSchema().size() != remoteOlapTbl.getBaseSchema().size()) {
+                        List<Pair<Integer, String>> localCheckSumList = localOlapTbl.getSignatureSequence(
+                                BackupHandler.SIGNATURE_VERSION, intersectPartNames);
+                        List<Pair<Integer, String>> remoteCheckSumList = remoteOlapTbl.getSignatureSequence(
+                                BackupHandler.SIGNATURE_VERSION, intersectPartNames);
+                        
+                        String errMsg = "";
+                        if (localCheckSumList.size() == remoteCheckSumList.size()) {
+                            for (int i = 0; i < localCheckSumList.size(); ++i) {
+                                int localCheckSum = ((Integer) localCheckSumList.get(i).first).intValue();
+                                int remoteCheckSum = ((Integer) remoteCheckSumList.get(i).first).intValue();
+                                if (localCheckSum != remoteCheckSum) {
+                                    errMsg = ((String) localCheckSumList.get(i).second);
+                                    break;
+                                }
+                            }
+                        }
+
                         status = new Status(ErrCode.COMMON_ERROR,
                                 "Table " + jobInfo.getAliasByOriginNameIfSet(tblInfo.name)
-                                        + " already exist but with different schema");
+                                        + " already exist but with different schema, errMsg: "
+                                        + errMsg);
+                        return;
+                    }
+
+                    if (localOlapTbl.getKeysType() != remoteOlapTbl.getKeysType()) {
+                        status = new Status(ErrCode.COMMON_ERROR,
+                                "Table " + jobInfo.getAliasByOriginNameIfSet(tblInfo.name)
+                                        + " already exist but with different key type");
                         return;
                     }
 
@@ -527,7 +554,9 @@ public class RestoreJob extends AbstractJob {
                         if (!localColumn.equals(remoteColumn)) {
                             status = new Status(ErrCode.COMMON_ERROR,
                                     "Table " + jobInfo.getAliasByOriginNameIfSet(tblInfo.name)
-                                            + " already exist but with different schema");
+                                            + " already exist but with different schema, column: " + localColumn.getName()
+                                            + " in existed table is different from the column in backup snapshot, column: "
+                                            + remoteColumn.getName());
                             return;
                         }
                     }
@@ -1184,7 +1213,6 @@ public class RestoreJob extends AbstractJob {
             unfinishedSignatureToId.put(signature, beId);
         }
     }
-
     protected void sendDownloadTasks() {
         for (AgentTask task : batchTask.getAllTasks()) {
             AgentTaskQueue.addTask(task);
@@ -1235,6 +1263,7 @@ public class RestoreJob extends AbstractJob {
                 status = st;
             }
             MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB.increase(-1L);
+            WarehouseMetricMgr.increaseUnfinishedRestoreJobs(getCurrentWarehouse(), -1L);
             return;
         }
         LOG.info("waiting {} tablets to commit. {}", unfinishedSignatureToId.size(), this);
@@ -1400,6 +1429,7 @@ public class RestoreJob extends AbstractJob {
         status = new Status(ErrCode.COMMON_ERROR, "user cancelled, current state: " + state.name());
         cancelInternal(false);
         MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB.increase(-1L);
+        WarehouseMetricMgr.increaseUnfinishedRestoreJobs(getCurrentWarehouse(), -1L);
         return Status.OK;
     }
 

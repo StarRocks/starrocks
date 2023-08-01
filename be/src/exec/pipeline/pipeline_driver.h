@@ -307,6 +307,9 @@ public:
     void cancel_operators(RuntimeState* runtime_state);
 
     Operator* sink_operator() { return _operators.back().get(); }
+    bool is_ready() {
+        return _state == DriverState::READY || _state == DriverState::RUNNING || _state == DriverState::LOCAL_WAITING;
+    }
     bool is_finished() {
         return _state == DriverState::FINISH || _state == DriverState::CANCELED ||
                _state == DriverState::INTERNAL_ERROR;
@@ -412,7 +415,8 @@ public:
     void check_short_circuit();
 
     bool need_report_exec_state();
-    void report_exec_state();
+    void report_exec_state_if_necessary();
+    void runtime_report_action();
 
     std::string to_readable_string() const;
 
@@ -467,10 +471,12 @@ protected:
     void _close_operators(RuntimeState* runtime_state);
 
     void _adjust_memory_usage(RuntimeState* state, MemTracker* tracker, OperatorPtr& op, const ChunkPtr& chunk);
+    void _try_to_release_buffer(RuntimeState* state, OperatorPtr& op);
 
     // Update metrics when the driver yields.
     void _update_driver_acct(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);
     void _update_statistics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);
+    void _update_scan_statistics();
     void _update_overhead_timer();
 
     RuntimeState* _runtime_state = nullptr;

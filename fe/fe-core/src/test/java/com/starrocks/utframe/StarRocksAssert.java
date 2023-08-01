@@ -86,9 +86,11 @@ import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
+import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -235,9 +237,13 @@ public class StarRocksAssert {
         return this;
     }
 
+    public Table getTable(String dbName, String tableName) {
+        return ctx.getGlobalStateMgr().mayGetDb(dbName).map(db -> db.getTable(tableName)).orElse(null);
+    }
+
     public StarRocksAssert withSingleReplicaTable(String sql) throws Exception {
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        if (statementBase instanceof  CreateTableStmt) {
+        if (statementBase instanceof CreateTableStmt) {
             CreateTableStmt createTableStmt = (CreateTableStmt) statementBase;
             createTableStmt.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
             return this.withTable(sql);
@@ -278,6 +284,15 @@ public class StarRocksAssert {
     public StarRocksAssert alterMvProperties(String sql) throws Exception {
         AlterMaterializedViewStmt alterMvStmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().alterMaterializedView(alterMvStmt);
+        return this;
+    }
+
+    public StarRocksAssert alterTableProperties(String sql) throws Exception {
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertFalse(alterTableStmt.getOps().isEmpty());
+        Assert.assertTrue(alterTableStmt.getOps().get(0) instanceof ModifyTablePropertiesClause);
+        Analyzer.analyze(alterTableStmt, ctx);
+        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
         return this;
     }
 
@@ -424,6 +439,14 @@ public class StarRocksAssert {
 
         Assert.assertTrue(statement instanceof ShowResourceGroupStmt);
         return GlobalStateMgr.getCurrentState().getResourceGroupMgr().showResourceGroup((ShowResourceGroupStmt) statement);
+    }
+
+    public List<List<String>> show(String sql) throws Exception {
+        StatementBase stmt = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+        Assert.assertTrue(stmt instanceof ShowStmt);
+        Analyzer.analyze(stmt, ctx);
+        ShowExecutor showExecutor = new ShowExecutor(ctx, (ShowStmt) stmt);
+        return showExecutor.execute().getResultRows();
     }
 
     private void checkAlterJob() throws InterruptedException {

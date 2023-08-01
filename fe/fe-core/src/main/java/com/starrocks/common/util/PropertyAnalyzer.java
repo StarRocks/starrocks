@@ -118,6 +118,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_ENABLE_PERSISTENT_INDEX = "enable_persistent_index";
 
+    public static final String PROPERTIES_PERSISTENT_INDEX_TYPE = "persistent_index_type";
+
     public static final String PROPERTIES_BINLOG_VERSION = "binlog_version";
 
     public static final String PROPERTIES_BINLOG_ENABLE = "binlog_enable";
@@ -148,6 +150,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
     public static final String PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE = "force_external_table_query_rewrite";
+    public static final String PROPERTIES_OLAP_TABLE_QUERY_REWRITE = "olap_table_query_rewrite_consistency";
     public static final String PROPERTIES_RESOURCE_GROUP = "resource_group";
 
     public static final String PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX = "session.";
@@ -369,16 +372,6 @@ public class PropertyAnalyzer {
             properties.remove(PROPERTIES_MV_REWRITE_STALENESS_SECOND);
         }
         return maxMVRewriteStaleness;
-    }
-
-    public static boolean analyzeForceExternalTableQueryRewrite(Map<String, String> properties) {
-        boolean forceExternalTableQueryRewrite = false;
-        if (properties != null && properties.containsKey(PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
-            forceExternalTableQueryRewrite = Boolean.parseBoolean(properties.
-                    get(PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE));
-            properties.remove(PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
-        }
-        return forceExternalTableQueryRewrite;
     }
 
     public static Short analyzeReplicationNum(Map<String, String> properties, short oldReplicationNum)

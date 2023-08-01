@@ -24,6 +24,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.DateLiteral;
@@ -47,6 +48,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.OlapTable;
@@ -64,7 +66,6 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
@@ -99,6 +100,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.statistic.StatsConstants;
 import org.apache.arrow.util.VisibleForTesting;
 import org.apache.commons.lang3.StringUtils;
 
@@ -181,10 +183,9 @@ public class AnalyzerUtils {
             Function search = new Function(fnName, argTypes, Type.INVALID, false);
             Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
-            if (fn != null && !PrivilegeActions.checkFunctionAction(context, db, fn, PrivilegeType.USAGE)) {
-                throw new StarRocksPlannerException(String.format("Access denied. " +
-                        "Found UDF: %s and need the USAGE privilege for FUNCTION", fn.getFunctionName()),
-                        ErrorType.USER_ERROR);
+            if (fn != null) {
+                PrivilegeChecker.checkFunctionAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        db, fn, PrivilegeType.USAGE);
             }
 
             return fn;
@@ -197,11 +198,9 @@ public class AnalyzerUtils {
         Function search = new Function(fnName, argTypes, Type.INVALID, false);
         Function fn = context.getGlobalStateMgr().getGlobalFunctionMgr()
                 .getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-        if (fn != null && !PrivilegeActions.checkGlobalFunctionAction(context,
-                fn, PrivilegeType.USAGE)) {
-            throw new StarRocksPlannerException(String.format("Access denied. " +
-                    "Found UDF: %s and need the USAGE privilege for GLOBAL FUNCTION", fn.getFunctionName()),
-                    ErrorType.USER_ERROR);
+        if (fn != null) {
+            PrivilegeChecker.checkGlobalFunctionAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    fn, PrivilegeType.USAGE);
         }
 
         return fn;
@@ -662,6 +661,43 @@ public class AnalyzerUtils {
         }
     }
 
+    public static Set<TableName> getAllTableNamesForAnalyzeJobStmt(long dbId, long tableId) {
+        Set<TableName> tableNames = Sets.newHashSet();
+        if (StatsConstants.DEFAULT_ALL_ID != tableId && StatsConstants.DEFAULT_ALL_ID != dbId) {
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (db != null && !db.isSystemDatabase()) {
+                Table table = db.getTable(tableId);
+                if (table != null && table.isOlapOrCloudNativeTable()) {
+                    tableNames.add(new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                            db.getFullName(), table.getName()));
+                }
+            }
+        } else if (StatsConstants.DEFAULT_ALL_ID == tableId && StatsConstants.DEFAULT_ALL_ID != dbId) {
+            getTableNamesInDb(tableNames, dbId);
+        } else {
+            List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
+            for (Long id : dbIds) {
+                getTableNamesInDb(tableNames, id);
+            }
+        }
+
+        return tableNames;
+    }
+
+    private static void getTableNamesInDb(Set<TableName> tableNames, Long id) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(id);
+        if (db != null && !db.isSystemDatabase()) {
+            for (Table table : db.getTables()) {
+                if (table == null || !table.isOlapOrCloudNativeTable()) {
+                    continue;
+                }
+                TableName tableNameNew = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        db.getFullName(), table.getName());
+                tableNames.add(tableNameNew);
+            }
+        }
+    }
+
     public static Type transformTableColumnType(Type srcType) {
         return transformTableColumnType(srcType, true);
     }
@@ -832,8 +868,8 @@ public class AnalyzerUtils {
                     formattedPartitionValue.add(formatValue);
                 }
                 String partitionName = partitionPrefix + Joiner.on("_").join(formattedPartitionValue);
-                if (partitionName.length() > 64) {
-                    partitionName = partitionName.substring(0, 64);
+                if (partitionName.length() > 50) {
+                    partitionName = partitionName.substring(0, 50) + "_" + System.currentTimeMillis();
                 }
                 MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
                         partitionName, Collections.singletonList(partitionValue), partitionProperties);
@@ -853,12 +889,16 @@ public class AnalyzerUtils {
     @VisibleForTesting
     public static String getFormatPartitionValue(String value) {
         StringBuilder sb = new StringBuilder();
+        // When the value is negative
+        if (value.length() > 0 && value.charAt(0) == '-') {
+            sb.append("_");
+        }
         for (int i = 0; i < value.length(); i++) {
             char ch = value.charAt(i);
             if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) {
                 sb.append(ch);
             } else if (ch == '-' || ch == ':' || ch == ' ') {
-                // remove;
+                // Main user remove characters in time
             } else {
                 int unicodeValue = value.codePointAt(i);
                 String unicodeString = Integer.toHexString(unicodeValue);
@@ -1079,6 +1119,15 @@ public class AnalyzerUtils {
             }
         };
         return queryStatement.getQueryRelation().accept(slotRefResolver, null);
+    }
+
+    public static boolean containsIgnoreCase(List<String> list, String soughtFor) {
+        for (String current : list) {
+            if (current.equalsIgnoreCase(soughtFor)) {
+                return true;
+            }
+        }
+        return false;
     }
 
 }

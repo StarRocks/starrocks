@@ -948,7 +948,7 @@ private:
         }
 
         ASSIGN_OR_RETURN(auto result, _array_has_non_nullable(*array_col, *target_col));
-        DCHECK_EQ(array_nullable->size(), result->size());
+        DCHECK_EQ(array_col->size(), result->size());
         return NullableColumn::create(std::move(result), merge_nullcolum(array_nullable, target_nullable));
     }
 };
@@ -1342,7 +1342,7 @@ inline static void nestloop_intersect(uint8_t* hits, const Column* base, size_t 
 }
 
 StatusOr<ColumnPtr> ArrayFunctions::array_intersect_any_type(FunctionContext* ctx, const Columns& columns) {
-    DCHECK_LE(2, columns.size());
+    DCHECK_LE(1, columns.size());
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     size_t rows = columns[0]->size();

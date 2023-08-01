@@ -117,7 +117,7 @@ public class StarOSAgent {
         try {
             return client.addFileStore(fsInfo, serviceId);
         } catch (StarClientException e) {
-            throw new DdlException("Failed to add file store", e);
+            throw new DdlException("Failed to add file store, error: " + e.getMessage());
         }
     }
 
@@ -125,7 +125,7 @@ public class StarOSAgent {
         try {
             client.removeFileStoreByName(fsName, serviceId);
         } catch (StarClientException e) {
-            throw new DdlException("Failed to remove file store", e);
+            throw new DdlException("Failed to remove file store, error: " + e.getMessage());
         }
     }
 
@@ -133,7 +133,7 @@ public class StarOSAgent {
         try {
             client.updateFileStore(fsInfo, serviceId);
         } catch (StarClientException e) {
-            throw new DdlException("Failed to update file store", e);
+            throw new DdlException("Failed to update file store, error: " + e.getMessage());
         }
     }
 
@@ -144,7 +144,7 @@ public class StarOSAgent {
             if (e.getCode() == StatusCode.NOT_EXIST) {
                 return null;
             }
-            throw new DdlException("Failed to get file store", e);
+            throw new DdlException("Failed to get file store, error: " + e.getMessage());
         }
     }
 
@@ -155,7 +155,7 @@ public class StarOSAgent {
             if (e.getCode() == StatusCode.NOT_EXIST) {
                 return null;
             }
-            throw new DdlException("Failed to get file store", e);
+            throw new DdlException("Failed to get file store, error: " + e.getMessage());
         }
     }
 
@@ -163,7 +163,7 @@ public class StarOSAgent {
         try {
             return client.listFileStore(serviceId);
         } catch (StarClientException e) {
-            throw new DdlException("Failed to list file store", e);
+            throw new DdlException("Failed to list file store, error: " + e.getMessage());
         }
     }
 
@@ -189,7 +189,7 @@ public class StarOSAgent {
             LOG.debug("Allocate file path from starmgr: {}", pathInfo);
             return pathInfo;
         } catch (StarClientException e) {
-            throw new DdlException("Failed to allocate file path from StarMgr", e);
+            throw new DdlException("Failed to allocate file path from StarMgr, error: " + e.getMessage());
         }
     }
 
@@ -200,7 +200,7 @@ public class StarOSAgent {
             LOG.debug("Allocate file path from starmgr: {}", pathInfo);
             return pathInfo;
         } catch (StarClientException e) {
-            throw new DdlException("Failed to allocate file path from StarMgr", e);
+            throw new DdlException("Failed to allocate file path from StarMgr, error: " + e.getMessage());
         }
     }
 
@@ -684,6 +684,35 @@ public class StarOSAgent {
             return nodeIds;
         } catch (StarClientException e) {
             throw new UserException("Failed to get workers by group id. error: " + e.getMessage());
+        }
+    }
+
+    public List<String> listDefaultWorkerGroupIpPort() throws UserException {
+        List<String> addresses = new ArrayList<>();
+        prepare();
+        try {
+            List<WorkerGroupDetailInfo> workerGroupDetailInfos = client.
+                    listWorkerGroup(serviceId, Collections.singletonList(DEFAULT_WORKER_GROUP_ID), true);
+            Preconditions.checkState(1 == workerGroupDetailInfos.size());
+            WorkerGroupDetailInfo workerGroupInfo = workerGroupDetailInfos.get(0);
+            for (WorkerInfo workerInfo : workerGroupInfo.getWorkersInfoList()) {
+                addresses.add(workerInfo.getIpPort());
+            }
+            return addresses;
+        } catch (StarClientException e) {
+            throw new UserException("Fail to get workers by default group id, error: " + e.getMessage());
+        }
+    }
+
+    // dump all starmgr meta, for DEBUG purpose
+    public String dump() {
+        prepare();
+
+        try {
+            return client.dump();
+        } catch (StarClientException e) {
+            String str = "Fail to dump starmgr meta, " + e.getMessage();
+            return str;
         }
     }
 }

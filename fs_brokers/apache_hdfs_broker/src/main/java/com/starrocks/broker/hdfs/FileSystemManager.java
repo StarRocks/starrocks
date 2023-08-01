@@ -905,6 +905,13 @@ public class FileSystemManager {
             logger.info("file not found: " + e.getMessage());
             throw new BrokerException(TBrokerOperationStatusCode.FILE_NOT_FOUND,
                     e, "file not found");
+        } catch (IllegalArgumentException e) {
+            logger.error("The arguments of blob store(S3/Azure) may be wrong. You can check " +
+                      "the arguments like region, IAM, instance profile and so on.");
+            throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
+                e, "The arguments of blob store(S3/Azure) may be wrong. " +
+                   "You can check the arguments like region, IAM, " +
+                   "instance profile and so on.");
         } catch (Exception e) {
             logger.error("errors while get file status ", e);
             throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,

@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Set;
 
 public class BaseResponse {
+    public static final String HEADER_QUERY_ID = "X-StarRocks-Query-Id";
     private String contentType;
     protected StringBuilder content = new StringBuilder();
 

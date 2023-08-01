@@ -328,12 +328,14 @@ Status IcebergTableSinkOperator::partition_value_to_string(Column* column, std::
                     using T = std::decay_t<decltype(arg)>;
                     if constexpr (std::is_same_v<T, Slice>) {
                         partition_value = arg.to_string();
-                    } else if constexpr (std::is_same_v<T, int8_t> || std::is_same_v<T, uint8_t> ||
-                                         std::is_same_v<T, int16_t> || std::is_same_v<T, uint16_t> ||
-                                         std::is_same_v<T, uint24_t> || std::is_same_v<T, int32_t> ||
-                                         std::is_same_v<T, uint32_t> || std::is_same_v<T, int64_t> ||
-                                         std::is_same_v<T, uint64_t>) {
+                    } else if constexpr (std::is_same_v<T, uint8_t> || std::is_same_v<T, int16_t> ||
+                                         std::is_same_v<T, uint16_t> || std::is_same_v<T, uint24_t> ||
+                                         std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t> ||
+                                         std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
                         partition_value = std::to_string(arg);
+                    } else if constexpr (std::is_same_v<T, int8_t>) {
+                        // iceberg has no smallint type. we can safely use int8 as boolean.
+                        partition_value = arg == 0 ? "false" : "true";
                     } else {
                         not_support = true;
                     }

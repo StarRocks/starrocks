@@ -414,7 +414,8 @@ public class DatabaseTransactionMgr {
             return waiter;
         }
         // For compatible reason, the default behavior of empty load is still returning "all partitions have no load data" and abort transaction.
-        if (Config.empty_load_as_error && (tabletCommitInfos == null || tabletCommitInfos.isEmpty())) {
+        if (Config.empty_load_as_error && (tabletCommitInfos == null || tabletCommitInfos.isEmpty())
+                && transactionState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING) {
             throw new TransactionCommitFailedException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
         }
         if (tabletCommitInfos != null && !tabletCommitInfos.isEmpty()) {
@@ -735,6 +736,21 @@ public class DatabaseTransactionMgr {
         }
     }
 
+    public TransactionState getLabelTransactionState(String label) {
+        readLock();
+        try {
+            Set<Long> existingTxnIds = unprotectedGetTxnIdsByLabel(label);
+            if (existingTxnIds == null || existingTxnIds.isEmpty()) {
+                return null;
+            }
+            // find the latest txn (which id is largest)
+            long maxTxnId = existingTxnIds.stream().max(Comparator.comparingLong(Long::valueOf)).orElse(Long.MIN_VALUE);
+            return unprotectedGetTransactionState(maxTxnId);
+        } finally {
+            readUnlock();
+        }
+    }
+
     public Long getLabelTxnID(String label) {
         readLock();
         try {
@@ -863,7 +879,7 @@ public class DatabaseTransactionMgr {
 
                                 // if all unfinished backends already down through heartbeat detect, we don't need to wait anymore
                                 for (Long backendID : unfinishedBackends) {
-                                    if (globalStateMgr.getCurrentSystemInfo().checkBackendAlive(backendID)) {
+                                    if (GlobalStateMgr.getCurrentSystemInfo().checkBackendAlive(backendID)) {
                                         return false;
                                     }
                                 }
@@ -1003,7 +1019,7 @@ public class DatabaseTransactionMgr {
                                                 partitionCommitInfo.getVersion());
                                         LOG.warn("transaction state {} has error, the replica [{}] not appeared " +
                                                         "in error replica list and its version not equal to partition " +
-                                                        "commit version or commit version - 1 if its not a upgrate " +
+                                                        "commit version or commit version - 1 if it's not a upgrade " +
                                                         "stage, its a fatal error. ",
                                                 transactionState, replica);
                                     }

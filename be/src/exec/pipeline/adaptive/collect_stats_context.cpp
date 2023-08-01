@@ -198,7 +198,7 @@ StatusOr<ChunkPtr> RoundRobinState::pull_chunk(int32_t driver_seq) {
     while (buffer_idx < _ctx->_upstream_dop) {
         auto& buffer_chunk_queue = _ctx->_buffer_chunk_queue(buffer_idx);
         while (!buffer_chunk_queue.empty()) {
-            accumulator.push(std::move(buffer_chunk_queue.front()));
+            RETURN_IF_ERROR(accumulator.push(std::move(buffer_chunk_queue.front())));
             buffer_chunk_queue.pop();
             if (!accumulator.empty()) {
                 return accumulator.pull();

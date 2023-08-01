@@ -17,6 +17,7 @@
 #include <bvar/bvar.h>
 
 #include "storage/chunk_helper.h"
+#include "storage/lake/lake_local_persistent_index.h"
 #include "storage/lake/tablet.h"
 #include "storage/primary_key_encoder.h"
 #include "util/trace.h"
@@ -27,13 +28,13 @@ static bvar::LatencyRecorder g_load_pk_index_latency("lake_load_pk_index");
 
 Status LakePrimaryIndex::lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
                                    const MetaFileBuilder* builder) {
-    TRACE_COUNTER_SCOPE_LATENCY_US("load_pk_index");
     std::lock_guard<std::mutex> lg(_lock);
     if (_loaded) {
         return _status;
     }
     _status = _do_lake_load(tablet, metadata, base_version, builder);
     _loaded = true;
+    TRACE("end load pk index");
     if (!_status.ok()) {
         LOG(WARNING) << "load LakePrimaryIndex error: " << _status << " tablet:" << _tablet_id;
     }
@@ -57,6 +58,44 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
     }
     auto pkey_schema = ChunkHelper::convert_schema(*tablet_schema, pk_columns);
     _set_schema(pkey_schema);
+
+    // load persistent index if enable persistent index meta
+    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
+
+    if (tablet->get_enable_persistent_index(base_version) && (fix_size <= 128)) {
+        DCHECK(_persistent_index == nullptr);
+
+        // Even if `enable_persistent_index` is enabled,
+        // it may not take effect because `storage_root_path` is not set
+        if (StorageEngine::instance()->is_lake_persistent_index_dir_inited()) {
+            auto persistent_index_type = tablet->get_persistent_index_type(base_version);
+            if (persistent_index_type.ok()) {
+                switch (persistent_index_type.value()) {
+                case PersistentIndexTypePB::LOCAL: {
+                    std::string path = strings::Substitute(
+                            "$0/$1/",
+                            StorageEngine::instance()->get_persistent_index_store()->get_persistent_index_path(),
+                            tablet->id());
+
+                    RETURN_IF_ERROR(
+                            StorageEngine::instance()->get_persistent_index_store()->create_dir_if_path_not_exists(
+                                    path));
+                    _persistent_index = std::make_unique<LakeLocalPersistentIndex>(path);
+                    return ((LakeLocalPersistentIndex*)_persistent_index.get())
+                            ->load_from_lake_tablet(tablet, metadata, base_version, builder);
+                }
+                default:
+                    LOG(WARNING) << "only support LOCAL lake_persistend_index_type for now";
+                    return Status::InternalError("only support LOCAL lake_persistend_index_type for now");
+                }
+            }
+
+        } else {
+            LOG(WARNING) << "lake tablet persistent_index will not take effect, for storage_root_path is not set";
+            return Status::InternalError(
+                    "lake tablet persistent_index will not take effect, for storage_root_path is not set");
+        }
+    }
 
     OlapReaderStatistics stats;
     std::unique_ptr<Column> pk_column;

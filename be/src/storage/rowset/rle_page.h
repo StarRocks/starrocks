@@ -202,15 +202,15 @@ public:
     }
 
     Status next_batch(size_t* n, Column* dst) override {
-        SparseRange read_range;
+        SparseRange<> read_range;
         uint32_t begin = current_index();
-        read_range.add(Range(begin, begin + *n));
+        read_range.add(Range<>(begin, begin + *n));
         RETURN_IF_ERROR(next_batch(read_range, dst));
         *n = current_index() - begin;
         return Status::OK();
     }
 
-    Status next_batch(const SparseRange& range, Column* dst) override {
+    Status next_batch(const SparseRange<>& range, Column* dst) override {
         DCHECK(_parsed);
         if (PREDICT_FALSE(_cur_index >= _num_elements)) {
             return Status::OK();
@@ -219,10 +219,10 @@ public:
 
         size_t to_read =
                 std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_elements - _cur_index));
-        SparseRangeIterator iter = range.new_iterator();
+        SparseRangeIterator<> iter = range.new_iterator();
         while (to_read > 0) {
             seek_to_position_in_page(iter.begin());
-            Range r = iter.next(to_read);
+            Range<> r = iter.next(to_read);
             for (size_t i = 0; i < r.span_size(); ++i) {
                 if (PREDICT_FALSE(!_rle_decoder.Get(&value))) {
                     return Status::Corruption("RLE decode failed");

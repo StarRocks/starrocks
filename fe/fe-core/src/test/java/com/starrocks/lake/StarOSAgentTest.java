@@ -154,9 +154,13 @@ public class StarOSAgentTest {
                 client.allocateFilePath("1", FileStoreType.S3, Long.toString(tableId));
                 result = FilePathInfo.newBuilder().build();
                 minTimes = 0;
+
+                client.allocateFilePath("2", FileStoreType.S3, Long.toString(tableId));
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked exception");
             }
         };
 
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
         Config.cloud_native_storage_type = "s3";
         ExceptionChecker.expectThrowsNoException(() -> starosAgent.allocateFilePath(tableId));
 
@@ -164,15 +168,30 @@ public class StarOSAgentTest {
         ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Invalid cloud native storage type: ss",
                 () -> starosAgent.allocateFilePath(tableId));
 
+        Config.cloud_native_storage_type = "s3";
+        Deencapsulation.setField(starosAgent, "serviceId", "2");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Failed to allocate file path from StarMgr, error: INVALID_ARGUMENT:mocked exception",
+                () -> starosAgent.allocateFilePath(tableId));
+
         new Expectations() {
             {
                 client.allocateFilePath("1", "test-fskey", Long.toString(tableId));
                 result = FilePathInfo.newBuilder().build();
                 minTimes = 0;
+
+                client.allocateFilePath("2", "test-fskey", Long.toString(tableId));
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked exception");
             }
         };
         Config.cloud_native_storage_type = "s3";
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
         ExceptionChecker.expectThrowsNoException(() -> starosAgent.allocateFilePath("test-fskey", tableId));
+
+        Deencapsulation.setField(starosAgent, "serviceId", "2");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Failed to allocate file path from StarMgr, error: INVALID_ARGUMENT:mocked exception",
+                () -> starosAgent.allocateFilePath("test-fskey", tableId));
     }
 
     @Test
@@ -508,11 +527,19 @@ public class StarOSAgentTest {
                 client.addFileStore(fsInfo, "1");
                 result = fsInfo.getFsKey();
                 minTimes = 0;
+
+                client.addFileStore(fsInfo, "2");
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked exception");
             }
         };
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         Assert.assertEquals("test-fskey", starosAgent.addFileStore(fsInfo));
+
+        Deencapsulation.setField(starosAgent, "serviceId", "2");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Failed to add file store, error: INVALID_ARGUMENT:mocked exception",
+                () -> starosAgent.addFileStore(fsInfo));
     }
 
     @Test
@@ -526,12 +553,20 @@ public class StarOSAgentTest {
                 client.listFileStore("1");
                 result = new ArrayList<>(Arrays.asList(fsInfo));
                 minTimes = 0;
+
+                client.listFileStore("2");
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked exception");
             }
         };
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         Assert.assertEquals(1, starosAgent.listFileStore().size());
         Assert.assertEquals("test-fskey", starosAgent.listFileStore().get(0).getFsKey());
+
+        Deencapsulation.setField(starosAgent, "serviceId", "2");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Failed to list file store, error: INVALID_ARGUMENT:mocked exception",
+                () -> starosAgent.listFileStore());
     }
 
     @Test
@@ -543,12 +578,14 @@ public class StarOSAgentTest {
         new Expectations() {
             {
                 client.updateFileStore(fsInfo, "1");
-                result = new DdlException("Failed to update file store");
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked exception");
             }
         };
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-        ExceptionChecker.expectThrows(DdlException.class, () -> starosAgent.updateFileStore(fsInfo));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Failed to update file store, error: INVALID_ARGUMENT:mocked exception",
+                () -> starosAgent.updateFileStore(fsInfo));
     }
 
     @Test
@@ -556,12 +593,14 @@ public class StarOSAgentTest {
         new Expectations() {
             {
                 client.removeFileStoreByName("test-fsname", "1");
-                result = new DdlException("Failed to remove file store");
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked exception");
             }
         };
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-        ExceptionChecker.expectThrows(DdlException.class, () -> starosAgent.removeFileStoreByName("test-fsname"));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Failed to remove file store, error: INVALID_ARGUMENT:mocked exception",
+                () -> starosAgent.removeFileStoreByName("test-fsname"));
     }
 
     @Test
@@ -575,11 +614,19 @@ public class StarOSAgentTest {
                 client.getFileStoreByName("test-fsname", "1");
                 result = fsInfo;
                 minTimes = 0;
+
+                client.getFileStoreByName("test-fsname", "2");
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked exception");
             }
         };
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         Assert.assertEquals("test-fskey", starosAgent.getFileStoreByName("test-fsname").getFsKey());
+
+        Deencapsulation.setField(starosAgent, "serviceId", "2");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Failed to get file store, error: INVALID_ARGUMENT:mocked exception",
+                () -> starosAgent.getFileStoreByName("test-fsname"));
     }
 
     @Test
@@ -593,10 +640,37 @@ public class StarOSAgentTest {
                 client.getFileStore("test-fskey", "1");
                 result = fsInfo;
                 minTimes = 0;
+
+                client.getFileStore("test-fskey", "2");
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked exception");
             }
         };
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         Assert.assertEquals("test-fskey", starosAgent.getFileStore("test-fskey").getFsKey());
+
+        Deencapsulation.setField(starosAgent, "serviceId", "2");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Failed to get file store, error: INVALID_ARGUMENT:mocked exception",
+                () -> starosAgent.getFileStore("test-fskey"));
+    }
+
+    @Test
+    public void testListDefaultWorkerGroupIpPort() throws StarClientException, DdlException, UserException {
+        new MockUp<StarClient>() {
+            @Mock
+            public List<WorkerGroupDetailInfo> listWorkerGroup(String serviceId, List<Long> groupIds, boolean include) {
+                long workerId0 = 10000L;
+                WorkerInfo worker0 = newWorkerInfo(workerId0, "127.0.0.1:8090", 9050, 9060, 8040, 8060);
+                long workerId1 = 10001L;
+                WorkerInfo worker1 = newWorkerInfo(workerId1, "127.0.0.2:8091", 9051, 9061, 8041, 8061);
+                WorkerGroupDetailInfo group = WorkerGroupDetailInfo.newBuilder().addWorkersInfo(worker0)
+                        .addWorkersInfo(worker1).build();
+                return Lists.newArrayList(group);
+            }
+        };
+        List<String> addresses = starosAgent.listDefaultWorkerGroupIpPort();
+        Assert.assertEquals("127.0.0.1:8090", addresses.get(0));
+        Assert.assertEquals("127.0.0.2:8091", addresses.get(1));
     }
 }

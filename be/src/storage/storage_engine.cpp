@@ -67,7 +67,6 @@
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/task/engine_task.h"
-#include "storage/tuple.h"
 #include "storage/update_manager.h"
 #include "util/bthreads/executor.h"
 #include "util/lru_cache.h"
@@ -123,7 +122,8 @@ StorageEngine::StorageEngine(const EngineOptions& options)
     REGISTER_GAUGE_STARROCKS_METRIC(unused_rowsets_count, [this]() {
         std::lock_guard lock(_gc_mutex);
         return _unused_rowsets.size();
-    });
+    })
+    _delta_column_group_cache_mem_tracker = std::make_unique<MemTracker>(-1, "delta_column_group_non_pk_cache");
 }
 
 StorageEngine::~StorageEngine() {
@@ -211,25 +211,24 @@ Status StorageEngine::_open(const EngineOptions& options) {
         return static_cast<bthreads::ThreadPoolExecutor*>(_async_delta_writer_executor.get())
                 ->get_thread_pool()
                 ->num_queued_tasks();
-    });
+    })
 
     _memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_memtable_flush_executor->init(dirs), "init MemTableFlushExecutor failed");
     REGISTER_GAUGE_STARROCKS_METRIC(memtable_flush_queue_count, [this]() {
         return _memtable_flush_executor->get_thread_pool()->num_queued_tasks();
-    });
+    })
 
     _segment_flush_executor = std::make_unique<SegmentFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_segment_flush_executor->init(dirs), "init SegmentFlushExecutor failed");
-    REGISTER_GAUGE_STARROCKS_METRIC(segment_flush_queue_count, [this]() {
-        return _segment_flush_executor->get_thread_pool()->num_queued_tasks();
-    });
+    REGISTER_GAUGE_STARROCKS_METRIC(segment_flush_queue_count,
+                                    [this]() { return _segment_flush_executor->get_thread_pool()->num_queued_tasks(); })
 
     _segment_replicate_executor = std::make_unique<SegmentReplicateExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_segment_replicate_executor->init(dirs), "init SegmentReplicateExecutor failed");
     REGISTER_GAUGE_STARROCKS_METRIC(segment_replicate_queue_count, [this]() {
         return _segment_replicate_executor->get_thread_pool()->num_queued_tasks();
-    });
+    })
 
     return Status::OK();
 }
@@ -274,7 +273,16 @@ Status StorageEngine::_init_store_map() {
     for (auto& store : tmp_stores) {
         _store_map.emplace(store.second->path(), store.second);
         store.first = false;
+        if (!_lake_persistent_index_dir_inited) {
+            auto status = store.second->init_persistent_index_dir();
+            if (!status.ok()) {
+                return Status::InternalError(strings::Substitute("init persistIndex dir failed, error=$0", error_msg));
+            }
+            _lake_persistent_index_dir_inited = true;
+            _persistent_index_data_dir = store.second;
+        }
     }
+
     release_guard.cancel();
     return Status::OK();
 }
@@ -522,6 +530,15 @@ DataDir* StorageEngine::get_store(int64_t path_hash) {
     return nullptr;
 }
 
+bool StorageEngine::is_lake_persistent_index_dir_inited() {
+    return _lake_persistent_index_dir_inited;
+}
+
+// maybe nullptr if storage_root_path is not set
+DataDir* StorageEngine::get_persistent_index_store() {
+    return _persistent_index_data_dir;
+}
+
 static bool too_many_disks_are_failed(uint32_t unused_num, uint32_t total_num) {
     return total_num == 0 || unused_num * 100 / total_num > config::max_percentage_of_error_disk;
 }
@@ -600,7 +617,7 @@ void StorageEngine::stop() {
 
     if (config::path_gc_check) {
         JOIN_THREADS(_path_scan_threads)
-        JOIN_THREADS(_path_gc_threads);
+        JOIN_THREADS(_path_gc_threads)
     }
 
 #undef JOIN_THREADS
@@ -760,7 +777,7 @@ static void do_manual_compaction(TabletManager* tablet_manager, ManualCompaction
         LOG(ERROR) << "manual compaction failed, tablet not primary key tablet found: " << t.tablet_id;
         return;
     }
-    auto* mem_tracker = ExecEnv::GetInstance()->compaction_mem_tracker();
+    auto* mem_tracker = GlobalEnv::GetInstance()->compaction_mem_tracker();
     auto st = tablet->updates()->get_rowsets_for_compaction(t.rowset_size_threshold, t.input_rowset_ids, t.total_bytes);
     if (!st.ok()) {
         t.status = st.to_string();
@@ -825,8 +842,8 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir,
         if (watch.elapsed_time() / 1000000000 > config::compaction_trace_threshold) {
             LOG(INFO) << "Trace:" << std::endl << trace->DumpToString(Trace::INCLUDE_ALL);
         }
-    });
-    ADOPT_TRACE(trace.get());
+    })
+    ADOPT_TRACE(trace.get())
     TRACE("start to perform cumulative compaction");
     TabletSharedPtr best_tablet = _tablet_manager->find_best_tablet_to_compaction(CompactionType::CUMULATIVE_COMPACTION,
                                                                                   data_dir, tablet_shards_range);
@@ -868,8 +885,8 @@ Status StorageEngine::_perform_base_compaction(DataDir* data_dir, std::pair<int3
         if (watch.elapsed_time() / 1000000000 > config::compaction_trace_threshold) {
             LOG(INFO) << "Trace:" << std::endl << trace->DumpToString(Trace::INCLUDE_ALL);
         }
-    });
-    ADOPT_TRACE(trace.get());
+    })
+    ADOPT_TRACE(trace.get())
     TRACE("start to perform base compaction");
     TabletSharedPtr best_tablet = _tablet_manager->find_best_tablet_to_compaction(CompactionType::BASE_COMPACTION,
                                                                                   data_dir, tablet_shards_range);
@@ -907,8 +924,8 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
         if (watch.elapsed_time() / 1000000000 > config::compaction_trace_threshold) {
             LOG(WARNING) << "Trace:" << std::endl << trace->DumpToString(Trace::INCLUDE_ALL);
         }
-    });
-    ADOPT_TRACE(trace.get());
+    })
+    ADOPT_TRACE(trace.get())
     TRACE("start to perform update compaction");
     TabletSharedPtr best_tablet = _tablet_manager->find_best_tablet_to_do_update_compaction(data_dir);
     if (best_tablet == nullptr) {
@@ -1169,6 +1186,10 @@ double StorageEngine::delete_unused_rowset() {
                 << rowset->version().second;
         Status status = rowset->remove();
         LOG_IF(WARNING, !status.ok()) << "remove rowset:" << rowset->rowset_id() << " finished. status:" << status;
+        clear_rowset_delta_column_group_cache(*rowset.get());
+        status = rowset->remove_delta_column_group();
+        LOG_IF(WARNING, !status.ok()) << "remove delta column group error rowset:" << rowset->rowset_id()
+                                      << " finished. status:" << status;
     }
     LOG(INFO) << "remove " << delete_rowsets.size() << " rowsets collect cost " << collect_time << "ms total "
               << timer.elapsed_time() / (1000 * 1000) << "ms";
@@ -1378,6 +1399,88 @@ Status StorageEngine::get_next_increment_id_interval(int64_t tableid, size_t num
     cur_avaliable_min_id += num_row;
 
     return Status::OK();
+}
+
+// calc the total memory usage of delta column group list, can be optimazed later if need.
+size_t StorageEngine::delta_column_group_list_memory_usage(const DeltaColumnGroupList& dcgs) {
+    size_t res = 0;
+    for (const auto& dcg : dcgs) {
+        res += dcg->memory_usage();
+    }
+    return res;
+}
+
+// Search delta column group from `all_dcgs` which version isn't larger than `version`.
+// Using it because we record all version dcgs in cache
+void StorageEngine::search_delta_column_groups_by_version(const DeltaColumnGroupList& all_dcgs, int64_t version,
+                                                          DeltaColumnGroupList* dcgs) {
+    for (const auto& dcg : all_dcgs) {
+        if (dcg->version() <= version) {
+            dcgs->push_back(dcg);
+        }
+    }
+}
+
+Status StorageEngine::get_delta_column_group(KVStore* meta, int64_t tablet_id, RowsetId rowsetid, uint32_t segment_id,
+                                             int64_t version, DeltaColumnGroupList* dcgs) {
+    StarRocksMetrics::instance()->delta_column_group_get_non_pk_total.increment(1);
+    // Currently non-Primary Key tablet can generate cols file only through
+    // schema change which will change tablet_id. Every time we do schema change
+    // we will get cache miss and guarantee that we always can get the newest
+    // cols file.
+    DeltaColumnGroupKey dcg_key;
+    dcg_key.tablet_id = tablet_id;
+    dcg_key.rowsetid = rowsetid;
+    dcg_key.segment_id = segment_id;
+    {
+        // find in delta column group cache
+        std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
+        auto itr = _delta_column_group_cache.find(dcg_key);
+        if (itr != _delta_column_group_cache.end()) {
+            search_delta_column_groups_by_version(itr->second, version, dcgs);
+            StarRocksMetrics::instance()->delta_column_group_get_non_pk_hit_cache.increment(1);
+            return Status::OK();
+        }
+    }
+    // find from rocksdb
+    DeltaColumnGroupList new_dcgs;
+    RETURN_IF_ERROR(
+            TabletMetaManager::get_delta_column_group(meta, tablet_id, rowsetid, segment_id, INT64_MAX, &new_dcgs));
+    search_delta_column_groups_by_version(new_dcgs, version, dcgs);
+    {
+        // fill delta column group cache
+        std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
+        bool ok = _delta_column_group_cache.insert({dcg_key, new_dcgs}).second;
+        if (ok) {
+            // insert success
+            _delta_column_group_cache_mem_tracker->consume(delta_column_group_list_memory_usage(new_dcgs));
+        }
+    }
+    return Status::OK();
+}
+
+void StorageEngine::clear_cached_delta_column_group(const std::vector<DeltaColumnGroupKey>& dcg_keys) {
+    std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
+    for (const auto& dcg_key : dcg_keys) {
+        auto itr = _delta_column_group_cache.find(dcg_key);
+        if (itr != _delta_column_group_cache.end()) {
+            _delta_column_group_cache_mem_tracker->release(
+                    StorageEngine::instance()->delta_column_group_list_memory_usage(itr->second));
+            _delta_column_group_cache.erase(itr);
+        }
+    }
+}
+
+void StorageEngine::clear_rowset_delta_column_group_cache(const Rowset& rowset) {
+    StorageEngine::instance()->clear_cached_delta_column_group([&]() {
+        std::vector<DeltaColumnGroupKey> dcg_keys;
+        dcg_keys.reserve(rowset.num_segments());
+        for (auto i = 0; i < rowset.num_segments(); i++) {
+            dcg_keys.emplace_back(
+                    DeltaColumnGroupKey(rowset.rowset_meta()->tablet_id(), rowset.rowset_meta()->rowset_id(), i));
+        }
+        return dcg_keys;
+    }());
 }
 
 } // namespace starrocks

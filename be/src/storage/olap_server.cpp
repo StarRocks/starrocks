@@ -265,7 +265,7 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
         if (config::disable_storage_page_cache) {
             continue;
         }
-        MemTracker* memtracker = ExecEnv::GetInstance()->process_mem_tracker();
+        MemTracker* memtracker = GlobalEnv::GetInstance()->process_mem_tracker();
         if (memtracker == nullptr || !memtracker->has_limit() || cache == nullptr) {
             continue;
         }
@@ -305,7 +305,7 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
             size_t bytes_to_dec = dec_advisor->bytes_should_gc(MonoTime::Now(), delta_high);
             evict_pagecache(cache, static_cast<int64_t>(bytes_to_dec), _bg_worker_stopped);
         } else {
-            int64_t max_cache_size = std::max(ExecEnv::GetInstance()->get_storage_page_cache_size(), kcacheMinSize);
+            int64_t max_cache_size = std::max(GlobalEnv::GetInstance()->get_storage_page_cache_size(), kcacheMinSize);
             int64_t cur_cache_size = cache->get_capacity();
             if (cur_cache_size >= max_cache_size) {
                 continue;
@@ -431,7 +431,7 @@ void* StorageEngine::_repair_compaction_thread_callback(void* arg) {
             }
             vector<pair<uint32_t, string>> rowset_results;
             for (auto rowsetid : task.second) {
-                auto st = tablet->updates()->compaction(ExecEnv::GetInstance()->compaction_mem_tracker(), {rowsetid});
+                auto st = tablet->updates()->compaction(GlobalEnv::GetInstance()->compaction_mem_tracker(), {rowsetid});
                 if (!st.ok()) {
                     LOG(WARNING) << "repair compaction failed tablet: " << task.first << " rowset: " << rowsetid << " "
                                  << st;

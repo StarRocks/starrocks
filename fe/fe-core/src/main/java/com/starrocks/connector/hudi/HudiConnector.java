@@ -52,8 +52,8 @@ public class HudiConnector implements Connector {
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.catalogName = context.getCatalogName();
         this.internalMgr = new HudiConnectorInternalMgr(catalogName, properties, hdfsEnvironment);
-        this.metadataFactory = createMetadataFactory();
         this.infoSchemaDb = new InfoSchemaDb(catalogName);
+        this.metadataFactory = createMetadataFactory(hdfsEnvironment);
         validate();
         onCreate();
     }
@@ -76,7 +76,7 @@ public class HudiConnector implements Connector {
         return wrapInfoSchema(metadataFactory.create(), infoSchemaDb);
     }
 
-    private HudiMetadataFactory createMetadataFactory() {
+    private HudiMetadataFactory createMetadataFactory(HdfsEnvironment hdfsEnvironment) {
         IHiveMetastore metastore = internalMgr.createHiveMetastore();
         RemoteFileIO remoteFileIO = internalMgr.createRemoteFileIO();
         return new HudiMetadataFactory(
@@ -86,7 +86,8 @@ public class HudiConnector implements Connector {
                 internalMgr.getHiveMetastoreConf(),
                 internalMgr.getRemoteFileConf(),
                 internalMgr.getPullRemoteFileExecutor(),
-                internalMgr.isSearchRecursive()
+                internalMgr.isSearchRecursive(),
+                hdfsEnvironment.getConfiguration()
         );
     }
 

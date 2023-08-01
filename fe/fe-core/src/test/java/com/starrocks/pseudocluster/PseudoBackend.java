@@ -47,6 +47,7 @@ import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
+import com.starrocks.proto.PListFailPointResponse;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
@@ -63,6 +64,8 @@ import com.starrocks.proto.PTabletWriterOpenRequest;
 import com.starrocks.proto.PTabletWriterOpenResult;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
+import com.starrocks.proto.PUpdateFailPointStatusRequest;
+import com.starrocks.proto.PUpdateFailPointStatusResponse;
 import com.starrocks.proto.PublishLogVersionRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
@@ -82,6 +85,7 @@ import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
 import com.starrocks.rpc.PGetFileSchemaRequest;
+import com.starrocks.rpc.PListFailPointRequest;
 import com.starrocks.rpc.PMVMaintenanceTaskRequest;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.BackendService;
@@ -1028,6 +1032,16 @@ public class PseudoBackend {
                 throw new org.apache.commons.lang3.NotImplementedException("TODO");
             }
             return CompletableFuture.completedFuture(result);
+        }
+
+        @Override
+        public Future<PUpdateFailPointStatusResponse> updateFailPointStatusAsync(PUpdateFailPointStatusRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PListFailPointResponse> listFailPointAsync(PListFailPointRequest request) {
+            return null;
         }
     }
 

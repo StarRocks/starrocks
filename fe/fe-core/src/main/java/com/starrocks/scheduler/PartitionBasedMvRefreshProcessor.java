@@ -105,7 +105,6 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -165,7 +164,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             // sync partitions between materialized view and base tables out of lock
             // do it outside lock because it is a time-cost operation
             syncPartitions();
-
+            // refresh external table meta cache before check the partition changed
+            refreshExternalTable(context);
             database.readLock();
             try {
                 // the following steps should be done in the same lock:
@@ -174,8 +174,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 // 3. generate insert stmt
                 // 4. generate insert ExecPlan
 
-                // refresh external table meta cache before check the partition changed
-                refreshExternalTable(context);
                 // check whether there are partition changes for base tables, eg: partition rename
                 // retry to sync partitions if any base table changed the partition infos
                 if (checkBaseTablePartitionChange()) {
@@ -318,9 +316,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
         newProperties.put(TaskRun.PARTITION_START, mvContext.getNextPartitionStart());
         newProperties.put(TaskRun.PARTITION_END, mvContext.getNextPartitionEnd());
-        ExecuteOption option = new ExecuteOption(mvContext.getPriority(), false, newProperties);
+        // Partition refreshing task run should have the HIGHEST priority, and be scheduled before other tasks
+        // Otherwise this round of partition refreshing would be staved and never got finished
+        ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.HIGHEST.value(), true, newProperties);
         taskManager.executeTask(taskName, option);
-        LOG.info("Submit a generate taskRun for task:{}, partitionStart:{}, partitionEnd:{}", mvId,
+        LOG.info("[MV] Generate a task to refresh next batches of partitions for MV {}-{}, start={}, end={}",
+                materializedView.getName(), materializedView.getId(),
                 mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd());
     }
 
@@ -397,14 +398,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     new ChangeMaterializedViewRefreshSchemeLog(materializedView);
             GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
 
-            // TODO: To be simple, MV's refresh time is defined by max(baseTables' refresh time) which
-            // is not very correct, because it may be not monotonically increasing.
-            long maxChangedTableRefreshTime = changedTablePartitionInfos.values().stream()
-                    .map(x -> x.values().stream().map(
-                            MaterializedView.BasePartitionInfo::getLastRefreshTime).max(Long::compareTo))
-                    .map(x -> x.orElse(null)).filter(Objects::nonNull)
-                    .max(Long::compareTo)
-                    .orElse(System.currentTimeMillis());
+            long maxChangedTableRefreshTime =
+                    MvUtils.getMaxTablePartitionInfoRefreshTime(changedTablePartitionInfos.values());
             materializedView.getRefreshScheme().setLastRefreshTime(maxChangedTableRefreshTime);
         }
     }
@@ -445,6 +440,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
                     new ChangeMaterializedViewRefreshSchemeLog(materializedView);
             GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
+            long maxChangedTableRefreshTime =
+                    MvUtils.getMaxTablePartitionInfoRefreshTime(changedTablePartitionInfos.values());
+            materializedView.getRefreshScheme().setLastRefreshTime(maxChangedTableRefreshTime);
         }
     }
 
@@ -516,9 +514,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         RangePartitionDiff rangePartitionDiff = new RangePartitionDiff();
         Map<String, Range<PartitionKey>> baseRangePartitionMap;
-
-        Map<String, Range<PartitionKey>> mvPartitionMap = materializedView.getRangePartitionMap();
+        
         database.readLock();
+        Map<String, Range<PartitionKey>> mvPartitionMap = materializedView.getRangePartitionMap();
         try {
             baseRangePartitionMap = PartitionUtil.getPartitionRange(partitionBaseTable, partitionColumn);
             if (partitionExpr instanceof SlotRef) {

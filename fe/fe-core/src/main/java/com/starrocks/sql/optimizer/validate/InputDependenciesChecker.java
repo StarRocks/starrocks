@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSetOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
@@ -52,7 +53,9 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
         @Override
         public Void visit(OptExpression optExpression, Void context) {
             Operator operator = optExpression.getOp();
-            if (optExpression.arity() == 1) {
+            if (optExpression.arity() == 0) {
+                return context;
+            } else if (optExpression.arity() == 1) {
                 checkOptExprWithOneChild(optExpression);
             } else if (operator instanceof LogicalJoinOperator || operator instanceof PhysicalJoinOperator) {
                 checkJoinOpt(optExpression);
@@ -68,6 +71,11 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
 
         private void checkOptExprWithOneChild(OptExpression optExpression) {
             visit(optExpression.inputAt(0), null);
+            // LogicalCteConsumer's input col actually is from LogicalCteProducer not from its input
+            // So we skip check it
+            if (optExpression.getOp() instanceof LogicalCTEConsumeOperator) {
+                return;
+            }
             ColumnRefSet inputCols = optExpression.inputAt(0).getRowOutputInfo().getOutputColumnRefSet();
             ColumnRefSet usedCols = optExpression.getRowOutputInfo().getUsedColumnRefSet();
             checkInputCols(inputCols, usedCols, optExpression);
@@ -82,6 +90,23 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
                 inputCols.union(input.getRowOutputInfo().getOutputColumnRefSet());
             }
             ColumnRefSet usedCols = optExpression.getRowOutputInfo().getUsedColumnRefSet();
+            if (optExpression.getOp() instanceof LogicalJoinOperator) {
+                LogicalJoinOperator joinOperator = optExpression.getOp().cast();
+                if (joinOperator.getOnPredicate() != null) {
+                    usedCols.union(joinOperator.getOnPredicate().getUsedColumns());
+                }
+                if (joinOperator.getPredicate() != null) {
+                    usedCols.union(joinOperator.getPredicate().getUsedColumns());
+                }
+            } else {
+                PhysicalJoinOperator joinOperator = optExpression.getOp().cast();
+                if (joinOperator.getOnPredicate() != null) {
+                    usedCols.union(joinOperator.getOnPredicate().getUsedColumns());
+                }
+                if (joinOperator.getPredicate() != null) {
+                    usedCols.union(joinOperator.getPredicate().getUsedColumns());
+                }
+            }
             checkInputCols(inputCols, usedCols, optExpression);
         }
 

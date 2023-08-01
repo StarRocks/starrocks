@@ -38,6 +38,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TNetworkAddress;

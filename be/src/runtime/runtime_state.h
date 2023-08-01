@@ -334,8 +334,9 @@ public:
     double spill_mem_limit_threshold() const { return _query_options.spill_mem_limit_threshold; }
 
     int64_t spill_operator_min_bytes() const { return _query_options.spill_operator_min_bytes; }
-
     int64_t spill_operator_max_bytes() const { return _query_options.spill_operator_max_bytes; }
+    int64_t spill_revocable_max_bytes() const { return _query_options.spill_revocable_max_bytes; }
+
     int32_t spill_encode_level() const { return _query_options.spill_encode_level; }
 
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }
@@ -566,8 +567,12 @@ private:
                 str << "Mem usage has exceed the limit of query pool";                                              \
             } else {                                                                                                \
                 str << "Mem usage has exceed the limit of the resource group [" << tracker->label() << "]. "        \
-                    << "You can change the limit by modify [mem_limit] of this group";                              \
+                    << "You can change the limit by modifying [mem_limit] of this group";                           \
             }                                                                                                       \
+            break;                                                                                                  \
+        case MemTracker::RESOURCE_GROUP_BIG_QUERY:                                                                  \
+            str << "Mem usage has exceed the big query limit of the resource group [" << tracker->label() << "]. "  \
+                << "You can change the limit by modifying [big_query_mem_limit] of this group";                     \
             break;                                                                                                  \
         default:                                                                                                    \
             break;                                                                                                  \

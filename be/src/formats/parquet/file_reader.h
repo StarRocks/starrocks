@@ -37,7 +37,7 @@ namespace starrocks::parquet {
 
 // contains magic number (4 bytes) and footer length (4 bytes)
 constexpr static const uint32_t PARQUET_FOOTER_SIZE = 8;
-constexpr static const uint64_t DEFAULT_FOOTER_BUFFER_SIZE = 16 * 1024;
+constexpr static const uint64_t DEFAULT_FOOTER_BUFFER_SIZE = 64 * 1024;
 constexpr static const char* PARQUET_MAGIC_NUMBER = "PAR1";
 constexpr static const char* PARQUET_EMAIC_NUMBER = "PARE";
 
@@ -53,6 +53,8 @@ public:
     Status init(HdfsScannerContext* scanner_ctx);
 
     Status get_next(ChunkPtr* chunk);
+
+    std::shared_ptr<FileMetaData> get_file_metadata();
 
 private:
     int _chunk_size;
@@ -81,7 +83,7 @@ private:
     Status _get_next_internal(ChunkPtr* chunk);
 
     // only scan partition column + not exist column
-    Status _exec_only_partition_scan(ChunkPtr* chunk);
+    Status _exec_no_materialized_column_scan(ChunkPtr* chunk);
 
     // get partition column idx in param.partition_columns
     int32_t _get_partition_column_idx(const std::string& col_name) const;
@@ -120,7 +122,7 @@ private:
 
     size_t _total_row_count = 0;
     size_t _scan_row_count = 0;
-    bool _is_only_partition_scan = false;
+    bool _no_materialized_column_scan = false;
 
     // not exist column conjuncts eval false, file can be skipped
     bool _is_file_filtered = false;

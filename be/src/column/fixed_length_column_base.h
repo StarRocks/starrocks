@@ -94,6 +94,11 @@ public:
 
     size_t byte_size(size_t idx __attribute__((unused))) const override { return sizeof(ValueType); }
 
+    size_t byte_size(size_t from, size_t size) const override {
+        DCHECK_LE(from + size, this->size()) << "Range error";
+        return sizeof(ValueType) * size;
+    }
+
     void reserve(size_t n) override { _data.reserve(n); }
 
     void resize(size_t n) override { _data.resize(n); }
@@ -158,7 +163,7 @@ public:
 
     Status fill_range(const Buffer<T>& ids, const std::vector<uint8_t>& filter);
 
-    Status update_rows(const Column& src, const uint32_t* indexes) override;
+    void update_rows(const Column& src, const uint32_t* indexes) override;
 
     // The `_data` support one size(> 2^32), but some interface such as update_rows() will use uint32_t to
     // access the item, so we should use 2^32 as the limit

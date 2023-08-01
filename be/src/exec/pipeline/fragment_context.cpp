@@ -114,8 +114,10 @@ bool FragmentContext::need_report_exec_state() {
     if (!query_ctx->enable_profile()) {
         return false;
     }
-
-    return (MonotonicNanos() - _last_report_exec_state_ns) >= query_ctx->get_runtime_profile_report_interval_ns();
+    const auto now = MonotonicNanos();
+    const auto interval_ns = query_ctx->get_runtime_profile_report_interval_ns();
+    auto last_report_ns = _last_report_exec_state_ns.load();
+    return now - last_report_ns >= interval_ns;
 }
 
 void FragmentContext::report_exec_state_if_necessary() {
@@ -124,12 +126,28 @@ void FragmentContext::report_exec_state_if_necessary() {
     if (!query_ctx->enable_profile()) {
         return;
     }
-    auto now = MonotonicNanos();
-    auto last_report_exec_state_ns = _last_report_exec_state_ns.load();
-    if (now - last_report_exec_state_ns < query_ctx->get_runtime_profile_report_interval_ns()) {
+    const auto now = MonotonicNanos();
+    const auto interval_ns = query_ctx->get_runtime_profile_report_interval_ns();
+    auto last_report_ns = _last_report_exec_state_ns.load();
+    if (now - last_report_ns < interval_ns) {
         return;
     }
-    if (_last_report_exec_state_ns.compare_exchange_strong(last_report_exec_state_ns, now)) {
+
+    int64_t normalized_report_ns;
+    if (now - last_report_ns > 2 * interval_ns) {
+        // Maybe the first time, then initialized it.
+        normalized_report_ns = now;
+    } else {
+        // Fix the report interval regardless the noise.
+        normalized_report_ns = last_report_ns + interval_ns;
+    }
+    if (_last_report_exec_state_ns.compare_exchange_strong(last_report_ns, normalized_report_ns)) {
+        for (auto& pipeline : _pipelines) {
+            for (auto& driver : pipeline->drivers()) {
+                driver->runtime_report_action();
+            }
+        }
+
         state->exec_env()->wg_driver_executor()->report_exec_state(query_ctx, this, Status::OK(), false, true);
     }
 }
@@ -177,8 +195,7 @@ void FragmentContext::cancel(const Status& status) {
     if (query_options.query_type == TQueryType::LOAD && (query_options.load_job_type == TLoadJobType::BROKER ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
-        starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(_query_id,
-                                                                                             _fragment_instance_id);
+        ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(_query_id, _fragment_instance_id);
     }
 
     if (_stream_load_contexts.size() > 0) {
@@ -225,7 +242,7 @@ Status FragmentContextManager::register_ctx(const TUniqueId& fragment_id, Fragme
     if (query_options.query_type == TQueryType::LOAD && (query_options.load_job_type == TLoadJobType::BROKER ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
-        RETURN_IF_ERROR(starrocks::ExecEnv::GetInstance()->profile_report_worker()->register_pipeline_load(
+        RETURN_IF_ERROR(ExecEnv::GetInstance()->profile_report_worker()->register_pipeline_load(
                 fragment_ctx->query_id(), fragment_id));
     }
     _fragment_contexts.emplace(fragment_id, std::move(fragment_ctx));
@@ -254,8 +271,8 @@ void FragmentContextManager::unregister(const TUniqueId& fragment_id) {
              query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
              query_options.load_job_type == TLoadJobType::INSERT_VALUES) &&
             !it->second->runtime_state()->is_cancelled()) {
-            starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(it->second->query_id(),
-                                                                                                 fragment_id);
+            ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(it->second->query_id(),
+                                                                                      fragment_id);
         }
         const auto& stream_load_contexts = it->second->_stream_load_contexts;
 

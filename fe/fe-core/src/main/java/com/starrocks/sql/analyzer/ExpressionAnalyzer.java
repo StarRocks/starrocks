@@ -89,6 +89,7 @@ import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 
@@ -109,6 +110,10 @@ public class ExpressionAnalyzer {
     private final ConnectContext session;
 
     public ExpressionAnalyzer(ConnectContext session) {
+        if (session == null) {
+            // For some load requests, the ConnectContext will be null
+            session = new ConnectContext();
+        }
         this.session = session;
     }
 
@@ -363,6 +368,7 @@ public class ExpressionAnalyzer {
             }
 
             List<String> fieldNames = node.getFieldNames();
+            List<String> rightNames = Lists.newArrayList();
             Type tmpType = child.getType();
             for (String fieldName : fieldNames) {
                 StructType structType = (StructType) tmpType;
@@ -371,9 +377,12 @@ public class ExpressionAnalyzer {
                     throw new SemanticException(String.format("Struct subfield '%s' cannot be resolved", fieldName),
                             node.getPos());
                 }
+                rightNames.add(structField.getName());
                 tmpType = structField.getType();
             }
 
+            // set right field names
+            node.setFieldNames(rightNames);
             node.setType(tmpType);
             return null;
         }
@@ -1068,6 +1077,9 @@ public class ExpressionAnalyzer {
             if (fn == null) {
                 fn = AnalyzerUtils.getUdfFunction(session, node.getFnName(), argumentTypes);
             }
+            if (fn == null) {
+                fn = ScalarOperatorEvaluator.INSTANCE.getMetaFunction(node.getFnName(), argumentTypes);
+            }
 
             if (fn == null) {
                 String msg = String.format("No matching function with signature: %s(%s)",
@@ -1230,12 +1242,12 @@ public class ExpressionAnalyzer {
                         }
 
                         String name = ((StringLiteral) node.getChild(i)).getValue();
-                        if (check.contains(name)) {
+                        if (check.contains(name.toLowerCase())) {
                             throw new SemanticException("named_struct contains duplicate subfield name: " +
                                     name + " at " + (i + 1) + "-th input", node.getPos());
                         }
 
-                        check.add(name);
+                        check.add(name.toLowerCase());
                     }
                     break;
                 }

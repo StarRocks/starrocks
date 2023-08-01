@@ -207,6 +207,12 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     if (hdfs_scan_node.__isset.case_sensitive) {
         _case_sensitive = hdfs_scan_node.case_sensitive;
     }
+    if (hdfs_scan_node.__isset.can_use_any_column) {
+        _can_use_any_column = hdfs_scan_node.can_use_any_column;
+    }
+    if (hdfs_scan_node.__isset.can_use_min_max_count_opt) {
+        _can_use_min_max_count_opt = hdfs_scan_node.can_use_min_max_count_opt;
+    }
 }
 
 Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
@@ -227,7 +233,7 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
         std::vector<SlotId> slot_ids;
         root_expr->get_slot_ids(&slot_ids);
         for (SlotId slot_id : slot_ids) {
-            _conjunct_slots.insert(slot_id);
+            _slots_in_conjunct.insert(slot_id);
         }
 
         // For some conjunct like (a < 1) or (a > 7)
@@ -262,16 +268,16 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _profile.rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
     _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
 
-    _profile.reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
-    _profile.open_file_timer = ADD_TIMER(_runtime_profile, "OpenFile");
-    _profile.expr_filter_timer = ADD_TIMER(_runtime_profile, "ExprFilterTime");
+    _profile.reader_init_timer = ADD_CHILD_TIMER(_runtime_profile, "ReaderInit", "IOTaskExecTime");
+    _profile.open_file_timer = ADD_CHILD_TIMER(_runtime_profile, "OpenFile", "IOTaskExecTime");
+    _profile.expr_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ExprFilterTime", "IOTaskExecTime");
 
-    _profile.column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
-    _profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
+    _profile.column_read_timer = ADD_CHILD_TIMER(_runtime_profile, "ColumnReadTime", "IOTaskExecTime");
+    _profile.column_convert_timer = ADD_CHILD_TIMER(_runtime_profile, "ColumnConvertTime", "IOTaskExecTime");
 
     {
         static const char* prefix = "SharedBuffered";
-        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
+        ADD_CHILD_COUNTER(_runtime_profile, prefix, TUnit::UNIT, "IOTaskExecTime");
         _profile.shared_buffered_shared_io_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "SharedIOBytes", TUnit::BYTES, prefix);
         _profile.shared_buffered_shared_io_count =
@@ -286,7 +292,7 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 
     if (_use_block_cache) {
         static const char* prefix = "BlockCache";
-        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
+        ADD_CHILD_COUNTER(_runtime_profile, prefix, TUnit::UNIT, "IOTaskExecTime");
         _profile.block_cache_read_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadCounter", TUnit::UNIT, prefix);
         _profile.block_cache_read_bytes =
@@ -305,7 +311,7 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 
     {
         static const char* prefix = "InputStream";
-        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
+        ADD_CHILD_COUNTER(_runtime_profile, prefix, TUnit::UNIT, "IOTaskExecTime");
         _profile.app_io_bytes_read_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "AppIOBytesRead", TUnit::BYTES, prefix);
         _profile.app_io_timer = ADD_CHILD_TIMER(_runtime_profile, "AppIOTime", prefix);
@@ -457,6 +463,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.fs = _pool.add(fs.release());
     scanner_params.path = native_file_path;
     scanner_params.file_size = _scan_range.file_length;
+    scanner_params.modification_time = _scan_range.modification_time;
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;
     scanner_params.materialize_index_in_chunk = _materialize_index_in_chunk;
@@ -466,7 +473,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.partition_values = _partition_values;
     scanner_params.conjunct_ctxs = _scanner_conjunct_ctxs;
     scanner_params.conjunct_ctxs_by_slot = _conjunct_ctxs_by_slot;
-    scanner_params.conjunct_slots = _conjunct_slots;
+    scanner_params.slots_in_conjunct = _slots_in_conjunct;
     scanner_params.min_max_conjunct_ctxs = _min_max_conjunct_ctxs;
     scanner_params.min_max_tuple_desc = _min_max_tuple_desc;
     scanner_params.hive_column_names = &_hive_column_names;
@@ -483,6 +490,8 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     }
     scanner_params.use_block_cache = _use_block_cache;
     scanner_params.enable_populate_block_cache = _enable_populate_block_cache;
+    scanner_params.can_use_any_column = _can_use_any_column;
+    scanner_params.can_use_min_max_count_opt = _can_use_min_max_count_opt;
 
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;
@@ -514,6 +523,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     RETURN_IF_ERROR(scanner->init(state, scanner_params));
     Status st = scanner->open(state);
     if (!st.ok()) {
+        if (scanner->is_jni_scanner()) {
+            return st;
+        }
+
         auto msg = fmt::format("file = {}", native_file_path);
 
         // After catching the AWS 404 file not found error and returning it to the FE,

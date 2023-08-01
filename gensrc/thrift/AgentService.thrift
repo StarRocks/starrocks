@@ -50,7 +50,7 @@ struct TTabletSchema {
     5: required list<Descriptors.TColumn> columns
     6: optional double bloom_filter_fpp
     7: optional list<Descriptors.TOlapTableIndex> indexes
-    8: optional bool is_in_memory
+    8: optional bool is_in_memory // Deprecated
     9: optional i64 id;
     10: optional list<i32> sort_key_idxes
 }
@@ -80,6 +80,12 @@ struct TBinlogConfig {
     4: optional i64 binlog_max_size;
 }
 
+// If you want to add types,
+// don't forget to also add type to PersistentIndexTypePB
+enum TPersistentIndexType {
+    LOCAL = 0
+}
+
 struct TCreateTabletReq {
     1: required Types.TTabletId tablet_id
     2: required TTabletSchema tablet_schema
@@ -102,6 +108,7 @@ struct TCreateTabletReq {
     15: optional bool enable_persistent_index
     16: optional Types.TCompressionType compression_type = Types.TCompressionType.LZ4_FRAME
     17: optional TBinlogConfig binlog_config;
+    18: optional TPersistentIndexType persistent_index_type;
 }
 
 struct TDropTabletReq {
@@ -340,7 +347,7 @@ struct TTabletMetaInfo {
     2: optional Types.TSchemaHash schema_hash
     3: optional Types.TPartitionId partition_id
     4: optional TTabletMetaType meta_type
-    5: optional bool is_in_memory
+    5: optional bool is_in_memory // Deprecated
     6: optional bool enable_persistent_index
     7: optional TBinlogConfig binlog_config
 }

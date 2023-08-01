@@ -165,10 +165,10 @@ public class FunctionAnalyzer {
             }
         }
 
-        if (fnName.getFunction().equals(FunctionSet.ALLOCATE_SESSION)) {
+        if (fnName.getFunction().equals(FunctionSet.SESSION_NUMBER)) {
             if (!functionCallExpr.getChild(1).isConstant()) {
                 throw new SemanticException(
-                        "The delta parameter (parameter 2) of ALLOCATE_SESSION must be a constant: "
+                        "The delta parameter (parameter 2) of SESSION_NUMBER must be a constant: "
                                 + functionCallExpr.toSql(), functionCallExpr.getChild(1).getPos());
             }
         }
@@ -396,6 +396,16 @@ public class FunctionAnalyzer {
             if (rate < 0 || rate > 1) {
                 throw new SemanticException(
                         fnName + " second parameter'value should be between 0 and 1");
+            }
+        }
+
+        if (fnName.getFunction().equals(FunctionSet.COVAR_POP) || fnName.getFunction().equals(FunctionSet.COVAR_SAMP) ||
+                fnName.getFunction().equals(FunctionSet.CORR)) {
+            if (functionCallExpr.getChildren().size() != 2) {
+                throw new SemanticException(fnName + " function should have two args", functionCallExpr.getPos());
+            }
+            if (functionCallExpr.getChild(0).isConstant() || functionCallExpr.getChild(1).isConstant()) {
+                throw new SemanticException(fnName + " function 's args must be column");
             }
         }
     }

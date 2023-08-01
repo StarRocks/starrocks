@@ -138,7 +138,7 @@ public:
     // page-level zone map filter.
     Status zone_map_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p,
                            const ::starrocks::ColumnPredicate* del_predicate,
-                           std::unordered_set<uint32_t>* del_partial_filtered_pages, SparseRange* row_ranges,
+                           std::unordered_set<uint32_t>* del_partial_filtered_pages, SparseRange<>* row_ranges,
                            const IndexReadOptions& opts);
 
     // segment-level zone map filter.
@@ -147,7 +147,7 @@ public:
     bool segment_zone_map_filter(const std::vector<const ::starrocks::ColumnPredicate*>& predicates) const;
 
     // prerequisite: at least one predicate in |predicates| support bloom filter.
-    Status bloom_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p, SparseRange* ranges,
+    Status bloom_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p, SparseRange<>* ranges,
                         const IndexReadOptions& opts);
 
     Status load_ordinal_index(const IndexReadOptions& opts);
@@ -156,8 +156,6 @@ public:
 
 private:
     const std::string& file_name() const { return _segment->file_name(); }
-
-    bool keep_in_memory() const { return _segment->keep_in_memory(); }
 
     struct private_type {
         explicit private_type(int) {}
@@ -175,7 +173,7 @@ private:
 
     Status _parse_zone_map(const ZoneMapPB& zm, ZoneMapDetail* detail) const;
 
-    Status _calculate_row_ranges(const std::vector<uint32_t>& page_indexes, SparseRange* row_ranges);
+    Status _calculate_row_ranges(const std::vector<uint32_t>& page_indexes, SparseRange<>* row_ranges);
 
     Status _zone_map_filter(const std::vector<const ColumnPredicate*>& predicates, const ColumnPredicate* del_predicate,
                             std::unordered_set<uint32_t>* del_partial_filtered_pages, std::vector<uint32_t>* pages);
