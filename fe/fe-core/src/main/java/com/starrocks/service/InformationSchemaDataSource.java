@@ -36,7 +36,7 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
@@ -95,7 +95,7 @@ public class InformationSchemaDataSource {
         for (String fullName : dbNames) {
 
             try {
-                PrivilegeChecker.checkAnyActionOnOrInDb(currentUser, null,
+                Authorizer.checkAnyActionOnOrInDb(currentUser, null,
                         InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, fullName);
             } catch (AccessDeniedException e) {
                 continue;
@@ -137,7 +137,7 @@ public class InformationSchemaDataSource {
                     List<Table> allTables = db.getTables();
                     for (Table table : allTables) {
                         try {
-                            PrivilegeChecker.checkAnyActionOnTableLikeObject(result.currentUser,
+                            Authorizer.checkAnyActionOnTableLikeObject(result.currentUser,
                                     null, dbName, table);
                         } catch (AccessDeniedException e) {
                             continue;
@@ -304,7 +304,7 @@ public class InformationSchemaDataSource {
                     List<Table> allTables = db.getTables();
                     for (Table table : allTables) {
                         try {
-                            PrivilegeChecker.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table);
+                            Authorizer.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table);
                         } catch (AccessDeniedException e) {
                             continue;
                         }
