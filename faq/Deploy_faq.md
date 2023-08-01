@@ -34,7 +34,7 @@ be安装过程中启动报错 `Doris Be http service did not start correctly,exi
 
 目前安装报错的信息是因为setuptools的版本不对，需要到每台机器上执行下以下命令，因为需要root权限
 
-```palin text
+```plain text
 yum remove python-setuptools
 
 rm /usr/lib/python2.7/site-packages/setuptool* -rf
