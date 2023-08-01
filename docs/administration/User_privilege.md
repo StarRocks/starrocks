@@ -417,7 +417,7 @@ GRANT public_sales TO ROLE lineb_query;
 
 We recommend you customize roles to manage privileges and users. The following examples classify a few combinations of privileges for some common scenarios.
 
-1. Grant global read-only privilege:
+1. Grant global read-only privileges on StarRocks tables:
 
    ```SQL
    --Create a role.
@@ -441,7 +441,7 @@ We recommend you customize roles to manage privileges and users. The following e
    GRANT USAGE ON ALL GLOBAL FUNCTIONS TO ROLE read_only;
    ```
 
-2. Grant global write privilege:
+2. Grant global write privileges on StarRocks tables:
 
    ```SQL
    --Create a role.
@@ -461,11 +461,27 @@ We recommend you customize roles to manage privileges and users. The following e
    CREATE ROLE read_catalog_only;
    --Switch to the corresponding catalog.
    SET CATALOG hive_catalog;
-   --Grant the SELECT privilege on all tables in all databases.
+   --Grant the SELECT privilege on all tables and views in all databases.
    GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE read_catalog_only;
+   GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE read_catalog_only;
    ```
 
-4. Grant privileges to perform backup and restore operations on global, database, table, and partition levels.
+   Note: You can query only Hive table views (since v3.1).
+
+4. Grant write-only privileges on a specific external catalog
+
+   You can only write data into Iceberg tables (since v3.1).
+
+   ```SQL
+   -- Create a role.
+   CREATE ROLE write_catalog_only;
+   -- Switch to the corresponding catalog.
+   SET CATALOG iceberg_catalog;
+   -- Grant the privilege to write data into Iceberg tables.
+   GRANT INSERT ON ALL TABLES IN ALL DATABASES TO ROLE write_catalog_only;
+   ```
+
+5. Grant privileges to perform backup and restore operations on global, database, table, and partition levels.
 
    - Grant privileges to perform global backup and restore operations:
 
@@ -500,7 +516,7 @@ We recommend you customize roles to manage privileges and users. The following e
      --Grant the privilege to load data into any table.
      GRANT INSERT ON ALL TABLES IN ALL DATABASES TO ROLE recover_db;
      --Grant the privilege to export data from any table in the database to be backed up.
-     GRANT EXPORT ON ALL TABLES IN DATABASE <database_name> TO ROLE recover_db;
+     GRANT EXPORT ON ALL TABLES IN DATABASE <db_name> TO ROLE recover_db;
      ```
 
    - Grant the privileges to perform table-level backup and restore operations:
@@ -514,6 +530,10 @@ We recommend you customize roles to manage privileges and users. The following e
      GRANT REPOSITORY ON SYSTEM TO ROLE recover_tbl;
      --Grant the privilege to create tables in corresponding databases.
      GRANT CREATE TABLE ON DATABASE <db_name> TO ROLE recover_tbl;
+     --Grant the privilege to load data into any table in a database.
+     GRANT INSERT ON ALL TABLES IN DATABASE <db_name> TO ROLE recover_db;
+     -- Grant the privilege to export data from the table you want to back up.
+     GRANT EXPORT ON TABLE <table_name> TO ROLE recover_tbl;     
      ```
 
    - Grant the privileges to perform partition-level backup and restore operations:
