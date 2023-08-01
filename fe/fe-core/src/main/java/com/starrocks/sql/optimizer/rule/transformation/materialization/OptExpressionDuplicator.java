@@ -66,7 +66,7 @@ public class OptExpressionDuplicator {
         this.columnRefFactory = materializationContext.getQueryRefFactory();
         this.columnMapping = Maps.newHashMap();
         this.rewriter = new ReplaceColumnRefRewriter(columnMapping);
-        Pair<Table, Column> partitionInfo = materializationContext.getMv().getPartitionTableAndColumn();
+        Pair<Table, Column> partitionInfo = materializationContext.getMv().getBaseTableAndPartitionColumn();
         this.partitionByTable = partitionInfo == null ? null : partitionInfo.first;
         this.partitionColumn = partitionInfo == null ? null : partitionInfo.second;
         this.partialPartitionRewrite = !materializationContext.getMvPartitionNamesToRefresh().isEmpty();

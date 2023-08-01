@@ -480,7 +480,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     private Pair<Table, Column> getPartitionTableAndColumn(
             Map<Long, Pair<BaseTableInfo, Table>> tables) {
-        SlotRef slotRef = MaterializedView.getPartitionSlotRef(materializedView);
+        SlotRef slotRef = MaterializedView.getRefBaseTablePartitionSlotRef(materializedView);
         for (Pair<BaseTableInfo, Table> tableInfo : tables.values()) {
             BaseTableInfo baseTableInfo = tableInfo.first;
             Table table = tableInfo.second;
@@ -788,7 +788,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             sourceTablePartitionRange.add(mvContext.getBasePartitionMap().get(partitionName));
         }
         sourceTablePartitionRange = MvUtils.mergeRanges(sourceTablePartitionRange);
-        SlotRef partitionSlot = MaterializedView.getPartitionSlotRef(materializedView);
+
+        SlotRef partitionSlot = MaterializedView.getRefBaseTablePartitionSlotRef(materializedView);
         List<String> columnOutputNames = queryStatement.getQueryRelation().getColumnOutputNames();
         List<Expr> outputExpressions = queryStatement.getQueryRelation().getOutputExpression();
         Expr outputPartitionSlot = null;

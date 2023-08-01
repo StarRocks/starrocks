@@ -23,10 +23,14 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakePartitionKey;
 import com.starrocks.catalog.HiveMetaStoreTable;
@@ -46,6 +50,9 @@ import com.starrocks.common.UserException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.common.PartitionDiff;
+import com.starrocks.sql.common.SyncPartitionUtils;
+import com.starrocks.sql.common.UnsupportedException;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.iceberg.PartitionField;
@@ -427,5 +434,20 @@ public class PartitionUtil {
         thread.setName(threadName);
         thread.setDaemon(true);
         thread.start();
+    }
+
+    public static PartitionDiff getPartitionDiff(Expr partitionExpr, Column partitionColumn,
+                                                 Map<String, Range<PartitionKey>> basePartitionMap,
+                                                 Map<String, Range<PartitionKey>> mvPartitionMap) {
+        if (partitionExpr instanceof SlotRef) {
+            return SyncPartitionUtils.calcSyncSamePartition(basePartitionMap, mvPartitionMap);
+        } else if (partitionExpr instanceof FunctionCallExpr) {
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
+            String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
+            return SyncPartitionUtils.calcSyncRollupPartition(basePartitionMap, mvPartitionMap,
+                    granularity, partitionColumn.getPrimitiveType());
+        } else {
+            throw UnsupportedException.unsupportedException("unsupported partition expr:" + partitionExpr);
+        }
     }
 }

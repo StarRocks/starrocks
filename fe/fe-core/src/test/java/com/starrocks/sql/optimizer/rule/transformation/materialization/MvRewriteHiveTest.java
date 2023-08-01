@@ -197,7 +197,6 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
 
         // no refresh partitions if mv_rewrite_staleness is set.
         {
-
             MaterializedView mv1 = getMv("test", "hive_staleness_1");
             Assert.assertTrue(mv1.maxBaseTableRefreshTimestamp().isPresent());
 

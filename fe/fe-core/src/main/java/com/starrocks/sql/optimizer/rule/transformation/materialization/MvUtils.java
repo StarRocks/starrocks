@@ -793,7 +793,7 @@ public class MvUtils {
     public static ScalarOperator getMvPartialPartitionPredicates(MaterializedView mv,
                                                                  OptExpression mvPlan,
                                                                  Set<String> mvPartitionNamesToRefresh) {
-        Pair<Table, Column> partitionTableAndColumns = mv.getPartitionTableAndColumn();
+        Pair<Table, Column> partitionTableAndColumns = mv.getBaseTableAndPartitionColumn();
         if (partitionTableAndColumns == null) {
             return null;
         }

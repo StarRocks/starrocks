@@ -2955,19 +2955,19 @@ public class LocalMetastore implements ConnectorMetadata {
             // force external query rewrite
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
                 String propertyValue = properties.get(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
-                TableProperty.QueryRewriteConsistencyMode value = TableProperty.analyzeQueryRewriteMode(propertyValue);
+                TableProperty.QueryRewriteConsistencyMode value = TableProperty.analyzeExternalTableQueryRewrite(propertyValue);
                 properties.remove(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
                 materializedView.getTableProperty().getProperties().
                         put(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE, String.valueOf(value));
                 materializedView.getTableProperty().setForceExternalTableQueryRewrite(value);
             }
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_OLAP_TABLE_QUERY_REWRITE)) {
-                String propertyValue = properties.get(PropertyAnalyzer.PROPERTIES_OLAP_TABLE_QUERY_REWRITE);
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY)) {
+                String propertyValue = properties.get(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY);
                 TableProperty.QueryRewriteConsistencyMode value = TableProperty.analyzeQueryRewriteMode(propertyValue);
-                properties.remove(PropertyAnalyzer.PROPERTIES_OLAP_TABLE_QUERY_REWRITE);
+                properties.remove(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY);
                 materializedView.getTableProperty().getProperties().
-                        put(PropertyAnalyzer.PROPERTIES_OLAP_TABLE_QUERY_REWRITE, String.valueOf(value));
-                materializedView.getTableProperty().setOlapTableQueryRewrite(value);
+                        put(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY, String.valueOf(value));
+                materializedView.getTableProperty().setQueryRewriteConsistencyMode(value);
             }
             // unique keys
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
