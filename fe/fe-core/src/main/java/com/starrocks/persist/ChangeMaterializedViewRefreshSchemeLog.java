@@ -3,6 +3,7 @@ package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -31,6 +32,9 @@ public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
         this.asyncRefreshContext = materializedView.getRefreshScheme().getAsyncRefreshContext();
     }
 
+    public ChangeMaterializedViewRefreshSchemeLog() {
+    }
+
     public long getId() {
         return id;
     }
@@ -54,7 +58,15 @@ public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
     }
 
     public static ChangeMaterializedViewRefreshSchemeLog read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, ChangeMaterializedViewRefreshSchemeLog.class);
+        try {
+            String json = Text.readString(in);
+            return GsonUtils.GSON.fromJson(json, ChangeMaterializedViewRefreshSchemeLog.class);
+        } catch (Exception ex) {
+            if (Config.ignore_materialized_view_error) {
+                return new ChangeMaterializedViewRefreshSchemeLog();
+            } else {
+                throw ex;
+            }
+        }
     }
 }
