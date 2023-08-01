@@ -59,15 +59,17 @@ public class ColocatedBackendSelector implements BackendSelector {
 
         for (Integer bucketSeq : scanNode.bucketSeq2locations.keySet()) {
             List<TScanRangeLocations> locations = scanNode.bucketSeq2locations.get(bucketSeq);
-            long numTablets = 0;
+            long numTablets = locations.size();
             long numTabletRows = 0;
             for (TScanRangeLocations location : locations) {
-                numTablets += 1L;
                 numTabletRows += location.getScan_range().getInternal_scan_range().getRow_count();
             }
 
             if (!bucketSeqToWorkerId.containsKey(bucketSeq)) {
                 computeExecAddressForBucketSeq(locations.get(0), bucketSeq, numTablets, numTabletRows);
+            } else {
+                Long workerId = bucketSeqToWorkerId.get(bucketSeq);
+                workerStatsTracker.consume(workerId, numTablets, numTabletRows);
             }
 
             List<TScanRangeParams> scanRangeParamsList =
