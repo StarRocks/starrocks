@@ -86,7 +86,7 @@
 | ALTER  | 对表进行修改，对外表元数据进行刷新。             |
 | DROP   | 删除表。                                         |
 | SELECT | 查询表中数据。                                   |
-| INSERT | 向 StarRocks 表中导入数据。                      |
+| INSERT | 向表中导入数据。                      |
 | UPDATE | 更新表。                                         |
 | EXPORT | 从 StarRocks 表中导出数据。                      |
 | DELETE | 按条件删除指定表中的数据，或者清空指定表的数据。 |
