@@ -33,38 +33,40 @@ import com.starrocks.common.util.DnsCache;
 import com.starrocks.common.util.ListUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.planner.DataPartition;
-import com.starrocks.planner.DataSink;
-import com.starrocks.planner.DataStreamSink;
 import com.starrocks.planner.DeltaLakeScanNode;
 import com.starrocks.planner.ExchangeNode;
-import com.starrocks.planner.ExportSink;
 import com.starrocks.planner.FileTableScanNode;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergScanNode;
-import com.starrocks.planner.IcebergTableSink;
-import com.starrocks.planner.JoinNode;
-import com.starrocks.planner.MultiCastDataSink;
 import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNode;
-import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ResultSink;
-import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
+<<<<<<< HEAD
 import com.starrocks.planner.UnionNode;
+=======
+import com.starrocks.qe.scheduler.DefaultWorkerProvider;
+import com.starrocks.qe.scheduler.TFragmentInstanceFactory;
+import com.starrocks.qe.scheduler.WorkerProvider;
+import com.starrocks.qe.scheduler.dag.ExecutionDAG;
+import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+import com.starrocks.qe.scheduler.dag.FragmentInstance;
+import com.starrocks.qe.scheduler.dag.JobSpec;
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.system.ComputeNode;
+<<<<<<< HEAD
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.InternalServiceVersion;
 import com.starrocks.thrift.TAdaptiveDopParam;
@@ -76,14 +78,18 @@ import com.starrocks.thrift.TFunctionVersion;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TLoadJobType;
+=======
+import com.starrocks.thrift.TDescriptorTable;
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TPlanFragmentDestination;
-import com.starrocks.thrift.TPlanFragmentExecParams;
 import com.starrocks.thrift.TQueryGlobals;
+<<<<<<< HEAD
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TRuntimeFilterParams;
 import com.starrocks.thrift.TScanRangeLocation;
+=======
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
@@ -98,7 +104,6 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Deque;
@@ -109,6 +114,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class CoordinatorPreprocessor {
@@ -119,6 +125,7 @@ public class CoordinatorPreprocessor {
 
     private final Random random = new Random();
 
+<<<<<<< HEAD
     private TNetworkAddress coordAddress;
     private TUniqueId queryId;
     private final ConnectContext connectContext;
@@ -159,12 +166,21 @@ public class CoordinatorPreprocessor {
     private final Map<Integer, TNetworkAddress> channelIdToBEPort = Maps.newHashMap();
     // used only by channel stream load, records the mapping from be port to be's webserver port
     private final Map<TNetworkAddress, TNetworkAddress> bePortToBeWebServerPort = Maps.newHashMap();
+=======
+    private final TNetworkAddress coordAddress;
+    private final ConnectContext connectContext;
+    private final Set<Integer> replicateScanIds = Sets.newHashSet();
+
+    private final JobSpec jobSpec;
+    private final ExecutionDAG executionDAG;
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
 
     // backends which this query will use
     private ImmutableMap<Long, ComputeNode> idToBackend;
     // compute node which this query will use
     private ImmutableMap<Long, ComputeNode> idToComputeNode;
 
+<<<<<<< HEAD
     // save of related backends of this query
     private final Set<Long> usedBackendIDs = Sets.newConcurrentHashSet();
     private final Map<TNetworkAddress, Long> addressToBackendID = Maps.newHashMap();
@@ -188,10 +204,24 @@ public class CoordinatorPreprocessor {
         resourceGroup = prepareResourceGroup(connectContext,
                 queryOptions.getQuery_type() == TQueryType.LOAD ? ResourceGroupClassifier.QueryType.INSERT
                         : ResourceGroupClassifier.QueryType.SELECT);
+=======
+    public CoordinatorPreprocessor(ConnectContext context, JobSpec jobSpec) {
+        this.coordAddress = new TNetworkAddress(LOCAL_IP, Config.rpc_port);
+
+        this.connectContext = Preconditions.checkNotNull(context);
+        this.jobSpec = jobSpec;
+        this.executionDAG = ExecutionDAG.build(jobSpec);
+
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        this.workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(),
+                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes());
+
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
     }
 
     @VisibleForTesting
     CoordinatorPreprocessor(List<PlanFragment> fragments, List<ScanNode> scanNodes) {
+<<<<<<< HEAD
         this.scanNodes = scanNodes;
         this.connectContext = StatisticUtils.buildConnectContext();
         this.queryId = connectContext.getExecutionId();
@@ -201,6 +231,13 @@ public class CoordinatorPreprocessor {
         this.usePipeline = true;
         this.descriptorTable = null;
         this.fragments = fragments;
+=======
+        this.coordAddress = new TNetworkAddress(LOCAL_IP, Config.rpc_port);
+
+        this.connectContext = StatisticUtils.buildConnectContext();
+        this.jobSpec = JobSpec.Factory.mockJobSpec(connectContext, fragments, scanNodes);
+        this.executionDAG = ExecutionDAG.build(jobSpec);
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
 
         this.idToComputeNode = buildComputeNodeInfo();
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
@@ -210,21 +247,24 @@ public class CoordinatorPreprocessor {
         }
 
         Map<PlanFragmentId, PlanFragment> fragmentMap =
-                fragments.stream().collect(Collectors.toMap(PlanFragment::getFragmentId, x -> x));
+                fragments.stream().collect(Collectors.toMap(PlanFragment::getFragmentId, Function.identity()));
         for (ScanNode scan : scanNodes) {
             PlanFragmentId id = scan.getFragmentId();
             PlanFragment fragment = fragmentMap.get(id);
             if (fragment == null) {
                 // Fake a fragment for this node
                 fragment = new PlanFragment(id, scan, DataPartition.RANDOM);
+                executionDAG.attachFragments(Collections.singletonList(fragment));
             }
-            fragmentExecParamsMap.put(scan.getFragmentId(), new FragmentExecParams(fragment));
         }
 
+<<<<<<< HEAD
         // prepare workgroup
         resourceGroup = prepareResourceGroup(connectContext,
                 queryOptions.getQuery_type() == TQueryType.LOAD ? ResourceGroupClassifier.QueryType.INSERT
                         : ResourceGroupClassifier.QueryType.SELECT);
+=======
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
     }
 
     public static TQueryGlobals genQueryGlobals(long startTime, String timezone) {
@@ -240,10 +280,6 @@ public class CoordinatorPreprocessor {
         return queryGlobals;
     }
 
-    public TNetworkAddress getCoordAddress() {
-        return coordAddress;
-    }
-
     public TUniqueId getQueryId() {
         return queryId;
     }
@@ -256,6 +292,7 @@ public class CoordinatorPreprocessor {
         return connectContext;
     }
 
+<<<<<<< HEAD
     public boolean isUsePipeline() {
         return usePipeline;
     }
@@ -290,12 +327,17 @@ public class CoordinatorPreprocessor {
 
     public Set<TUniqueId> getInstanceIds() {
         return instanceIds;
+=======
+    public ExecutionDAG getExecutionDAG() {
+        return executionDAG;
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
     }
 
     public TDescriptorTable getDescriptorTable() {
         return descriptorTable;
     }
 
+<<<<<<< HEAD
     public List<PlanFragment> getFragments() {
         return fragments;
     }
@@ -334,6 +376,14 @@ public class CoordinatorPreprocessor {
 
     public Map<Integer, TNetworkAddress> getChannelIdToBEPort() {
         return channelIdToBEPort;
+=======
+    public List<ExecutionFragment> getFragmentsInPreorder() {
+        return executionDAG.getFragmentsInPreorder();
+    }
+
+    public TNetworkAddress getCoordAddress() {
+        return coordAddress;
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
     }
 
     public Map<TNetworkAddress, TNetworkAddress> getBePortToBeWebServerPort() {
@@ -386,13 +436,16 @@ public class CoordinatorPreprocessor {
 
     public void prepareExec() throws Exception {
         // prepare information
+<<<<<<< HEAD
         resetFragmentState();
         prepareFragments();
+=======
+        resetExec();
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
 
         computeScanRangeAssignment();
         computeFragmentExecParams();
         traceInstance();
-        computeBeInstanceNumbers();
     }
 
     /**
@@ -409,6 +462,7 @@ public class CoordinatorPreprocessor {
         }
     }
 
+<<<<<<< HEAD
     @VisibleForTesting
     void prepareFragments() {
         for (PlanFragment fragment : fragments) {
@@ -470,6 +524,8 @@ public class CoordinatorPreprocessor {
         }
     }
 
+=======
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
     private void traceInstance() {
         if (LOG.isDebugEnabled()) {
             // TODO(zc): add a switch to close this function
@@ -477,12 +533,12 @@ public class CoordinatorPreprocessor {
             int idx = 0;
             sb.append("query id=").append(DebugUtil.printId(queryId)).append(",");
             sb.append("fragment=[");
-            for (Map.Entry<PlanFragmentId, FragmentExecParams> entry : fragmentExecParamsMap.entrySet()) {
+            for (ExecutionFragment execFragment : executionDAG.getFragmentsInPreorder()) {
                 if (idx++ != 0) {
                     sb.append(",");
                 }
-                sb.append(entry.getKey());
-                entry.getValue().appendTo(sb);
+                sb.append(execFragment.getFragmentId());
+                execFragment.appendTo(sb);
             }
             sb.append("]");
             LOG.debug(sb.toString());
@@ -550,24 +606,36 @@ public class CoordinatorPreprocessor {
         // compute hosts *bottom up*.
         boolean isGatherOutput = fragments.get(0).getDataPartition() == DataPartition.UNPARTITIONED;
 
+<<<<<<< HEAD
         for (int i = fragments.size() - 1; i >= 0; --i) {
             PlanFragment fragment = fragments.get(i);
             FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
+=======
+        for (ExecutionFragment execFragment : executionDAG.getFragmentsInPostorder()) {
+            PlanFragment fragment = execFragment.getPlanFragment();
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
 
             boolean dopAdaptionEnabled = usePipeline &&
                     connectContext.getSessionVariable().isEnablePipelineAdaptiveDop();
 
             // If left child is MultiCastDataFragment(only support left now), will keep same instance with child.
             if (fragment.getChildren().size() > 0 && fragment.getChild(0) instanceof MultiCastPlanFragment) {
+<<<<<<< HEAD
                 FragmentExecParams childFragmentParams =
                         fragmentExecParamsMap.get(fragment.getChild(0).getFragmentId());
                 for (FInstanceExecParam childInstanceParam : childFragmentParams.instanceExecParams) {
                     params.instanceExecParams.add(new FInstanceExecParam(null, childInstanceParam.host, 0, params));
+=======
+                ExecutionFragment childExecFragment = execFragment.getChild(0);
+                for (FragmentInstance childInstance : childExecFragment.getInstances()) {
+                    execFragment.addInstance(new FragmentInstance(childInstance.getWorker(), execFragment));
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
                 }
                 continue;
             }
 
             if (fragment.getDataPartition() == DataPartition.UNPARTITIONED) {
+<<<<<<< HEAD
                 Reference<Long> backendIdRef = new Reference<>();
                 TNetworkAddress execHostport;
                 if (usedComputeNode) {
@@ -584,10 +652,15 @@ public class CoordinatorPreprocessor {
                 FInstanceExecParam instanceParam = new FInstanceExecParam(null, execHostport,
                         0, params);
                 params.instanceExecParams.add(instanceParam);
+=======
+                long workerId = workerProvider.selectNextWorker();
+                FragmentInstance instance = new FragmentInstance(workerProvider.getWorkerById(workerId), execFragment);
+                execFragment.addInstance(instance);
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
                 continue;
             }
 
-            PlanNode leftMostNode = findLeftmostNode(fragment.getPlanRoot());
+            PlanNode leftMostNode = fragment.getLeftMostNode();
 
             /*
              * Case A:
@@ -604,8 +677,7 @@ public class CoordinatorPreprocessor {
                 int inputFragmentIndex = 0;
                 int maxParallelism = 0;
                 for (int j = 0; j < fragment.getChildren().size(); j++) {
-                    int currentChildFragmentParallelism =
-                            fragmentExecParamsMap.get(fragment.getChild(j).getFragmentId()).instanceExecParams.size();
+                    int currentChildFragmentParallelism = execFragment.getChild(j).getInstances().size();
                     // when dop adaptation enabled, numInstances * pipelineDop is equivalent to numInstances in
                     // non-pipeline engine and pipeline engine(dop adaptation disabled).
                     if (dopAdaptionEnabled) {
@@ -617,8 +689,7 @@ public class CoordinatorPreprocessor {
                     }
                 }
 
-                PlanFragmentId inputFragmentId = fragment.getChild(inputFragmentIndex).getFragmentId();
-                FragmentExecParams maxParallelismFragmentExecParams = fragmentExecParamsMap.get(inputFragmentId);
+                ExecutionFragment maxParallelismExecFragment = execFragment.getChild(inputFragmentIndex);
 
                 // hostSet contains target backends to whom fragment instances of the current PlanFragment will be
                 // delivered. when pipeline parallelization is adopted, the number of instances should be the size
@@ -642,15 +713,28 @@ public class CoordinatorPreprocessor {
                     if (isUnionFragment(fragment) && isGatherOutput) {
                         // union fragment use all children's host
                         // if output fragment isn't gather, all fragment must keep 1 instance
+<<<<<<< HEAD
                         for (PlanFragment child : fragment.getChildren()) {
                             FragmentExecParams childParams = fragmentExecParamsMap.get(child.getFragmentId());
                             childParams.instanceExecParams.stream().map(e -> e.host).forEach(hostSet::add);
+=======
+                        for (int i = 0; i < execFragment.childrenSize(); i++) {
+                            ExecutionFragment childExecFragment = execFragment.getChild(i);
+                            childExecFragment.getInstances().stream()
+                                    .map(FragmentInstance::getWorkerId)
+                                    .forEach(workerIdSet::add);
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
                         }
                         //make olapScan maxParallelism equals prefer compute node number
                         maxParallelism = hostSet.size() * fragment.getParallelExecNum();
                     } else {
+<<<<<<< HEAD
                         for (FInstanceExecParam execParams : maxParallelismFragmentExecParams.instanceExecParams) {
                             hostSet.add(execParams.host);
+=======
+                        for (FragmentInstance execParams : maxParallelismExecFragment.getInstances()) {
+                            workerIdSet.add(execParams.getWorkerId());
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
                         }
                     }
                 }
@@ -668,6 +752,7 @@ public class CoordinatorPreprocessor {
                 if (exchangeInstances > 0 && maxParallelism > exchangeInstances) {
                     // random select some instance
                     // get distinct host,  when parallel_fragment_exec_instance_num > 1, single host may execute several instances
+<<<<<<< HEAD
                     List<TNetworkAddress> hosts = Lists.newArrayList(hostSet);
                     Collections.shuffle(hosts, random);
 
@@ -675,20 +760,37 @@ public class CoordinatorPreprocessor {
                         FInstanceExecParam instanceParam =
                                 new FInstanceExecParam(null, hosts.get(index % hosts.size()), 0, params);
                         params.instanceExecParams.add(instanceParam);
+=======
+                    List<Long> workerIds = Lists.newArrayList(workerIdSet);
+                    Collections.shuffle(workerIds, random);
+
+                    for (int index = 0; index < exchangeInstances; index++) {
+                        Long workerId = workerIds.get(index % workerIds.size());
+                        FragmentInstance instance =
+                                new FragmentInstance(workerProvider.getWorkerById(workerId), execFragment);
+                        execFragment.addInstance(instance);
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
                     }
                 } else {
                     List<TNetworkAddress> hosts = Lists.newArrayList(hostSet);
                     for (int index = 0; index < maxParallelism; ++index) {
+<<<<<<< HEAD
                         TNetworkAddress host = hosts.get(index % hosts.size());
                         FInstanceExecParam instanceParam = new FInstanceExecParam(null, host, 0, params);
                         params.instanceExecParams.add(instanceParam);
+=======
+                        Long workerId = workerIds.get(index % workerIds.size());
+                        FragmentInstance instance =
+                                new FragmentInstance(workerProvider.getWorkerById(workerId), execFragment);
+                        execFragment.addInstance(instance);
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
                     }
                 }
 
                 // When group by cardinality is smaller than number of backend, only some backends always
                 // process while other has no data to process.
                 // So we shuffle instances to make different backends handle different queries.
-                Collections.shuffle(params.instanceExecParams, random);
+                execFragment.shuffleInstances(random);
 
                 // TODO: switch to unpartitioned/coord execution if our input fragment
                 // is executed that way (could have been downgraded from distributed)
@@ -697,6 +799,7 @@ public class CoordinatorPreprocessor {
 
             int parallelExecInstanceNum = fragment.getParallelExecNum();
             int pipelineDop = fragment.getPipelineDop();
+<<<<<<< HEAD
             boolean hasColocate = (isColocateFragment(fragment.getPlanRoot()) &&
                     fragmentIdToSeqToAddressMap.containsKey(fragment.getFragmentId())
                     && fragmentIdToSeqToAddressMap.get(fragment.getFragmentId()).size() > 0);
@@ -707,13 +810,33 @@ public class CoordinatorPreprocessor {
                         fragmentIdBucketSeqToScanRangeMap.get(fragment.getFragmentId()),
                         parallelExecInstanceNum, pipelineDop, usePipeline, params);
                 computeBucketSeq2InstanceOrdinal(params, fragmentIdToBucketNumMap.get(fragment.getFragmentId()));
+=======
+            ColocatedBackendSelector.Assignment colocatedAssignment = execFragment.getColocatedAssignment();
+            boolean hasColocate = execFragment.isColocated()
+                    && colocatedAssignment != null
+                    && colocatedAssignment.getSeqToWorkerId().size() > 0;
+            boolean hasBucketShuffle = execFragment.isLocalBucketShuffleJoin() && colocatedAssignment != null;
+
+            if (hasColocate || hasBucketShuffle) {
+                computeColocatedJoinInstanceParam(colocatedAssignment.getSeqToWorkerId(),
+                        colocatedAssignment.getSeqToScanRange(),
+                        parallelExecInstanceNum, pipelineDop, jobSpec.isEnablePipeline(), execFragment);
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
             } else {
                 boolean assignScanRangesPerDriverSeq = usePipeline &&
                         (fragment.isAssignScanRangesPerDriverSeq() || fragment.isForceAssignScanRangesPerDriverSeq());
+<<<<<<< HEAD
                 for (Map.Entry<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> tNetworkAddressMapEntry :
                         fragmentExecParamsMap.get(fragment.getFragmentId()).scanRangeAssignment.entrySet()) {
                     TNetworkAddress key = tNetworkAddressMapEntry.getKey();
                     Map<Integer, List<TScanRangeParams>> value = tNetworkAddressMapEntry.getValue();
+=======
+                for (Map.Entry<Long, Map<Integer, List<TScanRangeParams>>> workerIdMapEntry :
+                        execFragment.getScanRangeAssignment().entrySet()) {
+                    Long workerId = workerIdMapEntry.getKey();
+                    ComputeNode worker = workerProvider.getWorkerById(workerId);
+                    Map<Integer, List<TScanRangeParams>> value = workerIdMapEntry.getValue();
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
 
                     // 1. Handle normal scan node firstly
                     for (Integer planNodeId : value.keySet()) {
@@ -730,17 +853,22 @@ public class CoordinatorPreprocessor {
                                 expectedInstanceNum);
 
                         for (List<TScanRangeParams> scanRangeParams : perInstanceScanRanges) {
+<<<<<<< HEAD
                             FInstanceExecParam instanceParam = new FInstanceExecParam(null, key, 0, params);
                             params.instanceExecParams.add(instanceParam);
+=======
+                            FragmentInstance instance = new FragmentInstance(worker, execFragment);
+                            execFragment.addInstance(instance);
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
 
                             boolean assignPerDriverSeq = assignScanRangesPerDriverSeq &&
                                     (enableAssignScanRangesPerDriverSeq(scanRangeParams, pipelineDop)
                                             || fragment.isForceAssignScanRangesPerDriverSeq());
                             if (!assignPerDriverSeq) {
-                                instanceParam.perNodeScanRanges.put(planNodeId, scanRangeParams);
+                                instance.getNode2ScanRanges().put(planNodeId, scanRangeParams);
                             } else {
                                 int expectedDop = Math.max(1, Math.min(pipelineDop, scanRangeParams.size()));
-                                List<List<TScanRangeParams>> scanRangeParamsPerDriverSeq = null;
+                                List<List<TScanRangeParams>> scanRangeParamsPerDriverSeq;
                                 if (Config.enable_schedule_insert_query_by_row_count && isLoadType()
                                         && scanRangeParams.size() > 0
                                         && scanRangeParams.get(0).getScan_range().isSetInternal_scan_range()) {
@@ -752,20 +880,18 @@ public class CoordinatorPreprocessor {
                                         != pipelineDop) {
                                     fragment.setPipelineDop(scanRangeParamsPerDriverSeq.size());
                                 }
-                                instanceParam.pipelineDop = scanRangeParamsPerDriverSeq.size();
-                                if (fragment.isUseRuntimeAdaptiveDop()) {
-                                    instanceParam.pipelineDop = Utils.computeMinGEPower2(instanceParam.pipelineDop);
-                                }
+                                instance.setPipelineDop(scanRangeParamsPerDriverSeq.size());
                                 Map<Integer, List<TScanRangeParams>> scanRangesPerDriverSeq = new HashMap<>();
-                                instanceParam.nodeToPerDriverSeqScanRanges.put(planNodeId, scanRangesPerDriverSeq);
+                                instance.getNode2DriverSeqToScanRanges().put(planNodeId, scanRangesPerDriverSeq);
                                 for (int driverSeq = 0; driverSeq < scanRangeParamsPerDriverSeq.size(); ++driverSeq) {
                                     scanRangesPerDriverSeq.put(driverSeq, scanRangeParamsPerDriverSeq.get(driverSeq));
                                 }
                                 for (int driverSeq = scanRangeParamsPerDriverSeq.size();
-                                        driverSeq < instanceParam.pipelineDop; ++driverSeq) {
+                                        driverSeq < instance.getPipelineDop(); ++driverSeq) {
                                     scanRangesPerDriverSeq.put(driverSeq, Lists.newArrayList());
                                 }
                             }
+<<<<<<< HEAD
                             if (this.queryOptions.getLoad_job_type() == TLoadJobType.STREAM_LOAD) {
                                 for (TScanRangeParams scanRange : scanRangeParams) {
                                     int channelId = scanRange.scan_range.broker_scan_range.channel_id;
@@ -774,25 +900,28 @@ public class CoordinatorPreprocessor {
                                     channelIdToBEPort.put(channelId, key);
                                 }
                             }
+=======
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
                         }
                     }
 
                     // 1. Handle replicated scan node if need
-                    boolean isReplicated = isReplicatedFragment(fragment.getPlanRoot());
+                    boolean isReplicated = execFragment.isReplicated();
                     if (isReplicated) {
                         for (Integer planNodeId : value.keySet()) {
                             if (!replicateScanIds.contains(planNodeId)) {
                                 continue;
                             }
                             List<TScanRangeParams> perNodeScanRanges = value.get(planNodeId);
-                            for (FInstanceExecParam instanceParam : params.instanceExecParams) {
-                                instanceParam.perNodeScanRanges.put(planNodeId, perNodeScanRanges);
+                            for (FragmentInstance instanceParam : execFragment.getInstances()) {
+                                instanceParam.getNode2ScanRanges().put(planNodeId, perNodeScanRanges);
                             }
                         }
                     }
                 }
             }
 
+<<<<<<< HEAD
             if (params.instanceExecParams.isEmpty()) {
                 Reference<Long> backendIdRef = new Reference<>();
                 TNetworkAddress execHostport;
@@ -809,10 +938,18 @@ public class CoordinatorPreprocessor {
                 FInstanceExecParam instanceParam = new FInstanceExecParam(null, execHostport,
                         0, params);
                 params.instanceExecParams.add(instanceParam);
+=======
+            if (execFragment.getInstances().isEmpty()) {
+                long workerId = workerProvider.selectNextWorker();
+                ComputeNode worker = workerProvider.getWorkerById(workerId);
+                FragmentInstance instance = new FragmentInstance(worker, execFragment);
+                execFragment.addInstance(instance);
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
             }
         }
     }
 
+<<<<<<< HEAD
     private boolean isUnionFragment(PlanFragment fragment) {
         Deque<PlanNode> dq = new LinkedList<>();
         dq.offer(fragment.getPlanRoot());
@@ -946,6 +1083,8 @@ public class CoordinatorPreprocessor {
         return newPlan;
     }
 
+=======
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
     /**
      * This strategy assigns buckets to each driver sequence to avoid local shuffle.
      * If the number of buckets assigned to a fragment instance is less than pipelineDop,
@@ -966,7 +1105,7 @@ public class CoordinatorPreprocessor {
     public void computeColocatedJoinInstanceParam(Map<Integer, TNetworkAddress> bucketSeqToAddress,
                                                   BucketSeqToScanRange bucketSeqToScanRange,
                                                   int parallelExecInstanceNum, int pipelineDop, boolean enablePipeline,
-                                                  FragmentExecParams params) {
+                                                  ExecutionFragment execFragment) {
         // 1. count each node in one fragment should scan how many tablet, gather them in one list
         Map<TNetworkAddress, List<Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>>>> addressToScanRanges =
                 Maps.newHashMap();
@@ -981,9 +1120,16 @@ public class CoordinatorPreprocessor {
                 enablePipeline && addressToScanRanges.values().stream()
                         .allMatch(scanRanges -> enableAssignScanRangesPerDriverSeq(scanRanges, pipelineDop));
 
+<<<<<<< HEAD
         for (Map.Entry<TNetworkAddress, List<Map.Entry<Integer, Map<Integer,
                 List<TScanRangeParams>>>>> addressScanRange : addressToScanRanges.entrySet()) {
             List<Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>>> scanRange = addressScanRange.getValue();
+=======
+        for (Map.Entry<Long, List<Map.Entry<Integer, Map<Integer,
+                List<TScanRangeParams>>>>> workerIdScanRange : workerIdToScanRanges.entrySet()) {
+            ComputeNode worker = workerProvider.getWorkerById(workerIdScanRange.getKey());
+            List<Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>>> scanRange = workerIdScanRange.getValue();
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
 
             int expectedInstanceNum = 1;
             if (parallelExecInstanceNum > 1) {
@@ -997,7 +1143,11 @@ public class CoordinatorPreprocessor {
 
             // 3.construct instanceExecParam add the scanRange should be scan by instance
             for (List<Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>>> scanRangePerInstance : scanRangesPerInstance) {
+<<<<<<< HEAD
                 FInstanceExecParam instanceParam = new FInstanceExecParam(null, addressScanRange.getKey(), 0, params);
+=======
+                FragmentInstance instance = new FragmentInstance(worker, execFragment);
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
                 // record each instance replicate scan id in set, to avoid add replicate scan range repeatedly when they are in different buckets
                 Set<Integer> instanceReplicateScanSet = new HashSet<>();
 
@@ -1009,28 +1159,25 @@ public class CoordinatorPreprocessor {
                         ListUtil.splitBySize(scanRangePerInstance, expectedDop);
 
                 if (assignPerDriverSeq) {
-                    instanceParam.pipelineDop = scanRangesPerDriverSeq.size();
-                    if (params.fragment.isUseRuntimeAdaptiveDop()) {
-                        instanceParam.pipelineDop = Utils.computeMinGEPower2(instanceParam.pipelineDop);
-                    }
+                    instance.setPipelineDop(scanRangesPerDriverSeq.size());
                 }
 
                 for (int driverSeq = 0; driverSeq < scanRangesPerDriverSeq.size(); ++driverSeq) {
                     final int finalDriverSeq = driverSeq;
                     scanRangesPerDriverSeq.get(finalDriverSeq).forEach(bucketSeqAndScanRanges -> {
                         if (assignPerDriverSeq) {
-                            instanceParam.addBucketSeqAndDriverSeq(bucketSeqAndScanRanges.getKey(), finalDriverSeq);
+                            instance.addBucketSeqAndDriverSeq(bucketSeqAndScanRanges.getKey(), finalDriverSeq);
                         } else {
-                            instanceParam.addBucketSeq(bucketSeqAndScanRanges.getKey());
+                            instance.addBucketSeq(bucketSeqAndScanRanges.getKey());
                         }
 
                         bucketSeqAndScanRanges.getValue().forEach((scanId, scanRanges) -> {
                             List<TScanRangeParams> destScanRanges;
                             if (!assignPerDriverSeq) {
-                                destScanRanges = instanceParam.perNodeScanRanges
+                                destScanRanges = instance.getNode2ScanRanges()
                                         .computeIfAbsent(scanId, k -> new ArrayList<>());
                             } else {
-                                destScanRanges = instanceParam.nodeToPerDriverSeqScanRanges
+                                destScanRanges = instance.getNode2DriverSeqToScanRanges()
                                         .computeIfAbsent(scanId, k -> new HashMap<>())
                                         .computeIfAbsent(finalDriverSeq, k -> new ArrayList<>());
                             }
@@ -1048,14 +1195,14 @@ public class CoordinatorPreprocessor {
                 }
 
                 if (assignPerDriverSeq) {
-                    instanceParam.nodeToPerDriverSeqScanRanges.forEach((scanId, perDriverSeqScanRanges) -> {
-                        for (int driverSeq = 0; driverSeq < instanceParam.pipelineDop; ++driverSeq) {
+                    instance.getNode2DriverSeqToScanRanges().forEach((scanId, perDriverSeqScanRanges) -> {
+                        for (int driverSeq = 0; driverSeq < instance.getPipelineDop(); ++driverSeq) {
                             perDriverSeqScanRanges.computeIfAbsent(driverSeq, k -> new ArrayList<>());
                         }
                     });
                 }
 
-                params.instanceExecParams.add(instanceParam);
+                execFragment.addInstance(instance);
             }
         }
     }
@@ -1069,7 +1216,7 @@ public class CoordinatorPreprocessor {
     }
 
     public FragmentScanRangeAssignment getFragmentScanRangeAssignment(PlanFragmentId fragmentId) {
-        return fragmentExecParamsMap.get(fragmentId).scanRangeAssignment;
+        return executionDAG.getFragment(fragmentId).getScanRangeAssignment();
     }
 
     // Populates scan_range_assignment_.
@@ -1086,8 +1233,15 @@ public class CoordinatorPreprocessor {
                 // only analysis olap scan node
                 continue;
             }
+<<<<<<< HEAD
             FragmentScanRangeAssignment assignment =
                     fragmentExecParamsMap.get(scanNode.getFragmentId()).scanRangeAssignment;
+=======
+
+            ExecutionFragment execFragment = executionDAG.getFragment(scanNode.getFragmentId());
+            FragmentScanRangeAssignment assignment = execFragment.getScanRangeAssignment();
+
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
             if (scanNode instanceof SchemaScanNode) {
                 BackendSelector selector = new NormalBackendSelector(scanNode, locations, assignment);
                 selector.computeScanRangeAssignment();
@@ -1103,16 +1257,28 @@ public class CoordinatorPreprocessor {
                                 sv.getHDFSBackendSelectorScanRangeShuffle());
                 selector.computeScanRangeAssignment();
             } else {
-                boolean hasColocate = isColocateFragment(scanNode.getFragment().getPlanRoot());
-                boolean hasBucket =
-                        isBucketShuffleJoin(scanNode.getFragmentId().asInt(), scanNode.getFragment().getPlanRoot());
-                boolean hasReplicated = isReplicatedFragment(scanNode.getFragment().getPlanRoot());
+                boolean hasColocate = execFragment.isColocated();
+                boolean hasBucket = execFragment.isLocalBucketShuffleJoin();
+                boolean hasReplicated = execFragment.isReplicated();
                 if (assignment.size() > 0 && hasReplicated && scanNode.canDoReplicatedJoin()) {
+<<<<<<< HEAD
                     BackendSelector selector = new ReplicatedBackendSelector(scanNode, locations, assignment);
                     selector.computeScanRangeAssignment();
                     replicateScanIds.add(scanNode.getId().asInt());
                 } else if (hasColocate || hasBucket) {
                     BackendSelector selector = new ColocatedBackendSelector((OlapScanNode) scanNode, assignment);
+=======
+                    BackendSelector selector = new ReplicatedBackendSelector(scanNode, locations, assignment,
+                            execFragment.getColocatedAssignment());
+                    selector.computeScanRangeAssignment();
+                    replicateScanIds.add(scanNode.getId().asInt());
+                } else if (hasColocate || hasBucket) {
+                    ColocatedBackendSelector.Assignment colocatedAssignment =
+                            execFragment.getOrCreateColocatedAssignment((OlapScanNode) scanNode);
+                    boolean isRightOrFullBucketShuffleFragment = execFragment.isRightOrFullBucketShuffle();
+                    BackendSelector selector = new ColocatedBackendSelector((OlapScanNode) scanNode, assignment,
+                            colocatedAssignment, isRightOrFullBucketShuffleFragment, workerProvider);
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
                     selector.computeScanRangeAssignment();
                 } else {
                     BackendSelector selector = new NormalBackendSelector(scanNode, locations, assignment, isLoadType());
@@ -1137,17 +1303,18 @@ public class CoordinatorPreprocessor {
         computeFragmentHosts();
 
         // assign instance ids
-        instanceIds.clear();
-        for (FragmentExecParams params : fragmentExecParamsMap.values()) {
+        for (ExecutionFragment execFragment : executionDAG.getFragmentsInPreorder()) {
             if (LOG.isDebugEnabled()) {
-                LOG.debug("fragment {} has instances {}", params.fragment.getFragmentId(),
-                        params.instanceExecParams.size());
+                LOG.debug("fragment {} has instances {}", execFragment.getFragmentId(),
+                        execFragment.getInstances().size());
             }
 
-            if (params.fragment.getSink() instanceof ResultSink && params.instanceExecParams.size() > 1) {
+            if (execFragment.getPlanFragment().getSink() instanceof ResultSink &&
+                    execFragment.getInstances().size() > 1) {
                 throw new StarRocksPlannerException("This sql plan has multi result sinks",
                         ErrorType.INTERNAL_ERROR);
             }
+<<<<<<< HEAD
 
             for (int j = 0; j < params.instanceExecParams.size(); ++j) {
                 // we add instance_num to query_id.lo to create a
@@ -1242,10 +1409,14 @@ public class CoordinatorPreprocessor {
                     params.destinations.add(dest);
                 }
             }
+=======
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
         }
 
+        executionDAG.finalizeDAG();
     }
 
+<<<<<<< HEAD
     private void handleMultiCastFragmentParams() throws Exception {
         for (FragmentExecParams params : fragmentExecParamsMap.values()) {
             if (!(params.fragment instanceof MultiCastPlanFragment)) {
@@ -1388,13 +1559,27 @@ public class CoordinatorPreprocessor {
     public Map<Integer, TNetworkAddress> getChannelIdToBEHTTPMap() {
         if (this.queryOptions.getLoad_job_type() == TLoadJobType.STREAM_LOAD) {
             return channelIdToBEHTTP;
+=======
+    public TFragmentInstanceFactory createTFragmentInstanceFactory() {
+        return new TFragmentInstanceFactory(connectContext, jobSpec, executionDAG, coordAddress);
+    }
+
+    public Map<Integer, TNetworkAddress> getChannelIdToBEHTTPMap() {
+        if (jobSpec.isStreamLoad()) {
+            return executionDAG.getChannelIdToBEHTTP();
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
         }
         return null;
     }
 
     public Map<Integer, TNetworkAddress> getChannelIdToBEPortMap() {
+<<<<<<< HEAD
         if (this.queryOptions.getLoad_job_type() == TLoadJobType.STREAM_LOAD) {
             return channelIdToBEPort;
+=======
+        if (jobSpec.isStreamLoad()) {
+            return executionDAG.getChannelIdToBEPort();
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
         }
         return null;
     }
@@ -1441,6 +1626,7 @@ public class CoordinatorPreprocessor {
 
         return resourceGroup;
     }
+<<<<<<< HEAD
 
     // fragment instance exec param, it is used to assemble
     // the per-instance TPlanFragmentExecParas, as a member of
@@ -2187,4 +2373,6 @@ public class CoordinatorPreprocessor {
         }
     }
 
+=======
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
 }

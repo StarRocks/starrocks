@@ -16,24 +16,27 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.starrocks.analysis.AggregateInfo;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.planner.BinlogScanNode;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.EmptySetNode;
 import com.starrocks.planner.JoinNode;
+import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.stream.StreamAggNode;
+import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.system.Backend;
@@ -55,7 +58,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -86,6 +88,7 @@ public class CoordinatorTest extends PlanTestBase {
 
     private void testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode mode) throws IOException {
         PlanFragment fragment = genFragment();
+<<<<<<< HEAD
         CoordinatorPreprocessor.FragmentExecParams params = coordinatorPreprocessor.new FragmentExecParams(fragment);
         CoordinatorPreprocessor.FInstanceExecParam instance0 =
                 new CoordinatorPreprocessor.FInstanceExecParam(null, null, 0, params);
@@ -99,13 +102,37 @@ public class CoordinatorTest extends PlanTestBase {
         params.instanceExecParams.add(instance0);
         params.instanceExecParams.add(instance1);
         params.instanceExecParams.add(instance2);
+=======
+        ExecutionFragment execFragment = new ExecutionFragment(null, fragment, 0);
+        FragmentInstance instance0 = new FragmentInstance(null, execFragment);
+        FragmentInstance instance1 = new FragmentInstance(null, execFragment);
+        FragmentInstance instance2 = new FragmentInstance(null, execFragment);
+        instance0.addBucketSeq(2);
+        instance0.addBucketSeq(0);
+        instance1.addBucketSeq(1);
+        instance1.addBucketSeq(4);
+        instance2.addBucketSeq(3);
+        instance2.addBucketSeq(5);
+
+        execFragment.addInstance(instance0);
+        execFragment.addInstance(instance1);
+        execFragment.addInstance(instance2);
+
+        OlapTable table = new OlapTable();
+        table.setDefaultDistributionInfo(new HashDistributionInfo(6, Collections.emptyList()));
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+        OlapScanNode scanNode = new OlapScanNode(new PlanNodeId(0), desc, "test-scan-node");
+        scanNode.setSelectedPartitionIds(ImmutableList.of(0L, 1L));
+        execFragment.getOrCreateColocatedAssignment(scanNode);
+
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
         RuntimeFilterDescription rf = new RuntimeFilterDescription(ctx.sessionVariable);
         rf.setJoinMode(mode);
         fragment.getBuildRuntimeFilters().put(1, rf);
         Assert.assertTrue(rf.getBucketSeqToInstance() == null || rf.getBucketSeqToInstance().isEmpty());
-        coordinatorPreprocessor.computeBucketSeq2InstanceOrdinal(params, 6);
-        params.setBucketSeqToInstanceForRuntimeFilters();
-        Assert.assertEquals(rf.getBucketSeqToInstance(), Arrays.<Integer>asList(0, 1, 0, 2, 1, 2));
+        execFragment.setBucketSeqToInstanceForRuntimeFilters();
+        Assert.assertEquals(Arrays.asList(0, 1, 0, 2, 1, 2), rf.getBucketSeqToInstance());
     }
 
     @Test
@@ -118,6 +145,7 @@ public class CoordinatorTest extends PlanTestBase {
         testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode.LOCAL_HASH_BUCKET);
     }
 
+<<<<<<< HEAD
     private Map<Integer, List<TScanRangeParams>> createScanId2scanRanges(int scanId, int numScanRanges) {
         List<TScanRangeParams> scanRanges = Lists.newArrayList();
         for (int i = 0; i < numScanRanges; ++i) {
@@ -423,6 +451,8 @@ public class CoordinatorTest extends PlanTestBase {
 
     }
 
+=======
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
     @Test
     public void testBinlogScan() throws Exception {
         PlanFragmentId fragmentId = new PlanFragmentId(0);
@@ -512,20 +542,18 @@ public class CoordinatorTest extends PlanTestBase {
 
         // Build topology
         CoordinatorPreprocessor prepare = new CoordinatorPreprocessor(fragments, scanNodes);
-        prepare.prepareFragments();
         prepare.computeScanRangeAssignment();
         prepare.computeFragmentExecParams();
 
         // Assert
-        Map<PlanFragmentId, CoordinatorPreprocessor.FragmentExecParams> fragmentParams =
-                prepare.getFragmentExecParamsMap();
+        Map<PlanFragmentId, ExecutionFragment> fragmentParams = prepare.getExecutionDAG().getIdToFragment();
         fragmentParams.forEach((k, v) -> {
             System.err.println("Fragment " + k + " : " + v);
         });
         Assert.assertTrue(fragmentParams.containsKey(fragmentId));
-        CoordinatorPreprocessor.FragmentExecParams fragmentParam = fragmentParams.get(fragmentId);
-        FragmentScanRangeAssignment scanRangeAssignment = fragmentParam.scanRangeAssignment;
-        List<CoordinatorPreprocessor.FInstanceExecParam> instances = fragmentParam.instanceExecParams;
+        ExecutionFragment fragmentParam = fragmentParams.get(fragmentId);
+        FragmentScanRangeAssignment scanRangeAssignment = fragmentParam.getScanRangeAssignment();
+        List<FragmentInstance> instances = fragmentParam.getInstances();
         Assert.assertFalse(fragmentParams.isEmpty());
         Assert.assertEquals(1, scanRangeAssignment.size());
         Assert.assertEquals(1, instances.size());

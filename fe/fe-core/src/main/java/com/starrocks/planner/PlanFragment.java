@@ -263,6 +263,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.pipelineDop = dop;
     }
 
+    public boolean hasTableSink() {
+        return hasIcebergTableSink() || hasOlapTableSink();
+    }
+
     public boolean hasOlapTableSink() {
         return this.hasOlapTableSink;
     }
@@ -671,8 +675,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.cacheParam = cacheParam;
     }
 
-    public List<OlapScanNode> collectOlapScanNodes() {
-        List<OlapScanNode> olapScanNodes = Lists.newArrayList();
+    public Map<PlanNodeId, ScanNode> collectScanNodes() {
+        Map<PlanNodeId, ScanNode> scanNodes = Maps.newHashMap();
         Queue<PlanNode> queue = Lists.newLinkedList();
         queue.add(planRoot);
         while (!queue.isEmpty()) {
@@ -681,13 +685,48 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             if (node instanceof ExchangeNode) {
                 continue;
             }
-            if (node instanceof OlapScanNode) {
-                olapScanNodes.add((OlapScanNode) node);
+            if (node instanceof ScanNode) {
+                scanNodes.put(node.getId(), (ScanNode) node);
             }
 
             queue.addAll(node.getChildren());
         }
 
-        return olapScanNodes;
+        return scanNodes;
     }
+<<<<<<< HEAD
+=======
+
+    public boolean isUnionFragment() {
+        Deque<PlanNode> dq = new LinkedList<>();
+        dq.offer(planRoot);
+
+        while (!dq.isEmpty()) {
+            PlanNode nd = dq.poll();
+
+            if (nd instanceof UnionNode) {
+                return true;
+            }
+            if (!(nd instanceof ExchangeNode)) {
+                dq.addAll(nd.getChildren());
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Returns the leftmost node of the fragment.
+     */
+    public PlanNode getLeftMostNode() {
+        PlanNode node = planRoot;
+        while (!node.getChildren().isEmpty() && !(node instanceof ExchangeNode)) {
+            node = node.getChild(0);
+        }
+        return node;
+    }
+
+    public void reset() {
+        // Do nothing.
+    }
+>>>>>>> e41f76d5f3 ([Refactor] Extract ExecutionDAG and Deployer from Coordinator (#28208))
 }
