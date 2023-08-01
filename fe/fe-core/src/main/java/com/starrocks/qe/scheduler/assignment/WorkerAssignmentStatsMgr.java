@@ -83,21 +83,6 @@ public class WorkerAssignmentStatsMgr {
         }
 
         @Override
-        public boolean tryConsume(Long workerId, Long expectedNumRunningTablets, Long numRunningTablets,
-                                  Long numRunningTabletRows) {
-            WorkerStats stats = globalWorkerToStats.computeIfAbsent(workerId, k -> new WorkerStats());
-            boolean ok = stats.tryConsume(expectedNumRunningTablets, numRunningTablets, numRunningTabletRows);
-            if (!ok) {
-                return false;
-            }
-
-            localWorkerToStats.computeIfAbsent(workerId, k -> new WorkerStats())
-                    .consume(numRunningTablets, numRunningTabletRows);
-
-            return true;
-        }
-
-        @Override
         public void consume(Long workerId, Long numRunningTablets, Long numRunningTabletRows) {
             localWorkerToStats.computeIfAbsent(workerId, k -> new WorkerStats())
                     .consume(numRunningTablets, numRunningTabletRows);
@@ -130,6 +115,21 @@ public class WorkerAssignmentStatsMgr {
         protected Map<Long, WorkerStats> getWorkerToStats() {
             return globalWorkerToStats;
         }
+
+        @Override
+        public boolean tryConsume(Long workerId, Long expectedNumRunningTablets, Long numRunningTablets,
+                                  Long numRunningTabletRows) {
+            WorkerStats stats = globalWorkerToStats.computeIfAbsent(workerId, k -> new WorkerStats());
+            boolean ok = stats.tryConsume(expectedNumRunningTablets, numRunningTablets, numRunningTabletRows);
+            if (!ok) {
+                return false;
+            }
+
+            localWorkerToStats.computeIfAbsent(workerId, k -> new WorkerStats())
+                    .consume(numRunningTablets, numRunningTabletRows);
+
+            return true;
+        }
     }
 
     public static class LocalWorkerStatsTracker extends BaseWorkerStatsTracker {
@@ -140,6 +140,13 @@ public class WorkerAssignmentStatsMgr {
         @Override
         protected Map<Long, WorkerStats> getWorkerToStats() {
             return localWorkerToStats;
+        }
+
+        @Override
+        public boolean tryConsume(Long workerId, Long expectedNumRunningTablets, Long numRunningTablets,
+                                  Long numRunningTabletRows) {
+            consume(workerId, numRunningTablets, numRunningTabletRows);
+            return true;
         }
     }
 
