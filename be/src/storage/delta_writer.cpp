@@ -90,7 +90,9 @@ Status DeltaWriter::_init() {
     _tablet = tablet_mgr->get_tablet(_opt.tablet_id, false);
     if (_tablet == nullptr) {
         std::stringstream ss;
-        ss << "Fail to get tablet. tablet_id=" << _opt.tablet_id;
+        ss << "Fail to get tablet, perhaps this table is doing schema change, or it has already been deleted. Please "
+              "try again. tablet_id="
+           << _opt.tablet_id;
         LOG(WARNING) << ss.str();
         Status st = Status::InternalError(ss.str());
         _set_state(kUninitialized, st);
