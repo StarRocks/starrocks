@@ -878,6 +878,7 @@ struct TRange {
     2: optional TBasePartitionDesc base_desc
     3: optional binary start_key
     4: optional binary end_key
+    5: optional bool is_temp
 }
 
 struct TRangePartitionDesc {
@@ -903,6 +904,7 @@ struct TPartitionMeta {
     7: optional i64 visible_time
     8: optional i64 next_version
     9: optional i64 next_version_hash // Deprecated
+    10: optional bool is_temp
 }
 
 struct THashDistributionInfo {
@@ -938,6 +940,10 @@ struct TTableMeta {
     15: optional list<TIndexInfo> index_infos
     16: optional string colocate_group
     17: optional list<string> bloomfilter_columns
+<<<<<<< HEAD
+=======
+    18: optional string table_type
+>>>>>>> cea43eca79 ([Enhancement] External olap table support temp partition (#28389))
 }
 
 struct TGetTableMetaResponse {

@@ -51,6 +51,11 @@ public enum PartitionType {
             case UNPARTITIONED:
                 return TPartitionType.UNPARTITIONED;
             case RANGE:
+<<<<<<< HEAD
+=======
+            case EXPR_RANGE:
+            case EXPR_RANGE_V2:
+>>>>>>> cea43eca79 ([Enhancement] External olap table support temp partition (#28389))
                 return TPartitionType.RANGE_PARTITIONED;
             default:
                 return TPartitionType.UNPARTITIONED;
