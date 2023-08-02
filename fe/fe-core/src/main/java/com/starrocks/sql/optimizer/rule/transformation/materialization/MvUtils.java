@@ -863,7 +863,7 @@ public class MvUtils {
         } else {
             Map<String, Range<PartitionKey>> partitionMap;
             try {
-                partitionMap = PartitionUtil.getPartitionRange(table, partitionColumn);
+                partitionMap = PartitionUtil.getPartitionKeyRange(table, partitionColumn);
             } catch (UserException e) {
                 LOG.warn("Materialized view Optimizer compute partition range failed.", e);
                 return Lists.newArrayList();

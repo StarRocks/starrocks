@@ -78,8 +78,8 @@ public class SyncPartitionUtils {
 
     private static final String DEFAULT_PREFIX = "p";
 
-    public static PartitionDiff calcSyncSamePartition(Map<String, Range<PartitionKey>> baseRangeMap,
-                                                      Map<String, Range<PartitionKey>> mvRangeMap) {
+    public static PartitionDiff getRangePartitionDiffOfSlotRef(Map<String, Range<PartitionKey>> baseRangeMap,
+                                                                    Map<String, Range<PartitionKey>> mvRangeMap) {
         // This synchronization method has a one-to-one correspondence
         // between the base table and the partition of the mv.
         Map<String, Range<PartitionKey>> adds = diffRange(baseRangeMap, mvRangeMap);
@@ -97,11 +97,11 @@ public class SyncPartitionUtils {
         return deletes != null && !deletes.isEmpty();
     }
 
-    public static PartitionDiff calcSyncRollupPartition(Map<String, Range<PartitionKey>> baseRangeMap,
+    public static PartitionDiff getRangePartitionDiffOfExpr(Map<String, Range<PartitionKey>> baseRangeMap,
                                                         Map<String, Range<PartitionKey>> mvRangeMap,
                                                         String granularity, PrimitiveType partitionType) {
         Map<String, Range<PartitionKey>> rollupRange = mappingRangeList(baseRangeMap, granularity, partitionType);
-        Map<String, Set<String>> partitionRefMap = generatePartitionRefMap(rollupRange, baseRangeMap);
+        Map<String, Set<String>> partitionRefMap = getIntersectedPartitions(rollupRange, baseRangeMap);
         Map<String, Range<PartitionKey>> adds = diffRange(rollupRange, mvRangeMap);
         Map<String, Range<PartitionKey>> deletes = diffRange(mvRangeMap, rollupRange);
         PartitionDiff diff = new PartitionDiff(adds, deletes);
@@ -173,8 +173,8 @@ public class SyncPartitionUtils {
         return new PartitionMapping(truncLowerDateTime, truncUpperDateTime);
     }
 
-    public static Map<String, Set<String>> generatePartitionRefMap(Map<String, Range<PartitionKey>> srcRangeMap,
-                                                                   Map<String, Range<PartitionKey>> dstRangeMap) {
+    public static Map<String, Set<String>> getIntersectedPartitions(Map<String, Range<PartitionKey>> srcRangeMap,
+                                                                    Map<String, Range<PartitionKey>> dstRangeMap) {
         Map<String, Set<String>> result = Maps.newHashMap();
         for (Map.Entry<String, Range<PartitionKey>> srcEntry : srcRangeMap.entrySet()) {
             Iterator<Map.Entry<String, Range<PartitionKey>>> dstIter = dstRangeMap.entrySet().iterator();
@@ -437,7 +437,7 @@ public class SyncPartitionUtils {
             if (mvTableVersionMap != null && mvPartitionRange != null && baseTable instanceof OlapTable) {
                 // use range derive connect base partition
                 Map<String, Range<PartitionKey>> basePartitionMap = ((OlapTable) baseTable).getRangePartitionMap();
-                Map<String, Set<String>> mvToBaseMapping = generatePartitionRefMap(
+                Map<String, Set<String>> mvToBaseMapping = getIntersectedPartitions(
                         Collections.singletonMap(mvPartitionName, mvPartitionRange), basePartitionMap);
                 mvToBaseMapping.values().forEach(parts -> parts.forEach(mvTableVersionMap::remove));
             }
