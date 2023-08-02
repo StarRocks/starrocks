@@ -213,7 +213,9 @@ public class AnalyzerUtils {
         }
         if (fn != null) {
             if (!Config.enable_udf) {
-                throw new StarRocksPlannerException("CBO Optimizer don't support UDF function: " + fnName,
+                throw new StarRocksPlannerException(
+                        "UDF is not enabled in FE, please configure enable_udf=true in fe/conf/fe.conf or " +
+                                "execute the command `admin set frontend config (\"enable_udf\" = \"true\");`",
                         ErrorType.USER_ERROR);
             }
         }
