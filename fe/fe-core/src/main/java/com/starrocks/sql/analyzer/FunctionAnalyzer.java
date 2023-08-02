@@ -374,5 +374,15 @@ public class FunctionAnalyzer {
                 throw new SemanticException(fnName.getFunction() + " should run in new_planner_agg_stage = 1.");
             }
         }
+
+        if (fnName.getFunction().equals(FunctionSet.COVAR_POP) || fnName.getFunction().equals(FunctionSet.COVAR_SAMP) ||
+                fnName.getFunction().equals(FunctionSet.CORR)) {
+            if (functionCallExpr.getChildren().size() != 2) {
+                throw new SemanticException(fnName + " function should have two args", functionCallExpr);
+            }
+            if (functionCallExpr.getChild(0).isConstant() || functionCallExpr.getChild(1).isConstant()) {
+                throw new SemanticException(fnName + " function 's args must be column");
+            }
+        }
     }
 }
