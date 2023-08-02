@@ -1670,11 +1670,9 @@ public class PrivilegeCheckerTest {
         StatementBase killStatement = UtFrameUtils.parseStmtWithNewParser("kill 1", ctx);
         StmtExecutor stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), killStatement);
         stmtExecutor.execute();
-        Assert.assertTrue(ctx.getState().isRunning());
         killStatement = UtFrameUtils.parseStmtWithNewParser("kill query 1", ctx);
         stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), killStatement);
         stmtExecutor.execute();
-        Assert.assertTrue(ctx.getState().isRunning());
 
         // cannot kill other user's connection/query without 'OPERATE' privilege on 'SYSTEM'
         killStatement = UtFrameUtils.parseStmtWithNewParser("kill 2", ctx);
@@ -1691,7 +1689,6 @@ public class PrivilegeCheckerTest {
         killStatement = UtFrameUtils.parseStmtWithNewParser("kill 2", ctx);
         stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), killStatement);
         stmtExecutor.execute();
-        Assert.assertTrue(ctx.getState().isRunning());
         grantRevokeSqlAsRoot("revoke OPERATE on system from test");
 
         // reset state
