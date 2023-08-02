@@ -98,14 +98,14 @@ public class SyncPartitionUtilsTest {
         dstRangeMap.put("p202011_202012", createRange("2020-11-01", "2020-12-01"));
         dstRangeMap.put("p202012_202101", createRange("2020-12-01", "2021-01-01"));
 
-        Map<String, Set<String>> partitionRefMap = SyncPartitionUtils.generatePartitionRefMap(srcRangeMap, dstRangeMap);
+        Map<String, Set<String>> partitionRefMap = SyncPartitionUtils.getIntersectedPartitions(srcRangeMap, dstRangeMap);
 
         Assert.assertTrue(partitionRefMap.get("p20201015_20201115").contains("p202010_202011"));
         Assert.assertTrue(partitionRefMap.get("p20201015_20201115").contains("p202011_202012"));
         Assert.assertTrue(partitionRefMap.get("p20201115_20201215").contains("p202011_202012"));
         Assert.assertTrue(partitionRefMap.get("p20201115_20201215").contains("p202012_202101"));
 
-        partitionRefMap = SyncPartitionUtils.generatePartitionRefMap(dstRangeMap, srcRangeMap);
+        partitionRefMap = SyncPartitionUtils.getIntersectedPartitions(dstRangeMap, srcRangeMap);
 
         Assert.assertTrue(partitionRefMap.get("p202010_202011").contains("p20201015_20201115"));
         Assert.assertTrue(partitionRefMap.get("p202011_202012").contains("p20201015_20201115"));
@@ -119,10 +119,10 @@ public class SyncPartitionUtilsTest {
         dstRangeMap = Maps.newHashMap();
         dstRangeMap.put("p202011_202012", createRange("2020-11-01", "2020-12-01"));
 
-        partitionRefMap = SyncPartitionUtils.generatePartitionRefMap(srcRangeMap, dstRangeMap);
+        partitionRefMap = SyncPartitionUtils.getIntersectedPartitions(srcRangeMap, dstRangeMap);
         Assert.assertEquals(0, partitionRefMap.get("p20201015").size());
 
-        partitionRefMap = SyncPartitionUtils.generatePartitionRefMap(dstRangeMap, srcRangeMap);
+        partitionRefMap = SyncPartitionUtils.getIntersectedPartitions(dstRangeMap, srcRangeMap);
         Assert.assertEquals(0, partitionRefMap.get("p202011_202012").size());
 
     }
@@ -139,7 +139,7 @@ public class SyncPartitionUtilsTest {
         dstRangeMap.put("p202011_202012", createRange("2020-11-01", "2020-12-01"));
         dstRangeMap.put("p202012_202101", createRange("2020-12-01", "2021-01-01"));
 
-        Map<String, Set<String>> partitionRefMap = SyncPartitionUtils.generatePartitionRefMap(srcRangeMap, dstRangeMap);
+        Map<String, Set<String>> partitionRefMap = SyncPartitionUtils.getIntersectedPartitions(srcRangeMap, dstRangeMap);
 
         Assert.assertEquals(1, partitionRefMap.get("p202010_202011").size());
         Assert.assertEquals(1, partitionRefMap.get("p202011_202012").size());
@@ -214,7 +214,11 @@ public class SyncPartitionUtilsTest {
         Map<String, Range<PartitionKey>> mvRange = Maps.newHashMap();
         mvRange.put("p202001", createRange("2020-01-01", "2020-02-01"));
 
+<<<<<<< HEAD
         PartitionDiff diff = SyncPartitionUtils.calcSyncSamePartition(baseRange, mvRange);
+=======
+        RangePartitionDiff diff = SyncPartitionUtils.getRangePartitionDiffOfSlotRef(baseRange, mvRange);
+>>>>>>> 2d8dec769f ([BugFix] Materialized view should update all its refreshed base table partitions after refresh (#28093))
 
         Map<String, Range<PartitionKey>> adds = diff.getAdds();
         Assert.assertEquals(3, adds.size());
@@ -249,7 +253,11 @@ public class SyncPartitionUtilsTest {
         mvRange.put("p20200102", createRange("2020-01-02", "2020-01-03"));
         mvRange.put("p20200103", createRange("2020-01-03", "2020-01-04"));
 
+<<<<<<< HEAD
         diff = SyncPartitionUtils.calcSyncSamePartition(baseRange, mvRange);
+=======
+        diff = SyncPartitionUtils.getRangePartitionDiffOfSlotRef(baseRange, mvRange);
+>>>>>>> 2d8dec769f ([BugFix] Materialized view should update all its refreshed base table partitions after refresh (#28093))
 
         adds = diff.getAdds();
         deletes = diff.getDeletes();
@@ -437,7 +445,11 @@ public class SyncPartitionUtilsTest {
         baseRange.put("p2", createRange("2020-05-04", "2020-11-12"));
 
         Map<String, Range<PartitionKey>> mvRange = Maps.newHashMap();
+<<<<<<< HEAD
         PartitionDiff diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange,
+=======
+        RangePartitionDiff diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
+>>>>>>> 2d8dec769f ([BugFix] Materialized view should update all its refreshed base table partitions after refresh (#28093))
                 "month", PrimitiveType.DATETIME);
         Map<String, Range<PartitionKey>> adds = diff.getAdds();
         Map<String, Range<PartitionKey>> deletes = diff.getDeletes();
@@ -463,7 +475,7 @@ public class SyncPartitionUtilsTest {
 
         mvRange = Maps.newHashMap();
         mvRange.put("p20200101_20200102", createRange("2020-01-01", "2020-01-02"));
-        diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange,
+        diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
                 "day", PrimitiveType.DATETIME);
         adds = diff.getAdds();
         deletes = diff.getDeletes();
@@ -483,7 +495,11 @@ public class SyncPartitionUtilsTest {
         baseRange.put("p2", createRange("2020-10-12", "2020-11-12"));
 
         Map<String, Range<PartitionKey>> mvRange = Maps.newHashMap();
+<<<<<<< HEAD
         PartitionDiff diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange,
+=======
+        RangePartitionDiff diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
+>>>>>>> 2d8dec769f ([BugFix] Materialized view should update all its refreshed base table partitions after refresh (#28093))
                 granularity, PrimitiveType.DATETIME);
 
         Map<String, Range<PartitionKey>> adds = diff.getAdds();
@@ -510,7 +526,7 @@ public class SyncPartitionUtilsTest {
         mvRange = Maps.newHashMap();
         mvRange.put("p202001_202002", createRange("2020-01-01", "2020-02-01"));
 
-        diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange,
+        diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
                 granularity, PrimitiveType.DATETIME);
         adds = diff.getAdds();
         deletes = diff.getDeletes();
@@ -530,7 +546,7 @@ public class SyncPartitionUtilsTest {
         baseRange.put("p20200503", createRange("2020-05-03", "2020-06-05"));
         mvRange = Maps.newHashMap();
         mvRange.put("p202005_202006", createRange("2020-05-01", "2020-06-01"));
-        diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange,
+        diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
                 "month", PrimitiveType.DATETIME);
         adds = diff.getAdds();
         deletes = diff.getDeletes();
@@ -550,7 +566,7 @@ public class SyncPartitionUtilsTest {
         baseRange.put("p20200503", createRange("2020-05-03", "2020-06-05"));
         mvRange = Maps.newHashMap();
         mvRange.put("p202005_202006", createRange("2020-05-01", "2020-06-01"));
-        diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange,
+        diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
                 "month", PrimitiveType.DATETIME);
         adds = diff.getAdds();
         deletes = diff.getDeletes();
