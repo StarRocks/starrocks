@@ -114,6 +114,7 @@ Status HashJoiner::prepare_builder(RuntimeState* state, RuntimeProfile* runtime_
     return Status::OK();
 }
 
+// it is ok that prepare_builder is done whether before this or not
 Status HashJoiner::prepare_prober(RuntimeState* state, RuntimeProfile* runtime_profile) {
     if (_runtime_state == nullptr) {
         _runtime_state = state;
@@ -122,6 +123,15 @@ Status HashJoiner::prepare_prober(RuntimeState* state, RuntimeProfile* runtime_p
     runtime_profile->add_info_string("DistributionMode", to_string(_hash_join_node.distribution_mode));
     runtime_profile->add_info_string("JoinType", to_string(_join_type));
     _probe_metrics->prepare(runtime_profile);
+
+    auto& hash_table = _hash_join_builder->hash_table();
+    hash_table.set_probe_profile(probe_metrics().search_ht_timer, probe_metrics().output_probe_column_timer,
+                                 probe_metrics().output_tuple_column_timer, probe_metrics().output_build_column_timer);
+
+    _hash_table_param.search_ht_timer = probe_metrics().search_ht_timer;
+    _hash_table_param.output_build_column_timer = probe_metrics().output_build_column_timer;
+    _hash_table_param.output_probe_column_timer = probe_metrics().output_probe_column_timer;
+    _hash_table_param.output_tuple_column_timer = probe_metrics().output_tuple_column_timer;
 
     return Status::OK();
 }
@@ -134,10 +144,6 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param) {
     param->row_desc = &_row_descriptor;
     param->build_row_desc = &_build_row_descriptor;
     param->probe_row_desc = &_probe_row_descriptor;
-    param->search_ht_timer = probe_metrics().search_ht_timer;
-    param->output_build_column_timer = probe_metrics().output_build_column_timer;
-    param->output_probe_column_timer = probe_metrics().output_probe_column_timer;
-    param->output_tuple_column_timer = probe_metrics().output_tuple_column_timer;
     param->output_slots = _output_slots;
     std::set<SlotId> predicate_slots;
     for (ExprContext* expr_context : _conjunct_ctxs) {
@@ -313,7 +319,7 @@ void HashJoiner::reference_hash_table(HashJoiner* src_join_builder) {
     _hash_table_param = src_join_builder->hash_table_param();
     hash_table = src_join_builder->_hash_join_builder->hash_table().clone_readable_table();
     hash_table.set_probe_profile(probe_metrics().search_ht_timer, probe_metrics().output_probe_column_timer,
-                                 probe_metrics().output_tuple_column_timer);
+                                 probe_metrics().output_tuple_column_timer, probe_metrics().output_build_column_timer);
 
     // _hash_table_build_rows is root truth, it used to by _short_circuit_break().
     _hash_table_build_rows = src_join_builder->_hash_table_build_rows;

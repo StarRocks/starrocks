@@ -436,7 +436,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const Col
             }
         }
         {
-            SCOPED_TIMER(_table_items->output_build_column_timer);
+            SCOPED_TIMER(_probe_state->output_build_column_timer);
             _build_output(chunk);
         }
         {
@@ -457,7 +457,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const Col
         }
         {
             // output default values for build-columns as placeholder.
-            SCOPED_TIMER(_table_items->output_build_column_timer);
+            SCOPED_TIMER(_probe_state->output_build_column_timer);
             if (!_table_items->with_other_conjunct) {
                 _build_default_output(chunk, _probe_state->count);
             } else {
@@ -476,7 +476,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const Col
             _probe_output(probe_chunk, chunk);
         }
         {
-            SCOPED_TIMER(_table_items->output_build_column_timer);
+            SCOPED_TIMER(_probe_state->output_build_column_timer);
             _build_output(chunk);
         }
         {
