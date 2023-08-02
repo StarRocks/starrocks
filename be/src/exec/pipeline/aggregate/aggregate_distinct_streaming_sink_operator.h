@@ -21,6 +21,7 @@
 #include "exec/pipeline/operator.h"
 
 namespace starrocks::pipeline {
+// TODO: think about refactor
 class AggregateDistinctStreamingSinkOperator : public Operator {
 public:
     AggregateDistinctStreamingSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
@@ -34,7 +35,8 @@ public:
 
     bool has_output() const override { return false; }
     bool need_input() const override {
-        return !is_finished() && _aggregator->chunk_buffer_size() < Aggregator::MAX_CHUNK_BUFFER_SIZE;
+        return !is_finished() && !_aggregator->is_streaming_all_states() &&
+               _aggregator->chunk_buffer_size() < Aggregator::MAX_CHUNK_BUFFER_SIZE;
     }
     bool is_finished() const override { return _is_finished || _aggregator->is_finished(); }
     Status set_finishing(RuntimeState* state) override;
@@ -59,6 +61,9 @@ private:
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::AUTO
     Status _push_chunk_by_auto(const ChunkPtr& chunk, const size_t chunk_size);
 
+    // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::LIMITED
+    Status _push_chunk_by_limited_memory(const ChunkPtr& chunk, const size_t chunk_size);
+
     // It is used to perform aggregation algorithms shared by
     // AggregateDistinctStreamingSourceOperator. It is
     // - prepared at SinkOperator::prepare(),
@@ -67,6 +72,7 @@ private:
     AggregatorPtr _aggregator = nullptr;
     // Whether prev operator has no output
     bool _is_finished = false;
+    LimitedMemAggState _limited_mem_state;
 };
 
 class AggregateDistinctStreamingSinkOperatorFactory final : public OperatorFactory {

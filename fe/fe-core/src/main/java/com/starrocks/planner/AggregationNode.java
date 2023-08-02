@@ -74,6 +74,7 @@ import java.util.stream.IntStream;
 
 import static com.starrocks.qe.SessionVariableConstants.FORCE_PREAGGREGATION;
 import static com.starrocks.qe.SessionVariableConstants.FORCE_STREAMING;
+import static com.starrocks.qe.SessionVariableConstants.LIMITED;
 
 public class AggregationNode extends PlanNode {
     private final AggregateInfo aggInfo;
@@ -249,6 +250,8 @@ public class AggregationNode extends PlanNode {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.FORCE_STREAMING);
         } else if (streamingPreaggregationMode.equalsIgnoreCase(FORCE_PREAGGREGATION)) {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.FORCE_PREAGGREGATION);
+        } else if (streamingPreaggregationMode.equalsIgnoreCase(LIMITED)) {
+            msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.LIMITED_MEM);
         } else {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.AUTO);
         }
