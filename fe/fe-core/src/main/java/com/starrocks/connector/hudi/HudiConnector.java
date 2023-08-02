@@ -33,7 +33,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.connector.InfoSchemaWrappedConnectorMetadata.wrapInfoSchema;
+import static com.starrocks.connector.CatalogConnectorMetadata.wrapInfoSchema;
 
 public class HudiConnector implements Connector {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";

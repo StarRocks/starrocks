@@ -36,7 +36,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Map;
 import java.util.Properties;
 
-import static com.starrocks.connector.InfoSchemaWrappedConnectorMetadata.wrapInfoSchema;
+import static com.starrocks.connector.CatalogConnectorMetadata.wrapInfoSchema;
 
 public class IcebergConnector implements Connector {
     private static final Logger LOG = LogManager.getLogger(IcebergConnector.class);

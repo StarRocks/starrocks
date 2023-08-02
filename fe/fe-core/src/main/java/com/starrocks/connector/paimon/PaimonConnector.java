@@ -31,7 +31,7 @@ import org.apache.paimon.options.Options;
 
 import java.util.Map;
 
-import static com.starrocks.connector.InfoSchemaWrappedConnectorMetadata.wrapInfoSchema;
+import static com.starrocks.connector.CatalogConnectorMetadata.wrapInfoSchema;
 import static org.apache.paimon.options.CatalogOptions.METASTORE;
 import static org.apache.paimon.options.CatalogOptions.URI;
 import static org.apache.paimon.options.CatalogOptions.WAREHOUSE;

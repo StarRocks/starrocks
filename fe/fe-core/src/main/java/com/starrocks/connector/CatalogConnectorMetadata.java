@@ -60,22 +60,22 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.starrocks.catalog.system.information.InfoSchemaDb.isInfoSchemaDb;
 import static java.util.Objects.requireNonNull;
 
-// InfoSchemaWrappedConnectorMetadata provides a uniform interface to provide normal tables and information schema tables.
+// CatalogConnectorMetadata provides a uniform interface to provide normal tables and information schema tables.
 // Most of its method implementations delegate to the wrapped metadata.
 // Only used for connector metadata of external catalog.
-public class InfoSchemaWrappedConnectorMetadata implements ConnectorMetadata {
+public class CatalogConnectorMetadata implements ConnectorMetadata {
     private final ConnectorMetadata metadata;
     private final InfoSchemaDb infoSchemaDb;
 
-    public static InfoSchemaWrappedConnectorMetadata wrapInfoSchema(ConnectorMetadata metadata, InfoSchemaDb infoSchemaDb) {
-        return new InfoSchemaWrappedConnectorMetadata(metadata, infoSchemaDb);
+    public static CatalogConnectorMetadata wrapInfoSchema(ConnectorMetadata metadata, InfoSchemaDb infoSchemaDb) {
+        return new CatalogConnectorMetadata(metadata, infoSchemaDb);
     }
 
-    public InfoSchemaWrappedConnectorMetadata(ConnectorMetadata metadata, InfoSchemaDb infoSchemaDb) {
+    public CatalogConnectorMetadata(ConnectorMetadata metadata, InfoSchemaDb infoSchemaDb) {
         requireNonNull(metadata, "metadata is null");
         requireNonNull(infoSchemaDb, "infoSchemaDb is null");
-        checkArgument(!(metadata instanceof InfoSchemaWrappedConnectorMetadata),
-                "wrapped metadata is InfoSchemaWrappedConnectorMetadata");
+        checkArgument(!(metadata instanceof CatalogConnectorMetadata),
+                "wrapped metadata is CatalogConnectorMetadata");
         this.metadata = metadata;
         this.infoSchemaDb = infoSchemaDb;
     }

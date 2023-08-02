@@ -32,7 +32,7 @@ import java.net.URLConnection;
 import java.security.MessageDigest;
 import java.util.Map;
 
-import static com.starrocks.connector.InfoSchemaWrappedConnectorMetadata.wrapInfoSchema;
+import static com.starrocks.connector.CatalogConnectorMetadata.wrapInfoSchema;
 
 public class JDBCConnector implements Connector {
 

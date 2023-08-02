@@ -19,7 +19,7 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.connector.InfoSchemaWrappedConnectorMetadata;
+import com.starrocks.connector.CatalogConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -99,7 +99,7 @@ public class PaimonConnectorTest {
         };
 
         ConnectorMetadata metadata = connector.getMetadata();
-        Assert.assertTrue(metadata instanceof InfoSchemaWrappedConnectorMetadata);
+        Assert.assertTrue(metadata instanceof CatalogConnectorMetadata);
         com.starrocks.catalog.Table table = metadata.getTable("db1", "tbl1");
         PaimonTable paimonTable = (PaimonTable) table;
         Assert.assertEquals("db1", paimonTable.getDbName());
