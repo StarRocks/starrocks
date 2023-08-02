@@ -261,6 +261,14 @@ public:
 
     void get_basic_info(TabletBasicInfo& info);
 
+<<<<<<< HEAD
+=======
+    // verify all rowsets of current(max) version in this tablet
+    [[nodiscard]] Status verify();
+
+    void update_max_continuous_version() { _timestamped_version_tracker.update_max_continuous_version(); }
+
+>>>>>>> bbedba49f0 ([BugFix] Recalculate max_continuous_version after schema change finished (#28473))
 protected:
     void on_shutdown() override;
 
