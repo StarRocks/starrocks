@@ -3528,8 +3528,7 @@ public class Coordinator {
                         minBackendId = location.getBackend_id();
                     }
                 }
-                workerStatsTracker.consume(minBackendId, 1L,
-                        scanRangeLocations.getScan_range().getInternal_scan_range().getRow_count());
+                workerStatsTracker.consume(minBackendId, 1L);
 
                 Reference<Long> backendIdRef = new Reference<Long>();
                 TNetworkAddress execHostPort = SimpleScheduler.getHost(minLocation.backend_id,
@@ -3639,17 +3638,11 @@ public class Coordinator {
                 //fill scanRangeParamsList
                 List<TScanRangeLocations> locations = scanNode.bucketSeq2locations.get(bucketSeq);
                 long numTablets = locations.size();
-                long numTabletRows = 0;
-                for (TScanRangeLocations location : locations) {
-                    numTabletRows += location.getScan_range().getInternal_scan_range().getRow_count();
-                }
-
                 if (!bucketSeqToAddress.containsKey(bucketSeq)) {
-                    getExecHostPortForFragmentIDAndBucketSeq(locations.get(0), fragmentId, bucketSeq, idToBackend, numTablets,
-                            numTabletRows);
+                    getExecHostPortForFragmentIDAndBucketSeq(locations.get(0), fragmentId, bucketSeq, idToBackend, numTablets);
                 } else {
                     Long workerId = bucketSeqToWorkerId.get(bucketSeq);
-                    workerStatsTracker.consume(workerId, numTablets, numTabletRows);
+                    workerStatsTracker.consume(workerId, numTablets);
                 }
 
                 for (TScanRangeLocations location : locations) {
@@ -3706,9 +3699,7 @@ public class Coordinator {
         private void getExecHostPortForFragmentIDAndBucketSeq(TScanRangeLocations seqLocation,
                                                               PlanFragmentId fragmentId, Integer bucketSeq,
                                                               ImmutableMap<Long, Backend> idToBackend,
-                                                              long deltaNumTablets,
-                                                              long deltaNumTabletRows)
-                throws Exception {
+                                                              long deltaNumTablets) throws Exception {
             final int maxRetryTimes =
                     connectContext == null ? 6 : connectContext.getSessionVariable().getScheduleAtomicAssignmentRetryTimes();
             long minBackendId = Long.MAX_VALUE;
@@ -3724,11 +3715,11 @@ public class Coordinator {
                 }
 
                 if (retryTimes < maxRetryTimes) {
-                    if (workerStatsTracker.tryConsume(minBackendId, minNumTablets, deltaNumTablets, deltaNumTabletRows)) {
+                    if (workerStatsTracker.tryConsume(minBackendId, minNumTablets, deltaNumTablets)) {
                         break;
                     }
                 } else {
-                    workerStatsTracker.consume(minBackendId, deltaNumTablets, deltaNumTabletRows);
+                    workerStatsTracker.consume(minBackendId, deltaNumTablets);
                     break;
                 }
             }

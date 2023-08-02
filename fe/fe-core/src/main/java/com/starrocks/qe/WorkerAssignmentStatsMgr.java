@@ -42,11 +42,9 @@ public class WorkerAssignmentStatsMgr {
 
         Long getNumTotalTablets(Long workerId);
 
-        Long getNumRunningTabletRows(Long workerId);
+        boolean tryConsume(Long workerId, Long expectedNumRunningTablets, Long numRunningTablets);
 
-        boolean tryConsume(Long workerId, Long expectedNumRunningTablets, Long numRunningTablets, Long numRunningTabletRows);
-
-        void consume(Long workerId, Long numRunningTablets, Long numRunningTabletRows);
+        void consume(Long workerId, Long numRunningTablets);
 
         void release();
     }
@@ -80,27 +78,18 @@ public class WorkerAssignmentStatsMgr {
         }
 
         @Override
-        public Long getNumRunningTabletRows(Long workerId) {
-            WorkerStats stats = getWorkerToStats().get(workerId);
-            if (stats == null) {
-                return 0L;
-            }
-            return stats.numRunningTabletRows.get();
-        }
-
-        @Override
-        public void consume(Long workerId, Long numRunningTablets, Long numRunningTabletRows) {
+        public void consume(Long workerId, Long numRunningTablets) {
             localWorkerToStats.computeIfAbsent(workerId, k -> new WorkerStats())
-                    .consume(numRunningTablets, numRunningTabletRows);
+                    .consume(numRunningTablets);
 
             globalWorkerToStats.computeIfAbsent(workerId, k -> new WorkerStats())
-                    .consume(numRunningTablets, numRunningTabletRows);
+                    .consume(numRunningTablets);
         }
 
         @Override
         public void release() {
             localWorkerToStats.forEach((workerId, stats) ->
-                    globalWorkerToStats.get(workerId).consume(-stats.numRunningTablets.get(), -stats.numRunningTabletRows.get()));
+                    globalWorkerToStats.get(workerId).consume(-stats.numRunningTablets.get()));
         }
 
         @Override
@@ -123,16 +112,15 @@ public class WorkerAssignmentStatsMgr {
         }
 
         @Override
-        public boolean tryConsume(Long workerId, Long expectedNumRunningTablets, Long numRunningTablets,
-                                  Long numRunningTabletRows) {
+        public boolean tryConsume(Long workerId, Long expectedNumRunningTablets, Long numRunningTablets) {
             WorkerStats stats = globalWorkerToStats.computeIfAbsent(workerId, k -> new WorkerStats());
-            boolean ok = stats.tryConsume(expectedNumRunningTablets, numRunningTablets, numRunningTabletRows);
+            boolean ok = stats.tryConsume(expectedNumRunningTablets, numRunningTablets);
             if (!ok) {
                 return false;
             }
 
             localWorkerToStats.computeIfAbsent(workerId, k -> new WorkerStats())
-                    .consume(numRunningTablets, numRunningTabletRows);
+                    .consume(numRunningTablets);
 
             return true;
         }
@@ -149,9 +137,8 @@ public class WorkerAssignmentStatsMgr {
         }
 
         @Override
-        public boolean tryConsume(Long workerId, Long expectedNumRunningTablets, Long numRunningTablets,
-                                  Long numRunningTabletRows) {
-            consume(workerId, numRunningTablets, numRunningTabletRows);
+        public boolean tryConsume(Long workerId, Long expectedNumRunningTablets, Long numRunningTablets) {
+            consume(workerId, numRunningTablets);
             return true;
         }
     }
@@ -159,12 +146,10 @@ public class WorkerAssignmentStatsMgr {
     public static class WorkerStatsInfo {
         private final long numRunningTablets;
         private final long numTotalTablets;
-        private final long numRunningTabletRows;
 
-        public WorkerStatsInfo(long numRunningTablets, long numTotalTablets, long numRunningTabletRows) {
+        public WorkerStatsInfo(long numRunningTablets, long numTotalTablets) {
             this.numRunningTablets = numRunningTablets;
             this.numTotalTablets = numTotalTablets;
-            this.numRunningTabletRows = numRunningTabletRows;
         }
 
         public long getNumRunningTablets() {
@@ -174,32 +159,26 @@ public class WorkerAssignmentStatsMgr {
         public long getNumTotalTablets() {
             return numTotalTablets;
         }
-
-        public long getNumRunningTabletRows() {
-            return numRunningTabletRows;
-        }
     }
 
     private static class WorkerStats {
         private final AtomicLong numRunningTablets = new AtomicLong();
         private final AtomicLong numTotalTablets = new AtomicLong();
-        private final AtomicLong numRunningTabletRows = new AtomicLong();
 
         private WorkerStatsInfo toInfo() {
-            return new WorkerStatsInfo(numRunningTablets.get(), numTotalTablets.get(), numRunningTabletRows.get());
+            return new WorkerStatsInfo(numRunningTablets.get(), numTotalTablets.get());
         }
 
-        private void consume(Long numRunningTablets, Long numRunningTabletRows) {
+        private void consume(Long numRunningTablets) {
             if (numRunningTablets > 0) {
                 this.numTotalTablets.addAndGet(numRunningTablets);
             }
             this.numRunningTablets.addAndGet(numRunningTablets);
-            this.numRunningTabletRows.addAndGet(numRunningTabletRows);
         }
 
-        private boolean tryConsume(Long expectedNumRunningTablets, Long numRunningTablets, Long numRunningTabletRows) {
+        private boolean tryConsume(Long expectedNumRunningTablets, Long numRunningTablets) {
             if (numRunningTablets <= 0) {
-                consume(numRunningTablets, numRunningTabletRows);
+                consume(numRunningTablets);
                 return true;
             }
 
@@ -210,7 +189,6 @@ public class WorkerAssignmentStatsMgr {
             }
 
             this.numTotalTablets.addAndGet(numRunningTablets);
-            this.numRunningTabletRows.addAndGet(numRunningTabletRows);
 
             return true;
         }
@@ -220,7 +198,6 @@ public class WorkerAssignmentStatsMgr {
             return "WorkerStats{" +
                     "numRunningTablets=" + numRunningTablets +
                     ", numTotalTablets=" + numTotalTablets +
-                    ", numRunningTabletRows=" + numRunningTabletRows +
                     '}';
         }
     }

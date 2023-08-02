@@ -48,6 +48,7 @@ import com.starrocks.monitor.jvm.JvmService;
 import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.proto.PKafkaOffsetProxyRequest;
 import com.starrocks.proto.PKafkaOffsetProxyResult;
+import com.starrocks.qe.WorkerAssignmentStatsMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.system.Backend;
@@ -580,6 +581,24 @@ public final class MetricRepo {
         GAUGE_ROUTINE_LOAD_LAGS = routineLoadLags;
     }
 
+    public static void collectWorkerStatsMetric(MetricVisitor visitor) {
+        Map<Long, WorkerAssignmentStatsMgr.WorkerStatsInfo> workerStatsInfoMap =
+                GlobalStateMgr.getCurrentState().getWorkerAssignmentStatsMgr().getWorkerToStats();
+        workerStatsInfoMap.forEach((workerId, info) -> {
+            GaugeMetricImpl<Long> numRunningTablets = new GaugeMetricImpl<>("num_running_tablets", MetricUnit.OPERATIONS,
+                    "the number of the running tablets in a backend");
+            numRunningTablets.addLabel(new MetricLabel("backend", workerId.toString()));
+            numRunningTablets.setValue(info.getNumRunningTablets());
+            visitor.visit(numRunningTablets);
+
+            GaugeMetricImpl<Long> numTotalTablets = new GaugeMetricImpl<>("num_total_tablets", MetricUnit.OPERATIONS,
+                    "the number of the total historical tablets executed in a backend");
+            numTotalTablets.addLabel(new MetricLabel("backend", workerId.toString()));
+            numTotalTablets.setValue(info.getNumTotalTablets());
+            visitor.visit(numTotalTablets);
+        });
+    }
+
     public static synchronized String getMetric(MetricVisitor visitor, boolean collectTableMetrics,
                                                 boolean minifyTableMetrics) {
         if (!isInit) {
@@ -618,6 +637,8 @@ public final class MetricRepo {
         if (Config.enable_routine_load_lag_metrics) {
             collectRoutineLoadProcessMetrics(visitor);
         }
+
+        collectWorkerStatsMetric(visitor);
 
         // node info
         visitor.getNodeInfo();
