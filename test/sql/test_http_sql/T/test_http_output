@@ -70,8 +70,8 @@ shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '
 sync;
 
 -- support catalog/sql without database
---shell: curl -X POST '${url}/api/v2/default_catalog/sql' -u 'root:' -d '{"query": "select 1 from ${db[0]}.duplicate_table_with_null limit 1;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
---sync;
+shell: curl -X POST '${url}/api/v2/default_catalog/sql' -u 'root:' -d '{"query": "select * from ${db[0]}.duplicate_table_with_null order by k6 limit 1;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
+sync;
 
 -- support show
 shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "show create table duplicate_table_with_null;"}' --header "Content-Type: application/json"  
@@ -113,7 +113,6 @@ shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '
 
 -- query not support yet
 shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "set profile_timeout =60", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
-
 
 -- kill a random connection
 shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "kill 314159265432222;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
