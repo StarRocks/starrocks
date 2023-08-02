@@ -87,7 +87,11 @@ public final class QeProcessorImpl implements QeProcessor {
 
     @Override
     public void unregisterQuery(TUniqueId queryId) {
-        if (coordinatorMap.remove(queryId) != null) {
+        QueryInfo queryInfo = coordinatorMap.remove(queryId);
+        if (queryInfo != null) {
+            if (queryInfo.coord != null) {
+                queryInfo.coord.onFinished();
+            }
             LOG.info("deregister query id {}", DebugUtil.printId(queryId));
         }
     }

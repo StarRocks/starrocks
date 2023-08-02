@@ -150,6 +150,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PIPELINE = "enable_pipeline";
 
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
+    public static final String ENABLE_SCHEDULE_WITH_GLOBAL_ASSIGNMENT = "enable_schedule_with_global_assignment";
+    public static final String SCHEDULE_ATOMIC_ASSIGNMENT_RETRY_TIMES = "schedule_atomic_assignment_retry_times";
+
     public static final String ENABLE_PIPELINE_QUERY_STATISTIC = "enable_pipeline_query_statistic";
 
     public static final String ENABLE_MV_PLANNER = "enable_mv_planner";
@@ -304,7 +307,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_CONNECTOR_ADAPTIVE_IO_TASKS = "enable_connector_adaptive_io_tasks";
     public static final String CONNECTOR_IO_TASKS_SLOW_IO_LATENCY_MS = "connector_io_tasks_slow_io_latency_ms";
     public static final String SCAN_USE_QUERY_MEM_RATIO = "scan_use_query_mem_ratio";
-    public static final String CONNECTOR_SCAN_USE_QUERY_MEM_RATIO = "connector_scan_use_query_mem_ratio";    
+    public static final String CONNECTOR_SCAN_USE_QUERY_MEM_RATIO = "connector_scan_use_query_mem_ratio";
 
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
@@ -396,6 +399,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_SCHEDULE_WITH_GLOBAL_ASSIGNMENT)
+    private boolean enableScheduleWithGlobalAssignments = false;
+    @VariableMgr.VarAttr(name = SCHEDULE_ATOMIC_ASSIGNMENT_RETRY_TIMES)
+    private int scheduleAtomicAssignmentRetryTimes = 10;
 
     @VarAttr(name = ENABLE_MV_PLANNER)
     private boolean enableMVPlanner = false;
@@ -831,7 +839,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CONNECTOR_IO_TASKS_PER_SCAN_OPERATOR)
     private int connectorIoTasksPerScanOperator = 16;
-
 
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_ADAPTIVE_IO_TASKS)
     private boolean enableConnectorAdaptiveIoTasks = true;
@@ -1409,6 +1416,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnablePipelineEngine(boolean enablePipelineEngine) {
         this.enablePipelineEngine = enablePipelineEngine;
+    }
+
+    public boolean isEnableScheduleWithGlobalAssignments() {
+        return enableScheduleWithGlobalAssignments;
+    }
+
+    public int getScheduleAtomicAssignmentRetryTimes() {
+        return scheduleAtomicAssignmentRetryTimes;
     }
 
     public void setEnableLocalShuffleAgg(boolean enableLocalShuffleAgg) {

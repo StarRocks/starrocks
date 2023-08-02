@@ -197,6 +197,7 @@ import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.WorkerAssignmentStatsMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -464,6 +465,8 @@ public class GlobalStateMgr {
 
     private ConfigRefreshDaemon configRefreshDaemon;
 
+    private final WorkerAssignmentStatsMgr workerAssignmentStatsMgr = new WorkerAssignmentStatsMgr();
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
     }
@@ -526,6 +529,10 @@ public class GlobalStateMgr {
 
     public long getFeStartTime() {
         return feStartTime;
+    }
+
+    public WorkerAssignmentStatsMgr getWorkerAssignmentStatsMgr() {
+        return workerAssignmentStatsMgr;
     }
 
     public LocalMetastore getLocalMetastore() {

@@ -245,12 +245,11 @@ public class Coordinator {
     TWorkGroup resourceGroup = null;
 
     private final Map<PlanFragmentId, Map<Integer, TNetworkAddress>> fragmentIdToSeqToAddressMap = Maps.newHashMap();
+    private final Map<PlanFragmentId, Map<Integer, Long>> fragmentIdToSeqToWorkerIdMap = Maps.newHashMap();
     // fragment_id -> < bucket_seq -> < scannode_id -> scan_range_params >>
     private final Map<PlanFragmentId, BucketSeqToScanRange> fragmentIdBucketSeqToScanRangeMap = Maps.newHashMap();
     // fragment_id -> bucket_num
     private final Map<PlanFragmentId, Integer> fragmentIdToBucketNumMap = Maps.newHashMap();
-    // fragment_id -> < be_id -> bucket_count >
-    private final Map<PlanFragmentId, Map<Long, Integer>> fragmentIdToBackendIdBucketCountMap = Maps.newHashMap();
 
     private final Map<PlanFragmentId, List<Integer>> fragmentIdToSeqToInstanceMap = Maps.newHashMap();
 
@@ -427,6 +426,19 @@ public class Coordinator {
         nextInstanceId.setLo(queryId.lo + 1);
 
         this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
+    }
+
+    private WorkerAssignmentStatsMgr.WorkerStatsTracker createWorkerStatsTracker(ConnectContext context) {
+        boolean withGlobalAssignments = context != null && context.getSessionVariable().isEnableScheduleWithGlobalAssignments();
+        if (withGlobalAssignments) {
+            return GlobalStateMgr.getCurrentState().getWorkerAssignmentStatsMgr().createGlobalWorkerStatsTracker();
+        } else {
+            return GlobalStateMgr.getCurrentState().getWorkerAssignmentStatsMgr().createLocalWorkerStatsTracker();
+        }
+    }
+
+    public void onFinished() {
+        fragmentExecParamsMap.values().forEach(execFragment -> execFragment.workerStatsTracker.release());
     }
 
     public long getJobId() {
@@ -2423,10 +2435,12 @@ public class Coordinator {
                 continue;
             }
 
-            FragmentScanRangeAssignment assignment =
-                    fragmentExecParamsMap.get(scanNode.getFragmentId()).scanRangeAssignment;
+            FragmentExecParams execFragment = fragmentExecParamsMap.get(scanNode.getFragmentId());
+            FragmentScanRangeAssignment assignment = execFragment.scanRangeAssignment;
+            WorkerAssignmentStatsMgr.WorkerStatsTracker workerStatsTracker = execFragment.workerStatsTracker;
+
             if (scanNode instanceof SchemaScanNode) {
-                BackendSelector selector = new NormalBackendSelector(scanNode, locations, assignment);
+                BackendSelector selector = new NormalBackendSelector(scanNode, locations, assignment, workerStatsTracker);
                 selector.computeScanRangeAssignment();
             } else if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
                     scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode ||
@@ -2448,10 +2462,11 @@ public class Coordinator {
                     selector.computeScanRangeAssignment();
                     replicateScanIds.add(scanNode.getId().asInt());
                 } else if (hasColocate || hasBucket) {
-                    BackendSelector selector = new ColocatedBackendSelector((OlapScanNode) scanNode, assignment);
+                    BackendSelector selector =
+                            new ColocatedBackendSelector((OlapScanNode) scanNode, assignment, workerStatsTracker);
                     selector.computeScanRangeAssignment();
                 } else {
-                    BackendSelector selector = new NormalBackendSelector(scanNode, locations, assignment);
+                    BackendSelector selector = new NormalBackendSelector(scanNode, locations, assignment, workerStatsTracker);
                     selector.computeScanRangeAssignment();
                 }
             }
@@ -3139,8 +3154,11 @@ public class Coordinator {
         TRuntimeFilterParams runtimeFilterParams = new TRuntimeFilterParams();
         public boolean bucketSeqToInstanceForFilterIsSet = false;
 
+        private final WorkerAssignmentStatsMgr.WorkerStatsTracker workerStatsTracker;
+
         public FragmentExecParams(PlanFragment fragment) {
             this.fragment = fragment;
+            this.workerStatsTracker = createWorkerStatsTracker(connectContext);
         }
 
         void setBucketSeqToInstanceForRuntimeFilters() {
@@ -3484,30 +3502,34 @@ public class Coordinator {
         private final ScanNode scanNode;
         private final List<TScanRangeLocations> locations;
         private final FragmentScanRangeAssignment assignment;
+        private final WorkerAssignmentStatsMgr.WorkerStatsTracker workerStatsTracker;
 
         public NormalBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
-                                     FragmentScanRangeAssignment assignment) {
+                                     FragmentScanRangeAssignment assignment,
+                                     WorkerAssignmentStatsMgr.WorkerStatsTracker workerStatsTracker) {
             this.scanNode = scanNode;
             this.locations = locations;
             this.assignment = assignment;
+            this.workerStatsTracker = workerStatsTracker;
         }
 
         @Override
         public void computeScanRangeAssignment() throws Exception {
-            HashMap<TNetworkAddress, Long> assignedBytesPerHost = Maps.newHashMap();
             for (TScanRangeLocations scanRangeLocations : locations) {
                 // assign this scan range to the host w/ the fewest assigned bytes
-                Long minAssignedBytes = Long.MAX_VALUE;
+                long minNumTablets = Long.MAX_VALUE;
+                long minBackendId = Long.MIN_VALUE;
                 TScanRangeLocation minLocation = null;
                 for (final TScanRangeLocation location : scanRangeLocations.getLocations()) {
-                    Long assignedBytes = BackendSelector.findOrInsert(assignedBytesPerHost, location.server, 0L);
-                    if (assignedBytes < minAssignedBytes) {
-                        minAssignedBytes = assignedBytes;
+                    long assignedBytes = workerStatsTracker.getNumRunningTablets(location.getBackend_id());
+                    if (assignedBytes < minNumTablets) {
+                        minNumTablets = assignedBytes;
                         minLocation = location;
+                        minBackendId = location.getBackend_id();
                     }
                 }
-                assignedBytesPerHost.put(minLocation.server,
-                        assignedBytesPerHost.get(minLocation.server) + 1);
+                workerStatsTracker.consume(minBackendId, 1L,
+                        scanRangeLocations.getScan_range().getInternal_scan_range().getRow_count());
 
                 Reference<Long> backendIdRef = new Reference<Long>();
                 TNetworkAddress execHostPort = SimpleScheduler.getHost(minLocation.backend_id,
@@ -3584,10 +3606,13 @@ public class Coordinator {
     private class ColocatedBackendSelector implements BackendSelector {
         private final OlapScanNode scanNode;
         private final FragmentScanRangeAssignment assignment;
+        private final WorkerAssignmentStatsMgr.WorkerStatsTracker workerStatsTracker;
 
-        public ColocatedBackendSelector(OlapScanNode scanNode, FragmentScanRangeAssignment assignment) {
+        public ColocatedBackendSelector(OlapScanNode scanNode, FragmentScanRangeAssignment assignment,
+                                        WorkerAssignmentStatsMgr.WorkerStatsTracker workerStatsTracker) {
             this.scanNode = scanNode;
             this.assignment = assignment;
+            this.workerStatsTracker = workerStatsTracker;
         }
 
         @Override
@@ -3595,8 +3620,8 @@ public class Coordinator {
             PlanFragmentId fragmentId = scanNode.getFragmentId();
             if (!fragmentIdToSeqToAddressMap.containsKey(fragmentId)) {
                 fragmentIdToSeqToAddressMap.put(fragmentId, Maps.newHashMap());
+                fragmentIdToSeqToWorkerIdMap.put(fragmentId, Maps.newHashMap());
                 fragmentIdBucketSeqToScanRangeMap.put(fragmentId, new BucketSeqToScanRange());
-                fragmentIdToBackendIdBucketCountMap.put(fragmentId, new HashMap<>());
                 fragmentIdToBucketNumMap.put(fragmentId,
                         scanNode.getOlapTable().getDefaultDistributionInfo().getBucketNum());
                 if (scanNode.getSelectedPartitionIds().size() <= 1) {
@@ -3606,15 +3631,25 @@ public class Coordinator {
                     }
                 }
             }
-            Map<Integer, TNetworkAddress> bucketSeqToAddress =
-                    fragmentIdToSeqToAddressMap.get(fragmentId);
+            Map<Integer, TNetworkAddress> bucketSeqToAddress = fragmentIdToSeqToAddressMap.get(fragmentId);
+            Map<Integer, Long> bucketSeqToWorkerId = fragmentIdToSeqToWorkerIdMap.get(fragmentId);
             BucketSeqToScanRange bucketSeqToScanRange = fragmentIdBucketSeqToScanRangeMap.get(scanNode.getFragmentId());
 
             for (Integer bucketSeq : scanNode.bucketSeq2locations.keySet()) {
                 //fill scanRangeParamsList
                 List<TScanRangeLocations> locations = scanNode.bucketSeq2locations.get(bucketSeq);
+                long numTablets = locations.size();
+                long numTabletRows = 0;
+                for (TScanRangeLocations location : locations) {
+                    numTabletRows += location.getScan_range().getInternal_scan_range().getRow_count();
+                }
+
                 if (!bucketSeqToAddress.containsKey(bucketSeq)) {
-                    getExecHostPortForFragmentIDAndBucketSeq(locations.get(0), fragmentId, bucketSeq, idToBackend);
+                    getExecHostPortForFragmentIDAndBucketSeq(locations.get(0), fragmentId, bucketSeq, idToBackend, numTablets,
+                            numTabletRows);
+                } else {
+                    Long workerId = bucketSeqToWorkerId.get(bucketSeq);
+                    workerStatsTracker.consume(workerId, numTablets, numTabletRows);
                 }
 
                 for (TScanRangeLocations location : locations) {
@@ -3670,28 +3705,37 @@ public class Coordinator {
         // Make sure each host have average bucket to scan
         private void getExecHostPortForFragmentIDAndBucketSeq(TScanRangeLocations seqLocation,
                                                               PlanFragmentId fragmentId, Integer bucketSeq,
-                                                              ImmutableMap<Long, Backend> idToBackend)
+                                                              ImmutableMap<Long, Backend> idToBackend,
+                                                              long deltaNumTablets,
+                                                              long deltaNumTabletRows)
                 throws Exception {
-            Map<Long, Integer> buckendIdToBucketCountMap = fragmentIdToBackendIdBucketCountMap.get(fragmentId);
-            int maxBucketNum = Integer.MAX_VALUE;
-            long buckendId = Long.MAX_VALUE;
-            for (TScanRangeLocation location : seqLocation.locations) {
-                if (buckendIdToBucketCountMap.containsKey(location.backend_id)) {
-                    if (buckendIdToBucketCountMap.get(location.backend_id) < maxBucketNum) {
-                        maxBucketNum = buckendIdToBucketCountMap.get(location.backend_id);
-                        buckendId = location.backend_id;
+            final int maxRetryTimes =
+                    connectContext == null ? 6 : connectContext.getSessionVariable().getScheduleAtomicAssignmentRetryTimes();
+            long minBackendId = Long.MAX_VALUE;
+            for (int retryTimes = 1; retryTimes <= maxRetryTimes; retryTimes++) {
+                long minNumTablets = Long.MAX_VALUE;
+                minBackendId = Long.MAX_VALUE;
+                for (TScanRangeLocation location : seqLocation.locations) {
+                    long numTablets = workerStatsTracker.getNumRunningTablets(location.backend_id);
+                    if (numTablets < minNumTablets) {
+                        minNumTablets = numTablets;
+                        minBackendId = location.backend_id;
+                    }
+                }
+
+                if (retryTimes < maxRetryTimes) {
+                    if (workerStatsTracker.tryConsume(minBackendId, minNumTablets, deltaNumTablets, deltaNumTabletRows)) {
+                        break;
                     }
                 } else {
-                    buckendId = location.backend_id;
-                    buckendIdToBucketCountMap.put(buckendId, 0);
+                    workerStatsTracker.consume(minBackendId, deltaNumTablets, deltaNumTabletRows);
                     break;
                 }
             }
 
-            buckendIdToBucketCountMap.put(buckendId, buckendIdToBucketCountMap.get(buckendId) + 1);
             Reference<Long> backendIdRef = new Reference<Long>();
             TNetworkAddress execHostPort =
-                    SimpleScheduler.getHost(buckendId, seqLocation.locations, idToBackend, backendIdRef);
+                    SimpleScheduler.getHost(minBackendId, seqLocation.locations, idToBackend, backendIdRef);
             if (execHostPort == null) {
                 throw new UserException("Backend not found. Check if any backend is down or not. "
                         + backendInfosString(false));
@@ -3699,6 +3743,7 @@ public class Coordinator {
 
             recordUsedBackend(execHostPort, backendIdRef.getRef());
             fragmentIdToSeqToAddressMap.get(fragmentId).put(bucketSeq, execHostPort);
+            fragmentIdToSeqToWorkerIdMap.get(fragmentId).put(bucketSeq, minBackendId);
         }
     }
 
