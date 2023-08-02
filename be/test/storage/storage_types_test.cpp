@@ -49,9 +49,13 @@ void common_test(typename TypeTraits<field_type>::CppType src_val) {
     }
     {
         typename TypeTraits<field_type>::CppType dst_val;
+<<<<<<< HEAD
         type->direct_copy((char*)&dst_val, (char*)&src_val, nullptr);
         ASSERT_TRUE(type->equal((char*)&src_val, (char*)&dst_val));
         ASSERT_EQ(0, type->cmp((char*)&src_val, (char*)&dst_val));
+=======
+        type->direct_copy((char*)&dst_val, (char*)&src_val);
+>>>>>>> c2d40363ca ([Refactor] Remove param `mempool` from TypeInfo::direct_copy (#28458))
     }
     // test min
     {
@@ -89,9 +93,13 @@ void test_char(Slice src_val) {
     {
         char buf[64];
         Slice dst_val(buf, sizeof(buf));
+<<<<<<< HEAD
         type->direct_copy((char*)&dst_val, (char*)&src_val, nullptr);
         ASSERT_TRUE(type->equal((char*)&src_val, (char*)&dst_val));
         ASSERT_EQ(0, type->cmp((char*)&src_val, (char*)&dst_val));
+=======
+        type->direct_copy((char*)&dst_val, (char*)&src_val);
+>>>>>>> c2d40363ca ([Refactor] Remove param `mempool` from TypeInfo::direct_copy (#28458))
     }
     // test min
     {

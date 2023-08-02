@@ -98,9 +98,7 @@ public:
 
     void deep_copy(void* dest, const void* src, MemPool* mem_pool) const override { _deep_copy(dest, src, mem_pool); }
 
-    void direct_copy(void* dest, const void* src, MemPool* mem_pool) const override {
-        _direct_copy(dest, src, mem_pool);
-    }
+    void direct_copy(void* dest, const void* src) const override { _direct_copy(dest, src); }
 
     Status from_string(void* buf, const std::string& scan_key) const override { return _from_string(buf, scan_key); }
 
@@ -123,7 +121,7 @@ private:
 
     void (*_shallow_copy)(void* dest, const void* src);
     void (*_deep_copy)(void* dest, const void* src, MemPool* mem_pool);
-    void (*_direct_copy)(void* dest, const void* src, MemPool* mem_pool);
+    void (*_direct_copy)(void* dest, const void* src);
 
     Status (*_from_string)(void* buf, const std::string& scan_key);
     std::string (*_to_string)(const void* src);
@@ -179,11 +177,15 @@ struct ScalarTypeInfoImplBase {
         unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
     }
 
+<<<<<<< HEAD
     static void copy_object(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
         unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
     }
 
     static void direct_copy(void* dest, const void* src, MemPool* mem_pool) {
+=======
+    static void direct_copy(void* dest, const void* src) {
+>>>>>>> c2d40363ca ([Refactor] Remove param `mempool` from TypeInfo::direct_copy (#28458))
         unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
     }
 
@@ -530,10 +532,14 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_LARGEINT> : public ScalarTypeInfoImplB
         unaligned_store<int128_t>(dest, unaligned_load<int128_t>(src));
     }
 
+<<<<<<< HEAD
     static void copy_object(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
         unaligned_store<int128_t>(dest, unaligned_load<int128_t>(src));
     }
     static void direct_copy(void* dest, const void* src, MemPool* mem_pool) {
+=======
+    static void direct_copy(void* dest, const void* src) {
+>>>>>>> c2d40363ca ([Refactor] Remove param `mempool` from TypeInfo::direct_copy (#28458))
         unaligned_store<int128_t>(dest, unaligned_load<int128_t>(src));
     }
     static void set_to_max(void* buf) { unaligned_store<int128_t>(buf, ~((int128_t)(1) << 127)); }
@@ -669,10 +675,14 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DECIMAL_V2> : public ScalarTypeInfoImp
         memcpy(dest, src, sizeof(CppType));
     }
 
+<<<<<<< HEAD
     static void copy_object(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
         memcpy(dest, src, sizeof(CppType));
     }
     static void direct_copy(void* dest, const void* src, MemPool* mem_pool) { memcpy(dest, src, sizeof(CppType)); }
+=======
+    static void direct_copy(void* dest, const void* src) { memcpy(dest, src, sizeof(CppType)); }
+>>>>>>> c2d40363ca ([Refactor] Remove param `mempool` from TypeInfo::direct_copy (#28458))
 
     static void set_to_max(void* buf) {
         CppType v;
@@ -951,9 +961,13 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_CHAR> : public ScalarTypeInfoImplBase<
         unaligned_store<Slice>(dest, l_slice);
     }
 
+<<<<<<< HEAD
     static void copy_object(void* dest, const void* src, MemPool* mem_pool) { deep_copy(dest, src, mem_pool); }
 
     static void direct_copy(void* dest, const void* src, MemPool* mem_pool) {
+=======
+    static void direct_copy(void* dest, const void* src) {
+>>>>>>> c2d40363ca ([Refactor] Remove param `mempool` from TypeInfo::direct_copy (#28458))
         auto l_slice = unaligned_load<Slice>(dest);
         auto r_slice = unaligned_load<Slice>(src);
         memory_copy(l_slice.data, r_slice.data, r_slice.size);

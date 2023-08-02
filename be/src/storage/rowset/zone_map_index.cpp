@@ -116,11 +116,19 @@ void ZoneMapIndexWriterImpl<type>::add_values(const void* values, size_t count) 
         _page_zone_map.has_not_null = true;
         const auto* vals = reinterpret_cast<const CppType*>(values);
         auto [pmin, pmax] = std::minmax_element(vals, vals + count);
+<<<<<<< HEAD
         if (unaligned_load<CppType>(pmin) < unaligned_load<CppType>(_page_zone_map.min_value)) {
             _field->type_info()->direct_copy(_page_zone_map.min_value, pmin, nullptr);
         }
         if (unaligned_load<CppType>(pmax) > unaligned_load<CppType>(_page_zone_map.max_value)) {
             _field->type_info()->direct_copy(_page_zone_map.max_value, pmax, nullptr);
+=======
+        if (unaligned_load<CppType>(pmin) < _page_zone_map.min_value.value) {
+            _type_info->direct_copy(&_page_zone_map.min_value.value, pmin);
+        }
+        if (unaligned_load<CppType>(pmax) > _page_zone_map.max_value.value) {
+            _type_info->direct_copy(&_page_zone_map.max_value.value, pmax);
+>>>>>>> c2d40363ca ([Refactor] Remove param `mempool` from TypeInfo::direct_copy (#28458))
         }
     }
 }
@@ -128,11 +136,19 @@ void ZoneMapIndexWriterImpl<type>::add_values(const void* values, size_t count) 
 template <FieldType type>
 Status ZoneMapIndexWriterImpl<type>::flush() {
     // Update segment zone map.
+<<<<<<< HEAD
     if (_field->compare(_segment_zone_map.min_value, _page_zone_map.min_value) > 0) {
         _field->type_info()->direct_copy(_segment_zone_map.min_value, _page_zone_map.min_value, nullptr);
     }
     if (_field->compare(_segment_zone_map.max_value, _page_zone_map.max_value) < 0) {
         _field->type_info()->direct_copy(_segment_zone_map.max_value, _page_zone_map.max_value, nullptr);
+=======
+    if (_page_zone_map.min_value.value < _segment_zone_map.min_value.value) {
+        _type_info->direct_copy(&_segment_zone_map.min_value.value, &_page_zone_map.min_value.value);
+    }
+    if (_page_zone_map.max_value.value > _segment_zone_map.max_value.value) {
+        _type_info->direct_copy(&_segment_zone_map.max_value.value, &_page_zone_map.max_value.value);
+>>>>>>> c2d40363ca ([Refactor] Remove param `mempool` from TypeInfo::direct_copy (#28458))
     }
     if (_page_zone_map.has_null) {
         _segment_zone_map.has_null = true;
