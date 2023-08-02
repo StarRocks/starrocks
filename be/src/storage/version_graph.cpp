@@ -119,6 +119,10 @@ int64_t TimestampedVersionTracker::get_max_continuous_version() const {
     return _version_graph.max_continuous_version();
 }
 
+void TimestampedVersionTracker::update_max_continuous_version() {
+    _version_graph.update_max_continuous_version();
+}
+
 int64_t TimestampedVersionTracker::get_min_readable_version() const {
     return _version_graph.min_readable_version();
 }
@@ -235,6 +239,10 @@ void TimestampedVersionPathContainer::add_timestamped_version(const TimestampedV
 
 std::vector<TimestampedVersionSharedPtr>& TimestampedVersionPathContainer::timestamped_versions() {
     return _timestamped_versions_container;
+}
+
+void VersionGraph::update_max_continuous_version() {
+    _max_continuous_version = _get_max_continuous_version_from(0);
 }
 
 void VersionGraph::construct_version_graph(const std::vector<RowsetMetaSharedPtr>& rs_metas, int64_t* max_version) {
