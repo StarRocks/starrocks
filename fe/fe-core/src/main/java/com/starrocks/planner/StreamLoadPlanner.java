@@ -180,6 +180,7 @@ public class StreamLoadPlanner {
         scanNode.setUseVectorizedLoad(true);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
+        scanNode.setWarehouse(streamLoadInfo.getWarehouse());
 
         descTable.computeMemLayout();
 
@@ -195,7 +196,7 @@ public class StreamLoadPlanner {
         }
         OlapTableSink olapTableSink = new OlapTableSink(destTable, tupleDesc, partitionIds, writeQuorum,
                 destTable.enableReplicatedStorage(), scanNode.nullExprInAutoIncrement(),
-                enableAutomaticPartition);
+                enableAutomaticPartition, streamLoadInfo.getWarehouse());
         if (missAutoIncrementColumn.size() == 1 && missAutoIncrementColumn.get(0) == Boolean.TRUE) {
             olapTableSink.setMissAutoIncrementColumn();
         }

@@ -52,6 +52,7 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
                     .add("BeId")
                     .add("DataSourceProperties")
                     .add("Message")
+                    .add("Warehouse")
                     .build();
 
     private final Expr jobNameExpr;

@@ -32,6 +32,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -47,6 +48,7 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.AfterClass;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -54,6 +56,9 @@ import java.util.Map;
 
 public class CreateLakeTableTest {
     private static ConnectContext connectContext;
+
+    @Mocked
+    private StarOSAgentEpack agent;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -90,6 +95,17 @@ public class CreateLakeTableTest {
             @Mock
             public String getStorageVolumeIdOfTable(long tableId) {
                 return fsInfo.getFsKey();
+            }
+        };
+
+    }
+
+    @Before
+    public void setUp() throws Exception {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return agent;
             }
         };
     }
@@ -146,7 +162,7 @@ public class CreateLakeTableTest {
     }
 
     @Test
-    public void testCreateLakeTable(@Mocked StarOSAgent agent) throws UserException {
+    public void testCreateLakeTable() throws UserException {
         new Expectations(agent) {
             {
                 agent.allocateFilePath(anyString, anyLong);
@@ -195,7 +211,7 @@ public class CreateLakeTableTest {
     }
 
     @Test
-    public void testCreateLakeTableWithStorageCache(@Mocked StarOSAgent agent) throws UserException {
+    public void testCreateLakeTableWithStorageCache() throws UserException {
         new Expectations() {
             {
                 agent.allocateFilePath(anyString, anyLong);
@@ -318,7 +334,7 @@ public class CreateLakeTableTest {
     }
 
     @Test
-    public void testExplainRowCount(@Mocked StarOSAgent agent) throws Exception {
+    public void testExplainRowCount() throws Exception {
         new Expectations(agent) {
             {
                 agent.allocateFilePath(anyString, anyLong);
@@ -366,7 +382,7 @@ public class CreateLakeTableTest {
     }
 
     @Test
-    public void testCreateLakeTableListPartition(@Mocked StarOSAgent agent) throws UserException {
+    public void testCreateLakeTableListPartition() throws UserException {
         new Expectations() {
             {
                 agent.allocateFilePath(anyString, anyLong);
@@ -379,6 +395,9 @@ public class CreateLakeTableTest {
                         Lists.newArrayList(20008L), Lists.newArrayList(20009L));
                 agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+
+                agent.getWorkersByWorkerGroup(anyLong);
+                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
             }
         };
 

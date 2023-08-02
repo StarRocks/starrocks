@@ -328,7 +328,8 @@ public class KafkaRoutineLoadJobTest {
         new MockUp<KafkaUtil>() {
             @Mock
             public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
-                                                       ImmutableMap<String, String> properties) throws UserException {
+                                                       ImmutableMap<String, String> properties,
+                                                       String warehouse) throws UserException {
                 return Lists.newArrayList(1, 2, 3);
             }
         };

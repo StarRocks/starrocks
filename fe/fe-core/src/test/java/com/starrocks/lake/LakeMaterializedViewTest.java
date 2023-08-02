@@ -46,6 +46,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
@@ -90,7 +91,7 @@ public class LakeMaterializedViewTest {
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase(DB).useDatabase(DB);
 
-        new MockUp<StarOSAgent>() {
+        new MockUp<StarOSAgentEpack>() {
             @Mock
             public List getWorkersByWorkerGroup(long workerGroupId) {
                 return GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);

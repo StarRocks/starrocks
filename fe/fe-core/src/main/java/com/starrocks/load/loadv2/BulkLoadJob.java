@@ -165,6 +165,10 @@ public abstract class BulkLoadJob extends LoadJob {
                 bulkLoadJob.sessionVariables.put(BulkLoadJob.LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY,
                         Long.toString(bulkLoadJob.logRejectedRecordNum));
             }
+            if (context != null) {
+                bulkLoadJob.sessionVariables.put(BulkLoadJob.CURRENT_WAREHOUSE, context.getCurrentWarehouse());
+            }
+
             bulkLoadJob.checkAndSetDataSourceInfo(db, stmt.getDataDescriptions());
             return bulkLoadJob;
         } catch (MetaNotFoundException e) {

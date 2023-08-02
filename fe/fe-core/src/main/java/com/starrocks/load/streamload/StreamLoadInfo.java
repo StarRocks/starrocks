@@ -25,6 +25,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
@@ -81,6 +82,7 @@ public class StreamLoadInfo {
     private String confluentSchemaRegistryUrl;
     private long logRejectedRecordNum = 0;
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.UNKNOWN_MODE;
+    private String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
 
     public StreamLoadInfo(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType) {
         this.id = id;
@@ -247,6 +249,14 @@ public class StreamLoadInfo {
 
     public void setLogRejectedRecordNum(long logRejectedRecordNum) {
         this.logRejectedRecordNum = logRejectedRecordNum;
+    }
+
+    public void setWarehouse(String warehouse) {
+        this.warehouse = warehouse;
+    }
+
+    public String getWarehouse() {
+        return warehouse;
     }
 
     public static StreamLoadInfo fromStreamLoadContext(TUniqueId id, long txnId, int timeout, StreamLoadParam context)
@@ -489,6 +499,7 @@ public class StreamLoadInfo {
         trimSpace = routineLoadJob.isTrimspace();
         enclose = routineLoadJob.getEnclose();
         escape = routineLoadJob.getEscape();
+        warehouse = routineLoadJob.getWarehouse();
     }
 
     // used for stream load

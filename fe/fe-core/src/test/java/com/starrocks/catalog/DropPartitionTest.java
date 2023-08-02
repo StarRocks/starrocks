@@ -46,6 +46,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -86,7 +87,7 @@ public class DropPartitionTest {
         createDb(createDbStmtStr);
         createTable(createTableStr);
 
-        StarOSAgent agent = new StarOSAgent();
+        StarOSAgent agent = new StarOSAgentEpack();
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
         FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();

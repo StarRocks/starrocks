@@ -1743,7 +1743,8 @@ public class PrivilegeCheckerTest {
         new MockUp<KafkaUtil>() {
             @Mock
             public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
-                                                       ImmutableMap<String, String> properties) {
+                                                       ImmutableMap<String, String> properties,
+                                                       String warehouse) {
                 return Lists.newArrayList(0, 1, 2);
             }
         };
@@ -1809,7 +1810,8 @@ public class PrivilegeCheckerTest {
         new MockUp<KafkaUtil>() {
             @Mock
             public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
-                                                       ImmutableMap<String, String> properties) {
+                                                       ImmutableMap<String, String> properties,
+                                                       String warehouse) {
                 return Lists.newArrayList(0, 1, 2);
             }
         };

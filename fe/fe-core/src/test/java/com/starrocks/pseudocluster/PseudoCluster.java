@@ -36,7 +36,7 @@ import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
-import com.starrocks.lake.StarOSAgent;
+import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.PBackendService;
@@ -141,7 +141,7 @@ public class PseudoCluster {
         }
     }
 
-    private static class PseudoStarOSAgent extends StarOSAgent {
+    private static class PseudoStarOSAgent extends StarOSAgentEpack {
         private class Worker {
             long backendId;
             long workerId;

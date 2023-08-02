@@ -296,6 +296,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     @SerializedName("os")
     protected OriginStatement origStmt;
 
+    @SerializedName("wh")
+    protected String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+
     protected ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
     // TODO(ml): error sample
 
@@ -677,6 +680,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         } finally {
             readUnlock();
         }
+    }
+
+    public void setWarehouse(String warehouse) {
+        this.warehouse = warehouse;
+    }
+
+    public String getWarehouse() {
+        return warehouse;
     }
 
     // RoutineLoadScheduler will run this method at fixed interval, and renew the timeout tasks

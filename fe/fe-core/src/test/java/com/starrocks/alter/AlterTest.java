@@ -65,6 +65,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.ListPartitionPersistInfo;
@@ -115,6 +116,7 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.AfterClass;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -133,6 +135,9 @@ public class AlterTest {
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
+
+    @Mocked
+    private StarOSAgentEpack agent;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -250,6 +255,16 @@ public class AlterTest {
                         "    \"partition_live_number\" = \"3\",\n" +
                         "    \"replication_num\" = \"1\"\n" +
                         ");");
+    }
+
+    @Before
+    public void setUp() throws Exception {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return agent;
+            }
+        };
     }
 
     @AfterClass
@@ -1005,7 +1020,7 @@ public class AlterTest {
     }
 
     @Test
-    public void testAddPartitionForLakeTable(@Mocked StarOSAgent agent) throws Exception {
+    public void testAddPartitionForLakeTable() throws Exception {
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
         FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
@@ -1115,7 +1130,7 @@ public class AlterTest {
     }
 
     @Test
-    public void testMultiRangePartitionForLakeTable(@Mocked StarOSAgent agent) throws Exception {
+    public void testMultiRangePartitionForLakeTable() throws Exception {
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
         FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
@@ -2091,7 +2106,7 @@ public class AlterTest {
     }
 
     @Test
-    public void testSingleRangePartitionPersistInfo(@Mocked StarOSAgent agent) throws Exception {
+    public void testSingleRangePartitionPersistInfo() throws Exception {
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
         FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
 
