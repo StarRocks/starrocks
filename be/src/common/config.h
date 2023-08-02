@@ -996,7 +996,9 @@ CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache={
 
 // limit local exchange buffer's memory size per driver
 CONF_Int64(local_exchange_buffer_mem_limit_per_driver, "134217728"); // 128MB
-CONF_mInt64(wait_apply_time, "6000");                                // 6s
+// only used for test. default: 128M
+CONF_mInt64(streaming_agg_limited_memory_size, "134217728");
+CONF_mInt64(wait_apply_time, "6000"); // 6s
 
 // Max size of a binlog file. The default is 512MB.
 CONF_Int64(binlog_file_max_size, "536870912");
