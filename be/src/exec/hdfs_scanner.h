@@ -68,6 +68,8 @@ struct HdfsScanStats {
     // io coalesce
     int64_t group_active_lazy_coalesce_together = 0;
     int64_t group_active_lazy_coalesce_seperately = 0;
+    // page statistics
+    bool has_page_statistics = false;
 
     // ORC only!
     int64_t delete_build_ns = 0;
