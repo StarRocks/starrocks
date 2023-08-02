@@ -1124,6 +1124,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
     if (status.ok()) {
         status = sc_params.new_tablet->check_version_integrity(sc_params.version);
     }
+    sc_params.new_tablet->update_max_continuous_version();
 
     LOG(INFO) << _alter_msg_header << "finish converting rowsets for new_tablet from base_tablet. "
               << "base_tablet=" << sc_params.base_tablet->full_name()
