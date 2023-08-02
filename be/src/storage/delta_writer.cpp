@@ -121,8 +121,17 @@ Status DeltaWriter::_init() {
         if (config::enable_event_based_compaction_framework) {
             StorageEngine::instance()->compaction_manager()->update_tablet_async(_tablet);
         }
+<<<<<<< HEAD
         auto msg = fmt::format("Too many versions. tablet_id: {}, version_count: {}, limit: {}, replica_state: {}",
                                _opt.tablet_id, _tablet->version_count(), config::tablet_max_versions, _replica_state);
+=======
+        auto msg = fmt::format(
+                "Failed to load data into tablet {}, because of too many versions, current/limit: {}/{}. You can "
+                "reduce the loading job concurrency, or increase loading data batch size. If you are loading data with "
+                "Routine Load, you can increase FE configs routine_load_task_consume_second and "
+                "max_routine_load_batch_size,",
+                _opt.tablet_id, _tablet->version_count(), config::tablet_max_versions);
+>>>>>>> 595e806c38 ([Enhancement] improve user prompt about too many versions error (#28397))
         LOG(ERROR) << msg;
         Status st = Status::ServiceUnavailable(msg);
         _set_state(kUninitialized, st);
