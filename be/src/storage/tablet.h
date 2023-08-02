@@ -295,6 +295,8 @@ public:
 
     void get_basic_info(TabletBasicInfo& info);
 
+    void update_max_continuous_version() { _timestamped_version_tracker.update_max_continuous_version(); }
+    
 protected:
     void on_shutdown() override;
 
