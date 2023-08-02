@@ -31,7 +31,7 @@ ORCHdfsFileStream::ORCHdfsFileStream(RandomAccessFile* file, uint64_t length, io
 
 void ORCHdfsFileStream::prepareCache(PrepareCacheScope scope, uint64_t offset, uint64_t length) {
     size_t cache_max_size = config::orc_file_cache_max_size;
-    if (scope == PrepareCacheScope::READ_ROW_GROUP_INDEX) {
+    if (scope == PrepareCacheScope::READ_FULL_ROW_INDEX) {
         cache_max_size = config::orc_row_index_cache_max_size;
     }
 

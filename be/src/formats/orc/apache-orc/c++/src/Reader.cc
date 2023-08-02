@@ -431,7 +431,7 @@ void RowReaderImpl::loadStripeIndex() {
 
     // usually row index size is small.
     uint64_t rowIndexSize = currentStripeInfo.indexlength();
-    contents->stream->prepareCache(InputStream::PrepareCacheScope::READ_ROW_GROUP_INDEX, offset, rowIndexSize);
+    contents->stream->prepareCache(InputStream::PrepareCacheScope::READ_FULL_ROW_INDEX, offset, rowIndexSize);
     for (int i = 0; i < currentStripeFooter.streams_size(); ++i) {
         const proto::Stream& pbStream = currentStripeFooter.streams(i);
         uint64_t colId = pbStream.column();
