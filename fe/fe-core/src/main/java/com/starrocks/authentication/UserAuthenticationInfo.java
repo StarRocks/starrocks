@@ -58,7 +58,7 @@ public class UserAuthenticationInfo implements Writable {
      * auth plugin, since the authenticate info for different auth mechanism can vary a log, here we
      * use a general Object map to represent this requirement.
      */
-    protected Map<String, Object> extraInfo = new HashMap<>();
+    public Map<String, Object> extraInfo = new HashMap<>();
 
     public boolean matchUser(String remoteUser) {
         return isAnyUser || userPattern.match(remoteUser);
