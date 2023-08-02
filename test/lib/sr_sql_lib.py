@@ -490,10 +490,24 @@ class StarrocksSQLApiLib(object):
                         all(k in act_std and exp_std[k] == act_std[k] for k in exp_std),
                         "shell result json not match, \n[exp]: %s,\n[act]: %s" % (exp_std, act_std),
                     )
+                    return
+
                 except Exception as e:
-                    # if can't be treat as json, cmp as str
-                    if exp_std != act_std and not re.match(exp_std, act_std, flags=re.S):
-                        tools.assert_true(False, "shell result str not match,\n[exp]: %s,\n [act]: %s" % (exp_std, act_std))
+                    log.debug("Try to treat res as json failed!\n:%s" % e)
+
+                # If result can't be treated as json, cmp as str
+                if exp_std == act_std:
+                    return
+
+                try:
+                    tools.assert_true(re.match(exp_std, act_std, flags=re.S),
+                                      "shell result str|re not match,\n[exp]: %s,\n [act]: %s" % (exp_std, act_std))
+                except Exception as e:
+                    log.warn("Try to treat res as regex, failed!\n:%s" % e)
+
+                tools.assert_true(False, "shell result str|re not match,\n[exp]: %s,\n [act]: %s" % (exp_std, act_std))
+
+            else:
             else:
                 # str
                 if exp_std != act_std and not re.match(exp_std, act_std, flags=re.S):
