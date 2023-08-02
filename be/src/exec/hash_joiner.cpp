@@ -114,7 +114,7 @@ Status HashJoiner::prepare_builder(RuntimeState* state, RuntimeProfile* runtime_
     return Status::OK();
 }
 
-// prepare_builder is done before this
+// it is ok that prepare_builder is done whether before this or not
 Status HashJoiner::prepare_prober(RuntimeState* state, RuntimeProfile* runtime_profile) {
     if (_runtime_state == nullptr) {
         _runtime_state = state;
