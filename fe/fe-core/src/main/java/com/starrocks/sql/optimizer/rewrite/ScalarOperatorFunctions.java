@@ -61,7 +61,7 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.Partition;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.collections4.SetUtils;
@@ -1058,7 +1058,7 @@ public class ScalarOperatorFunctions {
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName)
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
         ConnectContext connectContext = ConnectContext.get();
-        PrivilegeChecker.checkAnyActionOnTable(
+        Authorizer.checkAnyActionOnTable(
                 connectContext.getCurrentUserIdentity(),
                 connectContext.getCurrentRoleIds(),
                 tableName);
@@ -1071,7 +1071,7 @@ public class ScalarOperatorFunctions {
         Table table = db.tryGetTable(tableName.getTbl())
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
         ConnectContext connectContext = ConnectContext.get();
-        PrivilegeChecker.checkAnyActionOnTable(
+        Authorizer.checkAnyActionOnTable(
                 connectContext.getCurrentUserIdentity(),
                 connectContext.getCurrentRoleIds(),
                 tableName);

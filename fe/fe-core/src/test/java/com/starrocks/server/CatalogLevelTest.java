@@ -27,7 +27,7 @@ import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.UserIdentity;
@@ -82,7 +82,7 @@ public class CatalogLevelTest {
         GlobalStateMgr.getCurrentState().getAuthenticationMgr().createUser(createUserStmt);
 
         AnalyzeTestUtil.getConnectContext().setCurrentUserIdentity(new UserIdentity("u1", "%"));
-        Assert.assertThrows(AccessDeniedException.class, () -> PrivilegeChecker.checkAnyActionOnOrInDb(
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnOrInDb(
                 AnalyzeTestUtil.getConnectContext().getCurrentUserIdentity(),
                 AnalyzeTestUtil.getConnectContext().getCurrentRoleIds(), "hive_catalog", "hive_db"));
 
@@ -90,7 +90,7 @@ public class CatalogLevelTest {
         GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql,
                 AnalyzeTestUtil.getConnectContext());
         DDLStmtExecutor.execute(grantPrivilegeStmt,  AnalyzeTestUtil.getConnectContext());
-        Assert.assertThrows(AccessDeniedException.class, () -> PrivilegeChecker.checkAnyActionOnOrInDb(
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnOrInDb(
                 AnalyzeTestUtil.getConnectContext().getCurrentUserIdentity(),
                 AnalyzeTestUtil.getConnectContext().getCurrentRoleIds(), "hive_catalog", "hive_db"));
 
@@ -98,7 +98,7 @@ public class CatalogLevelTest {
         grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql,
                 AnalyzeTestUtil.getConnectContext());
         DDLStmtExecutor.execute(grantPrivilegeStmt,  AnalyzeTestUtil.getConnectContext());
-        PrivilegeChecker.checkAnyActionOnOrInDb(
+        Authorizer.checkAnyActionOnOrInDb(
                 AnalyzeTestUtil.getConnectContext().getCurrentUserIdentity(),
                 AnalyzeTestUtil.getConnectContext().getCurrentRoleIds(), "hive_catalog", "hive_db");
     }

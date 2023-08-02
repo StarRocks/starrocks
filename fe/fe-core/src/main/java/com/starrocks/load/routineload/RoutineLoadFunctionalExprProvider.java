@@ -23,7 +23,7 @@ import com.starrocks.common.util.LogKey;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.analyzer.Authorizer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -248,7 +248,7 @@ public class RoutineLoadFunctionalExprProvider extends FunctionalExprProvider<Ro
     protected boolean delegatePostRowFilter(ConnectContext cxt, RoutineLoadJob job) {
         try {
             try {
-                PrivilegeChecker.checkTableAction(
+                Authorizer.checkTableAction(
                         cxt.getCurrentUserIdentity(), cxt.getCurrentRoleIds(),
                         job.getDbFullName(),
                         job.getTableName(),

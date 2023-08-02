@@ -24,6 +24,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -33,8 +34,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class PrivilegeActions implements SystemAccessControl {
-    private static final Logger LOG = LogManager.getLogger(PrivilegeActions.class);
+public class NativeAccessControl implements AccessControl {
+    private static final Logger LOG = LogManager.getLogger(NativeAccessControl.class);
 
     @Override
     public void checkSystemAction(UserIdentity currentUser, Set<Long> roleIds, PrivilegeType privilegeType) {
@@ -97,6 +98,11 @@ public class PrivilegeActions implements SystemAccessControl {
     }
 
     @Override
+    public void checkAnyActionOnAnyTable(UserIdentity currentUser, Set<Long> roleIds, String catalog, String db) {
+        checkAnyActionOnTable(currentUser, roleIds, new TableName(catalog, db, "*"));
+    }
+
+    @Override
     public void checkViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName, PrivilegeType privilegeType) {
         if (!checkObjectTypeAction(currentUser, roleIds, privilegeType, ObjectType.VIEW,
                 Arrays.asList(tableName.getDb(), tableName.getTbl()))) {
@@ -110,6 +116,11 @@ public class PrivilegeActions implements SystemAccessControl {
                 Lists.newArrayList(tableName.getDb(), tableName.getTbl()))) {
             AccessDeniedException.reportAccessDenied("ANY", ObjectType.VIEW, tableName.getTbl());
         }
+    }
+
+    @Override
+    public void checkAnyActionOnAnyView(UserIdentity currentUser, Set<Long> roleIds, String db) {
+        checkAnyActionOnView(currentUser, roleIds, new TableName(db, "*"));
     }
 
     @Override
@@ -130,6 +141,11 @@ public class PrivilegeActions implements SystemAccessControl {
     }
 
     @Override
+    public void checkAnyActionOnAnyMaterializedView(UserIdentity currentUser, Set<Long> roleIds, String db) {
+        checkAnyActionOnView(currentUser, roleIds, new TableName(db, "*"));
+    }
+
+    @Override
     public void checkFunctionAction(UserIdentity currentUser, Set<Long> roleIds, Database database, Function function,
                                     PrivilegeType privilegeType) {
         if (!checkFunctionAction(currentUser, roleIds, ObjectType.FUNCTION, database.getId(), function, privilegeType)) {
@@ -138,9 +154,16 @@ public class PrivilegeActions implements SystemAccessControl {
     }
 
     @Override
-    public void checkAnyActionOnFunction(UserIdentity currentUser, Set<Long> roleIds, long databaseId, long functionSig) {
-        if (!checkAnyActionOnFunctionObject(currentUser, roleIds, ObjectType.FUNCTION, databaseId, functionSig)) {
-            AccessDeniedException.reportAccessDenied("ANY", ObjectType.FUNCTION, String.valueOf(functionSig));
+    public void checkAnyActionOnFunction(UserIdentity currentUser, Set<Long> roleIds, String database, Function function) {
+        if (!checkAnyActionOnFunctionObject(currentUser, roleIds, ObjectType.FUNCTION, database, function)) {
+            AccessDeniedException.reportAccessDenied("ANY", ObjectType.FUNCTION, function.getSignature());
+        }
+    }
+
+    @Override
+    public void checkAnyActionOnAnyFunction(UserIdentity currentUser, Set<Long> roleIds, String database) {
+        if (!checkAnyActionOnFunctionObject(currentUser, roleIds, ObjectType.FUNCTION, database, null)) {
+            AccessDeniedException.reportAccessDenied("ANY", ObjectType.FUNCTION, "ANY");
         }
     }
 
@@ -154,11 +177,11 @@ public class PrivilegeActions implements SystemAccessControl {
     }
 
     @Override
-    public void checkAnyActionOnGlobalFunction(UserIdentity currentUser, Set<Long> roleIds, Long functionId) {
+    public void checkAnyActionOnGlobalFunction(UserIdentity currentUser, Set<Long> roleIds, Function function) {
         if (!checkAnyActionOnFunctionObject(currentUser, roleIds, ObjectType.GLOBAL_FUNCTION,
-                PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID, functionId)) {
+                null, function)) {
             AccessDeniedException.reportAccessDenied("ANY", ObjectType.GLOBAL_FUNCTION,
-                    String.valueOf(functionId));
+                    function.getSignature());
         }
     }
 
@@ -276,9 +299,9 @@ public class PrivilegeActions implements SystemAccessControl {
         }
     }
 
-    private static boolean checkObjectTypeAction(UserIdentity userIdentity, Set<Long> roleIds,
-                                                 PrivilegeType privilegeType,
-                                                 ObjectType objectType, List<String> objectTokens) {
+    protected static boolean checkObjectTypeAction(UserIdentity userIdentity, Set<Long> roleIds,
+                                                   PrivilegeType privilegeType,
+                                                   ObjectType objectType, List<String> objectTokens) {
         AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
             PrivilegeCollectionV2 collection = manager.mergePrivilegeCollection(userIdentity, roleIds);
@@ -302,9 +325,8 @@ public class PrivilegeActions implements SystemAccessControl {
                 .collect(Collectors.joining("."));
     }
 
-
-    private static boolean checkAnyActionOnObject(UserIdentity currentUser, Set<Long> roleIds, ObjectType objectType,
-                                                  List<String> objectTokens) {
+    protected static boolean checkAnyActionOnObject(UserIdentity currentUser, Set<Long> roleIds, ObjectType objectType,
+                                                    List<String> objectTokens) {
         AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
             PrivilegeCollectionV2 collection = manager.mergePrivilegeCollection(currentUser, roleIds);
@@ -324,7 +346,23 @@ public class PrivilegeActions implements SystemAccessControl {
 
     private static boolean checkAnyActionOnFunctionObject(UserIdentity currentUser, Set<Long> roleIds,
                                                           ObjectType objectType,
-                                                          long databaseId, long functionId) {
+                                                          String dbName, Function function) {
+        // database == null means global function
+        long databaseId;
+        if (dbName == null) {
+            databaseId = PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID;
+        } else {
+            Database database = MetaUtils.getDatabase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
+            databaseId = database.getId();
+        }
+
+        long functionId;
+        if (function == null) {
+            functionId = PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID;
+        } else {
+            functionId = function.getFunctionId();
+        }
+
         AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
             PrivilegeCollectionV2 collection = manager.mergePrivilegeCollection(currentUser, roleIds);

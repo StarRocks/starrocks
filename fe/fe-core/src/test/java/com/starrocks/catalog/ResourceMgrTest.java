@@ -42,7 +42,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
@@ -136,7 +136,7 @@ public class ResourceMgrTest {
         properties.put("hive.metastore.uris", newThriftPath);
         AlterResourceStmt stmt = new AlterResourceStmt(name, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        PrivilegeChecker.check(stmt, connectContext);
+        Authorizer.check(stmt, connectContext);
         mgr.alterResource(stmt);
 
         // assert
@@ -161,7 +161,7 @@ public class ResourceMgrTest {
         properties.put("broker", "broker2");
         AlterResourceStmt stmt = new AlterResourceStmt(name, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        PrivilegeChecker.check(stmt, connectContext);
+        Authorizer.check(stmt, connectContext);
         mgr.alterResource(stmt);
     }
 
@@ -181,7 +181,7 @@ public class ResourceMgrTest {
         String noExistName = "hive1";
         AlterResourceStmt stmt = new AlterResourceStmt(noExistName, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        PrivilegeChecker.check(stmt, connectContext);
+        Authorizer.check(stmt, connectContext);
         mgr.alterResource(stmt);
     }
 
@@ -200,7 +200,7 @@ public class ResourceMgrTest {
         properties.put("hive.metastore.uris.xxx", "thrift://10.10.44.xxx:9083");
         AlterResourceStmt stmt = new AlterResourceStmt(name, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        PrivilegeChecker.check(stmt, connectContext);
+        Authorizer.check(stmt, connectContext);
         mgr.alterResource(stmt);
     }
 

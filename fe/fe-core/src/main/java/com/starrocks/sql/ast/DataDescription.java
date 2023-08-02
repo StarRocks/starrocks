@@ -42,7 +42,7 @@ import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TNetworkAddress;
@@ -644,11 +644,11 @@ public class DataDescription implements ParseNode {
         }
 
         try {
-            PrivilegeChecker.checkTableAction(ConnectContext.get().getCurrentUserIdentity(),
+            Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(),
                     ConnectContext.get().getCurrentRoleIds(), fullDbName, tableName, PrivilegeType.INSERT);
 
             if (isLoadFromTable()) {
-                PrivilegeChecker.checkTableAction(ConnectContext.get().getCurrentUserIdentity(),
+                Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(),
                         ConnectContext.get().getCurrentRoleIds(), fullDbName, srcTableName, PrivilegeType.SELECT);
             }
         } catch (AccessDeniedException e) {
