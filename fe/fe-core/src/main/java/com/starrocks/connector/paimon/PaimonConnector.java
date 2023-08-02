@@ -21,6 +21,7 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.paimon.catalog.Catalog;
@@ -28,13 +29,15 @@ import org.apache.paimon.catalog.CatalogContext;
 import org.apache.paimon.catalog.CatalogFactory;
 import org.apache.paimon.options.Options;
 
+import java.util.Iterator;
 import java.util.Map;
+import java.util.Map.Entry;
 
 import static org.apache.paimon.options.CatalogOptions.METASTORE;
 import static org.apache.paimon.options.CatalogOptions.URI;
 import static org.apache.paimon.options.CatalogOptions.WAREHOUSE;
 
-public class PaimonConnector implements Connector  {
+public class PaimonConnector implements Connector {
     private static final Logger LOG = LogManager.getLogger(PaimonConnector.class);
     private static final String PAIMON_CATALOG_TYPE = "paimon.catalog.type";
     private static final String PAIMON_CATALOG_WAREHOUSE = "paimon.catalog.warehouse";
@@ -72,6 +75,16 @@ public class PaimonConnector implements Connector  {
             throw new StarRocksConnectorException("The property %s must be set.", PAIMON_CATALOG_WAREHOUSE);
         }
         paimonOptions.setString(WAREHOUSE.key(), warehousePath);
+
+        Configuration storageConfig = new Configuration();
+        cloudConfiguration.applyToConfiguration(storageConfig);
+        Iterator<Entry<String, String>> propsIterator = storageConfig.iterator();
+        while (propsIterator.hasNext()) {
+            Entry<String, String> item = propsIterator.next();
+            if (item.getKey().startsWith("fs.s3")) {
+                paimonOptions.setString(item.getKey(), item.getValue());
+            }
+        }
     }
 
     public Catalog getPaimonNativeCatalog() {
