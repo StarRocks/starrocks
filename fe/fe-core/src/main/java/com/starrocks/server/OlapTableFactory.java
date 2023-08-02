@@ -247,15 +247,18 @@ public class OlapTableFactory implements AbstractTableFactory {
 
             // analyze replication_num
             short replicationNum = RunMode.defaultReplicationNum();
+            String logReplicationNum = "";
             try {
-                boolean isReplicationNumSet =
-                        properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM);
+                if (properties != null) {
+                    logReplicationNum = properties.get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM);
+                }
                 replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
-                if (isReplicationNumSet) {
+                if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
                     table.setReplicationNum(replicationNum);
                 }
-            } catch (AnalysisException e) {
-                throw new DdlException(e.getMessage());
+            } catch (AnalysisException ex) {
+                throw new DdlException(String.format("%s table=%s, properties.replication_num=%s",
+                        ex.getMessage(), table.getName(), logReplicationNum));
             }
 
             // set in memory
