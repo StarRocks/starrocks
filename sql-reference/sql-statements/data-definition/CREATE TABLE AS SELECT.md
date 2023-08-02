@@ -13,6 +13,7 @@ CREATE TABLE AS SELECT（简称 CTAS）语句可用于同步或异步查询原�
   ```SQL
   CREATE TABLE [IF NOT EXISTS] [database.]table_name
   [(column_name [, column_name2, ...]]
+  [key_desc]
   [COMMENT "table comment"]
   [partition_desc]
   [distribution_desc]
@@ -26,6 +27,7 @@ CREATE TABLE AS SELECT（简称 CTAS）语句可用于同步或异步查询原�
   SUBMIT [/*+ SET_VAR(key=value) */] TASK [[database.]<task_name>]AS
   CREATE TABLE [IF NOT EXISTS] [database.]table_name
   [(column_name [, column_name2, ...]]
+  [key_desc]
   [COMMENT "table comment"]
   [partition_desc]
   [distribution_desc]
@@ -38,6 +40,7 @@ CREATE TABLE AS SELECT（简称 CTAS）语句可用于同步或异步查询原�
 | **参数**          | **必填** | **描述**                                                     |
 | ----------------- | -------- | ------------------------------------------------------------ |
 | column_name       | 是       | 新表的列名。您无需指定列类型。StarRocks 会自动选择合适的列类型，并将 FLOAT 和 DOUBLE 转换为 DECIMAL(38,9)；将 CHAR、VARCHAR 和 STRING 转换为 VARCHAR(65533)。 |
+| key_desc          | 否       | 语法是 `key_type (<col_name1> [, <col_name2>, ...])`。<br>**参数**：<ul><li>`key_type`：新表的 Key 类型。有效值：`DUPLICATE KEY` 和 `PRIMARY KEY`。默认值：`DUPLICATE KEY`。</li><li> `col_name`：组成 Key 的列。</li></ul>|
 | COMMENT           | 否       | 新表注释。                                                   |
 | partition_desc    | 否       | 新表的分区方式。如不指定该参数，则默认新表为无分区。更多有关分区的设置，参见 CREATE TABLE。 |
 | distribution_desc | 否       | 新表的分桶方式。如不指定该参数，则默认新表的分桶列为使用 CBO 优化器采集的统计信息中基数最高的列，且分桶数量默认为 10。如果 CBO 优化器没有采集基数信息，则默认新表的第一列为分桶列。更多有关分桶的设置，参见 CREATE TABLE。 |
@@ -49,7 +52,7 @@ CREATE TABLE AS SELECT（简称 CTAS）语句可用于同步或异步查询原�
 - 使用 CTAS 语句创建的新表需满足如下条件：
   - `ENGINE` 类型为 `OLAP`。
 
-  - 数据模型为明细模型 (Duplicate Key)。
+  - 表类型默认为明细表，您也可以在 `key_desc` 中指定为主键表。
 
   - 排序列为前三列且这三列类型的存储空间不能超过 36 个字节。
 
@@ -107,7 +110,19 @@ SELECT * FROM employee_new;
 +------------+
 ```
 
-示例四：同步查询四张原表 `lineorder`、`customer`、`supplier` 和 `part` 并根据查询结果创建新表 `lineorder_flat`，然后将查询结果插入到新表中，并指定新表的分区和分桶方式。
+示例四：使用 CTAS 创建一张主键表。需要注意的是，主键表中的数据行数可能会比查询结果中的数据行数少。这是因为主键表只存储具有相同主键的一组数据行中最新的一条数据行。
+
+```SQL
+CREATE TABLE employee_new
+PRIMARY KEY(order_id)
+AS SELECT
+    order_list.order_id,
+    sum(goods.price) as total
+FROM order_list INNER JOIN goods ON goods.item_id1 = order_list.item_id2
+GROUP BY order_id;
+```
+
+示例五：同步查询四张原表 `lineorder`、`customer`、`supplier` 和 `part` 并根据查询结果创建新表 `lineorder_flat`，然后将查询结果插入到新表中，并指定新表的分区和分桶方式。
 
 ```SQL
 CREATE TABLE lineorder_flat
@@ -159,7 +174,7 @@ INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY
 INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY;
 ```
 
-示例五：异步查询原表 `order_detail` 并根据查询结果创建新表 `order_statistics`，然后将查询结果插入到新表中。
+示例六：异步查询原表 `order_detail` 并根据查询结果创建新表 `order_statistics`，然后将查询结果插入到新表中。
 
 ```Plain%20Text
 SUBMIT TASK AS CREATE TABLE order_statistics AS SELECT COUNT(*) as count FROM order_detail;
