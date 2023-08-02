@@ -291,9 +291,7 @@ public:
     // verify all rowsets of current(max) version in this tablet
     [[nodiscard]] Status verify();
 
-    void update_max_continuous_version() {
-        _timestamped_version_tracker.update_max_continuous_version();
-    }
+    void update_max_continuous_version() { _timestamped_version_tracker.update_max_continuous_version(); }
 
 protected:
     void on_shutdown() override;
