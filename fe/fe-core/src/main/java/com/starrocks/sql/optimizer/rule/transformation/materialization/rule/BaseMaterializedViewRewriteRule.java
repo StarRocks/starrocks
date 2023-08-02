@@ -10,7 +10,6 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -86,7 +85,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             queryPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(queryPredicate, queryPartitionPredicate));
         }
         final PredicateSplit queryPredicateSplit = PredicateSplit.splitPredicate(queryPredicate);
-        List<ScalarOperator> onPredicates = collectOnPredicate(queryExpression);
+        List<ScalarOperator> onPredicates = MvUtils.collectOnPredicate(queryExpression);
         onPredicates = onPredicates.stream().map(MvUtils::canonizePredicate).collect(Collectors.toList());
         List<Table> queryTables = MvUtils.getAllTables(queryExpression);
         for (MaterializationContext mvContext : mvCandidateContexts) {
@@ -108,23 +107,6 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         }
 
         return results;
-    }
-
-    private List<ScalarOperator> collectOnPredicate(OptExpression optExpression) {
-        List<ScalarOperator> onPredicates = Lists.newArrayList();
-        collectOnPredicate(optExpression, onPredicates);
-        return onPredicates;
-    }
-
-    private void collectOnPredicate(OptExpression optExpression, List<ScalarOperator> onPredicates) {
-        if (optExpression.getOp() instanceof LogicalJoinOperator) {
-            LogicalJoinOperator joinOperator = optExpression.getOp().cast();
-            onPredicates.addAll(Utils.extractConjuncts(joinOperator.getOnPredicate()));
-        } else {
-            for (OptExpression child : optExpression.getInputs()) {
-                collectOnPredicate(child, onPredicates);
-            }
-        }
     }
 
     /**
