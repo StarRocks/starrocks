@@ -8,7 +8,7 @@ An Iceberg catalog is a type of external catalog that is supported by StarRocks 
 
 To ensure successful SQL workloads on your Iceberg cluster, your StarRocks cluster needs to integrate with two important components:
 
-- Object storage or distributed file system like AWS S3, Microsoft Azure Storage, Google GCS, other S3-compatible storage system (for example, MinIO), or HDFS
+- Distributed file system (HDFS) or object storage like AWS S3, Microsoft Azure Storage, Google GCS, or other S3-compatible storage system (for example, MinIO)
 
 - Metastore like Hive metastore, AWS Glue, or REST
 
@@ -936,7 +936,7 @@ You can specify the table attributes in the `"key" = "value"` format in `propert
    ```SQL
    CREATE TABLE partition_tbl
    (
-       action varchar,
+       action varchar(20),
        id int,
        dt date
    )
@@ -974,7 +974,7 @@ INSERT {INTO | OVERWRITE} <table_name>
 
 -- If you want to sink data to specified partitions, use the following syntax:
 INSERT {INTO | OVERWRITE} <table_name>
-PARTITION (par_col1=<value> [, par_col2=<value>...]) ]
+PARTITION (par_col1=<value> [, par_col2=<value>...])
 { VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
 ```
 

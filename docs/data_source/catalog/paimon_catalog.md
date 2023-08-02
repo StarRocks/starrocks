@@ -8,7 +8,7 @@ Also, you can directly transform and load data from Paimon by using [INSERT INTO
 
 To ensure successful SQL workloads on your Paimon cluster, your StarRocks cluster needs to integrate with two important components:
 
-- Object storage or distributed file system like AWS S3, other S3-compatible storage system, Microsoft Azure Storage, Google GCS, or HDFS
+- istributed file system (HDFS) or object storage like AWS S3, Microsoft Azure Storage, Google GCS, or or other S3-compatible storage system (for example, MinIO)
 - Metastore like your file system or Hive metastore
 
 ## Usage notes
