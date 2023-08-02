@@ -127,7 +127,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.QueryStatement;
@@ -322,7 +322,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<String> dbs = new ArrayList<>();
         for (String fullName : dbNames) {
             try {
-                PrivilegeChecker.checkAnyActionOnOrInDb(currentUser, null, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                Authorizer.checkAnyActionOnOrInDb(currentUser, null, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         fullName);
             } catch (AccessDeniedException e) {
                 continue;
@@ -433,7 +433,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 OUTER:
                 for (Table table : tables) {
                     try {
-                        PrivilegeChecker.checkAnyActionOnTableLikeObject(currentUser,
+                        Authorizer.checkAnyActionOnTableLikeObject(currentUser,
                                 null, params.db, table);
                     } catch (AccessDeniedException e) {
                         continue;
@@ -466,7 +466,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                 Table tbl = db.getTable(tableName.getTbl());
                                 if (tbl != null) {
                                     try {
-                                        PrivilegeChecker.checkAnyActionOnTableLikeObject(currentUser,
+                                        Authorizer.checkAnyActionOnTableLikeObject(currentUser,
                                                 null, tableName.getDb(), tbl);
                                     } catch (AccessDeniedException e) {
                                         continue OUTER;
@@ -569,7 +569,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 if (table.isMaterializedView()) {
                     MaterializedView mvTable = (MaterializedView) table;
                     try {
-                        PrivilegeChecker.checkAnyActionOnTableLikeObject(currentUser,
+                        Authorizer.checkAnyActionOnTableLikeObject(currentUser,
                                 null, dbName, mvTable);
                     } catch (AccessDeniedException e) {
                         continue;
@@ -628,7 +628,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
 
             try {
-                PrivilegeChecker.checkAnyActionOnOrInDb(currentUser, null, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                Authorizer.checkAnyActionOnOrInDb(currentUser, null, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         task.getDbName());
             } catch (AccessDeniedException e) {
                 continue;
@@ -676,7 +676,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
 
             try {
-                PrivilegeChecker.checkAnyActionOnOrInDb(currentUser, null, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                Authorizer.checkAnyActionOnOrInDb(currentUser, null, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         status.getDbName());
             } catch (AccessDeniedException e) {
                 continue;
@@ -913,7 +913,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     return result;
                 }
                 try {
-                    PrivilegeChecker.checkAnyActionOnTableLikeObject(currentUser,
+                    Authorizer.checkAnyActionOnTableLikeObject(currentUser,
                             null, params.db, table);
                 } catch (AccessDeniedException e) {
                     return result;
@@ -934,7 +934,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         boolean reachLimit;
         for (String fullName : dbNames) {
             try {
-                PrivilegeChecker.checkAnyActionOnOrInDb(currentUser, null,
+                Authorizer.checkAnyActionOnOrInDb(currentUser, null,
                         InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, fullName);
             } catch (AccessDeniedException e) {
                 continue;
@@ -950,7 +950,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         }
 
                         try {
-                            PrivilegeChecker.checkAnyActionOnTableLikeObject(currentUser,
+                            Authorizer.checkAnyActionOnTableLikeObject(currentUser,
                                     null, fullName, table);
                         } catch (AccessDeniedException e) {
                             continue;
@@ -1116,7 +1116,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         // check INSERT action on table
         try {
-            PrivilegeChecker.checkTableAction(currentUser, null, db, tbl, PrivilegeType.INSERT);
+            Authorizer.checkTableAction(currentUser, null, db, tbl, PrivilegeType.INSERT);
         } catch (AccessDeniedException e) {
             throw new AuthenticationException(
                     "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
@@ -1683,7 +1683,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try {
             String dbName = authParams.getDb_name();
             for (String tableName : authParams.getTable_names()) {
-                PrivilegeChecker.checkTableAction(userIdentity, null, dbName, tableName, PrivilegeType.INSERT);
+                Authorizer.checkTableAction(userIdentity, null, dbName, tableName, PrivilegeType.INSERT);
             }
             return new TStatus(TStatusCode.OK);
         } catch (Exception e) {

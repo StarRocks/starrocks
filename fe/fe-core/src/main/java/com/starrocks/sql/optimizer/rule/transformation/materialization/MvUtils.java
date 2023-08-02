@@ -803,7 +803,7 @@ public class MvUtils {
     public static ScalarOperator getMvPartialPartitionPredicates(MaterializedView mv,
                                                                  OptExpression mvPlan,
                                                                  Set<String> mvPartitionNamesToRefresh) {
-        Pair<Table, Column> partitionTableAndColumns = mv.getPartitionTableAndColumn();
+        Pair<Table, Column> partitionTableAndColumns = mv.getBaseTableAndPartitionColumn();
         if (partitionTableAndColumns == null) {
             return null;
         }
@@ -873,7 +873,7 @@ public class MvUtils {
         } else {
             Map<String, Range<PartitionKey>> partitionMap;
             try {
-                partitionMap = PartitionUtil.getPartitionRange(table, partitionColumn);
+                partitionMap = PartitionUtil.getPartitionKeyRange(table, partitionColumn);
             } catch (UserException e) {
                 LOG.warn("Materialized view Optimizer compute partition range failed.", e);
                 return Lists.newArrayList();
