@@ -194,6 +194,11 @@ static const StreamingHtMinReductionEntry STREAMING_HT_MIN_REDUCTION[] = {
 static const int STREAMING_HT_MIN_REDUCTION_SIZE =
         sizeof(STREAMING_HT_MIN_REDUCTION) / sizeof(STREAMING_HT_MIN_REDUCTION[0]);
 
+struct LimitedMemAggState {
+    size_t limited_memory_size{};
+    bool has_limited(const Aggregator& aggregator) const;
+};
+
 using AggregatorPtr = std::shared_ptr<Aggregator>;
 
 struct AggregatorParams {
@@ -278,9 +283,19 @@ public:
     void set_aggr_phase(AggrPhase aggr_phase) { _aggr_phase = aggr_phase; }
     AggrPhase get_aggr_phase() { return _aggr_phase; }
 
-    bool is_hash_set() { return _is_only_group_by_columns; }
+    bool is_hash_set() const { return _is_only_group_by_columns; }
     const int64_t hash_map_memory_usage() const { return _hash_map_variant.reserved_memory_usage(mem_pool()); }
     const int64_t hash_set_memory_usage() const { return _hash_set_variant.reserved_memory_usage(mem_pool()); }
+
+    const int64_t memory_usage() const {
+        if (is_hash_set()) {
+            return hash_set_memory_usage();
+        } else if (!_group_by_expr_ctxs.empty()) {
+            return hash_map_memory_usage();
+        } else {
+            return 0;
+        }
+    }
 
     TStreamingPreaggregationMode::type& streaming_preaggregation_mode() { return _streaming_preaggregation_mode; }
     TStreamingPreaggregationMode::type streaming_preaggregation_mode() const { return _streaming_preaggregation_mode; }
@@ -371,6 +386,10 @@ public:
         return _spiller == nullptr || _spiller->spilled_append_rows() == _spiller->restore_read_rows();
     }
 
+    void set_streaming_all_states(bool streaming_all_states) { _streaming_all_states = streaming_all_states; }
+
+    bool is_streaming_all_states() const { return _streaming_all_states; }
+
     HashTableKeyAllocator _state_allocator;
 
 protected:
@@ -404,6 +423,7 @@ protected:
     bool _needs_finalize;
     // Indicate whether data of the hash table has been taken out or reach limit
     bool _is_ht_eos = false;
+    bool _streaming_all_states = false;
     bool _is_only_group_by_columns = false;
     // At least one group by column is nullable
     bool _has_nullable_key = false;
@@ -579,6 +599,10 @@ inline AggDataPtr AllocateState<HashMapWithKey>::operator()(std::nullptr_t) {
         }
         throw;
     }
+}
+
+inline bool LimitedMemAggState::has_limited(const Aggregator& aggregator) const {
+    return limited_memory_size > 0 && aggregator.memory_usage() >= limited_memory_size;
 }
 
 template <class T>
