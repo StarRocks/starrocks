@@ -56,22 +56,22 @@ public class FileListTableRepo extends FileListRepo {
             "ALTER TABLE %s SET ('replication_num'='3')";
 
     protected static final String ALL_COLUMNS =
-            "pipe_id, file_name, file_version, file_size, state, last_modified, staged_time," +
-                    " start_load, finish_load";
+            "`pipe_id`, `file_name`, `file_version`, `file_size`, `state`, `last_modified`, `staged_time`," +
+                    " `start_load`, `finish_load`";
 
     protected static final String SELECT_FILES =
             "SELECT " + ALL_COLUMNS + " FROM " + FILE_LIST_FULL_NAME;
 
-    protected static final String SELECT_FILES_BY_STATE = SELECT_FILES + " WHERE pipe_id = %d AND state = %s";
+    protected static final String SELECT_FILES_BY_STATE = SELECT_FILES + " WHERE `pipe_id` = %d AND `state` = %s";
 
     protected static final String UPDATE_FILE_STATE =
-            "UPDATE " + FILE_LIST_FULL_NAME + " SET state = %s WHERE ";
+            "UPDATE " + FILE_LIST_FULL_NAME + " SET `state` = %s WHERE ";
 
     protected static final String UPDATE_FILE_STATE_START_LOAD =
-            "UPDATE " + FILE_LIST_FULL_NAME + " SET state = %s, start_load = now() WHERE ";
+            "UPDATE " + FILE_LIST_FULL_NAME + " SET `state` = %s, `start_load` = now() WHERE ";
 
     protected static final String UPDATE_FILE_STATE_FINISH_LOAD =
-            "UPDATE " + FILE_LIST_FULL_NAME + " SET state = %s, finish_load = now() WHERE ";
+            "UPDATE " + FILE_LIST_FULL_NAME + " SET `state` = %s, `finish_load` = now() WHERE ";
 
     protected static final String INSERT_FILES =
             "INSERT INTO " + FILE_LIST_FULL_NAME + " VALUES ";
@@ -79,7 +79,7 @@ public class FileListTableRepo extends FileListRepo {
     protected static final String SELECTED_STAGED_FILES =
             "SELECT " + ALL_COLUMNS + " FROM " + FILE_LIST_FULL_NAME + " WHERE ";
 
-    protected static final String DELETE_BY_PIPE = "DELETE FROM " + FILE_LIST_FULL_NAME + " WHERE pipe_id = %d";
+    protected static final String DELETE_BY_PIPE = "DELETE FROM " + FILE_LIST_FULL_NAME + " WHERE `pipe_id` = %d";
 
     @Override
     public List<PipeFileRecord> listUnloadedFiles() {

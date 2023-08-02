@@ -123,7 +123,7 @@ public class FileListRepoTest {
         FileListRepo.PipeFileState state = FileListRepo.PipeFileState.LOADING;
         String sql = RepoAccessor.getInstance().buildSqlStartLoad(records, state);
         Assert.assertEquals("UPDATE _statistics_.pipe_file_list " +
-                "SET state = 'LOADING', start_load = now() " +
+                "SET `state` = 'LOADING', `start_load` = now() " +
                 "WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '123asdf') " +
                 "OR (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '123asdf')", sql);
 
@@ -131,7 +131,7 @@ public class FileListRepoTest {
         state = FileListRepo.PipeFileState.LOADED;
         sql = RepoAccessor.getInstance().buildSqlFinishLoad(records, state);
         Assert.assertEquals("UPDATE _statistics_.pipe_file_list " +
-                "SET state = 'LOADED', finish_load = now() " +
+                "SET `state` = 'LOADED', `finish_load` = now() " +
                 "WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '123asdf') " +
                 "OR (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '123asdf')", sql);
 
@@ -145,21 +145,21 @@ public class FileListRepoTest {
 
         // delete pipe
         sql = RepoAccessor.getInstance().buildDeleteByPipe(1);
-        Assert.assertEquals("DELETE FROM _statistics_.pipe_file_list WHERE pipe_id = 1", sql);
+        Assert.assertEquals("DELETE FROM _statistics_.pipe_file_list WHERE `pipe_id` = 1", sql);
 
         // list unloaded files
         sql = RepoAccessor.getInstance().buildListUnloadedFile(1);
-        Assert.assertEquals("SELECT pipe_id, file_name, file_version, file_size, state, last_modified, " +
-                "staged_time, start_load, finish_load FROM _statistics_.pipe_file_list " +
-                "WHERE pipe_id = 1 AND state = 'UNLOADED'", sql);
+        Assert.assertEquals("SELECT `pipe_id`, `file_name`, `file_version`, `file_size`, `state`, " +
+                "`last_modified`, `staged_time`, `start_load`, `finish_load` " +
+                "FROM _statistics_.pipe_file_list WHERE `pipe_id` = 1 AND `state` = 'UNLOADED'", sql);
 
         // select staged
         sql = RepoAccessor.getInstance().buildSelectStagedFiles(records);
-        Assert.assertEquals("SELECT pipe_id, file_name, file_version, file_size, state, last_modified, " +
-                        "staged_time, start_load, finish_load FROM _statistics_.pipe_file_list " +
-                        "WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '123asdf') " +
-                        "OR (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '123asdf')",
-                sql);
+        Assert.assertEquals("SELECT `pipe_id`, `file_name`, `file_version`, `file_size`, `state`, " +
+                "`last_modified`, `staged_time`, `start_load`, `finish_load` " +
+                "FROM _statistics_.pipe_file_list WHERE (pipe_id = 1 AND file_name = 'a.parquet' " +
+                "AND file_version = '123asdf') OR (pipe_id = 1 AND file_name = 'a.parquet' " +
+                "AND file_version = '123asdf')", sql);
     }
 
     private void mockExecutor() {
@@ -268,7 +268,7 @@ public class FileListRepoTest {
             {
                 executor.executeDML(
                         "UPDATE _statistics_.pipe_file_list " +
-                                "SET state = 'LOADING', start_load = now() " +
+                                "SET `state` = 'LOADING', `start_load` = now() " +
                                 "WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '1')");
                 result = Lists.newArrayList();
             }
@@ -278,7 +278,7 @@ public class FileListRepoTest {
             {
                 executor.executeDML(
                         "UPDATE _statistics_.pipe_file_list " +
-                                "SET state = 'LOADED', finish_load = now() " +
+                                "SET `state` = 'LOADED', `finish_load` = now() " +
                                 "WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '1')");
                 result = Lists.newArrayList();
             }
@@ -288,7 +288,7 @@ public class FileListRepoTest {
             {
                 executor.executeDML(
                         "UPDATE _statistics_.pipe_file_list " +
-                                "SET state = 'ERROR' " +
+                                "SET `state` = 'ERROR' " +
                                 "WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '1')");
                 result = Lists.newArrayList();
             }
@@ -299,7 +299,7 @@ public class FileListRepoTest {
         // delete by pipe
         new Expectations(executor) {
             {
-                executor.executeDML("DELETE FROM _statistics_.pipe_file_list WHERE pipe_id = 1");
+                executor.executeDML("DELETE FROM _statistics_.pipe_file_list WHERE `pipe_id` = 1");
                 result = Lists.newArrayList();
             }
         };
