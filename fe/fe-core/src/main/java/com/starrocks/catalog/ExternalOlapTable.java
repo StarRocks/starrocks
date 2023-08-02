@@ -400,6 +400,7 @@ public class ExternalOlapTable extends OlapTable {
                 indexes = new TableIndexes(indexList);
             }
 
+<<<<<<< HEAD
             TPartitionInfo tPartitionInfo = meta.getPartition_info();
             PartitionType partitionType = PartitionType.fromThrift(tPartitionInfo.getType());
             switch (partitionType) {
@@ -473,6 +474,17 @@ public class ExternalOlapTable extends OlapTable {
             for (TIndexMeta indexMeta : meta.getIndexes()) {
                 List<Column> columns = new ArrayList();
                 for (TColumnMeta columnMeta : indexMeta.getSchema_meta().getColumns()) {
+=======
+        TPartitionInfo tPartitionInfo = meta.getPartition_info();
+        PartitionType partitionType = PartitionType.fromThrift(tPartitionInfo.getType());
+        switch (partitionType) {
+            case RANGE:
+            case EXPR_RANGE:
+            case EXPR_RANGE_V2:
+                TRangePartitionDesc rangePartitionDesc = tPartitionInfo.getRange_partition_desc();
+                List<Column> columns = new ArrayList<Column>();
+                for (TColumnMeta columnMeta : rangePartitionDesc.getColumns()) {
+>>>>>>> cea43eca79 ([Enhancement] External olap table support temp partition (#28389))
                     Type type = Type.fromThrift(columnMeta.getColumnType());
                     Column column = new Column(columnMeta.getColumnName(), type, columnMeta.isAllowNull());
                     if (columnMeta.isSetKey()) {
@@ -489,6 +501,7 @@ public class ExternalOlapTable extends OlapTable {
                     }
                     columns.add(column);
                 }
+<<<<<<< HEAD
                 MaterializedIndexMeta index = new MaterializedIndexMeta(indexMeta.getIndex_id(), columns,
                         indexMeta.getSchema_meta().getSchema_version(),
                         indexMeta.getSchema_meta().getSchema_hash(),
@@ -500,6 +513,73 @@ public class ExternalOlapTable extends OlapTable {
                 indexIdToMeta.put(index.getIndexId(), index);
                 // TODO(wulei)
                 // indexNameToId.put(indexMeta.getIndex_name(), index.getIndexId());
+=======
+                partitionInfo = new RangePartitionInfo(columns);
+
+                for (Map.Entry<Long, TRange> entry : rangePartitionDesc.getRanges().entrySet()) {
+                    TRange tRange = entry.getValue();
+                    long partitionId = tRange.getPartition_id();
+                    ByteArrayInputStream stream = new ByteArrayInputStream(tRange.getStart_key());
+                    DataInputStream input = new DataInputStream(stream);
+                    PartitionKey startKey = PartitionKey.read(input);
+                    stream = new ByteArrayInputStream(tRange.getEnd_key());
+                    input = new DataInputStream(stream);
+                    PartitionKey endKey = PartitionKey.read(input);
+                    Range<PartitionKey> range = Range.closedOpen(startKey, endKey);
+                    short replicaNum = tRange.getBase_desc().getReplica_num_map().get(partitionId);
+                    boolean inMemory = tRange.getBase_desc().getIn_memory_map().get(partitionId);
+                    TDataProperty thriftDataProperty = tRange.getBase_desc().getData_property().get(partitionId);
+                    DataProperty dataProperty = new DataProperty(thriftDataProperty.getStorage_medium(),
+                            thriftDataProperty.getCold_time());
+                    // TODO: confirm false is ok
+                    RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+                    rangePartitionInfo.addPartition(partitionId, tRange.isSetIs_temp() && tRange.isIs_temp(),
+                            range, dataProperty, replicaNum, inMemory);
+                }
+                break;
+            case UNPARTITIONED:
+                partitionInfo = new SinglePartitionInfo();
+                TSinglePartitionDesc singePartitionDesc = tPartitionInfo.getSingle_partition_desc();
+                for (Map.Entry<Long, Short> entry : singePartitionDesc.getBase_desc().getReplica_num_map()
+                        .entrySet()) {
+                    long partitionId = entry.getKey();
+                    short replicaNum = singePartitionDesc.getBase_desc().getReplica_num_map().get(partitionId);
+                    boolean inMemory = singePartitionDesc.getBase_desc().getIn_memory_map().get(partitionId);
+                    TDataProperty thriftDataProperty =
+                            singePartitionDesc.getBase_desc().getData_property().get(partitionId);
+                    DataProperty dataProperty = new DataProperty(thriftDataProperty.getStorage_medium(),
+                            thriftDataProperty.getCold_time());
+                    partitionInfo.addPartition(partitionId, dataProperty, replicaNum, inMemory);
+                }
+                break;
+            default:
+                LOG.error("invalid partition type: {}", partitionType);
+                return;
+        }
+        long endOfPartitionBuild = System.currentTimeMillis();
+
+        indexIdToMeta.clear();
+        indexNameToId.clear();
+
+        for (TIndexMeta indexMeta : meta.getIndexes()) {
+            List<Column> columns = new ArrayList();
+            for (TColumnMeta columnMeta : indexMeta.getSchema_meta().getColumns()) {
+                Type type = Type.fromThrift(columnMeta.getColumnType());
+                Column column = new Column(columnMeta.getColumnName(), type, columnMeta.isAllowNull());
+                if (columnMeta.isSetKey()) {
+                    column.setIsKey(columnMeta.isKey());
+                }
+                if (columnMeta.isSetAggregationType()) {
+                    column.setAggregationType(AggregateType.valueOf(columnMeta.getAggregationType()), false);
+                }
+                if (columnMeta.isSetComment()) {
+                    column.setComment(columnMeta.getComment());
+                }
+                if (columnMeta.isSetDefaultValue()) {
+                    column.setDefaultValue(columnMeta.getDefaultValue());
+                }
+                columns.add(column);
+>>>>>>> cea43eca79 ([Enhancement] External olap table support temp partition (#28389))
             }
             long endOfIndexMetaBuild = System.currentTimeMillis();
 
@@ -561,7 +641,17 @@ public class ExternalOlapTable extends OlapTable {
                 }
                 addPartition(partition);
             }
+<<<<<<< HEAD
             long endOfTabletMetaBuild = System.currentTimeMillis();
+=======
+            if (partitionMeta.isSetIs_temp() && partitionMeta.isIs_temp()) {
+                addTempPartition(partition);
+            } else {
+                addPartition(partition);
+            }
+        }
+        long endOfTabletMetaBuild = System.currentTimeMillis();
+>>>>>>> cea43eca79 ([Enhancement] External olap table support temp partition (#28389))
 
             SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(clusterId);
             for (TBackendMeta backendMeta : backendMetas) {
