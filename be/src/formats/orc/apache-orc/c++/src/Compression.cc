@@ -712,17 +712,26 @@ void Zlib2DecompressionStream::NextDecompress(const void** data, int* size, size
 
         switch (result) {
         case LIBDEFLATE_SUCCESS:
+            if (tmpActualConsumeSize != avail_in) {
+                throw std::logic_error("not happen");
+            }
+
             remainingLength -= tmpActualConsumeSize;
             inputBuffer += tmpActualConsumeSize;
 
             next_out += tmpActualGetSize;
             avail_out -= tmpActualGetSize;
 
-            readBuffer(false);
-            if (state == DECOMPRESS_EOF) {
-                avail_in = 0;
+            if (remainingLength == 0) {
+                availableSize =
+                        std::min(static_cast<size_t>(inputBufferEnd - inputBuffer), remainingLength);
+                next_in = inputBuffer;
+                avail_in = availableSize;
                 break;
             }
+
+            readBuffer(true);
+
             availableSize =
                     std::min(static_cast<size_t>(inputBufferEnd - inputBuffer), remainingLength);
             next_in = inputBuffer;
@@ -755,6 +764,7 @@ std::string Zlib2DecompressionStream::getName() const {
     return result.str();
 }
 
+
 class BlockDecompressionStream : public DecompressionStream {
 public:
     BlockDecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize, MemoryPool& pool,
@@ -772,6 +782,38 @@ private:
     // may need to stitch together multiple input buffers;
     // to give snappy a contiguous block
     DataBuffer<char> inputDataBuffer;
+};
+
+class Zlib3DecompressionStream : public BlockDecompressionStream {
+public:
+    Zlib3DecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize, MemoryPool& _pool,
+                             ReaderMetrics* _metrics)
+            : BlockDecompressionStream(std::move(inStream), blockSize, _pool, _metrics) {
+        // PASS
+        decompressor = libdeflate_alloc_decompressor();
+    }
+    ~Zlib3DecompressionStream() override {
+        libdeflate_free_decompressor(decompressor);
+    }
+
+    std::string getName() const override {
+        std::ostringstream result;
+        result << "zlib3(" << getStreamName() << ")";
+        return result.str();
+    }
+
+protected:
+    uint64_t decompress(const char* input, uint64_t length, char* output, size_t maxOutputLength) override {
+        decompressor = libdeflate_alloc_decompressor();
+        size_t actual = 0;
+        auto res = libdeflate_deflate_decompress(decompressor, input, length, output, maxOutputLength, &actual);
+        if (res != LIBDEFLATE_SUCCESS) {
+            throw ParseError("not ok");
+        }
+        return actual;
+    }
+private:
+    libdeflate_decompressor* decompressor;
 };
 
 BlockDecompressionStream::BlockDecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize,
@@ -1197,7 +1239,9 @@ std::unique_ptr<SeekableInputStream> createDecompressor(CompressionKind kind,
         return REDUNDANT_MOVE(input);
     case CompressionKind_ZLIB:
         return std::unique_ptr<SeekableInputStream>(
-                new Zlib2DecompressionStream(std::move(input), blockSize, pool, metrics));
+                new Zlib3DecompressionStream(std::move(input), blockSize, pool, metrics));
+//        return std::unique_ptr<SeekableInputStream>(
+//                new Zlib2DecompressionStream(std::move(input), blockSize, pool, metrics));
 //        return std::unique_ptr<SeekableInputStream>(
 //                new ZlibDecompressionStream(std::move(input), blockSize, pool, metrics));
     case CompressionKind_SNAPPY:
