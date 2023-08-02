@@ -3817,6 +3817,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "                k2 int not null\n" +
                 "            )\n" +
                 "            DUPLICATE KEY(k1) " +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
                 "    \"in_memory\" = \"false\"\n" +
@@ -3826,6 +3827,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "                b int not null\n" +
                 "            )\n" +
                 "            DUPLICATE KEY(a) " +
+                "DISTRIBUTED BY HASH(`a`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
                 "    \"in_memory\" = \"false\"\n" +
