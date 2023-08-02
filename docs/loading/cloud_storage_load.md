@@ -2,7 +2,7 @@
 
 StarRocks supports using one of the following methods to load huge amounts of data from cloud storage: [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) and [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md).
 
-In v3.0 and earlier, StarRocks only supports Broker Load, which runs in asynchronous loading mode. After you submit a load job, StarRocks asynchronously runs the job, and you need to use the [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) statement or the `curl` command to check the result of the job.
+In v3.0 and earlier, StarRocks only supports Broker Load, which runs in asynchronous loading mode. After you submit a load job, StarRocks asynchronously runs the job. You can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
 Broker Load ensures the transactional atomicity of each load job that is run to load multiple data files, which means that the loading of multiple data files in one load job must all succeed or fail. It never happens that the loading of some data files succeeds while the loading of the other files fails.
 
@@ -769,51 +769,107 @@ After you confirm that the load job is successful, you can use [SELECT](../sql-r
 
 ## View a load job
 
-Broker Load allows you to view a lob job by using the SHOW LOAD statement or the `curl` command.
+Use the [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) statement to query the results of one or more load jobs from the `loads` table in the `information_schema` database. This feature is supported from v3.1 onwards.
 
-### Use SHOW LOAD
+Example 1: Query the results of load jobs executed on the `test_db` database. In the query statement, specify that a maximum of two results can be returned and the return results must be sorted by creation time (`CREATE_TIME`) in descending order.
 
-For more information, see [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md).
-
-### Use curl
-
-The syntax is as follows:
-
-```Bash
-curl --location-trusted -u <username>:<password> \
-    'http://<fe_host>:<fe_http_port>/api/<database_name>/_load_info?label=<label_name>'
+```SQL
+SELECT * FROM information_schema.loads
+WHERE database_name = 'test_db'
+ORDER BY create_time DESC
+LIMIT 2\G;
 ```
 
-> **NOTE**
->
-> - If you use an account for which no password is set, you need to input only `<username>:`.
-> - You can use [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW%20FRONTENDS.md) to view the IP address and HTTP port of the FE node.
+The following results are returned:
 
-For example, you can run the following command to view the information about one of the preceding load jobs, whose label is `label_brokerloadtest_103`, in the `test_db` database:
-
-```Bash
-curl --location-trusted -u <username>:<password> \
-    'http://<fe_host>:<fe_http_port>/api/test_db/_load_info?label=label_brokerloadtest_103'
+```SQL
+*************************** 1. row ***************************
+              JOB_ID: 20686
+               LABEL: label_brokerload_unqualifiedtest_83
+       DATABASE_NAME: test_db
+               STATE: FINISHED
+            PROGRESS: ETL:100%; LOAD:100%
+                TYPE: BROKER
+            PRIORITY: NORMAL
+           SCAN_ROWS: 8
+       FILTERED_ROWS: 0
+     UNSELECTED_ROWS: 0
+           SINK_ROWS: 8
+            ETL_INFO:
+           TASK_INFO: resource:N/A; timeout(s):14400; max_filter_ratio:1.0
+         CREATE_TIME: 2023-08-02 15:25:22
+      ETL_START_TIME: 2023-08-02 15:25:24
+     ETL_FINISH_TIME: 2023-08-02 15:25:24
+     LOAD_START_TIME: 2023-08-02 15:25:24
+    LOAD_FINISH_TIME: 2023-08-02 15:25:27
+         JOB_DETAILS: {"All backends":{"77fe760e-ec53-47f7-917d-be5528288c08":[10006],"0154f64e-e090-47b7-a4b2-92c2ece95f97":[10005]},"FileNumber":2,"FileSize":84,"InternalTableLoadBytes":252,"InternalTableLoadRows":8,"ScanBytes":84,"ScanRows":8,"TaskNumber":2,"Unfinished backends":{"77fe760e-ec53-47f7-917d-be5528288c08":[],"0154f64e-e090-47b7-a4b2-92c2ece95f97":[]}}
+           ERROR_MSG: NULL
+        TRACKING_URL: NULL
+        TRACKING_SQL: NULL
+REJECTED_RECORD_PATH: NULL
+*************************** 2. row ***************************
+              JOB_ID: 20624
+               LABEL: label_brokerload_unqualifiedtest_82
+       DATABASE_NAME: test_db
+               STATE: FINISHED
+            PROGRESS: ETL:100%; LOAD:100%
+                TYPE: BROKER
+            PRIORITY: NORMAL
+           SCAN_ROWS: 12
+       FILTERED_ROWS: 4
+     UNSELECTED_ROWS: 0
+           SINK_ROWS: 8
+            ETL_INFO:
+           TASK_INFO: resource:N/A; timeout(s):14400; max_filter_ratio:1.0
+         CREATE_TIME: 2023-08-02 15:23:29
+      ETL_START_TIME: 2023-08-02 15:23:34
+     ETL_FINISH_TIME: 2023-08-02 15:23:34
+     LOAD_START_TIME: 2023-08-02 15:23:34
+    LOAD_FINISH_TIME: 2023-08-02 15:23:34
+         JOB_DETAILS: {"All backends":{"78f78fc3-8509-451f-a0a2-c6b5db27dcb6":[10010],"a24aa357-f7de-4e49-9e09-e98463b5b53c":[10006]},"FileNumber":2,"FileSize":158,"InternalTableLoadBytes":333,"InternalTableLoadRows":8,"ScanBytes":158,"ScanRows":12,"TaskNumber":2,"Unfinished backends":{"78f78fc3-8509-451f-a0a2-c6b5db27dcb6":[],"a24aa357-f7de-4e49-9e09-e98463b5b53c":[]}}
+           ERROR_MSG: NULL
+        TRACKING_URL: http://172.26.195.69:8540/api/_load_error_log?file=error_log_78f78fc38509451f_a0a2c6b5db27dcb7
+        TRACKING_SQL: select tracking_log from information_schema.load_tracking_logs where job_id=20624
+REJECTED_RECORD_PATH: 172.26.95.92:/home/disk1/sr/be/storage/rejected_record/test_db/label_brokerload_unqualifiedtest_0728/6/404a20b1e4db4d27_8aa9af1e8d6d8bdc
 ```
 
-The `curl` command returns the information about the load job as a JSON object `jobInfo`:
+Example 2: Query the result of the load job (whose label is `label_brokerload_unqualifiedtest_82`) executed on the `test_db` database:
 
-```JSON
-{"jobInfo":{"dbName":"test_db","tblNames":["table1","table2"],"label":"label_brokerloadtest_103","state":"FINISHED","failMsg":"","trackingUrl":""},"status":"OK","msg":"Success"}
+```SQL
+SELECT * FROM information_schema.loads
+WHERE database_name = 'test_db' and label = 'label_brokerload_unqualifiedtest_82'\G;
 ```
 
-The following table describes the parameters in `jobInfo`.
+The following result is returned:
 
-| **Parameter** | **Description**                                              |
-| ------------- | ------------------------------------------------------------ |
-| dbName        | The name of the database into which data is loaded           |
-| tblNames      | The name of the table into which data is loaded.             |
-| label         | The label of the load job.                                   |
-| state         | The status of the load job. Valid values:<ul><li>`PENDING`: The load job is in queue waiting to be scheduled.</li><li>`QUEUEING`: The load job is in the queue waiting to be scheduled.</li><li>`LOADING`: The load job is running.</li><li>`PREPARED`: The transaction has been committed.</li><li>`FINISHED`: The load job succeeded.</li><li>`CANCELLED`: The load job failed.</li></ul>For more information, see ["Asynchronous loading"](../loading/Loading_intro.md#asynchronous-loading). |
-| failMsg       | The reason why the load job failed. If the `state` value for the load job is `PENDING`, `LOADING`, or `FINISHED`, `NULL` is returned for the `failMsg` parameter. If the `state` value for the load job is `CANCELLED`, the value returned for the `failMsg` parameter consists of two parts: `type` and `msg`.<ul><li>The `type` part can be any of the following values:</li><ul><li>`USER_CANCEL`: The load job was manually canceled.</li><li>`ETL_SUBMIT_FAIL`: The load job failed to be submitted.</li><li>`ETL-QUALITY-UNSATISFIED`: The load job failed because the percentage of unqualified data exceeds the value of the `max-filter-ratio` parameter.</li><li>`LOAD-RUN-FAIL`: The load job failed in the `LOADING` stage.</li><li>`TIMEOUT`: The load job failed to finish within the specified timeout period.</li><li>`UNKNOWN`: The load job failed due to an unknown error.</li></ul><li>The `msg` part provides the detailed cause of the load failure.</li></ul> |
-| trackingUrl   | The URL that is used to access the unqualified data detected in the load job. You can use the `curl` or `wget` command to access the URL and obtain the unqualified data. If no unqualified data is detected, `NULL` is returned for the `trackingUrl` parameter. |
-| status        | The status of the HTTP request for the load job. Valid values: `OK` and `Fail`. |
-| msg           | The error information of the HTTP request for the load job.  |
+```SQL
+*************************** 1. row ***************************
+              JOB_ID: 20624
+               LABEL: label_brokerload_unqualifiedtest_82
+       DATABASE_NAME: test_db
+               STATE: FINISHED
+            PROGRESS: ETL:100%; LOAD:100%
+                TYPE: BROKER
+            PRIORITY: NORMAL
+           SCAN_ROWS: 12
+       FILTERED_ROWS: 4
+     UNSELECTED_ROWS: 0
+           SINK_ROWS: 8
+            ETL_INFO:
+           TASK_INFO: resource:N/A; timeout(s):14400; max_filter_ratio:1.0
+         CREATE_TIME: 2023-08-02 15:23:29
+      ETL_START_TIME: 2023-08-02 15:23:34
+     ETL_FINISH_TIME: 2023-08-02 15:23:34
+     LOAD_START_TIME: 2023-08-02 15:23:34
+    LOAD_FINISH_TIME: 2023-08-02 15:23:34
+         JOB_DETAILS: {"All backends":{"78f78fc3-8509-451f-a0a2-c6b5db27dcb6":[10010],"a24aa357-f7de-4e49-9e09-e98463b5b53c":[10006]},"FileNumber":2,"FileSize":158,"InternalTableLoadBytes":333,"InternalTableLoadRows":8,"ScanBytes":158,"ScanRows":12,"TaskNumber":2,"Unfinished backends":{"78f78fc3-8509-451f-a0a2-c6b5db27dcb6":[],"a24aa357-f7de-4e49-9e09-e98463b5b53c":[]}}
+           ERROR_MSG: NULL
+        TRACKING_URL: http://172.26.195.69:8540/api/_load_error_log?file=error_log_78f78fc38509451f_a0a2c6b5db27dcb7
+        TRACKING_SQL: select tracking_log from information_schema.load_tracking_logs where job_id=20624
+REJECTED_RECORD_PATH: 172.26.95.92:/home/disk1/sr/be/storage/rejected_record/test_db/label_brokerload_unqualifiedtest_0728/6/404a20b1e4db4d27_8aa9af1e8d6d8bdc
+```
+
+For information about the fields in the return results, see [Information Schema > loads](../administration/information_schema.md#loads).
 
 ## Cancel a load job
 
