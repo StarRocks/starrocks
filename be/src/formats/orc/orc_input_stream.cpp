@@ -42,7 +42,7 @@ void ORCHdfsFileStream::prepareCache(PrepareCacheScope scope, uint64_t offset, u
 
     _cache_buffer.resize(length);
     _cache_offset = offset;
-    doRead(_cache_buffer.data(), length, offset, true);
+    doRead(_cache_buffer.data(), length, offset);
 }
 
 bool ORCHdfsFileStream::canUseCacheBuffer(uint64_t offset, uint64_t length) {
@@ -58,7 +58,7 @@ void ORCHdfsFileStream::read(void* buf, uint64_t length, uint64_t offset) {
         size_t idx = offset - _cache_offset;
         memcpy(buf, _cache_buffer.data() + idx, length);
     } else {
-        doRead(buf, length, offset, false);
+        doRead(buf, length, offset);
     }
 }
 
@@ -66,7 +66,7 @@ const std::string& ORCHdfsFileStream::getName() const {
     return _file->filename();
 }
 
-void ORCHdfsFileStream::doRead(void* buf, uint64_t length, uint64_t offset, bool direct) {
+void ORCHdfsFileStream::doRead(void* buf, uint64_t length, uint64_t offset) {
     if (buf == nullptr) {
         throw orc::ParseError("Buffer is null");
     }

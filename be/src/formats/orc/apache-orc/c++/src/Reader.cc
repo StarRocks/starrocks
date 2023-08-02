@@ -428,6 +428,8 @@ void RowReaderImpl::loadStripeIndex() {
 
     // obtain row indexes for selected columns
     uint64_t offset = currentStripeInfo.offset();
+
+    // usually row index size is small.
     uint64_t rowIndexSize = currentStripeInfo.indexlength();
     contents->stream->prepareCache(InputStream::PrepareCacheScope::READ_ROW_GROUP_INDEX, offset, rowIndexSize);
     for (int i = 0; i < currentStripeFooter.streams_size(); ++i) {

@@ -68,7 +68,7 @@ public:
     void setIORanges(std::vector<IORange>& io_ranges) override;
 
 private:
-    void doRead(void* buf, uint64_t length, uint64_t offset, bool direct);
+    void doRead(void* buf, uint64_t length, uint64_t offset);
     bool canUseCacheBuffer(uint64_t offset, uint64_t length);
 
     RandomAccessFile* _file;
