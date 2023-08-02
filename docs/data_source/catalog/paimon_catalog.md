@@ -417,7 +417,7 @@ PROPERTIES
 (
     "type" = "paimon",
     "paimon.catalog.type" = "filesystem",
-    "paimon.catalog.warehouse" = "hdfs://192.168.7.239:9000/user/hive/warehouse",
+    "paimon.catalog.warehouse" = "s3:///bucket/warehouse",
     "aws.s3.enable_ssl" = "true",
     "aws.s3.enable_path_style_access" = "true",
     "aws.s3.endpoint" = "<s3_endpoint>",
