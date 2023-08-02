@@ -16,6 +16,7 @@
 
 #include "column/schema.h"
 #include "fs/fs.h"
+#include "gen_cpp/lake_types.pb.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/general_tablet_writer.h"
@@ -42,6 +43,26 @@ StatusOr<TabletMetadataPtr> Tablet::get_metadata(int64_t version) {
 
 Status Tablet::delete_metadata(int64_t version) {
     return _mgr->delete_tablet_metadata(_id, version);
+}
+
+bool Tablet::get_enable_persistent_index(int64_t version) {
+    auto tablet_metadata = _mgr->get_tablet_metadata(_id, version);
+    if (!tablet_metadata.ok()) {
+        LOG(WARNING) << "Fail to get tablet metadata. tablet_id: " << _id << ", version: " << version
+                     << ", error: " << tablet_metadata.status();
+        return false;
+    }
+    return (*tablet_metadata)->enable_persistent_index();
+}
+
+StatusOr<PersistentIndexTypePB> Tablet::get_persistent_index_type(int64_t version) {
+    auto tablet_metadata = _mgr->get_tablet_metadata(_id, version);
+    if (!tablet_metadata.ok()) {
+        LOG(WARNING) << "Fail to get tablet metadata. tablet_id: " << _id << ", version: " << version
+                     << ", error: " << tablet_metadata.status();
+        return Status::InternalError("get tablet metadata failed");
+    }
+    return (*tablet_metadata)->persistent_index_type();
 }
 
 Status Tablet::put_txn_log(const TxnLog& log) {

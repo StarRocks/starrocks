@@ -47,7 +47,7 @@ public class ComputeNodeProcDir implements ProcDirInterface {
                 .add("BePort").add("HttpPort").add("BrpcPort").add("LastStartTime").add("LastHeartbeat").add("Alive")
                 .add("SystemDecommissioned").add("ClusterDecommissioned").add("ErrMsg")
                 .add("Version")
-                .add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct");
+                .add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct").add("HasStoragePath");
         if (RunMode.allowCreateLakeTable()) {
             builder.add("StarletPort").add("WorkerId").add("WarehouseName");
         }
@@ -140,6 +140,8 @@ public class ComputeNodeProcDir implements ProcDirInterface {
                 Warehouse wh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(computeNode.getWarehouseId());
                 computeNodeInfo.add(wh.getName());
             }
+
+            computeNodeInfo.add(String.valueOf(computeNode.isSetStoragePath()));
 
             comparableComputeNodeInfos.add(computeNodeInfo);
         }
