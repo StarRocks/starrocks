@@ -24,6 +24,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
@@ -76,8 +77,28 @@ public class SyncPartitionUtils {
 
     private static final String DEFAULT_PREFIX = "p";
 
+<<<<<<< HEAD
     public static PartitionDiff calcSyncSamePartition(Map<String, Range<PartitionKey>> baseRangeMap,
                                                       Map<String, Range<PartitionKey>> mvRangeMap) {
+=======
+    public static RangePartitionDiff getRangePartitionDiff(Expr partitionExpr, Column partitionColumn,
+                                                           Map<String, Range<PartitionKey>> basePartitionMap,
+                                                           Map<String, Range<PartitionKey>> mvPartitionMap) {
+        if (partitionExpr instanceof SlotRef) {
+            return getRangePartitionDiffOfSlotRef(basePartitionMap, mvPartitionMap);
+        } else if (partitionExpr instanceof FunctionCallExpr) {
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
+            String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
+            return getRangePartitionDiffOfExpr(basePartitionMap, mvPartitionMap,
+                    granularity, partitionColumn.getPrimitiveType());
+        } else {
+            throw UnsupportedException.unsupportedException("unsupported partition expr:" + partitionExpr);
+        }
+    }
+
+    public static RangePartitionDiff getRangePartitionDiffOfSlotRef(Map<String, Range<PartitionKey>> baseRangeMap,
+                                                                    Map<String, Range<PartitionKey>> mvRangeMap) {
+>>>>>>> 2d8dec769f ([BugFix] Materialized view should update all its refreshed base table partitions after refresh (#28093))
         // This synchronization method has a one-to-one correspondence
         // between the base table and the partition of the mv.
         Map<String, Range<PartitionKey>> adds = diffRange(baseRangeMap, mvRangeMap);
@@ -85,6 +106,19 @@ public class SyncPartitionUtils {
         return new PartitionDiff(adds, deletes);
     }
 
+<<<<<<< HEAD
+=======
+    public static ListPartitionDiff getListPartitionDiff(Map<String, List<List<String>>> baseListMap,
+                                                         Map<String, List<List<String>>> mvListMap) {
+        // This synchronization method has a one-to-one correspondence
+        // between the base table and the partition of the mv.
+        Map<String, List<List<String>>> adds = diffList(baseListMap, mvListMap);
+        Map<String, List<List<String>>> deletes = diffList(mvListMap, baseListMap);
+        return new ListPartitionDiff(adds, deletes);
+    }
+
+
+>>>>>>> 2d8dec769f ([BugFix] Materialized view should update all its refreshed base table partitions after refresh (#28093))
     public static boolean hasPartitionChange(Map<String, Range<PartitionKey>> baseRangeMap,
                                              Map<String, Range<PartitionKey>> mvRangeMap) {
         Map<String, Range<PartitionKey>> adds = diffRange(baseRangeMap, mvRangeMap);
@@ -95,6 +129,7 @@ public class SyncPartitionUtils {
         return deletes != null && !deletes.isEmpty();
     }
 
+<<<<<<< HEAD
     public static PartitionDiff calcSyncRollupPartition(Map<String, Range<PartitionKey>> baseRangeMap,
                                                         Map<String, Range<PartitionKey>> mvRangeMap,
                                                         String granularity, PrimitiveType partitionType) {
@@ -103,6 +138,25 @@ public class SyncPartitionUtils {
         Map<String, Range<PartitionKey>> adds = diffRange(rollupRange, mvRangeMap);
         Map<String, Range<PartitionKey>> deletes = diffRange(mvRangeMap, rollupRange);
         PartitionDiff diff = new PartitionDiff(adds, deletes);
+=======
+    public static RangePartitionDiff getRangePartitionDiffOfExpr(Map<String, Range<PartitionKey>> baseRangeMap,
+                                                                 Map<String, Range<PartitionKey>> mvRangeMap,
+                                                                 String granularity, PrimitiveType partitionType) {
+        Map<String, Range<PartitionKey>> rollupRange = mappingRangeList(baseRangeMap, granularity, partitionType);
+
+        // TODO: Callers may use `List<PartitionRange>` directly.
+        List<PartitionRange> rollupRanges = rollupRange.keySet().stream().map(name -> new PartitionRange(name,
+                rollupRange.get(name))).collect(Collectors.toList());
+        List<PartitionRange> baseRanges = baseRangeMap.keySet().stream().map(name -> new PartitionRange(name,
+                baseRangeMap.get(name))).collect(Collectors.toList());
+        List<PartitionRange> mvRanges = mvRangeMap.keySet().stream().map(name -> new PartitionRange(name,
+                mvRangeMap.get(name))).collect(Collectors.toList());
+        Map<String, Set<String>> partitionRefMap = getIntersectedPartitions(rollupRanges, baseRanges);
+        Map<String, Range<PartitionKey>> adds = diffRange(rollupRanges, mvRanges);
+        Map<String, Range<PartitionKey>> deletes = diffRange(mvRanges, rollupRanges);
+
+        RangePartitionDiff diff = new RangePartitionDiff(adds, deletes);
+>>>>>>> 2d8dec769f ([BugFix] Materialized view should update all its refreshed base table partitions after refresh (#28093))
         diff.setRollupToBasePartitionMap(partitionRefMap);
         return diff;
 
@@ -171,6 +225,7 @@ public class SyncPartitionUtils {
         return new PartitionMapping(truncLowerDateTime, truncUpperDateTime);
     }
 
+<<<<<<< HEAD
     public static Map<String, Set<String>> generatePartitionRefMap(Map<String, Range<PartitionKey>> srcRangeMap,
                                                                    Map<String, Range<PartitionKey>> dstRangeMap) {
         Map<String, Set<String>> result = Maps.newHashMap();
@@ -190,6 +245,58 @@ public class SyncPartitionUtils {
                 }
                 Set<String> dstNames = result.get(srcEntry.getKey());
                 dstNames.add(dstEntry.getKey());
+=======
+    /**
+     * return all src partition name to intersected dst partition names which the src partition
+     * is intersected with dst partitions.
+     */
+    public static Map<String, Set<String>> getIntersectedPartitions(Map<String, Range<PartitionKey>> srcRangeMap,
+                                                                    Map<String, Range<PartitionKey>> dstRangeMap) {
+        if (dstRangeMap.isEmpty()) {
+            return srcRangeMap.keySet().stream().collect(Collectors.toMap(Function.identity(), Sets::newHashSet));
+        }
+
+        // TODO: Callers may use `List<PartitionRange>` directly.
+        List<PartitionRange> srcRanges = srcRangeMap.keySet().stream().map(name -> new PartitionRange(name,
+                srcRangeMap.get(name))).collect(Collectors.toList());
+        List<PartitionRange> dstRanges = dstRangeMap.keySet().stream().map(name -> new PartitionRange(name,
+                dstRangeMap.get(name))).collect(Collectors.toList());
+        return getIntersectedPartitions(srcRanges, dstRanges);
+    }
+
+    /**
+     * @param srcRanges : src partition ranges
+     * @param dstRanges : dst partition ranges
+     * @return          : return all src partition name to intersected dst partition names which the src partition
+     * is intersected with dst ranges.
+     */
+    private static Map<String, Set<String>> getIntersectedPartitions(List<PartitionRange> srcRanges,
+                                                                     List<PartitionRange> dstRanges) {
+        Map<String, Set<String>> result = srcRanges.stream().collect(
+                Collectors.toMap(PartitionRange::getPartitionName, x -> Sets.newHashSet()));
+
+        Collections.sort(srcRanges, PartitionRange::compareTo);
+        Collections.sort(dstRanges, PartitionRange::compareTo);
+
+        for (PartitionRange srcRange : srcRanges) {
+            int mid = Collections.binarySearch(dstRanges, srcRange);
+            if (mid < 0) {
+                continue;
+            }
+            Set<String> addedSet = result.get(srcRange.getPartitionName());
+            addedSet.add(dstRanges.get(mid).getPartitionName());
+
+            int lower = mid - 1;
+            while (lower >= 0 && dstRanges.get(lower).isIntersected(srcRange)) {
+                addedSet.add(dstRanges.get(lower).getPartitionName());
+                lower--;
+            }
+
+            int higher = mid + 1;
+            while (higher < dstRanges.size() && dstRanges.get(higher).isIntersected(srcRange)) {
+                addedSet.add(dstRanges.get(higher).getPartitionName());
+                higher++;
+>>>>>>> 2d8dec769f ([BugFix] Materialized view should update all its refreshed base table partitions after refresh (#28093))
             }
         }
         return result;
@@ -426,7 +533,20 @@ public class SyncPartitionUtils {
         if (expr instanceof SlotRef) {
             Map<String, MaterializedView.BasePartitionInfo> mvTableVersionMap = versionMap.get(tableId);
             if (mvTableVersionMap != null) {
+<<<<<<< HEAD
                 mvTableVersionMap.remove(basePartitionName);
+=======
+                mvTableVersionMap.remove(mvPartitionName);
+            }
+        } else if (expr instanceof FunctionCallExpr) {
+            Map<String, MaterializedView.BasePartitionInfo> mvTableVersionMap = versionMap.get(tableId);
+            if (mvTableVersionMap != null && mvPartitionRange != null && baseTable instanceof OlapTable) {
+                // use range derive connect base partition
+                Map<String, Range<PartitionKey>> basePartitionMap = ((OlapTable) baseTable).getRangePartitionMap();
+                Map<String, Set<String>> mvToBaseMapping = getIntersectedPartitions(
+                        Collections.singletonMap(mvPartitionName, mvPartitionRange), basePartitionMap);
+                mvToBaseMapping.values().forEach(parts -> parts.forEach(mvTableVersionMap::remove));
+>>>>>>> 2d8dec769f ([BugFix] Materialized view should update all its refreshed base table partitions after refresh (#28093))
             }
         } else {
             // This is a bad case for refreshing, and this problem will be optimized later.

@@ -47,6 +47,7 @@ import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.StarRocksAssert;
@@ -82,8 +83,15 @@ public class PartitionBasedMvRefreshProcessorTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
         starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.withDatabase("test").useDatabase("test")
-                .withTable("CREATE TABLE test.tbl1\n" +
+
+        if (!starRocksAssert.databaseExist("_statistics_")) {
+            StatisticsMetaManager m = new StatisticsMetaManager();
+            m.createStatisticsTablesForTest();
+        }
+        starRocksAssert.withDatabase("test");
+        starRocksAssert.useDatabase("test");
+
+        starRocksAssert.withTable("CREATE TABLE test.tbl1\n" +
                         "(\n" +
                         "    k1 date,\n" +
                         "    k2 int,\n" +
@@ -261,6 +269,25 @@ public class PartitionBasedMvRefreshProcessorTest {
                         ")\n" +
                         "AS SELECT t1.c1, t1.c2, t1_par.par_col, t1_par.par_date FROM `hive0`.`partitioned_db`.`t1` join " +
                         "`hive0`.`partitioned_db`.`t1_par` using (par_col)");
+
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+                if (stmt instanceof InsertStmt) {
+                    InsertStmt insertStmt = (InsertStmt) stmt;
+                    TableName tableName = insertStmt.getTableName();
+                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
+                    if (tbl != null) {
+                        for (Partition partition : tbl.getPartitions()) {
+                            if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
+                                setPartitionVersion(partition, partition.getVisibleVersion() + 1);
+                            }
+                        }
+                    }
+                }
+            }
+        };
     }
 
     protected void assertPlanContains(ExecPlan execPlan, String... explain) throws Exception {
@@ -273,32 +300,38 @@ public class PartitionBasedMvRefreshProcessorTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testUnionAllMvWithPartition() {
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("union_all_mv"));
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        try {
+            // base table partition insert data
+            String insertSql = "insert into tbl5 partition(p4) values('2022-04-01', '2021-04-01 00:02:11', 3, 10);";
+            new StmtExecutor(connectContext, insertSql).execute();
+
+            taskRun.executeTaskRun();
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                    taskRun.getProcessor();
+
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            System.out.println(plan);
+            Assert.assertFalse(plan.contains("partitions=5/5"));
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.fail(e.getMessage());
+        }
+    }
+
+    @Test
+>>>>>>> 2d8dec769f ([BugFix] Materialized view should update all its refreshed base table partitions after refresh (#28093))
     public void testWithPartition() {
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
-                if (stmt instanceof InsertStmt) {
-                    InsertStmt insertStmt = (InsertStmt) stmt;
-                    TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-                    if (tableName.getTbl().equals("tbl1")) {
-                        OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
-                        for (Partition partition : tbl1.getPartitions()) {
-                            if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
-                                setPartitionVersion(partition, partition.getVisibleVersion() + 1);
-                            }
-                        }
-                    } else if (tableName.getTbl().equals("tbl2")) {
-                        OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl2"));
-                        for (Partition partition : tbl1.getPartitions()) {
-                            if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
-                                setPartitionVersion(partition, partition.getVisibleVersion() + 1);
-                            }
-                        }
-                    }
-                }
-            }
-        };
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv1"));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
@@ -379,31 +412,6 @@ public class PartitionBasedMvRefreshProcessorTest {
 
     @Test
     public void testMvWithoutPartition() {
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
-                if (stmt instanceof InsertStmt) {
-                    InsertStmt insertStmt = (InsertStmt) stmt;
-                    TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-                    if (tableName.getTbl().equals("tbl1")) {
-                        OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
-                        for (Partition partition : tbl1.getPartitions()) {
-                            if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
-                                setPartitionVersion(partition, partition.getVisibleVersion() + 1);
-                            }
-                        }
-                    } else if (tableName.getTbl().equals("tbl2")) {
-                        OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl2"));
-                        for (Partition partition : tbl1.getPartitions()) {
-                            if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
-                                setPartitionVersion(partition, partition.getVisibleVersion() + 1);
-                            }
-                        }
-                    }
-                }
-            }
-        };
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_without_partition"));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
@@ -421,22 +429,6 @@ public class PartitionBasedMvRefreshProcessorTest {
 
     @Test
     public void testRangePartitionRefresh() throws Exception {
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
-                if (stmt instanceof InsertStmt) {
-                    InsertStmt insertStmt = (InsertStmt) stmt;
-                    TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
-                    for (Partition partition : tbl.getPartitions()) {
-                        if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
-                            setPartitionVersion(partition, partition.getVisibleVersion() + 1);
-                        }
-                    }
-                }
-            }
-        };
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv2"));
         HashMap<String, String> taskRunProperties = new HashMap<>();
@@ -550,6 +542,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         }
     }
 
+    @Test
     public void testAutoRefreshPartitionLimitWithHiveTable() throws Exception {
         starRocksAssert.useDatabase("test").withMaterializedView("CREATE MATERIALIZED VIEW `hive_parttbl_mv1`\n" +
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
@@ -607,23 +600,6 @@ public class PartitionBasedMvRefreshProcessorTest {
 
     @Test
     public void testRefreshWithHiveTableJoin() throws Exception {
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
-                if (stmt instanceof InsertStmt) {
-                    InsertStmt insertStmt = (InsertStmt) stmt;
-                    TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
-                    for (Partition partition : tbl.getPartitions()) {
-                        if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
-                            setPartitionVersion(partition, partition.getVisibleVersion() + 1);
-                        }
-                    }
-                }
-            }
-        };
-
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("hive_join_mv"));
 
@@ -640,56 +616,9 @@ public class PartitionBasedMvRefreshProcessorTest {
         Assert.assertTrue(plan.contains("4:HASH JOIN"));
     }
 
-    @Test
-    public void testAutoPartitionRefreshWithHiveTable() throws Exception {
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
-                if (stmt instanceof InsertStmt) {
-                    InsertStmt insertStmt = (InsertStmt) stmt;
-                    TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
-                    for (Partition partition : tbl.getPartitions()) {
-                        if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
-                            setPartitionVersion(partition, partition.getVisibleVersion() + 1);
-                        }
-                    }
-                }
-            }
-        };
-        testAutoPartitionRefreshWithUnPartitionedHiveTable();
-        testAutoPartitionRefreshWithPartitionedHiveTable1();
-        testAutoPartitionRefreshWithPartitionedHiveTable2();
-        testAutoPartitionRefreshWithPartitionedHiveTableJoinInternalTable();
-        testAutoPartitionRefreshWithHiveTableJoin1();
-        testAutoPartitionRefreshWithHiveTableJoin2();
-
-        testPartitionRefreshWithUpperCaseTable();
-        testPartitionRefreshWithUpperCaseDb();
-        testPartitionRefreshWithLowerCase();
-
-        testAutoRefreshPartitionLimitWithHiveTable();
-    }
 
     @Test
     public void testAutoPartitionRefreshWithPartitionChanged() throws Exception {
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
-                if (stmt instanceof InsertStmt) {
-                    InsertStmt insertStmt = (InsertStmt) stmt;
-                    TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
-                    for (Partition partition : tbl.getPartitions()) {
-                        if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
-                            setPartitionVersion(partition, partition.getVisibleVersion() + 1);
-                        }
-                    }
-                }
-            }
-        };
         starRocksAssert.useDatabase("test").withMaterializedView("CREATE MATERIALIZED VIEW `test`.`hive_parttbl_mv1`\n" +
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
                 "PARTITION BY (`l_shipdate`)\n" +
@@ -731,6 +660,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         starRocksAssert.useDatabase("test").dropMaterializedView("hive_parttbl_mv1");
     }
 
+    @Test
     public void testAutoPartitionRefreshWithHiveTableJoin1() throws Exception {
         starRocksAssert.useDatabase("test").withMaterializedView("CREATE MATERIALIZED VIEW `hive_join_mv1`\n" +
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
@@ -779,6 +709,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         assertPlanContains(execPlan, "partitions=6/6", "partitions=3/3");
     }
 
+    @Test
     public void testAutoPartitionRefreshWithHiveTableJoin2() throws Exception {
         starRocksAssert.useDatabase("test").withMaterializedView("CREATE MATERIALIZED VIEW `hive_join_mv2`\n" +
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
@@ -828,6 +759,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         assertPlanContains(execPlan, "partitions=6/6", "partitions=1/1");
     }
 
+    @Test
     public void testAutoPartitionRefreshWithUnPartitionedHiveTable() throws Exception {
         starRocksAssert.useDatabase("test").withMaterializedView("CREATE MATERIALIZED VIEW `hive_tbl_mv1`\n" +
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
@@ -870,7 +802,11 @@ public class PartitionBasedMvRefreshProcessorTest {
         starRocksAssert.useDatabase("test").dropMaterializedView("hive_tbl_mv1");
     }
 
+<<<<<<< HEAD
 
+=======
+    @Test
+>>>>>>> 2d8dec769f ([BugFix] Materialized view should update all its refreshed base table partitions after refresh (#28093))
     public void testAutoPartitionRefreshWithPartitionedHiveTable1() throws Exception {
         starRocksAssert.useDatabase("test").withMaterializedView("CREATE MATERIALIZED VIEW `hive_parttbl_mv1`\n" +
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
@@ -921,6 +857,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         starRocksAssert.useDatabase("test").dropMaterializedView("hive_parttbl_mv1");
     }
 
+    @Test
     public void testAutoPartitionRefreshWithPartitionedHiveTable2() throws Exception {
         starRocksAssert.useDatabase("test").withMaterializedView("CREATE MATERIALIZED VIEW `hive_tbl_mv2`\n" +
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
@@ -963,7 +900,11 @@ public class PartitionBasedMvRefreshProcessorTest {
         starRocksAssert.useDatabase("test").dropMaterializedView("hive_tbl_mv2");
     }
 
+<<<<<<< HEAD
 
+=======
+    @Test
+>>>>>>> 2d8dec769f ([BugFix] Materialized view should update all its refreshed base table partitions after refresh (#28093))
     public void testAutoPartitionRefreshWithPartitionedHiveTableJoinInternalTable() throws Exception {
         starRocksAssert.useDatabase("test").withMaterializedView(
                 "CREATE MATERIALIZED VIEW `hive_join_internal_mv`\n" +
@@ -1008,6 +949,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         starRocksAssert.useDatabase("test").dropMaterializedView("hive_join_internal_mv");
     }
 
+    @Test
     public void testPartitionRefreshWithUpperCaseTable() throws Exception {
         starRocksAssert.useDatabase("test").withMaterializedView("CREATE MATERIALIZED VIEW `hive_parttbl_mv1`\n" +
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
@@ -1106,6 +1048,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         starRocksAssert.useDatabase("test").dropMaterializedView("hive_parttbl_mv1");
     }
 
+    @Test
     public void testPartitionRefreshWithLowerCase() throws Exception {
         starRocksAssert.useDatabase("test").withMaterializedView(
                 "CREATE MATERIALIZED VIEW `test`.`hive_parttbl_mv1`\n" +
@@ -1154,22 +1097,6 @@ public class PartitionBasedMvRefreshProcessorTest {
 
     @Test
     public void testRangePartitionRefreshWithHiveTable() throws Exception {
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
-                if (stmt instanceof InsertStmt) {
-                    InsertStmt insertStmt = (InsertStmt) stmt;
-                    TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
-                    for (Partition partition : tbl.getPartitions()) {
-                        if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
-                            setPartitionVersion(partition, partition.getVisibleVersion() + 1);
-                        }
-                    }
-                }
-            }
-        };
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("hive_parttbl_mv"));
         HashMap<String, String> taskRunProperties = new HashMap<>();
@@ -1201,23 +1128,6 @@ public class PartitionBasedMvRefreshProcessorTest {
 
     @Test
     public void testRefreshPartitionWithMulParColumnsHiveTable1() throws Exception {
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
-                if (stmt instanceof InsertStmt) {
-                    InsertStmt insertStmt = (InsertStmt) stmt;
-                    TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
-                    for (Partition partition : tbl.getPartitions()) {
-                        if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
-                            setPartitionVersion(partition, partition.getVisibleVersion() + 1);
-                        }
-                    }
-                }
-            }
-        };
-
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("hive_mul_parttbl_mv1"));
         Map<String, String> mvProperties = Maps.newHashMap();
@@ -1240,23 +1150,6 @@ public class PartitionBasedMvRefreshProcessorTest {
 
     @Test
     public void testRefreshPartitionWithMulParColumnsHiveTable2() throws Exception {
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
-                if (stmt instanceof InsertStmt) {
-                    InsertStmt insertStmt = (InsertStmt) stmt;
-                    TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
-                    for (Partition partition : tbl.getPartitions()) {
-                        if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
-                            setPartitionVersion(partition, partition.getVisibleVersion() + 1);
-                        }
-                    }
-                }
-            }
-        };
-
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("hive_mul_parttbl_mv2"));
         Map<String, String> mvProperties = Maps.newHashMap();
@@ -1307,21 +1200,29 @@ public class PartitionBasedMvRefreshProcessorTest {
 
     @Test
     public void testClearQueryInfo() throws Exception {
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_without_partition"));
         new MockUp<StmtExecutor>() {
             @Mock
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 UUID uuid = UUID.randomUUID();
                 TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
                 System.out.println("register query id: " + DebugUtil.printId(connectContext.getExecutionId()));
+<<<<<<< HEAD
                 QeProcessorImpl.INSTANCE.registerQuery(connectContext.getExecutionId(),
                         new Coordinator(new LoadPlanner(1, loadId, 1, 1, null,
                                 false, "UTC", 10, System.currentTimeMillis(),
                                 false, connectContext, null, 10,
                                 10, null, null, null, 1)));
+=======
+                LoadPlanner loadPlanner = new LoadPlanner(1, loadId, 1, 1, materializedView,
+                        false, "UTC", 10, System.currentTimeMillis(),
+                        false, connectContext, null, 10,
+                        10, null, null, null, 1);
+                DefaultCoordinator coordinator = new DefaultCoordinator.Factory().createBrokerLoadScheduler(loadPlanner);
+>>>>>>> 2d8dec769f ([BugFix] Materialized view should update all its refreshed base table partitions after refresh (#28093))
             }
         };
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_without_partition"));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
 
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
@@ -1528,9 +1429,13 @@ public class PartitionBasedMvRefreshProcessorTest {
                 }
 
                 String addPartitionSql = "ALTER TABLE test.tbl1 ADD PARTITION p99 VALUES [('9999-03-01'),('9999-04-01'))";
-                String insertSql = "insert into tbl1 partition(p99) values('9999-03-01', 2, 10);";
                 try {
                     new StmtExecutor(connectContext, addPartitionSql).execute();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                String insertSql = "insert into tbl1 partition(p99) values('9999-03-01', 2, 10);";
+                try {
                     new StmtExecutor(connectContext, insertSql).execute();
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -1547,7 +1452,7 @@ public class PartitionBasedMvRefreshProcessorTest {
                 materializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
         Assert.assertEquals(3, baseTableVisibleVersionMap.get(tbl1.getId()).get("p3").getVersion());
         Assert.assertNotNull(baseTableVisibleVersionMap.get(tbl1.getId()).get("p99"));
-        Assert.assertEquals(3, baseTableVisibleVersionMap.get(tbl1.getId()).get("p99").getVersion());
+        Assert.assertEquals(2, baseTableVisibleVersionMap.get(tbl1.getId()).get("p99").getVersion());
     }
 
     public void testBaseTableAddPartitionWhileRefresh(Database testDb, MaterializedView materializedView, TaskRun taskRun)
@@ -1672,7 +1577,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         Assert.assertEquals(3, baseTableVisibleVersionMap.get(tbl1.getId()).get("p100").getVersion());
     }
 
-    private void setPartitionVersion(Partition partition, long version) {
+    private static void setPartitionVersion(Partition partition, long version) {
         partition.setVisibleVersion(version, System.currentTimeMillis());
         MaterializedIndex baseIndex = partition.getBaseIndex();
         List<Tablet> tablets = baseIndex.getTablets();
@@ -1714,31 +1619,6 @@ public class PartitionBasedMvRefreshProcessorTest {
 
     @Test
     public void testSyncPartitionWithSsdStorage() throws Exception {
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
-                if (stmt instanceof InsertStmt) {
-                    InsertStmt insertStmt = (InsertStmt) stmt;
-                    TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-                    if (tableName.getTbl().equals("tbl1")) {
-                        OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
-                        for (Partition partition : tbl1.getPartitions()) {
-                            if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
-                                setPartitionVersion(partition, partition.getVisibleVersion() + 1);
-                            }
-                        }
-                    } else if (tableName.getTbl().equals("tbl2")) {
-                        OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl2"));
-                        for (Partition partition : tbl1.getPartitions()) {
-                            if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
-                                setPartitionVersion(partition, partition.getVisibleVersion() + 1);
-                            }
-                        }
-                    }
-                }
-            }
-        };
         starRocksAssert.useDatabase("test").withMaterializedView("create materialized view test.mv_with_ssd\n" +
                 "partition by date_trunc('month',k1) \n" +
                 "distributed by hash(k2) buckets 10\n" +
@@ -1764,31 +1644,6 @@ public class PartitionBasedMvRefreshProcessorTest {
 
     @Test
     public void testSyncPartitionWithSsdStorageAndCooldownTime() throws Exception {
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
-                if (stmt instanceof InsertStmt) {
-                    InsertStmt insertStmt = (InsertStmt) stmt;
-                    TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-                    if (tableName.getTbl().equals("tbl1")) {
-                        OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
-                        for (Partition partition : tbl1.getPartitions()) {
-                            if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
-                                setPartitionVersion(partition, partition.getVisibleVersion() + 1);
-                            }
-                        }
-                    } else if (tableName.getTbl().equals("tbl2")) {
-                        OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl2"));
-                        for (Partition partition : tbl1.getPartitions()) {
-                            if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
-                                setPartitionVersion(partition, partition.getVisibleVersion() + 1);
-                            }
-                        }
-                    }
-                }
-            }
-        };
         starRocksAssert.useDatabase("test").withMaterializedView(
                 "create materialized view test.mv_use_ssd_and_cooldown\n" +
                         "partition by date_trunc('month',k1) \n" +
