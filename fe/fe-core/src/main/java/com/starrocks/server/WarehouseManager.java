@@ -16,7 +16,6 @@ package com.starrocks.server;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
-import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
@@ -52,7 +51,6 @@ public class WarehouseManager implements Writable {
     public static final long DEFAULT_WAREHOUSE_ID = 0L;
 
     private Map<Long, Warehouse> idToWh = new HashMap<>();
-    @SerializedName(value = "fullNameToWh")
     private Map<String, Warehouse> nameToWh = new HashMap<>();
 
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
@@ -107,9 +105,9 @@ public class WarehouseManager implements Writable {
         return builder.build();
     }
 
-    // warehouse meta persistence api
+    // old warehouse meta persistence api, deprecated
     public long saveWarehouses(DataOutputStream out, long checksum) throws IOException {
-        checksum ^= nameToWh.size();
+        checksum ^= 0;
         write(out);
         return checksum;
     }
