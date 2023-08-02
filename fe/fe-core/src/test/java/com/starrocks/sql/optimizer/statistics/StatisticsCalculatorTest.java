@@ -26,6 +26,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
@@ -605,5 +606,19 @@ public class StatisticsCalculatorTest {
         ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(false);
         statisticsCalculator.estimatorStats();
         Assert.assertEquals(expressionContext.getStatistics().getOutputRowCount(), 200000.0, 0.0001);
+    }
+
+    @Test
+    public void testNotFoundColumnStatistics() {
+        ColumnRefOperator v1 = columnRefFactory.create("v1", Type.INT, true);
+        ColumnRefOperator v2 = columnRefFactory.create("v2", Type.INT, true);
+
+        ColumnRefOperator v3 = columnRefFactory.create("v3", Type.INT, true);
+        Statistics.Builder builder = Statistics.builder();
+        builder.setOutputRowCount(10000);
+        builder.addColumnStatistics(ImmutableMap.of(v1, new ColumnStatistic(0, 100, 0, 10, 50)));
+        builder.addColumnStatistics(ImmutableMap.of(v2, new ColumnStatistic(0, 100, 0, 10, 50)));
+        Statistics statistics = builder.build();
+        Assert.assertThrows(StarRocksPlannerException.class, () -> statistics.getColumnStatistic(v3));
     }
 }

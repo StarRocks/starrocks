@@ -18,8 +18,10 @@ import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
+import java.util.StringJoiner;
 
 import static java.util.Collections.emptyList;
 import static java.util.Objects.requireNonNull;
@@ -106,16 +108,12 @@ public final class ColumnRefOperator extends ScalarOperator {
         return id + ": " + name;
     }
 
-    public static String toString(List<ColumnRefOperator> columns) {
-        StringBuilder sb = new StringBuilder();
-        int i = 0;
+    public static String toString(Collection<ColumnRefOperator> columns) {
+        StringJoiner joiner = new StringJoiner("{", ", ", "}");
         for (ColumnRefOperator column : columns) {
-            if (i++ != 0) {
-                sb.append(",");
-            }
-            sb.append(column);
+            joiner.add(column.toString());
         }
-        return sb.toString();
+        return joiner.toString();
     }
 
     @Override
