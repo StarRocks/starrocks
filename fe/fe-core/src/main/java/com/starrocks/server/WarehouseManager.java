@@ -105,7 +105,7 @@ public class WarehouseManager implements Writable {
         return builder.build();
     }
 
-    // old warehouse meta persistence api, deprecated
+    // not persist anything thereafter, so checksum ^= 0
     public long saveWarehouses(DataOutputStream out, long checksum) throws IOException {
         checksum ^= 0;
         write(out);
