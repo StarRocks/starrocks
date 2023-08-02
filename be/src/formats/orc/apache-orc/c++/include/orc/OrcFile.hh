@@ -56,10 +56,7 @@ public:
         uint64_t offset;
         uint64_t size;
     };
-    enum class PrepareCacheScope {
-        READ_FULL_FILE,
-        READ_FULL_STRIPE,
-    };
+    enum class PrepareCacheScope { READ_FULL_FILE, READ_FULL_STRIPE, READ_ROW_GROUP_INDEX };
 
     virtual ~InputStream();
 
