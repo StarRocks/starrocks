@@ -157,7 +157,9 @@ public class ExpressionStatisticCalculator {
         public ColumnStatistic visitCall(CallOperator call, Void context) {
             List<ColumnStatistic> childrenColumnStatistics =
                     call.getChildren().stream().map(child -> child.accept(this, context)).collect(Collectors.toList());
-            Preconditions.checkState(childrenColumnStatistics.size() == call.getChildren().size());
+            Preconditions.checkState(childrenColumnStatistics.size() == call.getChildren().size(),
+                    "column statistics missing for expr: %s. column statistics: %s",
+                    call, childrenColumnStatistics);
             if (childrenColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown) ||
                     inputStatistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
                 return ColumnStatistic.unknown();
