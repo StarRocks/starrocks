@@ -372,7 +372,8 @@ public class ExternalOlapTable extends OlapTable {
                             thriftDataProperty.getCold_time());
                     // TODO: confirm false is ok
                     RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                    rangePartitionInfo.addPartition(partitionId, false, range, dataProperty, replicaNum, inMemory);
+                    rangePartitionInfo.addPartition(partitionId, tRange.isSetIs_temp() && tRange.isIs_temp(),
+                            range, dataProperty, replicaNum, inMemory);
                 }
                 break;
             case UNPARTITIONED:
@@ -488,7 +489,11 @@ public class ExternalOlapTable extends OlapTable {
                     }
                 }
             }
-            addPartition(partition);
+            if (partitionMeta.isSetIs_temp() && partitionMeta.isIs_temp()) {
+                addTempPartition(partition);
+            } else {
+                addPartition(partition);
+            }
         }
         long endOfTabletMetaBuild = System.currentTimeMillis();
 
