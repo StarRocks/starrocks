@@ -174,13 +174,10 @@ public class HeartbeatMgr extends FrontendDaemon {
         } // end for all results
 
         // we also add a 'mocked' master Frontend heartbeat response to synchronize master info to other Frontends.
-        Map<Long, Integer> backendId2cpuCores = Maps.newHashMap();
-        idToBackendRef.values().forEach(
-                backend -> backendId2cpuCores.put(backend.getId(), BackendCoreStat.getCoresOfBe(backend.getId())));
         hbPackage.addHbResponse(new FrontendHbResponse(masterFeNodeName, Config.query_port, Config.rpc_port,
                 GlobalStateMgr.getCurrentState().getMaxJournalId(),
                 System.currentTimeMillis(), GlobalStateMgr.getCurrentState().getFeStartTime(),
-                Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH, backendId2cpuCores));
+                Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH));
 
         // write edit log
         GlobalStateMgr.getCurrentState().getEditLog().logHeartbeat(hbPackage);
@@ -190,17 +187,6 @@ public class HeartbeatMgr extends FrontendDaemon {
         switch (response.getType()) {
             case FRONTEND: {
                 FrontendHbResponse hbResponse = (FrontendHbResponse) response;
-
-                // Synchronize cpu cores of backends when synchronizing master info to other Frontends.
-                // It is non-empty, only when replaying a 'mocked' master Frontend heartbeat response to other Frontends.
-                hbResponse.getBackendId2cpuCores().forEach((backendId, cpuCores) -> {
-                    Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
-                    if (be != null && be.getCpuCores() != cpuCores) {
-                        be.setCpuCores(cpuCores);
-                        BackendCoreStat.setNumOfHardwareCoresOfBe(backendId, cpuCores);
-                    }
-                });
-
                 Frontend fe = GlobalStateMgr.getCurrentState().getFeByName(hbResponse.getName());
                 if (fe != null) {
                     return fe.handleHbResponse(hbResponse, isReplay);
@@ -309,10 +295,8 @@ public class HeartbeatMgr extends FrontendDaemon {
                     }
 
                     // Update number of hardware of cores of corresponding backend.
+                    // BackendCoreStat will be updated in ComputeNode.handleHbResponse.
                     int cpuCores = tBackendInfo.isSetNum_hardware_cores() ? tBackendInfo.getNum_hardware_cores() : 0;
-                    if (tBackendInfo.isSetNum_hardware_cores()) {
-                        BackendCoreStat.setNumOfHardwareCoresOfBe(computeNodeId, cpuCores);
-                    }
 
                     // backend.updateOnce(bePort, httpPort, beRpcPort, brpcPort);
                     BackendHbResponse backendHbResponse = new BackendHbResponse(
