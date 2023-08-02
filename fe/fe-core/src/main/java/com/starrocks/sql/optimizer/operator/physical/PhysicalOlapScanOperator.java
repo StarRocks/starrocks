@@ -41,6 +41,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     private final DistributionSpec distributionSpec;
     private final long selectedIndexId;
     private final List<Long> selectedTabletId;
+    private final List<Long> hintsReplicaId;
     private final List<Long> selectedPartitionId;
 
     private boolean isPreAggregation;
@@ -63,6 +64,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
                                     long selectedIndexId,
                                     List<Long> selectedPartitionId,
                                     List<Long> selectedTabletId,
+                                    List<Long> hintsReplicaId,
                                     List<ScalarOperator> prunedPartitionPredicates,
                                     Projection projection,
                                     boolean usePkIndex) {
@@ -71,6 +73,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         this.selectedIndexId = selectedIndexId;
         this.selectedPartitionId = selectedPartitionId;
         this.selectedTabletId = selectedTabletId;
+        this.hintsReplicaId = hintsReplicaId;
         this.prunedPartitionPredicates = prunedPartitionPredicates;
         this.usePkIndex = usePkIndex;
     }
@@ -81,6 +84,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         this.selectedIndexId = scanOperator.getSelectedIndexId();
         this.selectedPartitionId = scanOperator.getSelectedPartitionId();
         this.selectedTabletId = scanOperator.getSelectedTabletId();
+        this.hintsReplicaId = scanOperator.getHintsReplicaIds();
         this.prunedPartitionPredicates = scanOperator.getPrunedPartitionPredicates();
         this.usePkIndex = scanOperator.isUsePkIndex();
     }
@@ -95,6 +99,10 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
 
     public List<Long> getSelectedTabletId() {
         return selectedTabletId;
+    }
+
+    public List<Long> getHintsReplicaId() {
+        return hintsReplicaId;
     }
 
     public boolean isPreAggregation() {
