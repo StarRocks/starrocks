@@ -17,6 +17,7 @@
 #include "common/statusor.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/utils.h"
+#include "gutil/strings/fastmem.h"
 
 namespace starrocks {
 
@@ -565,6 +566,175 @@ inline void Decimal32Or64Or128ColumnReader<DecimalType>::_fill_decimal_column_ge
             DecimalV3Cast::to_decimal<T, Type, Type, true, false>(original_value, scale_factor, &values[dst_idx]);
         }
     }
+}
+
+Status StringColumnReader::new_get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
+    if (_nullable) {
+        auto* data = down_cast<orc::StringVectorBatch*>(cvb);
+
+        size_t len = 0;
+        for (size_t i = 0; i < size; ++i) {
+            len += data->length[from + i];
+        }
+
+        int col_start = col->size();
+
+        auto* c = ColumnHelper::as_raw_column<NullableColumn>(col);
+
+        c->null_column()->resize(col->size() + size);
+        auto* nulls = c->null_column()->get_data().data();
+        auto* values = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(c->data_column());
+
+        values->get_offset().reserve(values->get_offset().size() + size);
+        values->get_bytes().reserve(values->get_bytes().size() + len);
+
+        auto& vb = values->get_bytes();
+        size_t vb_pos = 0;
+        auto& vo = values->get_offset();
+
+        int pos = from;
+        if (cvb->hasNulls) {
+            if (_type.type == TYPE_CHAR) {
+                // Possibly there are some zero padding characters in value, we have to strip them off.
+                for (int i = col_start; i < col_start + size; ++i, ++pos) {
+                    nulls[i] = !cvb->notNull[pos];
+                    if (cvb->notNull[pos]) {
+                        size_t str_size = remove_trailing_spaces(data->data[pos], data->length[pos]);
+                        //                        vb.insert(vb.end(), data->data[pos], data->data[pos] + str_size);
+                        strings::memcpy_inlined(&vb[vb_pos], data->data[pos], str_size);
+                        vb_pos += str_size;
+                        vo.emplace_back(vb.size());
+                    } else {
+                        vo.emplace_back(vb.size());
+                    }
+                }
+            } else {
+                for (int i = col_start; i < col_start + size; ++i, ++pos) {
+                    nulls[i] = !cvb->notNull[pos];
+                    if (cvb->notNull[pos]) {
+                        //                        vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
+                        size_t str_size = data->length[pos];
+                        strings::memcpy_inlined(&vb[vb_pos], data->data[pos], str_size);
+                        vb_pos += str_size;
+                        vo.emplace_back(vb.size());
+                    } else {
+                        vo.emplace_back(vb.size());
+                    }
+                }
+            }
+        } else {
+            if (_type.type == TYPE_CHAR) {
+                // Possibly there are some zero padding characters in value, we have to strip them off.
+                for (int i = col_start; i < col_start + size; ++i, ++pos) {
+                    size_t str_size = remove_trailing_spaces(data->data[pos], data->length[pos]);
+                    //                    vb.insert(vb.end(), data->data[pos], data->data[pos] + str_size);
+                    strings::memcpy_inlined(&vb[vb_pos], data->data[pos], str_size);
+                    vb_pos += str_size;
+                    vo.emplace_back(vb.size());
+                }
+            } else {
+                for (int i = col_start; i < col_start + size; ++i, ++pos) {
+                    //                    vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
+                    size_t str_size = data->length[pos];
+                    strings::memcpy_inlined(&vb[vb_pos], data->data[pos], str_size);
+                    vb_pos += str_size;
+                    vo.emplace_back(vb.size());
+                }
+            }
+        }
+
+        // col_start == 0 and from == 0 means it's at top level of fill chunk, not in the middle of array
+        // otherwise `broker_load_filter` does not work.
+        if (_reader->get_broker_load_mode() && from == 0 && col_start == 0) {
+            auto* filter = _reader->get_broker_load_fiter()->data();
+            auto strict_mode = _reader->get_strict_mode();
+            bool reported = false;
+
+            if (strict_mode) {
+                for (int i = 0; i < size; i++) {
+                    // overflow.
+                    if (nulls[i] == 0 && _type.len > 0 && data->length[i] > _type.len) {
+                        filter[i] = 0;
+                        if (!reported) {
+                            reported = true;
+                            std::string raw_data(data->data[i], data->length[i]);
+                            auto slot = _reader->get_current_slot();
+                            std::string error_msg =
+                                    strings::Substitute("String '$0' is too long. The type of '$1' is $2'", raw_data,
+                                                        slot->col_name(), slot->type().debug_string());
+                            _reader->report_error_message(error_msg);
+                        }
+                    }
+                }
+            } else {
+                for (int i = 0; i < size; i++) {
+                    // overflow.
+                    if (nulls[i] == 0 && _type.len > 0 && data->length[i] > _type.len) {
+                        nulls[i] = 1;
+                    }
+                }
+            }
+        }
+
+        c->update_has_null();
+    } else {
+        DCHECK(false);
+        auto* data = down_cast<orc::StringVectorBatch*>(cvb);
+
+        size_t len = 0;
+        for (size_t i = 0; i < size; ++i) {
+            len += data->length[from + i];
+        }
+
+        int col_start = col->size();
+        auto* values = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(col);
+
+        values->get_offset().reserve(values->get_offset().size() + size);
+        values->get_bytes().reserve(values->get_bytes().size() + len);
+
+        auto& vb = values->get_bytes();
+        auto& vo = values->get_offset();
+        int pos = from;
+
+        if (_type.type == TYPE_CHAR) {
+            // Possibly there are some zero padding characters in value, we have to strip them off.
+            for (int i = col_start; i < col_start + size; ++i, ++pos) {
+                size_t str_size = remove_trailing_spaces(data->data[pos], data->length[pos]);
+                vb.insert(vb.end(), data->data[pos], data->data[pos] + str_size);
+                vo.emplace_back(vb.size());
+            }
+        } else {
+            for (int i = col_start; i < col_start + size; ++i, ++pos) {
+                vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
+                vo.emplace_back(vb.size());
+            }
+        }
+
+        // col_start == 0 and from == 0 means it's at top level of fill chunk, not in the middle of array
+        // otherwise `broker_load_filter` does not work.
+        if (_reader->get_broker_load_mode() && from == 0 && col_start == 0) {
+            auto filter = _reader->get_broker_load_fiter()->data();
+            // only report once.
+            bool reported = false;
+            for (int i = 0; i < size; i++) {
+                // overflow.
+                if (_type.len > 0 && data->length[i] > _type.len) {
+                    // can not accept null, so we have to discard it.
+                    filter[i] = 0;
+                    if (!reported) {
+                        reported = true;
+                        std::string raw_data(data->data[i], data->length[i]);
+                        auto slot = _reader->get_current_slot();
+                        std::string error_msg =
+                                strings::Substitute("String '$0' is too long. The type of '$1' is $2'", raw_data,
+                                                    slot->col_name(), slot->type().debug_string());
+                        _reader->report_error_message(error_msg);
+                    }
+                }
+            }
+        }
+    }
+    return Status::OK();
 }
 
 Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {

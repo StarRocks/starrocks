@@ -171,6 +171,8 @@ public:
     ~StringColumnReader() override = default;
 
     Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
+private:
+    Status new_get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size);
 };
 
 class VarbinaryColumnReader : public PrimitiveColumnReader {
