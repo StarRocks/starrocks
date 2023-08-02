@@ -261,7 +261,7 @@ public class MaterializedViewRewriter {
                 // for outer join, we should check some extra conditions
                 boolean ret = checkJoinMatch(queryJoinType, queryExpr, mvExpr);
                 if (!ret) {
-                    logMVRewrite(mvRewriteContext, "join match check failed, joinType: %s", queryJoinType);
+                    logMVRewrite(mvRewriteContext, "join match check failed, joinType: {}", queryJoinType);
                 }
                 return ret;
             }
@@ -355,7 +355,7 @@ public class MaterializedViewRewriter {
         if (!isEqual) {
             logMVRewrite(
                     mvRewriteContext,
-                    "join child predicate not matched, queryPredicates: %s, mvPredicates: %s, index: %s",
+                    "join child predicate not matched, queryPredicates: {}, mvPredicates: {}, index: {}",
                     queryPredicates, mvPredicates, index);
         }
         return isEqual;
@@ -2260,7 +2260,7 @@ public class MaterializedViewRewriter {
                 getCompensationPredicate(srcPr, targetPr, columnRewriter, true, isQueryToMV);
         if (compensationPr == null) {
             logMVRewrite(mvRewriteContext, "Compensate range predicates failed," +
-                    "srcPr:%s, targetPr:%s", MvUtils.toString(srcPr), MvUtils.toString(targetPr));
+                    "srcPr:{}, targetPr:{}", MvUtils.toString(srcPr), MvUtils.toString(targetPr));
             return null;
         }
 
@@ -2282,7 +2282,7 @@ public class MaterializedViewRewriter {
                 getCompensationPredicate(srcPu, targetPu, columnRewriter, false, isQueryToMV);
         if (compensationPu == null) {
             logMVRewrite(mvRewriteContext, "Compensate residual predicates failed," +
-                    "srcPr:%s, targetPr:%s", MvUtils.toString(srcPu), MvUtils.toString(targetPu));
+                    "srcPr:{}, targetPr:{}", MvUtils.toString(srcPu), MvUtils.toString(targetPu));
             return null;
         }
 
