@@ -19,9 +19,15 @@ import com.google.common.collect.Maps;
 import java.util.Map;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 public class WorkerAssignmentStatsMgr {
     private final ConcurrentMap<Long, WorkerStats> workerToStats = Maps.newConcurrentMap();
+
+    public Map<Long, WorkerStatsInfo> getWorkerToStats() {
+        return workerToStats.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().toInfo()));
+    }
 
     public WorkerStatsTracker createGlobalWorkerStatsTracker() {
         return new GlobalWorkerStatsTracker(workerToStats);
@@ -150,10 +156,38 @@ public class WorkerAssignmentStatsMgr {
         }
     }
 
+    public static class WorkerStatsInfo {
+        private final long numRunningTablets;
+        private final long numTotalTablets;
+        private final long numRunningTabletRows;
+
+        public WorkerStatsInfo(long numRunningTablets, long numTotalTablets, long numRunningTabletRows) {
+            this.numRunningTablets = numRunningTablets;
+            this.numTotalTablets = numTotalTablets;
+            this.numRunningTabletRows = numRunningTabletRows;
+        }
+
+        public long getNumRunningTablets() {
+            return numRunningTablets;
+        }
+
+        public long getNumTotalTablets() {
+            return numTotalTablets;
+        }
+
+        public long getNumRunningTabletRows() {
+            return numRunningTabletRows;
+        }
+    }
+
     private static class WorkerStats {
         private final AtomicLong numRunningTablets = new AtomicLong();
         private final AtomicLong numTotalTablets = new AtomicLong();
         private final AtomicLong numRunningTabletRows = new AtomicLong();
+
+        private WorkerStatsInfo toInfo() {
+            return new WorkerStatsInfo(numRunningTablets.get(), numTotalTablets.get(), numRunningTabletRows.get());
+        }
 
         private void consume(Long numRunningTablets, Long numRunningTabletRows) {
             if (numRunningTablets > 0) {
