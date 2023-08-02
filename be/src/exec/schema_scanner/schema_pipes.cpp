@@ -63,8 +63,7 @@ Status SchemaTablePipes::get_next(ChunkPtr* chunk, bool* eos) {
 }
 
 DatumArray SchemaTablePipes::_build_row() {
-    auto& pipe = _pipes_result.pipes.at(_cur_row);
-    _cur_row++;
+    auto& pipe = _pipes_result.pipes.at(_cur_row++);
     return {
             Slice(pipe.database_name),
             pipe.pipe_id,

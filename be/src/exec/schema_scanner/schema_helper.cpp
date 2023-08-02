@@ -82,7 +82,7 @@ Status SchemaHelper::describe_table(const std::string& ip, const int32_t port, c
             [&request, &result](FrontendServiceConnection& client) { client->describeTable(*result, request); });
 }
 
-Status SchemaHelper::show_varialbes(const std::string& ip, const int32_t port, const TShowVariableRequest& request,
+Status SchemaHelper::show_variables(const std::string& ip, const int32_t port, const TShowVariableRequest& request,
                                     TShowVariableResult* result) {
     return ThriftRpcHelper::rpc<FrontendServiceClient>(
             ip, port,

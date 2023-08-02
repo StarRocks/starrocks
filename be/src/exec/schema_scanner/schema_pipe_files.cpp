@@ -77,8 +77,7 @@ Status SchemaTablePipeFiles::get_next(ChunkPtr* chunk, bool* eos) {
 }
 
 DatumArray SchemaTablePipeFiles::_build_row() {
-    auto& pipe_file = _pipe_files_result.pipe_files.at(_cur_row);
-    _cur_row++;
+    auto& pipe_file = _pipe_files_result.pipe_files.at(_cur_row++);
     return {
             Slice(pipe_file.database_name),
             pipe_file.pipe_id,
