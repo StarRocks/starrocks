@@ -20,7 +20,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.analyzer.Authorizer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -180,7 +180,7 @@ public class StreamLoadFunctionalExprProvider extends FunctionalExprProvider<Str
     protected boolean delegatePostRowFilter(ConnectContext cxt, StreamLoadTask task) {
         // validate table privilege at the end of a predicateChain in the `stream().filter()`
         try {
-            PrivilegeChecker.checkTableAction(
+            Authorizer.checkTableAction(
                     cxt.getCurrentUserIdentity(), cxt.getCurrentRoleIds(),
                     task.getDBName(),
                     task.getTableName(),

@@ -44,7 +44,7 @@ import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -292,7 +292,7 @@ public abstract class BaseAction implements IAction {
     // For new RBAC privilege framework
     protected void checkActionOnSystem(UserIdentity currentUser, PrivilegeType... systemActions) {
         for (PrivilegeType systemAction : systemActions) {
-            PrivilegeChecker.checkSystemAction(currentUser, null, systemAction);
+            Authorizer.checkSystemAction(currentUser, null, systemAction);
         }
     }
 
@@ -317,7 +317,7 @@ public abstract class BaseAction implements IAction {
     }
 
     protected void checkTableAction(ConnectContext context, String db, String tbl, PrivilegeType privType) {
-        PrivilegeChecker.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), db, tbl, privType);
+        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), db, tbl, privType);
     }
 
     // return currentUserIdentity from StarRocks auth

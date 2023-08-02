@@ -43,7 +43,7 @@ import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.nio.NConnectContext;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.analyzer.Authorizer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -169,7 +169,7 @@ public class ConnectScheduler {
         for (ConnectContext ctx : connectionMap.values()) {
             if (!ctx.getQualifiedUser().equals(user)) {
                 try {
-                    PrivilegeChecker.checkSystemAction(currContext.getCurrentUserIdentity(),
+                    Authorizer.checkSystemAction(currContext.getCurrentUserIdentity(),
                             currContext.getCurrentRoleIds(), PrivilegeType.OPERATE);
                 } catch (AccessDeniedException e) {
                     continue;

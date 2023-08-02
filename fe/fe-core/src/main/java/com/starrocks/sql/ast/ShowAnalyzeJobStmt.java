@@ -28,7 +28,7 @@ import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.StatsConstants;
@@ -92,7 +92,7 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
                 // for jobs on entire instance or entire db, we just show it directly because there isn't a specified
                 // table to check privilege on.
                 try {
-                    PrivilegeChecker.checkAnyActionOnTable(context.getCurrentUserIdentity(),
+                    Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(),
                             context.getCurrentRoleIds(), new TableName(db.getOriginName(), table.getName()));
                 } catch (AccessDeniedException e) {
                     return null;
