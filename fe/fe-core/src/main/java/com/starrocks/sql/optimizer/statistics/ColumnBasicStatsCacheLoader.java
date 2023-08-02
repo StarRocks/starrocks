@@ -139,6 +139,7 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
         ColumnStatistic.Builder builder = ColumnStatistic.builder();
         double minValue = Double.NEGATIVE_INFINITY;
         double maxValue = Double.POSITIVE_INFINITY;
+        double distinctValues = statisticData.countDistinct;
         try {
             if (column.getPrimitiveType().isCharFamily()) {
                 // do nothing
@@ -171,9 +172,20 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
                     db.getFullName(), table.getName(), column.getName(), e.getMessage());
         }
 
+        if (minValue > maxValue) {
+            LOG.warn("Min: {}, Max: {} values abnormal for db : {}, table : {}, column : {}", minValue, maxValue,
+                    db.getFullName(), table.getName(), column.getName());
+            minValue = Double.NEGATIVE_INFINITY;
+            maxValue = Double.POSITIVE_INFINITY;
+        }
+
+        if (distinctValues <= 0) {
+            distinctValues = 1;
+        }
+
         return builder.setMinValue(minValue).
                 setMaxValue(maxValue).
-                setDistinctValuesCount(statisticData.countDistinct).
+                setDistinctValuesCount(distinctValues).
                 setAverageRowSize(statisticData.dataSize / Math.max(statisticData.rowCount, 1)).
                 setNullsFraction(statisticData.nullCount * 1.0 / Math.max(statisticData.rowCount, 1)).build();
     }

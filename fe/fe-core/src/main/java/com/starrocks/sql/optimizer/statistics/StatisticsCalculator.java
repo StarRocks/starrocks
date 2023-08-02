@@ -201,7 +201,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         Projection projection = node.getProjection();
         if (projection != null) {
-            Preconditions.checkState(projection.getCommonSubOperatorMap().isEmpty());
             for (ColumnRefOperator columnRefOperator : projection.getColumnRefMap().keySet()) {
                 ScalarOperator mapOperator = projection.getColumnRefMap().get(columnRefOperator);
                 statisticsBuilder.addColumnStatistic(columnRefOperator,
@@ -579,7 +578,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitPhysicalProject(PhysicalProjectOperator node, ExpressionContext context) {
-        Preconditions.checkState(node.getCommonSubOperatorMap().isEmpty());
         return computeProjectNode(context, node.getColumnRefMap());
     }
 
@@ -1304,14 +1302,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private Void computeCTEConsume(Operator node, ExpressionContext context, int cteId,
                                    Map<ColumnRefOperator, ColumnRefOperator> columnRefMap) {
-        Optional<Statistics> produceStatisticsOp = optimizerContext.getCteContext().getCTEStatistics(cteId);
-
-        // The statistics of producer and children are equal theoretically, but statistics of children
-        // plan maybe more accurate in actually
-        if (!produceStatisticsOp.isPresent() && (context.getChildrenStatistics().isEmpty() ||
-                context.getChildrenStatistics().stream().anyMatch(Objects::isNull))) {
-            Preconditions.checkState(false, "Impossible cte statistics");
-        }
 
         if (!context.getChildrenStatistics().isEmpty() && context.getChildStatistics(0) != null) {
             //  use the statistics of children first
@@ -1319,7 +1309,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             Projection projection = node.getProjection();
             if (projection != null) {
                 Statistics.Builder statisticsBuilder = Statistics.buildFrom(context.getStatistics());
-                Preconditions.checkState(projection.getCommonSubOperatorMap().isEmpty());
                 for (ColumnRefOperator columnRefOperator : projection.getColumnRefMap().keySet()) {
                     ScalarOperator mapOperator = projection.getColumnRefMap().get(columnRefOperator);
                     statisticsBuilder.addColumnStatistic(columnRefOperator,
@@ -1331,7 +1320,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
 
         // None children, may force CTE, use the statistics of producer
-        Preconditions.checkState(produceStatisticsOp.isPresent());
+        Optional<Statistics> produceStatisticsOp = optimizerContext.getCteContext().getCTEStatistics(cteId);
+        Preconditions.checkState(produceStatisticsOp.isPresent(),
+                "cannot obtain cte statistics for %s", node);
         Statistics produceStatistics = produceStatisticsOp.get();
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator ref : columnRefMap.keySet()) {
