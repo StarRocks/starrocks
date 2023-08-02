@@ -915,8 +915,6 @@ Currently StarRocks only supports [identity transforms](https://iceberg.apache.o
 
 #### properties
 
-The syntax of `properties` is as follows:
-
 You can specify the table attributes in the `"key" = "value"` format in `properties`. See [Iceberg table attributes](https://iceberg.apache.org/docs/latest/configuration/).
 
 ### Examples
@@ -988,7 +986,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 | ----------- | ------------------------------------------------------------ |
 | INTO        | To append the data of the StarRocks table to the Iceberg table.                                       |
 | OVERWRITE   | To overwrite the existing data of the Iceberg table with the data of the StarRocks table.                                       |
-| column_name | The name of the destination column to which you want to load data. You can specify one or more columns. If specify multiple columns, separate them with commas (`,`). You can only specify columns that actually exist in the Iceberg table, and the destination columns that you specify must include the partition columns of the Iceberg table. The destination columns you specify are mapped one on one in sequence to the columns of the StarRocks table, regardless of what the destination column names are. If no destination columns are specified, the data is loaded into all columns of the Iceberg table. If a non-partition column of the StarRocks table cannot be mapped to any column of the Iceberg table, StarRocks writes the default value `NULL` to the Iceberg table column. If the INSERT statement contains a query statement whose returned column types differ from the data types of the destination columns, StarRocks performs an implicit conversion on the mismatched columns. If the conversion fails, a syntax parsing error will be returned. |
+| column_name | The name of the destination column to which you want to load data. You can specify one or more columns. If you specify multiple columns, separate them with commas (`,`). You can only specify columns that actually exist in the Iceberg table, and the destination columns that you specify must include the partition columns of the Iceberg table. The destination columns you specify are mapped one on one in sequence to the columns of the StarRocks table, regardless of what the destination column names are. If no destination columns are specified, the data is loaded into all columns of the Iceberg table. If a non-partition column of the StarRocks table cannot be mapped to any column of the Iceberg table, StarRocks writes the default value `NULL` to the Iceberg table column. If the INSERT statement contains a query statement whose returned column types differ from the data types of the destination columns, StarRocks performs an implicit conversion on the mismatched columns. If the conversion fails, a syntax parsing error will be returned. |
 | expression  | Expression that assigns values to the destination column.                                   |
 | DEFAULT     | Assigns a default value to the destination column.                                         |
 | query       | Query statement whose result will be loaded into the Iceberg table. It can be any SQL statement supported by StarRocks. |
@@ -1038,7 +1036,7 @@ Similar to the internal tables of StarRocks, if you have the [DROP](../../admini
 
 When you drop an Iceberg table, the table's file path and data on your HDFS cluster or cloud storage will not be dropped along with the table.
 
-When you forcibly drop an Iceberg table (namely, with the `FORCE` keyword specified in the table drop statement), the table's data on your HDFS cluster or cloud storage will be dropped along with the table, but the table's file path is retained.
+When you forcibly drop an Iceberg table (namely, with the `FORCE` keyword specified in the DROP TABLE statement), the table's data on your HDFS cluster or cloud storage will be dropped along with the table, but the table's file path is retained.
 
 ```SQL
 DROP TABLE <table_name> [FORCE];
