@@ -71,7 +71,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+<<<<<<< HEAD
 import java.util.stream.Stream;
+=======
+
+import static com.starrocks.qe.SessionVariableConstants.FORCE_PREAGGREGATION;
+import static com.starrocks.qe.SessionVariableConstants.FORCE_STREAMING;
+import static com.starrocks.qe.SessionVariableConstants.LIMITED;
+>>>>>>> 61d47e4a9c ([Enhancement] support limited memory stream aggregate (#28402))
 
 public class AggregationNode extends PlanNode {
     private final AggregateInfo aggInfo;
@@ -243,6 +250,8 @@ public class AggregationNode extends PlanNode {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.FORCE_STREAMING);
         } else if (streamingPreaggregationMode.equalsIgnoreCase("force_preaggregation")) {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.FORCE_PREAGGREGATION);
+        } else if (streamingPreaggregationMode.equalsIgnoreCase(LIMITED)) {
+            msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.LIMITED_MEM);
         } else {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.AUTO);
         }

@@ -20,4 +20,13 @@ ComputeService::ComputeService(ExecEnv* exec_env) : BackendServiceBase(exec_env)
 
 ComputeService::~ComputeService() = default;
 
+<<<<<<< HEAD:be/src/service/service_cn/compute_service.cpp
 } // namespace starrocks
+=======
+    public static final String FORCE_STREAMING = "force_streaming";
+
+    public static final String FORCE_PREAGGREGATION = "force_preaggregation";
+
+    public static final String LIMITED = "limited";
+}
+>>>>>>> 61d47e4a9c ([Enhancement] support limited memory stream aggregate (#28402)):fe/fe-core/src/main/java/com/starrocks/qe/SessionVariableConstants.java
