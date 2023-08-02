@@ -516,7 +516,6 @@ void JoinHashMapTest::prepare_table_items(JoinHashTableItems* table_items, uint3
     table_items->row_count = row_count;
     table_items->next.resize(row_count + 1);
     table_items->build_pool = std::make_unique<MemPool>();
-    table_items->output_build_column_timer = ADD_TIMER(_runtime_profile, "OutputBuildColumnTime");
 }
 
 void JoinHashMapTest::prepare_probe_state(HashTableProbeState* probe_state, uint32_t probe_row_count) {
@@ -1060,7 +1059,7 @@ TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFunc) {
     param.search_ht_timer = ADD_TIMER(_runtime_profile, "search_ht");
     param.output_build_column_timer = ADD_TIMER(_runtime_profile, "output_build_column");
     param.output_probe_column_timer = ADD_TIMER(_runtime_profile, "output_probe_column");
-    param.output_build_column_timer = ADD_TIMER(_runtime_profile, "output_tuple_column");
+    param.output_tuple_column_timer = ADD_TIMER(_runtime_profile, "output_tuple_column");
 
     JoinHashTable ht;
 
@@ -1120,7 +1119,7 @@ TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFuncNullable) {
     param.search_ht_timer = ADD_TIMER(_runtime_profile, "search_ht");
     param.output_build_column_timer = ADD_TIMER(_runtime_profile, "output_build_column");
     param.output_probe_column_timer = ADD_TIMER(_runtime_profile, "output_probe_column");
-    param.output_build_column_timer = ADD_TIMER(_runtime_profile, "output_tuple_column");
+    param.output_tuple_column_timer = ADD_TIMER(_runtime_profile, "output_tuple_column");
 
     JoinHashTable ht;
 
