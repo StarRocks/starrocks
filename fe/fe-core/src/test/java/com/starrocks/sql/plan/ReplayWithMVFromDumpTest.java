@@ -38,7 +38,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
 
         new MockUp<MaterializedView>() {
             @Mock
-            Set<String> getMVToRefreshPartitionNames() {
+            Set<String> getPartitionNamesToRefreshForMv() {
                 return Sets.newHashSet();
             }
         };

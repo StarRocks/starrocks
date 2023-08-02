@@ -42,7 +42,7 @@ public class MVTaskRunExtraMessage implements Writable {
     @SerializedName("mvPartitionsToRefresh")
     private Set<String> mvPartitionsToRefresh = Sets.newHashSet();
     // refreshed partitions of the ref base table in this task run which should only have one table for now.
-    @SerializedName("refBaseePartitionsToRefreshMap")
+    @SerializedName("refBasePartitionsToRefreshMap")
     private Map<String, Set<String>> refBasePartitionsToRefreshMap = Maps.newHashMap();
     // refreshed partitions of all the base tables which are optimized by optimizer and the real partitions in executing.
     @SerializedName("basePartitionsToRefreshMap")

@@ -242,7 +242,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 }
                 mvContext.setExecPlan(execPlan);
             } catch (Exception e) {
-                LOG.warn("Refresh mv {} failed:", materializedView.getName(), e);
+                LOG.warn("Refresh mv {} failed: {}", materializedView.getName(), e);
             } finally {
                 database.readUnlock();
             }
