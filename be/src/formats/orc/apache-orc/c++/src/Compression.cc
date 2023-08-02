@@ -43,6 +43,7 @@
 #include "LzoDecompressor.hh"
 #include "Utils.hh"
 #include "lz4.h"
+#include "thirdparty/libdeflate/libdeflate.h"
 #include "orc/Exceptions.hh"
 #include "wrap/snappy-wrapper.h"
 #include "zlib.h"
@@ -669,6 +670,91 @@ std::string ZlibDecompressionStream::getName() const {
     return result.str();
 }
 
+class Zlib2DecompressionStream : public DecompressionStream {
+public:
+    Zlib2DecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize, MemoryPool& pool,
+                             ReaderMetrics* metrics);
+    ~Zlib2DecompressionStream() override;
+    std::string getName() const override;
+protected:
+    void NextDecompress(const void** data, int* size, size_t availableSize) override;
+private:
+    libdeflate_decompressor* decompressor;
+};
+
+Zlib2DecompressionStream::Zlib2DecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t bufferSize,
+                                                 MemoryPool& _pool, ReaderMetrics* _metrics)
+        : DecompressionStream(std::move(inStream), bufferSize, _pool, _metrics) {
+    decompressor = libdeflate_alloc_decompressor();
+}
+
+Zlib2DecompressionStream::~Zlib2DecompressionStream() {
+    libdeflate_free_decompressor(decompressor);
+}
+
+void Zlib2DecompressionStream::NextDecompress(const void** data, int* size, size_t availableSize) {
+    const char* next_in = inputBuffer;
+    size_t avail_in = availableSize;
+    outputBuffer = outputDataBuffer.data();
+    char* next_out = const_cast<char*>(outputBuffer);
+    size_t avail_out = outputDataBuffer.capacity();
+
+    if (avail_in == 0) {
+        throw std::logic_error("not happen");
+    }
+
+    while (avail_in > 0) {
+        size_t tmpActualConsumeSize = 0;
+        size_t tmpActualGetSize = 0;
+        libdeflate_result result = libdeflate_deflate_decompress_ex(decompressor, next_in, avail_in,
+                                               next_out, avail_out,
+                                                                 &tmpActualConsumeSize, &tmpActualGetSize);
+
+        switch (result) {
+        case LIBDEFLATE_SUCCESS:
+            remainingLength -= tmpActualConsumeSize;
+            inputBuffer += tmpActualConsumeSize;
+
+            next_out += tmpActualGetSize;
+            avail_out -= tmpActualGetSize;
+
+            readBuffer(false);
+            if (state == DECOMPRESS_EOF) {
+                avail_in = 0;
+                break;
+            }
+            availableSize =
+                    std::min(static_cast<size_t>(inputBufferEnd - inputBuffer), remainingLength);
+            next_in = inputBuffer;
+            avail_in = availableSize;
+            break;
+        case LIBDEFLATE_BAD_DATA:
+            throw std::logic_error(
+                    "Data error in "
+                    "Zlib2DecompressionStream::NextDecompress");
+        case LIBDEFLATE_INSUFFICIENT_SPACE:
+            throw std::logic_error(
+                    "Buffer error in "
+                    "Zlib2DecompressionStream::NextDecompress");
+        case LIBDEFLATE_SHORT_OUTPUT:
+            throw std::logic_error(
+                    "Shor error in "
+                    "Zlib2DecompressionStream::NextDecompress");
+        }
+    }
+
+    *size = outputDataBuffer.capacity() - avail_out;
+    *data = outputBuffer;
+    outputBufferLength = 0;
+    outputBuffer += *size;
+}
+
+std::string Zlib2DecompressionStream::getName() const {
+    std::ostringstream result;
+    result << "zlib2(" << input->getName() << ")";
+    return result.str();
+}
+
 class BlockDecompressionStream : public DecompressionStream {
 public:
     BlockDecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize, MemoryPool& pool,
@@ -1111,7 +1197,9 @@ std::unique_ptr<SeekableInputStream> createDecompressor(CompressionKind kind,
         return REDUNDANT_MOVE(input);
     case CompressionKind_ZLIB:
         return std::unique_ptr<SeekableInputStream>(
-                new ZlibDecompressionStream(std::move(input), blockSize, pool, metrics));
+                new Zlib2DecompressionStream(std::move(input), blockSize, pool, metrics));
+//        return std::unique_ptr<SeekableInputStream>(
+//                new ZlibDecompressionStream(std::move(input), blockSize, pool, metrics));
     case CompressionKind_SNAPPY:
         return std::unique_ptr<SeekableInputStream>(
                 new SnappyDecompressionStream(std::move(input), blockSize, pool, metrics));
