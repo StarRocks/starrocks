@@ -212,7 +212,6 @@ public class PredicateStatisticsCalculator {
             if (!checkNeedEvalEstimate(predicate)) {
                 return statistics;
             }
-            Preconditions.checkState(predicate.getChildren().size() == 2);
             ScalarOperator leftChild = predicate.getChild(0);
             ScalarOperator rightChild = predicate.getChild(1);
             Preconditions.checkState(!(leftChild.isConstantRef() && rightChild.isConstantRef()),
@@ -305,7 +304,6 @@ public class PredicateStatisticsCalculator {
 
                 return StatisticsEstimateUtils.adjustStatisticsByRowCount(cumulativeStatistics, rowCount);
             } else {
-                Preconditions.checkState(predicate.getChildren().size() == 1);
                 Statistics inputStatistics = predicate.getChild(0).accept(this, null);
                 double rowCount = Math.max(0, statistics.getOutputRowCount() - inputStatistics.getOutputRowCount());
                 return StatisticsEstimateUtils.adjustStatisticsByRowCount(
@@ -339,7 +337,6 @@ public class PredicateStatisticsCalculator {
 
         private ScalarOperator getChildForCastOperator(ScalarOperator operator) {
             if (operator instanceof CastOperator) {
-                Preconditions.checkState(operator.getChildren().size() == 1);
                 operator = getChildForCastOperator(operator.getChild(0));
             }
             return operator;
@@ -362,15 +359,12 @@ public class PredicateStatisticsCalculator {
             }
 
             if (predicate.isAnd()) {
-                Preconditions.checkState(predicate.getChildren().size() == 2);
                 Statistics leftStatistics = predicate.getChild(0).accept(this, null);
                 Statistics andStatistics = predicate.getChild(1)
                         .accept(new LargeOrCalculatingVisitor(leftStatistics), null);
                 return StatisticsEstimateUtils.adjustStatisticsByRowCount(andStatistics,
                         andStatistics.getOutputRowCount());
             } else if (predicate.isOr()) {
-                Preconditions.checkState(predicate.getChildren().size() == 2);
-
                 List<ScalarOperator> disjunctive = Utils.extractDisjunctive(predicate);
                 Statistics baseStatistics = disjunctive.get(0).accept(this, null);
                 double rowCount = baseStatistics.getOutputRowCount();
@@ -386,7 +380,6 @@ public class PredicateStatisticsCalculator {
 
                 return StatisticsEstimateUtils.adjustStatisticsByRowCount(baseStatistics, rowCount);
             } else {
-                Preconditions.checkState(predicate.getChildren().size() == 1);
                 Statistics inputStatistics = predicate.getChild(0).accept(this, null);
                 double rowCount = Math.max(0, statistics.getOutputRowCount() - inputStatistics.getOutputRowCount());
                 return StatisticsEstimateUtils.adjustStatisticsByRowCount(
