@@ -152,6 +152,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
     public static final String ENABLE_SCHEDULE_WITH_GLOBAL_ASSIGNMENT = "enable_schedule_with_global_assignment";
     public static final String SCHEDULE_ATOMIC_ASSIGNMENT_RETRY_TIMES = "schedule_atomic_assignment_retry_times";
+    public static final String ENABLE_SCHEDULE_AUDIT_LOG = "enable_schedule_audit_log";
 
     public static final String ENABLE_PIPELINE_QUERY_STATISTIC = "enable_pipeline_query_statistic";
 
@@ -404,6 +405,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableScheduleWithGlobalAssignments = false;
     @VariableMgr.VarAttr(name = SCHEDULE_ATOMIC_ASSIGNMENT_RETRY_TIMES)
     private int scheduleAtomicAssignmentRetryTimes = 10;
+
+    @VariableMgr.VarAttr(name = ENABLE_SCHEDULE_AUDIT_LOG)
+    private boolean enableScheduleAuditLog = false;
 
     @VarAttr(name = ENABLE_MV_PLANNER)
     private boolean enableMVPlanner = false;
@@ -1424,6 +1428,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getScheduleAtomicAssignmentRetryTimes() {
         return scheduleAtomicAssignmentRetryTimes;
+    }
+
+    public boolean isEnableScheduleAuditLog() {
+        return enableScheduleAuditLog;
     }
 
     public void setEnableLocalShuffleAgg(boolean enableLocalShuffleAgg) {

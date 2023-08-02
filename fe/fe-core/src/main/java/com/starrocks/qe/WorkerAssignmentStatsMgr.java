@@ -47,6 +47,8 @@ public class WorkerAssignmentStatsMgr {
         void consume(Long workerId, Long numRunningTablets);
 
         void release();
+
+        Map<Long, WorkerStatsInfo> getLocalWorkerToStatsInfo();
     }
 
     private abstract static class BaseWorkerStatsTracker implements WorkerStatsTracker {
@@ -58,6 +60,12 @@ public class WorkerAssignmentStatsMgr {
         }
 
         protected abstract Map<Long, WorkerStats> getWorkerToStats();
+
+        @Override
+        public Map<Long, WorkerStatsInfo> getLocalWorkerToStatsInfo() {
+            return localWorkerToStats.entrySet().stream()
+                    .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().toInfo()));
+        }
 
         @Override
         public Long getNumRunningTablets(Long workerId) {
@@ -144,8 +152,8 @@ public class WorkerAssignmentStatsMgr {
     }
 
     public static class WorkerStatsInfo {
-        private final long numRunningTablets;
-        private final long numTotalTablets;
+        private long numRunningTablets;
+        private long numTotalTablets;
 
         public WorkerStatsInfo(long numRunningTablets, long numTotalTablets) {
             this.numRunningTablets = numRunningTablets;
@@ -159,24 +167,29 @@ public class WorkerAssignmentStatsMgr {
         public long getNumTotalTablets() {
             return numTotalTablets;
         }
+
+        public void merge(long numRunningTablets, long numTotalTablets) {
+            this.numRunningTablets += numRunningTablets;
+            this.numTotalTablets += numTotalTablets;
+        }
     }
 
-    private static class WorkerStats {
+    public static class WorkerStats {
         private final AtomicLong numRunningTablets = new AtomicLong();
         private final AtomicLong numTotalTablets = new AtomicLong();
 
-        private WorkerStatsInfo toInfo() {
+        public WorkerStatsInfo toInfo() {
             return new WorkerStatsInfo(numRunningTablets.get(), numTotalTablets.get());
         }
 
-        private void consume(Long numRunningTablets) {
+        public void consume(Long numRunningTablets) {
             if (numRunningTablets > 0) {
                 this.numTotalTablets.addAndGet(numRunningTablets);
             }
             this.numRunningTablets.addAndGet(numRunningTablets);
         }
 
-        private boolean tryConsume(Long expectedNumRunningTablets, Long numRunningTablets) {
+        public boolean tryConsume(Long expectedNumRunningTablets, Long numRunningTablets) {
             if (numRunningTablets <= 0) {
                 consume(numRunningTablets);
                 return true;

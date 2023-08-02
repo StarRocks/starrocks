@@ -438,6 +438,28 @@ public class Coordinator {
     }
 
     public void onFinished() {
+        if (connectContext != null && connectContext.getSessionVariable().isEnableScheduleAuditLog()) {
+            Map<Long, WorkerAssignmentStatsMgr.WorkerStatsInfo> workerToInfo = Maps.newHashMap();
+            for (FragmentExecParams execFragment : fragmentExecParamsMap.values()) {
+                Map<Long, WorkerAssignmentStatsMgr.WorkerStatsInfo> curWorkerToInfo =
+                        execFragment.workerStatsTracker.getLocalWorkerToStatsInfo();
+                curWorkerToInfo.forEach((worker, curInfo) -> workerToInfo.compute(worker, (k, info) -> {
+                    if (info == null) {
+                        return curInfo;
+                    } else {
+                        info.merge(curInfo.getNumRunningTablets(), curInfo.getNumTotalTablets());
+                        return info;
+                    }
+                }));
+            }
+
+            StringBuilder builder = new StringBuilder();
+            workerToInfo.forEach((worker, info) -> builder.append(worker).append(":")
+                    .append(info.getNumRunningTablets()).append(";"));
+
+            connectContext.getAuditEventBuilder().setTabletAssignment(builder.toString());
+        }
+
         fragmentExecParamsMap.values().forEach(execFragment -> execFragment.workerStatsTracker.release());
     }
 
