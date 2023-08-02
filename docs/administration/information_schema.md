@@ -55,7 +55,7 @@ The following fields are provided in `loads`:
 | JOB_ID               | The unique ID assigned by StarRocks to identify the load job. |
 | LABEL                | The label of the load job.                                   |
 | DATABASE_NAME        | The name of the database to which the destination StarRocks tabes belong. |
-| STATE                | The state of the load job. Valid values:`PENDING`: The load job is created.`QUEUEING`: The load job is in the queue waiting to be scheduled.`LOADING`: The load job is running.`PREPARED`: The transaction has been committed.`FINISHED`: The load job succeeded.`CANCELLED`: The load job failed.For more information, see [Asynchronous loading](https://docs.starrocks.io/en-us/main/loading/Loading_intro#asynchronous-loading). |
+| STATE                | The state of the load job. Valid values:<ul><li>`PENDING`: The load job is created.</li><li>`QUEUEING`: The load job is in the queue waiting to be scheduled.</li><li>`LOADING`: The load job is running.</li><li>`PREPARED`: The transaction has been committed.</li><li>`FINISHED`: The load job succeeded.</li><li>`CANCELLED`: The load job failed.</li></ul>For more information, see [Asynchronous loading](https://docs.starrocks.io/en-us/main/loading/Loading_intro#asynchronous-loading). |
 | PROGRESS             | The progress of the ETL stage and LOADING stage of the load job. |
 | TYPE                 | The type of the load job. For Broker Load, the return value is `BROKER`. For INSERT, the return value is `INSERT`. |
 | PRIORITY             | The priority of the load job. Valid values: `HIGHEST`, `HIGH`, `NORMAL`, `LOW`, and `LOWEST`. |
