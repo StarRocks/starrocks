@@ -89,6 +89,7 @@ import com.starrocks.http.rest.TableRowCountAction;
 import com.starrocks.http.rest.TableSchemaAction;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.WarehouseAction;
+import com.starrocks.http.rest.WorkerStatsAction;
 import com.starrocks.leader.MetaHelper;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
@@ -147,6 +148,7 @@ public class HttpServer {
         CancelStreamLoad.registerAction(controller);
         GetStreamLoadState.registerAction(controller);
         WarehouseAction.registerAction(controller);
+        WorkerStatsAction.registerAction(controller);
 
         // add web action
         IndexAction.registerAction(controller);
