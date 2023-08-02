@@ -45,7 +45,7 @@ PARTITION: UNPARTITIONED
 
 RESULT SINK
 
-29:MERGING-EXCHANGE
+28:MERGING-EXCHANGE
 limit: 100
 
 PLAN FRAGMENT 1
@@ -53,33 +53,28 @@ OUTPUT EXPRS:
 PARTITION: HASH_PARTITIONED: 2: S_NAME
 
 STREAM DATA SINK
-EXCHANGE ID: 29
+EXCHANGE ID: 28
 UNPARTITIONED
 
-28:TOP-N
+27:TOP-N
 |  order by: <slot 77> 77: count DESC, <slot 2> 2: S_NAME ASC
 |  offset: 0
 |  limit: 100
 |
-27:AGGREGATE (merge finalize)
-|  output: count(77: count)
+26:AGGREGATE (update finalize)
+|  output: count(*)
 |  group by: 2: S_NAME
 |
-26:EXCHANGE
+25:EXCHANGE
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
 PARTITION: RANDOM
 
 STREAM DATA SINK
-EXCHANGE ID: 26
+EXCHANGE ID: 25
 HASH_PARTITIONED: 2: S_NAME
 
-25:AGGREGATE (update serialize)
-|  STREAMING
-|  output: count(*)
-|  group by: 2: S_NAME
-|
 24:Project
 |  <slot 2> : 2: S_NAME
 |

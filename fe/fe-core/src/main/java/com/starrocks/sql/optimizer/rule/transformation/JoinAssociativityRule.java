@@ -82,8 +82,7 @@ public class JoinAssociativityRule extends JoinAssociateBaseRule {
     public boolean check(final OptExpression input, OptimizerContext context) {
         LogicalJoinOperator topJoin = (LogicalJoinOperator) input.getOp();
         LogicalJoinOperator bottomJoin = (LogicalJoinOperator) input.inputAt(0).getOp();
-        if ((topJoin.getTransformMask() & JoinReorderProperty.ASSOCIATIVITY_TOP_MASK) > 0
-                && (bottomJoin.getTransformMask() & JoinReorderProperty.ASSOCIATIVITY_BOTTOM_MASK) > 0) {
+        if ((bottomJoin.getTransformMask() & JoinReorderProperty.LEFT_ASSCOM_BOTTOM_MASK) > 0) {
             return false;
         }
         if (StringUtils.isNotEmpty(topJoin.getJoinHint()) || StringUtils.isNotEmpty(bottomJoin.getJoinHint())) {

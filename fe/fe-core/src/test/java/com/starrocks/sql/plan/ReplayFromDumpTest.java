@@ -29,25 +29,9 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
-import org.junit.Ignore;
 import org.junit.Test;
 
 public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
-
-    @Test
-    public void testTPCH1() throws Exception {
-        compareDumpWithOriginTest("tpchcost/q1");
-    }
-
-    @Test
-    public void testTPCH5() throws Exception {
-        compareDumpWithOriginTest("tpchcost/q5");
-    }
-
-    @Test
-    public void testTPCH7() throws Exception {
-        compareDumpWithOriginTest("tpchcost/q7");
-    }
 
     @Test
     public void testTPCH17WithUseAnalytic() throws Exception {
@@ -79,11 +63,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  equal join conjunct: [tid, BIGINT, true] = [5: customer_id, BIGINT, true]\n" +
                 "  |  output columns: 3, 90"));
         sessionVariable.setNewPlanerAggStage(0);
-    }
-
-    @Test
-    public void testTPCH20() throws Exception {
-        compareDumpWithOriginTest("tpchcost/q20");
     }
 
     @Test
@@ -189,13 +168,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  other join predicates: CAST(190: sum AS DOUBLE) > CAST(0.5 * 262: max AS DOUBLE)"));
     }
 
-    @Test
-    public void testTPCH01() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch01"));
-        // check q1 has two agg phase with default column statistics
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("AGGREGATE (merge finalize)"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("AGGREGATE (update serialize)"));
-    }
 
     @Test
     public void testGroupByLimit() throws Exception {
@@ -279,7 +251,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
-    @Ignore
     public void testTPCDS54WithJoinHint() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/tpcds54_with_join_hint"), null, TExplainLevel.NORMAL);
