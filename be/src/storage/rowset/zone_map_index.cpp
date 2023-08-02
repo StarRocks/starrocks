@@ -180,10 +180,10 @@ void ZoneMapIndexWriterImpl<type>::add_values(const void* values, size_t count) 
         const auto* vals = reinterpret_cast<const CppType*>(values);
         auto [pmin, pmax] = std::minmax_element(vals, vals + count);
         if (unaligned_load<CppType>(pmin) < _page_zone_map.min_value.value) {
-            _type_info->direct_copy(&_page_zone_map.min_value.value, pmin, nullptr);
+            _type_info->direct_copy(&_page_zone_map.min_value.value, pmin);
         }
         if (unaligned_load<CppType>(pmax) > _page_zone_map.max_value.value) {
-            _type_info->direct_copy(&_page_zone_map.max_value.value, pmax, nullptr);
+            _type_info->direct_copy(&_page_zone_map.max_value.value, pmax);
         }
     }
 }
@@ -192,10 +192,10 @@ template <LogicalType type>
 Status ZoneMapIndexWriterImpl<type>::flush() {
     // Update segment zone map.
     if (_page_zone_map.min_value.value < _segment_zone_map.min_value.value) {
-        _type_info->direct_copy(&_segment_zone_map.min_value.value, &_page_zone_map.min_value.value, nullptr);
+        _type_info->direct_copy(&_segment_zone_map.min_value.value, &_page_zone_map.min_value.value);
     }
     if (_page_zone_map.max_value.value > _segment_zone_map.max_value.value) {
-        _type_info->direct_copy(&_segment_zone_map.max_value.value, &_page_zone_map.max_value.value, nullptr);
+        _type_info->direct_copy(&_segment_zone_map.max_value.value, &_page_zone_map.max_value.value);
     }
     if (_page_zone_map.has_null) {
         _segment_zone_map.has_null = true;
