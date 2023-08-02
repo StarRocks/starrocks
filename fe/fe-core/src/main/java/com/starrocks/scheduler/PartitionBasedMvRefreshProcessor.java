@@ -46,10 +46,16 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.TableProperty;
+import com.starrocks.catalog.Type;
+>>>>>>> 54fa2ccddd ([Enhancement] Change some default session variables for MV refresh (#28482))
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.DeepCopy;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
@@ -60,6 +66,7 @@ import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
@@ -113,6 +120,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private static final Logger LOG = LogManager.getLogger(PartitionBasedMvRefreshProcessor.class);
 
     public static final String MV_ID = "mvId";
+
+    // session.enable_spill
+    public static final String MV_SESSION_ENABLE_SPILL =
+            PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX + SessionVariable.ENABLE_SPILL;
+    // session.query_timeout
+    public static final String MV_SESSION_TIMEOUT =
+            PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX + SessionVariable.QUERY_TIMEOUT;
+    // default query timeout for mv: 1 hour
+    private static final int MV_DEFAULT_QUERY_TIMEOUT = 3600;
 
     private static final int MAX_RETRY_NUM = 10;
 
@@ -198,6 +214,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     extraMessage.setBasePartitionsToRefreshMap(sourceTablePartitions);
                 }
 
+<<<<<<< HEAD
                 if (mvContext.getCtx().getSessionVariable().isEnableResourceGroup()) {
                     String rg = materializedView.getTableProperty().getResourceGroup();
                     if (rg == null || rg.isEmpty()) {
@@ -207,6 +224,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 }
                 // create ExecPlan
                 insertStmt = generateInsertStmt(partitionsToRefresh, sourceTablePartitions);
+=======
+                // change default connect context for mv.
+                changeDefaultConnectContextIfNeeded(mvContext.getCtx());
+
+                // generate insert statement by using incremental base partition info
+                insertStmt = generateInsertStmt(mvToRefreshedPartitions, refTablePartitionNames, materializedView);
+
+                // create refresh ExecPlan
+>>>>>>> 54fa2ccddd ([Enhancement] Change some default session variables for MV refresh (#28482))
                 execPlan = generateRefreshPlan(mvContext.getCtx(), insertStmt);
                 if (mvContext.getCtx().getSessionVariable().isEnableOptimizerTraceLog()) {
                     StringBuffer sb = new StringBuffer();
@@ -233,6 +259,37 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         if (mvContext.hasNextBatchPartition()) {
             generateNextTaskRun();
+        }
+    }
+
+    /**
+     * Change default connect context when for mv refresh this is because:
+     * - MV Refresh may take much resource to load base tables' data into the final materialized view.
+     * - Those changes are set by default and also able to be changed by users for their needs.
+     * @param mvConnectCtx
+     */
+    private void changeDefaultConnectContextIfNeeded(ConnectContext mvConnectCtx) {
+        // add resource group if resource group is enabled
+        TableProperty mvProperty  = materializedView.getTableProperty();
+        SessionVariable mvSessionVariable = mvConnectCtx.getSessionVariable();
+        if (mvSessionVariable.isEnableResourceGroup()) {
+            String rg = mvProperty.getResourceGroup();
+            if (rg == null || rg.isEmpty()) {
+                rg = ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME;
+            }
+            mvSessionVariable.setResourceGroup(rg);
+        }
+
+        // enable spill by default for mv if spill is not set by default and `session.enable_spill` session variable
+        // is not set.
+        if (!mvSessionVariable.getEnableSpill() &&
+                !mvProperty.getProperties().containsKey(MV_SESSION_ENABLE_SPILL)) {
+            mvSessionVariable.setEnableSpill(true);
+        }
+
+        // change `query_timeout` to 1 hour by default for better user experience.
+        if (!mvProperty.getProperties().containsKey(MV_SESSION_TIMEOUT)) {
+            mvSessionVariable.setQueryTimeoutS(MV_DEFAULT_QUERY_TIMEOUT);
         }
     }
 
