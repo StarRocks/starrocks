@@ -28,6 +28,11 @@ import com.starrocks.sql.optimizer.rule.join.JoinReorderHelper;
 import com.starrocks.sql.optimizer.rule.join.JoinReorderProperty;
 import org.apache.commons.lang3.StringUtils;
 
+import static com.starrocks.sql.optimizer.rule.join.JoinReorderProperty.ASSOCIATIVITY_BOTTOM_MASK;
+import static com.starrocks.sql.optimizer.rule.join.JoinReorderProperty.ASSOCIATIVITY_TOP_MASK;
+import static com.starrocks.sql.optimizer.rule.join.JoinReorderProperty.LEFT_ASSCOM_BOTTOM_MASK;
+import static com.starrocks.sql.optimizer.rule.join.JoinReorderProperty.LEFT_ASSCOM_TOP_MASK;
+
 /*      Join            Join
  *      /    \          /    \
  *     Join   C   =>   Join   B
@@ -62,7 +67,8 @@ public class JoinLeftAsscomRule extends JoinAssociateBaseRule {
     public boolean check(final OptExpression input, OptimizerContext context) {
         LogicalJoinOperator topJoin = (LogicalJoinOperator) input.getOp();
         LogicalJoinOperator bottomJoin = (LogicalJoinOperator) input.inputAt(0).getOp();
-        if ((bottomJoin.getTransformMask() & JoinReorderProperty.LEFT_ASSCOM_BOTTOM_MASK) > 0) {
+        if ((topJoin.getTransformMask() & (ASSOCIATIVITY_TOP_MASK | LEFT_ASSCOM_TOP_MASK)) > 0 &&
+                (bottomJoin.getTransformMask() & (ASSOCIATIVITY_BOTTOM_MASK | LEFT_ASSCOM_BOTTOM_MASK)) > 0) {
             return false;
         }
 
