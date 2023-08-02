@@ -82,6 +82,8 @@ public class HDFSBackendSelector implements BackendSelector {
     private final boolean forceScheduleLocal;
     private final boolean shuffleScanRange;
     private final int kCandidateNumber = 3;
+    // After testing, this value can ensure that the scan range size assigned to each BE is as uniform as possible,
+    // and the largest scan data is not more than 1.1 times of the average value
     private final double kMaxImbalanceRatio = 1.1;
     public static final int CONSISTENT_HASH_RING_VIRTUAL_NUMBER = 32;
 
