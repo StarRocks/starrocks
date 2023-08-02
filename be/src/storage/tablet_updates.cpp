@@ -523,8 +523,10 @@ Status TabletUpdates::get_apply_version_and_rowsets(int64_t* version, std::vecto
                                                     std::vector<uint32_t>* rowset_ids) {
     std::lock_guard rl(_lock);
     if (_edit_version_infos.empty()) {
-        string msg =
-                strings::Substitute("tablet deleted when get_apply_version_and_rowsets tablet:$0", _tablet.tablet_id());
+        string msg = strings::Substitute(
+                "Tablet is deleted, perhaps this table is doing schema change, or it has already been deleted. Please "
+                "try again. get_apply_version_and_rowsets tablet:$0",
+                _tablet.tablet_id());
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
     }
@@ -560,7 +562,10 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
     {
         std::unique_lock<std::mutex> ul(_lock);
         if (_edit_version_infos.empty()) {
-            string msg = strings::Substitute("tablet deleted when rowset_commit tablet:$0", _tablet.tablet_id());
+            string msg = strings::Substitute(
+                    "Tablet is deleted, perhaps this table is doing schema change, or it has already been deleted. "
+                    "Please try again. rowset_commit tablet:$0",
+                    _tablet.tablet_id());
             LOG(WARNING) << msg;
             return Status::InternalError(msg);
         }
@@ -850,8 +855,10 @@ void TabletUpdates::_stop_and_wait_apply_done() {
 Status TabletUpdates::get_latest_applied_version(EditVersion* latest_applied_version) {
     std::lock_guard l(_lock);
     if (_edit_version_infos.empty()) {
-        string msg =
-                strings::Substitute("tablet deleted when get_latest_applied_version tablet:$0", _tablet.tablet_id());
+        string msg = strings::Substitute(
+                "Tablet is deleted, perhaps this table is doing schema change, or it has already been deleted. "
+                "get_latest_applied_version tablet:$0",
+                _tablet.tablet_id());
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
     }
@@ -1414,7 +1421,10 @@ RowsetSharedPtr TabletUpdates::_get_rowset(uint32_t rowset_id) {
 Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t timeout_ms,
                                         std::unique_lock<std::mutex>& ul) {
     if (_edit_version_infos.empty()) {
-        string msg = strings::Substitute("tablet deleted when _wait_for_version tablet:$0", _tablet.tablet_id());
+        string msg = strings::Substitute(
+                "Tablet is deleted, perhaps this table is doing schema change, or it has already been deleted. "
+                "_wait_for_version tablet:$0",
+                _tablet.tablet_id());
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
     }
@@ -2862,7 +2872,10 @@ Status TabletUpdates::get_applied_rowsets(int64_t version, std::vector<RowsetSha
     // wait for version timeout 55s, should smaller than exec_plan_fragment rpc timeout(60s)
     RETURN_IF_ERROR(_wait_for_version(EditVersion(version, 0), 55000, ul));
     if (_edit_version_infos.empty()) {
-        string msg = strings::Substitute("tablet deleted when get_applied_rowsets tablet:$0", _tablet.tablet_id());
+        string msg = strings::Substitute(
+                "Tablet is deleted, perhaps this table is doing schema change, or it has already been deleted. Please "
+                "try again. get_applied_rowsets tablet:$0",
+                _tablet.tablet_id());
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
     }
@@ -4145,8 +4158,10 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         }
     }
     if (rssid_to_rowsets.empty() && !rowids_by_rssid.empty()) {
-        std::string msg =
-                strings::Substitute("tablet deleted when call get_column_values() tablet:", _tablet.tablet_id());
+        std::string msg = strings::Substitute(
+                "Tablet is deleted, perhaps this table is doing schema change, or it has already been deleted. Please "
+                "try again. get_column_values() tablet:",
+                _tablet.tablet_id());
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
     }
