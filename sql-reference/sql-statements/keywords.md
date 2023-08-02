@@ -31,12 +31,9 @@
 - ALTER
 - ANALYZE
 - AND
-- ANTI
 - ARRAY
 - AS
 - ASC
-- AUTHENTICATION
-- AUTO_INCREMENT (3.0 及以后)
 
 ### B
 
@@ -48,13 +45,13 @@
 
 ### C
 
-- CANCEL
 - CASE
 - CHAR
 - CHARACTER
 - CHECK
 - COLLATE
 - COLUMN
+- COMPACTION (3.1 及以后)
 - CONVERT
 - CREATE
 - CROSS
@@ -81,7 +78,6 @@
 - DESC
 - DESCRIBE
 - DISTINCT
-- DISTRIBUTED
 - DOUBLE
 - DROP
 - DUAL
@@ -89,12 +85,9 @@
 ### E
 
 - ELSE
-- ENCLOSE (3.0 及以后)
-- ESCAPE (3.0 及以后)
 - EXCEPT
 - EXISTS
 - EXPLAIN
-- EXPORT
 
 ### F
 
@@ -171,7 +164,6 @@
 ### N
 
 - NTILE
-- NODES
 - NOT
 - NULL
 
@@ -189,7 +181,6 @@
 - PARTITION
 - PERCENTILE
 - PRIMARY
-- PRIVILEGES (3.0 及以后)
 - PROCEDURE
 
 ### Q
@@ -217,23 +208,20 @@
 - SCHEMA
 - SCHEMAS
 - SELECT
-- SEMI
 - SET
 - SET_VAR
 - SHOW
 - SMALLINT
-- SKIP_HEADER (3.0 及以后)
 - SYSTEM
-- SWAP
 
 ### T
 
 - TABLE
 - TERMINATED
+- TEXT (3.1 及以后)
 - THEN
 - TINYINT
 - TO
-- TRIM_SPACE (3.0 及以后)
 - TRUE
 
 ### U
@@ -248,7 +236,6 @@
 ### V
 
 - VALUES
-- VARBINARY (3.0 及以后)
 - VARCHAR
 
 ### W
