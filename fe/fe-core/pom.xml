@@ -715,6 +715,12 @@ under the License.
         </dependency>
 
         <dependency>
+            <groupId>org.apache.paimon</groupId>
+            <artifactId>paimon-s3</artifactId>
+            <version>${paimon.version}</version>
+        </dependency>
+
+        <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>starclient</artifactId>
             <version>3.1-rc8</version>
