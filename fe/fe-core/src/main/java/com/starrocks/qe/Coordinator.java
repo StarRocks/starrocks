@@ -31,6 +31,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
@@ -458,6 +459,12 @@ public class Coordinator {
                     .append(info.getNumRunningTablets()).append(";"));
 
             connectContext.getAuditEventBuilder().setTabletAssignment(builder.toString());
+
+            String groups = fragmentExecParamsMap.values().stream()
+                    .flatMap(execFragment -> execFragment.getColocateGroups().stream())
+                    .map(ColocateTableIndex.GroupId::toString)
+                    .collect(Collectors.joining(","));
+            connectContext.getAuditEventBuilder().setColocateGroup(groups);
         }
 
         fragmentExecParamsMap.values().forEach(execFragment -> execFragment.workerStatsTracker.release());
@@ -2484,8 +2491,15 @@ public class Coordinator {
                     selector.computeScanRangeAssignment();
                     replicateScanIds.add(scanNode.getId().asInt());
                 } else if (hasColocate || hasBucket) {
-                    BackendSelector selector =
-                            new ColocatedBackendSelector((OlapScanNode) scanNode, assignment, workerStatsTracker);
+                    OlapScanNode olapScanNode = (OlapScanNode) scanNode;
+
+                    ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
+                    ColocateTableIndex.GroupId groupId = colocateIndex.getColocateGroup(olapScanNode.getOlapTable().getId());
+                    if (groupId != null) {
+                        execFragment.colocateGroups.add(groupId);
+                    }
+
+                    BackendSelector selector = new ColocatedBackendSelector(olapScanNode, assignment, workerStatsTracker);
                     selector.computeScanRangeAssignment();
                 } else {
                     BackendSelector selector = new NormalBackendSelector(scanNode, locations, assignment, workerStatsTracker);
@@ -3178,9 +3192,15 @@ public class Coordinator {
 
         private final WorkerAssignmentStatsMgr.WorkerStatsTracker workerStatsTracker;
 
+        private final Set<ColocateTableIndex.GroupId> colocateGroups = Sets.newHashSet();
+
         public FragmentExecParams(PlanFragment fragment) {
             this.fragment = fragment;
             this.workerStatsTracker = createWorkerStatsTracker(connectContext);
+        }
+
+        public Set<ColocateTableIndex.GroupId> getColocateGroups() {
+            return colocateGroups;
         }
 
         void setBucketSeqToInstanceForRuntimeFilters() {

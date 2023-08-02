@@ -277,6 +277,15 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
+    public GroupId getColocateGroup(long tableId) {
+        readLock();
+        try {
+            return table2Group.get(tableId);
+        } finally {
+            readUnlock();
+        }
+    }
+
     public boolean isGroupExist(GroupId groupId) {
         readLock();
         try {
