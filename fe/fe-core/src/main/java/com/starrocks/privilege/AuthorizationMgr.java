@@ -226,7 +226,7 @@ public class AuthorizationMgr {
     }
 
     // called by initBuiltinRolesAndUsers()
-    private void initPrivilegeCollections(PrivilegeCollectionV2 collection, ObjectType objectType,
+    protected void initPrivilegeCollections(PrivilegeCollectionV2 collection, ObjectType objectType,
                                           List<PrivilegeType> actionList,
                                           List<String> tokens, boolean isGrant) throws PrivilegeException {
         List<PEntryObject> object;
@@ -293,12 +293,7 @@ public class AuthorizationMgr {
         }
     }
 
-    // called by initBuiltinRolesAndUsers()
-    private RolePrivilegeCollectionV2 initBuiltinRoleUnlocked(long roleId, String name) {
-        return initBuiltinRoleUnlocked(roleId, name, null);
-    }
-
-    private RolePrivilegeCollectionV2 initBuiltinRoleUnlocked(long roleId, String name, String comment) {
+    protected RolePrivilegeCollectionV2 initBuiltinRoleUnlocked(long roleId, String name, String comment) {
         RolePrivilegeCollectionV2 collection = new RolePrivilegeCollectionV2(
                 name, comment, RolePrivilegeCollectionV2.RoleFlags.MUTABLE);
         roleIdToPrivilegeCollection.put(roleId, collection);
@@ -1048,8 +1043,7 @@ public class AuthorizationMgr {
     public List<String> getGranteeRoleDetailsForUser(UserIdentity userIdentity) {
         userReadLock();
         try {
-            UserPrivilegeCollectionV2 userPrivilegeCollection = getUserPrivilegeCollectionUnlocked(userIdentity);
-            Set<Long> allRoles = userPrivilegeCollection.getAllRoles();
+            Set<Long> allRoles = getRoleIdsByUserUnlocked(userIdentity);
 
             roleReadLock();
             try {
@@ -1297,20 +1291,25 @@ public class AuthorizationMgr {
         }
     }
 
+    protected Set<Long> getRoleIdsByUserUnlocked(UserIdentity user) throws PrivilegeException {
+        Set<Long> ret = new HashSet<>();
+
+        for (long roleId : getUserPrivilegeCollectionUnlocked(user).getAllRoles()) {
+            // role may be removed
+            if (getRolePrivilegeCollectionUnlocked(roleId, false) != null) {
+                ret.add(roleId);
+            }
+        }
+        return ret;
+    }
+
     // used in executing `set role` statement
     public Set<Long> getRoleIdsByUser(UserIdentity user) throws PrivilegeException {
         userReadLock();
         try {
-            Set<Long> ret = new HashSet<>();
             roleReadLock();
             try {
-                for (long roleId : getUserPrivilegeCollectionUnlocked(user).getAllRoles()) {
-                    // role may be removed
-                    if (getRolePrivilegeCollectionUnlocked(roleId, false) != null) {
-                        ret.add(roleId);
-                    }
-                }
-                return ret;
+                return getRoleIdsByUserUnlocked(user);
             } finally {
                 roleReadUnlock();
             }
