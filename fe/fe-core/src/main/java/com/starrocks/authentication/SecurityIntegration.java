@@ -51,7 +51,7 @@ public abstract class SecurityIntegration {
         return propertyMap.get(SECURITY_INTEGRATION_PROPERTY_TYPE_KEY);
     }
 
-    abstract AuthenticationProvider getAuthenticationProvider() throws AuthenticationException;
+    public abstract AuthenticationProvider getAuthenticationProvider() throws AuthenticationException;
 
     public Map<String, String> getPropertyMapWithMasking() {
         return propertyMap;
