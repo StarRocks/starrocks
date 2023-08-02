@@ -109,9 +109,7 @@ public:
 
     void deep_copy(void* dest, const void* src, MemPool* mem_pool) const override { _deep_copy(dest, src, mem_pool); }
 
-    void direct_copy(void* dest, const void* src, MemPool* mem_pool) const override {
-        _direct_copy(dest, src, mem_pool);
-    }
+    void direct_copy(void* dest, const void* src) const override { _direct_copy(dest, src); }
 
     Status from_string(void* buf, const std::string& scan_key) const override { return _from_string(buf, scan_key); }
 
@@ -130,7 +128,7 @@ protected:
 private:
     void (*_shallow_copy)(void* dest, const void* src);
     void (*_deep_copy)(void* dest, const void* src, MemPool* mem_pool);
-    void (*_direct_copy)(void* dest, const void* src, MemPool* mem_pool);
+    void (*_direct_copy)(void* dest, const void* src);
 
     Status (*_from_string)(void* buf, const std::string& scan_key);
     std::string (*_to_string)(const void* src);
@@ -184,7 +182,7 @@ struct ScalarTypeInfoImplBase {
         unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
     }
 
-    static void direct_copy(void* dest, const void* src, MemPool* mem_pool) {
+    static void direct_copy(void* dest, const void* src) {
         unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
     }
 
@@ -529,7 +527,7 @@ struct ScalarTypeInfoImpl<TYPE_LARGEINT> : public ScalarTypeInfoImplBase<TYPE_LA
         unaligned_store<int128_t>(dest, unaligned_load<int128_t>(src));
     }
 
-    static void direct_copy(void* dest, const void* src, MemPool* mem_pool) {
+    static void direct_copy(void* dest, const void* src) {
         unaligned_store<int128_t>(dest, unaligned_load<int128_t>(src));
     }
     static void set_to_max(void* buf) { unaligned_store<int128_t>(buf, ~((int128_t)(1) << 127)); }
@@ -665,7 +663,7 @@ struct ScalarTypeInfoImpl<TYPE_DECIMALV2> : public ScalarTypeInfoImplBase<TYPE_D
         memcpy(dest, src, sizeof(CppType));
     }
 
-    static void direct_copy(void* dest, const void* src, MemPool* mem_pool) { memcpy(dest, src, sizeof(CppType)); }
+    static void direct_copy(void* dest, const void* src) { memcpy(dest, src, sizeof(CppType)); }
 
     static void set_to_max(void* buf) {
         CppType v;
@@ -934,7 +932,7 @@ struct ScalarTypeInfoImpl<TYPE_CHAR> : public ScalarTypeInfoImplBase<TYPE_CHAR> 
         unaligned_store<Slice>(dest, l_slice);
     }
 
-    static void direct_copy(void* dest, const void* src, MemPool* mem_pool) {
+    static void direct_copy(void* dest, const void* src) {
         auto l_slice = unaligned_load<Slice>(dest);
         auto r_slice = unaligned_load<Slice>(src);
         memory_copy(l_slice.data, r_slice.data, r_slice.size);
