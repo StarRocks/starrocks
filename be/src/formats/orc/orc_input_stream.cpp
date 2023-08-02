@@ -30,16 +30,13 @@ ORCHdfsFileStream::ORCHdfsFileStream(RandomAccessFile* file, uint64_t length, io
         : _file(file), _length(length), _cache_buffer(0), _cache_offset(0), _sb_stream(sb_stream) {}
 
 void ORCHdfsFileStream::prepareCache(PrepareCacheScope scope, uint64_t offset, uint64_t length) {
-    const size_t cache_max_size = config::orc_file_cache_max_size;
-    if (length > cache_max_size) return;
-    if (canUseCacheBuffer(offset, length)) return;
-
-    // If this stripe is small, probably other stripes are also small
-    // we combine those reads into one, and try to read several stripes in one shot.
-    if (scope == PrepareCacheScope::READ_FULL_STRIPE) {
-        length = std::min(_length - offset, cache_max_size);
+    size_t cache_max_size = config::orc_file_cache_max_size;
+    if (scope == PrepareCacheScope::READ_ROW_GROUP_INDEX) {
+        cache_max_size = config::orc_row_index_cache_max_size;
     }
 
+    if (length > cache_max_size) return;
+    if (canUseCacheBuffer(offset, length)) return;
     _cache_buffer.resize(length);
     _cache_offset = offset;
     doRead(_cache_buffer.data(), length, offset);

@@ -1054,11 +1054,7 @@ void RowReaderImpl::startNextStripe() {
 
         if (streamIORangesEnabled) {
             contents->stream->clearIORanges();
-        } else {
-            contents->stream->prepareCache(InputStream::PrepareCacheScope::READ_FULL_STRIPE, currentStripeInfo.offset(),
-                                           stripeSize);
         }
-
         currentStripeFooter = getStripeFooter(currentStripeInfo, *contents);
         rowsInCurrentStripe = currentStripeInfo.numberofrows();
         if (streamIORangesEnabled) {
