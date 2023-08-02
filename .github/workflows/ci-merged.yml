@@ -76,7 +76,7 @@ jobs:
           labels: '2.4'
 
   thirdparty-update-image:
-    runs-on: self-hosted
+    runs-on: [self-hosted, normal]
     name: Thirdparty Update Image
     if: github.event.pull_request.merged == true
     env:
@@ -109,7 +109,7 @@ jobs:
           rm -rf ${{ github.workspace }}/*
 
   close_msg:
-    runs-on: self-hosted
+    runs-on: [self-hosted, normal]
     if: >
       github.event.pull_request.merged == true && 
       github.base_ref == 'main' &&
