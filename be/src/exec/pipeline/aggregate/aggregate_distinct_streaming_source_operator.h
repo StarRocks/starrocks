@@ -41,7 +41,7 @@ public:
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
-    void _output_chunk_from_hash_set(ChunkPtr* chunk, RuntimeState* state);
+    Status _output_chunk_from_hash_set(ChunkPtr* chunk, RuntimeState* state);
 
     // It is used to perform aggregation algorithms shared by
     // AggregateDistinctStreamingSinkOperator. It is
