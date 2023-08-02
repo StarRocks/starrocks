@@ -4282,6 +4282,27 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new DdlException("failed to init view stmt", e);
             }
 
+            // check database exists again, because database can be dropped when creating table
+            if (!tryLock(false)) {
+                throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
+            }
+            try {
+                if (getDb(db.getId()) == null) {
+                    throw new DdlException("database has been dropped when creating view");
+                }
+                if (!db.createTableWithLock(view, false)) {
+                    if (!stmt.isSetIfNotExists()) {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName,
+                                "table already exists");
+                    } else {
+                        LOG.info("create table[{}] which already exists", tableName);
+                        return;
+                    }
+                }
+            } finally {
+                unlock();
+            }
+
             LOG.info("successfully create view[" + tableName + "-" + view.getId() + "]");
         }
     }
