@@ -508,7 +508,6 @@ class StarrocksSQLApiLib(object):
                 tools.assert_true(False, "shell result str|re not match,\n[exp]: %s,\n [act]: %s" % (exp_std, act_std))
 
             else:
-            else:
                 # str
                 if exp_std != act_std and not re.match(exp_std, act_std, flags=re.S):
                     tools.assert_true(False, "shell result str not match,\n[exp]: %s,\n [act]: %s" % (exp_std, act_std))
