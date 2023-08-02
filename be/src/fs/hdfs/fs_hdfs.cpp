@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 #include <hdfs/hdfs.h>
 
+#include <exception>
 #include <utility>
 
 #include "fs/fs_util.h"
@@ -146,8 +147,21 @@ StatusOr<int64_t> HdfsInputStream::read(void* data, int64_t size) {
 
     int64_t now = 0;
     uint8_t* buf = static_cast<uint8_t*>(data);
+    const int retry = 3;
     while (now < size) {
-        tSize r = hdfsRead(_handle->getFS(), file, buf + now, size - now);
+        tSize r = 0;
+        for (int i = 0; i < (retry + 1); i++) {
+            try {
+                r = hdfsRead(_handle->getFS(), file, buf + now, size - now);
+                break;
+            } catch (const std::exception& e) {
+                if (i == retry) {
+                    r = -1;
+                    errno = EINTERNAL;
+                    break;
+                }
+            }
+        }
         if (r == 0) break;
         if (r == -1) {
             if (errno == EINTR) {
