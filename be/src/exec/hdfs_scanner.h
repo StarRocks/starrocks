@@ -63,6 +63,9 @@ struct HdfsScanStats {
     // late materialization
     int64_t skip_read_rows = 0;
 
+    // page statistics
+    bool has_page_statistics = false;
+
     // ORC only!
     int64_t delete_build_ns = 0;
     int64_t delete_file_per_scan = 0;
