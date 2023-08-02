@@ -26,7 +26,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeStatus;
@@ -73,7 +73,7 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
 
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
         try {
-            PrivilegeChecker.checkAnyActionOnTable(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     new TableName(analyzeStatus.getCatalogName(), analyzeStatus.getDbName(), analyzeStatus.getTableName()));
         } catch (AccessDeniedException e) {
             return null;

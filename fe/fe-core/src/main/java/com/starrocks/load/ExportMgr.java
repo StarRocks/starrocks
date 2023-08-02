@@ -56,7 +56,7 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.common.MetaUtils;
@@ -225,7 +225,7 @@ public class ExportMgr {
                     }
 
                     try {
-                        PrivilegeChecker.checkAnyActionOnOrInDb(ConnectContext.get().getCurrentUserIdentity(),
+                        Authorizer.checkAnyActionOnOrInDb(ConnectContext.get().getCurrentUserIdentity(),
                                 ConnectContext.get().getCurrentRoleIds(),
                                 InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                                 db.getFullName());
@@ -234,7 +234,7 @@ public class ExportMgr {
                     }
                 } else {
                     try {
-                        PrivilegeChecker.checkAnyActionOnTable(ConnectContext.get().getCurrentUserIdentity(),
+                        Authorizer.checkAnyActionOnTable(ConnectContext.get().getCurrentUserIdentity(),
                                 ConnectContext.get().getCurrentRoleIds(), tableName);
                     } catch (AccessDeniedException e) {
                         continue;

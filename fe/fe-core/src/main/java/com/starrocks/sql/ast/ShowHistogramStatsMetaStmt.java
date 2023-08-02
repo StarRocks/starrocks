@@ -27,7 +27,7 @@ import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.HistogramStatsMeta;
 
@@ -72,7 +72,7 @@ public class ShowHistogramStatsMetaStmt extends ShowStmt {
         }
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
         try {
-            PrivilegeChecker.checkAnyActionOnTable(context.getCurrentUserIdentity(),
+            Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(),
                     context.getCurrentRoleIds(), new TableName(db.getOriginName(), table.getName()));
         } catch (AccessDeniedException e) {
             return null;

@@ -53,7 +53,7 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
@@ -338,7 +338,7 @@ public class ResourceMgr implements Writable {
                 }
 
                 try {
-                    PrivilegeChecker.checkAnyActionOnResource(ConnectContext.get().getCurrentUserIdentity(),
+                    Authorizer.checkAnyActionOnResource(ConnectContext.get().getCurrentUserIdentity(),
                             ConnectContext.get().getCurrentRoleIds(), resource.getName());
                 } catch (AccessDeniedException e) {
                     continue;

@@ -106,7 +106,7 @@ public class ExternalDbTablePrivTest {
         // 1. before grant: access denied
         ctxToTestUser();
         try {
-            PrivilegeChecker.check(statement, ctx);
+            Authorizer.check(statement, ctx);
             Assert.fail();
         } catch (AccessDeniedException e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
@@ -117,14 +117,14 @@ public class ExternalDbTablePrivTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
 
         ctxToTestUser();
-        PrivilegeChecker.check(statement, ctx);
+        Authorizer.check(statement, ctx);
 
         ctxToRoot();
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx), ctx);
 
         ctxToTestUser();
         try {
-            PrivilegeChecker.check(statement, starRocksAssert.getCtx());
+            Authorizer.check(statement, starRocksAssert.getCtx());
             Assert.fail();
         } catch (AccessDeniedException e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
