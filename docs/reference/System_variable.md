@@ -402,7 +402,7 @@ The variables are described in alphabetical order. Variables with the `global` l
 
   For more information, see [UPDATE](../sql-reference/sql-statements/data-manipulation/UPDATE.md#partial-updates-in-column-mode-since-v31).
 
-*  performance_schema
+* performance_schema
 
   Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical usage.
 
