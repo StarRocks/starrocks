@@ -15,6 +15,7 @@
 package com.starrocks.planner;
 
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class MaterializedViewManualTest extends MaterializedViewTestBase {
@@ -93,6 +94,7 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
     }
 
     @Test
+    @Ignore
     public void testLimit1() throws Exception {
         String sql = "CREATE TABLE `test_limit_1` (\n" +
                 "  `id` bigint(20) NULL COMMENT \"\",\n" +

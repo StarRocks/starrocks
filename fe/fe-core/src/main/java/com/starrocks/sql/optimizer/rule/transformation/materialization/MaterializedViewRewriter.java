@@ -214,7 +214,7 @@ public class MaterializedViewRewriter {
         LogicalOperator queryOp = (LogicalOperator) queryExpr.getOp();
         LogicalOperator mvOp = (LogicalOperator) mvExpr.getOp();
         if (!queryOp.getOpType().equals(mvOp.getOpType())) {
-            logMVRewrite(mvRewriteContext, "join type is different %s != %s", queryOp.getOpType(), mvOp.getOpType());
+            logMVRewrite(mvRewriteContext, "join type is different {} != {}", queryOp.getOpType(), mvOp.getOpType());
             return false;
         }
         if (queryOp instanceof LogicalJoinOperator) {
@@ -234,7 +234,7 @@ public class MaterializedViewRewriter {
             // For non-inner/cross join, we must ensure all on-predicates are not compensated, otherwise there may
             // be some correctness bugs.
             if (!ScalarOperator.isEquivalent(queryJoin.getOnPredicate(), (mvJoin.getOnPredicate()))) {
-                logMVRewrite(mvRewriteContext, "join predicate is different %s != %s", queryJoin.getOnPredicate(),
+                logMVRewrite(mvRewriteContext, "join predicate is different {} != {}", queryJoin.getOnPredicate(),
                         mvJoin.getOnPredicate());
                 return false;
             }
@@ -249,7 +249,7 @@ public class MaterializedViewRewriter {
             }
 
             if (!JOIN_COMPATIBLE_MAP.get(mvJoinType).contains(queryJoinType)) {
-                logMVRewrite(mvRewriteContext, "join type is not compatible %s not contains %s", mvJoinType,
+                logMVRewrite(mvRewriteContext, "join type is not compatible {} not contains {}", mvJoinType,
                         queryJoinType);
                 return false;
             }
@@ -263,7 +263,7 @@ public class MaterializedViewRewriter {
             boolean isSupported = isSupportedPredicate(queryOnPredicate,
                     materializationContext.getQueryRefFactory(), tableToJoinColumns, joinColumnPairs);
             if (!isSupported) {
-                logMVRewrite(mvRewriteContext, "join predicate is not supported %s", queryOnPredicate);
+                logMVRewrite(mvRewriteContext, "join predicate is not supported {}", queryOnPredicate);
                 return false;
             }
             // use join columns from query
@@ -280,7 +280,7 @@ public class MaterializedViewRewriter {
             boolean isCompatible = isJoinCompatible(usedColumnsToTable, queryJoinType, mvJoinType,
                     leftColumns, rightColumns, joinColumnPairs, joinColumnRefs, compensatedEquivalenceColumns);
             if (!isCompatible) {
-                logMVRewrite(mvRewriteContext, "join columns not compatible %s != %s", leftColumns, rightColumns);
+                logMVRewrite(mvRewriteContext, "join columns not compatible {} != {}", leftColumns, rightColumns);
                 return false;
             }
             JoinDeriveContext joinDeriveContext =
@@ -696,7 +696,7 @@ public class MaterializedViewRewriter {
         // used to prune partition and buckets after mv rewrite
         ScalarOperator mvPrunePredicate = collectMvPrunePredicate(materializationContext);
 
-        logMVRewrite(mvRewriteContext, "Construct %d relation id mappings from query to mv", relationIdMappings.size());
+        logMVRewrite(mvRewriteContext, "Construct {} relation id mappings from query to mv", relationIdMappings.size());
         for (BiMap<Integer, Integer> relationIdMapping : relationIdMappings) {
             mvRewriteContext.setMvPruneConjunct(mvPrunePredicate);
             rewriteContext.setQueryToMvRelationIdMapping(relationIdMapping);
@@ -1156,7 +1156,7 @@ public class MaterializedViewRewriter {
             newEqualPredicates = rewriteMVCompensationExpression(rewriteContext, rewriter,
                     mvColumnRefToScalarOp, equalPredicates, true);
             if (newEqualPredicates == null) {
-                logMVRewrite(mvRewriteContext, "Rewrite equal predicates compensation failed: %s", equalPredicates);
+                logMVRewrite(mvRewriteContext, "Rewrite equal predicates compensation failed: {}", equalPredicates);
                 return null;
             }
         }
@@ -1166,7 +1166,7 @@ public class MaterializedViewRewriter {
             newOtherPredicates = rewriteMVCompensationExpression(rewriteContext, rewriter,
                     mvColumnRefToScalarOp, otherPredicates, false);
             if (newOtherPredicates == null) {
-                logMVRewrite(mvRewriteContext, "Rewrite other predicates compensation failed: %s", otherPredicates);
+                logMVRewrite(mvRewriteContext, "Rewrite other predicates compensation failed: {}", otherPredicates);
                 return null;
             }
         }
@@ -1174,7 +1174,7 @@ public class MaterializedViewRewriter {
         ScalarOperator compensationPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(newEqualPredicates,
                 newOtherPredicates));
         if (compensationPredicate == null) {
-            logMVRewrite(mvRewriteContext, "Canonize compensate predicates failed: %s , %s",
+            logMVRewrite(mvRewriteContext, "Canonize compensate predicates failed: {} , {}",
                     equalPredicates, otherPredicates);
             return null;
         }
@@ -1400,7 +1400,7 @@ public class MaterializedViewRewriter {
                     rewriteContext.getQueryExpression(), rewriteContext.getQueryRefFactory(), rewrittenFailedPredicates);
             if (rewrittenPair == null) {
                 logMVRewrite(mvRewriteContext, "Rewrite union failed: cannot rewrite compensations other predicates" +
-                        " from view to query, rewrittenFailedPredicates:%s", rewrittenFailedPredicates);
+                        " from view to query, rewrittenFailedPredicates:{}", rewrittenFailedPredicates);
                 return null;
             }
             mvCompensationPredicates = Utils.compoundAnd(mvCompensationPredicates, rewrittenPair.first);
@@ -1408,7 +1408,7 @@ public class MaterializedViewRewriter {
         }
         if (mvCompensationPredicates == null) {
             logMVRewrite(mvRewriteContext, "Rewrite union failed: cannot rewrite compensations from view to query, " +
-                    "mvEqualPreds:%s, mvOtherPreds:%s", (mvEqualPreds == null), (mvOtherPreds == null));
+                    "mvEqualPreds:{}, mvOtherPreds:{}", (mvEqualPreds == null), (mvOtherPreds == null));
             return null;
         }
 
@@ -1983,13 +1983,13 @@ public class MaterializedViewRewriter {
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : swappedQueryColumnMap.entrySet()) {
             ScalarOperator rewritten = equationRewriter.replaceExprWithTarget(entry.getValue());
             if (rewritten == null) {
-                logMVRewrite(mvRewriteContext, "Rewrite projection failed: cannot rewrite expr %s",
+                logMVRewrite(mvRewriteContext, "Rewrite projection failed: cannot rewrite expr {}",
                         entry.getValue().toString());
                 return null;
             }
             if (!isAllExprReplaced(rewritten, new ColumnRefSet(rewriteContext.getQueryColumnSet()))) {
                 // it means there is some column that can not be rewritten by outputs of mv
-                logMVRewrite(mvRewriteContext, "Rewrite projection failed: cannot totally rewrite expr %s",
+                logMVRewrite(mvRewriteContext, "Rewrite projection failed: cannot totally rewrite expr {}",
                         entry.getValue().toString());
                 return null;
             }
@@ -2258,7 +2258,7 @@ public class MaterializedViewRewriter {
                 getCompensationPredicate(srcPr, targetPr, columnRewriter, true, isQueryToMV);
         if (compensationPr == null) {
             logMVRewrite(mvRewriteContext, "Rewrite query failed: get range compensation predicates failed," +
-                    "srcPr:%s, targetPr:%s", MvUtils.toString(srcPr), MvUtils.toString(targetPr));
+                    "srcPr:{}, targetPr:{}", MvUtils.toString(srcPr), MvUtils.toString(targetPr));
             return null;
         }
 
@@ -2280,7 +2280,7 @@ public class MaterializedViewRewriter {
                 getCompensationPredicate(srcPu, targetPu, columnRewriter, false, isQueryToMV);
         if (compensationPu == null) {
             logMVRewrite(mvRewriteContext, "Rewrite query failed: get residual compensation predicates failed," +
-                    "srcPr:%s, targetPr:%s", MvUtils.toString(srcPu), MvUtils.toString(targetPu));
+                    "srcPr:{}, targetPr:{}", MvUtils.toString(srcPu), MvUtils.toString(targetPu));
             return null;
         }
 

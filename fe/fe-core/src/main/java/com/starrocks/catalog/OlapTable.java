@@ -850,8 +850,12 @@ public class OlapTable extends Table {
         }
     }
 
-    // partition Name -> Range
+
+    /**
+     * @return  : table's partition name to range partition key mapping.
+     */
     public Map<String, Range<PartitionKey>> getRangePartitionMap() {
+        Preconditions.checkState(partitionInfo instanceof RangePartitionInfo);
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
         Map<String, Range<PartitionKey>> rangePartitionMap = Maps.newHashMap();
         for (Map.Entry<Long, Partition> partitionEntry : idToPartition.entrySet()) {

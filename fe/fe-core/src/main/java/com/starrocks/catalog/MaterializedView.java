@@ -30,7 +30,6 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.common.AnalysisException;
@@ -548,7 +547,13 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.maxMVRewriteStaleness = maxMVRewriteStaleness;
     }
 
-    public static SlotRef getPartitionSlotRef(MaterializedView materializedView) {
+    /**
+     * @param materializedView : materialized view to check
+     * @return                 : return the column slot ref which materialized view's partition column comes from.
+     *
+     * NOTE: Only support one column for Materialized View's partition column for now.
+     */
+    public static SlotRef getRefBaseTablePartitionSlotRef(MaterializedView materializedView) {
         List<SlotRef> slotRefs = Lists.newArrayList();
         Expr partitionExpr = getPartitionExpr(materializedView);
         partitionExpr.collect(SlotRef.class, slotRefs);
@@ -565,6 +570,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return materializedView.getPartitionRefTableExprs().get(0);
     }
 
+    /**
+     * @param baseTable : The materialized view's olap base table.
+     * @return          : Return the updated partition names of materialized view's olap base table.
+     */
     public Set<String> getUpdatedPartitionNamesOfOlapTable(OlapTable baseTable) {
         // Ignore partitions when mv 's last refreshed time period is less than `maxMVRewriteStaleness`
         if (isStalenessSatisfied()) {
@@ -581,6 +590,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         for (String partitionName : baseTable.getPartitionNames()) {
             if (!mvBaseTableVisibleVersionMap.containsKey(partitionName)) {
                 Partition partition = baseTable.getPartition(partitionName);
+                // TODO: use `mvBaseTableVisibleVersionMap` to check whether base table has been refreshed or not instead of
+                //  checking its version, remove this later.
                 if (partition.getVisibleVersion() != 1) {
                     result.add(partitionName);
                 }
@@ -662,6 +673,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return refreshScheme.getLastRefreshTime();
     }
 
+    /**
+     * Check weather this materialized view's staleness is satisfied.
+     * @return
+     */
     @VisibleForTesting
     public boolean isStalenessSatisfied() {
         if (this.maxMVRewriteStaleness <= 0) {
@@ -711,7 +726,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 .stream().map(BasePartitionInfo::fromExternalTable).collect(Collectors.toList());
     }
 
-    public Set<String> getUpdatedPartitionNamesOfExternalTable(Table baseTable) {
+    private Set<String> getUpdatedPartitionNamesOfExternalTable(Table baseTable) {
         if (!baseTable.isHiveTable()) {
             // Only support hive table now
             return null;
@@ -757,32 +772,41 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return result;
     }
 
-    public Set<String> getUpdatedPartitionNamesOfTable(Table base, boolean withMv) {
-        if (base.isView()) {
+    /**
+     * Return base tables' updated partition names, if `withMv` is true check base tables recursively when the base
+     * table is materialized view too.
+     *
+     * @param baseTable : materialized view's base table to be checked
+     * @param withMv    : whether to check the base table recursively when it is also a mv.
+     * @return
+     */
+    public Set<String> getUpdatedPartitionNamesOfTable(Table baseTable, boolean withMv) {
+        if (baseTable.isView()) {
             return Sets.newHashSet();
-        } else if (base.isNativeTableOrMaterializedView()) {
+        } else if (baseTable.isNativeTableOrMaterializedView()) {
             Set<String> result = Sets.newHashSet();
-            OlapTable baseTable = (OlapTable) base;
-            result.addAll(getUpdatedPartitionNamesOfOlapTable(baseTable));
+            OlapTable olapBaseTable = (OlapTable) baseTable;
+            result.addAll(getUpdatedPartitionNamesOfOlapTable(olapBaseTable));
+
             if (withMv && baseTable.isMaterializedView()) {
                 Set<String> partitionNames = ((MaterializedView) baseTable).getPartitionNamesToRefreshForMv();
                 result.addAll(partitionNames);
             }
             return result;
         } else {
-            Set<String> updatePartitionNames = getUpdatedPartitionNamesOfExternalTable(base);
-            Pair<Table, Column> partitionTableAndColumn = getPartitionTableAndColumn();
+            Set<String> updatePartitionNames = getUpdatedPartitionNamesOfExternalTable(baseTable);
+            Pair<Table, Column> partitionTableAndColumn = getBaseTableAndPartitionColumn();
             if (partitionTableAndColumn == null) {
                 return updatePartitionNames;
             }
-            if (!base.getTableIdentifier().equals(partitionTableAndColumn.first.getTableIdentifier())) {
+            if (!baseTable.getTableIdentifier().equals(partitionTableAndColumn.first.getTableIdentifier())) {
                 return updatePartitionNames;
             }
             try {
-                return PartitionUtil.getMVPartitionName(base, partitionTableAndColumn.second,
+                return PartitionUtil.getMVPartitionName(baseTable, partitionTableAndColumn.second,
                         Lists.newArrayList(updatePartitionNames));
             } catch (AnalysisException e) {
-                LOG.warn("Mv {}'s base table {} get partition name fail", name, base.name, e);
+                LOG.warn("Mv {}'s base table {} get partition name fail", name, baseTable.name, e);
                 return null;
             }
         }
@@ -1193,162 +1217,172 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return table.isHiveTable();
     }
 
+    /**
+     * Once the materialized view's base tables have updated, we need to check correspond materialized views' partitions
+     * to be refreshed.
+     *
+     * @return : Collect all need refreshed partitions of materialized view.
+     */
     public Set<String> getPartitionNamesToRefreshForMv() {
+        // Skip check for sync materialized view.
         if (refreshScheme.isSync()) {
             return Sets.newHashSet();
         }
 
-        PartitionInfo partitionInfo = getPartitionInfo();
-        TableProperty.QueryRewriteConsistencyMode externalTableRewriteMode = getForceExternalTableQueryRewrite();
-        TableProperty.QueryRewriteConsistencyMode olapTableRewriteMode = tableProperty.getOlapTableQueryRewrite();
+        // check mv's query rewrite consistency mode property
+        TableProperty.QueryRewriteConsistencyMode mvConsistencyRewriteMode = tableProperty.getQueryRewriteConsistencyMode();
+        switch (mvConsistencyRewriteMode) {
+            case DISABLE:
+                return getPartitionNames();
+            case LOOSE:
+                return Sets.newHashSet();
+            case CHECKED:
+            default:
+                break;
+        }
+
         if (partitionInfo instanceof SinglePartitionInfo) {
-            // for non-partitioned materialized view
-            for (BaseTableInfo tableInfo : baseTableInfos) {
-                Table table = tableInfo.getTable();
-
-                if (table.isView()) {
-                    // freshness of view should be ignored
-                    continue;
-                }
-                // we can not judge whether mv based on external table is update-to-date,
-                // because we do not know that any changes in external table.
-                if (!table.isNativeTableOrMaterializedView()) {
-                    switch (externalTableRewriteMode) {
-                        case DISABLE:
-                            return getPartitionNames();
-                        case LOOSE: {
-                            return Sets.newHashSet();
-                        }
-                        case CHECKED:
-                            if (!supportPartialPartitionQueryRewriteForExternalTable(table)) {
-                                continue;
-                            }
-                            break;
-                        default:
-                            Preconditions.checkState(false, "unknown force_external_table_rewrite");
-                    }
-                }
-                if (table.isNativeTableOrMaterializedView()) {
-                    switch (olapTableRewriteMode) {
-                        case DISABLE:
-                            return getPartitionNames();
-                        case LOOSE:
-                            return Sets.newHashSet();
-                        case CHECKED:
-                        default:
-                            break;
-                    }
-                }
-
-                // Check the partition consistency
-                Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table, true);
-                if (CollectionUtils.isNotEmpty(partitionNames)) {
-                    return getPartitionNames();
-                }
-            }
+            return getNonPartitionedMVRefreshPartitions();
         } else if (partitionInfo instanceof ExpressionRangePartitionInfo) {
             // partitions to refresh
             // 1. dropped partitions
             // 2. newly added partitions
             // 3. partitions loaded with new data
-            return getPartitionNamesToRefreshForPartitionedMv();
+            return getPartitionedMVRefreshPartitions();
         } else {
             throw UnsupportedException.unsupportedException("unsupported partition info type:"
                     + partitionInfo.getClass().getName());
         }
+    }
+
+    /**
+     * For non-partitioned materialized view, once its base table have updated, we need refresh the
+     * materialized view's totally.
+     * @return : non-partitioned materialized view's all need updated partition names.
+     */
+    private Set<String> getNonPartitionedMVRefreshPartitions() {
+        Preconditions.checkState(partitionInfo instanceof SinglePartitionInfo);
+        for (BaseTableInfo tableInfo : baseTableInfos) {
+            Table table = tableInfo.getTable();
+            // skip check freshness of view
+            if (table.isView()) {
+                continue;
+            }
+
+            // skip check external table if the external does not support rewrite.
+            if (!table.isNativeTableOrMaterializedView()) {
+                if (!supportPartialPartitionQueryRewriteForExternalTable(table)) {
+                    return Sets.newHashSet();
+                }
+                if (tableProperty.getForceExternalTableQueryRewrite() == TableProperty.QueryRewriteConsistencyMode.DISABLE) {
+                    return getPartitionNames();
+                }
+            }
+
+            // once mv's base table has updated, refresh the materialized view totally.
+            Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table, true);
+            if (CollectionUtils.isNotEmpty(partitionNames)) {
+                return getPartitionNames();
+            }
+        }
         return Sets.newHashSet();
     }
 
-    private Set<String> getPartitionNamesToRefreshForPartitionedMv() {
+    /**
+     * Materialized Views' base tables have two kinds: ref base table and non-ref base table.
+     *   - If non ref base tables updated, need refresh all mv partitions.
+     *   - If ref base table updated, need refresh the ref base table's updated partitions.
+     *
+     * eg:
+     *    CREATE MATERIALIZED VIEW mv1
+     *    PARTITION BY k1
+     *    DISTRIBUTED BY HASH(k1) BUCKETS 10
+     *    AS
+     *      SELECT k1, v1 as k2, v2 as k3
+     *          from t1 join t2
+     *          on t1.k1 and t2.kk1;
+     *
+     * - t1 is mv1's ref base table because mv1's partition column k1 is deduced from t1
+     * - t2 is mv1's non ref base table because mv1's partition column k1 is not associated with t2.
+     *
+     * @return : partitioned materialized view's all need updated partition names.
+     */
+    private Set<String> getPartitionedMVRefreshPartitions() {
+        Preconditions.checkState(partitionInfo instanceof ExpressionRangePartitionInfo);
+        // If non-partition-by table has changed, should refresh all mv partitions
         Expr partitionExpr = getPartitionRefTableExprs().get(0);
-        Pair<Table, Column> partitionInfo = getPartitionTableAndColumn();
+        Pair<Table, Column> partitionInfo = getBaseTableAndPartitionColumn();
         // if non-partition-by table has changed, should refresh all mv partitions
         if (partitionInfo == null) {
             setInactiveAndReason("partition configuration changed");
             LOG.warn("mark mv:{} inactive for get partition info failed", name);
             throw new RuntimeException(String.format("getting partition info failed for mv: %s", name));
         }
-        Table partitionTable = partitionInfo.first;
-        TableProperty.QueryRewriteConsistencyMode externalTableRewriteMode = getForceExternalTableQueryRewrite();
-        TableProperty.QueryRewriteConsistencyMode olapTableRewriteMode = tableProperty.getOlapTableQueryRewrite();
-        for (BaseTableInfo tableInfo : baseTableInfos) {
-            Table table = tableInfo.getTable();
-            if (table.isView()) {
-                continue;
-            }
-            if (!table.isNativeTableOrMaterializedView()) {
-                switch (externalTableRewriteMode) {
-                    case DISABLE:
-                        return getPartitionNames();
-                    case LOOSE:
-                        return Sets.newHashSet();
-                    case CHECKED: {
-                        if (!supportPartialPartitionQueryRewriteForExternalTable(table)) {
-                            return Sets.newHashSet();
-                        }
-                        break;
-                    }
-                    default:
-                        Preconditions.checkState(false, "unknown force_external_table_query_rewrite");
-                }
-            }
-            if (table.isNativeTableOrMaterializedView()) {
-                switch (olapTableRewriteMode) {
-                    case DISABLE:
-                        return getPartitionNames();
-                    case LOOSE:
-                        return Sets.newHashSet();
-                    case CHECKED:
-                    default:
-                        break;
-                }
-            }
 
-            if (table.getTableIdentifier().equals(partitionTable.getTableIdentifier())) {
+        Table refBaseTable = partitionInfo.first;
+        Column refBasePartitionCol = partitionInfo.second;
+        for (BaseTableInfo tableInfo : baseTableInfos) {
+            Table baseTable = tableInfo.getTable();
+            // skip view
+            if (baseTable.isView()) {
                 continue;
             }
-            Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table, true);
+            // skip external table that is not supported for query rewrite, return all partition ?
+            // skip check external table if the external does not support rewrite.
+            if (!baseTable.isNativeTableOrMaterializedView()) {
+                if (!supportPartialPartitionQueryRewriteForExternalTable(baseTable)) {
+                    return Sets.newHashSet();
+                }
+                if (tableProperty.getForceExternalTableQueryRewrite() == TableProperty.QueryRewriteConsistencyMode.DISABLE) {
+                    return getPartitionNames();
+                }
+            }
+            if (baseTable.getTableIdentifier().equals(refBaseTable.getTableIdentifier())) {
+                continue;
+            }
+            // If the non ref table has already changed, need refresh all materialized views' partitions.
+            Set<String> partitionNames = getUpdatedPartitionNamesOfTable(baseTable, true);
             if (CollectionUtils.isNotEmpty(partitionNames)) {
                 return getPartitionNames();
             }
         }
-        // check partition-by table
+
+        // Step1: collect updated partitions by partition name to range name:
+        // - deleted partitions.
+        // - added partitions.
         Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
-        Map<String, Range<PartitionKey>> basePartitionMap;
+        Map<String, Range<PartitionKey>> basePartitionNameToRangeMap;
         try {
-            basePartitionMap = PartitionUtil.getPartitionRange(partitionTable,
-                    partitionInfo.second);
+            basePartitionNameToRangeMap = PartitionUtil.getPartitionKeyRange(refBaseTable, refBasePartitionCol);
         } catch (UserException e) {
             LOG.warn("Materialized view compute partition difference with base table failed.", e);
             return getPartitionNames();
         }
-        Map<String, Range<PartitionKey>> mvPartitionMap = getRangePartitionMap();
-        PartitionDiff partitionDiff = getPartitionDiff(partitionExpr, partitionInfo.second,
-                basePartitionMap, mvPartitionMap);
-        needRefreshMvPartitionNames.addAll(partitionDiff.getDeletes().keySet());
-        for (String deleted : partitionDiff.getDeletes().keySet()) {
-            mvPartitionMap.remove(deleted);
+        Map<String, Range<PartitionKey>> mvPartitionNameToRangeMap = getRangePartitionMap();
+        PartitionDiff rangePartitionDiff = PartitionUtil.getPartitionDiff(partitionExpr, partitionInfo.second,
+                basePartitionNameToRangeMap, mvPartitionNameToRangeMap);
+        needRefreshMvPartitionNames.addAll(rangePartitionDiff.getDeletes().keySet());
+        for (String deleted : rangePartitionDiff.getDeletes().keySet()) {
+            mvPartitionNameToRangeMap.remove(deleted);
         }
-        needRefreshMvPartitionNames.addAll(partitionDiff.getAdds().keySet());
-        mvPartitionMap.putAll(partitionDiff.getAdds());
+        needRefreshMvPartitionNames.addAll(rangePartitionDiff.getAdds().keySet());
+        mvPartitionNameToRangeMap.putAll(rangePartitionDiff.getAdds());
 
         Map<String, Set<String>> baseToMvNameRef = SyncPartitionUtils
-                .generatePartitionRefMap(basePartitionMap, mvPartitionMap);
+                .getIntersectedPartitions(basePartitionNameToRangeMap, mvPartitionNameToRangeMap);
         Map<String, Set<String>> mvToBaseNameRef = SyncPartitionUtils
-                .generatePartitionRefMap(mvPartitionMap, basePartitionMap);
+                .getIntersectedPartitions(mvPartitionNameToRangeMap, basePartitionNameToRangeMap);
 
-        Set<String> baseChangedPartitionNames = getUpdatedPartitionNamesOfTable(partitionTable, true);
+        // step2: check ref base table's updated partition names by checking its ref tables recursively.
+        Set<String> baseChangedPartitionNames = getUpdatedPartitionNamesOfTable(refBaseTable, true);
         if (baseChangedPartitionNames == null) {
             return mvToBaseNameRef.keySet();
         }
+
         if (partitionExpr instanceof SlotRef) {
-            for (String basePartitionName : baseChangedPartitionNames) {
-                needRefreshMvPartitionNames.addAll(baseToMvNameRef.get(basePartitionName));
-            }
+            baseChangedPartitionNames.stream().forEach(x -> needRefreshMvPartitionNames.addAll(baseToMvNameRef.get(x)));
         } else if (partitionExpr instanceof FunctionCallExpr) {
-            for (String baseChangedPartitionName : baseChangedPartitionNames) {
-                needRefreshMvPartitionNames.addAll(baseToMvNameRef.get(baseChangedPartitionName));
-            }
+            baseChangedPartitionNames.stream().forEach(x -> needRefreshMvPartitionNames.addAll(baseToMvNameRef.get(x)));
             // because the relation of partitions between materialized view and base partition table is n : m,
             // should calculate the candidate partitions recursively.
             SyncPartitionUtils.calcPotentialRefreshPartition(needRefreshMvPartitionNames, baseChangedPartitionNames,
@@ -1357,22 +1391,13 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return needRefreshMvPartitionNames;
     }
 
-    private PartitionDiff getPartitionDiff(Expr partitionExpr, Column partitionColumn,
-                                           Map<String, Range<PartitionKey>> basePartitionMap,
-                                           Map<String, Range<PartitionKey>> mvPartitionMap) {
-        if (partitionExpr instanceof SlotRef) {
-            return SyncPartitionUtils.calcSyncSamePartition(basePartitionMap, mvPartitionMap);
-        } else if (partitionExpr instanceof FunctionCallExpr) {
-            FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-            String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
-            return SyncPartitionUtils.calcSyncRollupPartition(basePartitionMap, mvPartitionMap,
-                    granularity, partitionColumn.getPrimitiveType());
-        } else {
-            throw UnsupportedException.unsupportedException("unsupported partition expr:" + partitionExpr);
-        }
-    }
-
-    public Pair<Table, Column> getPartitionTableAndColumn() {
+    /**
+     * Materialized View's partition column can only refer one base table's partition column, get the referred
+     * base table and its partition column.
+     * TODO: support multi-column partitions later.
+     * @return : The materialized view's referred base table and its partition column.
+     */
+    public Pair<Table, Column> getBaseTableAndPartitionColumn() {
         if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
             return null;
         }

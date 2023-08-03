@@ -90,7 +90,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         LOOSE,      // 1: enable query rewrite, and skip the partition version check
         CHECKED;    // 2: enable query rewrite, and rewrite only if mv partition version is consistent with table meta
 
-        public static QueryRewriteConsistencyMode defaultForOlapTable() {
+        public static QueryRewriteConsistencyMode defaultQueryRewriteConsistencyMode() {
             return CHECKED;
         }
 
@@ -138,7 +138,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     // This property only applies to materialized views,
     // Specify the query rewrite behaviour for external table
-    private QueryRewriteConsistencyMode olapTableQueryRewrite = QueryRewriteConsistencyMode.defaultForOlapTable();
+    private QueryRewriteConsistencyMode queryRewriteConsistencyMode =
+            QueryRewriteConsistencyMode.defaultQueryRewriteConsistencyMode();
 
     private boolean isInMemory = false;
 
@@ -366,6 +367,17 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public static QueryRewriteConsistencyMode analyzeQueryRewriteMode(String value) throws AnalysisException {
+        QueryRewriteConsistencyMode res = EnumUtils.getEnumIgnoreCase(QueryRewriteConsistencyMode.class, value);
+        if (res == null) {
+            String allValues = EnumUtils.getEnumList(QueryRewriteConsistencyMode.class)
+                    .stream().map(Enum::name).collect(Collectors.joining(","));
+            throw new AnalysisException(
+                    PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY + " could only be " + allValues + " but got " + value);
+        }
+        return res;
+    }
+
+    public static QueryRewriteConsistencyMode analyzeExternalTableQueryRewrite(String value) throws AnalysisException {
         if ("true".equalsIgnoreCase(value) || "false".equalsIgnoreCase(value)) {
             // old version use the boolean value
             boolean boolValue = Boolean.parseBoolean(value);
@@ -376,7 +388,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 String allValues = EnumUtils.getEnumList(QueryRewriteConsistencyMode.class)
                         .stream().map(Enum::name).collect(Collectors.joining(","));
                 throw new AnalysisException(
-                        "force_external_table_query_rewrite could only be " + allValues + " but got " + value);
+                        PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE + " could only be " + allValues + " but " +
+                                "got " + value);
             }
             return res;
         }
@@ -388,19 +401,19 @@ public class TableProperty implements Writable, GsonPostProcessable {
         forceExternalTableQueryRewrite = QueryRewriteConsistencyMode.defaultForExternalTable();
         if (value != null) {
             try {
-                forceExternalTableQueryRewrite = analyzeQueryRewriteMode(value);
+                forceExternalTableQueryRewrite = analyzeExternalTableQueryRewrite(value);
             } catch (AnalysisException e) {
                 LOG.error("analyze {} failed", PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE, e);
             }
         }
 
-        olapTableQueryRewrite = QueryRewriteConsistencyMode.defaultForOlapTable();
-        value = properties.get(PropertyAnalyzer.PROPERTIES_OLAP_TABLE_QUERY_REWRITE);
+        queryRewriteConsistencyMode = QueryRewriteConsistencyMode.defaultQueryRewriteConsistencyMode();
+        value = properties.get(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY);
         if (value != null) {
             try {
-                olapTableQueryRewrite = analyzeQueryRewriteMode(value);
+                queryRewriteConsistencyMode = analyzeQueryRewriteMode(value);
             } catch (AnalysisException e) {
-                LOG.error("analyze {} failed", PropertyAnalyzer.PROPERTIES_OLAP_TABLE_QUERY_REWRITE, e);
+                LOG.error("analyze {} failed", PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY, e);
             }
         }
 
@@ -532,12 +545,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.forceExternalTableQueryRewrite = externalTableQueryRewrite;
     }
 
-    public void setOlapTableQueryRewrite(QueryRewriteConsistencyMode mode) {
-        this.olapTableQueryRewrite = mode;
+    public void setQueryRewriteConsistencyMode(QueryRewriteConsistencyMode mode) {
+        this.queryRewriteConsistencyMode = mode;
     }
 
-    public QueryRewriteConsistencyMode getOlapTableQueryRewrite() {
-        return this.olapTableQueryRewrite;
+    public QueryRewriteConsistencyMode getQueryRewriteConsistencyMode() {
+        return this.queryRewriteConsistencyMode;
     }
 
     public boolean isInMemory() {

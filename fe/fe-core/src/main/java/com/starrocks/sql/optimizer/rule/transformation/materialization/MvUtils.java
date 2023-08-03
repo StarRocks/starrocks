@@ -29,8 +29,10 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
@@ -38,6 +40,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
@@ -47,6 +50,9 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.RelationFields;
+import com.starrocks.sql.analyzer.RelationId;
+import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -77,6 +83,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
@@ -89,6 +96,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -769,7 +777,27 @@ public class MvUtils {
         for (LogicalScanOperator scanOperator : scanOperators) {
             List<ScalarOperator> partitionPredicate = null;
             if (scanOperator instanceof LogicalOlapScanOperator) {
-                partitionPredicate = ((LogicalOlapScanOperator) scanOperator).getPrunedPartitionPredicates();
+                // NOTE: It's not safe to get table's pruned partition predicates by
+                // `LogicalOlapScanOperator#getPrunedPartitionPredicates` :
+                //  - partitionPredicate is null if olap scan operator cannot prune partitions.
+                //  - partitionPredicate is not exact even if olap scan operator has pruned partitions.
+                // eg:
+                // t1:
+                //  PARTITION p1 VALUES [("0000-01-01"), ("2020-01-01")), has data
+                //  PARTITION p2 VALUES [("2020-01-01"), ("2020-02-01")), has data
+                //  PARTITION p3 VALUES [("2020-02-01"), ("2020-03-01")), has data
+                //  PARTITION p4 VALUES [("2020-03-01"), ("2020-04-01")), no data
+                //  PARTITION p5 VALUES [("2020-04-01"), ("2020-05-01")), no data
+                //
+                // TODO: support partition prune for this later.
+                // query1 : SELECT k1, sum(v1) as sum_v1 FROM t1 where k1>='2020-02-11' group by k1;
+                // `partitionPredicate` : null
+                //
+                // query2 : SELECT k1, sum(v1) as sum_v1 FROM t1 where k1>='2020-02-01' group by k1;
+                // `partitionPredicate` : k1>='2020-02-11'
+                // however for mv  we need: k1>='2020-02-11' and k1 < "2020-03-01"
+                partitionPredicate = compensatePartitionPredicateForOlapScan((LogicalOlapScanOperator) scanOperator,
+                        columnRefFactory);
             } else if (scanOperator instanceof LogicalHiveScanOperator) {
                 partitionPredicate = compensatePartitionPredicateForHiveScan((LogicalHiveScanOperator) scanOperator);
             } else {
@@ -784,6 +812,89 @@ public class MvUtils {
                 Utils.compoundAnd(partitionPredicates);
     }
 
+    /**
+     *
+     * Compensate olap table's partition predicates from olap scan operator which may be pruned by optimizer before or not.
+     *
+     * @param olapScanOperator   : olap scan operator that needs to compensate partition predicates.
+     * @param columnRefFactory   : column ref factory that used to generate new partition predicate epxr.
+     * @return
+     */
+    private static List<ScalarOperator> compensatePartitionPredicateForOlapScan(LogicalOlapScanOperator olapScanOperator,
+                                                                                ColumnRefFactory columnRefFactory) {
+        List<ScalarOperator> partitionPredicates = Lists.newArrayList();
+        Preconditions.checkState(olapScanOperator.getTable().isNativeTableOrMaterializedView());
+        OlapTable olapTable = (OlapTable) olapScanOperator.getTable();
+
+        // compensate nothing for single partition table
+        if (olapTable.getPartitionInfo() instanceof SinglePartitionInfo) {
+            return partitionPredicates;
+        }
+
+        // compensate nothing if selected partitions are the same with the total partitions.
+        if (olapScanOperator.getSelectedPartitionId() != null
+                && olapScanOperator.getSelectedPartitionId().size() == olapTable.getPartitions().size()) {
+            return partitionPredicates;
+        }
+
+        if (olapTable.getPartitionInfo() instanceof ExpressionRangePartitionInfo) {
+            ExpressionRangePartitionInfo partitionInfo =
+                    (ExpressionRangePartitionInfo) olapTable.getPartitionInfo();
+            Expr partitionExpr = partitionInfo.getPartitionExprs().get(0);
+            List<SlotRef> slotRefs = Lists.newArrayList();
+            partitionExpr.collect(SlotRef.class, slotRefs);
+            Preconditions.checkState(slotRefs.size() == 1);
+            Optional<ColumnRefOperator> partitionColumn =
+                    olapScanOperator.getColRefToColumnMetaMap().keySet().stream()
+                            .filter(columnRefOperator -> columnRefOperator.getName()
+                                    .equals(slotRefs.get(0).getColumnName()))
+                            .findFirst();
+            // compensate nothing if there is no partition column predicate in the scan node.
+            if (!partitionColumn.isPresent()) {
+                return null;
+            }
+
+            ExpressionMapping mapping =
+                    new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()));
+            mapping.put(slotRefs.get(0), partitionColumn.get());
+            ScalarOperator partitionScalarOperator =
+                    SqlToScalarOperatorTranslator.translate(partitionExpr, mapping, columnRefFactory);
+            List<Range<PartitionKey>> selectedRanges = Lists.newArrayList();
+            // compensate selected partition ranges from selected partition id
+            for (long pid : olapScanOperator.getSelectedPartitionId()) {
+                selectedRanges.add(partitionInfo.getRange(pid));
+            }
+
+            // normalize selected partition ranges
+            List<Range<PartitionKey>> mergedRanges = MvUtils.mergeRanges(selectedRanges);
+            List<ScalarOperator> rangePredicates = MvUtils.convertRanges(partitionScalarOperator, mergedRanges);
+            ScalarOperator partitionPredicate = Utils.compoundOr(rangePredicates);
+            partitionPredicates.add(partitionPredicate);
+        } else if (olapTable.getPartitionInfo() instanceof RangePartitionInfo) {
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
+            List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+            if (partitionColumns.size() != 1) {
+                // now do not support more than one partition columns
+                return null;
+            }
+            List<Range<PartitionKey>> selectedRanges = Lists.newArrayList();
+            for (long pid : olapScanOperator.getSelectedPartitionId()) {
+                selectedRanges.add(rangePartitionInfo.getRange(pid));
+            }
+            List<Range<PartitionKey>> mergedRanges = MvUtils.mergeRanges(selectedRanges);
+            ColumnRefOperator partitionColumnRef = olapScanOperator.getColumnReference(partitionColumns.get(0));
+            List<ScalarOperator> rangePredicates = MvUtils.convertRanges(partitionColumnRef, mergedRanges);
+            ScalarOperator partitionPredicate = Utils.compoundOr(rangePredicates);
+            if (partitionPredicate != null) {
+                partitionPredicates.add(partitionPredicate);
+            }
+        } else {
+            return null;
+        }
+
+        return partitionPredicates;
+    }
+
     // try to get partial partition predicates of partitioned mv.
     // eg, mv1's base partition table is t1, partition column is k1 and has two partition:
     // p1:[2022-01-01, 2022-01-02), p1 is updated(refreshed),
@@ -793,7 +904,7 @@ public class MvUtils {
     public static ScalarOperator getMvPartialPartitionPredicates(MaterializedView mv,
                                                                  OptExpression mvPlan,
                                                                  Set<String> mvPartitionNamesToRefresh) {
-        Pair<Table, Column> partitionTableAndColumns = mv.getPartitionTableAndColumn();
+        Pair<Table, Column> partitionTableAndColumns = mv.getBaseTableAndPartitionColumn();
         if (partitionTableAndColumns == null) {
             return null;
         }
@@ -863,7 +974,7 @@ public class MvUtils {
         } else {
             Map<String, Range<PartitionKey>> partitionMap;
             try {
-                partitionMap = PartitionUtil.getPartitionRange(table, partitionColumn);
+                partitionMap = PartitionUtil.getPartitionKeyRange(table, partitionColumn);
             } catch (UserException e) {
                 LOG.warn("Materialized view Optimizer compute partition range failed.", e);
                 return Lists.newArrayList();
