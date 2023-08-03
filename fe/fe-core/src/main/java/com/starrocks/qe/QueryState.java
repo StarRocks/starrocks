@@ -88,13 +88,9 @@ public class QueryState {
         infoMessage = null;
         errType = ErrType.OTHER_ERR;
         isQuery = false;
-<<<<<<< HEAD
-=======
         affectedRows = 0;
         warningRows = 0;
         serverStatus = 0;
-        isFinished = false;
->>>>>>> fffdd7a01a ([BugFix] Fix the wrong query state of failed query (#28500))
     }
 
     public MysqlStateType getStateType() {
