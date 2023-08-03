@@ -1601,7 +1601,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 createLakeTablets((LakeTable) table, partitionId, index, distributionInfo, replicationNum, tabletMeta,
                         tabletIdSet);
             } else {
-                createOlapTablets(index, Replica.ReplicaState.NORMAL, distributionInfo,
+                createOlapTablets(table, index, Replica.ReplicaState.NORMAL, distributionInfo,
                         partition.getVisibleVersion(), replicationNum, tabletMeta, tabletIdSet);
             }
             if (index.getId() != table.getBaseIndexId()) {
@@ -2086,15 +2086,20 @@ public class LocalMetastore implements ConnectorMetadata {
 
         // analyze replication_num
         short replicationNum = FeConstants.default_replication_num;
+        String logReplicationNum = "";
         try {
             boolean isReplicationNumSet =
                     properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM);
+            if (properties != null) {
+                logReplicationNum = properties.get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM);
+            }
             replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
             if (isReplicationNumSet) {
                 olapTable.setReplicationNum(replicationNum);
             }
-        } catch (AnalysisException e) {
-            throw new DdlException(e.getMessage());
+        } catch (AnalysisException ex) {
+            throw new DdlException(String.format("%s table=%s, properties.replication_num=%s",
+                    ex.getMessage(), olapTable.getName(), logReplicationNum));
         }
 
         // set in memory
@@ -2677,7 +2682,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    private void createOlapTablets(MaterializedIndex index, Replica.ReplicaState replicaState,
+    private void createOlapTablets(OlapTable table, MaterializedIndex index, Replica.ReplicaState replicaState,
                                    DistributionInfo distributionInfo, long version, short replicationNum,
                                    TabletMeta tabletMeta, Set<Long> tabletIdSet) throws DdlException {
         Preconditions.checkArgument(replicationNum > 0);
@@ -2738,7 +2743,12 @@ public class LocalMetastore implements ConnectorMetadata {
                     chosenBackendIds =
                             chosenBackendIdBySeq(replicationNum, tabletMeta.getStorageMedium());
                 } else {
-                    chosenBackendIds = chosenBackendIdBySeq(replicationNum);
+                    try {
+                        chosenBackendIds = chosenBackendIdBySeq(replicationNum);
+                    } catch (DdlException ex) {
+                        throw new DdlException(String.format("%stable=%s, default_replication_num=%d",
+                                ex.getMessage(), table.getName(), FeConstants.default_replication_num));
+                    }
                 }
                 backendsPerBucketSeq.add(chosenBackendIds);
             } else {
@@ -2793,8 +2803,10 @@ public class LocalMetastore implements ConnectorMetadata {
                 systemInfoService.seqChooseBackendIds(replicationNum, true, true);
         if (CollectionUtils.isEmpty(chosenBackendIds)) {
             List<Long> backendIds = systemInfoService.getBackendIds(true);
-            throw new DdlException("Failed to find enough host in all backends. need: " + replicationNum +
-                    ", Current alive backend is [" + Joiner.on(",").join(backendIds) + "]");
+            throw new DdlException(
+                    String.format("Table replication num should be less than of equal to the number of available BE nodes. "
+                    + "You can change this default by setting the replication_num table properties. "
+                    + "Current alive backend is [%s]. ", Joiner.on(",").join(backendIds)));
         }
         return chosenBackendIds;
     }
