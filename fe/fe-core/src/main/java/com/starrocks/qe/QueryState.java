@@ -70,10 +70,18 @@ public class QueryState {
 
     public void reset() {
         stateType = MysqlStateType.OK;
+        errorMessage = "";
         errorCode = null;
         infoMessage = null;
-        serverStatus = 0;
+        errType = ErrType.OTHER_ERR;
         isQuery = false;
+<<<<<<< HEAD
+=======
+        affectedRows = 0;
+        warningRows = 0;
+        serverStatus = 0;
+        isFinished = false;
+>>>>>>> fffdd7a01a ([BugFix] Fix the wrong query state of failed query (#28500))
     }
 
     public MysqlStateType getStateType() {
