@@ -1194,13 +1194,9 @@ public class EditLog {
     }
 
     public void logCreateDb(Database db, String storageVolumeId) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            CreateDbInfo createDbInfo = new CreateDbInfo(db.getId(), db.getFullName());
-            createDbInfo.setStorageVolumeId(storageVolumeId);
-            logJsonObject(OperationType.OP_CREATE_DB_V2, createDbInfo);
-        } else {
-            logEdit(OperationType.OP_CREATE_DB, db);
-        }
+        CreateDbInfo createDbInfo = new CreateDbInfo(db.getId(), db.getFullName());
+        createDbInfo.setStorageVolumeId(storageVolumeId);
+        logJsonObject(OperationType.OP_CREATE_DB_V2, createDbInfo);
     }
 
     public void logDropDb(DropDbInfo dropDbInfo) {
@@ -1228,11 +1224,7 @@ public class EditLog {
     }
 
     public void logCreateTable(CreateTableInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_CREATE_TABLE_V2, info);
-        } else {
-            logEdit(OperationType.OP_CREATE_TABLE, info);
-        }
+        logJsonObject(OperationType.OP_CREATE_TABLE_V2, info);
     }
 
     public void logResourceGroupOp(ResourceGroupOpEntry op) {
