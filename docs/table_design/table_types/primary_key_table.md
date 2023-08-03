@@ -150,6 +150,6 @@ PROPERTIES("replication_num" = "3",
 
 ## What to do next
 
-After table creation, you can run a load job to load data into the Primary Key table. For more information about loading methods, see [Overview of data loading](../../loading/Loading_intro.md).
+After table creation, you can run load jobs to load data into the Primary Key table. For more information about supported loading methods, see [Overview of data loading](../../loading/Loading_intro.md).
 
-If you need to update data in the Primary Key table, you can run a load job or execute DML statements ([UPDATE](../../sql-reference/sql-statements/data-manipulation/UPDATE.md) and [DELETE](../../sql-reference/sql-statements/data-manipulation/DELETE.md)). Also, the update operation guarantees atomicity.
+If you need to update data in the Primary Key table, you can run a load job or execute DML statements ([UPDATE](../../sql-reference/sql-statements/data-manipulation/UPDATE.md) and [DELETE](../../sql-reference/sql-statements/data-manipulation/DELETE.md)). Also, these update operations guarantee atomicity.
