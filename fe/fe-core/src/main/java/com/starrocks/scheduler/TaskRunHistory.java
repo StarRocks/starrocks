@@ -62,4 +62,8 @@ public class TaskRunHistory {
         allHistory.subList(startIndex, allHistory.size())
                 .forEach(taskRunStatus -> historyTaskRunMap.remove(taskRunStatus.getQueryId()));
     }
+
+    public long getTaskRunCount() {
+        return historyTaskRunMap.size();
+    }
 }

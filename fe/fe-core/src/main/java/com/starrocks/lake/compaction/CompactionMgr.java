@@ -203,4 +203,12 @@ public class CompactionMgr {
         CompactionMgr compactionManager = reader.readJson(CompactionMgr.class);
         partitionStatisticsHashMap = compactionManager.partitionStatisticsHashMap;
     }
+<<<<<<< HEAD
 }
+=======
+
+    public long getPartitionStatsCount() {
+        return partitionStatisticsHashMap.size();
+    }
+}
+>>>>>>> 7299e5c95c ([Enhancement] Add FE memory related metrics (#28184))
