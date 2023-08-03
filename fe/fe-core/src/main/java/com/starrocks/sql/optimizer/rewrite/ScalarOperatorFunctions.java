@@ -361,6 +361,7 @@ public class ScalarOperatorFunctions {
         return dateFormat(dl, fmtLiteral);
     }
 
+    @ConstantFunction(name = "now", argTypes = {}, returnType = DATETIME)    
     public static ConstantOperator now() {
         ConnectContext connectContext = ConnectContext.get();
         LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime() / 1000 * 1000)
