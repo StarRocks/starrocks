@@ -54,6 +54,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.KafkaUtil;
+import com.starrocks.common.util.ProfileManager;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.load.loadv2.LoadMgr;
@@ -67,6 +68,8 @@ import com.starrocks.monitor.jvm.JvmService;
 import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.proto.PKafkaOffsetProxyRequest;
 import com.starrocks.proto.PKafkaOffsetProxyResult;
+import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.system.Backend;
@@ -688,16 +691,44 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(streamLoadTaskCount);
 
         GaugeMetric<Long> queryDetailCount = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
-                "The count of cahed query details") {
+                "The count of cached query details") {
             @Override
             public Long getValue() {
-                return null;
+                return QueryDetailQueue.getTotalQueriesCount();
             }
         };
         queryDetailCount.addLabel(new MetricLabel("type", "query_detail_count"));
         STARROCKS_METRIC_REGISTER.addMetric(queryDetailCount);
 
+        GaugeMetric<Long> queryProfileCount = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
+                "The count of cached query profile") {
+            @Override
+            public Long getValue() {
+                return ProfileManager.getInstance().getQueryProfileCount();
+            }
+        };
+        queryProfileCount.addLabel(new MetricLabel("type", "query_profile_count"));
+        STARROCKS_METRIC_REGISTER.addMetric(queryProfileCount);
 
+        GaugeMetric<Long> loadProfileCount = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
+                "The count of cached load profile") {
+            @Override
+            public Long getValue() {
+                return ProfileManager.getInstance().getLoadProfileCount();
+            }
+        };
+        loadProfileCount.addLabel(new MetricLabel("type", "load_profile_count"));
+        STARROCKS_METRIC_REGISTER.addMetric(loadProfileCount);
+
+        GaugeMetric<Long> queryCoordinatorCount = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
+                "The count of running query coordinator") {
+            @Override
+            public Long getValue() {
+                return QeProcessorImpl.INSTANCE.getCoordinatorCount();
+            }
+        };
+        queryCoordinatorCount.addLabel(new MetricLabel("type", "query_coordinator_count"));
+        STARROCKS_METRIC_REGISTER.addMetric(queryCoordinatorCount);
     }
 
     // to generate the metrics related to tablets of each backends
