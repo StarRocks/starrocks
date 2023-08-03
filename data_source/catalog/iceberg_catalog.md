@@ -1,18 +1,21 @@
 # Iceberg catalog
 
-Iceberg Catalog 是一种 External Catalog。通过 Iceberg Catalog，您不需要执行数据导入就可以直接查询 Apache Iceberg 里的数据。
+Iceberg Catalog 是一种 External Catalog。StarRocks 从 2.4 版本开始支持 Iceberg Catalog。您可以：
 
-此外，您还可以基于 Iceberg Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 能力来实现数据转换和导入。StarRocks 从 2.4 版本开始支持 Iceberg Catalog。
+- 无需手动建表，通过 Iceberg Catalog 直接查询 Iceberg 内的数据。
+- 通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 或异步物化视图（2.5 版本及以上）将 Iceberg 内的数据进行加工建模，并导入至 StarRocks。
+- 在 StarRocks 侧创建或删除 Iceberg 库表，或通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 把 StarRocks 表数据写入到 Parquet 格式的 Iceberg 表中（3.1 版本及以上）。
 
 为保证正常访问 Iceberg 内的数据，StarRocks 集群必须集成以下两个关键组件：
 
-- 对象存储或分布式文件系统，如 AWS S3、其他兼容 S3 协议的对象存储、Microsoft Azure Storage、Google GCS、或 HDFS
+- 分布式文件系统 (HDFS) 或对象存储。当前支持的对象存储包括：AWS S3、Microsoft Azure Storage、Google GCS、其他兼容 S3 协议的对象存储（如阿里云 OSS、华为云 OBS、腾讯云 COS、火山引擎 TOS、金山云 KS3、MinIO、Ceph S3 等）。
 
-- 元数据服务，如 Hive Metastore（以下简称 HMS）或 AWS Glue
+- 元数据服务。当前支持的元数据服务包括：Hive Metastore（以下简称 HMS）、AWS Glue、REST 服务。
 
   > **说明**
   >
-  > 如果选择 AWS S3 作为存储系统，您可以选择 HMS 或 AWS Glue 作为元数据服务。如果选择其他存储系统，则只能选择 HMS 作为元数据服务。
+  > - 如果选择 AWS S3 作为存储系统，您可以选择 HMS 或 AWS Glue 作为元数据服务。如果选择其他存储系统，则只能选择 HMS 作为元数据服务。
+  > - 如果您使用的是 Tabular Iceberg Catalog，请选择 REST 作为元数据服务。
 
 ## 使用说明
 
@@ -140,6 +143,7 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 - 基于 IAM User 进行认证和鉴权
 
   ```SQL
+  "iceberg.catalog.type" = "glue",
   "aws.glue.use_instance_profile" = "false",
   "aws.glue.access_key" = "<iam_user_access_key>",
   "aws.glue.secret_key" = "<iam_user_secret_key>",
@@ -158,6 +162,40 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 | aws.glue.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
 
 有关如何选择用于访问 AWS Glue 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS Glue 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-glue-的认证参数)。
+
+##### REST
+
+如果您使用的是 Tabular Iceberg Catalog，请选择 REST 作为 Iceberg 集群的元数据服务，并按如下配置 `MetastoreParams`：
+
+```SQL
+"iceberg.catalog.type" = "rest",
+"iceberg.catalog.uri" = "<rest_server_api_endpoint>",
+"iceberg.catalog.credential" = "<credential>",
+"iceberg.catalog.warehouse" = "<identifier_or_path_to_warehouse>"
+```
+
+`MetastoreParams` 包含如下参数。
+
+| 参数                       | 是否必须 | 说明                                                         |
+| -------------------------- | ------ | ------------------------------------------------------------ |
+| iceberg.catalog.type       | 是      | Iceberg 集群所使用的元数据服务的类型。设置为 `rest`。           |
+| iceberg.catalog.uri        | 是      | REST 服务 Endpoint 的 URI，如 `https://api.tabular.io/ws`。      |
+| iceberg.catalog.credential | 是      | Tabular 服务的认证信息。                                        |
+| iceberg.catalog.warehouse  | 否      | Catalog 的仓库位置或标志符，如 `s3://my_bucket/warehouse_location` 或 `sandbox`。 |
+
+例如，创建一个名为 `tabular` 的 Iceberg Catalog，使用 REST 作为元数据服务：
+
+```SQL
+CREATE EXTERNAL CATALOG tabular
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "rest",
+    "iceberg.catalog.uri" = "https://api.tabular.io/ws",
+    "iceberg.catalog.credential" = "t-5Ii8e3FIbT9m0",
+    "iceberg.catalog.warehouse" = "sandbox"
+);
+```
 
 #### StorageCredentialParams
 
@@ -806,12 +844,216 @@ DROP Catalog iceberg_catalog_glue;
    SELECT count(*) FROM <table_name> LIMIT 10
    ```
 
-## 导入 Iceberg 数据
+## 创建 Iceberg 数据库
 
-假设有一个 OLAP 表，表名为 `olap_tbl`。您可以这样来转换该表中的数据，并把数据导入到 StarRocks 中：
+同 StarRocks 内部数据目录 (Internal Catalog) 一致，如果您拥有 Iceberg Catalog 的 [CREATE DATABASE](../../administration/privilege_item.md#数据目录权限-catalog) 权限，那么您可以使用 [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE%20DATABASE.md) 在该 Iceberg Catalog 内创建数据库。本功能自 3.1 版本起开始支持。
+
+> **说明**
+>
+> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
 
 ```SQL
-INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM iceberg_table
+CREATE DATABASE <database_name>
+[properties ("location" = "s3://path_to_db/<database_name.db>/")]
+```
+
+您可以通过 `location` 参数来为该数据库设置具体的文件路径，支持 HDFS 和对象存储。如果您不指定 `location` 参数，则 StarRocks 会在当前 Iceberg Catalog 的默认路径下创建该数据库。
+
+## 删除 Iceberg 数据库
+
+同 StarRocks 内部数据库一致，如果您拥有 Iceberg 数据库的 [DROP](../../administration/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP%20DATABASE.md) 来删除该数据库。本功能自 3.1 版本起开始支持。仅支持删除空数据库。
+
+> **说明**
+>
+> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+
+删除数据库操作并不会将 HDFS 或对象存储上的对应文件路径删除。
+
+```SQL
+DROP DATABASE <database_name>;
+```
+
+## 创建 Iceberg 表
+
+同 StarRocks 内部数据库一致，如果您拥有 Iceberg 数据库的 [CREATE TABLE](../../administration/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md) 或 [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE%20TABLE%20AS%20SELECT.md) 在该数据库下创建表。本功能自 3.1 版本起开始支持。
+
+> **说明**
+>
+> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+
+### 语法
+
+```SQL
+CREATE TABLE [IF NOT EXISTS] [database.]table_name
+(column_definition1[, column_definition2, ...
+partition_column_definition1,partition_column_definition2...])
+[partition_desc]
+[PROPERTIES ("key" = "value", ...)]
+[AS SELECT query]
+```
+
+### 参数说明
+
+#### column_definition
+
+`column_definition` 语法定义如下:
+
+```SQL
+col_name col_type [COMMENT 'comment']
+```
+
+参数说明：
+
+| **参数**           | **说明**                                              |
+| ----------------- |------------------------------------------------------ |
+| col_name          | 列名称。                                                |
+| col_type          | 列数据类型。当前支持如下数据类型：TINYINT、SMALLINT、INT、BIGINT、FLOAT、DOUBLE、DECIMAL、DATE、DATETIME、CHAR、VARCHAR[(length)]、ARRAY、MAP、STRUCT。不支持 LARGEINT、HLL、BITMAP 类型。 |
+
+> **注意**
+>
+> 所有非分区列均以 `NULL` 为默认值（即，在建表语句中指定 `DEFAULT "NULL"`）。分区列必须在最后声明，且不能为 `NULL`。
+
+#### partition_desc
+
+`partition_desc` 语法定义如下:
+
+```SQL
+PARTITION BY (par_col1[, par_col2...])
+```
+
+目前 StarRocks 仅支持 [Identity Transforms](https://iceberg.apache.org/spec/#partitioning)。 即，会为每个唯一的分区值创建一个分区。
+
+> **注意**
+>
+> 分区列必须在最后声明，支持除 FLOAT、DOUBLE、DECIMAL、DATETIME 以外的数据类型，不支持 `NULL` 值。
+
+#### properties
+
+可以在 `properties` 中通过 `"key" = "value"` 的形式声明 Iceberg 表的属性。具体请参见 [Iceberg 表属性](https://iceberg.apache.org/docs/latest/configuration/)。
+
+### 示例
+
+1. 创建非分区表 `unpartition_tbl`，包含 `id` 和 `score` 两列，如下所示：
+
+   ```SQL
+   CREATE TABLE unpartition_tbl
+   (
+       id int,
+       score double
+   );
+   ```
+
+2. 创建分区表 `partition_tbl`，包含 `action`、`id`、`dt` 三列，并定义 `id` 和 `dt` 为分区列，如下所示：
+
+   ```SQL
+   CREATE TABLE partition_tbl
+   (
+       action varchar(20),
+       id int,
+       dt date
+   )
+   PARTITION BY (id,dt);
+   ```
+
+3. 创建分区表 `partition_tbl`，包含 `v1`、`v2`、`k1`、`k2` 四列，定义 `k1` 和 `k2` 为分区列，并同步查询原表 `employee` 的数据、然后将查询结果插入到新表 `partition_tbl`：
+
+   ```SQL
+   CREATE TABLE partition_tbl 
+   (
+       v1 int,
+       v2 int,
+       k1 int,
+       k2 int
+   )
+   PARTITION BY (k1, k2)
+   AS SELECT * from employee;
+   ```
+
+## 向 Iceberg 表中插入数据
+
+同 StarRocks 内表一致，如果您拥有 Iceberg 表的 [INSERT](../../administration/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) 将 StarRocks 表数据写入到 Parquet 格式的 Iceberg 表中。本功能自 3.1 版本起开始支持。
+
+> **说明**
+>
+> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+
+### 语法
+
+```SQL
+INSERT {INTO | OVERWRITE} <table_name>
+[ (column_name [, ...]) ]
+{ VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
+
+-- 向指定分区写入数据。
+INSERT {INTO | OVERWRITE} <table_name>
+PARTITION (par_col1=<value> [, par_col2=<value>...])
+{ VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
+```
+
+> **注意**
+>
+> 分区列不允许为 `NULL`，因此导入时需要保证分区列有值。
+
+### 参数说明
+
+| 参数         | 说明                                                         |
+| ----------- | ------------------------------------------------------------ |
+| INTO        | 将数据追加写入目标表。                                       |
+| OVERWRITE   | 将数据覆盖写入目标表。                                       |
+| column_name | 导入的目标列。可以指定一个或多个列。指定多个列时，必须用逗号 (`,`) 分隔。指定的列必须是目标表中存在的列，并且必须包含分区列。该参数可以与源表中的列名称不同，但顺序需一一对应。如果不指定该参数，则默认导入数据到目标表中的所有列。如果源表中的某个非分区列在目标列不存在，则写入默认值 `NULL`。如果查询语句的结果列类型与目标列的类型不一致，会进行隐式转化，如果不能进行转化，那么 INSERT INTO 语句会报语法解析错误。 |
+| expression  | 表达式，用以为对应列赋值。                                   |
+| DEFAULT     | 为对应列赋予默认值。                                         |
+| query       | 查询语句，查询的结果会导入至目标表中。查询语句支持任意 StarRocks 支持的 SQL 查询语法。 |
+| PARTITION   | 导入的目标分区。需要指定目标表的所有分区列，指定的分区列的顺序可以与建表时定义的分区列的顺序不一致。指定分区时，不允许通过列名 (`column_name`) 指定导入的目标列。 |
+
+### 示例
+
+1. 向表 `partition_tbl` 中插入一行数据：
+
+   ```SQL
+   INSERT INTO partition_tbl SELECT 'pv', 1, '2023-07-21';
+   ```
+
+2. 向表 `partition_tbl` 按指定列顺序插入一个包含简单计算的 SELECT 查询的结果数据：
+
+   ```SQL
+   INSERT INTO partition_tbl (id, action, dt) SELECT 1+1, 'buy', '2023-07-21';
+   ```
+
+3. 向表 `partition_tbl` 中插入一个从其自身读取数据的 SELECT 查询的结果数据：
+
+   ```SQL
+   INSERT INTO partition_tbl SELECT 'buy', 1, date_add(dt, INTERVAL 2 DAY) FROM partition_tbl WHERE id=1;
+   ```
+
+4. 向表 `partition_table` 中 `dt=‘2023-07-21’`、`id=1` 的分区插入一个 SELECT 查询的结果数据：
+
+   ```SQL
+   INSERT INTO partition_table SELECT 'order', 1, '2023-07-21';
+   INSERT INTO partition_table (dt='2023-07-21',id=1) SELECT 'order';
+   ```
+
+5. 将表 `partition_table` 中 `dt=‘2023-07-21’`、`id=1` 的分区下所有 `action` 列值全部覆盖为 `close`：
+
+   ```SQL
+   INSERT OVERWRITE partition_table SELECT 'close', 1, '2023-07-21';
+   INSERT OVERWRITE partition_table (dt='2023-07-21',id=1) SELECT 'close';
+   ```
+
+## 删除 Iceberg 表
+
+同 StarRocks 内表一致，在拥有 Iceberg 表的 [DROP](../../administration/privilege_item.md#表权限-table) 权限的情况下，您可以使用 [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP%20TABLE.md) 来删除该表。本功能自 3.1 版本起开始支持。
+
+> **说明**
+>
+> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+
+删除表操作并不会将 HDFS 或对象存储上的对应文件路径和数据删除。
+
+强制删除表（增加 `FORCE` 关键字）会将 HDFS 或对象存储上的数据删除，但不会删除对应文件路径。
+
+```SQL
+DROP TABLE <table_name> [FORCE];
 ```
 
 ## 配置元数据缓存方式
