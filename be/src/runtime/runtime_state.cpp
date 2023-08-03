@@ -334,6 +334,7 @@ Status RuntimeState::create_rejected_record_file() {
         LOG(WARNING) << error_msg.str();
         return Status::InternalError(error_msg.str());
     }
+    LOG(WARNING) << "rejected record file path " << rejected_record_absolute_path;
     _rejected_record_file_path = rejected_record_absolute_path;
     return Status::OK();
 }
