@@ -4773,21 +4773,5 @@ public class LocalMetastore implements ConnectorMetadata {
          */
         defaultCluster = new Cluster(SystemInfoService.DEFAULT_CLUSTER, NEXT_ID_INIT_VALUE);
     }
-
-    public TableName getTableNameByTableId(Long tableId) {
-        Collection<Database> dbs = idToDb.values();
-        for (Database db : dbs) {
-            db.readLock();
-            try {
-                Table table = db.getTable(tableId);
-                if (table != null) {
-                    return new TableName(db.getFullName(), table.getName());
-                }
-            } finally {
-                db.readUnlock();
-            }
-        }
-        return null;
-    }
 }
 

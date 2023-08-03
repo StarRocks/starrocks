@@ -179,70 +179,6 @@ public class SchemaChangeHandler extends AlterHandler {
 
     }
 
-    private void processAddColumn(AddColumnClause alterClause, Table externalTable, List<Column> newSchema)
-            throws DdlException {
-        Column column = alterClause.getColumn();
-        ColumnPosition columnPos = alterClause.getColPos();
-        Set<String> newColNameSet = Sets.newHashSet(column.getName());
-
-        addColumnInternal(column, columnPos, newSchema, newColNameSet);
-    }
-
-    /*
-     * Add 'newColumn' to specified index.
-     * Modified schema will be saved in 'indexSchemaMap'
-     */
-    private void addColumnInternal(Column newColumn, ColumnPosition columnPos, List<Column> modIndexSchema,
-            Set<String> newColNameSet) throws DdlException {
-        String newColName = newColumn.getName();
-        int posIndex = -1;
-        boolean hasPos = (columnPos != null && !columnPos.isFirst());
-
-        for (int i = 0; i < modIndexSchema.size(); i++) {
-            Column col = modIndexSchema.get(i);
-            if (col.getName().equalsIgnoreCase(newColName)) {
-                if (!newColNameSet.contains(newColName)) {
-                    // if this is not a base index, we should check if user repeatedly add columns
-                    throw new DdlException("Repeatedly add column: " + newColName);
-                }
-                // this is a base index, and the column we check here is added by previous 'add column clause'
-                // in same ALTER stmt.
-                // so here we will check if the 2 columns is exactly same. if not, throw exception
-                if (!col.equals(newColumn)) {
-                    throw new DdlException("Repeatedly add same column with different definition: " + newColName);
-                }
-
-                // column already exist, return
-                return;
-            }
-
-            if (hasPos) {
-                // after the field
-                if (col.getName().equalsIgnoreCase(columnPos.getLastCol())) {
-                    posIndex = i;
-                }
-            }
-        }
-
-        // check if lastCol was found
-        if (hasPos && posIndex == -1) {
-            throw new DdlException("Column[" + columnPos.getLastCol() + "] does not found");
-        }
-
-        // check if add to first
-        if (columnPos != null && columnPos.isFirst()) {
-            posIndex = -1;
-            hasPos = true;
-        }
-
-        if (hasPos) {
-            // key
-            modIndexSchema.add(posIndex + 1, newColumn);
-        } else {
-            modIndexSchema.add(newColumn);
-        }
-    }
-
     /**
      * @param alterClause
      * @param olapTable
@@ -293,33 +229,6 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
         return ligthSchemaChange;
-    }
-
-    private void processDropColumn(DropColumnClause alterClause,
-            Table externalTable, List<Column> newSchema) throws DdlException {
-        String dropColName = alterClause.getColName();
-
-        // find column in base index and remove it
-        boolean found = false;
-        Iterator<Column> baseIter = newSchema.iterator();
-        while (baseIter.hasNext()) {
-            Column column = baseIter.next();
-            if (column.getName().equalsIgnoreCase(dropColName)) {
-                if (newSchema.size() > 1) {
-                    baseIter.remove();
-                    found = true;
-                } else {
-                    throw new DdlException(
-                            "Do not allow remove last column of table: " + externalTable.getName() + " column: "
-                                    + dropColName);
-                }
-                break;
-            }
-        }
-
-        if (!found) {
-            throw new DdlException("Column does not exists: " + dropColName);
-        }
     }
 
     /**

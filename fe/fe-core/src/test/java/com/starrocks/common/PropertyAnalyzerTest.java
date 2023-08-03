@@ -233,4 +233,11 @@ public class PropertyAnalyzerTest {
         property.put(PropertyAnalyzer.PROPERTIES_COMPRESSION, "zlib");
         Assert.assertEquals(TCompressionType.ZLIB, (PropertyAnalyzer.analyzeCompressionType(property)));
     }
+
+    @Test
+    public void testSchemaChangeProperties() throws AnalysisException {
+        Map<String, String> props = new HashMap<>();
+        props.put(PropertyAnalyzer.PROPERTIES_USE_LIGHT_SCHEMA_CHANGE, "true");
+        Assert.assertEquals(PropertyAnalyzer.analyzeUseLightSchemaChange(props), true);
+    }
 }

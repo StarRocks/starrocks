@@ -738,7 +738,6 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return this.uniqueId;
     }
 
-    // bitmap index is
     public void setIndexFlag(TColumn tColumn, List<Index> indexes) {
         for (Index index : indexes) {
             if (index.getIndexType() == IndexDef.IndexType.BITMAP) {
