@@ -55,6 +55,8 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
 
     // page statistics
     RuntimeProfile::Counter* has_page_statistics = nullptr;
+    // page skip
+    RuntimeProfile::Counter* page_skip = nullptr;
 
     RuntimeProfile* root = profile->runtime_profile;
     ADD_COUNTER(root, kParquetProfileSectionPrefix, TUnit::UNIT);
@@ -75,6 +77,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     build_iceberg_pos_filter_timer = ADD_CHILD_TIMER(root, "BuildIcebergPosFilter", kParquetProfileSectionPrefix);
 
     has_page_statistics = ADD_CHILD_COUNTER(root, "HasPageStatistics", TUnit::UNIT, kParquetProfileSectionPrefix);
+    page_skip = ADD_CHILD_COUNTER(root, "PageSkipCounter", TUnit::UNIT, kParquetProfileSectionPrefix);
 
     COUNTER_UPDATE(request_bytes_read, _stats.request_bytes_read);
     COUNTER_UPDATE(request_bytes_read_uncompressed, _stats.request_bytes_read_uncompressed);
@@ -90,6 +93,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
 
     int64_t page_stats = _stats.has_page_statistics ? 1 : 0;
     COUNTER_UPDATE(has_page_statistics, page_stats);
+    COUNTER_UPDATE(page_skip, _stats.page_skip);
 }
 
 Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
