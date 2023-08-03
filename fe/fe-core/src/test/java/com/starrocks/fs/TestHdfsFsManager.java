@@ -51,7 +51,14 @@ public class TestHdfsFsManager extends TestCase {
         } catch (UserException e) {
             Assert.fail(e.getMessage());
         }
-    } 
+    }
+
+    @Test
+    public void testGetHDFSFileSystemFailure() {
+        Map<String, String> properties = new HashMap<String, String>();
+        Assert.assertThrows(UserException.class,  () -> {
+            fileSystemManager.getFileSystem("hdfs:///127.0.0.1:9000/parquet/student.parquet", properties, null); });
+    }
     
     @Test
     public void testGetFileSystemForS3aScheme() throws IOException {
