@@ -138,7 +138,7 @@ public:
                                           std::vector<int32_t>& column_indexes, std::function<int16_t(int64_t)> v1_func,
                                           std::function<int32_t(int64_t)> v2_func,
                                           const std::shared_ptr<TabletSchema>& partial_schema, int segment_num,
-                                          PartialUpdateMode mode = PartialUpdateMode::COLUMN_UPDATE_ONLY_MODE) {
+                                          PartialUpdateMode mode = PartialUpdateMode::COLUMN_UPDATE_MODE) {
         // create partial rowset
         RowsetWriterContext writer_context;
         RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
@@ -765,7 +765,7 @@ TEST_F(RowsetColumnPartialUpdateTest, test_upsert) {
             std::vector<int32_t> column_indexes = {0, (i % 2) + 1};
             partial_schemas.push_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
             rowsets.emplace_back(create_partial_rowset(tablet, keys, column_indexes, v1_func, v2_func,
-                                                       partial_schemas[i], 5, PartialUpdateMode::COLUMN_MODE));
+                                                       partial_schemas[i], 5, PartialUpdateMode::COLUMN_UPSERT_MODE));
             ASSERT_EQ(rowsets[i]->num_update_files(), 5);
             // preload rowset update state
             ASSERT_OK(StorageEngine::instance()->update_manager()->on_rowset_finished(tablet.get(), rowsets[i].get()));

@@ -88,10 +88,9 @@ message FooterPointerPB {
 enum PartialUpdateMode {
     UNKNOWN_MODE = 0;
     ROW_MODE = 1;
-    COLUMN_MODE = 2;
+    COLUMN_UPSERT_MODE = 2;
     AUTO_MODE = 3;
-    // update only. not upsert
-    COLUMN_UPDATE_ONLY_MODE = 4;
+    COLUMN_UPDATE_MODE = 4;
 }
 message RowsetTxnMetaPB {
     repeated uint32 partial_update_column_ids = 1;

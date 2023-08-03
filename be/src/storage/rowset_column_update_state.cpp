@@ -691,8 +691,8 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     cost_str << " [generate delta column group] " << watch.elapsed_time();
     watch.reset();
     // generate segment file for insert data
-    if (txn_meta.partial_update_mode() == PartialUpdateMode::COLUMN_MODE) {
-        // ignore insert missing rows if partial_update_mode == COLUMN_UPDATE_ONLY_MODE
+    if (txn_meta.partial_update_mode() == PartialUpdateMode::COLUMN_UPSERT_MODE) {
+        // ignore insert missing rows if partial_update_mode == COLUMN_UPDATE_MODE
         RETURN_IF_ERROR(_insert_new_rows(tschema, tablet, EditVersion(latest_applied_version.major() + 1, 0), rowset,
                                          rowset_id, index_meta, delvecs, index));
         cost_str << " [insert missing rows] " << watch.elapsed_time();

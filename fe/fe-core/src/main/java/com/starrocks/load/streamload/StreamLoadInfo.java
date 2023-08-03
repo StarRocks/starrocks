@@ -322,7 +322,7 @@ public class StreamLoadInfo {
         }
         if (context.partialUpdateMode != null) {
             if (context.partialUpdateMode.equals("column")) {
-                partialUpdateMode = TPartialUpdateMode.COLUMN_MODE;
+                partialUpdateMode = TPartialUpdateMode.COLUMN_UPSERT_MODE;
             } else if (context.partialUpdateMode.equals("auto")) {
                 partialUpdateMode = TPartialUpdateMode.AUTO_MODE;
             } else if (context.partialUpdateMode.equals("row")) {
@@ -470,7 +470,7 @@ public class StreamLoadInfo {
         stripOuterArray = routineLoadJob.isStripOuterArray();
         partialUpdate = routineLoadJob.isPartialUpdate();
         if (routineLoadJob.getPartialUpdateMode().equals("column")) {
-            partialUpdateMode = TPartialUpdateMode.COLUMN_MODE;
+            partialUpdateMode = TPartialUpdateMode.COLUMN_UPSERT_MODE;
         } else if (routineLoadJob.getPartialUpdateMode().equals("auto")) {
             partialUpdateMode = TPartialUpdateMode.AUTO_MODE;
         } else if (routineLoadJob.getPartialUpdateMode().equals("row")) {

@@ -514,10 +514,9 @@ struct TBinlogOffset {
 enum TPartialUpdateMode {
     UNKNOWN_MODE = 0;
     ROW_MODE = 1;
-    COLUMN_MODE = 2;
+    COLUMN_UPSERT_MODE = 2;
     AUTO_MODE = 3;
-    // update only. not upsert
-    COLUMN_UPDATE_ONLY_MODE = 4;
+    COLUMN_UPDATE_MODE = 4;
 }
 
 enum TRunMode {
