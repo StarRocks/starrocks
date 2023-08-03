@@ -622,14 +622,6 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         this.rwLock.writeLock().unlock();
     }
 
-    public <E extends Exception> void writeLockOrException(E e) throws E {
-        writeLock();
-        if (isDropped) {
-            writeUnlock();
-            throw e;
-        }
-    }
-
     /*
      * 1. Only schedule OLAP table.
      * 2. If table is colocate with other table,
