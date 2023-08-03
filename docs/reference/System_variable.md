@@ -394,6 +394,14 @@ The variables are described in alphabetical order. Variables with the `global` l
 
   The number of scan instances determines the number of other execution nodes in the upper level, such as aggregation nodes and join nodes. Therefore, it increases the concurrency of the entire query plan execution. Modifying this variable will help  improve efficiency, but larger values will consume more machine resources, such as CPU, memory, and disk IO.
 
+* partial_update_mode (3.1 and later)
+
+  Used to control the mode of partial updates. Valid values:
+  * `auto` (default): The system automatically determines the mode of partial updates by analyzing the UPDATE statement and the columns involved.
+  * `column`: The column mode is used for the partial updates, which is particularly suitable for the partial updates which involve a small number of columns and a large number of rows.
+
+  For more information, see [UPDATE](../sql-reference/sql-statements/data-manipulation/UPDATE.md#partial-updates-in-column-mode-since-v31).
+
 * performance_schema
 
   Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical usage.
@@ -580,3 +588,4 @@ The variables are described in alphabetical order. Variables with the `global` l
 * wait_timeout
 
   Used to set the connection timeout for idle connections. When an idle connection does not interact with StarRocks for that length of time, StarRocks will actively disconnect the link. The default value is 8 hours, in seconds.
+  

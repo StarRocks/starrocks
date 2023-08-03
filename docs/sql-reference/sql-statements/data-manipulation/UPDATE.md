@@ -59,18 +59,18 @@ One or more other tables in the database. These tables can be joined with the ta
 
 `where_condition`
 
-The condition based on which you want to update rows. Only rows that meet the WHERE condition can be updated. This parameter is required, because it helps prevent you from accidentally updating the entire table. If you want to update the entire table, you can use 'WHERE true'. However, this parameter is not mandatory for [partial updates in column mode](#partial-updates-in-column-mode-since-v31).
+The condition based on which you want to update rows. Only rows that meet the WHERE condition can be updated. This parameter is required, because it helps prevent you from accidentally updating the entire table. If you want to update the entire table, you can use 'WHERE true'. However, this parameter is not required for [partial updates in column mode](#partial-updates-in-column-mode-since-v31).
 
 ## Partial updates in column mode (since v3.1)
 
-Partial updates in column mode are suitable for scenarios where only a small number of columns, but a large number of rows need to be updated. In such scenarios, enabing the column mode offers faster update speeds. For example, in a table with 100 columns, if only 10 columns (10% of the total) are updated for all rows, the update speed of the column mode is 10 times faster.
+Partial updates in column mode are suitable for scenarios where only a small number of columns, but a large number of rows need to be updated. In such scenarios, enabling the column mode offers faster update speeds. For example, in a table with 100 columns, if only 10 columns (10% of the total) are updated for all rows, the update speed of the column mode is 10 times faster.
 
 The system variable `partial_update_mode` controls the mode of partial updates and supports the following values:
 
 - `auto` (default): The system automatically determines the mode of partial updates by analyzing the UPDATE statement and the columns involved. If the following criteria are met, the system automatically uses the column mode:
   - The percentage of updated columns compared to the total number of columns is less than 30%, and the number of updated columns is fewer than 4.
   - The update statement does not use a WHERE condition.
-Otherwise, the system automatically uses the regular mode.
+Otherwise, the system does not use the column mode.
 
 - `column`: The column mode is used for the partial updates, which is particularly suitable for the partial updates which involve a small number of columns and a large number of rows.
 
