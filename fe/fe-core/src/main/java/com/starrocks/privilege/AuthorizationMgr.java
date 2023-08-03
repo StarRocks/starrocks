@@ -1203,6 +1203,42 @@ public class AuthorizationMgr {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isBuiltinRole(String name) {
+        return PrivilegeBuiltinConstants.BUILT_IN_ROLE_NAMES.contains(name);
+    }
+
+    public String getRoleComment(String name) {
+        try {
+            roleReadLock();
+            String result = FeConstants.NULL_STRING;
+            Long roleId = roleNameToId.get(name);
+            if (roleId != null) {
+                String comment = roleIdToPrivilegeCollection.get(roleId).getComment();
+                if (!Strings.isNullOrEmpty(comment)) {
+                    result = comment;
+                }
+            }
+            return result;
+        } finally {
+            roleReadUnlock();
+        }
+    }
+
+    protected Set<Long> getRoleIdsByUserUnlocked(UserIdentity user) throws PrivilegeException {
+        Set<Long> ret = new HashSet<>();
+
+        for (long roleId : getUserPrivilegeCollectionUnlocked(user).getAllRoles()) {
+            // role may be removed
+            if (getRolePrivilegeCollectionUnlocked(roleId, false) != null) {
+                ret.add(roleId);
+            }
+        }
+        return ret;
+    }
+
+>>>>>>> ad7172c02e ([BugFix] PUBLIC role should not in immutable names set (#28508))
     // used in executing `set role` statement
     public Set<Long> getRoleIdsByUser(UserIdentity user) throws PrivilegeException {
         userReadLock();
