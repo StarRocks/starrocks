@@ -597,6 +597,10 @@ public class StreamLoadMgr {
         return (long) idToStreamLoadTask.size() + (long) dbToLabelToStreamLoadTask.size();
     }
 
+    public long getStreamLoadTaskCount() {
+        return idToStreamLoadTask.size();
+    }
+
     // for ut
     public Map<String, StreamLoadTask> getIdToStreamLoadTask() {
         return idToStreamLoadTask;

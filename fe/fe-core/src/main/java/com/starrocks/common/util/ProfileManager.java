@@ -264,4 +264,22 @@ public class ProfileManager {
         }
         return result;
     }
+
+    public long getQueryProfileCount() {
+        readLock.lock();
+        try {
+            return profileMap.size();
+        } finally {
+            readLock.unlock();
+        }
+    }
+
+    public long getLoadProfileCount() {
+        readLock.lock();
+        try {
+            return loadProfileMap.size();
+        } finally {
+            readLock.unlock();
+        }
+    }
 }

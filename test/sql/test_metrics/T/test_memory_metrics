@@ -1,0 +1,136 @@
+-- name: test_memory_metrics_tablet_count
+CREATE TABLE `t1` (
+    a int 
+) ENGINE=OLAP
+DUPLICATE KEY(`a`)
+DISTRIBUTED BY HASH(`a`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1"
+);
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"tablet_count\" | awk '{if ($NF >= 10) print "true"; else print "false";}'
+
+-- name: test_memory_metrics_tablet_bytes
+CREATE TABLE `t1` (
+    a int
+) ENGINE=OLAP
+DUPLICATE KEY(`a`)
+DISTRIBUTED BY HASH(`a`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1"
+);
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"tablet_bytes\" | awk '{if ($NF >= 1360) print "true"; else print "false";}'
+
+-- name: test_memory_metrics_replica_count
+CREATE TABLE `t1` (
+    a int
+) ENGINE=OLAP
+DUPLICATE KEY(`a`)
+DISTRIBUTED BY HASH(`a`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1"
+);
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"replica_count\" | awk '{if ($NF >= 10) print "true"; else print "false";}'
+
+-- name: test_memory_metrics_replica_bytes
+CREATE TABLE `t1` (
+    a int
+) ENGINE=OLAP
+DUPLICATE KEY(`a`)
+DISTRIBUTED BY HASH(`a`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1"
+);
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"replica_bytes\" | awk '{if ($NF >= 1440) print "true"; else print "false";}'
+
+-- name: test_memory_metrics_txn_count
+CREATE TABLE `t1` (
+    a int
+) ENGINE=OLAP
+DUPLICATE KEY(`a`)
+DISTRIBUTED BY HASH(`a`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1"
+);
+insert into t1 values (1);
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"txn_count\" | awk '{if ($NF >= 1) print "true"; else print "false";}'
+
+-- name: test_memory_metrics_txn_bytes
+CREATE TABLE `t1` (
+    a int
+) ENGINE=OLAP
+DUPLICATE KEY(`a`)
+DISTRIBUTED BY HASH(`a`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1"
+);
+insert into t1 values (1);
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"txn_bytes\" | awk '{if ($NF >= 832) print "true"; else print "false";}'
+
+-- name: test_memory_metrics_txn_callback_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"txn_callback_count\" | awk '{if ($NF >= 0) print "true"; else print "false";}'
+
+-- name: test_memory_metrics_delete_job_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"delete_job_count\" | awk '{if ($NF >= 0) print "true"; else print "false";}'
+
+-- name: test_memory_metrics_delete_job_info_count
+CREATE TABLE `t1` (
+    a int
+) ENGINE=OLAP
+DUPLICATE KEY(`a`)
+DISTRIBUTED BY HASH(`a`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1"
+);
+insert into t1 values (1);
+delete from t1 where a = 1;
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"delete_job_info_count\" | awk '{if ($NF >= 1) print "true"; else print "false";}'
+
+-- name: test_memory_metrics_task_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"task_count\" | awk '{if ($NF >= 0) print "true"; else print "false";}'
+
+-- name: test_memory_metrics_running_task_run_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"running_task_run_count\" | awk '{if ($NF >= 0) print "true"; else print "false";}'
+
+-- name: test_memory_metrics_pending_task_run_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"pending_task_run_count\" | awk '{if ($NF >= 0) print "true"; else print "false";}'
+
+-- name: test_memory_metrics_history_task_run_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"history_task_run_count\" | awk '{if ($NF >= 0) print "true"; else print "false";}'
+
+-- name: test_memory_metrics_catalogs_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"catalogs_count\" | awk '{if ($NF >= 0) print "true"; else print "false";}'
+
+-- name: test_memory_metrics_insert_overwrite_jobs_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"insert_overwrite_jobs_count\" | awk '{if ($NF >= 0) print "true"; else print "false";}'
+
+-- name: test_memory_metrics_compaction_stats_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"compaction_stats_count\" | awk '{if ($NF >= 0) print "true"; else print "false";}'
+
+-- name: test_memory_metrics_stream_load_task_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"stream_load_task_count\" | awk '{if ($NF >= 0) print "true"; else print "false";}'
+
+-- name: test_memory_metrics_query_detail_count
+admin set frontend config ("enable_collect_query_detail_info" = "true");
+[UC]show frontends;
+admin set frontend config ("enable_collect_query_detail_info" = "false");
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"query_detail_count\" | awk '{if ($NF >= 1) print "true"; else print "false";}'
+
+-- name: test_memory_metrics_query_profile_count
+CREATE TABLE `t1` (
+    a int 
+) ENGINE=OLAP
+DUPLICATE KEY(`a`)
+DISTRIBUTED BY HASH(`a`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1"
+);
+set enable_profile=true;
+select count(*) from t1;
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"query_profile_count\" | awk '{if ($NF >= 1) print "true"; else print "false";}'
+
+-- name: test_memory_metrics_load_profile_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"load_profile_count\" | awk '{if ($NF >= 0) print "true"; else print "false";}'
+
+-- name: test_memory_metrics_query_coordinator_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"query_coordinator_count\" | awk '{if ($NF >= 0) print "true"; else print "false";}'
+

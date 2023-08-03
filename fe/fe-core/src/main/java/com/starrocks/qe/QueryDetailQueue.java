@@ -80,6 +80,10 @@ public class QueryDetailQueue {
         return results;
     }
 
+    public static synchronized long getTotalQueriesCount() {
+        return TOTAL_QUERIES.size();
+    }
+
     //must get lock before call
     //NOTICE: this is not precise nano seconds, but good enough to make eventTime in order and unique
     private static long getCurrentTimeNS() {
@@ -93,4 +97,4 @@ public class QueryDetailQueue {
             return ms * 1000000;
         }
     }
-};
+}
