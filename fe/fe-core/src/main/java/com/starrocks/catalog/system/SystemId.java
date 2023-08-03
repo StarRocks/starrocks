@@ -107,4 +107,5 @@ public class SystemId {
     public static final long GRANTS_TO_USERS_ID = 103L;
 
     public static final long PIPE_FILES_ID = 120L;
+    public static final long PIPES_ID = 121L;
 }

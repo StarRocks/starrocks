@@ -16,9 +16,13 @@
 package com.starrocks.sql.ast.pipe;
 
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.util.OrderByPair;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.Pipe;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
@@ -40,23 +44,30 @@ public class ShowPipeStmt extends ShowStmt {
                     .addColumn(new Column("LOADED_FILES", ScalarType.BIGINT))
                     .addColumn(new Column("LOADED_ROWS", ScalarType.BIGINT))
                     .addColumn(new Column("LOADED_BYTES", ScalarType.BIGINT))
+                    .addColumn(new Column("CREATED_TIME", ScalarType.DATETIME))
                     .build();
 
     private String dbName;
     private final String like;
     private final Expr where;
+    private final List<OrderByElement> orderBy;
+    private final LimitElement limit;
+    private List<OrderByPair> orderByPairs;
 
-    public ShowPipeStmt(String dbName, String like, Expr where, NodePosition pos) {
+    public ShowPipeStmt(String dbName, String like, Expr where, List<OrderByElement> orderBy, LimitElement limit,
+                        NodePosition pos) {
         super(pos);
         this.dbName = dbName;
         this.like = like;
         this.where = where;
+        this.orderBy = orderBy;
+        this.limit = limit;
     }
 
     /**
      * NOTE: Must be consistent with the META_DATA
      */
-    public static void handleShow(List<String> row, Pipe pipe) {
+    public static void handleShow(List<Comparable> row, Pipe pipe) {
         Pipe.LoadStatus loadStatus = pipe.getLoadStatus();
         row.add(String.valueOf(pipe.getPipeId().getDbId()));
         row.add(String.valueOf(pipe.getPipeId().getId()));
@@ -66,6 +77,15 @@ public class ShowPipeStmt extends ShowStmt {
         row.add(String.valueOf(loadStatus.loadFiles));
         row.add(String.valueOf(loadStatus.loadRows));
         row.add(String.valueOf(loadStatus.loadBytes));
+        if (pipe.getCreatedTime() == -1) {
+            row.add(null);
+        } else {
+            row.add(TimeUtils.longToTimeString(pipe.getCreatedTime()));
+        }
+    }
+
+    public static int findSlotIndex(String name) {
+        return META_DATA.getColumnIdx(name);
     }
 
     public void setDbName(String dbName) {
@@ -82,6 +102,32 @@ public class ShowPipeStmt extends ShowStmt {
 
     public Expr getWhere() {
         return where;
+    }
+
+    public List<OrderByElement> getOrderBy() {
+        return orderBy;
+    }
+
+    public long getLimit() {
+        if (limit == null) {
+            return -1;
+        }
+        return limit.getLimit();
+    }
+
+    public long getOffset() {
+        if (limit == null) {
+            return -1;
+        }
+        return limit.getOffset();
+    }
+
+    public List<OrderByPair> getOrderByPairs() {
+        return orderByPairs;
+    }
+
+    public void setOrderByPairs(List<OrderByPair> orderByPairs) {
+        this.orderByPairs = orderByPairs;
     }
 
     @Override

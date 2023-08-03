@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
@@ -44,6 +45,7 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableFunctionTable;
 import com.starrocks.thrift.TTableType;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
@@ -148,7 +150,10 @@ public class TableFunctionTable extends Table {
             if (path.startsWith("fake://")) {
                 return;
             }
-            HdfsUtil.parseFile(path, new BrokerDesc(properties), fileStatuses);
+            List<String> pieces = Splitter.on(",").trimResults().omitEmptyStrings().splitToList(path);
+            for (String piece : ListUtils.emptyIfNull(pieces)) {
+                HdfsUtil.parseFile(piece, new BrokerDesc(properties), fileStatuses);
+            }
         } catch (UserException e) {
             LOG.error("parse files error", e);
             throw new DdlException("failed to parse files", e);

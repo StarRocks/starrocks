@@ -19,18 +19,18 @@ import com.starrocks.sql.parser.NodePosition;
 
 public class AlterPipePauseResume extends AlterPipeClause {
 
-    private final boolean isPause;
+    private final boolean isSuspend;
 
-    public AlterPipePauseResume(NodePosition pos, boolean isPause) {
+    public AlterPipePauseResume(NodePosition pos, boolean isSuspend) {
         super(pos);
-        this.isPause = isPause;
+        this.isSuspend = isSuspend;
     }
 
-    public boolean isPause() {
-        return isPause;
+    public boolean isSuspend() {
+        return isSuspend;
     }
 
     public boolean isResume() {
-        return !isPause;
+        return !isSuspend;
     }
 }
