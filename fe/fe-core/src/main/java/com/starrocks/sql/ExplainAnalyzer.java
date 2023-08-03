@@ -67,6 +67,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.TreeSet;
@@ -146,6 +147,7 @@ public class ExplainAnalyzer {
     private final Map<Integer, NodeInfo> allNodeInfos = Maps.newHashMap();
     private final List<NodeInfo> allScanNodeInfos = Lists.newArrayList();
     private final List<NodeInfo> allExchangeNodeInfos = Lists.newArrayList();
+    private final Counter scheduleTime = new Counter(TUnit.TIME_NS, null, 0);
     private boolean isRuntimeProfile;
 
     private String color = ANSI_RESET;
@@ -191,9 +193,8 @@ public class ExplainAnalyzer {
 
         try {
             parseProfile();
-            appendSummaryInfo();
             appendExecutionInfo();
-            appendStatisticsSummaryInfo();
+            appendSummaryInfo();
         } catch (Exception e) {
             LOG.error("Failed to analyze profiles", e);
             summaryBuffer.setLength(0);
@@ -223,6 +224,14 @@ public class ExplainAnalyzer {
 
         for (int i = 0; i < executionProfile.getChildList().size(); i++) {
             RuntimeProfile fragmentProfile = executionProfile.getChildList().get(i).first;
+
+            for (Pair<RuntimeProfile, Boolean> kv : fragmentProfile.getChildList()) {
+                RuntimeProfile pipelineProfile = kv.first;
+                Counter scheduleTime = pipelineProfile.getMaxCounter("ScheduleTime");
+                if (scheduleTime != null && scheduleTime.getValue() > this.scheduleTime.getValue()) {
+                    this.scheduleTime.setValue(scheduleTime.getValue());
+                }
+            }
 
             ProfileNodeParser parser = new ProfileNodeParser(isRuntimeProfile, fragmentProfile);
             Map<Integer, NodeInfo> nodeInfos = parser.parse();
@@ -291,27 +300,28 @@ public class ExplainAnalyzer {
                 allExchangeNodeInfos.add(nodeInfo);
             }
         }
+
+        cumulativeOperatorTime = executionProfile.getCounter("QueryCumulativeOperatorTime").getValue();
     }
 
     private void appendSummaryInfo() {
         Counter allNetworkTime = new Counter(TUnit.TIME_NS, null, 0);
         for (NodeInfo nodeInfo : allExchangeNodeInfos) {
-            Counter networkTime = searchMaxMetric(nodeInfo, "UniqueMetrics", "NetworkTime");
-            if (networkTime != null) {
-                allNetworkTime.update(networkTime.getValue());
+            if (nodeInfo.networkTime != null) {
+                allNetworkTime.update(nodeInfo.networkTime.getValue());
             }
         }
 
         Counter allScanTime = new Counter(TUnit.TIME_NS, null, 0);
         for (NodeInfo nodeInfo : allScanNodeInfos) {
-            Counter scanTime = searchMaxMetric(nodeInfo, "UniqueMetrics", "ScanTime");
-            if (scanTime != null) {
-                allScanTime.update(scanTime.getValue());
+            if (nodeInfo.scanTime != null) {
+                allScanTime.update(nodeInfo.scanTime.getValue());
             }
         }
 
         appendSummaryLine("Summary");
 
+        // 1. Brief information
         pushIndent(GraphElement.LEAF_METRIC_INDENT);
         if (execPlan.getFragments().stream()
                 .anyMatch(fragment -> fragment.getSink() instanceof OlapTableSink)) {
@@ -319,7 +329,6 @@ public class ExplainAnalyzer {
                     "The transaction of the statement will be aborted, and no data will be actually inserted!!!",
                     ANSI_RESET);
         }
-
         appendSummaryLine("QueryId: ", summaryProfile.getInfoString("Query ID"));
         appendSummaryLine("Version: ", summaryProfile.getInfoString("StarRocks Version"));
         appendSummaryLine("State: ", summaryProfile.getInfoString("Query State"));
@@ -328,6 +337,7 @@ public class ExplainAnalyzer {
                     " for running; ", NodeState.FINISHED.symbol, " for finished");
         }
 
+        // 2. Time Usage
         appendSummaryLine("TotalTime: ", summaryProfile.getInfoString("Total"));
         pushIndent(GraphElement.LEAF_METRIC_INDENT);
         Counter executionWallTime = executionProfile.getCounter("QueryExecutionWallTime");
@@ -341,23 +351,40 @@ public class ExplainAnalyzer {
         if (executionWallTime != null) {
             appendSummaryLine("ExecutionTime: ", executionWallTime, " [",
                     "Scan: ", allScanTime,
-                    String.format(" (%.2f%%)", (double) allScanTime.getValue() * 100 / executionWallTime.getValue()),
+                    String.format(" (%.2f%%)", 100.0 * allScanTime.getValue() / executionWallTime.getValue()),
                     ", Network: ", allNetworkTime,
-                    String.format(" (%.2f%%)", (double) allNetworkTime.getValue() * 100 / executionWallTime.getValue()),
+                    String.format(" (%.2f%%)", 100.0 * allNetworkTime.getValue() / executionWallTime.getValue()),
                     ", ResultDeliverTime: ", resultDeliverTime,
-                    String.format(" (%.2f%%)",
-                            (double) resultDeliverTime.getValue() * 100 / executionWallTime.getValue()),
+                    String.format(" (%.2f%%)", 100.0 * resultDeliverTime.getValue() / executionWallTime.getValue()),
+                    ", ScheduleTime: ", scheduleTime,
+                    String.format(" (%.2f%%)", 100.0 * scheduleTime.getValue() / executionWallTime.getValue()),
                     "]");
         }
         appendSummaryLine("CollectProfileTime: ", summaryProfile.getInfoString("Collect Profile Time"));
         popIndent(); // metric indent
 
+        // 3. Memory Usage
         appendSummaryLine("QueryPeakMemoryUsage: ", executionProfile.getCounter("QueryPeakMemoryUsage"),
                 ", QueryAllocatedMemoryUsage: ", executionProfile.getCounter("QueryAllocatedMemoryUsage"));
 
-        popIndent(); // metric indent
+        // 4. Top Cpu Nodes
+        appendCpuTopNodes();
 
-        cumulativeOperatorTime = executionProfile.getCounter("QueryCumulativeOperatorTime").getValue();
+        // 5. Top Memory Nodes
+        appendMemoryNodes();
+
+        // 6. Runtime Progress
+        if (isRuntimeProfile) {
+            long finishedCount = allNodeInfos.values().stream()
+                    .filter(nodeInfo -> nodeInfo.state.isFinished())
+                    .count();
+            if (MapUtils.isNotEmpty(allNodeInfos)) {
+                appendSummaryLine(String.format("Progress (finished operator/all operator): %.2f%%",
+                        100.0 * finishedCount / allNodeInfos.size()));
+            }
+        }
+
+        popIndent(); // metric indent
     }
 
     private Counter getMaximumPipelineDriverTime() {
@@ -375,36 +402,14 @@ public class ExplainAnalyzer {
         return maxDriverTotalTime;
     }
 
-    private void appendStatisticsSummaryInfo() {
-        pushIndent(GraphElement.LEAF_METRIC_INDENT);
-
-        // 1. Top Time-Consuming Nodes
-        appendCpuTopNodes();
-
-        // 2. Runtime Progress
-        if (isRuntimeProfile) {
-            long finishedCount = allNodeInfos.values().stream()
-                    .filter(nodeInfo -> nodeInfo.state.isFinished())
-                    .count();
-            if (MapUtils.isNotEmpty(allNodeInfos)) {
-                appendSummaryLine(String.format("Progress (finished operator/all operator): %.2f%%",
-                        100.0 * finishedCount / allNodeInfos.size()));
-            }
-        }
-
-        popIndent(); // metric indent
-    }
-
     private void appendCpuTopNodes() {
-        // TopCpus
-        List<NodeInfo> topCpuNodes = Lists.newArrayList(allNodeInfos.values());
-        topCpuNodes.sort((info1, info2) -> Long.compare(info2.totalTime.getValue(), info1.totalTime.getValue()));
+        List<NodeInfo> topCpuNodes = Lists.newArrayList(allNodeInfos.values()).stream()
+                .sorted((info1, info2) -> Long.compare(info2.totalTime.getValue(), info1.totalTime.getValue()))
+                .limit(10)
+                .collect(Collectors.toList());
         appendSummaryLine("Top Most Time-consuming Nodes:");
         pushIndent(GraphElement.LEAF_METRIC_INDENT);
         for (int i = 0; i < topCpuNodes.size(); i++) {
-            if (i >= 10) {
-                break;
-            }
             NodeInfo nodeInfo = topCpuNodes.get(i);
             if (nodeInfo.isMostConsuming) {
                 setRedColor();
@@ -414,6 +419,22 @@ public class ExplainAnalyzer {
             appendSummaryLine(String.format("%d. ", i + 1), nodeInfo.getTitle(),
                     ": ", nodeInfo.totalTime, String.format(" (%.2f%%)", nodeInfo.totalTimePercentage));
             resetColor();
+        }
+        popIndent(); // metric indent
+    }
+
+    private void appendMemoryNodes() {
+        List<NodeInfo> topMemoryNodes = Lists.newArrayList(allNodeInfos.values()).stream()
+                .filter(NodeInfo::isMemoryConsumingOperator)
+                .filter(nodeInfo -> nodeInfo.peekMemory != null)
+                .sorted((info1, info2) -> Long.compare(info2.peekMemory.getValue(), info1.peekMemory.getValue()))
+                .limit(10)
+                .collect(Collectors.toList());
+        appendSummaryLine("Top Most Memory-consuming Nodes:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        for (int i = 0; i < topMemoryNodes.size(); i++) {
+            NodeInfo nodeInfo = topMemoryNodes.get(i);
+            appendSummaryLine(String.format("%d. ", i + 1), nodeInfo.getTitle(), ": ", nodeInfo.peekMemory);
         }
         popIndent(); // metric indent
     }
@@ -518,6 +539,7 @@ public class ExplainAnalyzer {
         Preconditions.checkNotNull(nodeInfo);
 
         nodeInfo.computeTimeUsage(cumulativeOperatorTime);
+        nodeInfo.computeMemoryUsage();
         if (nodeInfo.isMostConsuming) {
             setRedColor();
         } else if (nodeInfo.isSecondMostConsuming) {
@@ -609,22 +631,16 @@ public class ExplainAnalyzer {
         appendDetailLine("OutputRows: ", nodeInfo.outputRowNums);
 
         // 4. Memory Infos
-        if (nodeInfo.planElement instanceof AggregationNode || nodeInfo.planElement instanceof JoinNode
-                || nodeInfo.planElement instanceof AnalyticEvalNode) {
-            appendDetailLine("PeakMemory: ",
-                    sumUpMetric(nodeInfo, false, true, "CommonMetrics", "OperatorPeakMemoryUsage"),
-                    ", AllocatedMemory: ",
-                    sumUpMetric(nodeInfo, false, false, "CommonMetrics", "OperatorAllocatedMemoryUsage"));
+        if (nodeInfo.isMemoryConsumingOperator()) {
+            appendDetailLine("PeakMemory: ", nodeInfo.peekMemory, ", AllocatedMemory: ", nodeInfo.allocatedMemory);
         }
 
         // 5. Runtime Filters
         Counter rfInputRows = searchMetricFromUpperLevel(nodeInfo, "CommonMetrics", "JoinRuntimeFilterInputRows");
         Counter rfOutputRows = searchMetricFromUpperLevel(nodeInfo, "CommonMetrics", "JoinRuntimeFilterOutputRows");
         if (rfInputRows != null && rfOutputRows != null && rfInputRows.getValue() > 0) {
-            appendDetailLine("RuntimeFilter: ",
-                    rfInputRows, " -> ", rfOutputRows,
-                    String.format(" (%.2f%%)", 100 * (rfInputRows.getValue() - rfOutputRows.getValue()) /
-                            (double) rfInputRows.getValue()));
+            appendDetailLine("RuntimeFilter: ", rfInputRows, " -> ", rfOutputRows, String.format(" (%.2f%%)",
+                    100.0 * (rfInputRows.getValue() - rfOutputRows.getValue()) / rfInputRows.getValue()));
         }
 
         // 6. Progress Percentage
@@ -682,6 +698,36 @@ public class ExplainAnalyzer {
             if (CollectionUtils.isNotEmpty(aggInfo.getGroupingExprs())) {
                 appendExprs("GroupingExprs", aggInfo.getGroupingExprs());
             }
+            Optional<RuntimeProfile> cacheOptional = nodeInfo.pseudoOperatorProfiles.stream()
+                    .filter(profile -> profile.getName().contains("CACHE ("))
+                    .findAny();
+            if (cacheOptional.isPresent() && aggregationNode.hasChild(0) &&
+                    aggregationNode.getChild(0) instanceof ScanNode) {
+                PlanNode scanNode = aggregationNode.getChild(0);
+                NodeInfo scanNodeInfo = allNodeInfos.get(scanNode.getId().asInt());
+                Counter tabletNum = searchMetric(scanNodeInfo, false, null, false,
+                        "UniqueMetrics", "TabletCount");
+                Counter cachePassthroughTabletNum = searchMetric(nodeInfo, true, "CACHE (", false,
+                        "UniqueMetrics", "CachePassthroughTabletNum");
+                Counter cacheProbeTabletNum = searchMetric(nodeInfo, true, "CACHE (", false,
+                        "UniqueMetrics", "CacheProbeTabletNum");
+                Counter cachePopulateTabletNum = searchMetric(nodeInfo, true, "CACHE (", false,
+                        "UniqueMetrics", "CachePopulateTabletNum");
+                if (tabletNum != null && tabletNum.getValue() > 0 && cachePassthroughTabletNum != null &&
+                        cacheProbeTabletNum != null && cachePopulateTabletNum != null) {
+                    appendDetailLine("TabletNum: ", tabletNum, " [",
+                            "PassthroughNum: ", cachePassthroughTabletNum,
+                            String.format(" (%.2f%%)",
+                                    100.0 * cachePassthroughTabletNum.getValue() / tabletNum.getValue()),
+                            ", ProbeNum: ", cacheProbeTabletNum,
+                            String.format(" (%.2f%%)",
+                                    100.0 * cacheProbeTabletNum.getValue() / tabletNum.getValue()),
+                            ", PopulateNum: ", cachePopulateTabletNum,
+                            String.format(" (%.2f%%)",
+                                    100.0 * cachePopulateTabletNum.getValue() / tabletNum.getValue()),
+                            "]");
+                }
+            }
         } else if (nodeInfo.planElement instanceof AnalyticEvalNode) {
             AnalyticEvalNode window = (AnalyticEvalNode) nodeInfo.planElement;
             if (CollectionUtils.isNotEmpty(window.getAnalyticFnCalls())) {
@@ -717,10 +763,10 @@ public class ExplainAnalyzer {
             }
         } else if (nodeInfo.planElement instanceof JoinNode) {
             JoinNode joinNode = (JoinNode) nodeInfo.planElement;
-            Counter buildTime =
-                    searchMaxMetricByNamePattern(nodeInfo, "_JOIN_BUILD (", "CommonMetrics", "OperatorTotalTime");
-            Counter probeTime =
-                    searchMaxMetricByNamePattern(nodeInfo, "_JOIN_PROBE (", "CommonMetrics", "OperatorTotalTime");
+            Counter buildTime = searchMetric(nodeInfo, false, "_JOIN_BUILD (", true,
+                    "CommonMetrics", "OperatorTotalTime");
+            Counter probeTime = searchMetric(nodeInfo, false, "_JOIN_PROBE (", true,
+                    "CommonMetrics", "OperatorTotalTime");
             appendDetailLine("BuildTime: ", buildTime);
             appendDetailLine("ProbeTime: ", probeTime);
             if (CollectionUtils.isNotEmpty(joinNode.getEqJoinConjuncts())) {
@@ -903,32 +949,23 @@ public class ExplainAnalyzer {
         appendDetailLine(metricName, ": [", String.join(", ", exprContents), "]");
     }
 
-    private static Counter searchMaxMetric(NodeInfo nodeInfo, String... nameLevels) {
-        for (RuntimeProfile operatorProfile : nodeInfo.operatorProfiles) {
-            RuntimeProfile cur = getLastLevel(operatorProfile, nameLevels);
-            int lastIndex = nameLevels.length - 1;
-            Counter counter = cur.getCounter(RuntimeProfile.MERGED_INFO_PREFIX_MAX + nameLevels[lastIndex]);
-            if (counter == null) {
-                counter = cur.getCounter(nameLevels[lastIndex]);
-            }
-
-            if (counter != null) {
-                return counter;
-            }
+    private static Counter searchMetric(NodeInfo nodeInfo, boolean searchPseudoOperator, String pattern,
+                                        boolean useMaxValue, String... nameLevels) {
+        List<RuntimeProfile> profiles = Lists.newArrayList();
+        profiles.addAll(nodeInfo.operatorProfiles);
+        if (searchPseudoOperator) {
+            profiles.addAll(nodeInfo.pseudoOperatorProfiles);
         }
-
-        return null;
-    }
-
-    private static Counter searchMaxMetricByNamePattern(NodeInfo nodeInfo, String pattern, String... nameLevels) {
-        for (RuntimeProfile operatorProfile : nodeInfo.operatorProfiles) {
-            if (!operatorProfile.getName().contains(pattern)) {
+        for (RuntimeProfile operatorProfile : profiles) {
+            if (pattern != null && !operatorProfile.getName().contains(pattern)) {
                 continue;
             }
             RuntimeProfile cur = getLastLevel(operatorProfile, nameLevels);
             int lastIndex = nameLevels.length - 1;
-            Counter counter = cur.getCounter(RuntimeProfile.MERGED_INFO_PREFIX_MAX + nameLevels[lastIndex]);
-            if (counter == null) {
+            Counter counter;
+            if (useMaxValue) {
+                counter = cur.getMaxCounter(nameLevels[lastIndex]);
+            } else {
                 counter = cur.getCounter(nameLevels[lastIndex]);
             }
 
@@ -970,11 +1007,10 @@ public class ExplainAnalyzer {
         for (RuntimeProfile operatorProfile : operatorProfiles) {
             RuntimeProfile cur = getLastLevel(operatorProfile, nameLevels);
             int lastIndex = nameLevels.length - 1;
-            Counter counter = null;
+            Counter counter;
             if (useMaxValue) {
-                counter = cur.getCounter(RuntimeProfile.MERGED_INFO_PREFIX_MAX + nameLevels[lastIndex]);
-            }
-            if (counter == null) {
+                counter = cur.getMaxCounter(nameLevels[lastIndex]);
+            } else {
                 counter = cur.getCounter(nameLevels[lastIndex]);
             }
             if (counter == null) {
@@ -1106,6 +1142,8 @@ public class ExplainAnalyzer {
         private Counter networkTime;
         private Counter scanTime;
         private Counter outputRowNums;
+        private Counter peekMemory;
+        private Counter allocatedMemory;
         private double totalTimePercentage;
         private boolean isMostConsuming;
         private boolean isSecondMostConsuming;
@@ -1164,6 +1202,11 @@ public class ExplainAnalyzer {
             return false;
         }
 
+        public boolean isMemoryConsumingOperator() {
+            return planElement instanceof AggregationNode || planElement instanceof JoinNode
+                    || planElement instanceof SortNode || planElement instanceof AnalyticEvalNode;
+        }
+
         public void merge(NodeInfo other) {
             this.operatorProfiles.addAll(other.operatorProfiles);
             this.pseudoOperatorProfiles.addAll(other.pseudoOperatorProfiles);
@@ -1176,12 +1219,12 @@ public class ExplainAnalyzer {
                 totalTime.update(cpuTime.getValue());
             }
             if (planElement instanceof ExchangeNode) {
-                networkTime = searchMaxMetric(this, "UniqueMetrics", "NetworkTime");
+                networkTime = searchMetric(this, false, null, true, "UniqueMetrics", "NetworkTime");
                 if (networkTime != null) {
                     totalTime.update(networkTime.getValue());
                 }
             } else if (planElement instanceof ScanNode) {
-                scanTime = searchMaxMetric(this, "UniqueMetrics", "ScanTime");
+                scanTime = searchMetric(this, false, null, true, "UniqueMetrics", "ScanTime");
                 if (scanTime != null) {
                     totalTime.update(scanTime.getValue());
                 }
@@ -1192,6 +1235,11 @@ public class ExplainAnalyzer {
             } else if (totalTimePercentage > 15) {
                 isSecondMostConsuming = true;
             }
+        }
+
+        public void computeMemoryUsage() {
+            peekMemory = sumUpMetric(this, false, true, "CommonMetrics", "OperatorPeakMemoryUsage");
+            allocatedMemory = sumUpMetric(this, false, false, "CommonMetrics", "OperatorAllocatedMemoryUsage");
         }
 
         public String getTitle() {
