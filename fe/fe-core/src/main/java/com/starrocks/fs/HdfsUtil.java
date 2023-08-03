@@ -39,11 +39,11 @@ import com.starrocks.thrift.TBrokerPWriteRequest;
 import com.starrocks.thrift.TBrokerRenamePathRequest;
 import com.starrocks.thrift.TBrokerVersion;
 import com.starrocks.thrift.THdfsProperties;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.tools.ant.util.StringUtils;
 
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -85,7 +85,7 @@ public class HdfsUtil {
 
     public static List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc) throws UserException {
         if (path.startsWith(TableFunctionTable.FAKE_PATH)) {
-            path = StringUtils.removePrefix(path, TableFunctionTable.FAKE_PATH);
+            path = StringUtils.removeStart(path, TableFunctionTable.FAKE_PATH);
             FileStatus fakeFile = new FileStatus(1, false, 1, 1024, System.currentTimeMillis(), new Path(path));
             return Lists.newArrayList(fakeFile);
         }
