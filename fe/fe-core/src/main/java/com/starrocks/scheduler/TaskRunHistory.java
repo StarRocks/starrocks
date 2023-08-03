@@ -33,4 +33,8 @@ public class TaskRunHistory {
             }
         }
     }
+
+    public long getTaskRunCount() {
+        return historyTaskRunMap.size();
+    }
 }

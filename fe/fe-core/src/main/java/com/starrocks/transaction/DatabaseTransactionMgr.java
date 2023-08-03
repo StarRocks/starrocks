@@ -1425,7 +1425,12 @@ public class DatabaseTransactionMgr {
     }
 
     public int getTransactionNum() {
-        return idToRunningTransactionState.size() + finalStatusTransactionStateDeque.size();
+        try {
+            readLock();
+            return idToRunningTransactionState.size() + finalStatusTransactionStateDeque.size();
+        } finally {
+            readUnlock();
+        }
     }
 
     public List<Pair<Long, Long>> getTransactionIdByCoordinateBe(String coordinateHost, int limit) {

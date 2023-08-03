@@ -241,4 +241,16 @@ public class TaskRunManager {
     public TaskRunHistory getTaskRunHistory() {
         return taskRunHistory;
     }
+
+    public long getPendingTaskRunCount() {
+        return pendingTaskRunMap.size();
+    }
+
+    public long getRunningTaskRunCount() {
+        return runningTaskRunMap.size();
+    }
+
+    public long getHistoryTaskRunCount() {
+        return taskRunHistory.getTaskRunCount();
+    }
 }
