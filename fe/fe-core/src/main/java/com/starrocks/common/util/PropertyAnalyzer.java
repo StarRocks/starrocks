@@ -21,7 +21,11 @@
 
 package com.starrocks.common.util;
 
+<<<<<<< HEAD
 import com.clearspring.analytics.util.Lists;
+=======
+import com.google.common.base.Joiner;
+>>>>>>> f993752ded ([Enhancement] Tips for optimizing replication_num when creating a table (#28501))
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
@@ -365,10 +369,26 @@ public class PropertyAnalyzer {
             throw new AnalysisException("Replication num should larger than 0. (suggested 3)");
         }
         List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
+<<<<<<< HEAD
         if (replicationNum > backendIds.size()) {
             throw new AnalysisException("Replication num should be less than the number of available BE nodes. " 
             + "Replication num is " + replicationNum + " available BE nodes is " + backendIds.size() +
                     ", You can change this default by setting the replication_num table properties.");
+=======
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            backendIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getAvailableComputeNodeIds());
+            if (RunMode.defaultReplicationNum() > backendIds.size()) {
+                throw new AnalysisException("Number of available CN nodes is " + backendIds.size()
+                        + ", less than " + RunMode.defaultReplicationNum());
+            }
+        } else {
+            if (replicationNum > backendIds.size()) {
+                throw new AnalysisException("Table replication num should be less than " +
+                        "of equal to the number of available BE nodes. "
+                        + "You can change this default by setting the replication_num table properties. "
+                        + "Current alive backend is [" + Joiner.on(",").join(backendIds) + "].");
+            }
+>>>>>>> f993752ded ([Enhancement] Tips for optimizing replication_num when creating a table (#28501))
         }
     }
 
