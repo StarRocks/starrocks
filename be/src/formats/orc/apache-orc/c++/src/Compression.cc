@@ -43,8 +43,8 @@
 #include "LzoDecompressor.hh"
 #include "Utils.hh"
 #include "lz4.h"
-#include "thirdparty/libdeflate/libdeflate.h"
 #include "orc/Exceptions.hh"
+#include "thirdparty/libdeflate/libdeflate.h"
 #include "wrap/snappy-wrapper.h"
 #include "zlib.h"
 #include "zstd.h"
@@ -692,14 +692,12 @@ private:
 class LibDeflateDecompressionStream : public BlockDecompressionStream {
 public:
     LibDeflateDecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize, MemoryPool& _pool,
-                             ReaderMetrics* _metrics)
+                                  ReaderMetrics* _metrics)
             : BlockDecompressionStream(std::move(inStream), blockSize, _pool, _metrics) {
         decompressor = libdeflate_alloc_decompressor();
     }
 
-    ~LibDeflateDecompressionStream() override {
-        libdeflate_free_decompressor(decompressor);
-    }
+    ~LibDeflateDecompressionStream() override { libdeflate_free_decompressor(decompressor); }
 
     std::string getName() const override {
         std::ostringstream result;
@@ -716,6 +714,7 @@ protected:
         }
         return actual;
     }
+
 private:
     libdeflate_decompressor* decompressor;
 };
@@ -1144,8 +1143,8 @@ std::unique_ptr<SeekableInputStream> createDecompressor(CompressionKind kind,
     case CompressionKind_ZLIB:
         return std::unique_ptr<SeekableInputStream>(
                 new LibDeflateDecompressionStream(std::move(input), blockSize, pool, metrics));
-//        return std::unique_ptr<SeekableInputStream>(
-//                new ZlibDecompressionStream(std::move(input), blockSize, pool, metrics));
+        //        return std::unique_ptr<SeekableInputStream>(
+        //                new ZlibDecompressionStream(std::move(input), blockSize, pool, metrics));
     case CompressionKind_SNAPPY:
         return std::unique_ptr<SeekableInputStream>(
                 new SnappyDecompressionStream(std::move(input), blockSize, pool, metrics));
