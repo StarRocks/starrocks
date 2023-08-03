@@ -593,7 +593,7 @@ The following parameters are supported:
 
   Specifies the maximum number of unqualified data rows that can be logged. This parameter is supported from v3.1 onwards. Valid values: `0`, `-1`, and any non-zero positive integer. Default value: `0`.
   
-  - The value `0` specifies that no data rows that are filtered out will be logged.
+  - The value `0` specifies that data rows that are filtered out will not be logged.
   - The value `-1` specifies that all data rows that are filtered out will be logged.
   - A non-zero positive integer such as `n` specifies that up to `n` data rows that are filtered out can be logged on each BE.
 
