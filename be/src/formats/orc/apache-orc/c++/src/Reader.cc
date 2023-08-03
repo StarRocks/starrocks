@@ -1223,19 +1223,25 @@ void RowReaderImpl::lazyLoadSeekTo(uint64_t toRow) {
     // then #1 cost is X + toRow % rowindexstripe
     // #2 cost is (row - lazyLoadLastUsedRowInStripe)
     const uint64_t ROW_INDEX_STRIDE = footer->rowindexstride();
-    static const uint64_t SEEK_TO_ROW_GROUP_COST = 4096;
-    uint64_t costIndirectSkip = toRow % ROW_INDEX_STRIDE;
-    uint64_t toRowGroupNumber = toRow / ROW_INDEX_STRIDE;
-    uint64_t fromRowGroupNumber = lazyLoadLastUsedRowInStripe / ROW_INDEX_STRIDE;
-
-    if ((fromRowGroupNumber != toRowGroupNumber) && (SEEK_TO_ROW_GROUP_COST + costIndirectSkip) < costDirectSkip) {
-        PositionProviderMap map;
-        getRowGroupPosition(static_cast<uint32_t>(toRowGroupNumber), &map);
-        reader->lazyLoadSeekToRowGroup(&map);
-        reader->lazyLoadSkip(costIndirectSkip);
-    } else {
+    if (ROW_INDEX_STRIDE == 0) {
+        // Orc can only have one RowGroup in each stipe
         reader->lazyLoadSkip(costDirectSkip);
+    } else {
+        static const uint64_t SEEK_TO_ROW_GROUP_COST = 4096;
+        uint64_t costIndirectSkip = toRow % ROW_INDEX_STRIDE;
+        uint64_t toRowGroupNumber = toRow / ROW_INDEX_STRIDE;
+        uint64_t fromRowGroupNumber = lazyLoadLastUsedRowInStripe / ROW_INDEX_STRIDE;
+
+        if ((fromRowGroupNumber != toRowGroupNumber) && (SEEK_TO_ROW_GROUP_COST + costIndirectSkip) < costDirectSkip) {
+            PositionProviderMap map;
+            getRowGroupPosition(static_cast<uint32_t>(toRowGroupNumber), &map);
+            reader->lazyLoadSeekToRowGroup(&map);
+            reader->lazyLoadSkip(costIndirectSkip);
+        } else {
+            reader->lazyLoadSkip(costDirectSkip);
+        }
     }
+
     lazyLoadLastUsedRowInStripe = toRow;
 }
 
