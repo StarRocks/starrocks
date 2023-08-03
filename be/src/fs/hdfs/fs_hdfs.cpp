@@ -68,6 +68,29 @@ public:
     int64_t getOpenTimeNs() const { return _open_time_ns; }
     const std::string& getPath() const { return _path; }
 
+    Status seek(int64_t offset) {
+        hdfsFS fs = getFS();
+        int ret = hdfsSeek(fs, _file, offset);
+        if (ret == -1) {
+            return Status::IOError(fmt::format("fail to hdfdSeek {}: {}", _path, get_hdfs_err_msg()));
+        }
+        return Status::OK();
+    }
+
+    Status ensureOpened() {
+        RETURN_IF_ERROR(getOrCreateFS());
+        RETURN_IF_ERROR(getOrCreateFile());
+        return Status::OK();
+    }
+
+    void close() {
+        if (_file != nullptr) {
+            hdfsFS fs = getFS();
+            hdfsCloseFile(fs, _file);
+            _file = nullptr;
+        }
+    }
+
 private:
     const FSOptions _options;
     std::string _path;
@@ -124,11 +147,11 @@ StatusOr<int64_t> HdfsInputStream::read(void* data, int64_t size) {
     if (UNLIKELY(size > std::numeric_limits<tSize>::max())) {
         size = std::numeric_limits<tSize>::max();
     }
-    auto st = _handle->getOrCreateFile();
-    if (!st.ok()) {
-        return st.status();
-    }
-    hdfsFile file = st.value();
+    // auto st = _handle->getOrCreateFile();
+    // if (!st.ok()) {
+    //     return st.status();
+    // }
+    // hdfsFile file = st.value();
 
     // tSize r = hdfsPread(_fs, file, _offset, data, static_cast<tSize>(size));
     // if (r == -1) {
@@ -137,41 +160,31 @@ StatusOr<int64_t> HdfsInputStream::read(void* data, int64_t size) {
     // _offset += r;
     // return r;
 
-    if (!_seek) {
-        int ret = hdfsSeek(_handle->getFS(), file, _offset);
-        if (ret == -1) {
-            return Status::IOError(fmt::format("fail to hdfdSeek {}: {}", _handle->getPath(), get_hdfs_err_msg()));
-        }
-        _seek = true;
-    }
+    RETURN_IF_ERROR(_handle->ensureOpened());
+    RETURN_IF_ERROR(_handle->seek(_offset));
 
     int64_t now = 0;
     uint8_t* buf = static_cast<uint8_t*>(data);
     const int retry = 3;
+
     while (now < size) {
         tSize r = 0;
         for (int i = 0; i < (retry + 1); i++) {
-            try {
-                r = hdfsRead(_handle->getFS(), file, buf + now, size - now);
-                break;
-            } catch (const std::exception& e) {
-                if (i == retry) {
-                    r = -1;
-                    errno = EINTERNAL;
-                    break;
-                }
+            r = hdfsRead(_handle->getFS(), _handle->getFile(), buf + now, size - now);
+            // if (i == 0) r = -1;
+            if (r != -1) break;
+            if (i == retry) {
+                return Status::IOError(fmt::format("fail to hdfsRead {}: {}", _handle->getPath(), get_hdfs_err_msg()));
+            } else {
+                _handle->close();
+                RETURN_IF_ERROR(_handle->ensureOpened());
+                RETURN_IF_ERROR(_handle->seek(_offset));
             }
         }
         if (r == 0) break;
-        if (r == -1) {
-            if (errno == EINTR) {
-                continue;
-            }
-            return Status::IOError(fmt::format("fail to hdfsRead {}: {}", _handle->getPath(), get_hdfs_err_msg()));
-        }
         now += r;
+        _offset += r;
     }
-    _offset += now;
     return now;
 }
 
