@@ -182,4 +182,45 @@ public class ProfileManager {
             readLock.unlock();
         }
     }
+<<<<<<< HEAD
+=======
+
+    public ProfileElement getProfileElement(String queryId) {
+        readLock.lock();
+        try {
+            return profileMap.get(queryId);
+        } finally {
+            readLock.unlock();
+        }
+    }
+
+    public List<ProfileElement> getAllProfileElements() {
+        List<ProfileElement> result = Lists.newArrayList();
+        readLock.lock();
+        try {
+            result.addAll(profileMap.values());
+        } finally {
+            readLock.unlock();
+        }
+        return result;
+    }
+
+    public long getQueryProfileCount() {
+        readLock.lock();
+        try {
+            return profileMap.size();
+        } finally {
+            readLock.unlock();
+        }
+    }
+
+    public long getLoadProfileCount() {
+        readLock.lock();
+        try {
+            return loadProfileMap.size();
+        } finally {
+            readLock.unlock();
+        }
+    }
+>>>>>>> 7299e5c95c ([Enhancement] Add FE memory related metrics (#28184))
 }

@@ -425,7 +425,20 @@ public class StreamLoadManager {
         return (long) idToStreamLoadTask.size() + (long) dbToLabelToStreamLoadTask.size();
     }
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/load/streamload/StreamLoadManager.java
     public static StreamLoadManager loadStreamLoadManager(DataInput in) throws IOException {
+=======
+    public long getStreamLoadTaskCount() {
+        return idToStreamLoadTask.size();
+    }
+
+    // for ut
+    public Map<String, StreamLoadTask> getIdToStreamLoadTask() {
+        return idToStreamLoadTask;
+    }
+
+    public static StreamLoadMgr loadStreamLoadManager(DataInput in) throws IOException {
+>>>>>>> 7299e5c95c ([Enhancement] Add FE memory related metrics (#28184)):fe/fe-core/src/main/java/com/starrocks/load/streamload/StreamLoadMgr.java
         int size = in.readInt();
         long currentMs = System.currentTimeMillis();
         StreamLoadManager streamLoadManager = new StreamLoadManager();
