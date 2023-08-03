@@ -37,6 +37,8 @@ class RuntimeFilterProbeCollector;
 
 struct HdfsScanStats {
     int64_t raw_rows_read = 0;
+    // late materialization
+    int64_t skip_read_rows = 0;
     int64_t num_rows_read = 0;
     int64_t io_ns = 0;
     int64_t io_count = 0;
@@ -60,8 +62,11 @@ struct HdfsScanStats {
     int64_t group_chunk_read_ns = 0;
     int64_t group_dict_filter_ns = 0;
     int64_t group_dict_decode_ns = 0;
-    // late materialization
-    int64_t skip_read_rows = 0;
+
+    // page statistics
+    bool has_page_statistics = false;
+    // page skip
+    int64_t page_skip = 0;
 
     // ORC only!
     int64_t delete_build_ns = 0;
@@ -73,6 +78,7 @@ class HdfsParquetProfile;
 struct HdfsScanProfile {
     RuntimeProfile* runtime_profile = nullptr;
     RuntimeProfile::Counter* rows_read_counter = nullptr;
+    RuntimeProfile::Counter* rows_skip_counter = nullptr;
     RuntimeProfile::Counter* scan_ranges_counter = nullptr;
 
     RuntimeProfile::Counter* reader_init_timer = nullptr;
