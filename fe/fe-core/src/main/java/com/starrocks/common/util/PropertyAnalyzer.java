@@ -35,6 +35,7 @@
 package com.starrocks.common.util;
 
 import com.clearspring.analytics.util.Lists;
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
@@ -409,9 +410,10 @@ public class PropertyAnalyzer {
             }
         } else {
             if (replicationNum > backendIds.size()) {
-                throw new AnalysisException("Replication num should be less than the number of available BE nodes. "
-                        + "Replication num is " + replicationNum + " available BE nodes is " + backendIds.size() +
-                        ", You can change this default by setting the replication_num table properties.");
+                throw new AnalysisException("Table replication num should be less than " +
+                        "of equal to the number of available BE nodes. "
+                        + "You can change this default by setting the replication_num table properties. "
+                        + "Current alive backend is [" + Joiner.on(",").join(backendIds) + "].");
             }
         }
     }
