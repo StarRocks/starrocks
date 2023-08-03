@@ -24,6 +24,7 @@ package com.starrocks.leader;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.alter.AlterJobV2.JobType;
 import com.starrocks.catalog.Column;
@@ -915,7 +916,7 @@ public class LeaderImpl {
                     columnMeta.setComment(column.getComment());
                     rangePartitionDesc.addToColumns(columnMeta);
                 }
-                Map<Long, Range<PartitionKey>> ranges = rangePartitionInfo.getIdToRange(false);
+                Map<Long, Range<PartitionKey>> ranges = Maps.newHashMap(rangePartitionInfo.getIdToRange(false));
                 Map<Long, Range<PartitionKey>> tempRanges = rangePartitionInfo.getIdToRange(true);
                 ranges.putAll(tempRanges);
                 for (Map.Entry<Long, Range<PartitionKey>> range : ranges.entrySet()) {
