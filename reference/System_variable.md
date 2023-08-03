@@ -387,6 +387,14 @@ SELECT /*+ SET_VAR
 
   而 scan 实例的数量决定了上层其他执行节点，如聚合节点，join 节点的数量。因此相当于增加了整个查询计划执行的并发度。修改该参数会对大查询效率提升有帮助，但较大数值会消耗更多的机器资源，如CPU、内存、磁盘I/O。
 
+* partial_update_mode (3.1 及以后)
+
+  控制部分更新的模式，支持取值为：
+  * `auto`（默认值），表示由系统通过分析更新语句以及其涉及的列，自动判断执行部分更新时使用的模式。
+  * `column`，指定使用列模式执行部分更新，比较适用于涉及少数列并且大量行的部分列更新场景。
+
+  详细信息，请参见[UPDATE](../sql-reference/sql-statements/data-manipulation/UPDATE.md#列模式的部分更新自-31)。
+
 * performance_schema
 
   用于兼容 8.0.16 及以上版本的 MySQL JDBC。无实际作用。
