@@ -676,7 +676,8 @@ public class SharedDataStorageVolumeMgrTest {
 
         in = new ByteArrayInputStream(out.toByteArray());
         dis = new DataInputStream(in);
-        StorageVolumeMgr svm2 = StorageVolumeMgr.read(dis);
+        StorageVolumeMgr svm2 = new SharedDataStorageVolumeMgr();
+        svm2.load(dis);
         Assert.assertEquals(svId, svm2.getDefaultStorageVolumeId());
         Assert.assertEquals(storageVolumeToDbs, svm2.storageVolumeToDbs);
         Assert.assertEquals(storageVolumeToTables, svm2.storageVolumeToTables);

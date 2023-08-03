@@ -1861,7 +1861,7 @@ public class GlobalStateMgr {
     }
 
     public long loadStorageVolumes(DataInputStream in, long checksum) throws IOException {
-        storageVolumeMgr = StorageVolumeMgr.read(in);
+        storageVolumeMgr.load(in);
         return checksum;
     }
 

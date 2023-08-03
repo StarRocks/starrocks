@@ -297,9 +297,14 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         return checksum;
     }
 
-    public static StorageVolumeMgr read(DataInput in) throws IOException {
+    public void load(DataInput in) throws IOException {
         String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, StorageVolumeMgr.class);
+        StorageVolumeMgr data = GsonUtils.GSON.fromJson(json, StorageVolumeMgr.class);
+        this.storageVolumeToDbs = data.storageVolumeToDbs;
+        this.storageVolumeToTables = data.storageVolumeToTables;
+        this.defaultStorageVolumeId = data.defaultStorageVolumeId;
+        this.dbToStorageVolume = data.dbToStorageVolume;
+        this.tableToStorageVolume = data.tableToStorageVolume;
     }
 
     @Override
