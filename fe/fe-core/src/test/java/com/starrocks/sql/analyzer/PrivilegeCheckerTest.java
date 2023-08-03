@@ -58,7 +58,6 @@ import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeMgr;

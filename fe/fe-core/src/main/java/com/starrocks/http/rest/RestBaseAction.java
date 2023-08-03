@@ -42,9 +42,7 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseAction;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
-import com.starrocks.http.HttpConnectContext;
 import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.http.UnauthorizedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
@@ -81,6 +79,14 @@ public class RestBaseAction extends BaseAction {
         } catch (DdlException e) {
             LOG.warn("fail to process url: {}", request.getRequest().uri(), e);
             sendResult(request, response, new RestBaseResult(e.getMessage()));
+        } catch (Exception e) {
+            LOG.warn("fail to process url: {}", request.getRequest().uri(), e);
+            String msg = e.getMessage();
+            if (msg == null) {
+                msg = e.toString();
+            }
+            response.appendContent(new RestBaseResult(msg).toJson());
+            writeResponse(request, response, HttpResponseStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
