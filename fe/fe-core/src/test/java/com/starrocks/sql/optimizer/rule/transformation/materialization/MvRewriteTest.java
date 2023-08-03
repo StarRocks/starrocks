@@ -1406,4 +1406,49 @@ public class MvRewriteTest extends MvRewriteTestBase {
         PlanTestBase.assertContains(plan, "mv_with_partition_predicate_1");
         starRocksAssert.dropMaterializedView("mv_with_partition_predicate_1");
     }
+
+    @Test
+    public void testPartitionPrune1() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE test_partition_tbl1 (\n" +
+                "                            k1 date,\n" +
+                "                            v1 INT,\n" +
+                "                            v2 INT)\n" +
+                "                        DUPLICATE KEY(k1)\n" +
+                "                        PARTITION BY RANGE(k1)\n" +
+                "                        (\n" +
+                "                        PARTITION p1 VALUES LESS THAN ('2020-01-01'),\n" +
+                "                        PARTITION p2 VALUES LESS THAN ('2020-02-01'),\n" +
+                "                        PARTITION p3 VALUES LESS THAN ('2020-03-01'),\n" +
+                "                        PARTITION p4 VALUES LESS THAN ('2020-04-01'),\n" +
+                "                        PARTITION p5 VALUES LESS THAN ('2020-05-01'),\n" +
+                "                        PARTITION p6 VALUES LESS THAN ('2020-06-01')\n" +
+                "                        )\n" +
+                "                        DISTRIBUTED BY HASH(k1);");
+        cluster.runSql("test", "insert into test_partition_tbl1 values (\"2019-01-01\",1,1),(\"2019-01-01\",1,2),(\"2019-01-01\",2,1),(\"2019-01-01\",2,2),\n" +
+                "                                              (\"2020-01-11\",1,1),(\"2020-01-11\",1,2),(\"2020-01-11\",2,1),(\"2020-01-11\",2,2),\n" +
+                "                                              (\"2020-02-11\",1,1),(\"2020-02-11\",1,2),(\"2020-02-11\",2,1),(\"2020-02-11\",2,2);");
+        createAndRefreshMv("test", "test_partition_tbl_mv1",  "CREATE MATERIALIZED VIEW test_partition_tbl_mv1\n" +
+                "               PARTITION BY k1\n" +
+                "               DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                "               REFRESH ASYNC\n" +
+                "               PROPERTIES(\n" +
+                "               \"partition_ttl_number\"=\"4\",\n" +
+                "               \"auto_refresh_partitions_limit\"=\"4\"\n" +
+                "               )\n" +
+                "               AS SELECT k1, sum(v1) as sum_v1 FROM test_partition_tbl1 group by k1;");
+        {
+            String query = "select k1, sum(v1) FROM test_partition_tbl1 where k1>='2020-02-11' group by k1;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_partition_tbl_mv1");
+            PlanTestBase.assertContains(plan, "PREDICATES: 5: k1 >= '2020-02-11'\n" +
+                    "     partitions=4/6");
+        }
+        {
+            String query = "select k1, sum(v1) FROM test_partition_tbl1 where k1>='2020-02-01' group by k1;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_partition_tbl_mv1");
+            PlanTestBase.assertContains(plan, "partitions=4/6\n" +
+                    "     rollup: test_partition_tbl_mv1");
+        }
+    }
 }

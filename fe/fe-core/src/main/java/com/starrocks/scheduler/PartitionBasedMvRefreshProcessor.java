@@ -436,7 +436,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
             for (Map.Entry<Table, Set<String>> e : baseTableAndPartitionNames.entrySet()) {
                 Table baseTable = e.getKey();
-                if (!(baseTable.isOlapTableOrMaterializedView() || baseTable.isHiveTable()) || baseTable.isView()) {
+                if (!(baseTable.isNativeTableOrMaterializedView() || baseTable.isHiveTable()) || baseTable.isView()) {
                     throw new DmlException(
                             "update meta failed. only OlapTable or HiveTable is supported");
                 }
@@ -1391,7 +1391,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             Map<Table, Set<String>> baseTableAndPartitionNames) {
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> changedOlapTablePartitionInfos = Maps.newHashMap();
         for (Map.Entry<Table, Set<String>> entry : baseTableAndPartitionNames.entrySet()) {
-            if (entry.getKey() instanceof OlapTable) {
+            if (entry.getKey().isNativeTableOrMaterializedView()) {
                 Map<String, MaterializedView.BasePartitionInfo> partitionInfos = Maps.newHashMap();
                 OlapTable olapTable = (OlapTable) entry.getKey();
                 for (String partitionName : entry.getValue()) {
@@ -1416,7 +1416,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             Map<Table, Set<String>> baseTableAndPartitionNames) {
         Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> changedOlapTablePartitionInfos = Maps.newHashMap();
         for (Map.Entry<Table, Set<String>> entry : baseTableAndPartitionNames.entrySet()) {
-            if (entry.getKey() instanceof HiveTable) {
+            if (entry.getKey().isHiveTable()) {
                 HiveTable hiveTable = (HiveTable) entry.getKey();
                 Optional<BaseTableInfo> baseTableInfoOptional = materializedView.getBaseTableInfos().stream().filter(
                                 baseTableInfo -> baseTableInfo.getTableIdentifier().equals(hiveTable.getTableIdentifier())).

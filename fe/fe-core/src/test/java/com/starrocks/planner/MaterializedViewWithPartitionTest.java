@@ -175,7 +175,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     partitions=5/5");
 
         sql("select c1, c3, c2 from test_base_part where c2 < 3000 and c3 < 3000")
-                .contains("PREDICATES: 2: c2 < 3000\n" +
+                .contains("PREDICATES: 9: c2 <= 2999, 9: c2 >= 2000\n" +
                         "     partitions=5/5\n" +
                         "     rollup: test_base_part");
 
@@ -630,4 +630,58 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
             starRocksAssert.dropMaterializedView("partial_mv_13");
         }
     }
+
+    @Test
+    public void testPartitionPrune1() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+
+        String partial_mv_6 = "create materialized view partial_mv_6" +
+                " partition by c3" +
+                " distributed by hash(c1) as" +
+                " select c1, c3, c2 from test_base_part where c3 < 2000;";
+        starRocksAssert.withMaterializedView(partial_mv_6);
+        refreshMaterializedView(MATERIALIZED_DB_NAME, "partial_mv_6");
+
+        // test match
+        sql("select c1, c3, c2 from test_base_part where c3 < 2000")
+                .contains("TABLE: partial_mv_6\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     partitions=4/5\n" +
+                        "     rollup: partial_mv_6\n" +
+                        "     tabletRatio=8/8");
+
+        // test union all
+        sql("select c1, c3, c2 from test_base_part")
+                .contains("UNION")
+                .contains("TABLE: partial_mv_6\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     partitions=4/5\n" +
+                        "     rollup: partial_mv_6\n" +
+                        "     tabletRatio=8/8")
+                .contains("TABLE: test_base_part\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: (10: c3 >= 2000) OR (10: c3 IS NULL)\n" +
+                        "     partitions=2/5");
+
+        // test union all
+        sql("select c1, c3, c2 from test_base_part where c3 < 3000")
+                .contains("UNION")
+                .contains("TABLE: partial_mv_6\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     partitions=4/5\n" +
+                        "     rollup: partial_mv_6\n" +
+                        "     tabletRatio=8/8")
+                .contains("TABLE: test_base_part\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     partitions=1/5");
+
+        // test query delta
+        sql("select c1, c3, c2 from test_base_part where c3 < 1000")
+                .contains("partial_mv_6")
+                .contains("PREDICATES: 6: c3 <= 999\n" +
+                        "     partitions=3/5");
+
+        starRocksAssert.dropMaterializedView("partial_mv_6");
+    }
+
 }
