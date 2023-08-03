@@ -589,7 +589,7 @@ Status DataStreamRecvr::PipelineSenderQueue::try_to_build_chunk_meta(const PTran
     std::lock_guard<Mutex> l(_lock);
     wait_timer.stop();
 
-    if (!_chunk_meta.types.empty()) {
+    if (_is_chunk_meta_built) {
         return Status::OK();
     }
 
