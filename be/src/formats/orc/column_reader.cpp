@@ -615,16 +615,16 @@ Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col,
                 // set the correct size for vb
                 vb.resize(write_pos);
 
-//                for (int i = col_start; i < col_start + size; ++i, ++pos) {
-//                    nulls[i] = !cvb->notNull[pos];
-//                    if (cvb->notNull[pos]) {
-//                        size_t str_size = remove_trailing_spaces(data->data[pos], data->length[pos]);
-//                        vb.insert(vb.end(), data->data[pos], data->data[pos] + str_size);
-//                        vo.emplace_back(vb.size());
-//                    } else {
-//                        vo.emplace_back(vb.size());
-//                    }
-//                }
+                //                for (int i = col_start; i < col_start + size; ++i, ++pos) {
+                //                    nulls[i] = !cvb->notNull[pos];
+                //                    if (cvb->notNull[pos]) {
+                //                        size_t str_size = remove_trailing_spaces(data->data[pos], data->length[pos]);
+                //                        vb.insert(vb.end(), data->data[pos], data->data[pos] + str_size);
+                //                        vo.emplace_back(vb.size());
+                //                    } else {
+                //                        vo.emplace_back(vb.size());
+                //                    }
+                //                }
             } else {
                 size_t write_pos = vb.size();
                 for (int i = col_start; i < col_start + size; ++i, ++pos) {
@@ -640,15 +640,15 @@ Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col,
                 // set the correct size for vb
                 vb.resize(write_pos);
 
-//                for (int i = col_start; i < col_start + size; ++i, ++pos) {
-//                    nulls[i] = !cvb->notNull[pos];
-//                    if (cvb->notNull[pos]) {
-//                        vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
-//                        vo.emplace_back(vb.size());
-//                    } else {
-//                        vo.emplace_back(vb.size());
-//                    }
-//                }
+                //                for (int i = col_start; i < col_start + size; ++i, ++pos) {
+                //                    nulls[i] = !cvb->notNull[pos];
+                //                    if (cvb->notNull[pos]) {
+                //                        vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
+                //                        vo.emplace_back(vb.size());
+                //                    } else {
+                //                        vo.emplace_back(vb.size());
+                //                    }
+                //                }
             }
         } else {
             if (_type.type == TYPE_CHAR) {
@@ -663,11 +663,11 @@ Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col,
                 // set the correct size for vb
                 vb.resize(write_pos);
 
-//                for (int i = col_start; i < col_start + size; ++i, ++pos) {
-//                    size_t str_size = remove_trailing_spaces(data->data[pos], data->length[pos]);
-//                    vb.insert(vb.end(), data->data[pos], data->data[pos] + str_size);
-//                    vo.emplace_back(vb.size());
-//                }
+                //                for (int i = col_start; i < col_start + size; ++i, ++pos) {
+                //                    size_t str_size = remove_trailing_spaces(data->data[pos], data->length[pos]);
+                //                    vb.insert(vb.end(), data->data[pos], data->data[pos] + str_size);
+                //                    vo.emplace_back(vb.size());
+                //                }
             } else {
                 size_t write_pos = vb.size();
                 for (size_t i = col_start; i < col_start + size; ++i, ++pos) {
@@ -678,10 +678,10 @@ Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col,
                 // set the correct size for vb
                 vb.resize(write_pos);
 
-//                for (int i = col_start; i < col_start + size; ++i, ++pos) {
-//                    vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
-//                    vo.emplace_back(vb.size());
-//                }
+                //                for (int i = col_start; i < col_start + size; ++i, ++pos) {
+                //                    vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
+                //                    vo.emplace_back(vb.size());
+                //                }
             }
         }
 
@@ -749,11 +749,11 @@ Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col,
             // set the correct size for vb
             vb.resize(write_pos);
 
-//            for (int i = col_start; i < col_start + size; ++i, ++pos) {
-//                size_t str_size = remove_trailing_spaces(data->data[pos], data->length[pos]);
-//                vb.insert(vb.end(), data->data[pos], data->data[pos] + str_size);
-//                vo.emplace_back(vb.size());
-//            }
+            //            for (int i = col_start; i < col_start + size; ++i, ++pos) {
+            //                size_t str_size = remove_trailing_spaces(data->data[pos], data->length[pos]);
+            //                vb.insert(vb.end(), data->data[pos], data->data[pos] + str_size);
+            //                vo.emplace_back(vb.size());
+            //            }
         } else {
             size_t write_pos = vb.size();
             for (int i = col_start; i < col_start + size; ++i, ++pos) {
@@ -764,10 +764,10 @@ Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col,
             // set the correct size for vb
             vb.resize(write_pos);
 
-//            for (int i = col_start; i < col_start + size; ++i, ++pos) {
-//                vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
-//                vo.emplace_back(vb.size());
-//            }
+            //            for (int i = col_start; i < col_start + size; ++i, ++pos) {
+            //                vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
+            //                vo.emplace_back(vb.size());
+            //            }
         }
 
         // col_start == 0 and from == 0 means it's at top level of fill chunk, not in the middle of array
