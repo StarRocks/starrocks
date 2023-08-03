@@ -138,6 +138,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     private KeysType mvKeysType = KeysType.DUP_KEYS;
     private final TableName targetTable;
 
+    public static String where_col_name = "__WHERE_PREDICATION";
     // If the process is replaying log, isReplay is true, otherwise is false,
     // avoid replay process error report, only in Rollup or MaterializedIndexMeta is true
     private boolean isReplay = false;
@@ -219,9 +220,14 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     public Map<String, Expr> parseDefineExprWithoutAnalyze(String originalSql) throws AnalysisException {
         Map<String, Expr> result = Maps.newHashMap();
         SelectList selectList = null;
+        SelectRelation select = null;
         QueryRelation queryRelation = queryStatement.getQueryRelation();
         if (queryRelation instanceof SelectRelation) {
-            selectList = ((SelectRelation) queryRelation).getSelectList();
+            select = (SelectRelation) queryRelation;
+            selectList = select.getSelectList();
+            if (select.hasWhereClause()) {
+                result.put(where_col_name, select.getWhereClause());
+            }
         }
         if (selectList == null) {
             LOG.warn("parse defineExpr may not correctly for sql [{}] ", originalSql);

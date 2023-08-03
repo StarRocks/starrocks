@@ -396,7 +396,7 @@ public class MaterializedViewHandler extends AlterHandler {
             mvIndexMeta.setTargetTableId(targetTableId);
             mvIndexMeta.setTargetTableIndexId(targetOlapTable.getBaseIndexId());
             mvIndexMeta.setMetaIndexType(MaterializedIndexMeta.MetaIndexType.LOGICAL);
-            mvIndexMeta.setWhereClause(stmt.getWhereClause());
+            mvIndexMeta.setWhereClause(stmt.getWhereClause(), true);
 
             // colocate base table and target table.
             ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();

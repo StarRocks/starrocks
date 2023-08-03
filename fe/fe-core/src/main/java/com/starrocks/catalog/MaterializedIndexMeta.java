@@ -44,6 +44,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.OriginStatement;
+import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageType;
 
@@ -87,8 +88,9 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     @SerializedName(value = "targetTableIndexId")
     private long targetTableIndexId = 0;
 
-    @SerializedName(value = "whereCluase")
     private Expr whereClause = null;
+
+    private boolean whereClauseAnalyzed = false;
 
     public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
                                  short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
@@ -224,6 +226,9 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         if (indexMeta.whereClause != this.whereClause) {
             return false;
         }
+        if (indexMeta.whereClauseAnalyzed != this.whereClauseAnalyzed) {
+            return false;
+        }
         return true;
     }
 
@@ -235,12 +240,21 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         this.targetTableId = targetTableId;
     }
 
-    public void setWhereClause(Expr whereClause) {
+    public void setWhereClause(Expr whereClause, boolean whereClauseAnalyzed) {
         this.whereClause = whereClause;
+        this.whereClauseAnalyzed = whereClauseAnalyzed;
+    }
+
+    public void setWhereClauseAnalyzed(boolean whereClauseAnalyzed) {
+        this.whereClauseAnalyzed = whereClauseAnalyzed;
     }
 
     public Expr getWhereClause() {
         return whereClause;
+    }
+
+    public boolean isWhereClauseAnalyzed() {
+        return whereClauseAnalyzed;
     }
 
     public MetaIndexType getMetaIndexType() {
@@ -276,6 +290,10 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
             return;
         }
         Map<String, Expr> columnNameToDefineExpr = MetaUtils.parseColumnNameToDefineExpr(defineStmt);
+        if (columnNameToDefineExpr.containsKey(CreateMaterializedViewStmt.where_col_name)) {
+            whereClause = columnNameToDefineExpr.get(CreateMaterializedViewStmt.where_col_name);
+            setWhereClause(whereClause, false);
+        }
         setColumnsDefineExpr(columnNameToDefineExpr);
     }
 }

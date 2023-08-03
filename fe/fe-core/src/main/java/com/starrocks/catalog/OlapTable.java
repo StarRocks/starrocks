@@ -487,7 +487,7 @@ public class OlapTable extends Table {
         MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(indexId, schema, schemaVersion,
                 schemaHash, shortKeyColumnCount, storageType, keysType, origStmt, sortColumns);
         if (whereClause != null) {
-            indexMeta.setWhereClause(whereClause);
+            indexMeta.setWhereClause(whereClause, true);
         }
         addMaterializedIndexMeta(indexName, indexMeta);
     }

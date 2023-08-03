@@ -44,6 +44,7 @@ import com.google.common.collect.Range;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -74,7 +75,15 @@ import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.Load;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzeState;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
+import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.RelationFields;
+import com.starrocks.sql.analyzer.RelationId;
+import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
@@ -326,7 +335,23 @@ public class OlapTableSink extends DataSink {
             TOlapTableIndexSchema indexSchema = new TOlapTableIndexSchema(pair.getKey(), columns,
                     indexMeta.getSchemaHash());
             if (indexMeta.getWhereClause() != null) {
-                indexSchema.setWhere_clause(indexMeta.getWhereClause().treeToThrift());
+                if (indexMeta.isWhereClauseAnalyzed()) {
+                    indexSchema.setWhere_clause(indexMeta.getWhereClause().treeToThrift());
+                } else {
+                    String dbName = MetaUtils.getDatabase(dbId).getFullName();
+                    ExpressionAnalyzer.analyzeExpression(indexMeta.getWhereClause(), new AnalyzeState(),
+                            new Scope(RelationId.anonymous(),
+                                    new RelationFields(table.getBaseSchema()
+                                            .stream()
+                                            .map(col
+                                                    -> new Field(col.getName(), col.getType(),
+                                                    new TableName(dbName, table.getName()), null))
+                                            .collect(Collectors.toList()))),
+                            new ConnectContext());
+                    indexMeta.setWhereClauseAnalyzed(true);
+                    indexSchema.setWhere_clause(indexMeta.getWhereClause().treeToThrift());
+                }
+
             }
             schemaParam.addToIndexes(indexSchema);
         }
