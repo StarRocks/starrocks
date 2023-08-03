@@ -193,8 +193,8 @@ public class ExecuteSqlAction extends RestBaseAction {
             throw new StarRocksHttpException(BAD_REQUEST, "\"query can not be empty\"");
         }
 
-        if (requestBody.disablePrintConnectionId) {
-            context.set_disable_print_connection_id(true);
+        if (requestBody.onlyOutputResultRaw) {
+            context.setonlyOutputResultRaw(true);
         }
 
         return requestBody;
@@ -309,6 +309,6 @@ public class ExecuteSqlAction extends RestBaseAction {
     private static class SqlRequest {
         public String query;
         public Map<String, String> sessionVariables;
-        public boolean disablePrintConnectionId;
+        public boolean onlyOutputResultRaw;
     }
 }

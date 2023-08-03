@@ -59,8 +59,8 @@ public class HttpConnectContext extends ConnectContext {
     // when connection is established
     private boolean initialized;
 
-    // print connectionId or not, Mainly for ease of testing
-    private boolean disablePrintConnectionId;
+    // used for test. only output reuslt raws
+    private boolean onlyOutputResultRaw;
 
     private volatile ChannelHandlerContext nettyChannel;
 
@@ -76,7 +76,7 @@ public class HttpConnectContext extends ConnectContext {
         super();
         sendDate = false;
         initialized = false;
-        disablePrintConnectionId = false;
+        onlyOutputResultRaw = false;
     }
 
     public TResultSinkFormatType getResultSinkFormatType() {
@@ -128,14 +128,6 @@ public class HttpConnectContext extends ConnectContext {
         this.statement = statement;
     }
 
-    public boolean get_disable_print_connection_id() {
-        return disablePrintConnectionId;
-    }
-
-    public void set_disable_print_connection_id(boolean disablePrintConnectionId) {
-        this.disablePrintConnectionId = disablePrintConnectionId;
-    }
-
     public String getRemoteAddres() {
         return remoteAddres;
     }
@@ -146,6 +138,14 @@ public class HttpConnectContext extends ConnectContext {
 
     public void setKeepAlive(boolean keepAlive) {
         isKeepAlive = keepAlive;
+    }
+
+    public boolean isonlyOutputResultRaw() {
+        return onlyOutputResultRaw;
+    }
+
+    public void setonlyOutputResultRaw(boolean onlyOutputResultRaw) {
+        this.onlyOutputResultRaw = onlyOutputResultRaw;
     }
 
     @Override

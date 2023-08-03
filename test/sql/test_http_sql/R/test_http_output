@@ -73,7 +73,7 @@ INSERT INTO duplicate_table_with_null VALUES("2020-01-26",
                     29.628000001);
 -- result:
 -- !result
-shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "select * from duplicate_table_with_null order by k6;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
+shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "select * from duplicate_table_with_null order by k6;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json" 
 -- result:
 0
 {"meta":[{"name":"k1","type":"date"},{"name":"k2","type":"datetime"},{"name":"k3","type":"varchar"},{"name":"k4","type":"varchar"},{"name":"k5","type":"boolean"},{"name":"k6","type":"tinyint(4)"},{"name":"k7","type":"smallint(6)"},{"name":"k8","type":"int(11)"},{"name":"k9","type":"bigint(20)"},{"name":"k10","type":"largeint(40)"},{"name":"k11","type":"float"},{"name":"k12","type":"double"},{"name":"k13","type":"decimal128(27, 9)"}]}
@@ -81,7 +81,6 @@ shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/s
 {"data":["2020-01-25","2022-12-26 09:06:09","anhui","anhui",0,-127,1,-2147450879,-9223372036854743039,"-18446744073709518847",3273.800048828125,324.55,"29.628000000"]}
 {"data":["2020-01-26","2022-12-26 09:06:10","beijin","beijin",1,-126,2,-2147450878,-9223372036854743038,"-18446744073709518846",3273.89990234375,324.56,"29.628000001"]}
 {"data":["2020-01-27","2022-12-26 09:06:11","chengdu","chengdu",1,-125,3,-2147450877,-9223372036854743037,"-18446744073709518845",3274.10009765625,324.57,"29.628000002"]}
-{"statistics":{"scanRows":4,"scanBytes":428,"returnRows":4}}
 -- !result
 sync;
 -- result:
@@ -146,7 +145,7 @@ shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/s
 sync;
 -- result:
 -- !result
-shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "select from duplicate_table_with_null;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
+shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "select from duplicate_table_with_null;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json" 
 -- result:
 0
 {"status":"FAILED","code":"1","msg":"Getting syntax error at line 1, column 7. Detail message: Unexpected input \u0027from\u0027, the most similar input is {a legal identifier}.","message":"Getting syntax error at line 1, column 7. Detail message: Unexpected input \u0027from\u0027, the most similar input is {a legal identifier}."}
@@ -154,7 +153,7 @@ shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/s
 sync;
 -- result:
 -- !result
-shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "select * from duplicate_table_with_null;select 1 from duplicate_table_with_null;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
+shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "select * from duplicate_table_with_null;select 1 from duplicate_table_with_null;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json" 
 -- result:
 0
 {"status":"FAILED","code":"1","msg":"http query does not support execute multiple query","message":"http query does not support execute multiple query"}
@@ -162,7 +161,7 @@ shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/s
 sync;
 -- result:
 -- !result
-shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "set profile_timeout =60", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
+shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "set profile_timeout =60", "onlyOutputResultRaw":true}' --header "Content-Type: application/json" 
 -- result:
 0
 {"status":"FAILED","code":"1","msg":"http query only support SELECT, SHOW, EXPLAIN, DESC, KILL statement","message":"http query only support SELECT, SHOW, EXPLAIN, DESC, KILL statement"}
@@ -170,7 +169,7 @@ shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/s
 sync;
 -- result:
 -- !result
-shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "kill 314159265432222;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
+shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "kill 314159265432222;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json" 
 -- result:
 0
 {"status":"FAILED","code":"1","msg":"Unknown thread id: 314159265432222","message":"Unknown thread id: 314159265432222"}

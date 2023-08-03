@@ -66,11 +66,11 @@ INSERT INTO duplicate_table_with_null VALUES("2020-01-26",
                     29.628000001);
 
 -- a normal select with catalog and database
-shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "select * from duplicate_table_with_null order by k6;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
+shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "select * from duplicate_table_with_null order by k6;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json" 
 sync;
 
 -- support catalog/sql without database
---shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/sql' -u 'root:' -d '{"query": "select 1 from ${db[0]}.duplicate_table_with_null limit 1;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
+--shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/sql' -u 'root:' -d '{"query": "select 1 from ${db[0]}.duplicate_table_with_null limit 1;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json" 
 --sync;
 
 -- support show
@@ -105,17 +105,17 @@ shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/s
 sync;
 
 -- parse error
-shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "select from duplicate_table_with_null;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
+shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "select from duplicate_table_with_null;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json" 
 sync;
 
 -- mutil query
-shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "select * from duplicate_table_with_null;select 1 from duplicate_table_with_null;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
+shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "select * from duplicate_table_with_null;select 1 from duplicate_table_with_null;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json" 
 sync;
 
 -- query not support yet
-shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "set profile_timeout =60", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
+shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "set profile_timeout =60", "onlyOutputResultRaw":true}' --header "Content-Type: application/json" 
 sync;
 
 -- kill a random connection
-shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "kill 314159265432222;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
+shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "kill 314159265432222;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json" 
 sync;
