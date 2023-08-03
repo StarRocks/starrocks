@@ -22,6 +22,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import static java.util.Objects.requireNonNull;
 
+// ConnectorService is a wrapper class of connector interface.
+// For now, it maintains information schema and query-level metadata cache.
 public class ConnectorService {
     private final Connector connector;
     private final ConnectorMetadata informationSchemaMetadata;

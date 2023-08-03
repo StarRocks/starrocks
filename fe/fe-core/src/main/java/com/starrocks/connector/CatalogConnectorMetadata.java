@@ -59,8 +59,7 @@ import static com.starrocks.catalog.system.information.InfoSchemaDb.isInfoSchema
 import static java.util.Objects.requireNonNull;
 
 // CatalogConnectorMetadata provides a uniform interface to provide normal tables and information schema tables.
-// Most of its method implementations delegate to the wrapped metadata.
-// Only used for connector metadata of external catalog.
+// The database name/id is used to route request to specific metadata.
 public class CatalogConnectorMetadata implements ConnectorMetadata {
     private final ConnectorMetadata normal;
     private final ConnectorMetadata informationSchema;
