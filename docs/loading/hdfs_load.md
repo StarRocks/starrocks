@@ -267,7 +267,7 @@ Example 1: Query the results of load jobs executed on the `test_db` database. In
 SELECT * FROM information_schema.loads
 WHERE database_name = 'test_db'
 ORDER BY create_time DESC
-LIMIT 2\G;
+LIMIT 2\G
 ```
 
 The following results are returned:
@@ -327,7 +327,7 @@ Example 2: Query the result of the load job (whose label is `label_brokerload_un
 
 ```SQL
 SELECT * FROM information_schema.loads
-WHERE database_name = 'test_db' and label = 'label_brokerload_unqualifiedtest_82'\G;
+WHERE database_name = 'test_db' and label = 'label_brokerload_unqualifiedtest_82'\G
 ```
 
 The following result is returned:
