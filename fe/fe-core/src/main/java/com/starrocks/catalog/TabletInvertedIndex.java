@@ -783,6 +783,14 @@ public class TabletInvertedIndex {
         return replicaNumMap;
     }
 
+    public long getTabletCount() {
+        return this.tabletMetaMap.size();
+    }
+
+    public long getReplicaCount() {
+        return this.replicaMetaTable.size();
+    }
+
     // just for test
     public void clear() {
         writeLock();
