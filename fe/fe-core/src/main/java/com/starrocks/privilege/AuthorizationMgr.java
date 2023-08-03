@@ -1257,7 +1257,7 @@ public class AuthorizationMgr {
     }
 
     public boolean isBuiltinRole(String name) {
-        return PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_NAMES.contains(name);
+        return PrivilegeBuiltinConstants.BUILT_IN_ROLE_NAMES.contains(name);
     }
 
     public String getRoleComment(String name) {
