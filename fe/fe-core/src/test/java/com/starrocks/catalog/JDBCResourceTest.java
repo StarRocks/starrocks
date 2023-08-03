@@ -6,6 +6,7 @@ import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.persist.gson.GsonUtils;
 import org.junit.Assert;
 import org.junit.Before;
@@ -100,5 +101,16 @@ public class JDBCResourceTest {
         configs.put("xxx", "xxx");
         JDBCResource resource = new JDBCResource("jdbc_resource_test");
         resource.setProperties(configs);
+    }
+
+    @Test
+    public void testGetProcNodeData() throws Exception {
+        Map<String, String> configs = getMockConfigs();
+        JDBCResource resource = new JDBCResource("jdbc_resource_test");
+        resource.setProperties(configs);
+
+        BaseProcResult result = new BaseProcResult();
+        resource.getProcNodeData(result);
+        Assert.assertEquals(4, result.getRows().size()); // do not show password
     }
 }
