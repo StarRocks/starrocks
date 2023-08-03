@@ -3,7 +3,7 @@
 #
 # Please run this command from the git repo root directory to build:
 #   - Use artifact image to package runtime container:
-#     > DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=image --build-arg ARTIFACTIMAGE=ghcr.io/starrocks/starrocks/artifact-centos7:latest -f docker/dockerfiles/fe/fe-ubi.Dockerfile -t fe-ubi:latest .
+#     > DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=image --build-arg ARTIFACTIMAGE=starrocks/artifacts-centos7:latest -f docker/dockerfiles/fe/fe-ubi.Dockerfile -t fe-ubi:latest .
 #   - Use locally build artifacts to package runtime container:
 #     > DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=local --build-arg LOCAL_REPO_PATH=. -f docker/dockerfiles/fe/fe-ubi.Dockerfile -t fe-ubi:latest .
 #
@@ -12,7 +12,7 @@
 #   local: copy the artifacts from a local repo. Mainly used for local development and test.
 ARG ARTIFACT_SOURCE=image
 
-ARG ARTIFACTIMAGE=artifact:latest
+ARG ARTIFACTIMAGE=starrocks/artifacts-centos7:latest
 FROM ${ARTIFACTIMAGE} as artifacts-from-image
 
 # create a docker build stage that copy locally build artifacts

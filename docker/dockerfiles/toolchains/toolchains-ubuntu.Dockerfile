@@ -1,5 +1,5 @@
 # Build toolchains on ubuntu22.04, dev-env image can be built based on this image for ubuntu22
-#  DOCKER_BUILDKIT=1 docker build --rm=true -f docker/dockerfiles/toolchains/toolchains-ubuntu.Dockerfile -t starrocks/toolchains-ubuntu:20230306 docker/dockerfiles/toolchains/
+#  DOCKER_BUILDKIT=1 docker build --rm=true -f docker/dockerfiles/toolchains/toolchains-ubuntu.Dockerfile -t toolchains-ubuntu:latest docker/dockerfiles/toolchains/
 
 FROM ubuntu:22.04
 

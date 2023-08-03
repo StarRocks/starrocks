@@ -11,7 +11,7 @@
 #   local: copy the artifacts from a local repo. Mainly used for local development and test.
 ARG ARTIFACT_SOURCE=image
 
-ARG ARTIFACTIMAGE=artifact:latest
+ARG ARTIFACTIMAGE=starrocks/artifacts-ubuntu:latest
 FROM ${ARTIFACTIMAGE} as artifacts-from-image
 
 # create a docker build stage that copy locally build artifacts
