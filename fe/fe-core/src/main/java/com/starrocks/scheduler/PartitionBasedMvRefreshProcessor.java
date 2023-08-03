@@ -251,6 +251,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 mvContext.setExecPlan(execPlan);
             } catch (Exception e) {
                 LOG.warn("Refresh mv {} failed: {}", materializedView.getName(), e);
+                throw e;
             } finally {
                 database.readUnlock();
             }
@@ -461,6 +462,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             }
         } catch (Exception e) {
             LOG.warn("update final meta failed after mv refreshed:", e);
+            throw e;
         } finally {
             database.writeUnlock();
         }
@@ -1138,6 +1140,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             executor.handleDMLStmtWithProfile(execPlan, insertStmt, beginTimeInNanoSecond);
         } catch (Exception e) {
             LOG.warn("refresh materialized view {} failed: {}", materializedView.getName(), e);
+            throw e;
         } finally {
             auditAfterExec(mvContext, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
         }
