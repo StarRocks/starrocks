@@ -36,13 +36,14 @@ public class  PrivilegeBuiltinConstants {
     public static final long PUBLIC_ROLE_ID = -5;
 
     public static final Set<String> BUILT_IN_ROLE_NAMES =
-            new HashSet<>(Arrays.asList("root", "db_admin", "user_admin", "cluster_admin", "public"));
+            new HashSet<>(Arrays.asList(ROOT_ROLE_NAME, DB_ADMIN_ROLE_NAME, CLUSTER_ADMIN_ROLE_NAME,
+                    USER_ADMIN_ROLE_NAME, PUBLIC_ROLE_NAME));
 
     public static final Set<Long> IMMUTABLE_BUILT_IN_ROLE_IDS = new HashSet<>(Arrays.asList(
             ROOT_ROLE_ID, DB_ADMIN_ROLE_ID, CLUSTER_ADMIN_ROLE_ID, USER_ADMIN_ROLE_ID));
 
     public static final Set<String> IMMUTABLE_BUILT_IN_ROLE_NAMES = new HashSet<>(Arrays.asList(
-            ROOT_ROLE_NAME, DB_ADMIN_ROLE_NAME, CLUSTER_ADMIN_ROLE_NAME, USER_ADMIN_ROLE_NAME, PUBLIC_ROLE_NAME));
+            ROOT_ROLE_NAME, DB_ADMIN_ROLE_NAME, CLUSTER_ADMIN_ROLE_NAME, USER_ADMIN_ROLE_NAME));
 
     public static final long ALL_CATALOGS_ID = -1; // -1 represent all catalogs
 
