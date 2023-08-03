@@ -62,6 +62,14 @@ struct HdfsScanStats {
     int64_t group_dict_decode_ns = 0;
     // late materialization
     int64_t skip_read_rows = 0;
+<<<<<<< HEAD
+=======
+    // io coalesce
+    int64_t group_active_lazy_coalesce_together = 0;
+    int64_t group_active_lazy_coalesce_seperately = 0;
+    // page statistics
+    bool has_page_statistics = false;
+>>>>>>> 6a6d9a676f ([Enhancement] support check page statistics from profile (#28524))
 
     // ORC only!
     int64_t delete_build_ns = 0;
