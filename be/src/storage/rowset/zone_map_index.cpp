@@ -62,7 +62,7 @@ struct ZoneMapDatumBase {
 };
 
 template <LogicalType type>
-struct ZoneMapDatum : public ZoneMapDatumBase<type> {};
+struct ZoneMapDatum final : public ZoneMapDatumBase<type> {};
 
 template <>
 struct ZoneMapDatum<TYPE_DECIMAL32> : public ZoneMapDatumBase<TYPE_DECIMAL32> {
@@ -289,7 +289,7 @@ StatusOr<bool> ZoneMapIndexReader::load(const IndexReadOptions& opts, const Zone
         Status st = _do_load(opts, meta);
         if (st.ok()) {
             MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
-                                     _mem_usage() - sizeof(ZoneMapIndexReader));
+                                     _mem_usage() - sizeof(ZoneMapIndexReader))
         } else {
             _reset();
         }
