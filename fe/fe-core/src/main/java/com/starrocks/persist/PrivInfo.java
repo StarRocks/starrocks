@@ -196,7 +196,7 @@ public class PrivInfo implements Writable {
         }
 
         if (in.readBoolean()) {
-            if (GlobalStateMgr.getCurrentStateStarRocksJournalVersion() >= StarRocksFEMetaVersion.VERSION_2) {
+            if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() >= StarRocksFEMetaVersion.VERSION_2) {
                 passwd = Password.read(in);
             } else {
                 int passwordLen = in.readInt();

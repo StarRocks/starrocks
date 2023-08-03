@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.Type;
@@ -37,6 +38,28 @@ public class ComplexFunctionCallTransformer {
         } else if (functionName.equalsIgnoreCase("json_extract_scalar")) {
             return new CastExpr(Type.VARCHAR, new FunctionCallExpr("json_query",
                     ImmutableList.of(args[0], args[1])));
+        } else if (functionName.equalsIgnoreCase("json_array_get")) {
+            if (args.length != 2) {
+                throw new RuntimeException("json_array_get function must have 2 arguments");
+            }
+            Expr leftChild = args[0];
+
+            if (args[0] instanceof StringLiteral) {
+                leftChild = new FunctionCallExpr("parse_json", ImmutableList.of(args[0]));
+            }
+            Expr rightChild = new StringLiteral("$.[" + ((IntLiteral) args[1]).getValue() + "]");
+            return new FunctionCallExpr("json_query", ImmutableList.of(leftChild, rightChild));
+        } else if (functionName.equalsIgnoreCase("md5")) {
+            Expr child = args[0];
+            return new FunctionCallExpr("md5", ImmutableList.of(new FunctionCallExpr("from_binary",
+                    ImmutableList.of(child, new StringLiteral("utf8")))));
+        } else if (functionName.equalsIgnoreCase("sha256")) {
+            Expr child = args[0];
+            return new FunctionCallExpr("sha2", ImmutableList.of(new FunctionCallExpr("from_binary",
+                    ImmutableList.of(child, new StringLiteral("utf8"))), new IntLiteral(256)));
+        } else if (functionName.equalsIgnoreCase("last_day_of_month")) {
+            Expr child = args[0];
+            return new FunctionCallExpr("last_day", ImmutableList.of(child, new StringLiteral("month")));
         }
         return null;
     }

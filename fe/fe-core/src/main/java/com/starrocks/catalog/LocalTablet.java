@@ -349,22 +349,6 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         }
     }
 
-    @Deprecated
-    public Replica deleteReplicaById(long replicaId) {
-        synchronized (replicas) {
-            Iterator<Replica> iterator = replicas.iterator();
-            while (iterator.hasNext()) {
-                Replica replica = iterator.next();
-                if (replica.getId() == replicaId) {
-                    LOG.info("delete replica[" + replica.getId() + "]");
-                    iterator.remove();
-                    return replica;
-                }
-            }
-            return null;
-        }
-    }
-
     // for test,
     // and for some replay cases
     public void clearReplica() {
@@ -783,8 +767,8 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     public String getReplicaInfos() {
         StringBuilder sb = new StringBuilder();
         for (Replica replica : replicas) {
-            sb.append(String.format("%d:%d/%d/%d,", replica.getBackendId(), replica.getVersion(),
-                    replica.getLastFailedVersion(), replica.getLastSuccessVersion()));
+            sb.append(String.format("%d:%d/%d/%d/%d,", replica.getBackendId(), replica.getVersion(),
+                    replica.getLastFailedVersion(), replica.getLastSuccessVersion(), replica.getMinReadableVersion()));
         }
         return sb.toString();
     }

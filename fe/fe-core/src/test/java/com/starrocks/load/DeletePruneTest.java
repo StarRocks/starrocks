@@ -29,7 +29,7 @@ import java.util.List;
 public class DeletePruneTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
-    private static DeleteHandler deleteHandler;
+    private static DeleteMgr deleteHandler;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -38,7 +38,7 @@ public class DeletePruneTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
-        deleteHandler = new DeleteHandler();
+        deleteHandler = new DeleteMgr();
 
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE `test_delete` (\n" +

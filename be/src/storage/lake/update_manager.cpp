@@ -262,8 +262,8 @@ Status UpdateManager::_handle_index_op(Tablet* tablet, const TabletMetadata& met
     _index_cache.update_object_size(index_entry, index.memory_usage());
     if (!st.ok()) {
         _index_cache.remove(index_entry);
-        std::string msg = strings::Substitute("prepare_partial_update_states error: load primary index failed: $0",
-                                              st.to_string());
+        std::string msg =
+                strings::Substitute("get_rss_rowids_by_pk error: load primary index failed: $0", st.to_string());
         LOG(ERROR) << msg;
         return Status::InternalError(msg);
     }

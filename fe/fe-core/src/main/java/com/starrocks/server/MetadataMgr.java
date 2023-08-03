@@ -125,6 +125,10 @@ public class MetadataMgr {
         return ImmutableList.copyOf(tableNames.build());
     }
 
+    public Optional<Table> getTable(TableName tableName) {
+        return Optional.ofNullable(getTable(tableName.getCatalog(), tableName.getDb(), tableName.getTbl()));
+    }
+
     public List<String> listPartitionNames(String catalogName, String dbName, String tableName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<String> partitionNames = ImmutableSet.builder();

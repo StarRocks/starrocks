@@ -51,6 +51,18 @@ const TupleDescriptor* HiveDataSourceProvider::tuple_descriptor(RuntimeState* st
 HiveDataSource::HiveDataSource(const HiveDataSourceProvider* provider, const TScanRange& scan_range)
         : _provider(provider), _scan_range(scan_range.hdfs_scan_range) {}
 
+Status HiveDataSource::_check_all_slots_nullable() {
+    for (const auto* slot : _tuple_desc->slots()) {
+        if (!slot->is_nullable()) {
+            return Status::RuntimeError(fmt::format(
+                    "All columns must be nullable for external table. Column '{}' is not nullable, You can rebuild the"
+                    "external table and We strongly recommend that you use catalog to access external data.",
+                    slot->col_name()));
+        }
+    }
+    return Status::OK();
+}
+
 Status HiveDataSource::open(RuntimeState* state) {
     // right now we don't force user to set JAVA_HOME.
     // but when we access hdfs via JNI, we have to make sure JAVA_HOME is set,
@@ -71,6 +83,7 @@ Status HiveDataSource::open(RuntimeState* state) {
     if (_hive_table == nullptr) {
         return Status::RuntimeError("Invalid table type. Only hive/iceberg/hudi/delta lake/file table are supported");
     }
+    RETURN_IF_ERROR(_check_all_slots_nullable());
 
     _use_block_cache = config::block_cache_enable;
     if (state->query_options().__isset.use_scan_block_cache) {
@@ -233,6 +246,7 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 
     _profile.runtime_profile = _runtime_profile;
     _profile.rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
+    _profile.rows_skip_counter = ADD_COUNTER(_runtime_profile, "RowsSkip", TUnit::UNIT);
     _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
 
     _profile.reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
@@ -410,6 +424,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.fs = _pool.add(fs.release());
     scanner_params.path = native_file_path;
     scanner_params.file_size = _scan_range.file_length;
+    scanner_params.modification_time = _scan_range.modification_time;
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;
     scanner_params.materialize_index_in_chunk = _materialize_index_in_chunk;
@@ -461,6 +476,11 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     Status st = scanner->open(state);
     if (!st.ok()) {
         auto msg = fmt::format("file = {}", native_file_path);
+        // After catching the AWS 404 file not found error and returning it to the FE,
+        // the FE will refresh the file information of table and re-execute the SQL operation.
+        if (st.is_io_error() && st.message().starts_with("code=404")) {
+            st = Status::RemoteFileNotFound(st.message());
+        }
         return st.clone_and_append(msg);
     }
     _scanner = scanner;

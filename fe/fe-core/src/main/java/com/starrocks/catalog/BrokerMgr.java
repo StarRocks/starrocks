@@ -48,6 +48,7 @@ import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 
@@ -63,17 +64,19 @@ import java.util.concurrent.locks.ReentrantLock;
 /**
  * Broker manager
  */
-public class BrokerMgr {
+public class BrokerMgr implements GsonPostProcessable {
     public static final ImmutableList<String> BROKER_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("Name").add("IP").add("Port").add("Alive")
             .add("LastStartTime").add("LastUpdateTime").add("ErrMsg")
             .build();
 
+    // { BrokerName -> { list of FsBroker }
+    @SerializedName(value = "bm")
+    private final Map<String, List<FsBroker>> brokerListMap = Maps.newHashMap();
+
     // we need IP to find the co-location broker.
     // { BrokerName -> { IP -> [FsBroker] } }
     private final Map<String, ArrayListMultimap<String, FsBroker>> brokersMap = Maps.newHashMap();
-    // { BrokerName -> { list of FsBroker }
-    private final Map<String, List<FsBroker>> brokerListMap = Maps.newHashMap();
     private final ReentrantLock lock = new ReentrantLock();
     private BrokerProcNode procNode = null;
 
@@ -338,6 +341,21 @@ public class BrokerMgr {
             return procNode;
         } finally {
             lock.unlock();
+        }
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        for (Map.Entry<String, List<FsBroker>> brokers : brokerListMap.entrySet()) {
+            String name = brokers.getKey();
+            ArrayListMultimap<String, FsBroker> brokerAddrsMap = brokersMap.get(name);
+            if (brokerAddrsMap == null) {
+                brokerAddrsMap = ArrayListMultimap.create();
+                brokersMap.put(name, brokerAddrsMap);
+            }
+            for (FsBroker address : brokers.getValue()) {
+                brokerAddrsMap.put(address.ip, address);
+            }
         }
     }
 

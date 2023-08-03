@@ -591,7 +591,9 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 if (mvColumnItem.getAggregationType() != null) {
                     break;
                 }
-                Preconditions.checkArgument(mvColumnItem.getType().isScalarType(), "non scalar type");
+                if (!mvColumnItem.getType().isScalarType()) {
+                    throw new SemanticException("Key column must be scalar type: " + mvColumnItem.getName());
+                }
                 mvColumnItem.setIsKey(true);
             }
         } else if (statement.getMVKeysType() == KeysType.DUP_KEYS) {

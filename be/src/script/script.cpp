@@ -16,6 +16,8 @@
 
 #include <google/protobuf/util/json_util.h>
 
+#include <regex>
+
 #include "common/greplog.h"
 #include "common/logging.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
@@ -36,6 +38,8 @@ using namespace wrenbind17;
 using std::string;
 
 namespace starrocks {
+
+extern std::vector<std::string> list_stack_trace_of_long_wait_mutex();
 
 #define REG_VAR(TYPE, NAME) cls.var<&TYPE::NAME>(#NAME)
 #define REG_METHOD(TYPE, NAME) cls.func<&TYPE::NAME>(#NAME)
@@ -119,6 +123,41 @@ static int64_t unix_seconds() {
     return UnixSeconds();
 }
 
+static std::string exec(const std::string& cmd) {
+    std::string ret;
+
+    FILE* fp = popen(cmd.c_str(), "r");
+    if (fp == NULL) {
+        ret = strings::Substitute("popen failed: $0 cmd: $1", strerror(errno), cmd);
+        return ret;
+    }
+
+    char buff[4096];
+    while (true) {
+        size_t r = fread(buff, 1, 4096, fp);
+        if (r == 0) {
+            break;
+        }
+        ret.append(buff, r);
+    }
+    int status = pclose(fp);
+    if (status == -1) {
+        ret.append(strings::Substitute("pclose failed: $0", strerror(errno)));
+    } else if (status != 0) {
+        ret.append(strings::Substitute("exit: $0", status));
+    }
+    return ret;
+}
+
+static std::string exec_whitelist(const std::string& cmd) {
+    static std::regex legal_cmd("(ls|cat|head|tail|grep|free|echo)[^<>\\|;`\\\\]*");
+    std::cmatch m;
+    if (!std::regex_match(cmd.c_str(), m, legal_cmd)) {
+        return "illegal cmd";
+    }
+    return exec(cmd);
+}
+
 void bind_exec_env(ForeignModule& m) {
     {
         auto& cls = m.klass<MemTracker>("MemTracker");
@@ -147,6 +186,9 @@ void bind_exec_env(ForeignModule& m) {
         cls.funcStaticExt<&grep_log_as_string>("grep_log_as_string");
         cls.funcStaticExt<&get_file_write_history>("get_file_write_history");
         cls.funcStaticExt<&unix_seconds>("unix_seconds");
+        // uncomment this to enable executing shell commands
+        // cls.funcStaticExt<&exec_whitelist>("exec");
+        cls.funcStaticExt<&list_stack_trace_of_long_wait_mutex>("list_stack_trace_of_long_wait_mutex");
         REG_METHOD(ExecEnv, process_mem_tracker);
         REG_METHOD(ExecEnv, query_pool_mem_tracker);
         REG_METHOD(ExecEnv, load_mem_tracker);
@@ -250,6 +292,14 @@ public:
         return StorageEngine::instance()->get_manual_compaction_status();
     }
 
+    static std::string ls_tablet_dir(int64_t tablet_id) {
+        auto tablet = get_tablet(tablet_id);
+        if (!tablet) {
+            return "tablet not found";
+        }
+        return exec_whitelist(strings::Substitute("ls -al $0", tablet->schema_hash_path()));
+    }
+
     static void bind(ForeignModule& m) {
         {
             auto& cls = m.klass<TabletBasicInfo>("TabletBasicInfo");
@@ -266,6 +316,9 @@ public:
             REG_VAR(TabletBasicInfo, create_time);
             REG_VAR(TabletBasicInfo, state);
             REG_VAR(TabletBasicInfo, type);
+            REG_VAR(TabletBasicInfo, data_dir);
+            REG_VAR(TabletBasicInfo, shard_id);
+            REG_VAR(TabletBasicInfo, schema_hash);
         }
         {
             auto& cls = m.klass<TabletSchema>("TabletSchema");
@@ -398,6 +451,7 @@ public:
             REG_STATIC_METHOD(StorageEngineRef, submit_manual_compaction_task_for_partition);
             REG_STATIC_METHOD(StorageEngineRef, submit_manual_compaction_task_for_tablet);
             REG_STATIC_METHOD(StorageEngineRef, get_manual_compaction_status);
+            REG_STATIC_METHOD(StorageEngineRef, ls_tablet_dir);
         }
     }
 };

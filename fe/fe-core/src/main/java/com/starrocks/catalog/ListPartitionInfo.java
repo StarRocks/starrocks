@@ -160,6 +160,10 @@ public class ListPartitionInfo extends PartitionInfo {
         this.idToMultiLiteralExprValues.put(partitionId, multiPartitionValues);
     }
 
+    public void setDirectLiteralExprValues(long partitionId, List<LiteralExpr> values) {
+        this.idToLiteralExprValues.put(partitionId, values);
+    }
+
     public void setBatchMultiLiteralExprValues(Map<Long, List<List<String>>> batchMultiValues)
             throws AnalysisException {
         for (Map.Entry<Long, List<List<String>>> entry : batchMultiValues.entrySet()) {
@@ -167,6 +171,10 @@ public class ListPartitionInfo extends PartitionInfo {
             List<List<String>> multiValues = entry.getValue();
             this.setMultiLiteralExprValues(partitionId, multiValues);
         }
+    }
+
+    public void setDirectMultiLiteralExprValues(long partitionId, List<List<LiteralExpr>> multiValues) {
+        this.idToMultiLiteralExprValues.put(partitionId, multiValues);
     }
 
     public Map<Long, List<List<LiteralExpr>>> getMultiLiteralExprValues() {

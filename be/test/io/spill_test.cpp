@@ -294,7 +294,7 @@ TEST_F(SpillTest, unsorted_process) {
     // 4 buffer chunk
     spill_options.mem_table_pool_size = 4;
     // file size: 1M
-    spill_options.spill_file_size = 1 * 1024 * 1024;
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
     // spill format type
     spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
 
@@ -388,7 +388,7 @@ TEST_F(SpillTest, order_by_process) {
     // 4 buffer chunk
     spill_options.mem_table_pool_size = 2;
     // file size: 1M
-    spill_options.spill_file_size = 1 * 1024 * 1024;
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
     // spill format type
     spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
 

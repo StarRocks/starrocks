@@ -216,6 +216,7 @@ public:
 
     Status set_data(const Slice& data) override {
         _batched_bit_reader.reset(reinterpret_cast<const uint8_t*>(data.data), data.size);
+        _decoded_values_buffer.reset();
         return Status::OK();
     }
 

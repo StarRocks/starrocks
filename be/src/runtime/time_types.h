@@ -35,6 +35,7 @@ static const Timestamp TIMESTAMP_BITS_TIME{UINT64_MAX >> 24};
 // TimeUnit
 enum TimeUnit {
     MICROSECOND,
+    MILLISECOND,
     SECOND,
     MINUTE,
     HOUR,
@@ -69,6 +70,7 @@ static const int64_t USECS_PER_DAY = 86400000000;
 static const int64_t USECS_PER_HOUR = 3600000000;
 static const int64_t USECS_PER_MINUTE = 60000000;
 static const int64_t USECS_PER_SEC = 1000000;
+static const int64_t USECS_PER_MILLIS = 1000;
 
 static const int64_t NANOSECS_PER_USEC = 1000;
 static const int64_t NANOSECS_PER_SEC = 1000000000;
@@ -76,6 +78,7 @@ static const int64_t NANOSECS_PER_SEC = 1000000000;
 // Corresponding to TimeUnit
 static constexpr int64_t USECS_PER_UNIT[] = {
         1,                // Microsecond
+        USECS_PER_MILLIS, // Millisecond
         USECS_PER_SEC,    // Second
         USECS_PER_MINUTE, // Minute
         USECS_PER_HOUR,   // Hour
@@ -229,10 +232,13 @@ JulianDate date::add(JulianDate date, int count) {
         return date + count;
     } else if constexpr (UNIT == TimeUnit::WEEK) {
         return date + 7 * count;
-    } else if constexpr (UNIT == TimeUnit::MONTH) {
+    } else if constexpr (UNIT == TimeUnit::MONTH || UNIT == TimeUnit::QUARTER) {
         int year, month, day;
         to_date_with_cache(date, &year, &month, &day);
 
+        if (UNIT == TimeUnit::QUARTER) {
+            count = 3 * count;
+        }
         int months = year * 12 + month - 1 + count;
         if (months < 0) {
             // @INFO: NOT SUPPORT BCE

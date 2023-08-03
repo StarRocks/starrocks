@@ -15,6 +15,7 @@ package com.starrocks.catalog.system.information;
 
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
@@ -40,6 +41,7 @@ public class TablesConfigSystemTable {
                         .column("DISTRIBUTE_BUCKET", ScalarType.INT)
                         .column("SORT_KEY", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("PROPERTIES", ScalarType.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
+                        .column("TABLE_ID", Type.BIGINT)
                         .build(), TSchemaTableType.SCH_TABLES_CONFIG);
     }
 }

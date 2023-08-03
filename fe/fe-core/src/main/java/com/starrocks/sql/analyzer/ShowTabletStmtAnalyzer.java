@@ -27,7 +27,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.proc.LakeTabletsProcNode;
+import com.starrocks.common.proc.LakeTabletsProcDir;
 import com.starrocks.common.proc.LocalTabletsProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ConnectContext;
@@ -116,7 +116,7 @@ public class ShowTabletStmtAnalyzer {
                     int index = 0;
                     try {
                         if (table.isCloudNativeTableOrMaterializedView()) {
-                            index = LakeTabletsProcNode.analyzeColumn(slotRef.getColumnName());
+                            index = LakeTabletsProcDir.analyzeColumn(slotRef.getColumnName());
                         } else {
                             index = LocalTabletsProcDir.analyzeColumn(slotRef.getColumnName());
                         }

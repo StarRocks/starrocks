@@ -60,6 +60,8 @@ public:
     virtual void cancel() = 0;
 
     virtual void abort() = 0;
+
+    virtual void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) = 0;
 };
 
 struct TabletsChannelKey {

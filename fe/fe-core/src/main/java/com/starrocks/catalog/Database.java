@@ -35,12 +35,12 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
-import com.starrocks.catalog.system.starrocks.StarRocksDb;
+import com.starrocks.catalog.system.sys.SysDb;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -73,6 +73,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -95,28 +96,29 @@ import java.util.zip.Adler32;
  */
 public class Database extends MetaObject implements Writable {
     private static final Logger LOG = LogManager.getLogger(Database.class);
-
     // empirical value.
     // assume that the time a lock is held by thread is less than 100ms
     public static final long TRY_LOCK_TIMEOUT_MS = 100L;
 
+    @SerializedName(value = "i")
     private long id;
+    @SerializedName(value = "n")
+    private String fullQualifiedName;
+    // user define function
+    @SerializedName(value = "f")
+    private ConcurrentMap<String, List<Function>> name2Function = Maps.newConcurrentMap();
+    @SerializedName(value = "d")
+    private volatile long dataQuotaBytes;
+    @SerializedName(value = "r")
+    private volatile long replicaQuotaSize;
+
+    private final Map<String, Table> nameToTable;
+    private final Map<Long, Table> idToTable;
 
     // catalogName is set if the database comes from an external catalog
     private String catalogName;
-    private String fullQualifiedName;
+
     private QueryableReentrantReadWriteLock rwLock;
-
-    // table family group map
-    private Map<Long, Table> idToTable;
-    private Map<String, Table> nameToTable;
-
-    // user define function
-    private ConcurrentMap<String, ImmutableList<Function>> name2Function = Maps.newConcurrentMap();
-
-    private volatile long dataQuotaBytes;
-
-    private volatile long replicaQuotaSize;
 
     private long lastSlowLockLogTime = 0;
 
@@ -230,6 +232,10 @@ public class Database extends MetaObject implements Writable {
 
     public void readUnlock() {
         this.rwLock.readLock().unlock();
+    }
+
+    public boolean isReadLockHeldByCurrentThread() {
+        return this.rwLock.getReadHoldCount() > 0;
     }
 
     public void writeLock() {
@@ -619,6 +625,14 @@ public class Database extends MetaObject implements Writable {
         }
     }
 
+    public Optional<Table> tryGetTable(String tableName) {
+        return Optional.ofNullable(nameToTable.get(tableName));
+    }
+
+    public Optional<Table> tryGetTable(long tableId) {
+        return Optional.ofNullable(idToTable.get(tableId));
+    }
+
     public Table getTable(String tableName) {
         if (nameToTable.containsKey(tableName)) {
             return nameToTable.get(tableName);
@@ -677,7 +691,7 @@ public class Database extends MetaObject implements Writable {
 
         // write functions
         out.writeInt(name2Function.size());
-        for (Entry<String, ImmutableList<Function>> entry : name2Function.entrySet()) {
+        for (Entry<String, List<Function>> entry : name2Function.entrySet()) {
             Text.writeString(out, entry.getKey());
             out.writeInt(entry.getValue().size());
             for (Function function : entry.getValue()) {
@@ -714,18 +728,16 @@ public class Database extends MetaObject implements Writable {
         // Compatible for attachDbName
         Text.readString(in);
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_47) {
-            int numEntries = in.readInt();
-            for (int i = 0; i < numEntries; ++i) {
-                String name = Text.readString(in);
-                ImmutableList.Builder<Function> builder = ImmutableList.builder();
-                int numFunctions = in.readInt();
-                for (int j = 0; j < numFunctions; ++j) {
-                    builder.add(Function.read(in));
-                }
-
-                name2Function.put(name, builder.build());
+        int numEntries = in.readInt();
+        for (int i = 0; i < numEntries; ++i) {
+            String name = Text.readString(in);
+            List<Function> functions = new ArrayList<>();
+            int numFunctions = in.readInt();
+            for (int j = 0; j < numFunctions; ++j) {
+                functions.add(Function.read(in));
             }
+
+            name2Function.put(name, functions);
         }
 
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_81) {
@@ -822,12 +834,12 @@ public class Database extends MetaObject implements Writable {
             function.setFunctionId(-functionId);
         }
 
-        ImmutableList.Builder<Function> builder = ImmutableList.builder();
+        List<Function> functions = new ArrayList<>();
         if (existFuncs != null) {
-            builder.addAll(existFuncs);
+            functions.addAll(existFuncs);
         }
-        builder.add(function);
-        name2Function.put(functionName, builder.build());
+        functions.add(function);
+        name2Function.put(functionName, functions);
     }
 
     public synchronized void dropFunction(FunctionSearchDesc function) throws UserException {
@@ -875,18 +887,17 @@ public class Database extends MetaObject implements Writable {
             throw new UserException("Unknown function, function=" + function.toString());
         }
         boolean isFound = false;
-        ImmutableList.Builder<Function> builder = ImmutableList.builder();
+        List<Function> newFunctions = new ArrayList<>();
         for (Function existFunc : existFuncs) {
             if (function.isIdentical(existFunc)) {
                 isFound = true;
             } else {
-                builder.add(existFunc);
+                newFunctions.add(existFunc);
             }
         }
         if (!isFound) {
             throw new UserException("Unknown function, function=" + function.toString());
         }
-        ImmutableList<Function> newFunctions = builder.build();
         if (newFunctions.isEmpty()) {
             name2Function.remove(functionName);
         } else {
@@ -904,7 +915,7 @@ public class Database extends MetaObject implements Writable {
 
     public synchronized List<Function> getFunctions() {
         List<Function> functions = Lists.newArrayList();
-        for (Map.Entry<String, ImmutableList<Function>> entry : name2Function.entrySet()) {
+        for (Map.Entry<String, List<Function>> entry : name2Function.entrySet()) {
             functions.addAll(entry.getValue());
         }
         return functions;
@@ -912,7 +923,7 @@ public class Database extends MetaObject implements Writable {
 
     public boolean isSystemDatabase() {
         return fullQualifiedName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME) ||
-                fullQualifiedName.equalsIgnoreCase(StarRocksDb.DATABASE_NAME);
+                fullQualifiedName.equalsIgnoreCase(SysDb.DATABASE_NAME);
     }
 
     // the invoker should hold db's writeLock

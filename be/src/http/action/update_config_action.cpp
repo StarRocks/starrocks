@@ -111,6 +111,9 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::CLONE,
                                                                  config::parallel_clone_task_per_path);
         });
+        _config_callback.emplace("alter_tablet_worker_count", [&]() {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::ALTER, config::alter_tablet_worker_count);
+        });
         _config_callback.emplace("lake_metadata_cache_limit", [&]() {
             auto tablet_mgr = _exec_env->lake_tablet_manager();
             if (tablet_mgr != nullptr) tablet_mgr->update_metacache_limit(config::lake_metadata_cache_limit);
@@ -121,6 +124,13 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 max_thread_cnt = config::get_pindex_worker_count;
             }
             StorageEngine::instance()->update_manager()->get_pindex_thread_pool()->update_max_threads(max_thread_cnt);
+        });
+        _config_callback.emplace("transaction_apply_worker_count", [&]() {
+            int max_thread_cnt = CpuInfo::num_cores();
+            if (config::transaction_apply_worker_count > 0) {
+                max_thread_cnt = config::transaction_apply_worker_count;
+            }
+            StorageEngine::instance()->update_manager()->apply_thread_pool()->update_max_threads(max_thread_cnt);
         });
     });
 

@@ -37,7 +37,7 @@ public:
 
     Status prepare(RuntimeState* state) override { return SourceOperator::prepare(state); }
 
-    void close(RuntimeState* state) override { SourceOperator::close(state); }
+    void close(RuntimeState* state) override;
 
     bool has_output() const override;
 

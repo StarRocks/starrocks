@@ -39,7 +39,7 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.load.routineload.RoutineLoadJob;
-import com.starrocks.load.routineload.RoutineLoadManager;
+import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
@@ -79,7 +79,7 @@ public class RoutineLoadsProcDir implements ProcDirInterface {
     public ProcResult fetchResult() throws AnalysisException {
         BaseProcResult baseProcResult = new BaseProcResult();
         baseProcResult.setNames(TITLE_NAMES);
-        RoutineLoadManager routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadManager();
+        RoutineLoadMgr routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
         try {
             List<RoutineLoadJob> routineLoadJobList = routineLoadManager.getJob(null, null, true);
             for (RoutineLoadJob routineLoadJob : routineLoadJobList) {

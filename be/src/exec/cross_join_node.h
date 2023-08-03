@@ -60,6 +60,10 @@ private:
     Status _build(RuntimeState* state);
     Status _get_next_probe_chunk(RuntimeState* state);
 
+    template <class BuildFactory, class ProbeFactory>
+    std::vector<std::shared_ptr<pipeline::OperatorFactory>> _decompose_to_pipeline(
+            pipeline::PipelineBuilderContext* context);
+
     // append cross-joined rows into chunk
 
     void _copy_joined_rows_with_index_base_build(ChunkPtr& chunk, size_t row_count, size_t probe_index,

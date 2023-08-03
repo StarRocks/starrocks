@@ -14,6 +14,9 @@
 
 #include "formats/parquet/group_reader.h"
 
+#include <memory>
+#include <sstream>
+
 #include "column/column_helper.h"
 #include "common/status.h"
 #include "exec/exec_node.h"
@@ -21,8 +24,10 @@
 #include "exprs/expr.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/types.h"
+#include "simd/batch_run_counter.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
+#include "storage/column_or_predicate.h"
 #include "utils.h"
 
 namespace starrocks::parquet {
@@ -31,8 +36,7 @@ constexpr static const LogicalType kDictCodePrimitiveType = TYPE_INT;
 constexpr static const LogicalType kDictCodeFieldType = TYPE_INT;
 
 GroupReader::GroupReader(GroupReaderParam& param, int row_group_number) : _param(param) {
-    _row_group_metadata =
-            std::make_shared<tparquet::RowGroup>(param.file_metadata->t_metadata().row_groups[row_group_number]);
+    _row_group_metadata = &_param.file_metadata->t_metadata().row_groups[row_group_number];
 }
 
 Status GroupReader::init() {
@@ -158,7 +162,7 @@ Status GroupReader::_init_column_readers() {
     opts.chunk_size = _param.chunk_size;
     opts.stats = _param.stats;
     opts.file = _param.file;
-    opts.row_group_meta = _row_group_metadata.get();
+    opts.row_group_meta = _row_group_metadata;
     opts.context = _obj_pool.add(new ColumnReaderContext);
     opts.sb_stream = _param.sb_stream;
     for (const auto& column : _param.read_cols) {
@@ -361,18 +365,6 @@ bool GroupReader::_can_use_as_dict_filter_column(const SlotDescriptor* slot,
         return false;
     }
 
-    // check is null or is not null
-    // is null or is not null conjunct should not eval dict value, this will always return empty set
-    for (ExprContext* ctx : conjunct_ctxs_by_slot.at(slot_id)) {
-        const Expr* root_expr = ctx->root();
-        if (root_expr->node_type() == TExprNodeType::FUNCTION_CALL) {
-            std::string is_null_str;
-            if (root_expr->is_null_scalar_function(is_null_str)) {
-                return false;
-            }
-        }
-    }
-
     // check all data pages dict encoded
     if (!_column_all_pages_dict_encoded(column_metadata)) {
         return false;
@@ -527,38 +519,89 @@ Status GroupReader::DictFilterContext::rewrite_conjunct_ctxs_to_predicates(
     for (int col_idx : _dict_column_indices) {
         const auto& column = param.read_cols[col_idx];
         SlotId slot_id = column.slot_id;
-        ChunkPtr dict_value_chunk = std::make_shared<Chunk>();
-        std::shared_ptr<BinaryColumn> dict_value_column = BinaryColumn::create();
-        dict_value_chunk->append_column(dict_value_column, slot_id);
 
+        // --------
+        // create dict value chunk for evaluation.
+        ChunkPtr dict_value_chunk = std::make_shared<Chunk>();
+        ColumnPtr dict_value_column = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+        dict_value_chunk->append_column(dict_value_column, slot_id);
         RETURN_IF_ERROR(column_readers[slot_id]->get_dict_values(dict_value_column.get()));
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs_by_slot[slot_id], dict_value_chunk.get()));
-        dict_value_chunk->check_or_die();
+        // append a null value to check if null is ok or not.
+        dict_value_column->append_default();
+        Filter filter(dict_value_column->size(), 1);
+        int dict_values_after_filter = 0;
+        ASSIGN_OR_RETURN(
+                dict_values_after_filter,
+                ExecNode::eval_conjuncts_into_filter(_conjunct_ctxs_by_slot[slot_id], dict_value_chunk.get(), &filter));
 
         // dict column is empty after conjunct eval, file group can be skipped
-        if (dict_value_chunk->num_rows() == 0) {
+        if (dict_values_after_filter == 0) {
             *is_group_filtered = true;
             return Status::OK();
         }
 
-        // get dict codes
+        // ---------
+        // get dict codes according to dict values.
         std::vector<int32_t> dict_codes;
-        RETURN_IF_ERROR(column_readers[slot_id]->get_dict_codes(dict_value_column->get_data(), &dict_codes));
+        BatchRunCounter<32> batch_run(filter.data(), 0, filter.size() - 1);
+        BatchCount batch = batch_run.next_batch();
+        int index = 0;
+        while (batch.length > 0) {
+            if (batch.AllSet()) {
+                for (int32_t i = 0; i < batch.length; i++) {
+                    dict_codes.emplace_back(index + i);
+                }
+            } else if (batch.NoneSet()) {
+                // do nothing
+            } else {
+                for (int32_t i = 0; i < batch.length; i++) {
+                    if (filter[index + i]) {
+                        dict_codes.emplace_back(index + i);
+                    }
+                }
+            }
+            index += batch.length;
+            batch = batch_run.next_batch();
+        }
+
+        bool null_is_ok = filter[filter.size() - 1] == 1;
 
         // eq predicate is faster than in predicate
         // TODO: improve not eq and not in
-        if (dict_codes.size() == 1) {
-            _predicates[slot_id] =
-                    new_column_eq_predicate(get_type_info(kDictCodeFieldType), slot_id, std::to_string(dict_codes[0]));
+        if (dict_codes.size() == 0) {
+            _predicates[slot_id] = nullptr;
+        } else if (dict_codes.size() == 1) {
+            _predicates[slot_id] = obj_pool->add(
+                    new_column_eq_predicate(get_type_info(kDictCodeFieldType), slot_id, std::to_string(dict_codes[0])));
         } else {
             std::vector<std::string> str_codes;
             str_codes.reserve(dict_codes.size());
             for (int code : dict_codes) {
                 str_codes.emplace_back(std::to_string(code));
             }
-            _predicates[slot_id] = new_column_in_predicate(get_type_info(kDictCodeFieldType), slot_id, str_codes);
+            _predicates[slot_id] =
+                    obj_pool->add(new_column_in_predicate(get_type_info(kDictCodeFieldType), slot_id, str_codes));
         }
-        obj_pool->add(_predicates[slot_id]);
+
+        // deal with if NULL works or not.
+        if (null_is_ok) {
+            ColumnPredicate* old = _predicates[slot_id];
+            // new = old or (is_null);
+            ColumnPredicate* result = nullptr;
+            ColumnPredicate* is_null_pred =
+                    obj_pool->add(new_column_null_predicate(get_type_info(kDictCodeFieldType), slot_id, true));
+
+            if (old != nullptr) {
+                ColumnOrPredicate* or_pred =
+                        obj_pool->add(new ColumnOrPredicate(get_type_info(kDictCodeFieldType), slot_id));
+                or_pred->add_child(old);
+                or_pred->add_child(is_null_pred);
+                result = or_pred;
+            } else {
+                result = is_null_pred;
+            }
+            _predicates[slot_id] = result;
+        }
     }
 
     return Status::OK();
@@ -579,7 +622,6 @@ void GroupReader::DictFilterContext::init_chunk(const GroupReaderParam& param, C
 
 bool GroupReader::DictFilterContext::filter_chunk(ChunkPtr* chunk, Filter* filter) {
     if (_predicates.empty()) return false;
-
     auto iter = _predicates.begin();
     SlotId slot_id = iter->first;
     auto pred = iter->second;
@@ -604,16 +646,19 @@ Status GroupReader::DictFilterContext::decode_chunk(
         if (_is_dict_filter_column[col_idx]) {
             int chunk_index = column.col_idx_in_chunk;
 
-            ColumnPtr& dict_codes = read_chunk->get_column_by_slot_id(slot_id);
             ColumnPtr& dict_values = (*chunk)->get_column_by_slot_id(slot_id);
             dict_values->resize(0);
 
+            // decode dict code to dict values.
+            // note that in dict code, there could be null value.
+            ColumnPtr& dict_codes = read_chunk->get_column_by_slot_id(slot_id);
             auto* codes_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(dict_codes);
             auto* codes_column =
                     ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(codes_nullable_column->data_column());
-            RETURN_IF_ERROR(column_readers[slot_id]->get_dict_values(codes_column->get_data(), dict_values.get()));
-
+            RETURN_IF_ERROR(column_readers[slot_id]->get_dict_values(codes_column->get_data(), *codes_nullable_column,
+                                                                     dict_values.get()));
             DCHECK_EQ(dict_codes->size(), dict_values->size());
+
             if (slots[chunk_index]->is_nullable()) {
                 auto* nullable_codes = down_cast<NullableColumn*>(dict_codes.get());
                 auto* nullable_values = down_cast<NullableColumn*>(dict_values.get());

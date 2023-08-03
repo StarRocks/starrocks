@@ -2431,9 +2431,12 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
     const MutableIndexMetaPB& l0_meta = index_meta.l0_meta();
     DCHECK(_l0 != nullptr);
     RETURN_IF_ERROR(_l0->load(l0_meta));
-    _l1_vec.clear();
-    _l1_merged_num.clear();
-    _has_l1 = false;
+    {
+        std::unique_lock wrlock(_lock);
+        _l1_vec.clear();
+        _l1_merged_num.clear();
+        _has_l1 = false;
+    }
     std::unique_ptr<RandomAccessFile> l1_rfile;
     if (index_meta.has_l1_version()) {
         _l1_version = index_meta.l1_version();
@@ -2443,9 +2446,12 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
         if (!l1_st.ok()) {
             return l1_st.status();
         }
-        _l1_vec.emplace_back(std::move(l1_st).value());
-        _l1_merged_num.emplace_back(-1);
-        _has_l1 = true;
+        {
+            std::unique_lock wrlock(_lock);
+            _l1_vec.emplace_back(std::move(l1_st).value());
+            _l1_merged_num.emplace_back(-1);
+            _has_l1 = true;
+        }
     }
     // if reload, don't update _usage_and_size_by_key_length
     if (!reload) {
@@ -2682,9 +2688,12 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     _dump_snapshot = true;
 
     // clear l1
-    _l1_vec.clear();
-    _usage_and_size_by_key_length.clear();
-    _l1_merged_num.clear();
+    {
+        std::unique_lock wrlock(_lock);
+        _l1_vec.clear();
+        _usage_and_size_by_key_length.clear();
+        _l1_merged_num.clear();
+    }
     _has_l1 = false;
     for (const auto& [key_size, shard_info] : _l0->_shard_info_by_key_size) {
         auto [l0_shard_offset, l0_shard_size] = shard_info;
@@ -2931,7 +2940,7 @@ Status PersistentIndex::get_from_one_immutable_index(size_t n, const Slice* keys
             break;
         }
     }
-    std::unique_lock<std::mutex> ul(_lock);
+    std::unique_lock<std::mutex> ul(_get_lock);
     _running_get_task--;
     _found_keys_info[idx].key_infos.swap(found_keys_info->key_infos);
     if (_running_get_task == 0) {
@@ -2946,7 +2955,7 @@ Status PersistentIndex::_get_from_immutable_index_parallel(size_t n, const Slice
         return Status::OK();
     }
 
-    std::unique_lock<std::mutex> ul(_lock);
+    std::unique_lock<std::mutex> ul(_get_lock);
     std::map<size_t, KeysInfo>::iterator iter;
     std::string error_msg;
     std::vector<std::vector<uint64_t>> get_values(_l1_vec.size(), std::vector<uint64_t>(n, NullIndexValue));
@@ -3206,9 +3215,12 @@ Status PersistentIndex::flush_advance() {
     if (!l1_st.ok()) {
         return l1_st.status();
     }
-    _l1_vec.emplace_back(std::move(l1_st).value());
-    _l1_merged_num.emplace_back(1);
-    _l1_vec.back()->_bf_map.swap(bf_map);
+    {
+        std::unique_lock wrlock(_lock);
+        _l1_vec.emplace_back(std::move(l1_st).value());
+        _l1_merged_num.emplace_back(1);
+        _l1_vec.back()->_bf_map.swap(bf_map);
+    }
 
     // clear l0
     _l0->clear();
@@ -3784,8 +3796,11 @@ Status PersistentIndex::_merge_compaction_advance() {
         new_l1_merged_num.emplace_back(_l1_merged_num[i]);
     }
 
-    for (int i = merge_l1_start_idx; i < _l1_vec.size(); i++) {
-        _l1_vec[i]->destroy();
+    {
+        std::unique_lock wrlock(_lock);
+        for (int i = merge_l1_start_idx; i < _l1_vec.size(); i++) {
+            _l1_vec[i]->destroy();
+        }
     }
 
     const std::string idx_file_path = strings::Substitute("$0/index.l1.$1.$2.$3.tmp", _path, _version.major(),
@@ -3802,8 +3817,11 @@ Status PersistentIndex::_merge_compaction_advance() {
         new_l1_vec.back()->_bf_map.swap(bf_map);
     }
     new_l1_merged_num.emplace_back((merge_l1_end_idx - merge_l1_start_idx) * merge_num);
-    _l1_vec.swap(new_l1_vec);
-    _l1_merged_num.swap(new_l1_merged_num);
+    {
+        std::unique_lock wrlock(_lock);
+        _l1_vec.swap(new_l1_vec);
+        _l1_merged_num.swap(new_l1_merged_num);
+    }
     _l0->clear();
     return Status::OK();
 }

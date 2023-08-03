@@ -48,6 +48,8 @@ private:
 struct SpillableHashJoinProbeMetrics {
     RuntimeProfile::Counter* hash_partitions = nullptr;
     RuntimeProfile::Counter* probe_shuffle_timer = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* prober_peak_memory_usage = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* build_partition_peak_memory_usage = nullptr;
 };
 
 class SpillableHashJoinProbeOperator final : public HashJoinProbeOperator {
@@ -70,8 +72,6 @@ public:
 
     Status set_finished(RuntimeState* state) override;
 
-    bool pending_finish() const override;
-
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
@@ -79,8 +79,7 @@ public:
     void set_probe_spiller(std::shared_ptr<spill::Spiller> spiller) { _probe_spiller = std::move(spiller); }
 
 private:
-    void set_spill_strategy(spill::SpillStrategy strategy) { _join_builder->set_spill_strategy(strategy); }
-    spill::SpillStrategy spill_strategy() const { return _join_builder->spill_strategy(); }
+    bool spilled() const { return _join_builder->spiller()->spilled(); }
 
     SpillableHashJoinProbeOperator* raw() const { return const_cast<SpillableHashJoinProbeOperator*>(this); }
 

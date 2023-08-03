@@ -22,12 +22,14 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.external.starrocks.TableMetaSyncer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.InsertStmt;
@@ -58,6 +60,10 @@ public class InsertAnalyzer {
         MetaUtils.normalizationTableName(session, insertStmt.getTableName());
         Database database = MetaUtils.getDatabase(session, insertStmt.getTableName());
         Table table = MetaUtils.getTable(session, insertStmt.getTableName());
+
+        if (table instanceof ExternalOlapTable) {
+            table = getOLAPExternalTableMeta(database, (ExternalOlapTable) table);
+        }
 
         if (table instanceof MaterializedView && !insertStmt.isSystem()) {
             throw new SemanticException(
@@ -171,7 +177,9 @@ public class InsertAnalyzer {
         insertStmt.setTargetTable(table);
         insertStmt.setTargetPartitionIds(targetPartitionIds);
         insertStmt.setTargetColumns(targetColumns);
-        session.getDumpInfo().addTable(database.getFullName(), table);
+        if (session.getDumpInfo() != null) {
+            session.getDumpInfo().addTable(database.getFullName(), table);
+        }
     }
 
     private static void checkStaticKeyPartitionInsert(InsertStmt insertStmt, Table table, PartitionNames targetPartitionNames) {
@@ -202,7 +210,7 @@ public class InsertAnalyzer {
 
         for (int i = 0; i < partitionColNames.size(); i++) {
             String actualName = partitionColNames.get(i);
-            if (!tablePartitionColumnNames.contains(actualName)) {
+            if (!AnalyzerUtils.containsIgnoreCase(tablePartitionColumnNames, actualName)) {
                 throw new SemanticException("Can't find partition column %s", actualName);
             }
 
@@ -221,5 +229,24 @@ public class InsertAnalyzer {
                 throw new SemanticException(e.getMessage());
             }
         }
+    }
+
+    private static ExternalOlapTable getOLAPExternalTableMeta(Database database, ExternalOlapTable externalOlapTable) {
+        // copy the table, and release database lock when synchronize table meta
+        ExternalOlapTable copiedTable = new ExternalOlapTable();
+        externalOlapTable.copyOnlyForQuery(copiedTable);
+        int lockTimes = 0;
+        while (database.isReadLockHeldByCurrentThread()) {
+            database.readUnlock();
+            lockTimes++;
+        }
+        try {
+            new TableMetaSyncer().syncTable(copiedTable);
+        } finally {
+            while (lockTimes-- > 0) {
+                database.readLock();
+            }
+        }
+        return copiedTable;
     }
 }

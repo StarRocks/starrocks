@@ -44,7 +44,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TableName;
-import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
@@ -62,8 +62,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
-import com.starrocks.catalog.system.starrocks.GrantsTo;
-import com.starrocks.catalog.system.starrocks.RoleEdges;
+import com.starrocks.catalog.system.sys.GrantsTo;
+import com.starrocks.catalog.system.sys.RoleEdges;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.AuthenticationException;
@@ -111,7 +111,7 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
-import com.starrocks.scheduler.mv.MVManager;
+import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -336,10 +336,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         if (db != null) {
             for (String tableName : db.getTableNamesViewWithLock()) {
-                LOG.debug("get table: {}, wait to check", tableName);
                 if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                     Table tbl = db.getTable(tableName);
-                    if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db, tbl)) {
+                    if (tbl != null && !PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser,
+                            null, params.db, tbl)) {
                         continue;
                     }
                 } else {
@@ -374,8 +374,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
         }
 
-        // database privs should be checked in analysis phrase
-
         Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
         long limit = params.isSetLimit() ? params.getLimit() : -1;
         UserIdentity currentUser = null;
@@ -389,6 +387,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             try {
                 boolean listingViews = params.isSetType() && TTableType.VIEW.equals(params.getType());
                 List<Table> tables = listingViews ? db.getViews() : db.getTables();
+                OUTER:
                 for (Table table : tables) {
                     if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                         if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db, table)) {
@@ -414,7 +413,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         QueryStatement queryStatement = view.getQueryStatement();
 
                         ConnectContext connectContext = new ConnectContext();
-                        connectContext.setQualifiedUser(AuthenticationManager.ROOT_USER);
+                        connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
                         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
                         connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
@@ -424,9 +423,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                             for (TableName tableName : allTables.keySet()) {
                                 if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                                     Table tbl = db.getTable(tableName.getTbl());
-                                    if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null,
-                                            tableName.getDb(), tbl)) {
-                                        break;
+                                    if (tbl != null && !PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser,
+                                            null, tableName.getDb(), tbl)) {
+                                        continue OUTER;
                                     }
                                 } else {
                                     if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(
@@ -437,11 +436,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                 }
                             }
                         } catch (SemanticException e) {
-                            // ignore semantic exception because view may be is invalid
+                            // ignore semantic exception because view maybe invalid
                         }
-
                         status.setDdl_sql(ddlSql);
                     }
+
                     tablesResult.add(status);
                     // if user set limit, then only return limit size result
                     if (limit > 0 && tablesResult.size() >= limit) {
@@ -661,6 +660,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setExpire_time(status.getExpireTime() / 1000);
             info.setProgress(status.getProgress() + "%");
             info.setExtra_message(status.getExtraMessage());
+            info.setProperties(status.getPropertiesJson());
             tasksResult.add(info);
         }
         return result;
@@ -864,19 +864,20 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
         if (db != null) {
-            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db,
-                        db.getTable(params.getTable_name()))) {
-                    return result;
-                }
-            } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
-                    params.getTable_name(), PrivPredicate.SHOW)) {
-                return result;
-            }
-
             try {
                 db.readLock();
                 Table table = db.getTable(params.getTable_name());
+                if (table == null) {
+                    return result;
+                }
+                if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                    if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db, table)) {
+                        return result;
+                    }
+                } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
+                        params.getTable_name(), PrivPredicate.SHOW)) {
+                    return result;
+                }
                 setColumnDesc(columns, table, limit, false, params.db, params.getTable_name());
             } finally {
                 db.readUnlock();
@@ -906,22 +907,23 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             Database db = GlobalStateMgr.getCurrentState().getDb(fullName);
             if (db != null) {
                 for (String tableName : db.getTableNamesViewWithLock()) {
-                    LOG.debug("get table: {}, wait to check", tableName);
-                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null,
-                                fullName, db.getTable(tableName))) {
-                            continue;
-                        }
-                    } else {
-                        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, fullName,
-                                tableName, PrivPredicate.SHOW)) {
-                            continue;
-                        }
-                    }
-
                     try {
                         db.readLock();
                         Table table = db.getTable(tableName);
+                        if (table == null) {
+                            continue;
+                        }
+                        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                            if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null,
+                                    fullName, table)) {
+                                continue;
+                            }
+                        } else {
+                            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, fullName,
+                                    tableName, PrivPredicate.SHOW)) {
+                                continue;
+                            }
+                        }
                         reachLimit = setColumnDesc(columns, table, limit, true, fullName, tableName);
                     } finally {
                         db.readUnlock();
@@ -936,50 +938,50 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     private boolean setColumnDesc(List<TColumnDef> columns, Table table, long limit,
                                   boolean needSetDbAndTable, String db, String tbl) {
-        if (table != null) {
-            String tableKeysType = "";
-            if (TableType.OLAP.equals(table.getType())) {
-                OlapTable olapTable = (OlapTable) table;
-                tableKeysType = olapTable.getKeysType().name().substring(0, 3).toUpperCase();
+        String tableKeysType = "";
+        if (TableType.OLAP.equals(table.getType())) {
+            OlapTable olapTable = (OlapTable) table;
+            tableKeysType = olapTable.getKeysType().name().substring(0, 3).toUpperCase();
+        }
+        for (Column column : table.getBaseSchema()) {
+            final TColumnDesc desc =
+                    new TColumnDesc(column.getName(), column.getPrimitiveType().toThrift());
+            final Integer precision = column.getType().getPrecision();
+            if (precision != null) {
+                desc.setColumnPrecision(precision);
             }
-            for (Column column : table.getBaseSchema()) {
-                final TColumnDesc desc =
-                        new TColumnDesc(column.getName(), column.getPrimitiveType().toThrift());
-                final Integer precision = column.getType().getPrecision();
-                if (precision != null) {
-                    desc.setColumnPrecision(precision);
-                }
-                final Integer columnLength = column.getType().getColumnSize();
-                if (columnLength != null) {
-                    desc.setColumnLength(columnLength);
-                }
-                final Integer decimalDigits = column.getType().getDecimalDigits();
-                if (decimalDigits != null) {
-                    desc.setColumnScale(decimalDigits);
-                }
-                if (column.isKey()) {
-                    // COLUMN_KEY (UNI, AGG, DUP, PRI)
-                    desc.setColumnKey(tableKeysType);
-                } else {
-                    desc.setColumnKey("");
-                }
-                final TColumnDef colDef = new TColumnDef(desc);
-                final String comment = column.getComment();
-                if (comment != null) {
-                    colDef.setComment(comment);
-                }
-                columns.add(colDef);
-                // add db_name and table_name values to TColumnDesc if needed
-                if (needSetDbAndTable) {
-                    columns.get(columns.size() - 1).columnDesc.setDbName(db);
-                    columns.get(columns.size() - 1).columnDesc.setTableName(tbl);
-                }
-                // if user set limit, then only return limit size result
-                if (limit > 0 && columns.size() >= limit) {
-                    return true;
-                }
+            final Integer columnLength = column.getType().getColumnSize();
+            if (columnLength != null) {
+                desc.setColumnLength(columnLength);
+            }
+            final Integer decimalDigits = column.getType().getDecimalDigits();
+            if (decimalDigits != null) {
+                desc.setColumnScale(decimalDigits);
+            }
+            desc.setAllowNull(column.isAllowNull());
+            if (column.isKey()) {
+                // COLUMN_KEY (UNI, AGG, DUP, PRI)
+                desc.setColumnKey(tableKeysType);
+            } else {
+                desc.setColumnKey("");
+            }
+            final TColumnDef colDef = new TColumnDef(desc);
+            final String comment = column.getComment();
+            if (comment != null) {
+                colDef.setComment(comment);
+            }
+            columns.add(colDef);
+            // add db_name and table_name values to TColumnDesc if needed
+            if (needSetDbAndTable) {
+                columns.get(columns.size() - 1).columnDesc.setDbName(db);
+                columns.get(columns.size() - 1).columnDesc.setTableName(tbl);
+            }
+            // if user set limit, then only return limit size result
+            if (limit > 0 && columns.size() >= limit) {
+                return true;
             }
         }
+
         return false;
     }
 
@@ -1079,7 +1081,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         if (globalStateMgr.isUsingNewPrivilege()) {
             UserIdentity currentUser =
-                    globalStateMgr.getAuthenticationManager().checkPlainPassword(user, clientIp, passwd);
+                    globalStateMgr.getAuthenticationMgr().checkPlainPassword(user, clientIp, passwd);
             if (currentUser == null) {
                 throw new AuthenticationException("Access denied for " + user + "@" + clientIp);
             }
@@ -1897,7 +1899,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (!request.getTask_type().equals(MVTaskType.REPORT_EPOCH)) {
             throw new TException("Only support report_epoch task");
         }
-        MVManager.getInstance().onReportEpoch(request);
+        MaterializedViewMgr.getInstance().onReportEpoch(request);
         return new TMVReportEpochResponse();
     }
 
@@ -1909,25 +1911,25 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TLoadInfo> loads = Lists.newArrayList();
         try {
             if (request.isSetJob_id()) {
-                LoadJob job = GlobalStateMgr.getCurrentState().getLoadManager().getLoadJob(request.getJob_id());
+                LoadJob job = GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJob(request.getJob_id());
                 if (job != null) {
                     loads.add(job.toThrift());
                 }
             } else if (request.isSetDb()) {
                 long dbId = GlobalStateMgr.getCurrentState().getDb(request.getDb()).getId();
                 if (request.isSetLabel()) {
-                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadManager().getLoadJobsByDb(
+                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobsByDb(
                             dbId, request.getLabel(), true).stream().map(LoadJob::toThrift).collect(Collectors.toList()));
                 } else {
-                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadManager().getLoadJobsByDb(
+                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobsByDb(
                             dbId, null, false).stream().map(LoadJob::toThrift).collect(Collectors.toList()));
                 }
             } else {
                 if (request.isSetLabel()) {
-                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadManager().getLoadJobs(request.getLabel())
+                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobs(request.getLabel())
                             .stream().map(LoadJob::toThrift).collect(Collectors.toList()));
                 } else {
-                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadManager().getLoadJobs(null)
+                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobs(null)
                             .stream().map(LoadJob::toThrift).collect(Collectors.toList()));
                 }
             }

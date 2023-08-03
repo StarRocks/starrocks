@@ -103,5 +103,7 @@ enum TStatusCode {
     RESOURCE_BUSY = 53,
 
     SR_EAGAIN = 54
+
+    REMOTE_FILE_NOT_FOUND = 55 // for hive external table
 }
 

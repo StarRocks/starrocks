@@ -2,9 +2,9 @@
 
 This topic describes how to manually deploy StarRocks. For other modes of installation, see [Deployment Overview](../deployment/deployment_overview.md).
 
-## Step 1: Start the FE service
+## Step 1: Start the Leader FE node
 
-The following procedures are performed on the FE instances.
+The following procedures are performed on an FE instance.
 
 1. Create a dedicated directory for metadata storage. We recommend storing metadata in a separate directory from the FE deployment files. Make sure that this directory exists and that you have write access to it.
 
@@ -82,35 +82,7 @@ The following procedures are performed on the FE instances.
 
    A record of log like "2022-08-10 16:12:29,911 INFO (UNKNOWN x.x.x.x_9010_1660119137253(-1)|1) [FeServer.start():52] thrift server started with port 9020." suggests that the FE node is started properly.
 
-## Step 2: (Optional) Deploy high-availability FE cluster
-
-A high-availability FE cluster requires at least THREE Follower FE nodes in the StarRocks cluster. After the first FE node is started successfully, you can then start two new FE nodes to deploy a high-availability FE cluster.
-
-Basically, you can repeat the procedures in Step 1 **except for the command used to start the FE node**. When adding an extra FE node to a cluster, you must assign a helper node (essentially an existing FE node) to the new FE node to synchronize the metadata of all other FE nodes.
-
-- To start a new FE node with IP address access, run the following command to start the FE node:
-
-  ```Bash
-  # Replace <helper_fe_ip> with the IP address (priority_networks) 
-  # of the helper node, and replace <helper_edit_log_port> with 
-  # the helper node's edit_log_port.
-  ./fe/bin/start_fe.sh --helper <helper_fe_ip>:<helper_edit_log_port> --daemon
-  ```
-
-  Note that you only need to specify the parameter `--helper` ONCE when you start the node for the first time.
-
-- To start a new FE node with FQDN access, run the following command to start the FE node:
-
-  ```Bash
-  # Replace <helper_fqdn> with the FQDN of the helper node, 
-  # and replace <helper_edit_log_port> with the helper node's edit_log_port.
-  ./fe/bin/start_fe.sh --helper <helper_fqdn>:<helper_edit_log_port> \
-      --host_type FQDN --daemon
-  ```
-
-  Note that you only need to specify the parameters `--helper` and `--host_type` ONCE when you start the node for the first time.
-
-## Step 3: Start the BE service
+## Step 2: Start the BE service
 
 The following procedures are performed on the BE instances.
 
@@ -183,7 +155,7 @@ The following procedures are performed on the BE instances.
 >
 > A high-availability cluster of BEs is automatically formed when at least three BE nodes are deployed and added to a StarRocks cluster.
 
-## Step 4: (Optional) Start the CN service
+## Step 3: (Optional) Start the CN service
 
 A Compute Node (CN) is a stateless computing service that does not maintain data itself. You can optionally add CN nodes to your cluster to provide extra computing resources for queries. You can deploy CN nodes with the BE deployment files. Compute Nodes are supported since v2.4.
 
@@ -238,7 +210,7 @@ A Compute Node (CN) is a stateless computing service that does not maintain data
 
 4. You can start new CN nodes by repeating the above procedures on other instances.
 
-## Step 5: Set up the cluster
+## Step 4: Set up the cluster
 
 After all FE, BE nodes, and CN nodes are started properly, you can set up the StarRocks cluster.
 
@@ -248,26 +220,12 @@ The following procedures are performed on a MySQL client. You must have MySQL cl
 
    ```Bash
    # Replace <fe_address> with the IP address (priority_networks) or FQDN 
-   # of the FE node you connect to, and replace <query_port> (Default: 9030) 
+   # of the Leader FE node, and replace <query_port> (Default: 9030) 
    # with the query_port you specified in fe.conf.
    mysql -h <fe_address> -P<query_port> -uroot
    ```
 
-2. (Optional) If you have deployed multiple Follower FE nodes, you can add the extra two Follower FE nodes to the cluster by executing the following SQL.
-
-   ```SQL
-   -- Replace <fe_address> with the IP address (priority_networks) 
-   -- or FQDN of each FE node, and replace <edit_log_port> 
-   -- with the edit_log_port (Default: 9010) you specified in fe.conf.
-   ALTER SYSTEM ADD FOLLOWER "<fe2_address>:<edit_log_port>", "<fe3_address>:<edit_log_port>";
-   ```
-
-   > **NOTE**
-   >
-   > - You can use the preceding command to add multiple Follower FE nodes at a time. Each `<fe_address>:<edit_log_port>` pair represents one FE node.
-   > - If you want to add more Observer FE nodes, execute `ALTER SYSTEM ADD OBSERVER "<fe2_address>:<edit_log_port>"[, ...]`. For detailed instructions, see [ALTER SYSTEM - FE](../sql-reference/sql-statements/Administration/ALTER%20SYSTEM.md).
-
-3. Check the status of the FE nodes by executing the following SQL.
+2. Check the status of the Leader FE node by executing the following SQL.
 
    ```SQL
    SHOW PROC '/frontends'\G
@@ -278,23 +236,22 @@ The following procedures are performed on a MySQL client. You must have MySQL cl
    ```Plain
    MySQL [(none)]> SHOW PROC '/frontends'\G
    *************************** 1. row ***************************
-                 Name: x.x.x.x_9010_1660119137253
-                   IP: x.x.x.x
-          EditLogPort: 9010
-             HttpPort: 8030
-            QueryPort: 9030
-              RpcPort: 9020
-                 Role: FOLLOWER
-             IsMaster: true
-            ClusterId: 58958864
-                 Join: true
-                Alive: true
-    ReplayedJournalId: 30602
-        LastHeartbeat: 2022-08-11 20:34:26
-             IsHelper: true
-               ErrMsg: 
-            StartTime: 2022-08-10 16:12:29
-              Version: 2.3.0-a9bdb09
+                Name: x.x.x.x_9010_1686810741121
+                  IP: x.x.x.x
+         EditLogPort: 9010
+            HttpPort: 8030
+           QueryPort: 9030
+             RpcPort: 9020
+                Role: LEADER
+           ClusterId: 919351034
+                Join: true
+               Alive: true
+   ReplayedJournalId: 1220
+       LastHeartbeat: 2023-06-15 15:39:04
+            IsHelper: true
+              ErrMsg: 
+           StartTime: 2023-06-15 14:32:28
+             Version: 3.0.0-48f4d81
    1 row in set (0.01 sec)
    ```
 
@@ -302,11 +259,11 @@ The following procedures are performed on a MySQL client. You must have MySQL cl
    - If the field `Role` is `FOLLOWER`, this FE node is eligible to be elected as the Leader FE node.
    - If the field `Role` is `LEADER`, this FE node is the Leader FE node.
 
-4. Add a BE node to the cluster.
+3. Add the BE nodes to the cluster.
 
    ```SQL
    -- Replace <be_address> with the IP address (priority_networks) 
-   -- or FQDN of the BE node, and replace <heartbeat_service_port> 
+   -- or FQDN of the BE nodes, and replace <heartbeat_service_port> 
    -- with the heartbeat_service_port (Default: 9050) you specified in be.conf.
    ALTER SYSTEM ADD BACKEND "<be_address>:<heartbeat_service_port>";
    ```
@@ -315,7 +272,7 @@ The following procedures are performed on a MySQL client. You must have MySQL cl
    >
    > You can use the preceding command to add multiple BE nodes at a time. Each `<be_address>:<heartbeat_service_port>` pair represents one BE node.
 
-5. Check the status of the BE nodes by executing the following SQL.
+4. Check the status of the BE nodes by executing the following SQL.
 
    ```SQL
    SHOW PROC '/backends'\G
@@ -326,35 +283,37 @@ The following procedures are performed on a MySQL client. You must have MySQL cl
    ```Plain
    MySQL [(none)]> SHOW PROC '/backends'\G
    *************************** 1. row ***************************
-               BackendId: 10036
-                 Cluster: default_cluster
-                      IP: x.x.x.x
+               BackendId: 10007
+                      IP: 172.26.195.67
            HeartbeatPort: 9050
                   BePort: 9060
                 HttpPort: 8040
                 BrpcPort: 8060
-           LastStartTime: 2022-08-10 17:39:01
-           LastHeartbeat: 2022-08-11 20:34:31
+           LastStartTime: 2023-06-15 15:23:08
+           LastHeartbeat: 2023-06-15 15:57:30
                    Alive: true
     SystemDecommissioned: false
    ClusterDecommissioned: false
-               TabletNum: 0
-        DataUsedCapacity: .000 
-           AvailCapacity: 1.000 B
-           TotalCapacity: .000 
-                 UsedPct: 0.00 %
-          MaxDiskUsedPct: 0.00 %
+               TabletNum: 30
+        DataUsedCapacity: 0.000 
+           AvailCapacity: 341.965 GB
+           TotalCapacity: 1.968 TB
+                 UsedPct: 83.04 %
+          MaxDiskUsedPct: 83.04 %
                   ErrMsg: 
-                 Version: 2.3.0-a9bdb09
-                  Status: {"lastSuccessReportTabletsTime":"N/A"}
-       DataTotalCapacity: .000 
+                 Version: 3.0.0-48f4d81
+                  Status: {"lastSuccessReportTabletsTime":"2023-06-15 15:57:08"}
+       DataTotalCapacity: 341.965 GB
              DataUsedPct: 0.00 %
                 CpuCores: 16
+       NumRunningQueries: 0
+              MemUsedPct: 0.01 %
+              CpuUsedPct: 0.0 %
    ```
 
    If the field `Alive` is `true`, this BE node is properly started and added to the cluster.
 
-6. (Optional) Add a CN node to the cluster.
+5. (Optional) Add a CN node to the cluster.
 
    ```SQL
    -- Replace <cn_address> with the IP address (priority_networks) 
@@ -367,7 +326,7 @@ The following procedures are performed on a MySQL client. You must have MySQL cl
    >
    > You can add multiple CN nodes with one SQL. Each `<cn_address>:<heartbeat_service_port>` pair represents one CN node.
 
-7. (Optional) Check the status of the CN nodes by executing the following SQL.
+6. (Optional) Check the status of the CN nodes by executing the following SQL.
 
    ```SQL
    SHOW PROC '/compute_nodes'\G
@@ -380,10 +339,10 @@ The following procedures are performed on a MySQL client. You must have MySQL cl
    *************************** 1. row ***************************
            ComputeNodeId: 10003
                       IP: x.x.x.x
-           HeartbeatPort: 9550
+           HeartbeatPort: 9050
                   BePort: 9060
-                HttpPort: 8540
-                BrpcPort: 8560
+                HttpPort: 8040
+                BrpcPort: 8060
            LastStartTime: 2023-03-13 15:11:13
            LastHeartbeat: 2023-03-13 15:11:13
                    Alive: true
@@ -395,6 +354,141 @@ The following procedures are performed on a MySQL client. You must have MySQL cl
    ```
 
    If the field `Alive` is `true`, this CN node is properly started and added to the cluster.
+
+   After CNs are properly started and you want to use CNs during queries, set the system variables `SET prefer_compute_node = true;` and `SET use_compute_nodes = -1;`. For more information, see [System variables](../reference/System_variable.md#descriptions-of-variables).
+
+## Step 5: (Optional) Deploy a high-availability FE cluster
+
+A high-availability FE cluster requires at least THREE Follower FE nodes in the StarRocks cluster. After the Leader FE node is started successfully, you can then start two new FE nodes to deploy a high-availability FE cluster.
+
+1. Connect to StarRocks via your MySQL client. You need to log in with the initial account `root`, and the password is empty by default.
+
+   ```Bash
+   # Replace <fe_address> with the IP address (priority_networks) or FQDN 
+   # of the Leader FE node, and replace <query_port> (Default: 9030) 
+   # with the query_port you specified in fe.conf.
+   mysql -h <fe_address> -P<query_port> -uroot
+   ```
+
+2. Add the new Follower FE node to the cluster by executing the following SQL.
+
+   ```SQL
+   -- Replace <fe_address> with the IP address (priority_networks) 
+   -- or FQDN of the new Follower FE node, and replace <edit_log_port> 
+   -- with the edit_log_port (Default: 9010) you specified in fe.conf.
+   ALTER SYSTEM ADD FOLLOWER "<fe2_address>:<edit_log_port>";
+   ```
+
+   > **NOTE**
+   >
+   > - You can use the preceding command to add a single Follower FE nodes each time.
+   > - If you want to add Observer FE nodes, execute `ALTER SYSTEM ADD OBSERVER "<fe_address>:<edit_log_port>"=`. For detailed instructions, see [ALTER SYSTEM - FE](../sql-reference/sql-statements/Administration/ALTER%20SYSTEM.md).
+
+3. Launch a terminal on the new FE instance, create a dedicated directory for metadata storage, navigate to the directory that stores the StarRocks FE deployment files, and modify the FE configuration file **fe/conf/fe.conf**. For more instructions, see [Step 1: Start the Leader FE node](#step-1-start-the-leader-fe-node). Basically, you can repeat the procedures in Step 1 **except for the command used to start the FE node**.
+  
+   After configuring the Follower FE node, execute the following SQL to assign a helper node for Follower FE node and start the Follower FE node.
+
+   > **NOTE**
+   >
+   > When adding new Follower FE node to a cluster, you must assign a helper node (essentially an existing Follower FE node) to the new Follower FE node to synchronize the metadata.
+
+   - To start a new FE node with IP address access, run the following command to start the FE node:
+
+     ```Bash
+     # Replace <helper_fe_ip> with the IP address (priority_networks) 
+     # of the Leader FE node, and replace <helper_edit_log_port> (Default: 9010) with 
+     # the Leader FE node's edit_log_port.
+     ./fe/bin/start_fe.sh --helper <helper_fe_ip>:<helper_edit_log_port> --daemon
+     ```
+
+     Note that you only need to specify the parameter `--helper` ONCE when you start the node for the first time.
+
+   - To start a new FE node with FQDN access, run the following command to start the FE node:
+
+     ```Bash
+     # Replace <helper_fqdn> with the FQDN of the Leader FE node, 
+     # and replace <helper_edit_log_port> (Default: 9010) with the Leader FE node's edit_log_port.
+     ./fe/bin/start_fe.sh --helper <helper_fqdn>:<helper_edit_log_port> \
+           --host_type FQDN --daemon
+     ```
+
+     Note that you only need to specify the parameters `--helper` and `--host_type` ONCE when you start the node for the first time.
+
+4. Check the FE logs to verify if the FE node is started successfully.
+
+   ```Bash
+   cat fe/log/fe.log | grep thrift
+   ```
+
+   A record of log like "2022-08-10 16:12:29,911 INFO (UNKNOWN x.x.x.x_9010_1660119137253(-1)|1) [FeServer.start():52] thrift server started with port 9020." suggests that the FE node is started properly.
+
+5. Repeat the preceding procedure 2, 3, and 4 until you have start all the new Follower FE nodes properly, and then check the status of the FE nodes by executing the following SQL from your MySQL client:
+
+   ```SQL
+   SHOW PROC '/frontends'\G
+   ```
+
+   Example:
+
+   ```Plain
+   MySQL [(none)]> SHOW PROC '/frontends'\G
+   *************************** 1. row ***************************
+                Name: x.x.x.x_9010_1686810741121
+                  IP: x.x.x.x
+         EditLogPort: 9010
+            HttpPort: 8030
+           QueryPort: 9030
+             RpcPort: 9020
+                Role: LEADER
+           ClusterId: 919351034
+                Join: true
+               Alive: true
+   ReplayedJournalId: 1220
+       LastHeartbeat: 2023-06-15 15:39:04
+            IsHelper: true
+              ErrMsg: 
+           StartTime: 2023-06-15 14:32:28
+             Version: 3.0.0-48f4d81
+   *************************** 2. row ***************************
+                Name: x.x.x.x_9010_1686814080597
+                  IP: x.x.x.x
+         EditLogPort: 9010
+            HttpPort: 8030
+           QueryPort: 9030
+             RpcPort: 9020
+                Role: FOLLOWER
+           ClusterId: 919351034
+                Join: true
+               Alive: true
+   ReplayedJournalId: 1219
+       LastHeartbeat: 2023-06-15 15:39:04
+            IsHelper: true
+              ErrMsg: 
+           StartTime: 2023-06-15 15:38:53
+             Version: 3.0.0-48f4d81
+   *************************** 3. row ***************************
+                Name: x.x.x.x_9010_1686814090833
+                  IP: x.x.x.x
+         EditLogPort: 9010
+            HttpPort: 8030
+           QueryPort: 9030
+             RpcPort: 9020
+                Role: FOLLOWER
+           ClusterId: 919351034
+                Join: true
+               Alive: true
+   ReplayedJournalId: 1219
+       LastHeartbeat: 2023-06-15 15:39:04
+            IsHelper: true
+              ErrMsg: 
+           StartTime: 2023-06-15 15:37:52
+             Version: 3.0.0-48f4d81
+   3 rows in set (0.02 sec)
+   ```
+
+   - If the field `Alive` is `true`, this FE node is properly started and added to the cluster.
+   - If the field `Role` is `FOLLOWER`, this FE node is eligible to be elected as the Leader FE node.
+   - If the field `Role` is `LEADER`, this FE node is the Leader FE node.
 
 ## Stop the StarRocks cluster
 

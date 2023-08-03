@@ -28,14 +28,21 @@ namespace starrocks::spill {
 class QuerySpillManager {
 public:
     QuerySpillManager(const TUniqueId& uid) : _uid(uid) { _block_manager = std::make_unique<LogBlockManager>(uid); }
-    size_t pending_spilled_bytes() { return _spilled_bytes; }
-    void update_spilled_bytes(size_t spilled_bytes) { _spilled_bytes += spilled_bytes; }
+
+    void increase_spilling_operators() { _spilling_operators++; }
+    void decrease_spilling_operators() { _spilling_operators--; }
+    size_t spilling_operators() { return _spilling_operators; }
+
+    void increase_spillable_operators() { _spillable_operators++; }
+    void decrease_spillable_operators() { _spillable_operators--; }
+    size_t spillable_operators() { return _spillable_operators; }
 
     BlockManager* block_manager() const { return _block_manager.get(); }
 
 private:
     TUniqueId _uid;
-    std::atomic_size_t _spilled_bytes = 0;
     std::unique_ptr<BlockManager> _block_manager;
+    std::atomic_size_t _spilling_operators = 0;
+    size_t _spillable_operators = 0;
 };
 } // namespace starrocks::spill

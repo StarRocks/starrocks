@@ -1,23 +1,21 @@
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
-//   http://www.apache.org/licenses/LICENSE-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
@@ -37,7 +35,10 @@ import java.util.Objects;
  */
 public class FunctionName implements Writable {
     public static final String GLOBAL_UDF_DB = "__global_udf_db__";
+
+    @SerializedName(value = "db")
     private String db_;
+    @SerializedName(value = "fn")
     private String fn_;
 
     private FunctionName() {
@@ -46,9 +47,6 @@ public class FunctionName implements Writable {
     public FunctionName(String db, String fn) {
         db_ = db;
         fn_ = fn.toLowerCase();
-        if (db_ != null) {
-            db_ = db_.toLowerCase();
-        }
     }
 
     public FunctionName(String fn) {
@@ -57,7 +55,7 @@ public class FunctionName implements Writable {
     }
 
     public FunctionName(TFunctionName thriftName) {
-        db_ = thriftName.db_name.toLowerCase();
+        db_ = thriftName.db_name;
         fn_ = thriftName.function_name.toLowerCase();
     }
 
@@ -76,10 +74,6 @@ public class FunctionName implements Writable {
         } else {
             return new FunctionName(null, fn);
         }
-    }
-
-    public static FunctionName fromThrift(TFunctionName fnName) {
-        return new FunctionName(fnName.getDb_name(), fnName.getFunction_name());
     }
 
     @Override
@@ -103,10 +97,6 @@ public class FunctionName implements Writable {
         return fn_;
     }
 
-    public boolean isFullyQualified() {
-        return db_ != null;
-    }
-
     public boolean isGlobalFunction() {
         return GLOBAL_UDF_DB.equals(db_);
     }
@@ -121,15 +111,6 @@ public class FunctionName implements Writable {
             return fn_;
         }
         return db_ + "." + fn_;
-    }
-
-    // used to analyze db element in function name, add cluster
-    public String analyzeDb(Analyzer analyzer) throws AnalysisException {
-        String db = db_;
-        if (db == null) {
-            db = analyzer.getDefaultDb();
-        }
-        return db;
     }
 
     public void analyze(String defaultDb) throws AnalysisException {

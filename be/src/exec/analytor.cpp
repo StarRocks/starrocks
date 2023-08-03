@@ -38,8 +38,11 @@ Status window_init_jvm_context(int64_t fid, const std::string& url, const std::s
                                const std::string& symbol, FunctionContext* context);
 
 Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
-                   const TupleDescriptor* result_tuple_desc)
-        : _tnode(tnode), _child_row_desc(child_row_desc), _result_tuple_desc(result_tuple_desc) {
+                   const TupleDescriptor* result_tuple_desc, bool use_hash_based_partition)
+        : _tnode(tnode),
+          _child_row_desc(child_row_desc),
+          _result_tuple_desc(result_tuple_desc),
+          _use_hash_based_partition(use_hash_based_partition) {
     if (tnode.analytic_node.__isset.buffered_tuple_id) {
         _buffered_tuple_id = tnode.analytic_node.buffered_tuple_id;
     }
@@ -187,9 +190,8 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         }
 
         for (size_t j = 0; j < _agg_expr_ctxs[i].size(); ++j) {
-            // Currently, only lead and lag window function have multi args.
-            // For performance, we do this special handle.
-            // In future, if need, we could remove this if else easily.
+            // we always treat first argument as non const, because most window function has only one args
+            // and cant't handler const column within the function
             if (j == 0) {
                 _agg_intput_columns[i][j] =
                         ColumnHelper::create_column(_agg_expr_ctxs[i][j]->root()->type(), is_input_nullable);
@@ -455,29 +457,35 @@ Status Analytor::add_chunk(const ChunkPtr& chunk) {
     const size_t chunk_size = chunk->num_rows();
 
     {
+        auto check_if_overflow = [](Column* column) {
+            std::string msg;
+            if (column->capacity_limit_reached(&msg)) {
+                return Status::InternalError(msg);
+            }
+            return Status::OK();
+        };
         SCOPED_TIMER(_column_resize_timer);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
                 ASSIGN_OR_RETURN(ColumnPtr column, _agg_expr_ctxs[i][j]->evaluate(chunk.get()));
-                // Currently, only lead and lag window function have multi args.
-                // For performance, we do this special handle.
-                // In future, if need, we could remove this if else easily.
-                if (j == 0) {
-                    TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _agg_intput_columns[i][j].get(), column));
-                } else {
-                    TRY_CATCH_BAD_ALLOC(_agg_intput_columns[i][j]->append(*column, 0, column->size()));
-                }
+
+                // when chunk's column is const, maybe need to unpack it
+                TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _agg_intput_columns[i][j].get(), column));
+
+                RETURN_IF_ERROR(check_if_overflow(_agg_intput_columns[i][j].get()));
             }
         }
 
         for (size_t i = 0; i < _partition_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _partition_ctxs[i]->evaluate(chunk.get()));
             TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _partition_columns[i].get(), column));
+            RETURN_IF_ERROR(check_if_overflow(_partition_columns[i].get()));
         }
 
         for (size_t i = 0; i < _order_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _order_ctxs[i]->evaluate(chunk.get()));
             TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _order_columns[i].get(), column));
+            RETURN_IF_ERROR(check_if_overflow(_order_columns[i].get()));
         }
     }
 
@@ -489,13 +497,17 @@ Status Analytor::add_chunk(const ChunkPtr& chunk) {
 }
 
 void Analytor::_append_column(size_t chunk_size, Column* dst_column, ColumnPtr& src_column) {
+    DCHECK(!(src_column->is_constant() && dst_column->is_constant() && (!dst_column->empty()) &&
+             (!src_column->empty()) && (src_column->compare_at(0, 0, *dst_column, 1) != 0)));
     if (src_column->only_null()) {
         static_cast<void>(dst_column->append_nulls(chunk_size));
-    } else if (src_column->is_constant()) {
-        auto* const_column = static_cast<ConstColumn*>(src_column.get());
+    } else if (src_column->is_constant() && !dst_column->is_constant()) {
+        // unpack const column, then append it to dst
+        auto* const_column = down_cast<ConstColumn*>(src_column.get());
         const_column->data_column()->assign(chunk_size, 0);
         dst_column->append(*const_column->data_column(), 0, chunk_size);
     } else {
+        // most of case
         dst_column->append(*src_column, 0, chunk_size);
     }
 }
@@ -538,9 +550,14 @@ void Analytor::find_partition_end() {
     _found_partition_end.second = static_cast<int64_t>(_partition_columns[0]->size());
     {
         SCOPED_TIMER(_partition_search_timer);
-        for (auto& column : _partition_columns) {
+        if (_use_hash_based_partition) {
             _found_partition_end.second =
-                    _find_first_not_equal(column.get(), _partition_end, start, _found_partition_end.second);
+                    _find_first_not_equal_for_hash_based_partition(_partition_end, start, _found_partition_end.second);
+        } else {
+            for (auto& column : _partition_columns) {
+                _found_partition_end.second =
+                        _find_first_not_equal(column.get(), _partition_end, start, _found_partition_end.second);
+            }
         }
     }
 
@@ -720,13 +737,18 @@ void Analytor::_update_window_batch_lead_lag(int64_t peer_group_start, int64_t p
 void Analytor::_update_window_batch_normal(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                            int64_t frame_end) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-        const Column* agg_column = _agg_intput_columns[i][0].get();
+        size_t column_size = _agg_intput_columns[i].size();
+        const Column* data_columns[column_size];
+        for (size_t j = 0; j < column_size; j++) {
+            data_columns[j] = _agg_intput_columns[i][j].get();
+        }
+
         frame_start = std::max<int64_t>(frame_start, _partition_start);
         // for rows betweend unbounded preceding and current row, we have not found the partition end, for others,
         // _found_partition_end = _partition_end, so we use _found_partition_end instead of _partition_end
         frame_end = std::min<int64_t>(frame_end, _found_partition_end.second);
         _agg_functions[i]->update_batch_single_state_with_frame(
-                _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], &agg_column,
+                _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], data_columns,
                 peer_group_start, peer_group_end, frame_start, frame_end);
     }
 }
@@ -753,6 +775,32 @@ int64_t Analytor::_find_first_not_equal(Column* column, int64_t target, int64_t 
         }
     }
     if (column->compare_at(target, end - 1, *column, 1) == 0) {
+        return end;
+    }
+    return end - 1;
+}
+
+int64_t Analytor::_find_first_not_equal_for_hash_based_partition(int64_t target, int64_t start, int64_t end) {
+    // In this case, we cannot compare each column one by one like Analytor::_find_first_not_equal does,
+    // and we must compare all the partition columns for one comparation
+    auto compare = [this](size_t left, size_t right) {
+        for (auto& column : _partition_columns) {
+            auto res = column->compare_at(left, right, *column, 1);
+            if (res != 0) {
+                return res;
+            }
+        }
+        return 0;
+    };
+    while (start + 1 < end) {
+        int64_t mid = start + (end - start) / 2;
+        if (compare(target, mid) == 0) {
+            start = mid;
+        } else {
+            end = mid;
+        }
+    }
+    if (compare(target, end - 1) == 0) {
         return end;
     }
     return end - 1;
@@ -794,7 +842,8 @@ void Analytor::_find_candidate_peer_group_ends() {
 
 AnalytorPtr AnalytorFactory::create(int i) {
     if (!_analytors[i]) {
-        _analytors[i] = std::make_shared<Analytor>(_tnode, _child_row_desc, _result_tuple_desc);
+        _analytors[i] =
+                std::make_shared<Analytor>(_tnode, _child_row_desc, _result_tuple_desc, _use_hash_based_partition);
     }
     return _analytors[i];
 }

@@ -30,6 +30,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/runtime_state.h"
+#include "util/bit_util.h"
 #include "util/defer_op.h"
 
 namespace starrocks::pipeline {
@@ -41,6 +42,8 @@ Status SpillableHashJoinBuildOperator::prepare(RuntimeState* state) {
     if (state->spill_mode() == TSpillMode::FORCE) {
         set_spill_strategy(spill::SpillStrategy::SPILL_ALL);
     }
+    _peak_revocable_mem_bytes = _unique_metrics->AddHighWaterMarkCounter(
+            "PeakRevocableMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
     return Status::OK();
 }
 
@@ -48,48 +51,69 @@ void SpillableHashJoinBuildOperator::close(RuntimeState* state) {
     HashJoinBuildOperator::close(state);
 }
 
+size_t SpillableHashJoinBuildOperator::estimated_memory_reserved(const ChunkPtr& chunk) {
+    if (chunk && !chunk->is_empty()) {
+        return chunk->memory_usage() + _join_builder->hash_join_builder()->hash_table().mem_usage();
+    }
+    return 0;
+}
+
+size_t SpillableHashJoinBuildOperator::estimated_memory_reserved() {
+    return _join_builder->hash_join_builder()->hash_table().mem_usage() * 2;
+}
+
 bool SpillableHashJoinBuildOperator::need_input() const {
     return !is_finished() && !(_join_builder->spiller()->is_full() || _join_builder->spill_channel()->has_task());
 }
 
 Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
-    if (!_join_builder->spiller()->spilled()) {
-        _join_builder->spill_channel()->set_finishing();
+    auto defer_set_finishing = DeferOp([this]() { _join_builder->spill_channel()->set_finishing(); });
+
+    if (spill_strategy() == spill::SpillStrategy::NO_SPILL ||
+        (!_join_builder->spiller()->spilled() &&
+         _join_builder->hash_join_builder()->hash_table().get_row_count() == 0)) {
         return HashJoinBuildOperator::set_finishing(state);
     }
 
+    DCHECK(spill_strategy() == spill::SpillStrategy::SPILL_ALL);
+    // if this operator is changed to spill mode just before set_finishing,
+    // we should create spill task
+    if (!_join_builder->spiller()->spilled()) {
+        DCHECK(_is_first_time_spill);
+        _is_first_time_spill = false;
+        auto& ht = _join_builder->hash_join_builder()->hash_table();
+        RETURN_IF_ERROR(init_spiller_partitions(state, ht));
+
+        _hash_table_slice_iterator = _convert_hash_map_to_chunk();
+        RETURN_IF_ERROR(_join_builder->append_spill_task(state, _hash_table_slice_iterator));
+    }
+
+    if (state->is_cancelled()) {
+        _join_builder->spiller()->cancel();
+    }
+
+    auto flush_function = [this](RuntimeState* state, auto io_executor) {
+        return _join_builder->spiller()->flush(state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
+    };
+
     auto io_executor = _join_builder->spill_channel()->io_executor();
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
-        _join_builder->spill_channel()->set_finishing();
         return _join_builder->spiller()->set_flush_all_call_back(
                 [this]() {
                     _is_finished = true;
                     _join_builder->enter_probe_phase();
                     return Status::OK();
                 },
-                state, *io_executor, spill::MemTrackerGuard(tls_mem_tracker));
+                state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
     };
 
-    Status ret_status;
-    auto defer = DeferOp([&]() {
-        Status st = [&]() {
-            if (_join_builder->spill_channel()->is_working()) {
-                std::function<StatusOr<ChunkPtr>()> task = [state, io_executor,
-                                                            set_call_back_function]() -> StatusOr<ChunkPtr> {
-                    RETURN_IF_ERROR(set_call_back_function(state, io_executor));
-                    return Status::EndOfFile("eos");
-                };
-                _join_builder->spill_channel()->add_spill_task({task});
-            } else {
-                RETURN_IF_ERROR(set_call_back_function(state, io_executor));
-            }
-            return Status::OK();
-        }();
-        ret_status = ret_status.ok() ? st : ret_status;
-    });
-    ret_status = publish_runtime_filters(state);
+    publish_runtime_filters(state);
+    SpillProcessTasksBuilder task_builder(state, io_executor);
+    task_builder.then(flush_function).finally(set_call_back_function);
 
-    return ret_status;
+    RETURN_IF_ERROR(_join_builder->spill_channel()->execute(task_builder));
+
+    return Status::OK();
 }
 
 Status SpillableHashJoinBuildOperator::publish_runtime_filters(RuntimeState* state) {
@@ -131,8 +155,17 @@ Status SpillableHashJoinBuildOperator::append_hash_columns(const ChunkPtr& chunk
     return Status::OK();
 }
 
+Status SpillableHashJoinBuildOperator::init_spiller_partitions(RuntimeState* state, JoinHashTable& ht) {
+    if (ht.get_row_count() > 0) {
+        // We estimate the size of the hash table to be twice the size of the already input hash table
+        auto num_partitions = ht.mem_usage() * 2 / _join_builder->spiller()->options().spill_mem_table_bytes_size;
+        RETURN_IF_ERROR(_join_builder->spiller()->set_partition(state, num_partitions));
+    }
+    return Status::OK();
+}
+
 bool SpillableHashJoinBuildOperator::is_finished() const {
-    return _is_finished;
+    return _is_finished || _join_builder->is_finished();
 }
 
 Status SpillableHashJoinBuildOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
@@ -147,10 +180,13 @@ Status SpillableHashJoinBuildOperator::push_chunk(RuntimeState* state, const Chu
         return Status::OK();
     }
 
-    // TODO: materialize chunk (const/nullable)
-
     auto& ht = _join_builder->hash_join_builder()->hash_table();
-    ASSIGN_OR_RETURN(auto spill_chunk, ht.convert_to_serialize_format(chunk));
+    // Estimate the appropriate number of partitions
+    if (_is_first_time_spill) {
+        RETURN_IF_ERROR(init_spiller_partitions(state, ht));
+    }
+
+    ASSIGN_OR_RETURN(auto spill_chunk, ht.convert_to_spill_schema(chunk));
     RETURN_IF_ERROR(append_hash_columns(spill_chunk));
 
     RETURN_IF_ERROR(_join_builder->append_chunk_to_spill_buffer(state, spill_chunk));
@@ -164,8 +200,7 @@ Status SpillableHashJoinBuildOperator::push_chunk(RuntimeState* state, const Chu
     return Status::OK();
 }
 
-void SpillableHashJoinBuildOperator::mark_need_spill() {
-    HashJoinBuildOperator::mark_need_spill();
+void SpillableHashJoinBuildOperator::set_execute_mode(int performance_level) {
     if (!_is_finished) {
         _join_builder->set_spill_strategy(spill::SpillStrategy::SPILL_ALL);
     }
@@ -195,14 +230,14 @@ Status SpillableHashJoinBuildOperatorFactory::prepare(RuntimeState* state) {
 
     // no order by, init with 4 partitions
     _spill_options = std::make_shared<spill::SpilledOptions>(config::spill_init_partition);
-    _spill_options->spill_file_size = state->spill_mem_table_size();
+    _spill_options->spill_mem_table_bytes_size = state->spill_mem_table_size();
     _spill_options->mem_table_pool_size = state->spill_mem_table_num();
     _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
     _spill_options->min_spilled_size = state->spill_operator_min_bytes();
-    _spill_options->max_memory_size_each_partition = state->spill_operator_max_bytes();
     _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();
     _spill_options->name = "hash-join-build";
     _spill_options->plan_node_id = _plan_node_id;
+    _spill_options->encode_level = state->spill_encode_level();
     // TODO: Our current adaptive dop for non-broadcast functions will also result in a build hash_joiner corresponding to multiple prob hash_join prober.
     //
     _spill_options->read_shared =

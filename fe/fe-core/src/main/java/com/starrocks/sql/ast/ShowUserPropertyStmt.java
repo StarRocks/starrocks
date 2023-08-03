@@ -16,7 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
@@ -62,7 +62,7 @@ public class ShowUserPropertyStmt extends ShowStmt {
     public List<List<String>> getRows(ConnectContext connectContext) throws AnalysisException {
         List<List<String>> rows = new ArrayList<>();
         if (connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
-            AuthenticationManager authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationManager();
+            AuthenticationMgr authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
 
             // Currently only "max_user_connections" is supported
             long maxConn = authenticationManager.getMaxConn(user);

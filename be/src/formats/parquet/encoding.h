@@ -25,6 +25,7 @@ namespace starrocks {
 
 class Slice;
 class Column;
+class NullableColumn;
 
 } // namespace starrocks
 
@@ -56,12 +57,9 @@ public:
 
     virtual Status get_dict_values(Column* column) { return Status::NotSupported("get_dict_values is not supported"); }
 
-    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, Column* column) {
+    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
+                                   Column* column) {
         return Status::NotSupported("get_dict_values is not supported");
-    }
-
-    virtual Status get_dict_codes(const std::vector<Slice>& dict_values, std::vector<int32_t>* dict_codes) {
-        return Status::NotSupported("get_dict_codes is not supported");
     }
 
     // used to set fixed length

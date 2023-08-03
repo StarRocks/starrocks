@@ -4,7 +4,7 @@ A Delta Lake catalog is a kind of external catalog that enables you to query dat
 
 Also, you can directly transform and load data from Delta Lake by using [INSERT INTO](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md) based on Delta Lake catalogs. StarRocks supports Delta Lake catalogs from v2.5 onwards.
 
-To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster needs to integrate with two important components:
+To ensure successful SQL workloads on your Delta Lake cluster, your StarRocks cluster needs to integrate with two important components:
 
 - Object storage or distributed file system like AWS S3, other S3-compatible storage system, Microsoft Azure Storage, Google GCS, or HDFS
 
@@ -41,7 +41,7 @@ For more information, see [Preparation for authentication in AWS IAM](../../inte
 
 If you choose HDFS as storage, configure your StarRocks cluster as follows:
 
-- (Optional) Set the username that is used to access your HDFS cluster and Hive metastore. By default, StarRocks uses the username of the FE and BE processes to access your HDFS cluster and Hive metastore. You can also set the username by using the `HADOOP_USERNAME` parameter in the **fe/conf/hadoop_env.sh** file of each FE and the **be/conf/hadoop_env.sh** file of each BE. After you set the username in these files, restart each FE and each BE to make the parameter settings take effect. You can set only one username for each StarRocks cluster.
+- (Optional) Set the username that is used to access your HDFS cluster and Hive metastore. By default, StarRocks uses the username of the FE and BE processes to access your HDFS cluster and Hive metastore. You can also set the username by adding `export HADOOP_USER_NAME="<user_name>"` at the beginning of the **fe/conf/hadoop_env.sh** file of each FE and at the beginning of the **be/conf/hadoop_env.sh** file of each BE. After you set the username in these files, restart each FE and each BE to make the parameter settings take effect. You can set only one username for each StarRocks cluster.
 - When you query Delta Lake data, the FEs and BEs of your StarRocks cluster use the HDFS client to access your HDFS cluster. In most cases, you do not need to configure your StarRocks cluster to achieve that purpose, and StarRocks starts the HDFS client using the default configurations. You need to configure your StarRocks cluster only in the following situations:
 
   - High availability (HA) is enabled for your HDFS cluster: Add the **hdfs-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE.
@@ -74,16 +74,14 @@ PROPERTIES
 )
 ```
 
-For more information, see [CREATE EXTERNAL CATALOG](../../sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md).
-
 ### Parameters
 
 #### catalog_name
 
 The name of the Delta Lake catalog. The naming conventions are as follows:
 
-- The name can contain letters, digits 0 through 9, and underscores (_) and must start with a letter.
-- The name cannot exceed 64 characters in length.
+- The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.
+- The name is case-sensitive and cannot exceed 1023 characters in length.
 
 #### comment
 
@@ -102,6 +100,7 @@ A set of parameters about how StarRocks integrates with the metastore of your da
 If you choose Hive metastore as the metastore of your data source, configure `MetastoreParams` as follows:
 
 ```SQL
+"hive.metastore.type" = "hive",
 "hive.metastore.uris" = "<hive_metastore_uri>"
 ```
 
@@ -113,6 +112,7 @@ The following table describes the parameter you need to configure in `MetastoreP
 
 | Parameter           | Required | Description                                                  |
 | ------------------- | -------- | ------------------------------------------------------------ |
+| hive.metastore.type | Yes      | The type of metastore that you use for your Delta Lake cluster. Set the value to `hive`. |
 | hive.metastore.uris | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br>If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
 
 ##### AWS Glue
@@ -139,6 +139,7 @@ If you choose AWS Glue as the metastore of your data source, which is supported 
 - To choose the IAM user-based authentication method, configure `MetastoreParams` as follows:
 
   ```SQL
+  "hive.metastore.type" = "glue",
   "aws.glue.use_instance_profile" = "false",
   "aws.glue.access_key" = "<iam_user_access_key>",
   "aws.glue.secret_key" = "<iam_user_secret_key>",
@@ -422,7 +423,7 @@ If you choose Google GCS as storage for your Delta Lake cluster, take one of the
 
 A set of parameters about how StarRocks updates the cached metadata of Delta Lake. This parameter set is optional.
 
-StarRocks implements the automatic asynchronous update policy by default.
+StarRocks implements the [automatic asynchronous update policy](#appendix-understand-metadata-automatic-asynchronous-update) by default.
 
 In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with an out-of-the-box performance.
 
@@ -441,8 +442,6 @@ However, if the frequency of data updates in Delta Lake is high, you can tune th
 | metastore_cache_ttl_sec                | No       | The time interval at which StarRocks automatically discards the metadata of Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `86400`, which is 24 hours. |
 | remote_file_cache_ttl_sec              | No       | The time interval at which StarRocks automatically discards the metadata of the underlying data files of Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `129600`, which is 36 hours. |
 
-For more information, see the "[Understand automatic asynchronous update](../catalog/deltalake_catalog.md#appendix-understand-automatic-asynchronous-update)" section of this topic.
-
 ### Examples
 
 The following examples create a Delta Lake catalog named `deltalake_catalog_hms` or `deltalake_catalog_glue`, depending on the type of metastore you use, to query data from your Delta Lake cluster.
@@ -458,9 +457,10 @@ The following examples create a Delta Lake catalog named `deltalake_catalog_hms`
   PROPERTIES
   (
       "type" = "deltalake",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
-      "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -471,11 +471,11 @@ The following examples create a Delta Lake catalog named `deltalake_catalog_hms`
   PROPERTIES
   (
       "type" = "deltalake",
-      "aws.s3.use_instance_profile" = "true",
-      "aws.s3.region" = "us-west-2",
       "hive.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
-      "aws.glue.region" = "us-west-2"
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "true",
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -488,10 +488,11 @@ The following examples create a Delta Lake catalog named `deltalake_catalog_hms`
   PROPERTIES
   (
       "type" = "deltalake",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
-      "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -502,13 +503,13 @@ The following examples create a Delta Lake catalog named `deltalake_catalog_hms`
   PROPERTIES
   (
       "type" = "deltalake",
-      "aws.s3.use_instance_profile" = "true",
-      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
-      "aws.s3.region" = "us-west-2",
       "hive.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
       "aws.glue.iam_role_arn" = "arn:aws:iam::081976408565:role/test_glue_role",
-      "aws.glue.region" = "us-west-2"
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "true",
+      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -521,11 +522,12 @@ The following examples create a Delta Lake catalog named `deltalake_catalog_hms`
   PROPERTIES
   (
       "type" = "deltalake",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "false",
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_access_key>",
-      "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -536,15 +538,15 @@ The following examples create a Delta Lake catalog named `deltalake_catalog_hms`
   PROPERTIES
   (
       "type" = "deltalake",
-      "aws.s3.use_instance_profile" = "false",
-      "aws.s3.access_key" = "<iam_user_access_key>",
-      "aws.s3.secret_key" = "<iam_user_secret_key>",
-      "aws.s3.region" = "us-west-2",
       "hive.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "false",
       "aws.glue.access_key" = "<iam_user_access_key>",
       "aws.glue.secret_key" = "<iam_user_secret_key>",
-      "aws.glue.region" = "us-west-2"
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "false",
+      "aws.s3.access_key" = "<iam_user_access_key>",
+      "aws.s3.secret_key" = "<iam_user_secret_key>",
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -556,7 +558,8 @@ Use MinIO as an example. Run a command like below:
 CREATE EXTERNAL CATALOG deltalake_catalog_hms
 PROPERTIES
 (
-    "type" = "deltalake", 
+    "type" = "deltalake",
+    "hive.metastore.type" = "hive",
     "hive.metastore.uris" = "thrift://34.132.15.127:9083",
     "aws.s3.enable_ssl" = "true",
     "aws.s3.enable_path_style_access" = "true",
@@ -576,7 +579,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG deltalake_catalog_hms
   PROPERTIES
   (
-      "type" = "deltalake", 
+      "type" = "deltalake",
+      "hive.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.blob.storage_account" = "<blob_storage_account_name>",
       "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
@@ -589,7 +593,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG deltalake_catalog_hms
   PROPERTIES
   (
-      "type" = "deltalake", 
+      "type" = "deltalake",
+      "hive.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.blob.account_name" = "<blob_storage_account_name>",
       "azure.blob.container_name" = "<blob_container_name>",
@@ -605,7 +610,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG deltalake_catalog_hms
   PROPERTIES
   (
-      "type" = "deltalake", 
+      "type" = "deltalake",
+      "hive.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls1.use_managed_service_identity" = "true"    
   );
@@ -617,7 +623,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG deltalake_catalog_hms
   PROPERTIES
   (
-      "type" = "deltalake", 
+      "type" = "deltalake",
+      "hive.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls1.oauth2_client_id" = "<application_client_id>",
       "azure.adls1.oauth2_credential" = "<application_client_credential>",
@@ -633,7 +640,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG deltalake_catalog_hms
   PROPERTIES
   (
-      "type" = "deltalake", 
+      "type" = "deltalake",
+      "hive.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.oauth2_use_managed_identity" = "true",
       "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
@@ -647,7 +655,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG deltalake_catalog_hms
   PROPERTIES
   (
-      "type" = "deltalake", 
+      "type" = "deltalake",
+      "hive.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.storage_account" = "<storage_account_name>",
       "azure.adls2.shared_key" = "<shared_key>"     
@@ -660,7 +669,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG deltalake_catalog_hms
   PROPERTIES
   (
-      "type" = "deltalake", 
+      "type" = "deltalake",
+      "hive.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.oauth2_client_id" = "<service_client_id>",
       "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
@@ -676,7 +686,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG deltalake_catalog_hms
   PROPERTIES
   (
-      "type" = "deltalake", 
+      "type" = "deltalake",
+      "hive.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "gcp.gcs.use_compute_engine_service_account" = "true"    
   );
@@ -688,7 +699,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG deltalake_catalog_hms
   PROPERTIES
   (
-      "type" = "deltalake", 
+      "type" = "deltalake",
+      "hive.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "gcp.gcs.service_account_email" = "<google_service_account_email>",
       "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
@@ -704,7 +716,8 @@ PROPERTIES
     CREATE EXTERNAL CATALOG deltalake_catalog_hms
     PROPERTIES
     (
-        "type" = "deltalake", 
+        "type" = "deltalake",
+        "hive.metastore.type" = "hive",
         "hive.metastore.uris" = "thrift://34.132.15.127:9083",
         "gcp.gcs.use_compute_engine_service_account" = "true",
         "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"    
@@ -717,7 +730,8 @@ PROPERTIES
     CREATE EXTERNAL CATALOG deltalake_catalog_hms
     PROPERTIES
     (
-        "type" = "deltalake", 
+        "type" = "deltalake",
+        "hive.metastore.type" = "hive",
         "hive.metastore.uris" = "thrift://34.132.15.127:9083",
         "gcp.gcs.service_account_email" = "<google_service_account_email>",
         "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",

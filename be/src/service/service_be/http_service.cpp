@@ -68,7 +68,8 @@ namespace starrocks {
 HttpServiceBE::HttpServiceBE(ExecEnv* env, int port, int num_threads)
         : _env(env),
           _ev_http_server(new EvHttpServer(port, num_threads)),
-          _web_page_handler(new WebPageHandler(_ev_http_server.get())) {}
+          _web_page_handler(new WebPageHandler(_ev_http_server.get())),
+          _http_concurrent_limiter(new ConcurrentLimiter(config::be_http_num_workers - 1)) {}
 
 HttpServiceBE::~HttpServiceBE() {
     _ev_http_server->stop();
@@ -81,7 +82,7 @@ Status HttpServiceBE::start() {
     add_default_path_handlers(_web_page_handler.get(), _env->process_mem_tracker());
 
     // register load
-    auto* stream_load_action = new StreamLoadAction(_env);
+    auto* stream_load_action = new StreamLoadAction(_env, _http_concurrent_limiter.get());
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/{db}/{table}/_stream_load", stream_load_action);
     _http_handlers.emplace_back(stream_load_action);
 

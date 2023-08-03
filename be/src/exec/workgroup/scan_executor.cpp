@@ -15,11 +15,14 @@
 #include "exec/workgroup/scan_executor.h"
 
 #include "exec/workgroup/scan_task_queue.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks::workgroup {
 
 ScanExecutor::ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_ptr<ScanTaskQueue> task_queue)
-        : _task_queue(std::move(task_queue)), _thread_pool(std::move(thread_pool)) {}
+        : _task_queue(std::move(task_queue)), _thread_pool(std::move(thread_pool)) {
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_scan_executor_queuing, [this]() { return _task_queue->size(); });
+}
 
 ScanExecutor::~ScanExecutor() {
     _task_queue->close();

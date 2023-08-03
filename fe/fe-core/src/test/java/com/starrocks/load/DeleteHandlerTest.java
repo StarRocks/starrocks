@@ -70,7 +70,7 @@ import java.util.concurrent.TimeUnit;
 
 public class DeleteHandlerTest {
 
-    private DeleteHandler deleteHandler;
+    private DeleteMgr deleteHandler;
 
     private static final long BACKEND_ID_1 = 10000L;
     private static final long BACKEND_ID_2 = 10001L;
@@ -104,9 +104,8 @@ public class DeleteHandlerTest {
         FeConstants.runningUnitTest = true;
 
         globalTransactionMgr = new GlobalTransactionMgr(globalStateMgr);
-        globalTransactionMgr.setEditLog(editLog);
         connectContext.setGlobalStateMgr(globalStateMgr);
-        deleteHandler = new DeleteHandler();
+        deleteHandler = new DeleteMgr();
         auth = AccessTestUtil.fetchAdminAccess();
         try {
             db = CatalogMocker.mockDb();
@@ -252,13 +251,6 @@ public class DeleteHandlerTest {
             }
         };
 
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentAnalyzeMgr().updateLoadRows((TransactionState) any);
-                minTimes = 0;
-            }
-        };
-
         try {
             com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
         } catch (Exception e) {
@@ -305,13 +297,6 @@ public class DeleteHandlerTest {
                 TransactionState transactionState = new TransactionState();
                 transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
                 return transactionState;
-            }
-        };
-
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentAnalyzeMgr().updateLoadRows((TransactionState) any);
-                minTimes = 0;
             }
         };
 
@@ -433,13 +418,6 @@ public class DeleteHandlerTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentAnalyzeMgr().updateLoadRows((TransactionState) any);
-                minTimes = 0;
-            }
-        };
-
-        new Expectations() {
-            {
                 AgentTaskExecutor.submit((AgentBatchTask) any);
                 minTimes = 0;
             }
@@ -482,13 +460,6 @@ public class DeleteHandlerTest {
             @Mock
             public Collection<TabletDeleteInfo> getTabletDeleteInfo() {
                 return Lists.newArrayList(tabletDeleteInfo);
-            }
-        };
-
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentAnalyzeMgr().updateLoadRows((TransactionState) any);
-                minTimes = 0;
             }
         };
 

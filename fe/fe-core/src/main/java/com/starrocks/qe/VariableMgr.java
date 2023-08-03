@@ -38,6 +38,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -48,6 +49,9 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
@@ -341,6 +345,30 @@ public class VariableMgr {
             }
         } finally {
             WLOCK.unlock();
+        }
+    }
+
+    public static void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        try {
+            int sessionVarSize = reader.readInt();
+            for (int i = 0; i < sessionVarSize; ++i) {
+                VariableInfo v = reader.readJson(VariableInfo.class);
+                VarContext varContext = getVarContext(v.name);
+                if (varContext != null) {
+                    setValue(varContext.getObj(), varContext.getField(), v.variable);
+                }
+            }
+
+            int globalVarSize = reader.readInt();
+            for (int i = 0; i < globalVarSize; ++i) {
+                VariableInfo v = reader.readJson(VariableInfo.class);
+                VarContext varContext = getVarContext(v.name);
+                if (varContext != null) {
+                    setValue(varContext.getObj(), varContext.getField(), v.variable);
+                }
+            }
+        } catch (DdlException e) {
+            throw new IOException(e);
         }
     }
 
@@ -659,5 +687,17 @@ public class VariableMgr {
             ctx = CTX_BY_VAR_NAME.get(ALIASES.get(name));
         }
         return ctx;
+    }
+
+    private static class VariableInfo {
+        @SerializedName(value = "n")
+        private String name;
+        @SerializedName(value = "v")
+        private String variable;
+
+        public VariableInfo(String name, String variable) {
+            this.name = name;
+            this.variable = variable;
+        }
     }
 }

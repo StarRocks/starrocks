@@ -23,7 +23,7 @@ import com.starrocks.server.GlobalStateMgr;
  * <p>
  * We achieve this by registering the new type as {@link ForwardCompatiblePEntryObject} in
  * {@link com.starrocks.persist.gson.GsonUtils} and remove the privilege entry in corresponding
- * {@link PrivilegeCollection} when deserializing.
+ * {@link PrivilegeCollectionV2} when deserializing.
  */
 public class ForwardCompatiblePEntryObject implements PEntryObject {
     @Override

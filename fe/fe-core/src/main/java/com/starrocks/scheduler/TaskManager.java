@@ -23,12 +23,12 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
-import com.starrocks.meta.LimitExceededException;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -56,8 +56,8 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Queue;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -225,19 +225,7 @@ public class TaskManager {
                     if (schedule == null) {
                         throw new DdlException("Task [" + task.getName() + "] has no scheduling information");
                     }
-                    LocalDateTime startTime = Utils.getDatetimeFromLong(schedule.getStartTime());
-                    Duration duration = Duration.between(LocalDateTime.now(), startTime);
-                    long initialDelay = duration.getSeconds();
-                    // if startTime < now, start scheduling now
-                    if (initialDelay < 0) {
-                        initialDelay = 0;
-                    }
-                    // this operation should only run in master
-                    ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
-                                    executeTask(task.getName()), initialDelay,
-                            TimeUtils.convertTimeUnitValueToSecond(schedule.getPeriod(), schedule.getTimeUnit()),
-                            TimeUnit.SECONDS);
-                    periodFutureMap.put(task.getId(), future);
+                    registerScheduler(task);
                 }
             }
             nameToTaskMap.put(task.getName(), task);
@@ -296,36 +284,61 @@ public class TaskManager {
         return taskRunManager.killTaskRun(task.getId());
     }
 
-    public Constants.TaskRunState executeTaskSync(String taskName) throws ExecutionException, InterruptedException {
-        return executeTaskSync(taskName, new ExecuteOption());
-    }
-
-    public Constants.TaskRunState executeTaskSync(String taskName, ExecuteOption option)
-            throws ExecutionException, InterruptedException {
-        Task task = nameToTaskMap.get(taskName);
-        if (task == null) {
-            throw new DmlException("execute task:" + taskName + " failed");
-        }
-        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
-        SubmitResult submitResult = taskRunManager.submitTaskRun(taskRun, option);
-        if (submitResult.getStatus() != SUBMITTED) {
-            throw new DmlException("execute task:" + taskName + " failed");
-        }
-        return taskRun.getFuture().get();
-    }
-
     public SubmitResult executeTask(String taskName) {
         return executeTask(taskName, new ExecuteOption());
     }
 
     public SubmitResult executeTask(String taskName, ExecuteOption option) {
-        Task task = nameToTaskMap.get(taskName);
+        Task task = getTask(taskName);
         if (task == null) {
             return new SubmitResult(null, SubmitResult.SubmitStatus.FAILED);
         }
+        if (option.getIsSync()) {
+            return executeTaskSync(task, option);
+        } else {
+            return executeTaskAsync(task, option);
+        }
+    }
+
+    // for test
+    public SubmitResult executeTaskSync(Task task) {
+        return executeTaskSync(task, new ExecuteOption());
+    }
+
+    public SubmitResult executeTaskSync(Task task, ExecuteOption option) {
+        TaskRun taskRun;
+        SubmitResult submitResult;
+        if (!tryTaskLock()) {
+            throw new DmlException("Failed to get task lock when execute Task sync[" + task.getName() + "]");
+        }
+        try {
+            taskRun = TaskRunBuilder.newBuilder(task)
+                    .properties(option.getTaskRunProperties())
+                    .type(option)
+                    .setConnectContext(ConnectContext.get()).build();
+            submitResult = taskRunManager.submitTaskRun(taskRun, option);
+            if (submitResult.getStatus() != SUBMITTED) {
+                throw new DmlException("execute task:" + task.getName() + " failed");
+            }
+        } finally {
+            taskUnlock();
+        }
+        try {
+            Constants.TaskRunState taskRunState = taskRun.getFuture().get();
+            if (taskRunState != Constants.TaskRunState.SUCCESS) {
+                throw new DmlException("execute task: %s failed. task source:%s, task run state:%s",
+                        task.getName(), task.getSource(), taskRunState);
+            }
+            return submitResult;
+        } catch (Exception e) {
+            throw new DmlException("execute task: %s failed.", e, task.getName());
+        }
+    }
+
+    public SubmitResult executeTaskAsync(Task task, ExecuteOption option) {
         return taskRunManager
                 .submitTaskRun(TaskRunBuilder.newBuilder(task).properties(option.getTaskRunProperties()).type(option).
-                                build(), option);
+                        build(), option);
     }
 
     public void dropTasks(List<Long> taskIdList, boolean isReplay) {
@@ -377,6 +390,72 @@ public class TaskManager {
             }
         }
         return taskList;
+    }
+
+    public void alterTask(Task currentTask, Task changedTask, boolean isReplay) {
+        Constants.TaskType currentType = currentTask.getType();
+        Constants.TaskType changedType = changedTask.getType();
+        boolean hasChanged = false;
+        if (currentType == Constants.TaskType.MANUAL) {
+            if (changedType == Constants.TaskType.EVENT_TRIGGERED) {
+                hasChanged = true;
+            }
+        } else if (currentTask.getType() == Constants.TaskType.EVENT_TRIGGERED) {
+            if (changedType == Constants.TaskType.MANUAL) {
+                hasChanged = true;
+            }
+        } else if (currentTask.getType() == Constants.TaskType.PERIODICAL) {
+            if (!isReplay) {
+                boolean isCancel = stopScheduler(currentTask.getName());
+                if (!isCancel) {
+                    throw new RuntimeException("stop scheduler failed");
+                }
+            }
+            periodFutureMap.remove(currentTask.getId());
+            currentTask.setState(Constants.TaskState.UNKNOWN);
+            currentTask.setSchedule(null);
+            hasChanged = true;
+        }
+
+        if (changedType == Constants.TaskType.PERIODICAL) {
+            currentTask.setState(Constants.TaskState.ACTIVE);
+            TaskSchedule schedule = changedTask.getSchedule();
+            currentTask.setSchedule(schedule);
+            if (!isReplay) {
+                registerScheduler(currentTask);
+            }
+            hasChanged = true;
+        }
+
+        if (hasChanged) {
+            currentTask.setType(changedTask.getType());
+            if (!isReplay) {
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(changedTask);
+            }
+        }
+    }
+
+    private void registerScheduler(Task task) {
+        TaskSchedule schedule = task.getSchedule();
+        LocalDateTime startTime = Utils.getDatetimeFromLong(schedule.getStartTime());
+        Duration duration = Duration.between(LocalDateTime.now(), startTime);
+        long initialDelay = duration.getSeconds();
+        // if startTime < now, start scheduling now
+        if (initialDelay < 0) {
+            initialDelay = 0;
+        }
+        // this operation should only run in master
+        ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), true, task.getProperties());
+        ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
+                        executeTask(task.getName(), option), initialDelay,
+                TimeUtils.convertTimeUnitValueToSecond(schedule.getPeriod(), schedule.getTimeUnit()),
+                TimeUnit.SECONDS);
+        periodFutureMap.put(task.getId(), future);
+    }
+
+    public void replayAlterTask(Task task) {
+        Task currentTask = getTask(task.getName());
+        alterTask(currentTask, task, true);
     }
 
     private boolean tryTaskLock() {
@@ -438,7 +517,7 @@ public class TaskManager {
             if (ex.getMessage().contains("Failed to get task lock")) {
                 submitResult = new SubmitResult(null, SubmitResult.SubmitStatus.REJECTED);
             } else {
-                LOG.warn("Failed to create Task [{}]" + taskName, ex);
+                LOG.warn("Failed to create Task [{}]", taskName, ex);
                 throw ex;
             }
         }
@@ -478,8 +557,8 @@ public class TaskManager {
         return checksum;
     }
 
-    public void loadTasksV2(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, "TaskManager");
+    public void loadTasksV2(SRMetaBlockReader reader)
+            throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         int size = reader.readInt();
         while (size-- > 0) {
             Task task = reader.readJson(Task.class);
@@ -498,20 +577,16 @@ public class TaskManager {
         data.tasks = new ArrayList<>(nameToTaskMap.values());
         checksum ^= data.tasks.size();
         data.runStatus = showTaskRunStatus(null);
-        String s = GsonUtils.GSON.toJson(data);
-        boolean retry = false;
-        try {
-            Text.writeString(dos, s);
-        } catch (LimitExceededException ex) {
-            retry = true;
-        }
-        if (retry) {
-            int beforeLength = s.length();
+        int beforeSize = data.runStatus.size();
+        if (beforeSize >= Config.task_runs_max_history_number) {
             taskRunManager.getTaskRunHistory().forceGC();
             data.runStatus = showTaskRunStatus(null);
-            s = GsonUtils.GSON.toJson(data);
+            String s = GsonUtils.GSON.toJson(data);
             LOG.warn("Too much task metadata triggers forced task_run GC, " +
-                    "length before GC:{}, length after GC:{}.", beforeLength, s.length());
+                    "size before GC:{}, size after GC:{}.", beforeSize, data.runStatus.size());
+            Text.writeString(dos, s);
+        } else {
+            String s = GsonUtils.GSON.toJson(data);
             Text.writeString(dos, s);
         }
         return checksum;
@@ -543,7 +618,7 @@ public class TaskManager {
     /**
      * Return the last refresh TaskRunStatus for the task which the source type is MV.
      * The iteration order is by the task refresh time:
-     *      PendingTaskRunMap > RunningTaskRunMap > TaskRunHistory
+     * PendingTaskRunMap > RunningTaskRunMap > TaskRunHistory
      * TODO: Maybe only return needed MVs rather than all MVs.
      */
     public Map<String, TaskRunStatus> showMVLastRefreshTaskRunStatus(String dbName) {
@@ -553,33 +628,34 @@ public class TaskManager {
                 pTaskRunQueue.stream()
                         .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
                         .map(TaskRun::getStatus)
-                        .filter(task -> task != null)
+                        .filter(Objects::nonNull)
                         .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
             }
+            taskRunManager.getTaskRunHistory().getAllHistory()
+                    .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
+            // use Map::put to make running task status overwrite the pending task
             taskRunManager.getRunningTaskRunMap().values().stream()
                     .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
                     .map(TaskRun::getStatus)
-                    .filter(task -> task != null)
-                    .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
-            taskRunManager.getTaskRunHistory().getAllHistory().stream()
-                    .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
+                    .filter(Objects::nonNull)
+                    .forEach(task -> mvNameRunStatusMap.put(task.getTaskName(), task));
         } else {
             for (Queue<TaskRun> pTaskRunQueue : taskRunManager.getPendingTaskRunMap().values()) {
                 pTaskRunQueue.stream()
                         .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
                         .map(TaskRun::getStatus)
-                        .filter(task -> task != null)
-                        .filter(u -> u != null && u.getDbName().equals(dbName))
+                        .filter(Objects::nonNull)
+                        .filter(u -> u.getDbName().equals(dbName))
                         .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
             }
+            taskRunManager.getTaskRunHistory().getAllHistory().stream()
+                    .filter(u -> u.getDbName().equals(dbName))
+                    .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
             taskRunManager.getRunningTaskRunMap().values().stream()
                     .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
                     .map(TaskRun::getStatus)
                     .filter(u -> u != null && u.getDbName().equals(dbName))
-                    .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
-            taskRunManager.getTaskRunHistory().getAllHistory().stream()
-                    .filter(u -> u.getDbName().equals(dbName))
-                    .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
+                    .forEach(task -> mvNameRunStatusMap.put(task.getTaskName(), task));
         }
         return mvNameRunStatusMap;
     }
@@ -797,10 +873,24 @@ public class TaskManager {
     }
 
     public boolean containTask(String taskName) {
-        return nameToTaskMap.containsKey(taskName);
+        if (!tryTaskLock()) {
+            throw new DmlException("Failed to get task lock when check Task [" + taskName + "]");
+        }
+        try {
+            return nameToTaskMap.containsKey(taskName);
+        } finally {
+            taskUnlock();
+        }
     }
 
     public Task getTask(String taskName) {
-        return nameToTaskMap.get(taskName);
+        if (!tryTaskLock()) {
+            throw new DmlException("Failed to get task lock when get Task [" + taskName + "]");
+        }
+        try {
+            return nameToTaskMap.get(taskName);
+        } finally {
+            taskUnlock();
+        }
     }
 }

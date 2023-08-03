@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
@@ -49,7 +50,10 @@ public class FileTable extends Table {
     private static final String JSON_KEY_FORMAT = "format";
     private static final String JSON_RECURSIVE_DIRECTORIES = "enable_recursive_listing";
     private static final String JSON_KEY_FILE_PROPERTIES = "fileProperties";
+
+    @SerializedName(value = "fp")
     private Map<String, String> fileProperties = Maps.newHashMap();
+
     public FileTable() {
         super(TableType.FILE);
     }
@@ -121,7 +125,7 @@ public class FileTable extends Table {
             }
             return remoteFileDescs;
         } catch (StarRocksConnectorException e) {
-            throw new DdlException("doesn't get file with path: " + getTableLocation());
+            throw new DdlException("doesn't get file with path: " + getTableLocation(), e);
         }
     }
 

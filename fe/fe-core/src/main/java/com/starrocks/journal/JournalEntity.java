@@ -80,6 +80,7 @@ import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.ConsistencyCheckInfo;
+import com.starrocks.persist.CreateDbInfo;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.CreateUserInfo;
@@ -214,6 +215,11 @@ public class JournalEntity implements Writable {
             case OperationType.OP_CREATE_DB: {
                 data = new Database();
                 ((Database) data).readFields(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_CREATE_DB_V2: {
+                data = CreateDbInfo.read(in);
                 isRead = true;
                 break;
             }
@@ -738,6 +744,7 @@ public class JournalEntity implements Writable {
                 break;
             }
             case OperationType.OP_CREATE_TASK:
+            case OperationType.OP_ALTER_TASK:
                 data = Task.read(in);
                 isRead = true;
                 break;

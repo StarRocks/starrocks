@@ -256,6 +256,18 @@ public class CreateLakeTableTest {
 
     @Test
     public void testCreateLakeTableException() {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return new StarOSAgent();
+            }
+        };
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public FilePathInfo allocateFilePath(long tableId) throws DdlException {
+                return FilePathInfo.newBuilder().build();
+            }
+        };
 
         // storage_cache disabled but enable_async_write_back = true
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
@@ -272,6 +284,16 @@ public class CreateLakeTableTest {
                 () -> createTable(
                         "create table lake_test.auto_partition (key1 date, key2 varchar(10), key3 int)\n" +
                                 "partition by date_trunc(\"day\", key1) distributed by hash(key2) buckets 3;"));
+
+        // do not support list partition
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Do not support create list partition Cloud Native table",
+                () -> createTable(
+                        "create table lake_test.list_partition_invalid (dt date not null, key2 varchar(10))\n" +
+                                "PARTITION BY LIST (dt) (PARTITION p1 VALUES IN ((\"2022-04-01\")),\n" +
+                                "PARTITION p2 VALUES IN ((\"2022-04-02\")),\n" +
+                                "PARTITION p3 VALUES IN ((\"2022-04-03\")))\n" +
+                                "distributed by hash(dt) buckets 3;"));
     }
 
     @Test

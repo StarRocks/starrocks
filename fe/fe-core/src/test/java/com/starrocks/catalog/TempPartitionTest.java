@@ -114,7 +114,7 @@ public class TempPartitionTest {
     private void alterTableWithNewAnalyzer(String sql, boolean expectedException) throws Exception {
         try {
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-            GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
             if (expectedException) {
                 Assert.fail("expected exception not thrown");
             }

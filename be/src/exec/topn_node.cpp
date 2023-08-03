@@ -288,7 +288,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
             std::make_shared<SpillProcessChannelFactory>(degree_of_parallelism, std::move(executor));
 
     // spill process operator
-    if (runtime_state()->enable_spill() && _limit < 0 && !is_partition) {
+    if (runtime_state()->enable_spill() && runtime_state()->enable_sort_spill() && _limit < 0 && !is_partition) {
         context->interpolate_spill_process(id(), spill_channel_factory, degree_of_parallelism);
     }
 

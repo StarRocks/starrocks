@@ -178,7 +178,8 @@ TEST(PrimaryKeyEncoderTest, testEncodeVarcharLimit) {
         string tmpstr("slice00000");
         tmp.set_slice(tmpstr);
         pchunk->columns()[0]->append_datum(tmp);
-        tmpstr = "slice0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        tmpstr = "slice000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+                 "0000"
                  "00000000000000000000000000000000000";
         tmp.set_slice(tmpstr);
         pchunk->columns()[0]->append_datum(tmp);

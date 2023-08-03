@@ -471,7 +471,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                         node.getPartitionNames(),
                         node.getHasHintsPartitionNames(),
                         Lists.newArrayList(),
-                        node.getTabletIds());
+                        node.getTabletIds(),
+                        node.isUsePkIndex());
             } else {
                 scanOperator = new LogicalBinlogScanOperator(
                         node.getTable(),

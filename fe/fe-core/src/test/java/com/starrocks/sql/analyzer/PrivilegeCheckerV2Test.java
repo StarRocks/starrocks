@@ -18,7 +18,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.FunctionName;
-import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.backup.BlobStorage;
 import com.starrocks.backup.RemoteFile;
 import com.starrocks.backup.Repository;
@@ -34,7 +34,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.mysql.MysqlChannel;
-import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
@@ -57,8 +57,9 @@ import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.statistic.AnalyzeJob;
-import com.starrocks.statistic.AnalyzeManager;
+import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
@@ -84,7 +85,9 @@ public class PrivilegeCheckerV2Test {
     private static StarRocksAssert starRocksAssert;
     private static UserIdentity testUser;
 
-    private static AuthorizationManager authorizationManager;
+    private static AuthorizationMgr authorizationManager;
+
+    private static ConnectContext connectContext;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -112,7 +115,10 @@ public class PrivilegeCheckerV2Test {
         String createTblStmtStr3 = "create table db1.tbl2(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
                 +
                 "AGGREGATE KEY(k1, k2, k3, k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
-        starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
+
+        connectContext = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+        starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("db1");
         starRocksAssert.withDatabase("db2");
         starRocksAssert.withDatabase("db3");
@@ -121,7 +127,7 @@ public class PrivilegeCheckerV2Test {
         starRocksAssert.withTable(createTblStmtStr3);
         createMvForTest(starRocksAssert.getCtx());
 
-        authorizationManager = starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationManager();
+        authorizationManager = starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationMgr();
         starRocksAssert.getCtx().setRemoteIP("localhost");
         authorizationManager.initBuiltinRolesAndUsers();
         ctxToRoot();
@@ -228,7 +234,7 @@ public class PrivilegeCheckerV2Test {
     private static void ctxToTestUser() throws PrivilegeException {
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setCurrentRoleIds(
-                starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationManager().getRoleIdsByUser(testUser)
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationMgr().getRoleIdsByUser(testUser)
         );
         starRocksAssert.getCtx().setQualifiedUser(testUser.getQualifiedUser());
     }
@@ -236,7 +242,7 @@ public class PrivilegeCheckerV2Test {
     private static void ctxToRoot() throws PrivilegeException {
         starRocksAssert.getCtx().setCurrentUserIdentity(UserIdentity.ROOT);
         starRocksAssert.getCtx().setCurrentRoleIds(
-                starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationManager().getRoleIdsByUser(UserIdentity.ROOT)
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationMgr().getRoleIdsByUser(UserIdentity.ROOT)
         );
 
         starRocksAssert.getCtx().setQualifiedUser(UserIdentity.ROOT.getQualifiedUser());
@@ -253,8 +259,8 @@ public class PrivilegeCheckerV2Test {
         CreateUserStmt createUserStmt =
                 (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
 
-        AuthenticationManager authenticationManager =
-                starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationManager();
+        AuthenticationMgr authenticationManager =
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationMgr();
         authenticationManager.createUser(createUserStmt);
         testUser = createUserStmt.getUserIdentity();
 
@@ -451,6 +457,33 @@ public class PrivilegeCheckerV2Test {
     }
 
     @Test
+    public void testSelectCatalogTable() throws Exception {
+        ctxToTestUser();
+        try {
+            StmtExecutor stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "select * from hive0.tpch.region");
+            stmtExecutor.execute();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Access denied;"));
+        }
+
+        ctxToRoot();
+        StmtExecutor stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "set catalog hive0");
+        stmtExecutor.execute();
+        grantRevokeSqlAsRoot("grant SELECT on tpch.region to test");
+        ctxToTestUser();
+        try {
+            stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "select * from hive0.tpch.region");
+            stmtExecutor.execute();
+        } catch (Exception e) {
+            Assert.assertFalse(e.getMessage().contains("Access denied;"));
+        }
+        ctxToRoot();
+        grantRevokeSqlAsRoot("revoke SELECT on tpch.region from test");
+        stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "set catalog default_catalog");
+        stmtExecutor.execute();
+    }
+
+    @Test
     public void testResourceGroupStmt() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createRg3Sql = "create resource group rg3\n" +
@@ -593,7 +626,7 @@ public class PrivilegeCheckerV2Test {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant DROP on db1.tbl1 to test", ctx), ctx);
         ctxToTestUser();
-        AnalyzeManager analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
+        AnalyzeMgr analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
         AnalyzeJob analyzeJob = new AnalyzeJob(-1, -1, Lists.newArrayList(),
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
@@ -683,7 +716,7 @@ public class PrivilegeCheckerV2Test {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant DROP on db1.tbl1 to test", ctx), ctx);
         ctxToTestUser();
-        AnalyzeManager analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
+        AnalyzeMgr analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         Database db1 = globalStateMgr.getDb("db1");
@@ -2289,7 +2322,7 @@ public class PrivilegeCheckerV2Test {
 
         grantRevokeSqlAsRoot("grant drop on materialized view db1.mv4 to test");
         GlobalStateMgr.getCurrentState().dropMaterializedView(statement);
-        GlobalStateMgr.getCurrentState().getAuthorizationManager().removeInvalidObject();
+        GlobalStateMgr.getCurrentState().getAuthorizationMgr().removeInvalidObject();
         ctxToTestUser();
     }
 
@@ -2609,7 +2642,7 @@ public class PrivilegeCheckerV2Test {
     @Test
     public void testGrantRevokeBuiltinRole() throws Exception {
         String sql = "create role r1";
-        AuthorizationManager manager = starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationManager();
+        AuthorizationMgr manager = starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationMgr();
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
 

@@ -202,15 +202,29 @@ Status StorageEngine::_open() {
 
     _async_delta_writer_executor =
             std::make_unique<bthreads::ThreadPoolExecutor>(thread_pool.release(), kTakesOwnership);
+    REGISTER_GAUGE_STARROCKS_METRIC(async_delta_writer_queue_count, [this]() {
+        return static_cast<bthreads::ThreadPoolExecutor*>(_async_delta_writer_executor.get())
+                ->get_thread_pool()
+                ->num_queued_tasks();
+    });
 
     _memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_memtable_flush_executor->init(dirs), "init MemTableFlushExecutor failed");
+    REGISTER_GAUGE_STARROCKS_METRIC(memtable_flush_queue_count, [this]() {
+        return _memtable_flush_executor->get_thread_pool()->num_queued_tasks();
+    });
 
     _segment_flush_executor = std::make_unique<SegmentFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_segment_flush_executor->init(dirs), "init SegmentFlushExecutor failed");
+    REGISTER_GAUGE_STARROCKS_METRIC(segment_flush_queue_count, [this]() {
+        return _segment_flush_executor->get_thread_pool()->num_queued_tasks();
+    });
 
     _segment_replicate_executor = std::make_unique<SegmentReplicateExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_segment_replicate_executor->init(dirs), "init SegmentReplicateExecutor failed");
+    REGISTER_GAUGE_STARROCKS_METRIC(segment_replicate_queue_count, [this]() {
+        return _segment_replicate_executor->get_thread_pool()->num_queued_tasks();
+    });
 
     return Status::OK();
 }
@@ -448,7 +462,7 @@ std::vector<DataDir*> StorageEngine::get_stores_for_create_tablet(TStorageMedium
         for (auto& it : _store_map) {
             if (it.second->is_used()) {
                 if (_available_storage_medium_type_count == 1 || it.second->storage_medium() == storage_medium) {
-                    if (it.second->available_bytes() > config::storage_flood_stage_left_capacity_bytes) {
+                    if (!it.second->capacity_limit_reached(0)) {
                         stores.push_back(it.second);
                     }
                 }
@@ -456,13 +470,31 @@ std::vector<DataDir*> StorageEngine::get_stores_for_create_tablet(TStorageMedium
         }
     }
 
+    // sort by disk usage in asc order
     std::sort(stores.begin(), stores.end(),
-              [](const auto& a, const auto& b) { return a->available_bytes() > b->available_bytes(); });
+              [](const auto& a, const auto& b) { return a->disk_usage(0) < b->disk_usage(0); });
 
-    const int mid = stores.size() / 2 + 1;
-    //  TODO(lingbin): should it be a global util func?
+    // compute average usage of all disks
+    double avg_disk_usage = 0.0;
+    double usage_sum = 0.0;
+    for (const auto& v : stores) {
+        usage_sum += v->disk_usage(0);
+    }
+    avg_disk_usage = usage_sum / stores.size();
+
+    // find the last root path which will participate in vector shuffle so that all the paths
+    // before and included can be chosen to create tablet on preferentially
+    size_t last_candidate_idx = 0;
+    for (const auto v : stores) {
+        if (v->disk_usage(0) > avg_disk_usage + config::storage_high_usage_disk_protect_ratio) {
+            break;
+        }
+        last_candidate_idx++;
+    }
+
+    // randomize the preferential paths to balance number of tablets each disk has
     std::srand(std::random_device()());
-    std::shuffle(stores.begin(), stores.begin() + mid, std::mt19937(std::random_device()()));
+    std::shuffle(stores.begin(), stores.begin() + last_candidate_idx, std::mt19937(std::random_device()()));
     return stores;
 }
 
@@ -642,20 +674,23 @@ void StorageEngine::compaction_check() {
 // Base compaction may be started by time(once every day now)
 // Compaction checker will check whether to schedule base compaction for tablets
 size_t StorageEngine::_compaction_check_one_round() {
-    size_t batch_size = 1000;
+    size_t batch_size = _compaction_manager->max_task_num();
     int batch_sleep_time_ms = 1000;
     std::vector<TabletSharedPtr> tablets;
     tablets.reserve(batch_size);
     size_t tablets_num_checked = 0;
     while (!bg_worker_stopped()) {
-        bool finished = _tablet_manager->get_next_batch_tablets(batch_size, &tablets);
-        for (auto& tablet : tablets) {
-            _compaction_manager->update_tablet(tablet);
-        }
-        tablets_num_checked += tablets.size();
-        tablets.clear();
-        if (finished) {
-            break;
+        // if compaction task is too many, skip this round
+        if (_compaction_manager->candidates_size() <= batch_size) {
+            bool finished = _tablet_manager->get_next_batch_tablets(batch_size, &tablets);
+            for (auto& tablet : tablets) {
+                _compaction_manager->update_tablet(tablet);
+            }
+            tablets_num_checked += tablets.size();
+            tablets.clear();
+            if (finished) {
+                break;
+            }
         }
         std::unique_lock<std::mutex> lk(_checker_mutex);
         _checker_cv.wait_for(lk, std::chrono::milliseconds(batch_sleep_time_ms),

@@ -39,9 +39,10 @@ add_library(Formats STATIC
         orc/orc_chunk_reader.cpp
         orc/orc_input_stream.cpp
         orc/orc_mapping.cpp
+        orc/orc_memory_pool.cpp
         orc/orc_min_max_decoder.cpp
-        orc/fill_function.cpp
         orc/utils.cpp
+        orc/column_reader.cpp
         parquet/column_chunk_reader.cpp
         parquet/column_converter.cpp
         parquet/column_reader.cpp
@@ -55,6 +56,7 @@ add_library(Formats STATIC
         parquet/meta_helper.cpp
         parquet/group_reader.cpp
         parquet/file_reader.cpp
+        utils.h
         )
 
 add_subdirectory(orc/apache-orc)

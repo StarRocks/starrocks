@@ -121,13 +121,23 @@ StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_st
     auto ret = call_hdfs_scan_function_in_pthread([this, stats] {
         struct hdfsReadStatistics* hdfs_statistics = nullptr;
         auto r = hdfsFileGetReadStatistics(_file, &hdfs_statistics);
-        if (r != 0) return Status::InternalError(fmt::format("hdfsFileGetReadStatistics failed: {}", r));
-        stats->reserve(4);
+        if (r == -1) {
+            return Status::IOError(fmt::format("Fail to get read statistics of {}: {}", r, get_hdfs_err_msg()));
+        }
         stats->append("TotalBytesRead", hdfs_statistics->totalBytesRead);
         stats->append("TotalLocalBytesRead", hdfs_statistics->totalLocalBytesRead);
         stats->append("TotalShortCircuitBytesRead", hdfs_statistics->totalShortCircuitBytesRead);
         stats->append("TotalZeroCopyBytesRead", hdfs_statistics->totalZeroCopyBytesRead);
         hdfsFileFreeReadStatistics(hdfs_statistics);
+
+        struct hdfsHedgedReadMetrics* hdfs_hedged_read_statistics = nullptr;
+        r = hdfsGetHedgedReadMetrics(_fs, &hdfs_hedged_read_statistics);
+        if (r == 0) {
+            stats->append("TotalHedgedReadOps", hdfs_hedged_read_statistics->hedgedReadOps);
+            stats->append("TotalHedgedReadOpsInCurThread", hdfs_hedged_read_statistics->hedgedReadOpsInCurThread);
+            stats->append("TotalHedgedReadOpsWin", hdfs_hedged_read_statistics->hedgedReadOpsWin);
+            hdfsFreeHedgedReadMetrics(hdfs_hedged_read_statistics);
+        }
         return Status::OK();
     });
     Status st = ret->get_future().get();
@@ -450,7 +460,11 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
 
     hdfsFile file = hdfsOpenFile(hdfs_client->hdfs_fs, path.c_str(), flags, hdfs_write_buffer_size, 0, 0);
     if (file == nullptr) {
-        return Status::InternalError(fmt::format("hdfsOpenFile failed, file={}", path));
+        if (errno == ENOENT) {
+            return Status::RemoteFileNotFound(fmt::format("hdfsOpenFile failed, file={}", path));
+        } else {
+            return Status::InternalError(fmt::format("hdfsOpenFile failed, file={}", path));
+        }
     }
     return std::make_unique<HDFSWritableFile>(hdfs_client->hdfs_fs, file, path, 0);
 }
@@ -472,7 +486,11 @@ StatusOr<std::unique_ptr<SequentialFile>> HdfsFileSystem::new_sequential_file(co
     }
     hdfsFile file = hdfsOpenFile(hdfs_client->hdfs_fs, path.c_str(), O_RDONLY, hdfs_read_buffer_size, 0, 0);
     if (file == nullptr) {
-        return Status::InternalError("hdfsOpenFile failed, path={}"_format(path));
+        if (errno == ENOENT) {
+            return Status::RemoteFileNotFound(fmt::format("hdfsOpenFile failed, file={}", path));
+        } else {
+            return Status::InternalError(fmt::format("hdfsOpenFile failed, file={}", path));
+        }
     }
     auto stream = std::make_shared<HdfsInputStream>(hdfs_client->hdfs_fs, file, path);
     return std::make_unique<SequentialFile>(std::move(stream), path);
@@ -494,7 +512,11 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_fi
     }
     hdfsFile file = hdfsOpenFile(hdfs_client->hdfs_fs, path.c_str(), O_RDONLY, hdfs_read_buffer_size, 0, 0);
     if (file == nullptr) {
-        return Status::InternalError("hdfsOpenFile failed, path={}"_format(path));
+        if (errno == ENOENT) {
+            return Status::RemoteFileNotFound(fmt::format("hdfsOpenFile failed, file={}", path));
+        } else {
+            return Status::InternalError(fmt::format("hdfsOpenFile failed, file={}", path));
+        }
     }
     auto stream = std::make_shared<HdfsInputStream>(hdfs_client->hdfs_fs, file, path);
     return std::make_unique<RandomAccessFile>(std::move(stream), path);

@@ -123,8 +123,6 @@ public:
 
     Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time);
 
-    Status save_meta();
-
     // should only called by UpdateManager's apply thread
     void do_apply();
 
@@ -267,16 +265,11 @@ public:
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              vector<std::unique_ptr<Column>>* columns, void* state);
 
-    /*
-    Status prepare_partial_update_states(Tablet* tablet, const std::vector<ColumnUniquePtr>& upserts,
-                                         EditVersion* read_version, uint32_t* next_rowset_id,
-                                         std::vector<std::vector<uint64_t>*>* rss_rowids);
-    */
-    Status prepare_partial_update_states(Tablet* tablet, const ColumnUniquePtr& upserts, EditVersion* read_version,
-                                         std::vector<uint64_t>* rss_rowids);
+    Status get_rss_rowids_by_pk(Tablet* tablet, const Column& keys, EditVersion* read_version,
+                                std::vector<uint64_t>* rss_rowids, int64_t timeout_ms = 0);
 
-    Status prepare_partial_update_states_unlock(Tablet* tablet, const ColumnUniquePtr& upserts,
-                                                EditVersion* read_version, std::vector<uint64_t>* rss_rowids);
+    Status get_rss_rowids_by_pk_unlock(Tablet* tablet, const Column& keys, EditVersion* read_version,
+                                       std::vector<uint64_t>* rss_rowids);
 
     Status get_missing_version_ranges(std::vector<int64_t>& missing_version_ranges);
 
@@ -297,6 +290,11 @@ public:
 
     std::shared_ptr<std::unordered_map<uint32_t, RowsetSharedPtr>> get_rowset_map() const;
 
+    Status get_apply_version_and_rowsets(int64_t* version, std::vector<RowsetSharedPtr>* rowsets,
+                                         std::vector<uint32_t>* rowset_ids);
+
+    Status get_rowset_and_segment_idx_by_rssid(uint32_t rssid, RowsetSharedPtr* rowset, uint32_t* segment_idx);
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -311,6 +309,7 @@ private:
         size_t num_rows = 0;
         size_t num_dels = 0;
         size_t byte_size = 0;
+        size_t row_size = 0;
         int64_t compaction_score = 0;
         std::string to_string() const;
     };
@@ -372,7 +371,15 @@ private:
 
     void _set_error(const string& msg);
 
-    Status _load_from_pb(const TabletUpdatesPB& updates);
+    Status _load_meta_and_log(const TabletUpdatesPB& tablet_updates_pb);
+
+    Status _load_pending_rowsets();
+
+    Status _load_rowsets_and_check_consistency(std::set<uint32_t>& unapplied_rowsets);
+
+    Status _purge_versions_to_fix_rowset_missing_inconsistency();
+
+    Status _load_from_pb(const TabletUpdatesPB& tablet_updates_pb);
 
     // thread-safe
     void _remove_unused_rowsets(bool drop_tablet = false);
@@ -415,7 +422,7 @@ private:
     // used for async apply, make sure at most 1 thread is doing applying
     mutable std::mutex _apply_running_lock;
     // make sure at most 1 thread is read or write primary index
-    mutable std::mutex _index_lock;
+    mutable std::timed_mutex _index_lock;
     // apply process is running currently
     bool _apply_running = false;
 

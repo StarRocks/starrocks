@@ -15,20 +15,18 @@
 #pragma once
 
 #include <map>
+#include <vector>
 
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
+#include "simd/simd.h"
 #include "util/coding.h"
 #include "util/rle_encoding.h"
 #include "util/slice.h"
 
 namespace starrocks::parquet {
-
-struct SliceHasher {
-    uint32_t operator()(const Slice& s) const { return HashUtil::hash(s.data, s.size, 397); }
-};
 
 template <typename T>
 class DictEncoder final : public Encoder {
@@ -156,8 +154,6 @@ public:
     ~DictDecoder() override = default;
 
     Status set_dict(int chunk_size, size_t num_values, Decoder* decoder) override {
-        _indexes.resize(chunk_size);
-        _slices.resize(chunk_size);
         std::vector<Slice> slices(num_values);
         RETURN_IF_ERROR(decoder->next_batch(num_values, (uint8_t*)&slices[0]));
 
@@ -167,7 +163,6 @@ public:
         }
 
         _dict.resize(num_values);
-        _dict_code_by_value.reserve(num_values);
 
         // reserve enough memory to use append_strings_overflow
         _dict_data.resize(total_length + Column::APPEND_OVERFLOW_MAX_SIZE);
@@ -178,7 +173,6 @@ public:
             _dict[i].data = reinterpret_cast<char*>(&_dict_data[offset]);
             _dict[i].size = slices[i].size;
             offset += slices[i].size;
-            _dict_code_by_value[_dict[i]] = i;
 
             if (slices[i].size > _max_value_length) {
                 _max_value_length = slices[i].size;
@@ -196,22 +190,47 @@ public:
         return Status::OK();
     }
 
-    Status get_dict_values(const std::vector<int32_t>& dict_codes, Column* column) override {
-        std::vector<Slice> slices(dict_codes.size());
-        for (size_t i = 0; i < dict_codes.size(); i++) {
-            slices[i] = _dict[dict_codes[i]];
+    Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
+                           Column* column) override {
+        const std::vector<uint8_t>& null_data = nulls.immutable_null_column_data();
+        bool has_null = nulls.has_null();
+        bool all_null = false;
+
+        if (has_null) {
+            size_t count = SIMD::count_nonzero(null_data);
+            all_null = (count == null_data.size());
         }
-        auto ret = column->append_strings_overflow(slices, _max_value_length);
+
+        // dict codes size and column size HAVE TO BE EXACTLY SAME.
+        std::vector<Slice> slices(dict_codes.size());
+        if (!has_null) {
+            for (size_t i = 0; i < dict_codes.size(); i++) {
+                slices[i] = _dict[dict_codes[i]];
+            }
+        } else if (!all_null) {
+            size_t size = dict_codes.size();
+            const uint8_t* null_data_ptr = null_data.data();
+            for (size_t i = 0; i < size; i++) {
+                // if null, we assign dict code 0(there should be at least one value?)
+                // null = 0, mask = 0xffffffff
+                // null = 1, mask = 0x00000000
+                uint32_t mask = ~(static_cast<uint32_t>(-null_data_ptr[i]));
+                int32_t code = mask & dict_codes[i];
+                slices[i] = _dict[code];
+            }
+        }
+
+        // if all null, then slices[i] is Slice(), and we can not call `append_strings_overflow`
+        // and for other cases, slices[i] is dict value, then we can call `append_strings_overflow`
+        bool ret = false;
+        if (!all_null) {
+            ret = column->append_strings_overflow(slices, _max_value_length);
+        } else {
+            ret = column->append_strings(slices);
+        }
+
         if (UNLIKELY(!ret)) {
             return Status::InternalError("DictDecoder append strings to column failed");
-        }
-        return Status::OK();
-    }
-
-    Status get_dict_codes(const std::vector<Slice>& dict_values, std::vector<int32_t>* dict_codes) override {
-        for (auto& dict_value : dict_values) {
-            // dict value always exists in _dict_code_by_value
-            dict_codes->emplace_back(_dict_code_by_value[dict_value]);
         }
         return Status::OK();
     }
@@ -268,7 +287,6 @@ public:
 
 private:
     enum { SIZE_OF_DICT_CODE_TYPE = sizeof(int32_t) };
-    std::unordered_map<Slice, int32_t, SliceHasher> _dict_code_by_value;
 
     RleBatchDecoder<uint32_t> _index_batch_decoder;
     std::vector<uint8_t> _dict_data;

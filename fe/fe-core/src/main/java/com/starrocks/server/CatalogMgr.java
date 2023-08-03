@@ -27,6 +27,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Resource;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.DbsProcDir;
@@ -39,6 +40,9 @@ import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import org.apache.logging.log4j.LogManager;
@@ -145,7 +149,17 @@ public class CatalogMgr {
 
         readLock();
         try {
-            return catalogs.containsKey(catalogName);
+            if (catalogs.containsKey(catalogName)) {
+                return true;
+            }
+
+            // TODO: Used for replay query dump which only supports `hive` catalog for now.
+            if (FeConstants.isReplayFromQueryDump &&
+                    catalogs.containsKey(getResourceMappingCatalogName(catalogName, "hive"))) {
+                return true;
+            }
+
+            return false;
         } finally {
             readUnlock();
         }
@@ -238,6 +252,8 @@ public class CatalogMgr {
     }
 
     public void loadResourceMappingCatalog() {
+        LOG.info("start to replay resource mapping catalog");
+
         List<Resource> resources = GlobalStateMgr.getCurrentState().getResourceMgr().getNeedMappingCatalogResources();
         for (Resource resource : resources) {
             Map<String, String> properties = Maps.newHashMap(resource.getProperties());
@@ -255,6 +271,7 @@ public class CatalogMgr {
                 LOG.error("Failed to load resource mapping inside catalog {}", catalogName, e);
             }
         }
+        LOG.info("finished replaying resource mapping catalogs from resources");
     }
 
     public long saveCatalogs(DataOutputStream dos, long checksum) throws IOException {
@@ -366,6 +383,19 @@ public class CatalogMgr {
         public static String toResourceName(String catalogName, String type) {
             return isResourceMappingCatalog(catalogName) ?
                     catalogName.substring(RESOURCE_MAPPING_CATALOG_PREFIX.length() + type.length() + 1) : catalogName;
+        }
+    }
+
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        try {
+            int serializedCatalogsSize = reader.readInt();
+            for (int i = 0; i < serializedCatalogsSize; ++i) {
+                Catalog catalog = reader.readJson(Catalog.class);
+                replayCreateCatalog(catalog);
+            }
+            loadResourceMappingCatalog();
+        } catch (DdlException e) {
+            throw new IOException(e);
         }
     }
 }

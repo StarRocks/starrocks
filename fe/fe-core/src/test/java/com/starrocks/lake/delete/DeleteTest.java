@@ -39,8 +39,8 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.DeleteJob;
+import com.starrocks.load.DeleteMgr;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.EditLog;
 import com.starrocks.proto.DeleteDataRequest;
@@ -103,7 +103,7 @@ public class DeleteTest {
     private Database db;
     private Auth auth;
     private ConnectContext connectContext = new ConnectContext();
-    private DeleteHandler deleteHandler;
+    private DeleteMgr deleteHandler;
 
     private Database createDb() {
         // Schema
@@ -167,7 +167,7 @@ public class DeleteTest {
     @Before
     public void setUp() {
         connectContext.setGlobalStateMgr(globalStateMgr);
-        deleteHandler = new DeleteHandler();
+        deleteHandler = new DeleteMgr();
         auth = AccessTestUtil.fetchAdminAccess();
         db = createDb();
     }

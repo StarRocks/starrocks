@@ -146,6 +146,8 @@ public:
     size_t revocable_mem_bytes() const { return _revocable_mem_bytes; }
     void set_spill_stragety(spill::SpillStrategy stragety) { _spill_strategy = stragety; }
 
+    virtual size_t reserved_bytes(const ChunkPtr& chunk) { return chunk != nullptr ? chunk->memory_usage() : 0; }
+
     virtual void cancel() {}
 
 protected:

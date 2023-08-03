@@ -12,13 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
@@ -27,6 +25,7 @@ import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.parser.SqlParser;
 
 import java.util.List;
 
@@ -36,11 +35,7 @@ public class CreateTableLikeAnalyzer {
         MetaUtils.normalizationTableName(context, stmt.getDbTbl());
         MetaUtils.normalizationTableName(context, stmt.getExistedDbTbl());
         String tableName = stmt.getTableName();
-        try {
-            FeNameFormat.checkTableName(tableName);
-        } catch (AnalysisException e) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
-        }
+        FeNameFormat.checkTableName(tableName);
 
         Database db = MetaUtils.getDatabase(context, stmt.getExistedDbTbl());
         Table table = MetaUtils.getTable(stmt.getExistedDbTbl());
@@ -51,8 +46,8 @@ public class CreateTableLikeAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERROR_CREATE_TABLE_LIKE_EMPTY, "CREATE");
         }
 
-        StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parseFirstStatement(createTableStmt.get(0),
-                context.getSessionVariable().getSqlMode());
+        StatementBase statementBase =
+                SqlParser.parseOneWithStarRocksDialect(createTableStmt.get(0), context.getSessionVariable());
         com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, context);
         if (statementBase instanceof CreateTableStmt) {
             CreateTableStmt parsedCreateTableStmt = (CreateTableStmt) statementBase;

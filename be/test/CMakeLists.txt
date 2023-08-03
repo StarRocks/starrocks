@@ -20,7 +20,7 @@ set(EXEC_FILES
         ./common/config_test.cpp
         ./common/status_test.cpp
         ./common/tracer_test.cpp
-        ./common/s3_uri_test.cpp
+        ./common/uri_test.cpp
         ./fs/fs_broker_test.cpp
         ./fs/fs_posix_test.cpp
         ./fs/fs_memory_test.cpp
@@ -264,6 +264,7 @@ set(EXEC_FILES
         ./storage/binlog_manager_test.cpp
         ./storage/tablet_binlog_test.cpp
         ./storage/publish_version_task_test.cpp
+        ./storage/get_use_pk_index_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/datetime_value_test.cpp
         ./runtime/decimalv2_value_test.cpp
@@ -297,11 +298,13 @@ set(EXEC_FILES
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
         ./types/bitmap_value_test.cpp
+        ./simd/batch_run_counter_test.cpp
         ./simd/simd_test.cpp
         ./simd/simd_selector_test.cpp
         ./simd/simd_mulselector_test.cpp
         ./util/phmap_test.cpp
         ./util/aes_util_test.cpp
+        ./util/await_test.cpp
         ./util/bitmap_test.cpp
         ./util/bitmap_value_test.cpp
         ./util/bit_stream_utils_test.cpp
@@ -349,6 +352,8 @@ set(EXEC_FILES
         ./util/system_metrics_test.cpp
         ./util/ratelimit_test.cpp
         ./util/cpu_usage_info_test.cpp
+        ./util/concurrent_limiter_test.cpp
+        ./util/stack_trace_mutex_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp

@@ -1028,7 +1028,7 @@ public class MaterializedViewHandler extends AlterHandler {
         if (olapTable.existTempPartitions()) {
             throw new DdlException("Can not alter table when there are temp partitions in table");
         }
-        if (GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager().hasRunningOverwriteJob(olapTable.getId())) {
+        if (GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr().hasRunningOverwriteJob(olapTable.getId())) {
             throw new DdlException("Table[" + olapTable.getName() + "] is doing insert overwrite job, " +
                     "please create materialized view after insert overwrite");
         }

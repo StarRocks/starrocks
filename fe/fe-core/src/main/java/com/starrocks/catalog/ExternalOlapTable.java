@@ -20,6 +20,7 @@ import com.google.common.collect.Range;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -76,18 +77,27 @@ public class ExternalOlapTable extends OlapTable {
 
     public class ExternalTableInfo {
         // remote doris cluster fe addr
+        @SerializedName("ht")
         private String host;
+        @SerializedName("pt")
         private int port;
         // access credential
+        @SerializedName("us")
         private String user;
+        @SerializedName("pw")
         private String password;
 
         // source table info
+        @SerializedName("db")
         private String dbName;
+        @SerializedName("tb")
         private String tableName;
 
+        @SerializedName("dbi")
         private long dbId;
+        @SerializedName("tbi")
         private long tableId;
+        @SerializedName("tbt")
         private TableType tableType;
 
         public ExternalTableInfo() {
@@ -228,8 +238,11 @@ public class ExternalOlapTable extends OlapTable {
         }
     }
 
+
     private long dbId;
     private TTableMeta lastExternalMeta;
+
+    @SerializedName(value = "ef")
     private ExternalTableInfo externalTableInfo;
 
     public ExternalOlapTable() {
@@ -307,16 +320,6 @@ public class ExternalOlapTable extends OlapTable {
     }
 
     @Override
-    public void onCreate() {
-        GlobalStateMgr.getCurrentState().getStarRocksRepository().registerTable(this);
-    }
-
-    @Override
-    public void onDrop(Database db, boolean force, boolean replay) {
-        GlobalStateMgr.getCurrentState().getStarRocksRepository().deRegisterTable(this);
-    }
-
-    @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);
 
@@ -340,6 +343,13 @@ public class ExternalOlapTable extends OlapTable {
         externalTableInfo.fromJsonObj(obj);
     }
 
+    @Override
+    public void copyOnlyForQuery(OlapTable olapTable) {
+        super.copyOnlyForQuery(olapTable);
+        ExternalOlapTable externalOlapTable = (ExternalOlapTable) olapTable;
+        externalOlapTable.externalTableInfo = this.externalTableInfo;
+    }
+
     public void updateMeta(String dbName, TTableMeta meta, List<TBackendMeta> backendMetas)
             throws DdlException, IOException {
         // no meta changed since last time, do nothing
@@ -353,116 +363,46 @@ public class ExternalOlapTable extends OlapTable {
         if (meta.isSetTable_type()) {
             externalTableInfo.setTableType(TableType.deserialize(meta.getTable_type()));
         }
-
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (db == null) {
-            throw new DdlException("database " + dbId + " does not exist");
-        }
-        db.writeLock();
         long start = System.currentTimeMillis();
 
-        try {
-            state = OlapTableState.valueOf(meta.getState());
-            baseIndexId = meta.getBase_index_id();
-            colocateGroup = meta.getColocate_group();
-            bfFpp = meta.getBloomfilter_fpp();
+        lastExternalMeta = meta;
 
-            keysType = KeysType.valueOf(meta.getKey_type());
-            tableProperty = new TableProperty(meta.getProperties());
-            tableProperty.buildReplicationNum();
-            tableProperty.buildStorageFormat();
-            tableProperty.buildStorageVolume();
-            tableProperty.buildInMemory();
-            tableProperty.buildDynamicProperty();
-            tableProperty.buildWriteQuorum();
-            tableProperty.buildReplicatedStorage();
+        state = OlapTableState.valueOf(meta.getState());
+        baseIndexId = meta.getBase_index_id();
+        colocateGroup = meta.getColocate_group();
+        bfFpp = meta.getBloomfilter_fpp();
 
-            indexes = null;
-            if (meta.isSetIndex_infos()) {
-                List<Index> indexList = new ArrayList<>();
-                for (TIndexInfo indexInfo : meta.getIndex_infos()) {
-                    Index index = new Index(indexInfo.getIndex_name(), indexInfo.getColumns(),
-                            IndexDef.IndexType.valueOf(indexInfo.getIndex_type()), indexInfo.getComment());
-                    indexList.add(index);
-                }
-                indexes = new TableIndexes(indexList);
+        keysType = KeysType.valueOf(meta.getKey_type());
+        tableProperty = new TableProperty(meta.getProperties());
+        tableProperty.buildReplicationNum();
+        tableProperty.buildStorageVolume();
+        tableProperty.buildInMemory();
+        tableProperty.buildDynamicProperty();
+        tableProperty.buildWriteQuorum();
+        tableProperty.buildReplicatedStorage();
+
+        indexes = null;
+        if (meta.isSetIndex_infos()) {
+            List<Index> indexList = new ArrayList<>();
+            for (TIndexInfo indexInfo : meta.getIndex_infos()) {
+                Index index = new Index(indexInfo.getIndex_name(), indexInfo.getColumns(),
+                        IndexDef.IndexType.valueOf(indexInfo.getIndex_type()), indexInfo.getComment());
+                indexList.add(index);
             }
+            indexes = new TableIndexes(indexList);
+        }
 
-            TPartitionInfo tPartitionInfo = meta.getPartition_info();
-            PartitionType partitionType = PartitionType.fromThrift(tPartitionInfo.getType());
-            switch (partitionType) {
-                case RANGE:
-                case EXPR_RANGE:
-                    TRangePartitionDesc rangePartitionDesc = tPartitionInfo.getRange_partition_desc();
-                    List<Column> columns = new ArrayList<Column>();
-                    for (TColumnMeta columnMeta : rangePartitionDesc.getColumns()) {
-                        Type type = Type.fromThrift(columnMeta.getColumnType());
-                        Column column = new Column(columnMeta.getColumnName(), type);
-                        if (columnMeta.isSetKey()) {
-                            column.setIsKey(columnMeta.isKey());
-                        }
-                        if (columnMeta.isSetAggregationType()) {
-                            column.setAggregationType(AggregateType.valueOf(columnMeta.getAggregationType()), false);
-                        }
-                        if (columnMeta.isSetComment()) {
-                            column.setComment(columnMeta.getComment());
-                        }
-                        if (columnMeta.isSetDefaultValue()) {
-                            column.setDefaultValue(columnMeta.getDefaultValue());
-                        }
-                        columns.add(column);
-                    }
-                    partitionInfo = new RangePartitionInfo(columns);
-
-                    for (Map.Entry<Long, TRange> entry : rangePartitionDesc.getRanges().entrySet()) {
-                        TRange tRange = entry.getValue();
-                        long partitionId = tRange.getPartition_id();
-                        ByteArrayInputStream stream = new ByteArrayInputStream(tRange.getStart_key());
-                        DataInputStream input = new DataInputStream(stream);
-                        PartitionKey startKey = PartitionKey.read(input);
-                        stream = new ByteArrayInputStream(tRange.getEnd_key());
-                        input = new DataInputStream(stream);
-                        PartitionKey endKey = PartitionKey.read(input);
-                        Range<PartitionKey> range = Range.closedOpen(startKey, endKey);
-                        short replicaNum = tRange.getBase_desc().getReplica_num_map().get(partitionId);
-                        boolean inMemory = tRange.getBase_desc().getIn_memory_map().get(partitionId);
-                        TDataProperty thriftDataProperty = tRange.getBase_desc().getData_property().get(partitionId);
-                        DataProperty dataProperty = new DataProperty(thriftDataProperty.getStorage_medium(),
-                                thriftDataProperty.getCold_time());
-                        // TODO: confirm false is ok
-                        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                        rangePartitionInfo.addPartition(partitionId, false, range, dataProperty, replicaNum, inMemory);
-                    }
-                    break;
-                case UNPARTITIONED:
-                    partitionInfo = new SinglePartitionInfo();
-                    TSinglePartitionDesc singePartitionDesc = tPartitionInfo.getSingle_partition_desc();
-                    for (Map.Entry<Long, Short> entry : singePartitionDesc.getBase_desc().getReplica_num_map()
-                            .entrySet()) {
-                        long partitionId = entry.getKey();
-                        short replicaNum = singePartitionDesc.getBase_desc().getReplica_num_map().get(partitionId);
-                        boolean inMemory = singePartitionDesc.getBase_desc().getIn_memory_map().get(partitionId);
-                        TDataProperty thriftDataProperty =
-                                singePartitionDesc.getBase_desc().getData_property().get(partitionId);
-                        DataProperty dataProperty = new DataProperty(thriftDataProperty.getStorage_medium(),
-                                thriftDataProperty.getCold_time());
-                        partitionInfo.addPartition(partitionId, dataProperty, replicaNum, inMemory);
-                    }
-                    break;
-                default:
-                    LOG.error("invalid partition type: {}", partitionType);
-                    return;
-            }
-            long endOfPartitionBuild = System.currentTimeMillis();
-
-            indexIdToMeta.clear();
-            indexNameToId.clear();
-
-            for (TIndexMeta indexMeta : meta.getIndexes()) {
-                List<Column> columns = new ArrayList();
-                for (TColumnMeta columnMeta : indexMeta.getSchema_meta().getColumns()) {
+        TPartitionInfo tPartitionInfo = meta.getPartition_info();
+        PartitionType partitionType = PartitionType.fromThrift(tPartitionInfo.getType());
+        switch (partitionType) {
+            case RANGE:
+            case EXPR_RANGE:
+            case EXPR_RANGE_V2:
+                TRangePartitionDesc rangePartitionDesc = tPartitionInfo.getRange_partition_desc();
+                List<Column> columns = new ArrayList<Column>();
+                for (TColumnMeta columnMeta : rangePartitionDesc.getColumns()) {
                     Type type = Type.fromThrift(columnMeta.getColumnType());
-                    Column column = new Column(columnMeta.getColumnName(), type, columnMeta.isAllowNull());
+                    Column column = new Column(columnMeta.getColumnName(), type);
                     if (columnMeta.isSetKey()) {
                         column.setIsKey(columnMeta.isKey());
                     }
@@ -477,111 +417,178 @@ public class ExternalOlapTable extends OlapTable {
                     }
                     columns.add(column);
                 }
-                MaterializedIndexMeta index = new MaterializedIndexMeta(indexMeta.getIndex_id(), columns,
-                        indexMeta.getSchema_meta().getSchema_version(),
-                        indexMeta.getSchema_meta().getSchema_hash(),
-                        indexMeta.getSchema_meta().getShort_key_col_count(),
-                        indexMeta.getSchema_meta().getStorage_type(),
-                        KeysType.valueOf(indexMeta.getSchema_meta()
-                                .getKeys_type()),
-                        null);
-                indexIdToMeta.put(index.getIndexId(), index);
-                // TODO(wulei)
-                // indexNameToId.put(indexMeta.getIndex_name(), index.getIndexId());
+                partitionInfo = new RangePartitionInfo(columns);
+
+                for (Map.Entry<Long, TRange> entry : rangePartitionDesc.getRanges().entrySet()) {
+                    TRange tRange = entry.getValue();
+                    long partitionId = tRange.getPartition_id();
+                    ByteArrayInputStream stream = new ByteArrayInputStream(tRange.getStart_key());
+                    DataInputStream input = new DataInputStream(stream);
+                    PartitionKey startKey = PartitionKey.read(input);
+                    stream = new ByteArrayInputStream(tRange.getEnd_key());
+                    input = new DataInputStream(stream);
+                    PartitionKey endKey = PartitionKey.read(input);
+                    Range<PartitionKey> range = Range.closedOpen(startKey, endKey);
+                    short replicaNum = tRange.getBase_desc().getReplica_num_map().get(partitionId);
+                    boolean inMemory = tRange.getBase_desc().getIn_memory_map().get(partitionId);
+                    TDataProperty thriftDataProperty = tRange.getBase_desc().getData_property().get(partitionId);
+                    DataProperty dataProperty = new DataProperty(thriftDataProperty.getStorage_medium(),
+                            thriftDataProperty.getCold_time());
+                    // TODO: confirm false is ok
+                    RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+                    rangePartitionInfo.addPartition(partitionId, tRange.isSetIs_temp() && tRange.isIs_temp(),
+                            range, dataProperty, replicaNum, inMemory);
+                }
+                break;
+            case UNPARTITIONED:
+                partitionInfo = new SinglePartitionInfo();
+                TSinglePartitionDesc singePartitionDesc = tPartitionInfo.getSingle_partition_desc();
+                for (Map.Entry<Long, Short> entry : singePartitionDesc.getBase_desc().getReplica_num_map()
+                        .entrySet()) {
+                    long partitionId = entry.getKey();
+                    short replicaNum = singePartitionDesc.getBase_desc().getReplica_num_map().get(partitionId);
+                    boolean inMemory = singePartitionDesc.getBase_desc().getIn_memory_map().get(partitionId);
+                    TDataProperty thriftDataProperty =
+                            singePartitionDesc.getBase_desc().getData_property().get(partitionId);
+                    DataProperty dataProperty = new DataProperty(thriftDataProperty.getStorage_medium(),
+                            thriftDataProperty.getCold_time());
+                    partitionInfo.addPartition(partitionId, dataProperty, replicaNum, inMemory);
+                }
+                break;
+            default:
+                LOG.error("invalid partition type: {}", partitionType);
+                return;
+        }
+        long endOfPartitionBuild = System.currentTimeMillis();
+
+        indexIdToMeta.clear();
+        indexNameToId.clear();
+
+        for (TIndexMeta indexMeta : meta.getIndexes()) {
+            List<Column> columns = new ArrayList();
+            for (TColumnMeta columnMeta : indexMeta.getSchema_meta().getColumns()) {
+                Type type = Type.fromThrift(columnMeta.getColumnType());
+                Column column = new Column(columnMeta.getColumnName(), type, columnMeta.isAllowNull());
+                if (columnMeta.isSetKey()) {
+                    column.setIsKey(columnMeta.isKey());
+                }
+                if (columnMeta.isSetAggregationType()) {
+                    column.setAggregationType(AggregateType.valueOf(columnMeta.getAggregationType()), false);
+                }
+                if (columnMeta.isSetComment()) {
+                    column.setComment(columnMeta.getComment());
+                }
+                if (columnMeta.isSetDefaultValue()) {
+                    column.setDefaultValue(columnMeta.getDefaultValue());
+                }
+                columns.add(column);
             }
-            long endOfIndexMetaBuild = System.currentTimeMillis();
+            MaterializedIndexMeta index = new MaterializedIndexMeta(indexMeta.getIndex_id(), columns,
+                    indexMeta.getSchema_meta().getSchema_version(),
+                    indexMeta.getSchema_meta().getSchema_hash(),
+                    indexMeta.getSchema_meta().getShort_key_col_count(),
+                    indexMeta.getSchema_meta().getStorage_type(),
+                    KeysType.valueOf(indexMeta.getSchema_meta()
+                            .getKeys_type()),
+                    null);
+            indexIdToMeta.put(index.getIndexId(), index);
+            // TODO(wulei)
+            // indexNameToId.put(indexMeta.getIndex_name(), index.getIndexId());
+        }
+        long endOfIndexMetaBuild = System.currentTimeMillis();
 
-            rebuildFullSchema();
-            long endOfSchemaRebuild = System.currentTimeMillis();
+        rebuildFullSchema();
+        long endOfSchemaRebuild = System.currentTimeMillis();
 
-            idToPartition.clear();
-            nameToPartition.clear();
+        idToPartition.clear();
+        nameToPartition.clear();
 
-            DistributionInfoType type =
-                    DistributionInfoType.valueOf(meta.getDistribution_desc().getDistribution_type());
-            if (type == DistributionInfoType.HASH) {
-                THashDistributionInfo hashDist = meta.getDistribution_desc().getHash_distribution();
-                DistributionDesc distributionDesc = new HashDistributionDesc(hashDist.getBucket_num(),
-                        hashDist.getDistribution_columns());
-                defaultDistributionInfo = distributionDesc.toDistributionInfo(getBaseSchema());
-            }
+        DistributionInfoType type =
+                DistributionInfoType.valueOf(meta.getDistribution_desc().getDistribution_type());
+        if (type == DistributionInfoType.HASH) {
+            THashDistributionInfo hashDist = meta.getDistribution_desc().getHash_distribution();
+            DistributionDesc distributionDesc = new HashDistributionDesc(hashDist.getBucket_num(),
+                    hashDist.getDistribution_columns());
+            defaultDistributionInfo = distributionDesc.toDistributionInfo(getBaseSchema());
+        }
 
-            for (TPartitionMeta partitionMeta : meta.getPartitions()) {
-                Partition partition = new Partition(partitionMeta.getPartition_id(),
-                        partitionMeta.getPartition_name(),
-                        null, // TODO(wulei): fix it
-                        defaultDistributionInfo);
-                partition.setNextVersion(partitionMeta.getNext_version());
-                partition.updateVisibleVersion(partitionMeta.getVisible_version(),
-                        partitionMeta.getVisible_time());
-                for (TIndexMeta indexMeta : meta.getIndexes()) {
-                    MaterializedIndex index = new MaterializedIndex(indexMeta.getIndex_id(),
-                            IndexState.fromThrift(indexMeta.getIndex_state()));
-                    index.setRowCount(indexMeta.getRow_count());
-                    for (TTabletMeta tTabletMeta : indexMeta.getTablets()) {
-                        LocalTablet tablet = new LocalTablet(tTabletMeta.getTablet_id());
-                        tablet.setCheckedVersion(tTabletMeta.getChecked_version());
-                        tablet.setIsConsistent(tTabletMeta.isConsistent());
-                        for (TReplicaMeta replicaMeta : tTabletMeta.getReplicas()) {
-                            Replica replica = new Replica(replicaMeta.getReplica_id(), replicaMeta.getBackend_id(),
-                                    replicaMeta.getVersion(),
-                                    replicaMeta.getSchema_hash(), replicaMeta.getData_size(),
-                                    replicaMeta.getRow_count(), ReplicaState.valueOf(replicaMeta.getState()),
-                                    replicaMeta.getLast_failed_version(),
-                                    replicaMeta.getLast_success_version());
-                            replica.setLastFailedTime(replicaMeta.getLast_failed_time());
-                            // forbidden repair for external table
-                            replica.setNeedFurtherRepair(false);
-                            tablet.addReplica(replica, false);
-                        }
-                        TabletMeta tabletMeta = new TabletMeta(tTabletMeta.getDb_id(), tTabletMeta.getTable_id(),
-                                tTabletMeta.getPartition_id(), tTabletMeta.getIndex_id(),
-                                tTabletMeta.getOld_schema_hash(), tTabletMeta.getStorage_medium());
-                        index.addTablet(tablet, tabletMeta, false);
+        for (TPartitionMeta partitionMeta : meta.getPartitions()) {
+            Partition partition = new Partition(partitionMeta.getPartition_id(),
+                    partitionMeta.getPartition_name(),
+                    null, // TODO(wulei): fix it
+                    defaultDistributionInfo);
+            partition.setNextVersion(partitionMeta.getNext_version());
+            partition.updateVisibleVersion(partitionMeta.getVisible_version(),
+                    partitionMeta.getVisible_time());
+            for (TIndexMeta indexMeta : meta.getIndexes()) {
+                MaterializedIndex index = new MaterializedIndex(indexMeta.getIndex_id(),
+                        IndexState.fromThrift(indexMeta.getIndex_state()));
+                index.setRowCount(indexMeta.getRow_count());
+                for (TTabletMeta tTabletMeta : indexMeta.getTablets()) {
+                    LocalTablet tablet = new LocalTablet(tTabletMeta.getTablet_id());
+                    tablet.setCheckedVersion(tTabletMeta.getChecked_version());
+                    tablet.setIsConsistent(tTabletMeta.isConsistent());
+                    for (TReplicaMeta replicaMeta : tTabletMeta.getReplicas()) {
+                        Replica replica = new Replica(replicaMeta.getReplica_id(), replicaMeta.getBackend_id(),
+                                replicaMeta.getVersion(),
+                                replicaMeta.getSchema_hash(), replicaMeta.getData_size(),
+                                replicaMeta.getRow_count(), ReplicaState.valueOf(replicaMeta.getState()),
+                                replicaMeta.getLast_failed_version(),
+                                replicaMeta.getLast_success_version());
+                        replica.setLastFailedTime(replicaMeta.getLast_failed_time());
+                        // forbidden repair for external table
+                        replica.setNeedFurtherRepair(false);
+                        tablet.addReplica(replica, false);
                     }
-                    if (indexMeta.getPartition_id() == partition.getId()) {
-                        if (index.getId() != baseIndexId) {
-                            partition.createRollupIndex(index);
-                        } else {
-                            partition.setBaseIndex(index);
-                        }
+                    TabletMeta tabletMeta = new TabletMeta(tTabletMeta.getDb_id(), tTabletMeta.getTable_id(),
+                            tTabletMeta.getPartition_id(), tTabletMeta.getIndex_id(),
+                            tTabletMeta.getOld_schema_hash(), tTabletMeta.getStorage_medium());
+                    index.addTablet(tablet, tabletMeta, false);
+                }
+                if (indexMeta.getPartition_id() == partition.getId()) {
+                    if (index.getId() != baseIndexId) {
+                        partition.createRollupIndex(index);
+                    } else {
+                        partition.setBaseIndex(index);
                     }
                 }
+            }
+            if (partitionMeta.isSetIs_temp() && partitionMeta.isIs_temp()) {
+                addTempPartition(partition);
+            } else {
                 addPartition(partition);
             }
-            long endOfTabletMetaBuild = System.currentTimeMillis();
-
-            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(clusterId);
-            for (TBackendMeta backendMeta : backendMetas) {
-                Backend backend = systemInfoService.getBackend(backendMeta.getBackend_id());
-                if (backend == null) {
-                    backend = new Backend();
-                    backend.setId(backendMeta.getBackend_id());
-                    backend.setHost(backendMeta.getHost());
-                    backend.setBePort(backendMeta.getBe_port());
-                    backend.setHttpPort(backendMeta.getHttp_port());
-                    backend.setBrpcPort(backendMeta.getRpc_port());
-                    backend.setAlive(backendMeta.isAlive());
-                    backend.setBackendState(BackendState.values()[backendMeta.getState()]);
-                    systemInfoService.addBackend(backend);
-                } else {
-                    backend.setId(backendMeta.getBackend_id());
-                    backend.setBePort(backendMeta.getBe_port());
-                    backend.setHttpPort(backendMeta.getHttp_port());
-                    backend.setBrpcPort(backendMeta.getRpc_port());
-                    backend.setAlive(backendMeta.isAlive());
-                    backend.setBackendState(BackendState.values()[backendMeta.getState()]);
-                }
-            }
-            lastExternalMeta = meta;
-            LOG.info("TableMetaSyncer finish meta update. partition build cost: {}ms, " +
-                            "index meta build cost: {}ms, schema rebuild cost: {}ms, " +
-                            "tablet meta build cost: {}ms, total cost: {}ms",
-                    endOfPartitionBuild - start, endOfIndexMetaBuild - endOfPartitionBuild,
-                    endOfSchemaRebuild - endOfIndexMetaBuild, endOfTabletMetaBuild - endOfSchemaRebuild,
-                    System.currentTimeMillis() - start);
-        } finally {
-            db.writeUnlock();
         }
+        long endOfTabletMetaBuild = System.currentTimeMillis();
+
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(clusterId);
+        for (TBackendMeta backendMeta : backendMetas) {
+            Backend backend = systemInfoService.getBackend(backendMeta.getBackend_id());
+            if (backend == null) {
+                backend = new Backend();
+                backend.setId(backendMeta.getBackend_id());
+                backend.setHost(backendMeta.getHost());
+                backend.setBePort(backendMeta.getBe_port());
+                backend.setHttpPort(backendMeta.getHttp_port());
+                backend.setBrpcPort(backendMeta.getRpc_port());
+                backend.setAlive(backendMeta.isAlive());
+                backend.setBackendState(BackendState.values()[backendMeta.getState()]);
+                systemInfoService.addBackend(backend);
+            } else {
+                backend.setId(backendMeta.getBackend_id());
+                backend.setBePort(backendMeta.getBe_port());
+                backend.setHttpPort(backendMeta.getHttp_port());
+                backend.setBrpcPort(backendMeta.getRpc_port());
+                backend.setAlive(backendMeta.isAlive());
+                backend.setBackendState(BackendState.values()[backendMeta.getState()]);
+            }
+        }
+
+        LOG.info("TableMetaSyncer finish meta update. partition build cost: {}ms, " +
+                        "index meta build cost: {}ms, schema rebuild cost: {}ms, " +
+                        "tablet meta build cost: {}ms, total cost: {}ms",
+                endOfPartitionBuild - start, endOfIndexMetaBuild - endOfPartitionBuild,
+                endOfSchemaRebuild - endOfIndexMetaBuild, endOfTabletMetaBuild - endOfSchemaRebuild,
+                System.currentTimeMillis() - start);
     }
 }

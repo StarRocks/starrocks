@@ -21,7 +21,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.HdfsURI;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateFunction;

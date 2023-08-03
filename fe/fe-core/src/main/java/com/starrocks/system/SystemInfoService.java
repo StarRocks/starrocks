@@ -69,7 +69,6 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.ModifyBackendAddressClause;
 import com.starrocks.system.Backend.BackendState;
@@ -93,32 +92,33 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class SystemInfoService implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(SystemInfoService.class);
-
     public static final String DEFAULT_CLUSTER = "default_cluster";
 
-    private volatile ImmutableMap<Long, Backend> idToBackendRef;
-    private volatile ImmutableMap<Long, AtomicLong> idToReportVersionRef;
+    @SerializedName(value = "be")
+    private volatile ConcurrentHashMap<Long, Backend> idToBackendRef;
 
-    private volatile ImmutableMap<Long, ComputeNode> idToComputeNodeRef;
+    @SerializedName(value = "ce")
+    private volatile ConcurrentHashMap<Long, ComputeNode> idToComputeNodeRef;
 
     private long lastBackendIdForCreation = -1;
     private long lastBackendIdForOther = -1;
 
+    private volatile ImmutableMap<Long, AtomicLong> idToReportVersionRef;
     private volatile ImmutableMap<Long, DiskInfo> pathHashToDishInfoRef;
 
     public SystemInfoService() {
-        idToBackendRef = ImmutableMap.<Long, Backend>of();
-        idToReportVersionRef = ImmutableMap.<Long, AtomicLong>of();
+        idToBackendRef = new ConcurrentHashMap<>();
+        idToComputeNodeRef = new ConcurrentHashMap<>();
 
-        idToComputeNodeRef = ImmutableMap.<Long, ComputeNode>of();
-
-        pathHashToDishInfoRef = ImmutableMap.<Long, DiskInfo>of();
+        idToReportVersionRef = ImmutableMap.of();
+        pathHashToDishInfoRef = ImmutableMap.of();
     }
 
     public void addComputeNodes(List<Pair<String, Integer>> hostPortPairs)
@@ -140,8 +140,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     private ComputeNode getComputeNodeWithHeartbeatPort(String host, Integer heartPort) {
-        ImmutableMap<Long, ComputeNode> idToComputeNode = idToComputeNodeRef;
-        for (ComputeNode computeNode : idToComputeNode.values()) {
+        for (ComputeNode computeNode : idToComputeNodeRef.values()) {
             if (computeNode.getHost().equals(host) && computeNode.getHeartbeatPort() == heartPort) {
                 return computeNode;
             }
@@ -153,25 +152,20 @@ public class SystemInfoService implements GsonPostProcessable {
      * For test.
      */
     public void addComputeNode(ComputeNode computeNode) {
-        Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
-        copiedComputeNodes.put(computeNode.getId(), computeNode);
-        idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
+        idToComputeNodeRef.put(computeNode.getId(), computeNode);
     }
 
     // Final entry of adding compute node
-    private void addComputeNode(String host, int heartbeatPort) throws DdlException {
+    private void addComputeNode(String host, int heartbeatPort) {
         ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
-        // update idToComputor
-        Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
-        copiedComputeNodes.put(newComputeNode.getId(), newComputeNode);
-        idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
-
+        idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
         setComputeNodeOwner(newComputeNode);
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddComputeNode(newComputeNode);
         LOG.info("finished to add {} ", newComputeNode);
     }
+
     private void setComputeNodeOwner(ComputeNode computeNode) {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         Preconditions.checkState(cluster != null);
@@ -202,9 +196,7 @@ public class SystemInfoService implements GsonPostProcessable {
 
     // for test
     public void dropBackend(Backend backend) {
-        Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
-        copiedBackends.remove(backend.getId());
-        idToBackendRef = ImmutableMap.copyOf(copiedBackends);
+        idToBackendRef.remove(backend.getId());
 
         Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
         copiedReportVerions.remove(backend.getId());
@@ -213,9 +205,8 @@ public class SystemInfoService implements GsonPostProcessable {
 
     // for test
     public void addBackend(Backend backend) {
-        Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
-        copiedBackends.put(backend.getId(), backend);
-        idToBackendRef = ImmutableMap.copyOf(copiedBackends);
+        idToBackendRef.put(backend.getId(), backend);
+
         Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
         copiedReportVerions.put(backend.getId(), new AtomicLong(0L));
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
@@ -232,9 +223,7 @@ public class SystemInfoService implements GsonPostProcessable {
     private void addBackend(String host, int heartbeatPort) {
         Backend newBackend = new Backend(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
         // update idToBackend
-        Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
-        copiedBackends.put(newBackend.getId(), newBackend);
-        idToBackendRef = ImmutableMap.copyOf(copiedBackends);
+        idToBackendRef.put(newBackend.getId(), newBackend);
 
         // set new backend's report version as 0L
         Map<Long, AtomicLong> copiedReportVersions = Maps.newHashMap(idToReportVersionRef);
@@ -260,12 +249,9 @@ public class SystemInfoService implements GsonPostProcessable {
             throw new DdlException(String.format("backend [%s] not found", willBeModifiedHost));
         }
 
-        // update idToBackend
         Backend preUpdateBackend = candidateBackends.get(0);
-        Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
-        Backend updateBackend = copiedBackends.get(preUpdateBackend.getId());
+        Backend updateBackend = idToBackendRef.get(preUpdateBackend.getId());
         updateBackend.setHost(fqdn);
-        idToBackendRef = ImmutableMap.copyOf(copiedBackends);
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(updateBackend);
@@ -314,9 +300,7 @@ public class SystemInfoService implements GsonPostProcessable {
         }
 
         // update idToComputeNode
-        Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
-        copiedComputeNodes.remove(dropComputeNode.getId());
-        idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
+        idToComputeNodeRef.remove(dropComputeNode.getId());
 
         // update cluster
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
@@ -412,9 +396,7 @@ public class SystemInfoService implements GsonPostProcessable {
         }
 
         // update idToBackend
-        Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
-        copiedBackends.remove(droppedBackend.getId());
-        idToBackendRef = ImmutableMap.copyOf(copiedBackends);
+        idToBackendRef.remove(droppedBackend.getId());
 
         // update idToReportVersion
         Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
@@ -449,7 +431,7 @@ public class SystemInfoService implements GsonPostProcessable {
     // only for test
     public void dropAllBackend() {
         // update idToBackend
-        idToBackendRef = ImmutableMap.<Long, Backend>of();
+        idToBackendRef.clear();
         // update idToReportVersion
         idToReportVersionRef = ImmutableMap.<Long, AtomicLong>of();
     }
@@ -465,7 +447,7 @@ public class SystemInfoService implements GsonPostProcessable {
     public ComputeNode getBackendOrComputeNode(long nodeId) {
         ComputeNode backend = idToBackendRef.get(nodeId);
         if (backend == null) {
-            backend =  idToComputeNodeRef.get(nodeId);
+            backend = idToComputeNodeRef.get(nodeId);
         }
         return backend;
     }
@@ -481,8 +463,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public ComputeNode getComputeNodeWithHeartbeatPort(String host, int heartPort) {
-        ImmutableMap<Long, ComputeNode> idToComputeNode = idToComputeNodeRef;
-        for (ComputeNode computeNode : idToComputeNode.values()) {
+        for (ComputeNode computeNode : idToComputeNodeRef.values()) {
             if (computeNode.getHost().equals(host) && computeNode.getHeartbeatPort() == heartPort) {
                 return computeNode;
             }
@@ -491,8 +472,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public Backend getBackendWithHeartbeatPort(String host, int heartPort) {
-        ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
-        for (Backend backend : idToBackend.values()) {
+        for (Backend backend : idToBackendRef.values()) {
             if (backend.getHost().equals(host) && backend.getHeartbeatPort() == heartPort) {
                 return backend;
             }
@@ -501,8 +481,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public long getBackendIdWithStarletPort(String host, int starletPort) {
-        ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
-        for (Backend backend : idToBackend.values()) {
+        for (Backend backend : idToBackendRef.values()) {
             if (backend.getHost().equals(host) && backend.getStarletPort() == starletPort) {
                 return backend.getId();
             }
@@ -511,8 +490,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public long getComputeNodeIdWithStarletPort(String host, int starletPort) {
-        ImmutableMap<Long, ComputeNode> idToComputeNode = idToComputeNodeRef;
-        for (ComputeNode cn : idToComputeNode.values()) {
+        for (ComputeNode cn : idToComputeNodeRef.values()) {
             if (cn.getHost().equals(host) && cn.getStarletPort() == starletPort) {
                 return cn.getId();
             }
@@ -546,8 +524,7 @@ public class SystemInfoService implements GsonPostProcessable {
             return null;
         }
 
-        ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
-        for (Backend backend : idToBackend.values()) {
+        for (Backend backend : idToBackendRef.values()) {
             Pair<String, String> curPair;
             try {
                 curPair = NetUtils.getIpAndFqdnByHost(backend.getHost());
@@ -572,9 +549,8 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public List<Backend> getBackendOnlyWithHost(String host) {
-        ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
         List<Backend> resultBackends = new ArrayList<>();
-        for (Backend backend : idToBackend.values()) {
+        for (Backend backend : idToBackendRef.values()) {
             if (backend.getHost().equals(host)) {
                 resultBackends.add(backend);
             }
@@ -595,8 +571,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public ComputeNode getComputeNodeWithBePort(String host, int bePort) {
-        ImmutableMap<Long, ComputeNode> idToComputeNode = idToComputeNodeRef;
-        for (ComputeNode computeNode : idToComputeNode.values()) {
+        for (ComputeNode computeNode : idToComputeNodeRef.values()) {
             if (computeNode.getHost().equals(host) && computeNode.getBePort() == bePort) {
                 return computeNode;
             }
@@ -605,8 +580,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public List<Long> getComputeNodeIds(boolean needAlive) {
-        ImmutableMap<Long, ComputeNode> idToComputeNode = idToComputeNodeRef;
-        List<Long> computeNodeIds = Lists.newArrayList(idToComputeNode.keySet());
+        List<Long> computeNodeIds = Lists.newArrayList(idToComputeNodeRef.keySet());
         if (!needAlive) {
             return computeNodeIds;
         } else {
@@ -622,8 +596,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public List<Long> getBackendIds(boolean needAlive) {
-        ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
-        List<Long> backendIds = Lists.newArrayList(idToBackend.keySet());
+        List<Long> backendIds = Lists.newArrayList(idToBackendRef.keySet());
         if (!needAlive) {
             return backendIds;
         } else {
@@ -639,8 +612,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public List<Long> getDecommissionedBackendIds() {
-        ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
-        List<Long> backendIds = Lists.newArrayList(idToBackend.keySet());
+        List<Long> backendIds = Lists.newArrayList(idToBackendRef.keySet());
 
         Iterator<Long> iter = backendIds.iterator();
         while (iter.hasNext()) {
@@ -653,8 +625,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public List<Long> getAvailableBackendIds() {
-        ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
-        List<Long> backendIds = Lists.newArrayList(idToBackend.keySet());
+        List<Long> backendIds = Lists.newArrayList(idToBackendRef.keySet());
 
         Iterator<Long> iter = backendIds.iterator();
         while (iter.hasNext()) {
@@ -667,7 +638,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public List<Backend> getBackends() {
-        return idToBackendRef.values().asList();
+        return Lists.newArrayList(idToBackendRef.values());
     }
 
     public Stream<ComputeNode> backendAndComputeNodeStream() {
@@ -785,11 +756,11 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public ImmutableMap<Long, Backend> getIdToBackend() {
-        return idToBackendRef;
+        return ImmutableMap.copyOf(idToBackendRef);
     }
 
     public ImmutableMap<Long, ComputeNode> getIdComputeNode() {
-        return idToComputeNodeRef;
+        return ImmutableMap.copyOf(idToComputeNodeRef);
     }
 
     public ImmutableCollection<ComputeNode> getComputeNodes() {
@@ -802,7 +773,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public ImmutableCollection<ComputeNode> getComputeNodes(boolean needAlive) {
-        ImmutableMap<Long, ComputeNode> idToComputeNode = idToComputeNodeRef;
+        ImmutableMap<Long, ComputeNode> idToComputeNode = ImmutableMap.copyOf(idToComputeNodeRef);
         List<Long> computeNodeIds = getComputeNodeIds(needAlive);
         List<ComputeNode> computeNodes = new ArrayList<>();
         for (Long computeNodeId : computeNodeIds) {
@@ -812,7 +783,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public ImmutableCollection<ComputeNode> getBackends(boolean needAlive) {
-        ImmutableMap<Long, Backend> idToComputeNode = idToBackendRef;
+        ImmutableMap<Long, Backend> idToComputeNode = ImmutableMap.copyOf(idToBackendRef);
         List<Long> backendIds = getBackendIds(needAlive);
         List<ComputeNode> backends = new ArrayList<>();
         for (Long backendId : backendIds) {
@@ -851,7 +822,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public long saveBackends(DataOutputStream dos, long checksum) throws IOException {
-        ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
+        ImmutableMap<Long, Backend> idToBackend = ImmutableMap.copyOf(idToBackendRef);
         int backendCount = idToBackend.size();
         checksum ^= backendCount;
         dos.writeInt(backendCount);
@@ -866,7 +837,7 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public long saveComputeNodes(DataOutputStream dos, long checksum) throws IOException {
         SystemInfoService.SerializeData data = new SystemInfoService.SerializeData();
-        data.computeNodes = idToComputeNodeRef.values().asList();
+        data.computeNodes = Lists.newArrayList(idToComputeNodeRef.values());
         checksum ^= data.computeNodes.size();
         String s = GsonUtils.GSON.toJson(data);
         Text.writeString(dos, s);
@@ -911,11 +882,11 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public void clear() {
-        this.idToBackendRef = null;
-        this.idToReportVersionRef = null;
+        this.idToBackendRef = new ConcurrentHashMap<>();
+        this.idToReportVersionRef = ImmutableMap.of();
     }
 
-    public static Pair<String, Integer> validateHostAndPort(String hostPort) throws AnalysisException {
+    public static Pair<String, Integer> validateHostAndPort(String hostPort, boolean resolveHost) throws AnalysisException {
         hostPort = hostPort.replaceAll("\\s+", "");
         if (hostPort.isEmpty()) {
             throw new AnalysisException("Invalid host port: " + hostPort);
@@ -934,7 +905,7 @@ public class SystemInfoService implements GsonPostProcessable {
         int heartbeatPort = -1;
         try {
             // validate host
-            if (!InetAddressValidator.getInstance().isValid(host) && !FrontendOptions.isUseFqdn()) {
+            if (resolveHost && !InetAddressValidator.getInstance().isValid(host)) {
                 // maybe this is a hostname
                 // if no IP address for the host could be found, 'getByName'
                 // will throw
@@ -961,9 +932,7 @@ public class SystemInfoService implements GsonPostProcessable {
     public void replayAddComputeNode(ComputeNode newComputeNode) {
         // update idToComputeNode
         newComputeNode.setBackendState(BackendState.using);
-        Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
-        copiedComputeNodes.put(newComputeNode.getId(), newComputeNode);
-        idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
+        idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
 
         // to add compute to DEFAULT_CLUSTER
         if (newComputeNode.getBackendState() == BackendState.using) {
@@ -983,9 +952,7 @@ public class SystemInfoService implements GsonPostProcessable {
         if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
             newBackend.setBackendState(BackendState.using);
         }
-        Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
-        copiedBackends.put(newBackend.getId(), newBackend);
-        idToBackendRef = ImmutableMap.copyOf(copiedBackends);
+        idToBackendRef.put(newBackend.getId(), newBackend);
 
         // set new backend's report version as 0L
         Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
@@ -1008,9 +975,7 @@ public class SystemInfoService implements GsonPostProcessable {
     public void replayDropComputeNode(long computeNodeId) {
         LOG.debug("replayDropComputeNode: {}", computeNodeId);
         // update idToComputeNode
-        Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
-        copiedComputeNodes.remove(computeNodeId);
-        idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
+        idToComputeNodeRef.remove(computeNodeId);
 
         // update cluster
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
@@ -1024,9 +989,7 @@ public class SystemInfoService implements GsonPostProcessable {
     public void replayDropBackend(Backend backend) {
         LOG.debug("replayDropBackend: {}", backend);
         // update idToBackend
-        Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
-        copiedBackends.remove(backend.getId());
-        idToBackendRef = ImmutableMap.copyOf(copiedBackends);
+        idToBackendRef.remove(backend.getId());
 
         // update idToReportVersion
         Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
@@ -1075,7 +1038,7 @@ public class SystemInfoService implements GsonPostProcessable {
         memoryBe.setDecommissionType(be.getDecommissionType());
     }
 
-    private long getClusterAvailableCapacityB() {
+    public long getClusterAvailableCapacityB() {
         List<Backend> clusterBackends = getBackends();
         long capacity = 0L;
         for (Backend backend : clusterBackends) {
@@ -1103,7 +1066,7 @@ public class SystemInfoService implements GsonPostProcessable {
      * If not found, return -1
      */
     public long getBackendIdByHost(String host) {
-        ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
+        ImmutableMap<Long, Backend> idToBackend = ImmutableMap.copyOf(idToBackendRef);
         List<Backend> selectedBackends = Lists.newArrayList();
         for (Backend backend : idToBackend.values()) {
             if (backend.getHost().equals(host)) {

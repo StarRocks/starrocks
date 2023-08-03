@@ -36,7 +36,7 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
-import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
@@ -326,7 +326,7 @@ public class ConnectProcessorTest extends DDLTestBase {
         ConnectContext ctx = initMockContext(mockChannel(initDbPacket), GlobalStateMgr.getCurrentState());
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
-        ctx.setQualifiedUser(AuthenticationManager.ROOT_USER);
+        ctx.setQualifiedUser(AuthenticationMgr.ROOT_USER);
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.processOnce();
         Assert.assertEquals(MysqlCommand.COM_INIT_DB, myContext.getCommand());
@@ -338,7 +338,7 @@ public class ConnectProcessorTest extends DDLTestBase {
         ConnectContext ctx = initMockContext(mockChannel(initDbPacket), GlobalStateMgr.getCurrentState());
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
-        ctx.setQualifiedUser(AuthenticationManager.ROOT_USER);
+        ctx.setQualifiedUser(AuthenticationMgr.ROOT_USER);
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.processOnce();
         Assert.assertEquals(MysqlCommand.COM_INIT_DB, myContext.getCommand());
@@ -349,7 +349,7 @@ public class ConnectProcessorTest extends DDLTestBase {
     public void testInitWarehouse() throws IOException {
         ConnectContext ctx = initMockContext(mockChannel(initWarehousePacket), GlobalStateMgr.getCurrentState());
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        ctx.setQualifiedUser(AuthenticationManager.ROOT_USER);
+        ctx.setQualifiedUser(AuthenticationMgr.ROOT_USER);
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.processOnce();
         Assert.assertEquals(MysqlCommand.COM_INIT_DB, myContext.getCommand());

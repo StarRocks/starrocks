@@ -37,7 +37,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.mysql.privilege.Auth;
 import org.apache.logging.log4j.LogManager;
@@ -63,7 +63,7 @@ public class DomainResolver extends LeaderDaemon {
     private static final String BNS_RESOLVER_TOOLS_PATH = "/usr/bin/get_instance_by_service";
 
     private Auth auth;
-    private AuthenticationManager authenticationManager;
+    private AuthenticationMgr authenticationManager;
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     public DomainResolver(Auth auth) {
@@ -72,7 +72,7 @@ public class DomainResolver extends LeaderDaemon {
         this.authenticationManager = null;
     }
 
-    public DomainResolver(AuthenticationManager authenticationManager) {
+    public DomainResolver(AuthenticationMgr authenticationManager) {
         super("domain resolver", 10L * 1000);
         this.auth = null;
         this.authenticationManager = authenticationManager;
@@ -82,7 +82,7 @@ public class DomainResolver extends LeaderDaemon {
      * if a follower has just transfered to leader, or if it is replaying a AuthUpgrade journal.
      * this function will be called to switch from using Auth to using AuthenticationManager.
      */
-    public void setAuthenticationManager(AuthenticationManager manager) {
+    public void setAuthenticationManager(AuthenticationMgr manager) {
         lock.writeLock().lock();
         try {
             this.auth = null;

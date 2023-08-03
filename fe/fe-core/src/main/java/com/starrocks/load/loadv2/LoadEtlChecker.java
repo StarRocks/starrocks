@@ -29,9 +29,9 @@ import org.apache.logging.log4j.Logger;
 public class LoadEtlChecker extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(LoadEtlChecker.class);
 
-    private LoadManager loadManager;
+    private LoadMgr loadManager;
 
-    public LoadEtlChecker(LoadManager loadManager) {
+    public LoadEtlChecker(LoadMgr loadManager) {
         super("Load etl checker", Config.load_checker_interval_second * 1000L);
         this.loadManager = loadManager;
     }

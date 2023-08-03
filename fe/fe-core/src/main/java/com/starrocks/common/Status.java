@@ -88,6 +88,10 @@ public class Status {
         return this.errorCode == TStatusCode.THRIFT_RPC_ERROR;
     }
 
+    public boolean isRemoteFileNotFound() {
+        return this.errorCode == TStatusCode.REMOTE_FILE_NOT_FOUND;
+    }
+
     public boolean isGlobalDictError() {
         return this.errorCode == TStatusCode.GLOBAL_DICT_ERROR;
     }

@@ -200,6 +200,13 @@ public class ColocateTableIndex implements Writable {
                     groupAlreadyExist = false;
                 }
                 HashDistributionInfo distributionInfo = (HashDistributionInfo) tbl.getDefaultDistributionInfo();
+                if (!(tbl instanceof ExternalOlapTable)) {
+                    // Colocate table should keep the same bucket number across the partitions
+                    if (distributionInfo.getBucketNum() == 0) {
+                        int bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+                        distributionInfo.setBucketNum(bucketNum);
+                    }
+                }
                 ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId,
                         distributionInfo.getDistributionColumns(), distributionInfo.getBucketNum(),
                         tbl.getDefaultReplicationNum());
@@ -536,7 +543,7 @@ public class ColocateTableIndex implements Writable {
     }
 
     public GroupId changeGroup(long dbId, OlapTable tbl, String oldGroup, String newGroup, GroupId assignedGroupId,
-            boolean isReplay) throws DdlException {
+                               boolean isReplay) throws DdlException {
         writeLock();
         try {
             if (!Strings.isNullOrEmpty(oldGroup)) {
@@ -853,20 +860,15 @@ public class ColocateTableIndex implements Writable {
         return checksum;
     }
 
-    public void loadColocateTableIndexV2(DataInputStream dis) throws IOException, SRMetaBlockException,
-            SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, ColocateTableIndex.class.getName());
-        try {
-            ColocateTableIndex data = reader.readJson(ColocateTableIndex.class);
-            this.groupName2Id = data.groupName2Id;
-            this.group2Tables = data.group2Tables;
-            this.table2Group = data.table2Group;
-            this.group2Schema = data.group2Schema;
-            this.group2BackendsPerBucketSeq = data.group2BackendsPerBucketSeq;
-            this.unstableGroups = data.unstableGroups;
-        } finally {
-            reader.close();
-        }
+    public void loadColocateTableIndexV2(SRMetaBlockReader reader)
+            throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        ColocateTableIndex data = reader.readJson(ColocateTableIndex.class);
+        this.groupName2Id = data.groupName2Id;
+        this.group2Tables = data.group2Tables;
+        this.table2Group = data.table2Group;
+        this.group2Schema = data.group2Schema;
+        this.group2BackendsPerBucketSeq = data.group2BackendsPerBucketSeq;
+        this.unstableGroups = data.unstableGroups;
 
         constructLakeGroups(GlobalStateMgr.getCurrentState());
         LOG.info("finished replay colocateTableIndex from image");
@@ -887,7 +889,7 @@ public class ColocateTableIndex implements Writable {
     }
 
     public GroupId checkColocateSchemaWithGroupInOtherDb(String toCreateGroupName, long dbId,
-                                                      OlapTable toCreateTable) throws DdlException {
+                                                         OlapTable toCreateTable) throws DdlException {
         try {
             readLock();
             List<GroupId> sameOrigNameGroups = getOtherGroupsWithSameOrigNameUnlocked(toCreateGroupName, dbId);
@@ -1095,7 +1097,7 @@ public class ColocateTableIndex implements Writable {
     }
 
     public void updateLakeTableColocationInfo(OlapTable olapTable, boolean isJoin,
-            GroupId expectGroupId) throws DdlException {
+                                              GroupId expectGroupId) throws DdlException {
         if (olapTable == null || !olapTable.isCloudNativeTable()) { // skip non-lake table
             return;
         }

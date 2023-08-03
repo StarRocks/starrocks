@@ -96,7 +96,7 @@ import com.starrocks.planner.stream.StreamAggNode;
 import com.starrocks.planner.stream.StreamJoinNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.scheduler.mv.MVManager;
+import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.service.FrontendOptions;
@@ -232,7 +232,7 @@ public class PlanFragmentBuilder {
         PartitionInfo partitionInfo = LocalMetastore.buildPartitionInfo(createStmt);
         long mvId = GlobalStateMgr.getCurrentState().getNextId();
         long dbId = GlobalStateMgr.getCurrentState().getDb(createStmt.getTableName().getDb()).getId();
-        MaterializedView view = MVManager.getInstance().createSinkTable(createStmt, partitionInfo, mvId, dbId);
+        MaterializedView view = MaterializedViewMgr.getInstance().createSinkTable(createStmt, partitionInfo, mvId, dbId);
         TupleDescriptor tupleDesc = buildTupleDesc(execPlan, view);
         view.setMaintenancePlan(execPlan);
         List<Long> fakePartitionIds = Arrays.asList(1L, 2L, 3L);
@@ -762,6 +762,8 @@ public class PlanFragmentBuilder {
             scanNode.setDictStringIdToIntIds(node.getDictStringIdToIntIds());
             scanNode.updateAppliedDictStringColumns(node.getGlobalDicts().stream().
                     map(entry -> entry.first).collect(Collectors.toSet()));
+
+            scanNode.setUsePkIndex(node.isUsePkIndex());
 
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
@@ -2609,7 +2611,7 @@ public class PlanFragmentBuilder {
         @Override
         public PlanFragment visitPhysicalLimit(OptExpression optExpression, ExecPlan context) {
             // PhysicalLimit use for enforce gather property, Enforcer will produce more PhysicalDistribution, there
-            // don't need do anything.
+            // don't need to do anything.
             return visit(optExpression.inputAt(0), context);
         }
 

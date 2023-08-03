@@ -975,9 +975,9 @@ TEST_F(HdfsScannerTest, DecodeMinMaxDateTime) {
                                                {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATE)},
                                                {""}};
 
-    const std::string timzone_datetime_shanghai_orc_file =
+    const std::string timezone_datetime_shanghai_orc_file =
             "./be/test/exec/test_data/orc_scanner/writer_tz_shanghai.orc";
-    const std::string timzone_datetime_utc_orc_file = "./be/test/exec/test_data/orc_scanner/writer_tz_utc.orc";
+    const std::string timezone_datetime_utc_orc_file = "./be/test/exec/test_data/orc_scanner/writer_tz_utc.orc";
 
     struct Case {
         std::string file;
@@ -986,12 +986,12 @@ TEST_F(HdfsScannerTest, DecodeMinMaxDateTime) {
         int exp;
     };
     std::vector<Case> cases = {
-            {timzone_datetime_shanghai_orc_file, "2022-04-09 07:13:00", "Asia/Shanghai", 1},
-            {timzone_datetime_shanghai_orc_file, "2022-04-09 07:13:00", "UTC", 0},
-            {timzone_datetime_shanghai_orc_file, "2022-04-08 23:13:00", "UTC", 1},
-            {timzone_datetime_utc_orc_file, "2022-04-09 07:13:00", "Asia/Shanghai", 0},
-            {timzone_datetime_utc_orc_file, "2022-04-09 15:13:00", "Asia/Shanghai", 1},
-            {timzone_datetime_utc_orc_file, "2022-04-09 07:13:00", "UTC", 1},
+            {timezone_datetime_shanghai_orc_file, "2022-04-09 07:13:00", "Asia/Shanghai", 1},
+            {timezone_datetime_shanghai_orc_file, "2022-04-09 07:13:00", "UTC", 0},
+            {timezone_datetime_shanghai_orc_file, "2022-04-08 23:13:00", "UTC", 1},
+            {timezone_datetime_utc_orc_file, "2022-04-09 07:13:00", "Asia/Shanghai", 0},
+            {timezone_datetime_utc_orc_file, "2022-04-09 15:13:00", "Asia/Shanghai", 1},
+            {timezone_datetime_utc_orc_file, "2022-04-09 07:13:00", "UTC", 1},
     };
 
     for (const Case& c : cases) {
@@ -1183,6 +1183,56 @@ TEST_F(HdfsScannerTest, TestOrcLazyLoad) {
     status = scanner->get_next(_runtime_state, &chunk);
     // Should be end of file in next read.
     EXPECT_TRUE(status.is_end_of_file());
+
+    scanner->close(_runtime_state);
+}
+
+TEST_F(HdfsScannerTest, TestOrcBooleanConjunct) {
+    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/boolean_slot_ref.orc";
+
+    SlotDesc c0{"sex", TypeDescriptor::from_logical_type(LogicalType::TYPE_BOOLEAN)};
+
+    SlotDesc slot_descs[] = {c0, {""}};
+
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+
+    auto* range = _create_scan_range(input_orc_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(slot_descs);
+    auto* param = _create_param(input_orc_file, range, tuple_desc);
+
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node;
+        lit_node.__set_node_type(TExprNodeType::SLOT_REF);
+        lit_node.__set_num_children(0);
+        lit_node.__set_type(create_primitive_type_desc(TPrimitiveType::BOOLEAN));
+        TSlotRef t_slot_ref = TSlotRef();
+        t_slot_ref.slot_id = 0;
+        t_slot_ref.tuple_id = 0;
+        lit_node.__set_slot_ref(t_slot_ref);
+        nodes.emplace_back(lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        param->conjunct_ctxs_by_slot[0].push_back(ctx);
+    }
+
+    for (auto& it : param->conjunct_ctxs_by_slot) {
+        Expr::prepare(it.second, _runtime_state);
+        Expr::open(it.second, _runtime_state);
+    }
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+
+    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    status = scanner->get_next(_runtime_state, &chunk);
+    EXPECT_TRUE(status.ok());
+
+    EXPECT_EQ(1, chunk->num_rows());
+
+    EXPECT_EQ("[1]", chunk->debug_row(0));
 
     scanner->close(_runtime_state);
 }
@@ -1560,6 +1610,69 @@ TEST_F(HdfsScannerTest, TestCSVWithoutEndDelemeter) {
     }
 }
 
+TEST_F(HdfsScannerTest, TestCSVWithWindowsEndDelemeter) {
+    SlotDesc csv_descs[] = {{"uuid", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)}, {""}};
+
+    const std::string windows_file = "./be/test/exec/test_data/csv_scanner/windows.csv";
+    Status status;
+
+    {
+        auto* range = _create_scan_range(windows_file, 0, 0);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(windows_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
+
+        status = scanner->get_next(_runtime_state, &chunk);
+        EXPECT_TRUE(status.ok());
+        EXPECT_EQ(3, chunk->num_rows());
+
+        EXPECT_EQ("['hello']", chunk->debug_row(0));
+        EXPECT_EQ("['world']", chunk->debug_row(1));
+        EXPECT_EQ("['starrocks']", chunk->debug_row(2));
+        scanner->close(_runtime_state);
+    }
+}
+
+TEST_F(HdfsScannerTest, TestCSVWithUTFBOM) {
+    SlotDesc csv_descs[] = {{"uuid", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)}, {""}};
+
+    const std::string bom_file = "./be/test/exec/test_data/csv_scanner/bom.csv";
+    Status status;
+
+    {
+        auto* range = _create_scan_range(bom_file, 0, 0);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(bom_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
+
+        status = scanner->get_next(_runtime_state, &chunk);
+        EXPECT_TRUE(status.ok());
+        EXPECT_EQ(3, chunk->num_rows());
+
+        EXPECT_EQ("['5c3ffda0d1d7']", chunk->debug_row(0));
+        EXPECT_EQ("['62ef51eae5d8']", chunk->debug_row(1));
+        scanner->close(_runtime_state);
+    }
+}
+
 TEST_F(HdfsScannerTest, TestCSVNewlyAddColumn) {
     SlotDesc csv_descs[] = {{"name1", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
                             {"age", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
@@ -1679,6 +1792,51 @@ TEST_F(HdfsScannerTest, TestCSVWithStructMap) {
         EXPECT_EQ("[2, [NULL], [NULL,NULL]]", chunk->debug_row(1));
 
         scanner->close(_runtime_state);
+    }
+}
+
+TEST_F(HdfsScannerTest, TestCSVWithBlankDelimiter) {
+    const std::string small_file = "./be/test/exec/test_data/csv_scanner/array_struct_map.csv";
+
+    SlotDesc csv_descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+
+    auto* tuple_desc = _create_tuple_desc(csv_descs);
+    auto* common_range = _create_scan_range(small_file, 0, 0);
+    auto* param = _create_param(small_file, common_range, tuple_desc);
+    std::vector<std::string> hive_column_names{"id"};
+    param->hive_column_names = &hive_column_names;
+
+    {
+        auto* range = _create_scan_range(small_file, 0, 0);
+        range->text_file_desc.field_delim = "";
+        param->scan_ranges[0] = range;
+        auto scanner = std::make_shared<HdfsTextScanner>();
+        auto status = scanner->init(_runtime_state, *param);
+        EXPECT_FALSE(status.ok());
+    }
+    {
+        auto* range = _create_scan_range(small_file, 0, 0);
+        range->text_file_desc.collection_delim = "";
+        param->scan_ranges[0] = range;
+        auto scanner = std::make_shared<HdfsTextScanner>();
+        auto status = scanner->init(_runtime_state, *param);
+        EXPECT_FALSE(status.ok());
+    }
+    {
+        auto* range = _create_scan_range(small_file, 0, 0);
+        range->text_file_desc.mapkey_delim = "";
+        param->scan_ranges[0] = range;
+        auto scanner = std::make_shared<HdfsTextScanner>();
+        auto status = scanner->init(_runtime_state, *param);
+        EXPECT_FALSE(status.ok());
+    }
+    {
+        auto* range = _create_scan_range(small_file, 0, 0);
+        range->text_file_desc.line_delim = "";
+        param->scan_ranges[0] = range;
+        auto scanner = std::make_shared<HdfsTextScanner>();
+        auto status = scanner->init(_runtime_state, *param);
+        EXPECT_FALSE(status.ok());
     }
 }
 

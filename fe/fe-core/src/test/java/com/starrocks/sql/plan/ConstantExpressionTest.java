@@ -18,19 +18,66 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.ParsingException;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class ConstantExpressionTest extends PlanTestBase {
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        PlanTestBase.beforeClass();
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+    }
+
     private void testFragmentPlanContainsConstExpr(String sql, String result) throws Exception {
         String explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains(": " + result));
+        Assert.assertTrue(explainString, explainString.contains(": " + result));
     }
 
     private void testFragmentPlanContains(String sql, String result) throws Exception {
         String explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains(result));
+        Assert.assertTrue(explainString, explainString.contains(result));
+    }
+
+    @Test
+    public void testInspectMvMeta() throws Exception {
+        String db = starRocksAssert.getCtx().getDatabase();
+        starRocksAssert.withTable(
+                "create table mv_base_table_9527 (id int, name string) " +
+                        "distributed by hash(id) " +
+                        "properties('replication_num'='1')");
+        starRocksAssert.withMaterializedView("create materialized view mv1 " +
+                "distributed by hash(id) " +
+                "refresh async " +
+                "properties('replication_num'='1') " +
+                "as select * from mv_base_table_9527");
+        testFragmentPlanContains("select inspect_mv_meta('mv1');", "MaterializedView");
+        String fullName = db + ".mv1";
+        testFragmentPlanContains(String.format("select inspect_mv_meta('%s');", fullName), "MaterializedView");
+
+        // wrong arguments
+        Assert.assertThrows(StarRocksPlannerException.class,
+                () -> getFragmentPlan("select inspect_mv_meta('snowflake');"));
+        Assert.assertThrows(StarRocksPlannerException.class,
+                () -> getFragmentPlan("select inspect_mv_meta('mv_base_table_9527');"));
+        Assert.assertThrows(StarRocksPlannerException.class,
+                () -> getFragmentPlan("select inspect_mv_meta('a.b.c.d');"));
+        Assert.assertThrows(StarRocksPlannerException.class,
+                () -> getFragmentPlan("select inspect_mv_meta('db_notexists.mv1');"));
+
+        // inspect_related_mv
+        testFragmentPlanContains("select inspect_related_mv('mv_base_table_9527')", "name\":\"mv1\"");
+    }
+
+    @Test
+    public void testInspectHivePartitionInfo() throws Exception {
+        Assert.assertThrows(StarRocksPlannerException.class,
+                () -> testFragmentPlanContains("select inspect_hive_part_info('not_exist_catalog.no_db.no_table')",
+                        ""));
+        testFragmentPlanContains("select inspect_hive_part_info('hive0.partitioned_db.lineitem_par')", "Project");
     }
 
     @Test
@@ -375,11 +422,11 @@ public class ConstantExpressionTest extends PlanTestBase {
             assertContains(plan, "  2:Project\n" +
                     "  |  <slot 2> : 2: count\n" +
                     "  |  <slot 3> : 2: count\n" +
-                    "  |  <slot 4> : 4: count\n" +
+                    "  |  <slot 4> : 2: count\n" +
                     "  |  <slot 5> : 2: count\n" +
                     "  |  \n" +
                     "  1:AGGREGATE (update finalize)\n" +
-                    "  |  output: count(1), count(if(CAST(1.0 AS BOOLEAN), 1, NULL))\n" +
+                    "  |  output: count(1)\n" +
                     "  |  group by: ");
 
             sql = "SELECT 1, TRUE, 0, FALSE, 1.1, 1, 1.1, TRUE, FALSE, 0";

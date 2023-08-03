@@ -127,8 +127,6 @@ struct JoinHashTableItems {
 
     std::unique_ptr<MemPool> build_pool = nullptr;
     std::vector<JoinKeyDesc> join_keys;
-
-    RuntimeProfile::Counter* output_build_column_timer = nullptr;
 };
 
 struct HashTableProbeState {
@@ -172,6 +170,7 @@ struct HashTableProbeState {
     RuntimeProfile::Counter* search_ht_timer = nullptr;
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
     RuntimeProfile::Counter* output_tuple_column_timer = nullptr;
+    RuntimeProfile::Counter* output_build_column_timer = nullptr;
 
     HashTableProbeState() = default;
     ~HashTableProbeState() = default;
@@ -516,7 +515,7 @@ private:
         }
     }
     void _build_output(ChunkPtr* chunk) {
-        SCOPED_TIMER(_table_items->output_build_column_timer);
+        SCOPED_TIMER(_probe_state->output_build_column_timer);
         bool to_nullable = _table_items->right_to_nullable;
         for (size_t i = 0; i < _table_items->build_column_count; i++) {
             HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
@@ -685,7 +684,8 @@ public:
     // and the different probe state from this.
     JoinHashTable clone_readable_table();
     void set_probe_profile(RuntimeProfile::Counter* search_ht_timer, RuntimeProfile::Counter* output_probe_column_timer,
-                           RuntimeProfile::Counter* output_tuple_column_timer);
+                           RuntimeProfile::Counter* output_tuple_column_timer,
+                           RuntimeProfile::Counter* output_build_column_timer);
 
     void create(const HashTableParam& param);
     void close();
@@ -696,8 +696,8 @@ public:
     Status probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos);
 
     void append_chunk(RuntimeState* state, const ChunkPtr& chunk, const Columns& key_columns);
-    // convert input column to serialize format for spill
-    StatusOr<ChunkPtr> convert_to_serialize_format(const ChunkPtr& chunk) const;
+    // convert input column to spill schema order
+    StatusOr<ChunkPtr> convert_to_spill_schema(const ChunkPtr& chunk) const;
 
     const ChunkPtr& get_build_chunk() const { return _table_items->build_chunk; }
     Columns& get_key_columns() { return _table_items->key_columns; }
@@ -709,7 +709,7 @@ public:
 
     void remove_duplicate_index(Filter* filter);
 
-    int64_t mem_usage();
+    int64_t mem_usage() const;
 
 private:
     JoinHashMapType _choose_join_hash_map();
@@ -750,7 +750,7 @@ private:
     bool _need_create_tuple_columns = true;
 
     std::shared_ptr<JoinHashTableItems> _table_items;
-    std::unique_ptr<HashTableProbeState> _probe_state;
+    std::unique_ptr<HashTableProbeState> _probe_state = std::make_unique<HashTableProbeState>();
 };
 } // namespace starrocks
 

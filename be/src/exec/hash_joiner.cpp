@@ -23,6 +23,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/hash_join_components.h"
+#include "exec/spill/spiller.hpp"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "exprs/runtime_filter_bank.h"
@@ -114,6 +115,7 @@ Status HashJoiner::prepare_builder(RuntimeState* state, RuntimeProfile* runtime_
     return Status::OK();
 }
 
+// it is ok that prepare_builder is done whether before this or not
 Status HashJoiner::prepare_prober(RuntimeState* state, RuntimeProfile* runtime_profile) {
     if (_runtime_state == nullptr) {
         _runtime_state = state;
@@ -122,6 +124,15 @@ Status HashJoiner::prepare_prober(RuntimeState* state, RuntimeProfile* runtime_p
     runtime_profile->add_info_string("DistributionMode", to_string(_hash_join_node.distribution_mode));
     runtime_profile->add_info_string("JoinType", to_string(_join_type));
     _probe_metrics->prepare(runtime_profile);
+
+    auto& hash_table = _hash_join_builder->hash_table();
+    hash_table.set_probe_profile(probe_metrics().search_ht_timer, probe_metrics().output_probe_column_timer,
+                                 probe_metrics().output_tuple_column_timer, probe_metrics().output_build_column_timer);
+
+    _hash_table_param.search_ht_timer = probe_metrics().search_ht_timer;
+    _hash_table_param.output_build_column_timer = probe_metrics().output_build_column_timer;
+    _hash_table_param.output_probe_column_timer = probe_metrics().output_probe_column_timer;
+    _hash_table_param.output_tuple_column_timer = probe_metrics().output_tuple_column_timer;
 
     return Status::OK();
 }
@@ -134,10 +145,6 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param) {
     param->row_desc = &_row_descriptor;
     param->build_row_desc = &_build_row_descriptor;
     param->probe_row_desc = &_probe_row_descriptor;
-    param->search_ht_timer = probe_metrics().search_ht_timer;
-    param->output_build_column_timer = probe_metrics().output_build_column_timer;
-    param->output_probe_column_timer = probe_metrics().output_probe_column_timer;
-    param->output_tuple_column_timer = probe_metrics().output_tuple_column_timer;
     param->output_slots = _output_slots;
 
     for (auto i = 0; i < _build_expr_ctxs.size(); i++) {
@@ -166,7 +173,7 @@ Status HashJoiner::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk
 Status HashJoiner::append_chunk_to_spill_buffer(RuntimeState* state, const ChunkPtr& chunk) {
     update_build_rows(chunk->num_rows());
     auto io_executor = spill_channel()->io_executor();
-    RETURN_IF_ERROR(spiller()->spill(state, chunk, *io_executor, spill::MemTrackerGuard(tls_mem_tracker)));
+    RETURN_IF_ERROR(spiller()->spill(state, chunk, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state)));
     return Status::OK();
 }
 
@@ -176,7 +183,7 @@ Status HashJoiner::append_spill_task(RuntimeState* state, std::function<StatusOr
         auto chunk_st = spill_task();
         if (chunk_st.ok()) {
             RETURN_IF_ERROR(
-                    spiller()->spill(state, chunk_st.value(), io_executor(), spill::MemTrackerGuard(tls_mem_tracker)));
+                    spiller()->spill(state, chunk_st.value(), io_executor(), RESOURCE_TLS_MEMTRACER_GUARD(state)));
         } else if (chunk_st.status().is_end_of_file()) {
             return Status::OK();
         } else {
@@ -301,7 +308,7 @@ void HashJoiner::reference_hash_table(HashJoiner* src_join_builder) {
     _hash_table_param = src_join_builder->hash_table_param();
     hash_table = src_join_builder->_hash_join_builder->hash_table().clone_readable_table();
     hash_table.set_probe_profile(probe_metrics().search_ht_timer, probe_metrics().output_probe_column_timer,
-                                 probe_metrics().output_tuple_column_timer);
+                                 probe_metrics().output_tuple_column_timer, probe_metrics().output_build_column_timer);
 
     // _hash_table_build_rows is root truth, it used to by _short_circuit_break().
     _hash_table_build_rows = src_join_builder->_hash_table_build_rows;

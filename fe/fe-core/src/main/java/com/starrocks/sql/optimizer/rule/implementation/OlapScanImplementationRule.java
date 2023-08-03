@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.implementation;
 
 import com.google.common.collect.Lists;
@@ -45,7 +44,8 @@ public class OlapScanImplementationRule extends ImplementationRule {
                 scan.getSelectedPartitionId(),
                 scan.getSelectedTabletId(),
                 scan.getPrunedPartitionPredicates(),
-                scan.getProjection());
+                scan.getProjection(),
+                scan.isUsePkIndex());
 
         OptExpression result = new OptExpression(physicalOlapScan);
         return Lists.newArrayList(result);

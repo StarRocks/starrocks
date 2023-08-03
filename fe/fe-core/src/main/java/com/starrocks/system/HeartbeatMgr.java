@@ -75,23 +75,19 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReference;
 
-
 /**
  * Heartbeat manager run as a daemon at a fix interval.
  * For now, it will send heartbeat to all Frontends, Backends and Brokers
  */
 public class HeartbeatMgr extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(HeartbeatMgr.class);
+    private static final AtomicReference<TMasterInfo> MASTER_INFO = new AtomicReference<>();
 
     private final ExecutorService executor;
-    private final SystemInfoService nodeMgr;
     private final HeartbeatFlags heartbeatFlags;
 
-    private static AtomicReference<TMasterInfo> masterInfo = new AtomicReference<>();
-
-    public HeartbeatMgr(SystemInfoService nodeMgr, boolean needRegisterMetric) {
+    public HeartbeatMgr(boolean needRegisterMetric) {
         super("heartbeat mgr", Config.heartbeat_timeout_second * 1000L);
-        this.nodeMgr = nodeMgr;
         this.executor = ThreadPoolManager.newDaemonFixedThreadPool(Config.heartbeat_mgr_threads_num,
                 Config.heartbeat_mgr_blocking_queue_size, "heartbeat-mgr-pool", needRegisterMetric);
         this.heartbeatFlags = new HeartbeatFlags();
@@ -111,7 +107,7 @@ public class HeartbeatMgr extends LeaderDaemon {
         long flags = heartbeatFlags.getHeartbeatFlags();
         tMasterInfo.setHeartbeat_flags(flags);
         tMasterInfo.setMin_active_txn_id(computeMinActiveTxnId());
-        masterInfo.set(tMasterInfo);
+        MASTER_INFO.set(tMasterInfo);
     }
 
     /**
@@ -121,7 +117,7 @@ public class HeartbeatMgr extends LeaderDaemon {
      */
     @Override
     protected void runAfterCatalogReady() {
-        ImmutableMap<Long, Backend> idToBackendRef = nodeMgr.getIdToBackend();
+        ImmutableMap<Long, Backend> idToBackendRef = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
         if (idToBackendRef == null) {
             return;
         }
@@ -135,7 +131,7 @@ public class HeartbeatMgr extends LeaderDaemon {
         }
 
         // send compute node heartbeat
-        for (ComputeNode computeNode : nodeMgr.getIdComputeNode().values()) {
+        for (ComputeNode computeNode : GlobalStateMgr.getCurrentSystemInfo().getIdComputeNode().values()) {
             BackendHeartbeatHandler handler = new BackendHeartbeatHandler(computeNode);
             hbResponses.add(executor.submit(handler));
         }
@@ -144,7 +140,7 @@ public class HeartbeatMgr extends LeaderDaemon {
         List<Frontend> frontends = GlobalStateMgr.getCurrentState().getFrontends(null);
         String masterFeNodeName = "";
         for (Frontend frontend : frontends) {
-            if (frontend.getHost().equals(masterInfo.get().getNetwork_address().getHostname())) {
+            if (frontend.getHost().equals(MASTER_INFO.get().getNetwork_address().getHostname())) {
                 masterFeNodeName = frontend.getNodeName();
             }
             FrontendHeartbeatHandler handler = new FrontendHeartbeatHandler(frontend,
@@ -159,7 +155,7 @@ public class HeartbeatMgr extends LeaderDaemon {
         for (Map.Entry<String, List<FsBroker>> entry : brokerMap.entrySet()) {
             for (FsBroker brokerAddress : entry.getValue()) {
                 BrokerHeartbeatHandler handler = new BrokerHeartbeatHandler(entry.getKey(), brokerAddress,
-                        masterInfo.get().getNetwork_address().getHostname());
+                        MASTER_INFO.get().getNetwork_address().getHostname());
                 hbResponses.add(executor.submit(handler));
             }
         }
@@ -207,7 +203,7 @@ public class HeartbeatMgr extends LeaderDaemon {
                 // Synchronize cpu cores of backends when synchronizing master info to other Frontends.
                 // It is non-empty, only when replaying a 'mocked' master Frontend heartbeat response to other Frontends.
                 hbResponse.getBackendId2cpuCores().forEach((backendId, cpuCores) -> {
-                    Backend be = nodeMgr.getBackend(backendId);
+                    Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
                     if (be != null && be.getCpuCores() != cpuCores) {
                         be.setCpuCores(cpuCores);
                         BackendCoreStat.setNumOfHardwareCoresOfBe(backendId, cpuCores);
@@ -222,10 +218,10 @@ public class HeartbeatMgr extends LeaderDaemon {
             }
             case BACKEND: {
                 BackendHbResponse hbResponse = (BackendHbResponse) response;
-                ComputeNode computeNode = nodeMgr.getBackend(hbResponse.getBeId());
+                ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackend(hbResponse.getBeId());
                 boolean isBackend = true;
                 if (computeNode == null) {
-                    computeNode = nodeMgr.getComputeNode(hbResponse.getBeId());
+                    computeNode = GlobalStateMgr.getCurrentSystemInfo().getComputeNode(hbResponse.getBeId());
                     isBackend = false;
                 }
                 if (computeNode != null) {
@@ -288,7 +284,7 @@ public class HeartbeatMgr extends LeaderDaemon {
             try {
                 client = ClientPool.heartbeatPool.borrowObject(beAddr);
 
-                TMasterInfo copiedMasterInfo = new TMasterInfo(masterInfo.get());
+                TMasterInfo copiedMasterInfo = new TMasterInfo(MASTER_INFO.get());
                 copiedMasterInfo.setBackend_ip(computeNode.getHost());
                 long flags = heartbeatFlags.getHeartbeatFlags();
                 copiedMasterInfo.setHeartbeat_flags(flags);

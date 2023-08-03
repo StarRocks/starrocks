@@ -302,6 +302,7 @@ public class TransactionState implements Writable {
     private long checkerCreationTime = 0;
     private Span txnSpan = null;
     private String traceParent = null;
+    private Set<TabletCommitInfo> tabletCommitInfos = null;
 
     public TransactionState() {
         this.dbId = -1;
@@ -358,6 +359,21 @@ public class TransactionState implements Writable {
 
     public boolean isRunning() {
         return transactionStatus == TransactionStatus.PREPARE || transactionStatus == TransactionStatus.COMMITTED;
+    }
+
+    public void setTabletCommitInfos(List<TabletCommitInfo> infos) {
+        this.tabletCommitInfos = Sets.newHashSet();
+        this.tabletCommitInfos.addAll(infos);
+    }
+
+    public boolean tabletCommitInfosContainsReplica(long tabletId, long backendId) {
+        TabletCommitInfo info = new TabletCommitInfo(tabletId, backendId);
+        if (this.tabletCommitInfos == null || this.tabletCommitInfos.contains(info)) {
+            // if tabletCommitInfos is null, skip this check and return true
+            return true;
+        } else {
+            return false;
+        }
     }
 
     // Only for OlapTable

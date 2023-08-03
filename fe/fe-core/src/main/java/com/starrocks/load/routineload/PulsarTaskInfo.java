@@ -40,7 +40,7 @@ import java.util.Map;
 import java.util.UUID;
 
 public class PulsarTaskInfo extends RoutineLoadTaskInfo {
-    private RoutineLoadManager routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadManager();
+    private RoutineLoadMgr routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
 
     private List<String> partitions;
     private Map<String, Long> initialPositions = Maps.newHashMap();

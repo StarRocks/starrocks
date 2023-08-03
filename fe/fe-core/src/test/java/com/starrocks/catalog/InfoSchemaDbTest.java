@@ -16,9 +16,9 @@ package com.starrocks.catalog;
 
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
-import com.starrocks.catalog.system.starrocks.GrantsTo;
+import com.starrocks.catalog.system.sys.GrantsTo;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -47,7 +47,7 @@ import java.io.IOException;
 public class InfoSchemaDbTest {
     ConnectContext ctx;
     GlobalStateMgr globalStateMgr;
-    AuthorizationManager authorizationManager;
+    AuthorizationMgr authorizationManager;
 
     @Before
     public void beforeClass() throws Exception {
@@ -56,9 +56,9 @@ public class InfoSchemaDbTest {
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
         StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
         globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
-        globalStateMgr.getAuthorizationManager().initBuiltinRolesAndUsers();
+        globalStateMgr.getAuthorizationMgr().initBuiltinRolesAndUsers();
 
-        authorizationManager = globalStateMgr.getAuthorizationManager();
+        authorizationManager = globalStateMgr.getAuthorizationMgr();
 
         starRocksAssert.withDatabase("db");
         String createTblStmtStr = "(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
@@ -68,14 +68,14 @@ public class InfoSchemaDbTest {
 
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user", ctx);
-        globalStateMgr.getAuthenticationManager().createUser(createUserStmt);
+        globalStateMgr.getAuthenticationMgr().createUser(createUserStmt);
         createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user2", ctx);
-        globalStateMgr.getAuthenticationManager().createUser(createUserStmt);
+        globalStateMgr.getAuthenticationMgr().createUser(createUserStmt);
 
         CreateRoleStmt createRoleStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create role test_role", ctx);
-        globalStateMgr.getAuthorizationManager().createRole(createRoleStmt);
+        globalStateMgr.getAuthorizationMgr().createRole(createRoleStmt);
     }
 
     @Test

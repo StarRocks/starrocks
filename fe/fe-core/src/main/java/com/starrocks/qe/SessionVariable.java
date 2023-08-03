@@ -313,6 +313,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MULTI_COLUMNS_ON_GLOBAL_RUNTIME_FILTER =
             "enable_multicolumn_global_runtime_filter";
     public static final String ENABLE_OPTIMIZER_TRACE_LOG = "enable_optimizer_trace_log";
+    public static final String ENABLE_MV_OPTIMIZER_TRACE_LOG = "enable_mv_optimizer_trace_log";
     public static final String JOIN_IMPLEMENTATION_MODE = "join_implementation_mode";
     public static final String JOIN_IMPLEMENTATION_MODE_V2 = "join_implementation_mode_v2";
 
@@ -366,6 +367,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_SINGLE_TABLE_VIEW_DELTA_REWRITE =
             "enable_materialized_view_single_table_view_delta_rewrite";
     public static final String ANALYZE_FOR_MV = "analyze_mv";
+    public static final String QUERY_EXCLUDING_MV_NAMES = "query_excluding_mv_names";
+    public static final String QUERY_INCLUDING_MV_NAMES = "query_including_mv_names";
 
     public static final String ENABLE_BIG_QUERY_LOG = "enable_big_query_log";
     public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
@@ -416,6 +419,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SQL_QUOTE_SHOW_CREATE = "sql_quote_show_create";
 
     public static final String ENABLE_PLAN_VALIDATION = "enable_plan_validation";
+
+    public static final String SCAN_OR_TO_UNION_LIMIT = "scan_or_to_union_limit";
+
+    public static final String SCAN_OR_TO_UNION_THRESHOLD = "scan_or_to_union_threshold";
+
+    public static final String SELECT_RATIO_THRESHOLD = "select_ratio_threshold";
+
+    public static final String ENABLE_SIMPLIFY_CASE_WHEN = "enable_simplify_case_when";
+
+    public static final String HDFS_BACKEND_SELECTOR_HASH_ALGORITHM = "hdfs_backend_selector_hash_algorithm";
+
+    public static final String CONSISTENT_HASH_VIRTUAL_NUMBER = "consistent_hash_virtual_number";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -702,6 +717,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // if spillable_operator_mask & 2 != 0, agg operator can spill
     // if spillable_operator_mask & 4 != 0, agg distinct operator can spill
     // if spillable_operator_mask & 8 != 0, sort operator can spill
+    // if spillable_operator_mask & 16 != 0, nest loop join operator can spill
     // ...
     // default value is -1, means all operators can spill
     @VariableMgr.VarAttr(name = SPILLABLE_OPERATOR_MASK, flag = VariableMgr.INVISIBLE)
@@ -716,7 +732,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = SPILL_MEM_TABLE_NUM, flag = VariableMgr.INVISIBLE)
     private int spillMemTableNum = 2;
     @VarAttr(name = SPILL_MEM_LIMIT_THRESHOLD, flag = VariableMgr.INVISIBLE)
-    private double spillMemLimitThreshold = 0.5;
+    private double spillMemLimitThreshold = 0.8;
     @VarAttr(name = SPILL_OPERATOR_MIN_BYTES, flag = VariableMgr.INVISIBLE)
     private long spillOperatorMinBytes = 1024L * 1024 * 10;
     @VarAttr(name = SPILL_OPERATOR_MAX_BYTES, flag = VariableMgr.INVISIBLE)
@@ -888,6 +904,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_TRACE_LOG, flag = VariableMgr.INVISIBLE)
     private boolean enableOptimizerTraceLog = false;
 
+    @VariableMgr.VarAttr(name = ENABLE_MV_OPTIMIZER_TRACE_LOG, flag = VariableMgr.INVISIBLE)
+    private boolean enableMVOptimizerTraceLog = false;
+
     @VariableMgr.VarAttr(name = ENABLE_QUERY_DEBUG_TRACE, flag = VariableMgr.INVISIBLE)
     private boolean enableQueryDebugTrace = false;
 
@@ -930,6 +949,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_STRICT_TYPE, flag = VariableMgr.INVISIBLE)
     private boolean enableStrictType = false;
+
+    @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_HASH_ALGORITHM, flag = VariableMgr.INVISIBLE)
+    private String hdfsBackendSelectorHashAlgorithm = "consistent";
+
+    @VariableMgr.VarAttr(name = CONSISTENT_HASH_VIRTUAL_NUMBER, flag = VariableMgr.INVISIBLE)
+    private int consistentHashVirtualNodeNum = 32;
 
     public boolean isEnableSortAggregate() {
         return enableSortAggregate;
@@ -1023,6 +1048,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_SINGLE_TABLE_VIEW_DELTA_REWRITE, flag = VariableMgr.INVISIBLE)
     private boolean enableMaterializedViewSingleTableViewDeltaRewrite = false;
 
+    @VarAttr(name = QUERY_EXCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
+    private String queryExcludingMVNames = "";
+
+    @VarAttr(name = QUERY_INCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
+    private String queryIncludingMVNames = "";
+
     @VarAttr(name = ANALYZE_FOR_MV)
     private String analyzeTypeForMV = "sample";
 
@@ -1086,6 +1117,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PLAN_VALIDATION, flag = VariableMgr.INVISIBLE)
     private boolean enablePlanValidation = true;
+
+    @VarAttr(name = SCAN_OR_TO_UNION_LIMIT, flag = VariableMgr.INVISIBLE)
+    private int scanOrToUnionLimit = 1;
+
+    @VarAttr(name = SCAN_OR_TO_UNION_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private long scanOrToUnionThreshold = 50000000;
+
+    @VarAttr(name = SELECT_RATIO_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private double selectRatioThreshold = 0.15;
+
+    @VarAttr(name = ENABLE_SIMPLIFY_CASE_WHEN, flag = VariableMgr.INVISIBLE)
+    private boolean enableSimplifyCaseWhen = true;
 
     private int exprChildrenLimit = -1;
 
@@ -1301,6 +1344,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return maxParallelScanInstanceNum;
     }
 
+    public String getHdfsBackendSelectorHashAlgorithm() {
+        return hdfsBackendSelectorHashAlgorithm;
+    }
+
+    public void setHdfsBackendSelectorHashAlgorithm(String hdfsBackendSelectorHashAlgorithm) {
+        this.hdfsBackendSelectorHashAlgorithm = hdfsBackendSelectorHashAlgorithm;
+    }
+
+    public int getConsistentHashVirtualNodeNum() {
+        return consistentHashVirtualNodeNum;
+    }
+
+    public void setConsistentHashVirtualNodeNum(int consistentHashVirtualNodeNum) {
+        this.consistentHashVirtualNodeNum = consistentHashVirtualNodeNum;
+    }
+
     // when pipeline engine is enabled
     // in case of pipeline_dop > 0: return pipeline_dop * parallelExecInstanceNum;
     // in case of pipeline_dop <= 0 and avgNumCores < 2: return 1;
@@ -1483,6 +1542,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public long getTransactionVisibleWaitTimeout() {
         return transactionVisibleWaitTimeout;
+    }
+
+    public void setTransactionVisibleWaitTimeout(long transactionVisibleWaitTimeout) {
+        this.transactionVisibleWaitTimeout = transactionVisibleWaitTimeout;
     }
 
     public boolean getForceScheduleLocal() {
@@ -1796,6 +1859,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableOptimizerTraceLog = val;
     }
 
+    public boolean isEnableMVOptimizerTraceLog() {
+        return enableMVOptimizerTraceLog || enableOptimizerTraceLog;
+    }
+
+    public void setEnableMVOptimizerTraceLog(boolean val) {
+        this.enableMVOptimizerTraceLog = val;
+    }
+
     public boolean isRuntimeFilterOnExchangeNode() {
         return runtimeFilterOnExchangeNode;
     }
@@ -1929,6 +2000,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableMaterializedViewSingleTableViewDeltaRewrite = enableMaterializedViewSingleTableViewDeltaRewrite;
     }
 
+    public String getQueryExcludingMVNames() {
+        return queryExcludingMVNames;
+    }
+
+    public void setQueryExcludingMVNames(String queryExcludingMVNames) {
+        this.queryExcludingMVNames = queryExcludingMVNames;
+    }
+
+    public String getQueryIncludingMVNames() {
+        return queryIncludingMVNames;
+    }
+
+    public void setQueryIncludingMVNames(String queryIncludingMVNames) {
+        this.queryIncludingMVNames = queryIncludingMVNames;
+    }
+
     public String getAnalyzeForMV() {
         return analyzeTypeForMV;
     }
@@ -2039,6 +2126,38 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnablePlanValidation(boolean val) {
         this.enablePlanValidation = val;
+    }
+
+    public int getScanOrToUnionLimit() {
+        return scanOrToUnionLimit;
+    }
+
+    public void setScanOrToUnionLimit(int scanOrToUnionLimit) {
+        this.scanOrToUnionLimit = scanOrToUnionLimit;
+    }
+
+    public long getScanOrToUnionThreshold() {
+        return scanOrToUnionThreshold;
+    }
+
+    public void setScanOrToUnionThreshold(long scanOrToUnionThreshold) {
+        this.scanOrToUnionThreshold = scanOrToUnionThreshold;
+    }
+
+    public double getSelectRatioThreshold() {
+        return selectRatioThreshold;
+    }
+
+    public void setSelectRatioThreshold(double selectRatioThreshold) {
+        this.selectRatioThreshold = selectRatioThreshold;
+    }
+
+    public boolean isEnableSimplifyCaseWhen() {
+        return enableSimplifyCaseWhen;
+    }
+
+    public void setEnableSimplifyCaseWhen(boolean enableSimplifyCaseWhen) {
+        this.enableSimplifyCaseWhen = enableSimplifyCaseWhen;
     }
 
     // Serialize to thrift object

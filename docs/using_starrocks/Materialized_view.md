@@ -169,23 +169,28 @@ GROUP BY order_id;
   - Strict consistency is not guaranteed between the materialized view and the base tables in the external catalog.
   - Currently, building asynchronous materialized views based on external resources is not supported.
   - Currently, StarRocks cannot perceive the data changes on the base tables in Iceberg catalogs and Hudi catalogs, so all partitions are refreshed by default every time the refreshing task is triggered. If you want to refresh only some of the partitions, you can manually refresh the materialized view using the [REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/REFRESH%20MATERIALIZED%20VIEW.md) statement and specify the partition you want to refresh.
-  - From v2.5.5 onwards, StarRocks can periodically refresh the cached metadata of the frequently accessed Hive catalogs to perceive data changes. You can configure the Hive metadata cache refresh through the following FE parameters:
+  - From v2.5.5 onwards, StarRocks can periodically refresh the cached metadata of the frequently accessed Hive catalogs to perceive data changes. You can configure the Hive metadata cache refresh through the following FE dynamic parameters:
 
     | Configuration item                                           | Default                              | Description                          |
     | ------------------------------------------------------------ | ------------------------------------ | ------------------------------------ |
-    | enable_background_refresh_connector_metadata                 | `true` in v3.0<br />`false` in v2.5  | Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Hive cluster, and refreshes the cached metadata of the frequently accessed Hive catalogs to perceive data changes. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it. This item is an FE dynamic parameter. You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) command. |
-    | background_refresh_metadata_interval_millis                  | `600000` (10 minutes)                | The interval between two consecutive Hive metadata cache refreshes. Unit: millisecond. This item is an FE dynamic parameter. You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) command. |
-    | background_refresh_metadata_time_secs_since_last_access_secs | `86400` (24 hours)                   | The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second. This item is an FE dynamic parameter. You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) command. |
+    | enable_background_refresh_connector_metadata | `true` in v3.0<br />`false` in v2.5  | Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Hive cluster, and refreshes the cached metadata of the frequently accessed Hive catalogs to perceive data changes. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it.  |
+    | background_refresh_metadata_interval_millis  | `600000` (10 minutes)  | The interval between two consecutive Hive metadata cache refreshes. Unit: millisecond.  |
+    | background_refresh_metadata_time_secs_since_last_access_secs | `86400` (24 hours) | The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second.  |
+
+    You can modify these FE dynamic parameters using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) command.
 
 ## Manually refresh an asynchronous materialized view
 
-You can refresh an asynchronous materialized view that is created with the ASYNC or the MANUAL refreshing strategy via [REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/REFRESH%20MATERIALIZED%20VIEW.md). StarRocks v2.5 supports refreshing specific partitions of an asynchronous materialized view by specifying partition names.
+You can refresh an asynchronous materialized view regardless of its refreshing strategy via [REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/REFRESH%20MATERIALIZED%20VIEW.md). StarRocks v2.5 supports refreshing specific partitions of an asynchronous materialized view by specifying partition names. StarRocks v3.1 supports making a synchronous call of the refresh task, and the SQL statement is returned only when the task succeeds or fails.
 
 ```SQL
+-- Refresh the materialized view via an asynchronous call (default).
 REFRESH MATERIALIZED VIEW order_mv;
+-- Refresh the materialized view via a synchronous call.
+REFRESH MATERIALIZED VIEW order_mv WITH SYNC MODE;
 ```
 
-You can cancel a refresh task using [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL%20REFRESH%20MATERIALIZED%20VIEW.md).
+You can cancel a refresh task submitted via an asynchronous call using [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL%20REFRESH%20MATERIALIZED%20VIEW.md).
 
 ## Query the asynchronous materialized view
 
@@ -299,6 +304,51 @@ PROPERTIES (
     (lo_orderdate) REFERENCES dates(d_datekey)
 "
 );
+```
+
+### Rewrite queries with Derivable Join
+
+From v3.0.4 onwards, StarRocks supports rewriting queries with a join that can be derived from the corresponding asynchronous materialized view, that is, an asynchronous materialized view with a certain pattern of join can rewrite queries with a different pattern of join as long as both joins have the same joined tables and columns and meet some requirements.
+
+The following table specifies the correspondence of the join pattern in the materialized view and the join pattern in the queries that can be rewritten (`A` and `B` indicate the joined tables, `a1` indicates the joined column in `A`, and `b1` indicates the joined column in `B`):
+
+| **Join in the asynchronous** **materialized view** | **Join in the rewritable** **query** | **Constraints**                                              |
+| -------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------ |
+| LEFT OUTER JOIN ON A.a1 = B.b1                     | INNER JOIN ON A.a1 = B.b1            | None                                                         |
+| LEFT OUTER JOIN ON A.a1 = B.b1                     | LEFT ANTI JOIN ON A.a1 = B.b1        | None                                                         |
+| RIGHT OUTER JOIN ON A.a1 = B.b1                    | INNER JOIN ON A.a1 = B.b1            | None                                                         |
+| RIGHT OUTER JOIN ON A.a1 = B.b1                    | RIGHT ANTI JOIN ON A.a1 = B.b1       | None                                                         |
+| INNER JOIN ON A.a1 = B.b1                          | LEFT SEMI JOIN ON A.a1 = B.b1        | The joined column in the right table must be the Unique Key or Primary Key. |
+| INNER JOIN ON A.a1 = B.b1                          | RIGHT SEMI JOIN ON A.a1 = B.b1       | The joined column in the left table must be the Unique Key or Primary Key. |
+| FULL OUTER JOIN ON A.a1 = B.b1                     | LEFT OUTER JOIN ON A.a1 = B.b1       | At least one NOT NULL column in the left table.              |
+| FULL OUTER JOIN ON A.a1 = B.b1                     | RIGHT OUTER JOIN ON A.a1 = B.b1      | At least one NOT NULL column in the right table.             |
+| FULL OUTER JOIN ON A.a1 = B.b1                     | INNER JOIN ON A.a1 = B.b1            | At least one NOT NULL column in both the left and right table. |
+
+For example, if you create an asynchronous materialized view as follows:
+
+```SQL
+CREATE MATERIALIZED VIEW derivable_join_mv
+DISTRIBUTED BY hash(lo_orderkey)
+AS
+SELECT lo_orderkey, lo_linenumber, lo_revenue, c_custkey, c_name, c_address
+FROM lineorder LEFT OUTER JOIN customer
+ON lo_custkey = c_custkey;
+```
+
+The materialized view can rewrite queries in the following pattern:
+
+```SQL
+SELECT lo_orderkey, lo_linenumber, lo_revenue, c_name, c_address
+FROM lineorder INNER JOIN customer
+ON lo_custkey = c_custkey;
+```
+
+The query is rewritten as follows:
+
+```SQL
+SELECT lo_orderkey, lo_linenumber, lo_revenue, c_name, c_address
+FROM derivable_join_mv
+WHERE c_custkey IS NOT NULL;
 ```
 
 ### Configure query rewrite

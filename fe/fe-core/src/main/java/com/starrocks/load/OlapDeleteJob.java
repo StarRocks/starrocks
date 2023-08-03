@@ -177,7 +177,7 @@ public class OlapDeleteJob extends DeleteJob {
             // if transaction has been begun, need to abort it
             if (GlobalStateMgr.getCurrentGlobalTransactionMgr()
                     .getTransactionState(db.getId(), getTransactionId()) != null) {
-                cancel(DeleteHandler.CancelType.UNKNOWN, t.getMessage());
+                cancel(DeleteMgr.CancelType.UNKNOWN, t.getMessage());
             }
             throw new DdlException(t.getMessage(), t);
         } finally {
@@ -192,8 +192,8 @@ public class OlapDeleteJob extends DeleteJob {
             while (countDownTime > 0) {
                 if (countDownTime > CHECK_INTERVAL) {
                     countDownTime -= CHECK_INTERVAL;
-                    if (GlobalStateMgr.getCurrentState().getDeleteHandler().removeKillJob(getId())) {
-                        cancel(DeleteHandler.CancelType.USER, "user cancelled");
+                    if (GlobalStateMgr.getCurrentState().getDeleteMgr().removeKillJob(getId())) {
+                        cancel(DeleteMgr.CancelType.USER, "user cancelled");
                         throw new DdlException("Cancelled");
                     }
                     ok = countDownLatch.await(CHECK_INTERVAL, TimeUnit.MILLISECONDS);
@@ -222,7 +222,7 @@ public class OlapDeleteJob extends DeleteJob {
             try {
                 checkAndUpdateQuorum();
             } catch (MetaNotFoundException e) {
-                cancel(DeleteHandler.CancelType.METADATA_MISSING, e.getMessage());
+                cancel(DeleteMgr.CancelType.METADATA_MISSING, e.getMessage());
                 throw new DdlException(e.getMessage(), e);
             }
             DeleteState state = getState();
@@ -230,7 +230,7 @@ public class OlapDeleteJob extends DeleteJob {
                 case DELETING:
                     LOG.warn("delete job timeout: transactionId {}, timeout {}, {}", getTransactionId(), timeoutMs,
                             errMsg);
-                    cancel(DeleteHandler.CancelType.TIMEOUT, "delete job timeout");
+                    cancel(DeleteMgr.CancelType.TIMEOUT, "delete job timeout");
                     throw new DdlException("failed to execute delete. transaction id " + getTransactionId() +
                             ", timeout(ms) " + timeoutMs + ", " + errMsg);
                 case QUORUM_FINISHED:
@@ -247,10 +247,10 @@ public class OlapDeleteJob extends DeleteJob {
                                     getTransactionId());
                         }
                     } catch (MetaNotFoundException e) {
-                        cancel(DeleteHandler.CancelType.METADATA_MISSING, e.getMessage());
+                        cancel(DeleteMgr.CancelType.METADATA_MISSING, e.getMessage());
                         throw new DdlException(e.getMessage(), e);
                     } catch (InterruptedException e) {
-                        cancel(DeleteHandler.CancelType.UNKNOWN, e.getMessage());
+                        cancel(DeleteMgr.CancelType.UNKNOWN, e.getMessage());
                         throw new DdlException(e.getMessage(), e);
                     }
                     commit(db, timeoutMs);
@@ -343,7 +343,7 @@ public class OlapDeleteJob extends DeleteJob {
     }
 
     @Override
-    public boolean cancel(DeleteHandler.CancelType cancelType, String reason) {
+    public boolean cancel(DeleteMgr.CancelType cancelType, String reason) {
         if (!super.cancel(cancelType, reason)) {
             return false;
         }

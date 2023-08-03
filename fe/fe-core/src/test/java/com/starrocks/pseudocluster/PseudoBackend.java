@@ -225,6 +225,8 @@ public class PseudoBackend {
 
     private Random random;
 
+    private AtomicLong numSchemaScan = new AtomicLong(0);
+
     private static ThreadLocal<PseudoBackend> currentBackend = new ThreadLocal<>();
 
     static class QueryProgress {
@@ -449,6 +451,10 @@ public class PseudoBackend {
 
     public float getPublishFailureRate() {
         return publishFailureRate;
+    }
+
+    public long getNumSchemaScan() {
+        return numSchemaScan.get();
     }
 
     private void reportTablets() {
@@ -1127,6 +1133,9 @@ public class PseudoBackend {
                         runOlapScan(planNode, scanRanges);
                         System.out.printf("per_driver_seq_scan_range not empty numTablets: %d\n", numTabletScan);
                     }
+                } else if (planNode.node_type == TPlanNodeType.SCHEMA_SCAN_NODE) {
+                    numSchemaScan.incrementAndGet();
+                    sb.append(" SchemaScanNode:" + planNode.schema_scan_node.table_name);
                 }
             }
             if (numTabletScan > 0) {
@@ -1191,10 +1200,13 @@ public class PseudoBackend {
                         runOlapScan(planNode, scanRanges);
                         System.out.printf("per_driver_seq_scan_range not empty numTablets: %d\n", numTabletScan);
                     }
+                } else if (planNode.node_type == TPlanNodeType.SCHEMA_SCAN_NODE) {
+                    numSchemaScan.incrementAndGet();
+                    sb.append(" SchemaScanNode:" + planNode.schema_scan_node.table_name);
                 }
             }
             if (allScans != numTabletScan) {
-                System.out.printf("not all scanrange used: all:%d used:%d\n", allScans, numTabletScan);
+                System.out.printf(" not all scanrange used: all:%d used:%d\n", allScans, numTabletScan);
             }
             if (numTabletScan > 0) {
                 scansByQueryId.computeIfAbsent(DebugUtil.printId(commonParams.params.query_id), k -> new AtomicInteger(0))

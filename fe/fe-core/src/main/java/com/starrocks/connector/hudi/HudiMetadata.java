@@ -21,7 +21,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
-import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
@@ -165,8 +164,10 @@ public class HudiMetadata implements ConnectorMetadata {
         }
 
         Preconditions.checkState(columnRefOperators.size() == statistics.getColumnStatistics().size());
-        for (ColumnRefOperator column : columnRefOperators) {
-            session.getDumpInfo().addTableStatistics(table, column.getName(), statistics.getColumnStatistic(column));
+        if (session.getDumpInfo() != null) {
+            for (ColumnRefOperator column : columnRefOperators) {
+                session.getDumpInfo().addTableStatistics(table, column.getName(), statistics.getColumnStatistic(column));
+            }
         }
 
         return statistics;
@@ -186,9 +187,10 @@ public class HudiMetadata implements ConnectorMetadata {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
         if (isResourceMappingCatalog(catalogName)) {
-            HudiTable hudiTable = (HudiTable) GlobalStateMgr.getCurrentState().getMetadata().getTable(dbName, tableName);
+            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) GlobalStateMgr.getCurrentState()
+                    .getMetadata().getTable(dbName, tableName);
             cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTable(
-                    hudiTable.getDbName(), hudiTable.getTableName(), hudiTable.getTableLocation()));
+                    hmsTable.getDbName(), hmsTable.getTableName(), hmsTable.getTableLocation()));
         }
     }
 

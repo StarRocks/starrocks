@@ -16,7 +16,7 @@ package com.starrocks.common.proc;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.lake.compaction.CompactionManager;
+import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.compaction.CompactionRecord;
 import com.starrocks.server.GlobalStateMgr;
 
@@ -36,7 +36,7 @@ public class CompactionsProcNode implements ProcNodeInterface {
     public ProcResult fetchResult() throws AnalysisException {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLES);
-        CompactionManager compactionManager = GlobalStateMgr.getCurrentState().getCompactionManager();
+        CompactionMgr compactionManager = GlobalStateMgr.getCurrentState().getCompactionMgr();
         List<CompactionRecord> history = compactionManager.getHistory();
         for (CompactionRecord record : history) {
             List<String> row = new ArrayList<>();

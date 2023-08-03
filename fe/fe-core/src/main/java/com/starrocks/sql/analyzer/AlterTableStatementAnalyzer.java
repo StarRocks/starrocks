@@ -100,11 +100,7 @@ public class AlterTableStatementAnalyzer {
             if (Strings.isNullOrEmpty(newTableName)) {
                 throw new SemanticException("New Table name is not set");
             }
-            try {
-                FeNameFormat.checkTableName(newTableName);
-            } catch (AnalysisException e) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, newTableName);
-            }
+            FeNameFormat.checkTableName(newTableName);
             return null;
         }
 
@@ -175,6 +171,9 @@ public class AlterTableStatementAnalyzer {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
                 }
                 properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Short.toString(defaultReplicationNum));
+            } else if (properties.containsKey("default." + PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+                String storageMedium = properties.remove("default." + PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
+                properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, storageMedium);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
                 clause.setNeedTableStable(false);
                 clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
@@ -380,11 +379,7 @@ public class AlterTableStatementAnalyzer {
                 throw new SemanticException("New column name is not set");
             }
 
-            try {
-                FeNameFormat.checkColumnName(clause.getNewColName());
-            } catch (AnalysisException e) {
-                throw new SemanticException("Analyze FeNameFormat error: %s", e.getMessage());
-            }
+            FeNameFormat.checkColumnName(clause.getNewColName());
             return null;
         }
 
@@ -412,7 +407,7 @@ public class AlterTableStatementAnalyzer {
             // 1. data property
             DataProperty newDataProperty = null;
             newDataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                    DataProperty.getInferredDefaultDataProperty());
+                    DataProperty.getInferredDefaultDataProperty(), false);
             Preconditions.checkNotNull(newDataProperty);
 
             // 2. replication num

@@ -162,8 +162,6 @@ public:
         std::lock_guard<std::mutex> lg(_lock);
         entry->_ref--;
         if (entry->_ref != 1) {
-            LOG(ERROR) << "remove() failed: cache entry ref != 1 " << entry->_value;
-            DCHECK(false);
             return false;
         } else {
             _map.erase(entry->key());

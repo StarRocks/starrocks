@@ -40,6 +40,7 @@ import java.util.Map;
 
 public class SRMetaBlockTest {
     private static Path tmpDir;
+
     @BeforeClass
     public static void setUp() throws Exception {
         tmpDir = Files.createTempDirectory(Paths.get("."), "SRMetaBlockTest");
@@ -67,10 +68,12 @@ public class SRMetaBlockTest {
         int num;
         @SerializedName(value = "l")
         List<String> list;
-        static final Type LIST_TYPE = new TypeToken<ArrayList<String>>(){}.getType();
+        static final Type LIST_TYPE = new TypeToken<ArrayList<String>>() {
+        }.getType();
         @SerializedName(value = "m")
         Map<String, Integer> map;
-        static final Type MAP_TYPE = new TypeToken<HashMap<String, Integer>>(){}.getType();
+        static final Type MAP_TYPE = new TypeToken<HashMap<String, Integer>>() {
+        }.getType();
     }
 
     @Test
@@ -112,7 +115,7 @@ public class SRMetaBlockTest {
         // 3. list
         List<String> retList = (List<String>) reader.readJson(SimpleStruct.LIST_TYPE);
         Assert.assertEquals(simpleStruct.list.size(), retList.size());
-        for (int i = 0; i != simpleStruct.list.size(); ++ i) {
+        for (int i = 0; i != simpleStruct.list.size(); ++i) {
             Assert.assertEquals(simpleStruct.list.get(i), retList.get(i));
         }
         // 4. map
@@ -126,7 +129,7 @@ public class SRMetaBlockTest {
         Assert.assertEquals(simpleStruct.str, ret.str);
         Assert.assertEquals(simpleStruct.num, ret.num);
         Assert.assertEquals(simpleStruct.list.size(), ret.list.size());
-        for (int i = 0; i != simpleStruct.list.size(); ++ i) {
+        for (int i = 0; i != simpleStruct.list.size(); ++i) {
             Assert.assertEquals(simpleStruct.list.get(i), ret.list.get(i));
         }
         Assert.assertEquals(simpleStruct.map.size(), ret.map.size());
@@ -192,7 +195,7 @@ public class SRMetaBlockTest {
         // 3. list
         List<String> retList = (List<String>) reader.readJson(SimpleStruct.LIST_TYPE);
         Assert.assertEquals(simpleStruct.list.size(), retList.size());
-        for (int i = 0; i != simpleStruct.list.size(); ++ i) {
+        for (int i = 0; i != simpleStruct.list.size(); ++i) {
             Assert.assertEquals(simpleStruct.list.get(i), retList.get(i));
         }
         // 4. map
@@ -209,7 +212,7 @@ public class SRMetaBlockTest {
         Assert.assertEquals(simpleStruct.str, ret.str);
         Assert.assertEquals(simpleStruct.num, ret.num);
         Assert.assertEquals(simpleStruct.list.size(), ret.list.size());
-        for (int i = 0; i != simpleStruct.list.size(); ++ i) {
+        for (int i = 0; i != simpleStruct.list.size(); ++i) {
             Assert.assertEquals(simpleStruct.list.get(i), ret.list.get(i));
         }
         Assert.assertEquals(simpleStruct.map.size(), ret.map.size());
@@ -239,7 +242,7 @@ public class SRMetaBlockTest {
         Assert.assertEquals(simpleStruct.str, ret.str);
         Assert.assertEquals(simpleStruct.num, ret.num);
         Assert.assertEquals(simpleStruct.list.size(), ret.list.size());
-        for (int i = 0; i != simpleStruct.list.size(); ++ i) {
+        for (int i = 0; i != simpleStruct.list.size(); ++i) {
             Assert.assertEquals(simpleStruct.list.get(i), ret.list.get(i));
         }
         Assert.assertEquals(simpleStruct.map.size(), ret.map.size());
@@ -276,7 +279,7 @@ public class SRMetaBlockTest {
             writer.writeJson("won't write!");
             Assert.fail();
         } catch (SRMetaBlockException e) {
-            Assert.assertTrue(e.getMessage().contains("About to write json more than expect: 1 >= 1"));
+            Assert.assertTrue(e.getMessage().contains("About to write json more than"));
         }
     }
 
@@ -305,20 +308,17 @@ public class SRMetaBlockTest {
     }
 
     @Test
-    public void testReadBadBlockBadName() throws Exception {
-        String name = "badReaderBadName";
-        write2String(name);
-        DataInputStream dis = openInput(name);
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, "xxx");
-        Assert.assertTrue(true);
-        try {
-            reader.readJson(String.class);
-            Assert.fail();
-        } catch (SRMetaBlockException e) {
-            Assert.assertTrue(e.getMessage().contains("Invalid meta block header, expect badReaderBadName actual xxx"));
-        } finally {
-            dis.close();
-        }
+    public void testReadBadBlockBadID() throws Exception {
+        DataOutputStream dos = openOutput("blockid");
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.CATALOG_MGR, 2);
+        writer.writeJson("Muchos años después");
+        writer.writeJson("frente al pelotón de fusilamiento");
+        writer.close();
+        dos.close();
+
+        DataInputStream dis = openInput("blockid");
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis);
+        Assert.assertEquals(reader.getHeader().getSrMetaBlockID(), SRMetaBlockID.CATALOG_MGR);
     }
 
     @Test
@@ -357,14 +357,12 @@ public class SRMetaBlockTest {
         reader.close();
         // second block, get EOF
 
-        reader = new SRMetaBlockReader(dis, "xxx");
         try {
+            reader = new SRMetaBlockReader(dis, "xxx");
             reader.readJson(String.class);
             Assert.fail();
         } catch (EOFException exception) {
             Assert.assertTrue(true);
-        } finally {
-            reader.close();
         }
         dis.close();
     }

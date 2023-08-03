@@ -34,14 +34,16 @@ public:
 
     bool is_finished() const override { return _is_finished || _sort_context->is_finished(); }
 
-    bool pending_finish() const override { return _chunks_sorter && _chunks_sorter->has_pending_data(); }
-
-    void mark_need_spill() override {
-        Operator::mark_need_spill();
+    void set_execute_mode(int performance_level) override {
         if (_chunks_sorter) {
             _chunks_sorter->set_spill_stragety(spill::SpillStrategy::SPILL_ALL);
         }
     }
+
+    bool spillable() const override { return true; }
+
+    size_t estimated_memory_reserved(const ChunkPtr& chunk) override;
+    size_t estimated_memory_reserved() override;
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 

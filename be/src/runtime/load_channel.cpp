@@ -250,13 +250,13 @@ void LoadChannel::abort() {
     }
 }
 
-void LoadChannel::abort(int64_t index_id, const std::vector<int64_t>& tablet_ids) {
+void LoadChannel::abort(int64_t index_id, const std::vector<int64_t>& tablet_ids, const std::string& reason) {
     auto channel = get_tablets_channel(index_id);
     if (channel != nullptr) {
         auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(channel.get());
         if (local_tablets_channel != nullptr) {
             local_tablets_channel->incr_num_ref_senders();
-            local_tablets_channel->abort(tablet_ids);
+            local_tablets_channel->abort(tablet_ids, reason);
         } else {
             channel->abort();
         }
@@ -296,6 +296,9 @@ Status LoadChannel::_build_chunk_meta(const ChunkPB& pb_chunk) {
     std::lock_guard l(_chunk_meta_lock);
     if (_has_chunk_meta.load(std::memory_order_acquire)) {
         return Status::OK();
+    }
+    if (_row_desc == nullptr) {
+        return Status::InternalError(fmt::format("load channel not open yet, load id: {}", _load_id.to_string()));
     }
     StatusOr<serde::ProtobufChunkMeta> res = serde::build_protobuf_chunk_meta(*_row_desc, pb_chunk);
     if (!res.ok()) return res.status();

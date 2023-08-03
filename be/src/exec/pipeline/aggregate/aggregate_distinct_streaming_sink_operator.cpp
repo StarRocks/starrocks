@@ -48,6 +48,10 @@ StatusOr<ChunkPtr> AggregateDistinctStreamingSinkOperator::pull_chunk(RuntimeSta
     return Status::InternalError("Not support");
 }
 
+void AggregateDistinctStreamingSinkOperator::set_execute_mode(int performance_level) {
+    _aggregator->streaming_preaggregation_mode() = TStreamingPreaggregationMode::FORCE_STREAMING;
+}
+
 Status AggregateDistinctStreamingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     size_t chunk_size = chunk->num_rows();
 
@@ -86,10 +90,7 @@ Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_force_preaggregati
 }
 
 Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_auto(const ChunkPtr& chunk, const size_t chunk_size) {
-    // TODO: calc the real capacity of hashtable, will add one interface in the class of habletable
-    size_t real_capacity = _aggregator->hash_set_variant().capacity() - _aggregator->hash_set_variant().capacity() / 8;
-    size_t remain_size = real_capacity - _aggregator->hash_set_variant().size();
-    bool ht_needs_expansion = remain_size < chunk_size;
+    bool ht_needs_expansion = _aggregator->hash_set_variant().need_expand(chunk_size);
     size_t allocated_bytes = _aggregator->hash_set_variant().allocated_memory_usage(_aggregator->mem_pool());
     if (!ht_needs_expansion ||
         _aggregator->should_expand_preagg_hash_tables(_aggregator->num_input_rows(), chunk_size, allocated_bytes,

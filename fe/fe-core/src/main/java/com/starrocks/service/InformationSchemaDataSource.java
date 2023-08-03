@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.service;
 
 import com.google.common.base.Joiner;
@@ -59,7 +58,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-
 public class InformationSchemaDataSource {
 
     private static final Logger LOG = LogManager.getLogger(InformationSchemaDataSource.class);
@@ -71,7 +69,6 @@ public class InformationSchemaDataSource {
 
     @NotNull
     private static AuthDbRequestResult getAuthDbRequestResult(TAuthInfo authInfo) throws TException {
-
 
         List<String> authorizedDbs = Lists.newArrayList();
         PatternMatcher matcher = null;
@@ -124,7 +121,6 @@ public class InformationSchemaDataSource {
         }
     }
 
-
     // tables_config
     public static TGetTablesConfigResponse generateTablesConfigResponse(TGetTablesConfigRequest request)
             throws TException {
@@ -141,9 +137,7 @@ public class InformationSchemaDataSource {
                 try {
                     List<Table> allTables = db.getTables();
                     for (Table table : allTables) {
-
                         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                            // TODO(yiming): set role ids for ephemeral user in all the PrivilegeActions.* call in this dir
                             if (!PrivilegeActions.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table)) {
                                 continue;
                             }
@@ -175,7 +169,6 @@ public class InformationSchemaDataSource {
         resp.tables_config_infos = tList;
         return resp;
     }
-
 
 
     private static Map<String, String> genProps(Table table) {
@@ -301,6 +294,7 @@ public class InformationSchemaDataSource {
             tableConfigInfo.setSort_key(Joiner.on(", ").join(sortKeysColumnNames));
         }
         tableConfigInfo.setProperties(new Gson().toJson(genProps(table)));
+        tableConfigInfo.setTable_id(table.getId());
         return tableConfigInfo;
     }
 
@@ -319,9 +313,7 @@ public class InformationSchemaDataSource {
                 try {
                     List<Table> allTables = db.getTables();
                     for (Table table : allTables) {
-
                         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                            // TODO(yiming): set role ids for ephemeral user in all the PrivilegeActions.* call in this dir
                             if (!PrivilegeActions.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table)) {
                                 continue;
                             }

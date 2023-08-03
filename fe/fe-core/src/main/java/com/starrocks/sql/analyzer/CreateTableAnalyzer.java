@@ -36,6 +36,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.external.elasticsearch.EsUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
@@ -104,11 +105,9 @@ public class CreateTableAnalyzer {
         MetaUtils.normalizationTableName(context, tableNameObject);
 
         final String tableName = tableNameObject.getTbl();
-        try {
-            FeNameFormat.checkTableName(tableName);
-        } catch (AnalysisException e) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
-        }
+        FeNameFormat.checkTableName(tableName);
+
+        String catalogName = tableNameObject.getCatalog();
 
         final String engineName = analyzeEngineName(statement.getEngineName()).toLowerCase();
         statement.setEngineName(engineName);
@@ -244,7 +243,7 @@ public class CreateTableAnalyzer {
         Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ColumnDef columnDef : columnDefs) {
             try {
-                columnDef.analyze(statement.isOlapEngine());
+                columnDef.analyze(statement.isOlapEngine(), CatalogMgr.isInternalCatalog(catalogName), engineName);
             } catch (AnalysisException e) {
                 LOGGER.error("Column definition analyze failed.", e);
                 throw new SemanticException(e.getMessage());

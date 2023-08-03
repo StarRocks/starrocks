@@ -431,7 +431,6 @@ public class PublishVersionDaemon extends LeaderDaemon {
         } catch (Throwable e) {
             LOG.error("Fail to publish partition {} of txn {}: {}", partitionCommitInfo.getPartitionId(),
                     txnId, e.getMessage());
-            LOG.debug(e);
             return false;
         }
     }

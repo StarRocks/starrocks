@@ -32,8 +32,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.Utils;
-import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.DeleteJob;
+import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.MultiDeleteInfo;
 import com.starrocks.proto.BinaryPredicatePB;
 import com.starrocks.proto.DeleteDataRequest;
@@ -85,7 +85,7 @@ public class LakeDeleteJob extends DeleteJob {
             // if transaction has been begun, need to abort it
             if (GlobalStateMgr.getCurrentGlobalTransactionMgr()
                     .getTransactionState(db.getId(), getTransactionId()) != null) {
-                cancel(DeleteHandler.CancelType.UNKNOWN, t.getMessage());
+                cancel(DeleteMgr.CancelType.UNKNOWN, t.getMessage());
             }
             throw new DdlException(t.getMessage(), t);
         } finally {
@@ -125,7 +125,7 @@ public class LakeDeleteJob extends DeleteJob {
                 }
             }
         } catch (Throwable e) {
-            cancel(DeleteHandler.CancelType.UNKNOWN, e.getMessage());
+            cancel(DeleteMgr.CancelType.UNKNOWN, e.getMessage());
             throw new DdlException(e.getMessage());
         }
 
@@ -177,7 +177,7 @@ public class LakeDeleteJob extends DeleteJob {
 
     @Override
     public void clear() {
-        GlobalStateMgr.getCurrentState().getDeleteHandler().removeKillJob(getId());
+        GlobalStateMgr.getCurrentState().getDeleteMgr().removeKillJob(getId());
     }
 
     @Override

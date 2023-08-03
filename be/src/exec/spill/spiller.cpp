@@ -39,19 +39,31 @@
 
 namespace starrocks::spill {
 SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile) {
-    spill_timer = ADD_TIMER(profile, "SpillTime");
-    spill_rows = ADD_COUNTER(profile, "SpilledRows", TUnit::UNIT);
-    flush_timer = ADD_TIMER(profile, "SpillFlushTimer");
-    write_io_timer = ADD_TIMER(profile, "SpillWriteIOTimer");
-    restore_rows = ADD_COUNTER(profile, "SpillRestoreRows", TUnit::UNIT);
-    restore_timer = ADD_TIMER(profile, "SpillRestoreTimer");
-    shuffle_timer = ADD_TIMER(profile, "SpillShuffleTimer");
-    split_partition_timer = ADD_TIMER(profile, "SplitPartitionTimer");
+    _spiller_metrics = std::make_shared<RuntimeProfile>("SpillerMetrics");
+    profile->add_child(_spiller_metrics.get(), true, nullptr);
 
-    flush_bytes = ADD_COUNTER(profile, "SpillFlushBytes", TUnit::BYTES);
-    restore_bytes = ADD_COUNTER(profile, "SpillRestoreBytes", TUnit::BYTES);
-    serialize_timer = ADD_TIMER(profile, "SpillSerializeTimer");
-    deserialize_timer = ADD_TIMER(profile, "SpillDeserializeTimer");
+    append_data_timer = ADD_TIMER(_spiller_metrics.get(), "AppendDataTime");
+    spill_rows = ADD_COUNTER(_spiller_metrics.get(), "RowsSpilled", TUnit::UNIT);
+    flush_timer = ADD_TIMER(_spiller_metrics.get(), "FlushTime");
+    write_io_timer = ADD_TIMER(_spiller_metrics.get(), "WriteIOTime");
+    restore_rows = ADD_COUNTER(_spiller_metrics.get(), "RowsRestored", TUnit::UNIT);
+    restore_from_buffer_timer = ADD_TIMER(_spiller_metrics.get(), "RestoreTime");
+    read_io_timer = ADD_TIMER(_spiller_metrics.get(), "ReadIOTime");
+    flush_bytes = ADD_COUNTER(_spiller_metrics.get(), "BytesFlushToDisk", TUnit::BYTES);
+    restore_bytes = ADD_COUNTER(_spiller_metrics.get(), "BytesRestoreFromDisk", TUnit::BYTES);
+    serialize_timer = ADD_TIMER(_spiller_metrics.get(), "SerializeTime");
+    deserialize_timer = ADD_TIMER(_spiller_metrics.get(), "DeserializeTime");
+    mem_table_peak_memory_usage = _spiller_metrics->AddHighWaterMarkCounter(
+            "MemTablePeakMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+    input_stream_peak_memory_usage = _spiller_metrics->AddHighWaterMarkCounter(
+            "InputStreamPeakMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+
+    shuffle_timer = ADD_TIMER(_spiller_metrics.get(), "ShuffleTime");
+    split_partition_timer = ADD_TIMER(_spiller_metrics.get(), "SplitPartitionTime");
+    restore_from_mem_table_rows = ADD_COUNTER(_spiller_metrics.get(), "RowsRestoreFromMemTable", TUnit::UNIT);
+    restore_from_mem_table_bytes = ADD_COUNTER(_spiller_metrics.get(), "BytesRestoreFromMemTable", TUnit::UNIT);
+    partition_writer_peak_memory_usage = _spiller_metrics->AddHighWaterMarkCounter(
+            "PartitionWriterPeakMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
 }
 
 Status Spiller::prepare(RuntimeState* state) {
@@ -82,6 +94,11 @@ Status Spiller::prepare(RuntimeState* state) {
 Status Spiller::set_partition(const std::vector<const SpillPartitionInfo*>& parititons) {
     DCHECK_GT(_opts.init_partition_nums, 0);
     RETURN_IF_ERROR(down_cast<PartitionedSpillerWriter*>(_writer.get())->reset_partition(parititons));
+    return Status::OK();
+}
+
+Status Spiller::set_partition(RuntimeState* state, size_t num_partitions) {
+    RETURN_IF_ERROR(down_cast<PartitionedSpillerWriter*>(_writer.get())->reset_partition(state, num_partitions));
     return Status::OK();
 }
 

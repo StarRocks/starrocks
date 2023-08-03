@@ -8,6 +8,10 @@ A Routine Load job supports exactly-once delivery semantics to guarantee the dat
 
 Routine Load supports data transformation at data loading and supports data changes made by UPSERT and DELETE operations during data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md) and [Change data through loading](../loading/Load_to_Primary_Key_tables.md).
 
+> **NOTICE**
+>
+> You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
+
 ## Supported data formats
 
 Routine Load now supports consuming CSV, JSON, and Avro (supported since v3.0.1) formatted data from a Kafka cluster.
@@ -26,9 +30,11 @@ Routine Load now supports consuming CSV, JSON, and Avro (supported since v3.0.1)
 ### Terminology
 
 - **Load job**
-   A Routine Load job is a long-running job. As long as its status is RUNNING, a load job continuously generates one or multiple concurrent load tasks to consume the messages in a topic of a Kafka cluster, and load the data into StarRocks.
+
+   A Routine Load job is a long-running job. As long as its status is RUNNING, a load job continuously generates one or multiple concurrent load tasks which consume the messages in a topic of a Kafka cluster and load the data into StarRocks.
 
 - **Load task**
+
   A load job is split into multiple load tasks by certain rules. A load task is the basic unit of data loading. As an individual event, a load task implements the load mechanism based on [Stream Load](../loading/StreamLoad.md). Multiple load tasks concurrently consume the messages from different partitions of a topic, and load the data into StarRocks.
 
 ### Workflow
@@ -56,7 +62,7 @@ Routine Load now supports consuming CSV, JSON, and Avro (supported since v3.0.1)
 
          > **NOTE**
          >
-         > StarRocks supports access to Kafka with authentication via SSL or SASL, or without authentication.
+         > StarRocks supports access to Kafka via a security authentication mechanism SASL_SSL, SASL or SSL, or without authentication. This topic takes connection to Kafka without authentication as an example. If you need to connect to Kafka via a security authentication mechanism, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
 
 4. **The FE generates new load tasks to load data continuously.**
    After the Executor BEs has written the data to disks, the Coordinator BE reports the result of the load task to the FE. Based on the result, the FE then generates new load tasks to load the data continuously. Or the FE retries the failed tasks to make sure the data loaded into StarRocks is neither lost nor duplicated.
@@ -136,11 +142,11 @@ After submitting the load job, you can execute the [SHOW ROUTINE LOAD](../sql-re
 
 - **Kafka topic partition and offset**
 
-  You can specify the properties `kafka_partitions` and `kafka_offsets` to specify the partitions and offsets to consume the messages. For example, if you want the load job to consume messages from the Kafka partitions `"0,1,2,3,4"` of the topic `ordertest1` all with the initial offsets, you can specify the properties as follows:
+  You can specify the properties `kafka_partitions` and `kafka_offsets` to specify the partitions and offsets to consume the messages. For example, if you want the load job to consume messages from the Kafka partitions `"0,1,2,3,4"` of the topic `ordertest1` all with the initial offsets, you can specify the properties as follows: If you want the load job to consume messages from the Kafka partitions `"0,1,2,3,4"`and you need to specify a separate starting offset for each partition, you can configure as follows:
 
     ```SQL
     "kafka_partitions" ="0,1,2,3,4",
-    "kafka_offsets" = "OFFSET_BEGINNING,OFFSET_BEGINNING,OFFSET_BEGINNING,OFFSET_END,OFFSET_END"
+    "kafka_offsets" = "OFFSET_BEGINNING, OFFSET_END, 1000, 2000, 3000"
     ```
 
   You can also set the default offsets of all partitions with the property `property.kafka_default_offsets`.
@@ -300,7 +306,7 @@ Since v3.0.1, StarRocks supports loading Avro data by using Routine Load.
       }
       ```
 
-2. Register the Avro schema in the [Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html).
+2. Register the Avro schema in the [Schema Registry](https://docs.confluent.io/cloud/current/get-started/schema-registry.html#create-a-schema).
 
 **Avro data**
 
@@ -308,10 +314,10 @@ Prepare the Avro data and send it to the Kafka topic `topic_0`.
 
 #### Create a table
 
-According to the fields of Avro data, create a table `sensor_log` in the target database `sensor` in the StarRocks cluster. The column names of the table must match the field names in the Avro data. For the data type mapping between the table columns and the Avro data fields, see [Data types mapping](#Data types mapping).
+According to the fields of Avro data, create a table `sensor_log` in the target database `example_db` in the StarRocks cluster. The column names of the table must match the field names in the Avro data. For the data type mapping between the table columns and the Avro data fields, see [Data types mapping](#Data types mapping).
 
 ```SQL
-CREATE TABLE sensor.sensor_log ( 
+CREATE TABLE example_db.sensor_log ( 
     `id` bigint NOT NULL COMMENT "sensor id",
     `name` varchar(26) NOT NULL COMMENT "sensor name", 
     `checked` boolean NOT NULL COMMENT "checked", 
@@ -332,7 +338,7 @@ DISTRIBUTED BY HASH(`id`);
 Execute the following statement to submit a Routine Load job named `sensor_log_load_job` to consume the Avro messages in the Kafka topic `topic_0` and load the data into the table `sensor_log` in the database `sensor`. The load job consumes the messages from the initial offset in the specified partitions of the topic.
 
 ```SQL
-CREATE ROUTINE LOAD example_db.sensor_log_load_job ON sensor_log1  
+CREATE ROUTINE LOAD example_db.sensor_log_load_job ON sensor_log  
 PROPERTIES  
 (  
     "format" = "avro"  

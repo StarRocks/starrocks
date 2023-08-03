@@ -46,7 +46,6 @@ import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.DmlStmt;
-import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.StatementBase;
@@ -1528,7 +1527,7 @@ public class CreateMaterializedViewTest {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
             currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
-            Assert.assertEquals("Create materialized view from inactive materialized view: base_inactive_mv",
+            Assert.assertEquals("Create/Rebuild materialized view from inactive materialized view: base_inactive_mv",
                     e.getMessage());
         }
     }
@@ -2326,7 +2325,8 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Create materialized view do not support the table type: VIEW", e.getMessage());
+            Assert.assertEquals("Materialized view partition expression `test`.`tbl1`.`k1` " +
+                    "could only ref to base table", e.getMessage());
         }
     }
 
@@ -2858,5 +2858,36 @@ public class CreateMaterializedViewTest {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         }
     }
+
+    @Test
+    public void testMVWithMaxRewriteStaleness() throws Exception {
+        LocalDateTime startTime = LocalDateTime.now().plusSeconds(3);
+        String sql = "create materialized view mv_with_rewrite_staleness \n" +
+                "partition by date_trunc('month',k1)\n" +
+                "distributed by hash(s2) buckets 10\n" +
+                "refresh async START('" + startTime.format(DateUtils.DATE_TIME_FORMATTER) +
+                "') EVERY(INTERVAL 3 SECOND)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"," +
+                "\"mv_rewrite_staleness_second\" = \"60\"\n" +
+                ")\n" +
+                "as select tb1.k1, k2 s2 from tbl1 tb1;";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(4000L);
+            Table mv1 = testDb.getTable("mv_with_rewrite_staleness");
+            Assert.assertTrue(mv1 instanceof MaterializedView);
+
+            // test partition
+            MaterializedView materializedView = (MaterializedView) mv1;
+            Assert.assertEquals(materializedView.getMaxMVRewriteStaleness(), 60);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        } finally {
+            dropMv("mv_with_rewrite_staleness");
+        }
+    }
+
 }
 

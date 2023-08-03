@@ -98,6 +98,7 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
 
     _get_rowsets_timer = ADD_TIMER(_runtime_profile, "GetRowsets");
     _get_delvec_timer = ADD_TIMER(_runtime_profile, "GetDelVec");
+    _read_pk_index_timer = ADD_TIMER(_runtime_profile, "ReadPKIndex");
 
     // SegmentInit
     _seg_init_timer = ADD_TIMER(_runtime_profile, "SegmentInit");
@@ -160,6 +161,7 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     _params.profile = _runtime_profile;
     _params.runtime_state = _runtime_state;
     _params.use_page_cache = _runtime_state->use_page_cache();
+    _params.use_pk_index = thrift_olap_scan_node.use_pk_index;
     if (thrift_olap_scan_node.__isset.sorted_by_keys_per_tablet) {
         _params.sorted_by_keys_per_tablet = thrift_olap_scan_node.sorted_by_keys_per_tablet;
     }
@@ -406,6 +408,7 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_get_rowsets_timer, _reader->stats().get_rowsets_ns);
     COUNTER_UPDATE(_get_delvec_timer, _reader->stats().get_delvec_ns);
     COUNTER_UPDATE(_seg_init_timer, _reader->stats().segment_init_ns);
+    COUNTER_UPDATE(_read_pk_index_timer, _reader->stats().read_pk_index_ns);
 
     COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);
 

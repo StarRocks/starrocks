@@ -45,11 +45,11 @@ public:
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
-    bool pending_finish() const override {
-        return _join_builder->spiller()->has_pending_data() || !_join_builder->spiller()->restore_finished();
-    }
+    bool spillable() const override { return true; }
+    void set_execute_mode(int performance_level) override;
 
-    void mark_need_spill() override;
+    size_t estimated_memory_reserved(const ChunkPtr& chunk) override;
+    size_t estimated_memory_reserved() override;
 
 private:
     void set_spill_strategy(spill::SpillStrategy strategy) { _join_builder->set_spill_strategy(strategy); }
@@ -60,6 +60,8 @@ private:
     Status publish_runtime_filters(RuntimeState* state);
 
     Status append_hash_columns(const ChunkPtr& chunk);
+
+    Status init_spiller_partitions(RuntimeState* state, JoinHashTable& ht);
 
     ChunkSharedSlice _hash_table_build_chunk_slice;
     std::function<StatusOr<ChunkPtr>()> _hash_table_slice_iterator;

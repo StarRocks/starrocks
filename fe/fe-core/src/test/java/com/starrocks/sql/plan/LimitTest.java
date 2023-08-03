@@ -786,4 +786,11 @@ public class LimitTest extends PlanTestBase {
         assertContains(planFragment, "tabletRatio=3/3");
         FeConstants.runningUnitTest = flag;
     }
+
+    @Test
+    public void testConstantOrderByLimit() throws Exception {
+        String sql = "select * from t0 order by 'abc' limit 100, 100 ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "limit: 100");
+    }
 }

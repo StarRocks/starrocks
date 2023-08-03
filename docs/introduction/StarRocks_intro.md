@@ -12,7 +12,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 
 - [Introduction](../introduction/what_is_starrocks.md)
 - [Architecture](../introduction/Architecture.md)
-- [Shared-data StarRocks cluster](../administration/deploy_shared_data.md)
+- [Shared-data StarRocks cluster](../deployment/deploy_shared_data.md)
 - [Features](../introduction/Features.md)
 
 </NavBoxPartItem>
@@ -48,7 +48,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 - [Load data from a local file system or a streaming data source using HTTP PUT](../loading/StreamLoad.md)
 - [Load data from HDFS or cloud storage](../loading/BrokerLoad.md)
 - [Continuously load data from Apache Kafka®](../loading/RoutineLoad.md)
-- [Bulk load using Apache Spark™](../loading/SparkLoad.md)
+- [Load data using Apache Spark™](../loading/Spark-connector-starrocks.md)
 - [Load data using INSERT](../loading/InsertInto.md)
 - [Realtime synchronization from MySQL](../loading/Flink_cdc_load.md)
 - [Continuously load data from Apache Flink®](../loading/Flink-connector-starrocks.md)

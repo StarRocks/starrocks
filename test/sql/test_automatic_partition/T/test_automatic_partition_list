@@ -66,3 +66,36 @@ PROPERTIES (
 );
 insert into t3 values('2022-04-01',1,1,'hangzhou', 1);
 select * from t3;
+-- name: test_automatic_partition_list_limit
+CREATE TABLE list_auto_single (
+    id bigint  ,
+    user_id  bigint  ,
+    recharge_money decimal(32,2) ,
+    province varchar(20) not null,
+    dt varchar(20) not null
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+PARTITION BY (dt)
+DISTRIBUTED BY HASH(`id`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false"
+);
+ALTER TABLE list_auto_single ADD PARTITION psingle VALUES IN ("2023-04-01");
+ALTER TABLE list_auto_single ADD PARTITION pmul VALUES IN ("2022-04-01", "2022-04-02");
+CREATE TABLE list_normal_single (
+    id bigint  ,
+    user_id  bigint  ,
+    recharge_money decimal(32,2) ,
+    province varchar(20) not null,
+    dt varchar(20) not null
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+PARTITION BY LIST (dt)
+DISTRIBUTED BY HASH(`id`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false"
+);
+ALTER TABLE list_normal_single ADD PARTITION psingle VALUES IN ("2023-04-01");
+ALTER TABLE list_normal_single ADD PARTITION pmul VALUES IN ("2022-04-01", "2022-04-02");

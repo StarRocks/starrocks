@@ -65,7 +65,7 @@ public abstract class RoutineLoadTaskInfo {
 
     public static final long INVALID_BE_ID = -1L;
 
-    private RoutineLoadManager routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadManager();
+    private RoutineLoadMgr routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
 
     protected UUID id;
     protected long txnId = -1L;

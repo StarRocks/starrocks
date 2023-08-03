@@ -38,6 +38,8 @@ package com.starrocks.persist;
 public class OperationType {
     public static final short OP_INVALID = -1;
     public static final short OP_SAVE_NEXTID = 0;
+    @Deprecated
+    //Added OP_CREATE_DB_V2 in version 3.1, can be removed in version 3.2
     public static final short OP_CREATE_DB = 1;
     public static final short OP_DROP_DB = 2;
     public static final short OP_ALTER_DB = 3;
@@ -264,6 +266,7 @@ public class OperationType {
     @Deprecated
     public static final short OP_DROP_TASK_RUNS = 10083;
     public static final short OP_UPDATE_TASK_RUN_STATE = 10084;
+    public static final short OP_ALTER_TASK = 10085;
 
     // materialized view 10091 ~ 10100
     public static final short OP_RENAME_MATERIALIZED_VIEW = 10091;
@@ -321,6 +324,7 @@ public class OperationType {
     public static final short OP_MODIFY_TABLE_CONSTRAINT_PROPERTY = 11130;
 
     //Database json format log
+    public static final short OP_CREATE_DB_V2 = 12001;
     public static final short OP_ALTER_DB_V2 = 12002;
     public static final short OP_RECOVER_DB_V2 = 12003;
     public static final short OP_RENAME_DB_V2 = 12004;

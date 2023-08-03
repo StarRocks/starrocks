@@ -65,37 +65,52 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.LakeTableSchemaChangeJob;
 import com.starrocks.alter.RollupJobV2;
 import com.starrocks.alter.SchemaChangeJobV2;
-import com.starrocks.analysis.Expr;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.backup.SnapshotInfo;
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.AnyArrayType;
 import com.starrocks.catalog.AnyElementType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
+import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.FileTable;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveResource;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiResource;
+import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergResource;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.JDBCResource;
+import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MapType;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OdbcCatalogResource;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.PseudoType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Resource;
+import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.SparkResource;
 import com.starrocks.catalog.StructType;
+import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.View;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -135,12 +150,10 @@ import com.starrocks.privilege.ResourcePEntryObject;
 import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.privilege.UserPEntryObject;
 import com.starrocks.privilege.ViewPEntryObject;
-import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.optimizer.dump.HiveTableDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpDeserializer;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpSerializer;
-import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.BackendHbResponse;
 import com.starrocks.system.BrokerHbResponse;
 import com.starrocks.system.FrontendHbResponse;
@@ -202,7 +215,8 @@ public class GsonUtils {
                     .registerSubtype(RangePartitionInfo.class, "RangePartitionInfo")
                     .registerSubtype(ListPartitionInfo.class, "ListPartitionInfo")
                     .registerSubtype(SinglePartitionInfo.class, "SinglePartitionInfo")
-                    .registerSubtype(ExpressionRangePartitionInfo.class, "ExpressionRangePartitionInfo");
+                    .registerSubtype(ExpressionRangePartitionInfo.class, "ExpressionRangePartitionInfo")
+                    .registerSubtype(ExpressionRangePartitionInfoV2.class, "ExpressionRangePartitionInfoV2");
 
     // runtime adapter for class "Resource"
     private static final RuntimeTypeAdapterFactory<Resource> RESOURCE_TYPE_ADAPTER_FACTORY = RuntimeTypeAdapterFactory
@@ -254,8 +268,19 @@ public class GsonUtils {
 
     private static final RuntimeTypeAdapterFactory<com.starrocks.catalog.Table> TABLE_TYPE_ADAPTER_FACTORY
             = RuntimeTypeAdapterFactory.of(com.starrocks.catalog.Table.class, "clazz")
+            .registerSubtype(EsTable.class, "EsTable")
+            .registerSubtype(ExternalOlapTable.class, "ExternalOlapTable")
+            .registerSubtype(FileTable.class, "FileTable")
+            .registerSubtype(HiveTable.class, "HiveTable")
+            .registerSubtype(HudiTable.class, "HudiTable")
+            .registerSubtype(IcebergTable.class, "IcebergTable")
+            .registerSubtype(JDBCTable.class, "JDBCTable")
+            .registerSubtype(LakeMaterializedView.class, "LakeMaterializedView")
             .registerSubtype(LakeTable.class, "LakeTable")
-            .registerSubtype(LakeMaterializedView.class, "LakeMaterializedView");
+            .registerSubtype(MaterializedView.class, "MaterializedView")
+            .registerSubtype(MysqlTable.class, "MysqlTable")
+            .registerSubtype(OlapTable.class, "OlapTable")
+            .registerSubtype(View.class, "View");
 
     private static final RuntimeTypeAdapterFactory<SnapshotInfo> SNAPSHOT_INFO_TYPE_ADAPTER_FACTORY
             = RuntimeTypeAdapterFactory.of(SnapshotInfo.class, "clazz")
@@ -312,6 +337,12 @@ public class GsonUtils {
                     .registerSubtype(RestoreJob.class, "RestoreJob")
                     .registerSubtype(LakeRestoreJob.class, "LakeRestoreJob");
 
+    public static final RuntimeTypeAdapterFactory<Function> FUNCTION_TYPE_RUNTIME_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(Function.class, "clazz")
+                    .registerSubtype(ScalarFunction.class, "ScalarFunction")
+                    .registerSubtype(AggregateFunction.class, "AggregateFunction")
+                    .registerSubtype(TableFunction.class, "TableFunction");
+
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
 
@@ -329,9 +360,9 @@ public class GsonUtils {
     private static final JsonDeserializer<HiveTableDumpInfo> HIVE_TABLE_DUMP_INFO_DESERIALIZER = new HiveTableDumpInfo.
             HiveTableDumpInfoDeserializer();
 
-    private static final JsonSerializer<Expr> EXPRESSION_SERIALIZER = new ExpressionSerializer();
+    //private static final JsonSerializer<Expr> EXPRESSION_SERIALIZER = new ExpressionSerializer();
 
-    private static final JsonDeserializer<Expr> EXPRESSION_DESERIALIZER = new ExpressionDeserializer();
+    //private static final JsonDeserializer<Expr> EXPRESSION_DESERIALIZER = new ExpressionDeserializer();
 
     private static final JsonDeserializer<PrimitiveType> PRIMITIVE_TYPE_DESERIALIZER = new PrimitiveTypeDeserializer();
 
@@ -373,15 +404,14 @@ public class GsonUtils {
             .registerTypeAdapterFactory(ROUTINE_LOAD_PROGRESS_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(ROUTINE_LOAD_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(ABSTRACT_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(FUNCTION_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_DESERIALIZER)
             .registerTypeAdapter(HiveTableDumpInfo.class, HIVE_TABLE_DUMP_INFO_SERIALIZER)
             .registerTypeAdapter(HiveTableDumpInfo.class, HIVE_TABLE_DUMP_INFO_DESERIALIZER)
-            .registerTypeAdapter(PrimitiveType.class, PRIMITIVE_TYPE_DESERIALIZER)
-            .registerTypeHierarchyAdapter(Expr.class, EXPRESSION_SERIALIZER)
-            .registerTypeHierarchyAdapter(Expr.class, EXPRESSION_DESERIALIZER);
+            .registerTypeAdapter(PrimitiveType.class, PRIMITIVE_TYPE_DESERIALIZER);
 
     // this instance is thread-safe.
     public static final Gson GSON = GSON_BUILDER.create();
@@ -630,6 +660,12 @@ public class GsonUtils {
         }
     }
 
+    /*
+    * For historical reasons, there was a period of time when the code serialized Expr directly in GsonUtils,
+    * which would cause problems for the future expansion of Expr. This class is for code compatibility.
+    * Starting from version 3.2, this compatibility class can be deleted.
+    *
+    *
     private static class ExpressionSerializer implements JsonSerializer<Expr> {
         @Override
         public JsonElement serialize(Expr expr, Type type, JsonSerializationContext context) {
@@ -647,5 +683,14 @@ public class GsonUtils {
             String expressionSql = expressionObject.get("expr").getAsString();
             return SqlParser.parseSqlToExpr(expressionSql, SqlModeHelper.MODE_DEFAULT);
         }
+    }
+     */
+    public static class ExpressionSerializedObject {
+        public ExpressionSerializedObject(String expressionSql) {
+            this.expressionSql = expressionSql;
+        }
+
+        @SerializedName("expr")
+        public String expressionSql;
     }
 }

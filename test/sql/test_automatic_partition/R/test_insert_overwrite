@@ -105,3 +105,35 @@ select * from duplicate_table_with_null1;
 2020-08-03	2020-08-03 00:00:00	char3	varchar3	1
 2020-08-02	2020-08-02 00:00:00	char2	varchar2	0
 -- !result
+CREATE TABLE t_recharge_detail (
+    id bigint,
+    user_id bigint,
+    recharge_money decimal(32,2),
+    province varchar(20) not null,
+    dt varchar(20) not null
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+PARTITION BY (dt,province)
+DISTRIBUTED BY HASH(`id`) BUCKETS 2
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false"
+);
+-- result:
+-- !result
+insert overwrite t_recharge_detail PARTITION(dt='2022-04-02', province='beijing')
+select 2 as id, 2 as user_id, 2 as recharge_money, 'beijing' as province, '2022-04-02' as dt from dual;
+-- result:
+-- !result
+select * from t_recharge_detail;
+-- result:
+2	2	2.00	beijing	2022-04-02
+-- !result
+insert overwrite t_recharge_detail PARTITION(dt='2022-04-02', province='beijing')
+select 3 as id, 2 as user_id, 2 as recharge_money, 'beijing' as province, '2022-04-02' as dt from dual;
+-- result:
+-- !result
+select * from t_recharge_detail;
+-- result:
+3	2	2.00	beijing	2022-04-02
+-- !result

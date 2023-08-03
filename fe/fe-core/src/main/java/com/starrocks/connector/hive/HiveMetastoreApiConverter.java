@@ -26,10 +26,10 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.ColumnTypeConverter;
+import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.hudi.HudiConnector;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.avro.Schema;
@@ -118,11 +118,10 @@ public class HiveMetastoreApiConverter {
 
     public static HudiTable toHudiTable(Table table, String catalogName) {
         String hudiBasePath = table.getSd().getLocation();
-        // Trick
+        // using hadoop properties from catalog definition
         Configuration configuration = new Configuration();
         if (catalogName != null) {
-            HudiConnector connector = (HudiConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
-                    getConnector(catalogName);
+            Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
             CloudConfiguration cloudConfiguration = connector.getCloudConfiguration();
             HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
             configuration = hdfsEnvironment.getConfiguration();
@@ -296,6 +295,12 @@ public class HiveMetastoreApiConverter {
     }
 
     public static TextFileFormatDesc toTextFileFormatDesc(Map<String, String> serdeParams) {
+        final String DEFAULT_FIELD_DELIM = "\001";
+        final String DEFAULT_COLLECTION_DELIM = "\002";
+        final String DEFAULT_MAPKEY_DELIM = "\003";
+        final String DEFAULT_LINE_DELIM = "\n";
+
+
         // Get properties 'field.delim', 'line.delim', 'collection.delim' and 'mapkey.delim' from StorageDescriptor
         // Detail refer to:
         // https://github.com/apache/hive/blob/90428cc5f594bd0abb457e4e5c391007b2ad1cb8/serde/src/gen/thrift/gen-javabean/org/apache/hadoop/hive/serde/serdeConstants.java#L34-L40
@@ -305,16 +310,27 @@ public class HiveMetastoreApiConverter {
         // https://issues.apache.org/jira/browse/HIVE-16922
         String collectionDelim;
         if (serdeParams.containsKey("colelction.delim")) {
-            collectionDelim = serdeParams.get("colelction.delim");
+            collectionDelim = serdeParams.getOrDefault("colelction.delim", "");
         } else {
-            collectionDelim = serdeParams.getOrDefault("collection.delim", "\002");
+            collectionDelim = serdeParams.getOrDefault("collection.delim", "");
         }
 
-        return new TextFileFormatDesc(
-                serdeParams.getOrDefault("field.delim", "\001"),
-                serdeParams.getOrDefault("line.delim", "\n"),
-                collectionDelim,
-                serdeParams.getOrDefault("mapkey.delim", "\003"));
+        String fieldDelim = serdeParams.getOrDefault("field.delim", "");
+        if (fieldDelim.isEmpty()) {
+            // Support for hive org.apache.hadoop.hive.serde2.OpenCSVSerde
+            // https://cwiki.apache.org/confluence/display/hive/csv+serde
+            fieldDelim = serdeParams.getOrDefault("separatorChar", "");
+        }
+        String lineDelim = serdeParams.getOrDefault("line.delim", "");
+        String mapkeyDelim = serdeParams.getOrDefault("mapkey.delim", "");
+
+        // check is empty
+        fieldDelim = fieldDelim.isEmpty() ? DEFAULT_FIELD_DELIM : fieldDelim;
+        lineDelim = lineDelim.isEmpty() ? DEFAULT_LINE_DELIM : lineDelim;
+        collectionDelim = collectionDelim.isEmpty() ? DEFAULT_COLLECTION_DELIM : collectionDelim;
+        mapkeyDelim = mapkeyDelim.isEmpty() ? DEFAULT_MAPKEY_DELIM : mapkeyDelim;
+
+        return new TextFileFormatDesc(fieldDelim, lineDelim, collectionDelim, mapkeyDelim);
     }
 
     public static HiveCommonStats toHiveCommonStats(Map<String, String> params) {

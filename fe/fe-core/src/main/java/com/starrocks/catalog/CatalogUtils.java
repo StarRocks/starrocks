@@ -113,21 +113,25 @@ public class CatalogUtils {
         for (Partition partition : partitionList) {
             if (!listMap.isEmpty()) {
                 List<LiteralExpr> currentPartitionValueList = listMap.get(partition.getId());
-                simpleSet.addAll(currentPartitionValueList);
-                for (LiteralExpr literalExpr : currentPartitionValueList) {
-                    simpleValueSet.add(literalExpr.getRealObjectValue());
+                if (currentPartitionValueList != null) {
+                    simpleSet.addAll(currentPartitionValueList);
+                    for (LiteralExpr literalExpr : currentPartitionValueList) {
+                        simpleValueSet.add(literalExpr.getRealObjectValue());
+                    }
+                    continue;
                 }
-                continue;
             }
             if (!multiListMap.isEmpty()) {
                 List<List<LiteralExpr>> currentMultiplePartitionValueList = multiListMap.get(partition.getId());
-                multiSet.addAll(currentMultiplePartitionValueList);
-                for (List<LiteralExpr> list : currentMultiplePartitionValueList) {
-                    List<Object> valueList = new ArrayList<>();
-                    for (LiteralExpr literalExpr : list) {
-                        valueList.add(literalExpr.getRealObjectValue());
+                if (currentMultiplePartitionValueList != null) {
+                    multiSet.addAll(currentMultiplePartitionValueList);
+                    for (List<LiteralExpr> list : currentMultiplePartitionValueList) {
+                        List<Object> valueList = new ArrayList<>();
+                        for (LiteralExpr literalExpr : list) {
+                            valueList.add(literalExpr.getRealObjectValue());
+                        }
+                        multiValueSet.add(valueList);
                     }
-                    multiValueSet.add(valueList);
                 }
             }
         }

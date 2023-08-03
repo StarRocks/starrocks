@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 #include "fmt/format.h"
@@ -61,6 +62,7 @@ private:
         MemCacheManager(MemCacheManager&&) = delete;
 
         void consume(int64_t size) {
+            size = _consume_from_reserved(size);
             _cache_size += size;
             _allocated_cache_size += size;
             _total_consumed_bytes += size;
@@ -71,6 +73,7 @@ private:
 
         bool try_mem_consume(int64_t size) {
             MemTracker* cur_tracker = _loader();
+            size = _consume_from_reserved(size);
             _cache_size += size;
             _allocated_cache_size += size;
             _total_consumed_bytes += size;
@@ -88,6 +91,45 @@ private:
                 }
             }
             return true;
+        }
+
+        bool try_mem_consume_with_limited_tracker(int64_t size, MemTracker* tracker, int64_t limit) {
+            MemTracker* cur_tracker = _loader();
+            size = _consume_from_reserved(size);
+            _cache_size += size;
+            _allocated_cache_size += size;
+            _total_consumed_bytes += size;
+            if (cur_tracker != nullptr && _cache_size >= BATCH_SIZE) {
+                MemTracker* limit_tracker = cur_tracker->try_consume_with_limited(_cache_size, tracker, limit);
+                if (LIKELY(limit_tracker == nullptr)) {
+                    _cache_size = 0;
+                    return true;
+                } else {
+                    _cache_size -= size;
+                    _allocated_cache_size -= size;
+                    _try_consume_mem_size = size;
+                    tls_exceed_mem_tracker = limit_tracker;
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        bool try_mem_reserve(int64_t reserve_bytes, MemTracker* tracker, int64_t limit) {
+            DCHECK(_reserved_bytes == 0);
+            DCHECK(reserve_bytes >= 0);
+            if (try_mem_consume_with_limited_tracker(reserve_bytes, tracker, limit)) {
+                _reserved_bytes = reserve_bytes;
+                return true;
+            }
+            return false;
+        }
+
+        void release_reserved() {
+            if (_reserved_bytes) {
+                release(_reserved_bytes);
+                _reserved_bytes = 0;
+            }
         }
 
         void release(int64_t size) {
@@ -124,9 +166,22 @@ private:
         int64_t get_consumed_bytes() const { return _total_consumed_bytes; }
 
     private:
+        int64_t _consume_from_reserved(int64_t size) {
+            if (_reserved_bytes > size) {
+                _reserved_bytes -= size;
+                size = 0;
+            } else {
+                size -= _reserved_bytes;
+                _reserved_bytes = 0;
+            }
+            return size;
+        }
+
         const static int64_t BATCH_SIZE = 2 * 1024 * 1024;
 
         std::function<MemTracker*()> _loader;
+
+        int64_t _reserved_bytes = 0;
 
         // Allocated or delocated but not committed memory bytes, can be negative
         int64_t _cache_size = 0;
@@ -159,6 +214,7 @@ public:
 
     // Return prev memory tracker.
     starrocks::MemTracker* set_mem_tracker(starrocks::MemTracker* mem_tracker) {
+        release_reserved();
         mem_tracker_ctx_shift();
         auto* prev = tls_mem_tracker;
         tls_mem_tracker = mem_tracker;
@@ -208,6 +264,15 @@ public:
         }
         return false;
     }
+
+    bool try_mem_reserve(int64_t size, MemTracker* tracker, int64_t limit) {
+        if (_mem_cache_manager.try_mem_reserve(size, tracker, limit)) {
+            return true;
+        }
+        return false;
+    }
+
+    void release_reserved() { _mem_cache_manager.release_reserved(); }
 
     void mem_release(int64_t size) {
         _mem_cache_manager.release(size);
@@ -351,6 +416,9 @@ private:
 };
 
 #define SCOPED_SET_CATCHED(catched) auto VARNAME_LINENUM(catched_setter) = CurrentThreadCatchSetter(catched)
+
+#define RELEASE_RESERVED_GUARD() \
+    auto VARNAME_LINENUM(defer) = DeferOp([] { CurrentThread::current().release_reserved(); });
 
 #define SET_TRACE_INFO(driver_id, query_id, fragment_instance_id) \
     CurrentThread::current().set_pipeline_driver_id(driver_id);   \

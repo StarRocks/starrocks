@@ -10,49 +10,129 @@ You can also map the StarRocks table to a Spark DataFrame or a Spark RDD, and th
 
 ## Usage notes
 
-- Currently, you can only read data from StarRocks. You cannot write data from a sink to StarRocks.
 - You can filter data on StarRocks before you read the data, thereby reducing the amount of data transferred.
 - If the overhead of reading data is substantial, you can employ appropriate table design and filter conditions to prevent Spark from reading an excessive amount of data at a time. As such, you can reduce I/O pressure on your disk and network connection, thereby ensuring routine queries can be run properly.
 
 ## Version requirements
 
-| Spark connector | Spark | StarRocks       | Java | Scala |
-| --------------- | ----- | --------------- | ---- | ----- |
-| v1.0.0          | v2.x  | v1.18 and later | v8   | v2.11 |
-| v1.0.0          | v3.x  | v1.18 and later | v8   | v2.12 |
+| Spark connector | Spark         | StarRocks       | Java | Scala |
+|---------------- | ------------- | --------------- | ---- | ----- |
+| 1.1.0           | 3.2, 3.3, 3.4 | 2.5 and later   | 8    | 2.12  |
+| 1.0.0           | 3.x           | 1.18 and later  | 8    | 2.12  |
+| 1.0.0           | 2.x           | 1.18 and later  | 8    | 2.11  |
 
-## Prerequisites
+> **NOTICE**
+>
+> - In version 1.0.0, the Spark connector only supports reading data from StarRocks. From version 1.1.0 onwards, the Spark connector supports both reading data from and writing data to StarRocks.
+> - Version 1.0.0 differs from version 1.1.0 in terms of parameters and data type mappings. See [Spark connector upgrades](#spark-connector-upgrades).
+> - In general cases, no new features will be added to version 1.0.0. We recommend that you upgrade your Spark connector at your earliest opportunity.
 
-Spark has been deployed.
+## Obtain Spark connector
 
-## Before you begin
+Use one of the following methods to obtain the Spark connector **.jar** package that suits your business needs:
 
-You can directly download the compiled Spark Connector Jar file. You can also compile Spark connector by yourself.
+- Download a compiled package.
+- Use Maven to add the dependencies required by the Spark connector. (This method is supported only for Spark connector 1.1.0 and later.)
+- Manually compile a package.
 
-### Download the compiled Jar file
+### Spark connector 1.1.0 and later
+
+Spark connector **.jar** packages are named in the following format:
+
+`starrocks-spark-connector-${spark_version}_${scala_version}-${connector_version}.jar`
+
+For example, if you want to use Spark connector 1.1.0 with Spark 3.2 and Scala 2.12, you can choose `starrocks-spark-connector-3.2_2.12-1.1.0.jar`.
+
+> **NOTICE**
+>
+> In normal cases, the latest Spark connector version can be used with the most recent three Spark versions.
+
+#### Download a compiled package
+
+You can obtain Spark connector **.jar** packages of various versions at [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks).
+
+#### Add Maven dependencies
+
+Configure the dependencies required by the Spark connector as follows:
+
+> **NOTICE**
+>
+> You must replace `spark_version`, `scala_version`, and `connector_version` with the Spark version, Scala version, and Spark connector version you use.
+
+```xml
+<dependency>
+  <groupId>com.starrocks</groupId>
+  <artifactId>starrocks-spark-connector-${spark_version}_${scala_version}</artifactId>
+  <version>${connector_version}</version>
+</dependency>
+```
+
+For example, if you want to use Spark connector 1.1.0 with Spark 3.2 and Scala 2.12, configure the dependencies as follows:
+
+```xml
+<dependency>
+  <groupId>com.starrocks</groupId>
+  <artifactId>starrocks-spark-connector-3.2_2.12</artifactId>
+  <version>1.1.0</version>
+</dependency>
+```
+
+#### Manually compile a package
+
+1. Download [the Spark connector code](https://github.com/StarRocks/starrocks-connector-for-apache-spark).
+
+2. Use the following command to compile the Spark connector:
+
+   > **NOTICE**
+   >
+   > You must replace `spark_version` with the Spark version you use.
+
+   ```shell
+   sh build.sh <spark_version>
+   ```
+
+   For example, if you want to use the Spark connector with Spark 3.2, compile the Spark connector as follows:
+
+   ```shell
+   sh build.sh 3.2
+   ```
+
+3. Go to the `target/` path, in which a Spark connector **.jar** package like `starrocks-spark-connector-3.2_2.12-1.1.0-SNAPSHOT.jar` is generated upon compilation.
+
+   > **NOTICE**
+   >
+   > If you are using a Spark connector version that is not officially released, the name of the generated Spark connector **.jar** package contains `SNAPSHOT` as a suffix.
+
+### Spark connector 1.0.0
+
+#### Download a compiled package
 
 - [Spark 2.x](https://cdn-thirdparty.starrocks.com/spark/starrocks-spark2_2.11-1.0.0.jar)
 - [Spark 3.x](https://cdn-thirdparty.starrocks.com/spark/starrocks-spark3_2.12-1.0.0.jar)
 
-### Compile by yourself
+#### Manually compile a package
 
-1. Download the [Spark connector package](https://github.com/StarRocks/starrocks-connector-for-apache-spark).
+1. Download [the Spark connector code](https://github.com/StarRocks/starrocks-connector-for-apache-spark/tree/spark-1.0).
+
+   > **NOTICE**
+   >
+   > You must switch to `spark-1.0`.
 
 2. Take one of the following actions to compile the Spark connector:
 
-   - If you are using Spark v2.x, run the following command, which compiles the Spark connector to suit Spark v2.3.4 by default:
+   - If you are using Spark 2.x, run the following command, which compiles the Spark connector to suit Spark 2.3.4 by default:
 
      ```Plain
      sh build.sh 2
      ```
 
-   - If you are using Spark v3.x, run the following command, which compiles the Spark connector to suit Spark v3.1.2 by default:
+   - If you are using Spark 3.x, run the following command, which compiles the Spark connector to suit Spark 3.1.2 by default:
 
      ```Plain
      sh build.sh 3
      ```
 
-3. Go to the `output/` path to find the `starrocks-spark2_2.11-1.0.0.jar` file generated upon compilation. Then, copy the file to the classpath of Spark:
+3. Go to the `output/` path, in which the `starrocks-spark2_2.11-1.0.0.jar` file is generated upon compilation. Then, copy the file to the classpath of Spark:
 
    - If your Spark cluster runs in `Local` mode, place the file into the `jars/` path.
    - If your Spark cluster runs in `Yarn` mode, place the file into the pre-deployment package.
@@ -88,9 +168,13 @@ The following parameters apply only to the Spark SQL and Spark DataFrame reading
 
 | Parameter                           | Default value | Description                                                    |
 | ----------------------------------- | ------------- | ------------------------------------------------------------ |
-| user                                | None          | The username of your StarRocks cluster account.              |
-| password                            | None          | The password of your StarRocks cluster account.              |
-| starrocks.filter.query.in.max.count | 100           | The maximum number of values supported by the IN expression during predicate pushdown. If the number of values specified in the IN expression exceeds this limit, the filter conditions specified in the IN expression are processed on Spark. |
+| starrocks.fe.http.url               | None          | The HTTP IP address of the FE. This parameter is supported from Spark connector 1.1.0 onwards. This parameter is equivalent to `starrocks.fenodes`. You only need to configure one of them. In Spark connector 1.1.0 and later, we recommend that you use `starrocks.fe.http.url` because `starrocks.fenodes` may be deprecated. |
+| starrocks.fe.jdbc.url               | None          | The address that is used to connect to the MySQL server of the FE. Format: `jdbc:mysql://<fe_host>:<fe_query_port>`.<br>**NOTICE**<br>In Spark connector 1.1.0 and later, this parameter is mandatory.   |
+| user                                | None          | The username of your StarRocks cluster account.    |
+| starrocks.user                      | None          | The username of your StarRocks cluster account. This parameter is supported from Spark connector 1.1.0 onwards. This parameter is equivalent to `user`. You only need to configure one of them. In Spark connector 1.1.0 and later, we recommend that you use `starrocks.user` because `user` may be deprecated.   |
+| password                            | None          | The password of your StarRocks cluster account.    |
+| starrocks.password                  | None          | The password of your StarRocks cluster account. This parameter is supported from Spark connector 1.1.0 onwards. This parameter is equivalent to `password`. You only need to configure one of them. In Spark connector 1.1.0 and later, we recommend that you use `starrocks.password` because `password` may be deprecated.   |
+| starrocks.filter.query.in.max.count | 100           | The maximum number of values supported by the IN expression during predicate pushdown. If the number of values specified in the IN expression exceeds this limit, the filter conditions specified in the IN expression are processed on Spark.   |
 
 ### Parameters for Spark RDD
 
@@ -104,30 +188,69 @@ The following parameters apply only to the Spark RDD reading method.
 
 ## Data type mapping between StarRocks and Spark
 
-| StarRocks data type | Spark data type       |
-| ------------------- | --------------------- |
-| BOOLEAN             | DataTypes.BooleanType |
-| TINYINT             | DataTypes.ByteType    |
-| SMALLINT            | DataTypes.ShortType   |
-| INT                 | DataTypes.IntegerType |
-| BIGINT              | DataTypes.LongType    |
-| LARGEINT            | DataTypes.StringType  |
-| FLOAT               | DataTypes.FloatType   |
-| DOUBLE              | DataTypes.DoubleType  |
-| DECIMAL             | DecimalType           |
-| DATE                | DataTypes.StringType  |
-| DATETIME            | DataTypes.StringType  |
-| CHAR                | DataTypes.StringType  |
-| VARCHAR             | DataTypes.StringType  |
-| ARRAY               | Unsupported datatype  |
-| HLL                 | Unsupported datatype  |
-| BITMAP              | Unsupported datatype  |
+### Spark connector 1.1.0 and later
+
+| StarRocks data type | Spark data type           |
+|-------------------- |-------------------------- |
+| BOOLEAN             | DataTypes.BooleanType     |
+| TINYINT             | DataTypes.ByteType        |
+| SMALLINT            | DataTypes.ShortType       |
+| INT                 | DataTypes.IntegerType     |
+| BIGINT              | DataTypes.LongType        |
+| LARGEINT            | DataTypes.StringType      |
+| FLOAT               | DataTypes.FloatType       |
+| DOUBLE              | DataTypes.DoubleType      |
+| DECIMAL             | DecimalType               |
+| CHAR                | DataTypes.StringType      |
+| VARCHAR             | DataTypes.StringType      |
+| STRING              | DataTypes.StringType      |
+| DATE                | DataTypes.DateType        |
+| DATETIME            | DataTypes.TimestampType   |
+| ARRAY               | Unsupported datatype      |
+| HLL                 | Unsupported datatype      |
+| BITMAP              | Unsupported datatype      |
+
+### Spark connector 1.0.0
+
+| StarRocks data type  | Spark data type        |
+| -------------------- | ---------------------- |
+| BOOLEAN              | DataTypes.BooleanType  |
+| TINYINT              | DataTypes.ByteType     |
+| SMALLINT             | DataTypes.ShortType    |
+| INT                  | DataTypes.IntegerType  |
+| BIGINT               | DataTypes.LongType     |
+| LARGEINT             | DataTypes.StringType   |
+| FLOAT                | DataTypes.FloatType    |
+| DOUBLE               | DataTypes.DoubleType   |
+| DECIMAL              | DecimalType            |
+| CHAR                 | DataTypes.StringType   |
+| VARCHAR              | DataTypes.StringType   |
+| DATE                 | DataTypes.StringType   |
+| DATETIME             | DataTypes.StringType   |
+| ARRAY                | Unsupported datatype   |
+| HLL                  | Unsupported datatype   |
+| BITMAP               | Unsupported datatype   |
 
 The processing logic of the underlying storage engine used by StarRocks cannot cover an expected time range when DATE and DATETIME data types are directly used. Therefore, the Spark connector maps the DATE and DATETIME data types from StarRocks to the STRING data type from Spark, and generates readable string texts matching the date and time data read from StarRocks.
 
+## Spark connector upgrades
+
+### Upgrade from version 1.0.0 to version 1.1.0
+
+- In version 1.1.0, the Spark connector uses JDBC to access StarRocks to obtain more detailed table information. Therefore, you must configure `starrocks.fe.jdbc.url`.
+
+- In version 1.1.0, some parameters are renamed. Both the old and new parameters are retained for now. For each pair of equivalent parameters, you only need to configure one of them, but we recommend that you use the new one because the old one may be deprecated.
+  - `starrocks.fenodes` is renamed as `starrocks.fe.http.url`.
+  - `user` is renamed as `starrocks.user`.
+  - `password` is renamed as `starrocks.password`.
+
+- In version 1.1.0, the mappings of some data types are adjusted based on Spark 3.x:
+  - `DATE` in StarRocks is mapped to `DataTypes.DateType` (originally `DataTypes.StringType`) in Spark.
+  - `DATETIME` in StarRocks is mapped to `DataTypes.TimestampType` (originally `DataTypes.StringType`) in Spark.
+
 ## Examples
 
-The following examples assume you have created a database named `test` in your StarRocks cluster and you have the permissions of user `root`.
+The following examples assume you have created a database named `test` in your StarRocks cluster and you have the permissions of user `root`. The parameter settings in the examples are based on Spark Connector 1.1.0.
 
 ### Data example
 
@@ -227,9 +350,10 @@ Do as follows to prepare a sample table:
               OPTIONS
               (
                   "starrocks.table.identifier" = "test.score_board",
-                  "starrocks.fenodes" = "<fe_host>:<fe_http_port>",
-                  "user" = "root",
-                  "password" = ""
+                  "starrocks.fe.http.url" = "<fe_host>:<fe_http_port>",
+                  "starrocks.fe.jdbc.url" = "jdbc:mysql://<fe_host>:<fe_query_port>",
+                  "starrocks.user" = "root",
+                  "starrocks.password" = ""
               );
    ```
 
@@ -280,9 +404,10 @@ Do as follows to prepare a sample table:
    ```Scala
    scala> val starrocksSparkDF = spark.read.format("starrocks")
               .option("starrocks.table.identifier", s"test.score_board")
-              .option("starrocks.fenodes", s"<fe_host>:<fe_http_port>")
-              .option("user", s"root")
-              .option("password", s"")
+              .option("starrocks.fe.http.url", s"<fe_host>:<fe_http_port>")
+              .option("starrocks.fe.jdbc.url", s"jdbc:mysql://<fe_host>:<fe_query_port>")
+              .option("starrocks.user", s"root")
+              .option("starrocks.password", s"")
               .load()
    ```
 
@@ -371,8 +496,8 @@ When you read data from StarRocks using the Spark connector, you can use the `st
 
 | Component       | Version                                                      |
 | --------------- | ------------------------------------------------------------ |
-| Spark           | Spark v2.4.4 and Scala v2.11.12 (OpenJDK 64-Bit Server VM, Java 1.8.0_302) |
-| StarRocks       | v2.2.0                                                       |
+| Spark           | Spark 2.4.4 and Scala 2.11.12 (OpenJDK 64-Bit Server VM, Java 1.8.0_302) |
+| StarRocks       | 2.2.0                                                        |
 | Spark connector | starrocks-spark2_2.11-1.0.0.jar                              |
 
 ### Data example

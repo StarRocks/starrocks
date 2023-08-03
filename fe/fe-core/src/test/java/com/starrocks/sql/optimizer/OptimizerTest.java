@@ -185,12 +185,13 @@ public class OptimizerTest {
         MaterializedView mv = getMv(dbName, mvName);
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         final String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
+        Task task = taskManager.getTask(mvTaskName);
         if (!taskManager.containTask(mvTaskName)) {
-            Task task = TaskBuilder.buildMvTask(mv, "test");
+            task = TaskBuilder.buildMvTask(mv, dbName);
             TaskBuilder.updateTaskInfo(task, mv);
             taskManager.createTask(task, false);
         }
-        taskManager.executeTaskSync(mvTaskName);
+        taskManager.executeTaskSync(task);
     }
 
     @Test

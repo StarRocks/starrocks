@@ -129,7 +129,7 @@ public class Config extends ConfigBase {
     @ConfField
     public static int audit_log_roll_num = 90;
     @ConfField
-    public static String[] audit_log_modules = {"slow_query", "query", "connection"};
+    public static String[] audit_log_modules = {"slow_query", "query"};
     @ConfField(mutable = true)
     public static long qe_slow_log_ms = 5000;
     @ConfField
@@ -609,6 +609,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int thrift_rpc_retry_times = 3;
 
+    @ConfField
+    public static boolean thrift_rpc_strict_mode = true;
+
+    // thrift rpc max body limit size. -1 means unlimited
+    @ConfField
+    public static int thrift_rpc_max_body_size = -1;
+
     // May be necessary to modify the following BRPC configurations in high concurrency scenarios.
 
     // The size of BRPC connection pool. It will limit the concurrency of sending requests, because
@@ -870,8 +877,8 @@ public class Config extends ConfigBase {
      * Currently, it only limits the load task of broker load, pending and loading phases.
      * It should be less than 'max_running_txn_num_per_db'
      */
-    @ConfField
-    public static int async_load_task_pool_size = 2;
+    @ConfField(mutable = true, aliases = {"async_load_task_pool_size"})
+    public static int max_broker_load_job_concurrency = 5;
 
     /**
      * Same meaning as *tablet_create_timeout_second*, but used when delete a tablet.
@@ -1008,6 +1015,14 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_materialized_view = true;
 
+    /**
+     * When the materialized view fails to start FE due to metadata problems,
+     * you can try to open this configuration,
+     * and he can ignore some metadata exceptions.
+     */
+    @ConfField(mutable = true)
+    public static boolean ignore_materialized_view_error = false;
+
     @ConfField(mutable = true)
     public static boolean enable_udf = false;
 
@@ -1050,6 +1065,10 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int max_create_table_timeout_second = 600;
+
+    @ConfField(mutable = true, comment = "The maximum number of replicas to create serially." +
+            "If actual replica count exceeds this, replicas will be created concurrently.")
+    public static int create_table_max_serial_replicas = 128;
 
     // Configurations for backup and restore
     /**
@@ -1136,7 +1155,7 @@ public class Config extends ConfigBase {
     // if the number of scheduled tablets in TabletScheduler exceed max_scheduling_tablets
     // skip checking.
     @ConfField(mutable = true, aliases = {"max_scheduling_tablets"})
-    public static int tablet_sched_max_scheduling_tablets = 2000;
+    public static int tablet_sched_max_scheduling_tablets = 10000;
 
     /**
      * if set to true, TabletScheduler will not do balance.
@@ -1208,7 +1227,7 @@ public class Config extends ConfigBase {
     // if the number of balancing tablets in TabletScheduler exceed max_balancing_tablets,
     // no more balance check
     @ConfField(mutable = true, aliases = {"max_balancing_tablets"})
-    public static int tablet_sched_max_balancing_tablets = 100;
+    public static int tablet_sched_max_balancing_tablets = 500;
 
     /**
      * When create a table(or partition), you can specify its storage medium(HDD or SSD).
@@ -1226,12 +1245,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long tablet_sched_max_not_being_scheduled_interval_ms = 15 * 60 * 1000;
-
-    /**
-     * enable replicated storage as default table engine
-     */
-    @ConfField(mutable = true)
-    public static boolean enable_replicated_storage_as_default_engine = true;
 
     /**
      * FOR DiskAndTabletLoadBalancer:
@@ -1302,6 +1315,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int max_routine_load_job_num = 100;
+
+    /**
+     * enable replicated storage as default table engine
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_replicated_storage_as_default_engine = true;
 
     /**
      * the max concurrent routine load task num of a single routine load job
@@ -1559,6 +1578,12 @@ public class Config extends ConfigBase {
     @ConfField
     public static long statistic_cache_columns = 100000;
 
+    /**
+     * The size of the thread-pool which will be used to refresh statistic caches
+     */
+    @ConfField
+    public static int statistic_cache_thread_pool_size = 10;
+
     @ConfField
     public static long statistic_dict_columns = 100000;
 
@@ -1770,7 +1795,7 @@ public class Config extends ConfigBase {
      * or hdfs into smaller files for hive external table
      */
     @ConfField(mutable = true)
-    public static long hive_max_split_size = 64L * 1024L * 1024L;
+    public static long hive_max_split_size = 512L * 1024L * 1024L;
 
     /**
      * Enable background refresh all external tables all partitions metadata on internal catalog.

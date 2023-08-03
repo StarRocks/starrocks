@@ -34,6 +34,7 @@ from typing import List
 from cup import log
 from nose import tools
 
+from lib import skip
 from lib import sr_sql_lib
 from lib.sr_sql_lib import RESULT_FLAG, UNCHECK_FLAG
 from lib.sr_sql_lib import RESULT_END_FLAT
@@ -212,6 +213,11 @@ class ChooseCase(object):
         file_list = self.t if record_mode else self.r
 
         for file in file_list:
+            base_file = os.path.basename(file)
+            if base_file in skip.skip_files:
+                print('skip file {} because it is in skip_files'.format(file))
+                continue
+
             self.read_t_r_file(file, case_regex)
 
     def read_t_r_file(self, file, case_regex):

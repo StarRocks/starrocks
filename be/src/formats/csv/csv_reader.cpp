@@ -572,6 +572,8 @@ Status CSVReader::_expand_buffer_loosely() {
 }
 
 void CSVReader::split_record(const Record& record, Fields* columns) const {
+    DCHECK(_column_delimiter_length > 0);
+
     const char* value = record.data;
     const char* ptr = record.data;
     const size_t size = record.size;

@@ -25,7 +25,7 @@ public class PrivilegeCollectionTest {
 
     @Test
     public void testBasic() throws Exception {
-        PrivilegeCollection collection = new PrivilegeCollection();
+        PrivilegeCollectionV2 collection = new PrivilegeCollectionV2();
         ObjectType table = ObjectType.TABLE;
         PrivilegeType select = PrivilegeType.SELECT;
         PrivilegeType insert = PrivilegeType.INSERT;
@@ -86,7 +86,7 @@ public class PrivilegeCollectionTest {
 
     @Test
     public void testGrantOptionComplicated() throws Exception {
-        PrivilegeCollection collection = new PrivilegeCollection();
+        PrivilegeCollectionV2 collection = new PrivilegeCollectionV2();
         ObjectType table = ObjectType.TABLE;
         PrivilegeType select = PrivilegeType.SELECT;
         PrivilegeType insert = PrivilegeType.INSERT;
@@ -142,7 +142,7 @@ public class PrivilegeCollectionTest {
 
     @Test
     public void testAll() throws Exception {
-        PrivilegeCollection collection = new PrivilegeCollection();
+        PrivilegeCollectionV2 collection = new PrivilegeCollectionV2();
         ObjectType table = ObjectType.TABLE;
         PrivilegeType select = PrivilegeType.SELECT;
         PrivilegeType insert = PrivilegeType.INSERT;
@@ -198,15 +198,15 @@ public class PrivilegeCollectionTest {
         PrivilegeType drop = PrivilegeType.DROP;
         DbPEntryObject db1 = new DbPEntryObject("333");
 
-        PrivilegeCollection collection = new PrivilegeCollection();
-        PrivilegeCollection selectTable = new PrivilegeCollection();
+        PrivilegeCollectionV2 collection = new PrivilegeCollectionV2();
+        PrivilegeCollectionV2 selectTable = new PrivilegeCollectionV2();
         selectTable.grant(table, Arrays.asList(select), Arrays.asList(table1), false);
 
         Assert.assertFalse(collection.check(table, select, table1));
         collection.merge(selectTable);
         Assert.assertTrue(collection.check(table, select, table1));
 
-        PrivilegeCollection insertTable = new PrivilegeCollection();
+        PrivilegeCollectionV2 insertTable = new PrivilegeCollectionV2();
         insertTable.grant(table, Arrays.asList(insert), Arrays.asList(table1), false);
 
         Assert.assertFalse(collection.check(table, insert, table1));
@@ -220,7 +220,7 @@ public class PrivilegeCollectionTest {
         Assert.assertTrue(collection.check(table, insert, table1));
 
         // with grant option
-        PrivilegeCollection insertTableWithGrant = new PrivilegeCollection();
+        PrivilegeCollectionV2 insertTableWithGrant = new PrivilegeCollectionV2();
         insertTableWithGrant.grant(table, Arrays.asList(insert), Arrays.asList(table1), true);
 
         Assert.assertFalse(collection.allowGrant(table, Arrays.asList(insert), Arrays.asList(table1)));
@@ -231,7 +231,7 @@ public class PrivilegeCollectionTest {
         Assert.assertFalse(selectTable.check(table, insert, table1));
         Assert.assertFalse(insertTable.allowGrant(table, Arrays.asList(insert), Arrays.asList(table1)));
 
-        PrivilegeCollection createTable = new PrivilegeCollection();
+        PrivilegeCollectionV2 createTable = new PrivilegeCollectionV2();
         createTable.grant(db, Arrays.asList(drop), Arrays.asList(db1), true);
 
         Assert.assertFalse(collection.allowGrant(db, Arrays.asList(drop), Arrays.asList(db1)));
@@ -240,11 +240,11 @@ public class PrivilegeCollectionTest {
         Assert.assertTrue(collection.allowGrant(db, Arrays.asList(drop), Arrays.asList(db1)));
         Assert.assertTrue(collection.check(db, drop, db1));
 
-        PrivilegeCollection systemCollection1 = new PrivilegeCollection();
+        PrivilegeCollectionV2 systemCollection1 = new PrivilegeCollectionV2();
         systemCollection1.grant(ObjectType.SYSTEM, Arrays.asList(PrivilegeType.NODE),
                 Collections.singletonList(null), true);
 
-        PrivilegeCollection systemCollection2 = new PrivilegeCollection();
+        PrivilegeCollectionV2 systemCollection2 = new PrivilegeCollectionV2();
         systemCollection2.grant(ObjectType.SYSTEM, Arrays.asList(PrivilegeType.OPERATE),
                 Collections.singletonList(null), false);
         systemCollection1.merge(systemCollection2);
@@ -256,11 +256,11 @@ public class PrivilegeCollectionTest {
         PrivilegeType insert = PrivilegeType.INSERT;
         PrivilegeType delete = PrivilegeType.DELETE;
         TablePEntryObject table1 = new TablePEntryObject("111", "222");
-        PrivilegeCollection.PrivilegeEntry entry = new PrivilegeCollection.PrivilegeEntry(
+        PrivilegeEntry entry = new PrivilegeEntry(
                 new ActionSet(Arrays.asList(select, insert)),
                 table1,
                 false);
-        PrivilegeCollection.PrivilegeEntry clonedEntry = new PrivilegeCollection.PrivilegeEntry(entry);
+        PrivilegeEntry clonedEntry = new PrivilegeEntry(entry);
 
         entry.actionSet.add(new ActionSet(Arrays.asList(delete)));
         Assert.assertFalse(clonedEntry.actionSet.contains(delete));

@@ -512,6 +512,10 @@ public:
     size_t size() const { return _size; }
     size_t capacity() const { return _l0 ? _l0->capacity() : 0; }
     size_t memory_usage() const {
+        // commit thread will update primary index memory usage and get index memory usage
+        // apply thread maybe clear or modify _l1_vec
+        // add lock to avoid read/write conflicts
+        std::shared_lock rdlock(_lock);
         size_t memory_usage = _l0 ? _l0->memory_usage() : 0;
         for (int i = 0; i < _l1_vec.size(); i++) {
             memory_usage += _l1_vec[i]->memory_usage();
@@ -645,6 +649,10 @@ private:
 
     Status _update_usage_and_size_by_key_length(std::vector<std::pair<int64_t, int64_t>>& add_usage_and_size);
 
+    // prevent concurrent operations
+    // Currently there are only concurrent read/write conflicts for _l1_vec between apply_thread and commit_thread
+    mutable std::shared_mutex _lock;
+
     // index storage directory
     std::string _path;
     size_t _key_size = 0;
@@ -669,7 +677,7 @@ private:
     bool _flushed = false;
     bool _need_bloom_filter = false;
 
-    mutable std::mutex _lock;
+    mutable std::mutex _get_lock;
     std::condition_variable _get_task_finished;
     size_t _running_get_task = 0;
     std::atomic<bool> _error{false};

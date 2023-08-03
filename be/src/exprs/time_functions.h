@@ -104,6 +104,23 @@ public:
     DEFINE_VECTORIZED_FN(day_of_week);
 
     /**
+     * Get day of week of the timestamp.
+     * syntax like select dayofweek_iso("2023-01-03");
+     * result is 2
+     * @param context
+     * @param columns [TimestampColumn] Columns that hold timestamps.
+     * @return  IntColumn Day of the day_of_week_iso:
+     *  - 1: Monday
+     *  - 2: Tuesday
+     *  - 3: Wednesday
+     *  - 4: Thursday
+     *  - 5: Friday
+     *  - 6: Saturday
+     *  - 7: Sunday
+     */
+    DEFINE_VECTORIZED_FN(day_of_week_iso);
+
+    /**
      * Get day of the timestamp.
      * @param context
      * @param columns [TimestampColumn] Columns that hold timestamps.
@@ -338,12 +355,41 @@ public:
     DEFINE_VECTORIZED_FN(time_diff);
 
     /**
+     * Calculate times from the first timestamp to the second timestamp. according to type return bigint in hour/minute/second/millisecond.
+     * @param context
+     * @param columns [TimestampColumn] Columns that holds two groups timestamps for calculation.
+     * @return  BigIntColumn Difference in times between the two timestamps. It can be negative.
+     */
+    DEFINE_VECTORIZED_FN(datediff);
+    static Status datediff_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status datediff_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    /*
+     * Called by date_diff to handle
+     */
+    static StatusOr<ColumnPtr> date_diff_time(FunctionContext* context, const Columns& columns, int64_t t);
+
+    // function for datediff
+    struct DateDiffCtx {
+        int64_t type;
+        StatusOr<ColumnPtr> (*function)(FunctionContext* context, const Columns& columns, int64_t t);
+    };
+
+    /**
      * @param: [timestmap, year]
      * @paramType columns: [TimestampColumn, IntColumn]
      * @return TimestampColumn
      */
     DEFINE_VECTORIZED_FN(years_add);
     DEFINE_VECTORIZED_FN(years_sub);
+
+    /**
+     * @param: [timestmap, quarter]
+     * @paramType columns: [TimestampColumn, IntColumn]
+     * @return TimestampColumn
+     */
+    DEFINE_VECTORIZED_FN(quarters_add);
+    DEFINE_VECTORIZED_FN(quarters_sub);
 
     /**
      * @param: [timestmap, month]
@@ -400,6 +446,14 @@ public:
      */
     DEFINE_VECTORIZED_FN(micros_add);
     DEFINE_VECTORIZED_FN(micros_sub);
+
+    /**
+     * @param: [timestmap, millis]
+     * @paramType columns: [TimestampColumn, IntColumn]
+     * @return TimestampColumn
+     */
+    DEFINE_VECTORIZED_FN(millis_add);
+    DEFINE_VECTORIZED_FN(millis_sub);
 
     /**
      * @param: [timestmap, timestamp]
@@ -519,6 +573,10 @@ public:
 
     static Status format_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
+    static Status jodatime_format_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    static Status jodatime_format_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
     /**
      * Format TimestampValue.
      * @param context
@@ -536,6 +594,22 @@ public:
     DEFINE_VECTORIZED_FN(date_format);
     //    DEFINE_VECTORIZED_FN(month_name);
     //    DEFINE_VECTORIZED_FN(day_name);
+
+    /**
+     * Format TimestampValue using JodaTime’s date time format
+     * @param context
+     * @param columns [TimestampColumn, BinaryColumn of TYPE_VARCHAR] The first column holds the timestamp, the second column holds the format.
+     * @return  BinaryColumn of TYPE_VARCHAR.
+     */
+    DEFINE_VECTORIZED_FN(jodadatetime_format);
+
+    /**
+     * Format DateValue using JodaTime’s date time format
+     * @param context
+     * @param columns [DateColumn, BinaryColumn of TYPE_VARCHAR] The first column holds the date, the second column holds the format.
+     * @return  BinaryColumn of TYPE_VARCHAR.
+     */
+    DEFINE_VECTORIZED_FN(jodadate_format);
 
     /**
      * @param: [timestampstr, formatstr]
@@ -591,6 +665,18 @@ public:
      */
     DEFINE_VECTORIZED_FN(time_to_sec);
 
+    /**
+     * Returns the last day of the specified date part for a date or datetime.
+     * @param: [date_or_datetime_expr, date_part]
+     * @paramType columns: [TimestampColumn, VARCHAR]
+     * @return DateColumn of TYPE_DATE.
+     */
+    DEFINE_VECTORIZED_FN(last_day);
+    DEFINE_VECTORIZED_FN(last_day_with_format);
+
+    static Status last_day_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status last_day_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
     // Following const variables used to obtains number days of year
     constexpr static int NUMBER_OF_LEAP_YEAR = 366;
     constexpr static int NUMBER_OF_NON_LEAP_YEAR = 365;
@@ -623,6 +709,10 @@ private:
     static StatusOr<ColumnPtr> convert_tz_const(FunctionContext* context, const Columns& columns,
                                                 const cctz::time_zone& from, const cctz::time_zone& to);
 
+    static StatusOr<ColumnPtr> _last_day_with_format(FunctionContext* context, const Columns& columns);
+    static StatusOr<ColumnPtr> _last_day_with_format_const(std::string& format_content, FunctionContext* context,
+                                                           const Columns& columns);
+
 public:
     static TimestampValue start_of_time_slice;
     static std::string info_reported_by_time_slice;
@@ -641,6 +731,13 @@ public:
         None
     };
 
+    struct FormatCtx {
+        bool is_valid = false;
+        std::string fmt;
+        int len;
+        FormatType fmt_type;
+    };
+
 private:
     struct FromUnixState {
         bool const_format{false};
@@ -656,13 +753,6 @@ private:
         cctz::time_zone to_tz;
     };
 
-    struct FormatCtx {
-        bool is_valid = false;
-        std::string fmt;
-        int len;
-        FormatType fmt_type;
-    };
-
     // fmt for string format like "%Y-%m-%d" and "%Y-%m-%d %H:%i:%s"
     struct StrToDateCtx {
         FormatType fmt_type;
@@ -672,6 +762,12 @@ private:
     // method for datetime_trunc and time_slice
     struct DateTruncCtx {
         ScalarFunction function;
+    };
+
+    // last_day ctx
+    struct LastDayCtx {
+        bool const_optional{false};
+        std::string optional_content;
     };
 
     template <LogicalType Type>

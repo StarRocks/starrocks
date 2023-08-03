@@ -31,6 +31,7 @@
 #include "gutil/strings/join.h"
 #include "runtime/descriptors.h"
 #include "runtime/global_dict/types.h"
+#include "runtime/global_dict/types_fwd_decl.h"
 #include "runtime/load_channel.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
@@ -205,6 +206,9 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 
     context->set_count_down_latch(&count_down_latch);
 
+    std::unordered_map<int64_t, std::vector<int64_t>> node_id_to_abort_tablets;
+    context->set_node_id_to_abort_tablets(&node_id_to_abort_tablets);
+
     for (int i = 0; i < channel_size; ++i) {
         size_t from = channel_row_idx_start_points[i];
         size_t size = channel_row_idx_start_points[i + 1] - from;
@@ -249,6 +253,11 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 
     // This will only block the bthread, will not block the pthread
     count_down_latch.wait();
+
+    // Abort tablets which primary replica already failed
+    if (response->status().status_code() != TStatusCode::OK) {
+        _abort_replica_tablets(request, response->status().error_msgs()[0], node_id_to_abort_tablets);
+    }
 
     // We need wait all secondary replica commit before we close the channel
     if (_is_replicated_storage && close_channel && response->status().status_code() == TStatusCode::OK) {
@@ -350,6 +359,52 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     response->set_execution_time_us(last_execution_time_us +
                                     std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
     response->set_wait_lock_time_us(0); // We didn't measure the lock wait time, just give the caller a fake time
+
+    // reset error message if it already set by other replica
+    {
+        std::lock_guard l(_status_lock);
+        if (!_status.ok()) {
+            response->mutable_status()->set_status_code(_status.code());
+            response->mutable_status()->add_error_msgs(_status.get_error_msg());
+        }
+    }
+}
+
+void LocalTabletsChannel::_abort_replica_tablets(
+        const PTabletWriterAddChunkRequest& request, const std::string& abort_reason,
+        const std::unordered_map<int64_t, std::vector<int64_t>>& node_id_to_abort_tablets) {
+    for (auto& [node_id, tablet_ids] : node_id_to_abort_tablets) {
+        auto& endpoint = _node_id_to_endpoint[node_id];
+        auto stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(endpoint.host(), endpoint.port());
+        if (stub == nullptr) {
+            auto msg =
+                    fmt::format("Failed to Connect node {} {}:{} failed.", node_id, endpoint.host(), endpoint.port());
+            LOG(WARNING) << msg;
+            continue;
+        }
+
+        PTabletWriterCancelRequest cancel_request;
+        *cancel_request.mutable_id() = request.id();
+        cancel_request.set_sender_id(0);
+        cancel_request.mutable_tablet_ids()->CopyFrom({tablet_ids.begin(), tablet_ids.end()});
+        cancel_request.set_txn_id(_txn_id);
+        cancel_request.set_index_id(_index_id);
+        cancel_request.set_reason(abort_reason);
+
+        auto closure = new ReusableClosure<PTabletWriterCancelResult>();
+
+        closure->ref();
+        closure->cntl.set_timeout_ms(request.timeout_ms());
+
+        string node_abort_tablet_id_list_str;
+        JoinInts(tablet_ids, ",", &node_abort_tablet_id_list_str);
+
+        stub->tablet_writer_cancel(&closure->cntl, &cancel_request, &closure->result, closure);
+
+        VLOG(1) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id()) << " Cancel "
+                << tablet_ids.size() << " tablets " << node_abort_tablet_id_list_str << " request to "
+                << endpoint.host() << ":" << endpoint.port();
+    }
 }
 
 void LocalTabletsChannel::_commit_tablets(const PTabletWriterAddChunkRequest& request,
@@ -385,38 +440,8 @@ void LocalTabletsChannel::_commit_tablets(const PTabletWriterAddChunkRequest& re
     LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id()) << " commit "
               << commit_tablet_ids.size() << " tablets: " << commit_tablet_id_list_str;
 
-    // abort seconary replicas located on other nodes
-    for (auto& [node_id, tablet_ids] : node_id_to_abort_tablets) {
-        auto& endpoint = _node_id_to_endpoint[node_id];
-        auto stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(endpoint.host(), endpoint.port());
-        if (stub == nullptr) {
-            auto msg =
-                    fmt::format("Failed to Connect node {} {}:{} failed.", node_id, endpoint.host(), endpoint.port());
-            LOG(WARNING) << msg;
-            continue;
-        }
-
-        PTabletWriterCancelRequest cancel_request;
-        *cancel_request.mutable_id() = request.id();
-        cancel_request.set_sender_id(0);
-        cancel_request.mutable_tablet_ids()->CopyFrom({tablet_ids.begin(), tablet_ids.end()});
-        cancel_request.set_txn_id(_txn_id);
-        cancel_request.set_index_id(_index_id);
-
-        auto closure = new ReusableClosure<PTabletWriterCancelResult>();
-
-        closure->ref();
-        closure->cntl.set_timeout_ms(request.timeout_ms());
-
-        string node_abort_tablet_id_list_str;
-        JoinInts(tablet_ids, ",", &node_abort_tablet_id_list_str);
-
-        stub->tablet_writer_cancel(&closure->cntl, &cancel_request, &closure->result, closure);
-
-        VLOG(1) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id()) << " Cancel "
-                << tablet_ids.size() << " tablets " << node_abort_tablet_id_list_str << " request to "
-                << endpoint.host() << ":" << endpoint.port();
-    }
+    // abort seconary replicas located on other nodes which have no data
+    _abort_replica_tablets(request, "", node_id_to_abort_tablets);
 }
 
 int LocalTabletsChannel::_close_sender(const int64_t* partitions, size_t partitions_size) {
@@ -459,7 +484,10 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
                 Slice slice(data, dict_word.size());
                 global_dict.emplace(slice, i);
             }
-            _global_dicts.insert(std::make_pair(slot.col_name(), std::move(global_dict)));
+            GlobalDictsWithVersion<GlobalDictMap> dict;
+            dict.dict = std::move(global_dict);
+            dict.version = slot.has_global_dict_version() ? slot.global_dict_version() : 0;
+            _global_dicts.emplace(std::make_pair(slot.col_name(), std::move(dict)));
         }
     }
 
@@ -559,7 +587,7 @@ void LocalTabletsChannel::abort() {
     _num_ref_senders.fetch_sub(1);
 }
 
-void LocalTabletsChannel::abort(const std::vector<int64_t>& tablet_ids) {
+void LocalTabletsChannel::abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) {
     for (auto tablet_id : tablet_ids) {
         auto it = _delta_writers.find(tablet_id);
         if (it != _delta_writers.end()) {
@@ -570,6 +598,11 @@ void LocalTabletsChannel::abort(const std::vector<int64_t>& tablet_ids) {
     JoinInts(tablet_ids, ",", &tablet_id_list_str);
     LOG(INFO) << "cancel LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << _key.id
               << " index_id: " << _key.index_id << " tablet_ids:" << tablet_id_list_str;
+
+    if (!reason.empty()) {
+        std::lock_guard l(_status_lock);
+        _status = Status::Aborted(reason);
+    }
 }
 
 StatusOr<std::shared_ptr<LocalTabletsChannel::WriteContext>> LocalTabletsChannel::_create_write_context(
@@ -723,24 +756,34 @@ void LocalTabletsChannel::WriteCallback::run(const Status& st, const CommittedRo
         tablet_info.set_schema_hash(0);
         _context->add_failed_tablet_info(&tablet_info);
 
-        // committed tablets from seconary replica
+        // failed tablets from seconary replica
         if (failed_info->replicate_token) {
             const auto failed_tablet_infos = failed_info->replicate_token->failed_tablet_infos();
             for (const auto& failed_tablet_info : *failed_tablet_infos) {
                 _context->add_failed_tablet_info(failed_tablet_info.get());
             }
+
+            // primary replica already fail, we need cancel all secondary replica whether it's failed or not
+            auto failed_replica_node_ids = failed_info->replicate_token->replica_node_ids();
+            for (auto& node_id : failed_replica_node_ids) {
+                _context->add_failed_replica_node_id(node_id, failed_info->tablet_id);
+            }
         }
     }
     if (committed_info != nullptr) {
         // committed tablets from primary replica
+        // TODO: dup code with SegmentFlushToken::submit
         PTabletInfo tablet_info;
         tablet_info.set_tablet_id(committed_info->tablet->tablet_id());
         tablet_info.set_schema_hash(committed_info->tablet->schema_hash());
         const auto& rowset_global_dict_columns_valid_info =
                 committed_info->rowset_writer->global_dict_columns_valid_info();
+        const auto* rowset_global_dicts = committed_info->rowset_writer->rowset_global_dicts();
         for (const auto& item : rowset_global_dict_columns_valid_info) {
-            if (item.second) {
+            if (item.second && rowset_global_dicts != nullptr &&
+                rowset_global_dicts->find(item.first) != rowset_global_dicts->end()) {
                 tablet_info.add_valid_dict_cache_columns(item.first);
+                tablet_info.add_valid_dict_collected_version(rowset_global_dicts->at(item.first).version);
             } else {
                 tablet_info.add_invalid_dict_cache_columns(item.first);
             }

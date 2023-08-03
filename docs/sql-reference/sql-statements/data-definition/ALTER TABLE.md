@@ -4,6 +4,10 @@
 
 Modifies an existing table.
 
+> **NOTE**
+>
+> This operation requires the ALTER privilege on the destination table.
+
 ## Syntax
 
 ```SQL
@@ -17,8 +21,8 @@ alter_clause1[, alter_clause2, ...]
 - rollup: creates or drops a rollup index.
 - schema change: adds, drops, or reorder columns, or modify column type.
 - rename: renames a table, rollup index, or partition. **Note that column name cannot be modified.**
-- index: modifies index (only bitmap index can be modified.)
-- swap: atomic exchange of two tables
+- index: modifies index (only Bitmap index can be modified).
+- swap: atomic exchange of two tables.
 
 > **NOTE**
 >
@@ -675,3 +679,9 @@ SWAP WITH table_name;
     ```sql
     ALTER TABLE table1 SWAP WITH table2
     ```
+
+## References
+
+- [CREATE TABLE](CREATE%20TABLE.md)
+- [SHOW CREATE TABLE](../data-manipulation/SHOW%20CREATE%20TABLE.md)
+- [SHOW ALTER TABLE](../data-manipulation/SHOW%20ALTER.md)

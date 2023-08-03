@@ -26,8 +26,10 @@
 #include "exec/spill/options.h"
 #include "exec/spill/partition.h"
 #include "exec/spill/serde.h"
+#include "fmt/format.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
+#include "util/race_detect.h"
 
 namespace starrocks::spill {
 class Spiller;
@@ -56,8 +58,11 @@ public:
     bool has_output_data() { return _stream && _stream->is_ready(); }
 
     bool restore_finished() const { return _running_restore_tasks == 0; }
+    uint64_t running_restore_tasks() const { return _running_restore_tasks.load(); }
 
     bool has_restore_task() const { return _running_restore_tasks > 0; }
+
+    size_t read_rows() const { return _read_rows; }
 
 protected:
     Spiller* _spiller;
@@ -95,6 +100,7 @@ public:
     T as() {
         return down_cast<T>(this);
     }
+    uint64_t running_flush_tasks() const { return _running_flush_tasks.load(); }
 
 protected:
     Status _decrease_running_flush_tasks();
@@ -104,6 +110,7 @@ protected:
     Spiller* _spiller;
     RuntimeState* _runtime_state;
     std::atomic_uint64_t _running_flush_tasks{};
+    std::atomic_bool _write_finished{};
 
     FlushAllCallBack _flush_all_callback;
 };
@@ -166,12 +173,7 @@ public:
 
     Status acquire_stream(const SpillPartitionInfo* partition, std::shared_ptr<SpillInputStream>* stream) override;
 
-    void cancel() override {
-        std::lock_guard guard(_mutex);
-        if (_mem_table != nullptr) {
-            _mem_table_pool.push(std::move(_mem_table));
-        }
-    }
+    void cancel() override {}
 
     Status get_spill_partitions(std::vector<const SpillPartitionInfo*>* partitions) override { return Status::OK(); }
 
@@ -194,6 +196,11 @@ struct SpilledPartition : public SpillPartitionInfo {
     std::pair<SpilledPartitionPtr, SpilledPartitionPtr> split() {
         return {std::make_unique<SpilledPartition>(partition_id + level_elements()),
                 std::make_unique<SpilledPartition>(partition_id + level_elements() * 2)};
+    }
+
+    std::string debug_string() {
+        return fmt::format("[id={},bytes={},mem_size={},in_mem={},is_spliting={}]", partition_id, bytes, mem_size,
+                           in_mem, is_spliting);
     }
 
     bool is_spliting = false;
@@ -226,7 +233,7 @@ public:
     Status spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&& executor, MemGuard&& guard);
 
     template <class TaskExecutor, class MemGuard>
-    Status flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
+    Status flush(RuntimeState* state, bool is_final_flush, TaskExecutor&& executor, MemGuard&& guard);
 
     template <class TaskExecutor, class MemGuard>
     Status flush_if_full(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
@@ -234,6 +241,8 @@ public:
     Status get_spill_partitions(std::vector<const SpillPartitionInfo*>* partitions) override;
 
     Status reset_partition(const std::vector<const SpillPartitionInfo*>& partitions);
+
+    Status reset_partition(RuntimeState* state, size_t num_partitions);
 
     void cancel() override {}
 
@@ -273,11 +282,19 @@ public:
 
     const auto& level_to_partitions() { return _level_to_partitions; }
 
+    template <class ChunkProvider>
+    Status spill_partition(SerdeContext& context, SpilledPartition* partition, ChunkProvider&& provider);
+
+    int64_t mem_consumption() const { return _mem_tracker->consumption(); }
+
 private:
     Status _init_with_partition_nums(RuntimeState* state, int num_partitions);
+    // prepare and acquire mem_table for each partition in _id_to_partitions
+    Status _prepare_partitions(RuntimeState* state);
 
-    template <class ChunkProvider>
-    Status _spill_partition(SerdeContext& context, SpilledPartition* partition, ChunkProvider&& provider);
+    Status _spill_input_partitions(SerdeContext& context, const std::vector<SpilledPartition*>& spilling_partitions);
+
+    Status _split_input_partitions(SerdeContext& context, const std::vector<SpilledPartition*>& splitting_partitions);
 
     // split partition by hash
     // hash-based partitioning can have significant degradation in the case of heavily skewed data.
@@ -286,11 +303,16 @@ private:
     // can be executed in splitting out more parallel tasks). Process all blocks that hit this partition while processing the task
     // 2. If our input is ordered, we can use some sorting-based algorithm to split the partition. This way the probe side can do full streaming of the data
     Status _split_partition(SerdeContext& context, SpillerReader* reader, SpilledPartition* partition,
-                            SpilledPartition* left_partition, SpilledPartition* right_partition,
-                            const MemTrackerGuard& guard);
+                            SpilledPartition* left_partition, SpilledPartition* right_partition);
 
     void _add_partition(SpilledPartitionPtr&& partition);
     void _remove_partition(const SpilledPartition* partition);
+
+    Status _choose_partitions_to_flush(bool is_final_flush, std::vector<SpilledPartition*>& partitions_need_spilt,
+                                       std::vector<SpilledPartition*>& partitions_need_flush);
+
+    Status _flush_task(const std::vector<SpilledPartition*>& splitting_partitions,
+                       const std::vector<SpilledPartition*>& spilling_partitions);
 
     size_t _partition_rows() {
         size_t total_rows = 0;
@@ -302,6 +324,8 @@ private:
 
     int32_t _min_level = 0;
     int32_t _max_level = 0;
+
+    bool _need_final_flush = false;
 
     std::unique_ptr<MemTracker> _mem_tracker;
 
@@ -315,6 +339,8 @@ private:
     int32_t _max_partition_id = 0;
 
     std::mutex _mutex;
+
+    DECLARE_RACE_DETECTOR(detect_flush)
 };
 
 } // namespace starrocks::spill

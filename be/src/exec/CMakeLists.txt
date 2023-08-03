@@ -185,6 +185,8 @@ set(EXEC_FILES
     pipeline/nljoin/nljoin_context.cpp
     pipeline/nljoin/nljoin_build_operator.cpp
     pipeline/nljoin/nljoin_probe_operator.cpp
+    pipeline/nljoin/spillable_nljoin_build_operator.cpp
+    pipeline/nljoin/spillable_nljoin_probe_operator.cpp
     pipeline/sort/partition_sort_sink_operator.cpp
     pipeline/sort/local_partition_topn_sink.cpp
     pipeline/sort/local_partition_topn_source.cpp
@@ -265,6 +267,7 @@ set(EXEC_FILES
     spill/serde.cpp
     spill/input_stream.cpp
     spill/log_block_manager.cpp
+    spill/operator_mem_resource_manager.cpp
     stream/state/mem_state_table.cpp
     stream/aggregate/agg_state_data.cpp
     stream/aggregate/agg_group_state.cpp

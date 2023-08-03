@@ -28,7 +28,7 @@ public class KerberosAuthenticationProvider implements AuthenticationProvider {
     @Override
     public UserAuthenticationInfo validAuthenticationInfo(UserIdentity userIdentity, String password,
                                                           String textForAuthPlugin) throws AuthenticationException {
-        if (!GlobalStateMgr.getCurrentState().getAuthenticationManager().isSupportKerberosAuth()) {
+        if (!GlobalStateMgr.getCurrentState().getAuthenticationMgr().isSupportKerberosAuth()) {
             throw new AuthenticationException("Not support kerberos authentication");
         }
 
@@ -48,7 +48,7 @@ public class KerberosAuthenticationProvider implements AuthenticationProvider {
         try {
             String userForAuthPlugin = authenticationInfo.getTextForAuthPlugin();
 
-            Class<?> authClazz = GlobalStateMgr.getCurrentState().getAuthenticationManager().getAuthClazz();
+            Class<?> authClazz = GlobalStateMgr.getCurrentState().getAuthenticationMgr().getAuthClazz();
             Method method = authClazz.getMethod("authenticate",
                     String.class, String.class, String.class, byte[].class);
             boolean result = (boolean) method.invoke(null,

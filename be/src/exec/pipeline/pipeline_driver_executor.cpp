@@ -23,6 +23,7 @@
 #include "util/debug/query_trace.h"
 #include "util/defer_op.h"
 #include "util/stack_util.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks::pipeline {
 
@@ -33,36 +34,19 @@ GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_
                                               : std::make_unique<QuerySharedDriverQueue>()),
           _thread_pool(std::move(thread_pool)),
           _blocked_driver_poller(new PipelineDriverPoller(_driver_queue.get())),
-          _exec_state_reporter(new ExecStateReporter()) {}
+          _exec_state_reporter(new ExecStateReporter()) {
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_schedule_count, [this]() { return _schedule_count.load(); });
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_execution_time, [this]() { return _driver_execution_ns.load(); });
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_queue_len, [this]() { return _driver_queue->size(); });
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_poller_block_queue_len,
+                                    [this]() { return _blocked_driver_poller->blocked_driver_queue_len(); });
+}
 
 GlobalDriverExecutor::~GlobalDriverExecutor() {
-    {
-        // unregist hook
-        auto metrics = StarRocksMetrics::instance()->metrics();
-        metrics->deregister_hook("driver_queue_len");
-        metrics->deregister_hook("poller_block_queue_len");
-        _driver_queue_len.reset();
-        _driver_poller_block_queue_len.reset();
-    }
     _driver_queue->close();
 }
 
 void GlobalDriverExecutor::initialize(int num_threads) {
-    {
-        // regist pipeline metrics
-        auto metrics = StarRocksMetrics::instance()->metrics();
-        auto regist_metric = [this, metrics](const std::string& metric_name, std::unique_ptr<UIntGauge>& metric,
-                                             const std::function<unsigned long()>& provider) {
-            std::string full_name = _name + "_" + metric_name;
-            metric = std::make_unique<UIntGauge>(MetricUnit::NOUNIT);
-            metrics->register_metric(full_name, metric.get());
-            metrics->register_hook(full_name, [&metric, provider]() { metric->set_value(provider()); });
-        };
-        regist_metric("driver_queue_len", _driver_queue_len, [this]() { return _driver_queue->size(); });
-        regist_metric("poller_block_queue_len", _driver_poller_block_queue_len,
-                      [this]() { return _blocked_driver_poller->blocked_driver_queue_len(); });
-    }
-
     _blocked_driver_poller->start();
     _num_threads_setter.set_actual_num(num_threads);
     for (auto i = 0; i < num_threads; ++i) {
@@ -82,7 +66,7 @@ void GlobalDriverExecutor::change_num_threads(int32_t num_threads) {
 
 void GlobalDriverExecutor::_finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state) {
     DCHECK(driver);
-    driver->finalize(runtime_state, state);
+    driver->finalize(runtime_state, state, _schedule_count, _driver_execution_ns);
 }
 
 void GlobalDriverExecutor::_worker_thread() {
@@ -114,6 +98,7 @@ void GlobalDriverExecutor::_worker_thread() {
         auto* fragment_ctx = driver->fragment_ctx();
 
         driver->increment_schedule_times();
+        _schedule_count++;
 
         SCOPED_SET_TRACE_INFO(driver->driver_id(), query_ctx->query_id(), fragment_ctx->fragment_instance_id());
 
@@ -125,7 +110,6 @@ void GlobalDriverExecutor::_worker_thread() {
         auto* runtime_state = runtime_state_ptr.get();
         {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
-
             if (fragment_ctx->is_canceled()) {
                 driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {
@@ -145,6 +129,7 @@ void GlobalDriverExecutor::_worker_thread() {
                 continue;
             }
             StatusOr<DriverState> maybe_state;
+            int64_t start_time = driver->get_active_time();
 #ifdef NDEBUG
             TRY_CATCH_ALL(maybe_state, driver->process(runtime_state, worker_id));
 #else
@@ -155,6 +140,8 @@ void GlobalDriverExecutor::_worker_thread() {
             }
             Status status = maybe_state.status();
             this->_driver_queue->update_statistics(driver);
+            int64_t end_time = driver->get_active_time();
+            _driver_execution_ns += end_time - start_time;
 
             // Check big query
             if (!driver->is_query_never_expired() && status.ok() && driver->workgroup()) {
@@ -210,7 +197,7 @@ void GlobalDriverExecutor::_worker_thread() {
 }
 
 void GlobalDriverExecutor::submit(DriverRawPtr driver) {
-    driver->start_timers();
+    driver->start_schedule(_schedule_count, _driver_execution_ns);
 
     if (driver->is_precondition_block()) {
         driver->set_driver_state(DriverState::PRECONDITION_BLOCK);

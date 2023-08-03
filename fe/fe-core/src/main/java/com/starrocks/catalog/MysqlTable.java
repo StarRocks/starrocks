@@ -36,6 +36,7 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
@@ -68,12 +69,19 @@ public class MysqlTable extends Table {
 
     // For starrocks, mysql table can be created by specifying odbc resource,
     // but we do not support odbc resource, so we just read this property for meta compatible
+    @SerializedName(value = "rn")
     private String odbcCatalogResourceName;
+    @SerializedName(value = "host")
     private String host;
+    @SerializedName(value = "port")
     private String port;
+    @SerializedName(value = "userName")
     private String userName;
+    @SerializedName(value = "passwd")
     private String passwd;
+    @SerializedName(value = "dn")
     private String mysqlDatabaseName;
+    @SerializedName(value = "tn")
     private String mysqlTableName;
 
     public MysqlTable() {

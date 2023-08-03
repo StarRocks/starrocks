@@ -15,7 +15,6 @@
 #include "storage/lake/async_delta_writer.h"
 
 #include <bthread/execution_queue.h>
-#include <bthread/mutex.h>
 #include <fmt/format.h>
 
 #include <memory>
@@ -27,6 +26,7 @@
 #include "storage/lake/delta_writer.h"
 #include "storage/storage_engine.h"
 #include "testutil/sync_point.h"
+#include "util/stack_trace_mutex.h"
 
 namespace starrocks::lake {
 
@@ -94,7 +94,7 @@ private:
 
     DeltaWriter::Ptr _writer;
     bthread::ExecutionQueueId<Task> _queue_id;
-    bthread::Mutex _mtx;
+    StackTraceMutex<bthread::Mutex> _mtx;
     // _status、_opened and _closed are protected by _mtx
     Status _status;
     bool _opened;

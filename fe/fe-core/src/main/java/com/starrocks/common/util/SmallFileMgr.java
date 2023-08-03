@@ -552,16 +552,11 @@ public class SmallFileMgr implements Writable {
         return checksum;
     }
 
-    public void loadSmallFilesV2(DataInputStream in) throws IOException, SRMetaBlockEOFException, SRMetaBlockException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(in, SmallFileMgr.class.getName());
-        try {
-            int size = reader.readInt();
-            while (size-- > 0) {
-                SmallFile smallFile = reader.readJson(SmallFile.class);
-                putToFiles(smallFile);
-            }
-        } finally {
-            reader.close();
+    public void loadSmallFilesV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockEOFException, SRMetaBlockException {
+        int size = reader.readInt();
+        while (size-- > 0) {
+            SmallFile smallFile = reader.readJson(SmallFile.class);
+            putToFiles(smallFile);
         }
     }
 

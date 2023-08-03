@@ -99,6 +99,8 @@ private:
     std::unique_ptr<ExecStateReporter> _exec_state_reporter;
 
     std::atomic<int> _next_id = 0;
+    std::atomic_int64_t _schedule_count = 0;
+    std::atomic_int64_t _driver_execution_ns = 0;
 
     // metrics
     std::unique_ptr<UIntGauge> _driver_queue_len;

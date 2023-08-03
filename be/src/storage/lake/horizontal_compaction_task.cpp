@@ -32,6 +32,9 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
     if (progress == nullptr) {
         return Status::InvalidArgument("progress is null");
     }
+
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
+
     ASSIGN_OR_RETURN(auto tablet_schema, _tablet->get_schema());
     int64_t total_num_rows = 0;
     for (auto& rowset : _input_rowsets) {
@@ -79,7 +82,7 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
         chunk->reset();
 
         progress->update(100 * reader.stats().raw_rows_read / total_num_rows);
-        VLOG_EVERY_N(3, 1000) << "Tablet: << " << _tablet->id() << ", compaction progress: " << progress->value();
+        VLOG_EVERY_N(3, 1000) << "Tablet: " << _tablet->id() << ", compaction progress: " << progress->value();
     }
     // Adjust the progress here for 2 reasons:
     // 1. For primary key, due to the existence of the delete vector, the rows read may be less than "total_num_rows"

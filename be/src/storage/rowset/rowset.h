@@ -152,6 +152,7 @@ public:
     // reload this rowset after the underlying segment file is changed
     Status reload();
     Status reload_segment(int32_t segment_id);
+    int64_t total_segment_data_size();
 
     const TabletSchema& schema() const { return *_schema; }
     void set_schema(const TabletSchema* schema) { _schema = schema; }
@@ -294,6 +295,9 @@ public:
     }
 
     uint64_t refs_by_reader() { return _refs_by_reader; }
+
+    // only used in unit test
+    Status get_segment_sk_index(std::vector<std::string>* sk_index_values);
 
     static StatusOr<size_t> get_segment_num(const std::vector<RowsetSharedPtr>& rowsets) {
         size_t num_segments = 0;

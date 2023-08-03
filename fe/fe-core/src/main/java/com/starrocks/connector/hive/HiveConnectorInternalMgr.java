@@ -59,7 +59,7 @@ public class HiveConnectorInternalMgr {
         this.enableRemoteFileCache = Boolean.parseBoolean(properties.getOrDefault("enable_remote_file_cache", "true"));
         this.remoteFileConf = new CachingRemoteFileConf(properties);
 
-        this.isRecursive = Boolean.parseBoolean(properties.getOrDefault("enable_recursive_listing", "false"));
+        this.isRecursive = Boolean.parseBoolean(properties.getOrDefault("enable_recursive_listing", "true"));
         this.loadRemoteFileMetadataThreadNum = Integer.parseInt(properties.getOrDefault("remote_file_load_thread_num",
                 String.valueOf(Config.remote_file_metadata_load_concurrency)));
         this.enableHmsEventsIncrementalSync = Boolean.parseBoolean(properties.getOrDefault("enable_hms_events_incremental_sync",

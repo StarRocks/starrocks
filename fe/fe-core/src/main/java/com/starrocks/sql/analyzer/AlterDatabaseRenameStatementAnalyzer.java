@@ -15,9 +15,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 
@@ -32,11 +29,6 @@ public class AlterDatabaseRenameStatementAnalyzer {
 
         String dbName = statement.getDbName();
         String newName = statement.getNewDbName();
-
-        try {
-            FeNameFormat.checkDbName(newName);
-        } catch (AnalysisException e) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
-        }
+        FeNameFormat.checkDbName(newName);
     }
 }

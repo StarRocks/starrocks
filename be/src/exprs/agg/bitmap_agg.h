@@ -74,8 +74,8 @@ public:
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto* col = down_cast<BitmapColumn*>(to);
-        auto& bitmap = this->data(state);
-        col->append(bitmap);
+        auto& bitmap = const_cast<BitmapValue&>(this->data(state));
+        col->append(std::move(bitmap));
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,

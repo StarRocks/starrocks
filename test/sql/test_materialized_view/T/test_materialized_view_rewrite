@@ -10,7 +10,7 @@ insert into user_tags values('2023-04-13', 3, 'e', 6);
 
 -- TEST BITMAP: NO ROLLUP
 create materialized view user_tags_mv1  distributed by hash(user_id) as select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id order by user_id;
-select sleep(2);
+refresh materialized view user_tags_mv1 with sync mode;
 set enable_materialized_view_rewrite = off;
 select user_id, count(distinct tag_id) from user_tags group by user_id order by user_id;
 select user_id, bitmap_union_count(to_bitmap(tag_id)) from user_tags group by user_id order by user_id;
@@ -24,7 +24,7 @@ drop materialized view user_tags_mv1;
 
 -- TEST BITMAP: ROLLUP
 create materialized view user_tags_mv2  distributed by hash(user_id) as select user_id, time, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id, time;
-select sleep(2);
+refresh materialized view user_tags_mv2 with sync mode;
 set enable_materialized_view_rewrite = on;
 explain logical select user_id, count(distinct tag_id) from user_tags group by user_id order by user_id;
 select user_id, count(distinct tag_id) from user_tags group by user_id order by user_id;
@@ -34,7 +34,7 @@ drop materialized view user_tags_mv2;
 
 -- TEST HLL: NO ROLLUP
 create materialized view user_tags_hll_mv1  distributed by hash(user_id) as select user_id, time, hll_union(hll_hash(tag_id)) a  from user_tags group by user_id, time;
-select sleep(2);
+refresh materialized view user_tags_hll_mv1 with sync mode;
 set enable_materialized_view_rewrite = off;
 select user_id, approx_count_distinct(tag_id) x from user_tags group by user_id order by user_id;
 select user_id, ndv(tag_id) x from user_tags group by user_id order by user_id;
@@ -49,7 +49,7 @@ drop materialized view user_tags_hll_mv1;
 
 -- TEST HLL: ROLLUP
 create materialized view user_tags_hll_mv2  distributed by hash(user_id) as select user_id, time, hll_union(hll_hash(tag_id)) from user_tags group by user_id, time;
-select sleep(2);
+refresh materialized view user_tags_hll_mv2 with sync mode;
 set enable_materialized_view_rewrite = on;
 select user_id, approx_count_distinct(tag_id) x from user_tags group by user_id order by user_id;
 select user_id, ndv(tag_id) x from user_tags group by user_id order by user_id;
@@ -59,7 +59,7 @@ drop materialized view user_tags_hll_mv2;
 
 -- TEST PERCENTILE: NO ROLLUP
 create materialized view user_tags_percential_mv1 distributed by hash(user_id) as select user_id, percentile_union(percentile_hash(tag_id)) from user_tags group by user_id order by user_id;
-select sleep(2);
+refresh materialized view user_tags_percential_mv1 with sync mode;
 set enable_materialized_view_rewrite = off;
 select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id order by user_id;
 select user_id, percentile_approx(tag_id, 0) x from user_tags group by user_id order by user_id;
@@ -73,16 +73,18 @@ drop materialized view user_tags_percential_mv1;
 
 -- TEST PERCENTILE: ROLLUP
 create materialized view user_tags_percential_mv2 distributed by hash(user_id) as select user_id, time, percentile_union(percentile_hash(tag_id)) from user_tags group by user_id, time;
+refresh materialized view user_tags_percential_mv2 with sync mode;
 set enable_materialized_view_rewrite = on;
 select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id order by user_id;
 select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id order by user_id;
 select user_id, percentile_approx(tag_id, 0) x from user_tags group by user_id order by user_id;
 select user_id, round(percentile_approx(tag_id, 0)) x from user_tags group by user_id order by user_id;
+select user_id, time, round(percentile_approx(tag_id, 0)) from user_tags group by user_id, time order by user_id;
 drop materialized view user_tags_percential_mv2;
 
 -- TEST BITMAP : UNOION
 create materialized view user_tags_mv3  distributed by hash(user_id) as select user_id, tag_id from user_tags where user_id > 2;
-select sleep(2);
+refresh materialized view user_tags_mv3 with sync mode;
 set enable_materialized_view_rewrite = off;
 select user_id, approx_count_distinct(tag_id) x from user_tags group by user_id order by user_id;
 select user_id, ndv(tag_id) x from user_tags group by user_id order by user_id;
@@ -94,3 +96,172 @@ select user_id, ndv(tag_id) x from user_tags group by user_id order by user_id;
 select user_id, hll_union_agg(hll_hash(tag_id)) x from user_tags group by user_id order by user_id;
 select user_id, hll_cardinality(hll_union(hll_hash(tag_id))) x from user_tags group by user_id order by user_id;
 drop materialized view user_tags_mv3;
+
+create materialized view agg_mv1 
+distributed by hash(user_id) 
+as 
+select user_id, time, sum(tag_id) as total
+from user_tags 
+group by user_id, time;
+
+refresh materialized view agg_mv1 with sync mode;
+
+function: check_hit_materialized_view("select user_id, time, sum(tag_id) as total from user_tags group by user_id, time having sum(tag_id) > 2 order by user_id, time", "agg_mv1")
+select user_id, time, sum(tag_id) as total from user_tags group by user_id, time having sum(tag_id) > 2 order by user_id, time;
+
+function: check_hit_materialized_view("select user_id, sum(tag_id) as total from user_tags  group by user_id having sum(tag_id) > 2 order by user_id", "agg_mv1")
+select user_id, sum(tag_id) as total from user_tags  group by user_id having sum(tag_id) > 2 order by user_id;
+
+set enable_materialized_view_rewrite = off;
+
+function: check_no_hit_materialized_view("select user_id, time, sum(tag_id) as total from user_tags group by user_id, time having sum(tag_id) > 2 order by user_id, time", "agg_mv1")
+select user_id, time, sum(tag_id) as total from user_tags group by user_id, time having sum(tag_id) > 2 order by user_id, time;
+
+function: check_no_hit_materialized_view("select user_id, sum(tag_id) as total from user_tags  group by user_id having sum(tag_id) > 2 order by user_id", "agg_mv1")
+select user_id, sum(tag_id) as total from user_tags  group by user_id having sum(tag_id) > 2 order by user_id;
+
+-- name: test_all_join_type_rewrite
+CREATE TABLE emps (
+    empid INT NOT NULL,
+    deptno INT NOT NULL,
+    locationid INT NOT NULL,
+    commission INT NOT NULL,
+    name VARCHAR(20) NOT NULL,
+    salary DECIMAL(18, 2)
+) ENGINE=OLAP
+DUPLICATE KEY(`empid`)
+DISTRIBUTED BY HASH(`empid`) BUCKETS 12
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+CREATE TABLE depts(
+    deptno INT NOT NULL,
+    name VARCHAR(20)
+) ENGINE=OLAP
+DUPLICATE KEY(`deptno`)
+DISTRIBUTED BY HASH(`deptno`) BUCKETS 12
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+CREATE TABLE dependents(
+    empid INT NOT NULL,
+    name VARCHAR(20)
+) ENGINE=OLAP
+DUPLICATE KEY(`empid`)
+DISTRIBUTED BY HASH(`empid`) BUCKETS 12
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+insert into emps values(1, 1, 1, 10, "emp_name1", 1000);
+insert into emps values(2, 1, 1, 10, "emp_name1", 1000);
+insert into emps values(3, 1, 1, 10, "emp_name1", 1000);
+
+insert into depts values(1, "dept_name1");
+insert into depts values(2, "dept_name2");
+
+insert into dependents values(1, "dependents_name1");
+insert into dependents values(2, "dependents_name2");
+insert into dependents values(3, "dependents_name3");
+
+create materialized view mv_right_outer
+distributed by hash(`empid`) buckets 10
+refresh manual
+as
+select empid, depts.deptno
+from emps right outer join depts using (deptno);
+
+refresh materialized view mv_right_outer with sync mode;
+
+explain logical select empid, depts.deptno
+from emps right outer join depts using (deptno);
+
+select empid, depts.deptno
+from emps right outer join depts using (deptno) order by empid;
+
+drop materialized view mv_right_outer;
+
+create materialized view mv_full_outer
+distributed by hash(`empid`) buckets 10
+refresh manual
+as
+select empid, depts.deptno 
+from emps full outer join depts using (deptno);
+
+refresh materialized view mv_full_outer with sync mode;
+
+explain logical select empid, depts.deptno 
+from emps full outer join depts using (deptno);
+
+select empid, depts.deptno 
+from emps full outer join depts using (deptno) order by empid;
+
+drop materialized view mv_full_outer;
+
+create materialized view mv_left_semi
+distributed by hash(`empid`) buckets 10
+refresh manual
+as
+select empid 
+from emps left semi join depts using (deptno);
+
+refresh materialized view mv_left_semi with sync mode;
+
+explain logical select empid 
+from emps left semi join depts using (deptno);
+
+select empid 
+from emps left semi join depts using (deptno) order by empid;
+
+drop materialized view mv_left_semi;
+
+create materialized view mv_left_anti
+distributed by hash(`empid`) buckets 10
+refresh manual
+as
+select empid 
+from emps left anti join depts using (deptno);
+
+refresh materialized view mv_left_anti with sync mode;
+
+explain logical select empid 
+from emps left anti join depts using (deptno);
+
+select empid 
+from emps left anti join depts using (deptno) order by empid;
+
+drop materialized view mv_left_anti;
+
+create materialized view mv_right_semi
+distributed by hash(`deptno`) buckets 10
+refresh manual
+as
+select deptno 
+from emps right semi join depts using (deptno);
+
+refresh materialized view mv_right_semi with sync mode;
+
+explain select deptno 
+from emps right semi join depts using (deptno);
+
+select deptno 
+from emps right semi join depts using (deptno) order by deptno;
+
+drop materialized view mv_right_semi;
+
+create materialized view mv_right_anti
+distributed by hash(`deptno`) buckets 10
+refresh manual
+as
+select deptno 
+from emps right anti join depts using (deptno);
+
+refresh materialized view mv_right_anti with sync mode;
+
+explain select depts.deptno 
+from emps right anti join depts using (deptno);
+
+select depts.deptno 
+from emps right anti join depts using (deptno);

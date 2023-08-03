@@ -23,10 +23,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.scheduler.Task;
-import com.starrocks.scheduler.TaskBuilder;
-import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -80,6 +78,14 @@ public class RefreshMaterializedViewTest {
                 .withMaterializedView("create materialized view mv2_to_refresh\n" +
                         "PARTITION BY k1\n"+
                         "distributed by hash(k2) buckets 3\n" +
+                        "refresh manual\n" +
+                        "as select k1, k2, v1  from tbl_with_mv;")
+                .withMaterializedView("create materialized view mv_with_mv_rewrite_staleness\n" +
+                        "PARTITION BY k1\n"+
+                        "distributed by hash(k2) buckets 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"" +
+                        ")" +
                         "refresh manual\n" +
                         "as select k1, k2, v1  from tbl_with_mv;");
     }
@@ -144,15 +150,7 @@ public class RefreshMaterializedViewTest {
     }
 
     private void refreshMaterializedView(String dbName, String mvName) throws Exception {
-        MaterializedView mv = getMv(dbName, mvName);
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        final String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
-        if (!taskManager.containTask(mvTaskName)) {
-            Task task = TaskBuilder.buildMvTask(mv, "test");
-            TaskBuilder.updateTaskInfo(task, mv);
-            taskManager.createTask(task, false);
-        }
-        taskManager.executeTaskSync(mvTaskName);
+        cluster.runSql(dbName, String.format("refresh materialized view %s with sync mode", mvName));
     }
 
     @Test
@@ -182,6 +180,54 @@ public class RefreshMaterializedViewTest {
             System.out.println("p2 visible version:" + p2.getVisibleVersion());
             System.out.println("mv1 refresh context" + mv1.getRefreshScheme().getAsyncRefreshContext());
             System.out.println("mv2 refresh context" + mv2.getRefreshScheme().getAsyncRefreshContext());
+        }
+    }
+
+    @Test
+    public void testMaxMVRewriteStaleness() throws Exception {
+        Set<String> cachePartitionsToRefresh;
+
+        // refresh partitions are not empty if base table is updated.
+        cluster.runSql("test", "insert into tbl_with_mv values(\"2022-02-20\", 1, 10)");
+        // no refresh partitions if there is new data & refresh.
+        {
+            refreshMaterializedView("test", "mv_with_mv_rewrite_staleness");
+            MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness");
+            cachePartitionsToRefresh = mv1.getPartitionNamesToRefreshForMv();
+            Assert.assertTrue(cachePartitionsToRefresh.isEmpty());
+        }
+
+        // alter mv_rewrite_staleness
+        {
+            String alterMvSql = "alter materialized view mv_with_mv_rewrite_staleness " +
+                    "set (\"mv_rewrite_staleness_second\" = \"60\")";
+            AlterMaterializedViewStmt stmt =
+                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+            GlobalStateMgr.getCurrentState().alterMaterializedView(stmt);
+        }
+        // no refresh partitions if mv_rewrite_staleness is set.
+        cluster.runSql("test", "insert into tbl_with_mv values(\"2022-02-20\", 1, 10)");
+        {
+            MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness");
+            Set<String> partitionsToRefresh = mv1.getPartitionNamesToRefreshForMv();
+            Assert.assertTrue(partitionsToRefresh.isEmpty());
+
+        }
+        // no refresh partitions if there is no new data.
+        {
+            refreshMaterializedView("test", "mv_with_mv_rewrite_staleness");
+            MaterializedView mv2 = getMv("test", "mv_with_mv_rewrite_staleness");
+            Set<String> partitionsToRefresh = mv2.getPartitionNamesToRefreshForMv();
+            Assert.assertTrue(partitionsToRefresh.isEmpty());
+            Assert.assertEquals(cachePartitionsToRefresh, partitionsToRefresh);
+        }
+        // no refresh partitions if there is new data & no refresh but is set `mv_rewrite_staleness`.
+        {
+            cluster.runSql("test", "insert into tbl_with_mv values(\"2022-02-22\", 1, 10)");
+            MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness");
+            Set<String> partitionsToRefresh = mv1.getPartitionNamesToRefreshForMv();
+            Assert.assertTrue(partitionsToRefresh.isEmpty());
+            Assert.assertEquals(cachePartitionsToRefresh, partitionsToRefresh);
         }
     }
 }

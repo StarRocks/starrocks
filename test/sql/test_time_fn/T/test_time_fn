@@ -4,3 +4,73 @@ select week_iso("2023-01-02");
 select week_iso("2023-01-03");
 select week_iso("");
 select week_iso(NULL);
+
+-- name: test_dayofweek_iso
+select dayofweek_iso("2023-01-01");
+select dayofweek_iso("2023-01-02");
+select dayofweek_iso("2023-01-03");
+select dayofweek_iso("");
+select dayofweek_iso(NULL);
+
+-- name: test_date_diff
+select date_diff("2010-11-30 23:59:59", "2010-11-30 20:58:59", "millisecond");
+select date_diff("2010-11-30 23:59:59", "2010-11-30 20:58:59", "hour");
+select date_diff("2010-11-30 23:59:59", "2010-11-30 20:58:59", "minute");
+select date_diff("2010-11-30 23:59:59", "2010-11-30 20:59:59", "second");
+select date_diff('2010-11-30 23:59:59.000001', '2010-11-30 20:58:59.000001', 'hour');
+select date_diff('2010-11-30 23:59:59.000001', '2010-11-30 20:58:59.000001', 'day');
+select date_diff("2010-11-30 23:59:59", NULL, "hour");
+select date_diff("2010-11-30 23:59:59", "2010-11-30 20:59:59", "aaa");
+CREATE TABLE IF NOT EXISTS `test_data_diff` (
+  `d0` datetime,
+  `d1` datetime,
+  `t` varchar(12)
+)
+PROPERTIES(
+  "replication_num" = "1"
+);
+insert into test_data_diff(d0,d1,t)
+values ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'hour'),
+       ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'day'),
+       ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'second'),
+       ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'minute'),
+       ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'millisecond');
+select date_diff(d0,d1,t) from test_data_diff order by t;
+
+-- name: test_last_day
+select last_day('2023-02-12', 'month');
+select last_day('2020-02-12');
+select last_day('2023-05-10', 'quarter');
+select last_day('2023-05-10', 'year');
+create database test_last_day_db;
+use test_last_day_db;
+CREATE TABLE IF NOT EXISTS `last_day_table` (
+  `d1` DATE,
+  `d2` DATETIME
+)
+DISTRIBUTED BY HASH(`d1`)
+PROPERTIES(
+  "replication_num" = "1"
+);
+INSERT INTO `last_day_table`(d1, d2)
+VALUES ('2020-02-12', '2020-02-12 08:08:14'),
+       ('2021-03-28', '2021-03-28 08:08:14'),
+       ('2022-04-28', '2022-04-28 08:08:14'),
+       ('2023-05-29', '2023-05-29 08:08:14');
+CREATE TABLE IF NOT EXISTS `last_day_with_optional_table` (
+  `d1` DATE,
+  `d2` DATETIME,
+  `optional` CHAR(8)
+)
+DISTRIBUTED BY HASH(`d1`)
+PROPERTIES(
+  "replication_num" = "1"
+);
+INSERT INTO `last_day_with_optional_table`(d1, d2, optional)
+VALUES ('2020-02-12', '2020-02-12 08:08:14', 'month'),
+       ('2021-03-28', '2021-03-28 08:08:14', 'quarter'),
+       ('2022-04-28', '2022-04-28 08:08:14', 'year'),
+       ('2023-05-29', '2023-05-29 08:08:14', 'year');
+select d1, last_day(d1, 'month'), d2, last_day(d2, 'month') from last_day_table order by d1;
+select d1, optional, last_day(d1, optional), d2, optional, last_day(d2, optional) from last_day_with_optional_table order by d1;
+drop database test_last_day_db;

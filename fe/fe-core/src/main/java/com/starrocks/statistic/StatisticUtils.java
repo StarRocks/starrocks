@@ -93,6 +93,11 @@ public class StatisticUtils {
     }
 
     public static boolean statisticTableBlackListCheck(long tableId) {
+        if (null != ConnectContext.get() && ConnectContext.get().isStatisticsConnection()) {
+            // avoid query statistics table when collect statistics
+            return true;
+        }
+
         for (String dbName : COLLECT_DATABASES_BLACKLIST) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (null != db && null != db.getTable(tableId)) {

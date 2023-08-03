@@ -207,32 +207,6 @@ int main(int argc, char** argv) {
     }
 #endif
 
-    if (starrocks::config::block_cache_enable) {
-        starrocks::BlockCache* cache = starrocks::BlockCache::instance();
-        starrocks::CacheOptions cache_options;
-        cache_options.mem_space_size = starrocks::config::block_cache_mem_size;
-
-        std::vector<std::string> paths;
-        auto parse_res = starrocks::parse_conf_block_cache_paths(starrocks::config::block_cache_disk_path, &paths);
-        if (!parse_res.ok()) {
-            LOG(FATAL) << "parse config block cache disk path failed, path="
-                       << starrocks::config::block_cache_disk_path;
-            exit(-1);
-        }
-        for (auto& p : paths) {
-            cache_options.disk_spaces.push_back(
-                    {.path = p, .size = static_cast<size_t>(starrocks::config::block_cache_disk_size)});
-        }
-        cache_options.meta_path = starrocks::config::block_cache_meta_path;
-        cache_options.block_size = starrocks::config::block_cache_block_size;
-        cache_options.checksum = starrocks::config::block_cache_checksum_enable;
-        cache_options.max_parcel_memory_mb = starrocks::config::block_cache_max_parcel_memory_mb;
-        cache_options.max_concurrent_inserts = starrocks::config::block_cache_max_concurrent_inserts;
-        cache_options.lru_insertion_point = starrocks::config::block_cache_lru_insertion_point;
-        cache_options.engine = starrocks::config::block_cache_engine;
-        EXIT_IF_ERROR(cache->init(cache_options));
-    }
-
     Aws::SDKOptions aws_sdk_options;
     if (starrocks::config::aws_sdk_logging_trace_enabled) {
         auto level = parse_aws_sdk_log_level(starrocks::config::aws_sdk_logging_trace_level);
@@ -341,6 +315,32 @@ int main(int argc, char** argv) {
 #ifdef USE_STAROS
     starrocks::init_staros_worker();
 #endif
+
+    if (starrocks::config::block_cache_enable) {
+        starrocks::BlockCache* cache = starrocks::BlockCache::instance();
+        starrocks::CacheOptions cache_options;
+        cache_options.mem_space_size = starrocks::config::block_cache_mem_size;
+
+        std::vector<std::string> paths;
+        auto parse_res = starrocks::parse_conf_block_cache_paths(starrocks::config::block_cache_disk_path, &paths);
+        if (!parse_res.ok()) {
+            LOG(FATAL) << "parse config block cache disk path failed, path="
+                       << starrocks::config::block_cache_disk_path;
+            exit(-1);
+        }
+        for (auto& p : paths) {
+            cache_options.disk_spaces.push_back(
+                    {.path = p, .size = static_cast<size_t>(starrocks::config::block_cache_disk_size)});
+        }
+        cache_options.meta_path = starrocks::config::block_cache_meta_path;
+        cache_options.block_size = starrocks::config::block_cache_block_size;
+        cache_options.checksum = starrocks::config::block_cache_checksum_enable;
+        cache_options.max_parcel_memory_mb = starrocks::config::block_cache_max_parcel_memory_mb;
+        cache_options.max_concurrent_inserts = starrocks::config::block_cache_max_concurrent_inserts;
+        cache_options.lru_insertion_point = starrocks::config::block_cache_lru_insertion_point;
+        cache_options.engine = starrocks::config::block_cache_engine;
+        EXIT_IF_ERROR(cache->init(cache_options));
+    }
 
     if (as_cn) {
         start_cn();

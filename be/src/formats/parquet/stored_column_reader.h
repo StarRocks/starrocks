@@ -28,6 +28,7 @@
 
 namespace starrocks {
 class Column;
+class NullableColumn;
 } // namespace starrocks
 
 namespace starrocks::parquet {
@@ -66,12 +67,9 @@ public:
 
     virtual Status get_dict_values(Column* column) { return _reader->get_dict_values(column); }
 
-    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, Column* column) {
-        return _reader->get_dict_values(dict_codes, column);
-    }
-
-    virtual Status get_dict_codes(const std::vector<Slice>& dict_values, std::vector<int32_t>* dict_codes) {
-        return _reader->get_dict_codes(dict_values, dict_codes);
+    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
+                                   Column* column) {
+        return _reader->get_dict_values(dict_codes, nulls, column);
     }
 
 protected:
@@ -82,6 +80,11 @@ protected:
     Status next_page(size_t records_to_read, ColumnContentType content_type, size_t* records_read, Column* dst);
 
     void update_read_context(size_t records_read);
+
+    // for RequiredColumn, there is no need to get levels.
+    // for RepeatedColumn, there is no possible to get default levels.
+    // for OptionalColumn, we will override it.
+    virtual void append_default_levels(size_t row_nums) {}
 
     std::unique_ptr<ColumnChunkReader> _reader;
     size_t _num_values_left_in_cur_page = 0;

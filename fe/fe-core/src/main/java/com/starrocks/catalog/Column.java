@@ -550,6 +550,9 @@ public class Column implements Writable {
             if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
                 extras.add("DEFAULT_GENERATED");
                 return "CURRENT_TIMESTAMP";
+            } else {
+                extras.add("DEFAULT_GENERATED");
+                return defaultExpr.getExpr();
             }
         }
         return FeConstants.NULL_STRING;
@@ -567,7 +570,7 @@ public class Column implements Writable {
         }
         if (defaultExpr == null && isAutoIncrement) {
             sb.append("AUTO_INCREMENT ");
-        }  else if (defaultExpr != null) {
+        } else if (defaultExpr != null) {
             if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
                 // compatible with mysql
                 sb.append("DEFAULT ").append("CURRENT_TIMESTAMP").append(" ");

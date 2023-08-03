@@ -39,7 +39,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.common.DdlException;
 import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
@@ -312,7 +312,7 @@ public abstract class BaseAction implements IAction {
     // operation which checks `PrivPredicate.ADMIN` in global table in old Auth framework.
     protected void checkUserOwnsAdminRole(UserIdentity currentUser) throws UnauthorizedException {
         try {
-            Set<Long> userOwnedRoles = AuthorizationManager.getOwnedRolesByUser(currentUser);
+            Set<Long> userOwnedRoles = AuthorizationMgr.getOwnedRolesByUser(currentUser);
             if (!(currentUser.equals(UserIdentity.ROOT) ||
                     userOwnedRoles.contains(PrivilegeBuiltinConstants.ROOT_ROLE_ID) ||
                     (userOwnedRoles.contains(PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID) &&
@@ -358,7 +358,7 @@ public abstract class BaseAction implements IAction {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         if (globalStateMgr.isUsingNewPrivilege()) {
             UserIdentity currentUser =
-                    globalStateMgr.getAuthenticationManager().checkPlainPassword(
+                    globalStateMgr.getAuthenticationMgr().checkPlainPassword(
                             authInfo.fullUserName, authInfo.remoteIp, authInfo.password);
             if (currentUser == null) {
                 throw new UnauthorizedException("Access denied for "

@@ -25,6 +25,7 @@
 #include "common/status.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/operator.h"
+#include "exec/spill/spiller.hpp"
 #include "exprs/anyval_util.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
@@ -86,7 +87,7 @@ AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode) {
         params->output_tuple_id = tnode.agg_node.output_tuple_id;
         params->sql_grouping_keys = tnode.agg_node.__isset.sql_grouping_keys ? tnode.agg_node.sql_grouping_keys : "";
         params->sql_aggregate_functions =
-                tnode.agg_node.__isset.sql_aggregate_functions ? tnode.agg_node.sql_grouping_keys : "";
+                tnode.agg_node.__isset.sql_aggregate_functions ? tnode.agg_node.sql_aggregate_functions : "";
         params->has_outer_join_child =
                 tnode.agg_node.__isset.has_outer_join_child && tnode.agg_node.has_outer_join_child;
         params->grouping_exprs = tnode.agg_node.grouping_exprs;
@@ -181,6 +182,9 @@ ChunkUniquePtr AggregatorParams::create_result_chunk(bool is_serialize_fmt, cons
     return result_chunk;
 }
 
+#define ALIGN_TO(size, align) ((size + align - 1) / align * align)
+#define PAD(size, align) (align - (size % align)) % align;
+
 Aggregator::Aggregator(AggregatorParamsPtr params) : _params(std::move(params)) {}
 
 Status Aggregator::open(RuntimeState* state) {
@@ -210,6 +214,49 @@ Status Aggregator::open(RuntimeState* state) {
             return Status::OK();
         });
         RETURN_IF_ERROR(promise_st->get_future().get());
+    }
+
+    // For SQL: select distinct id from table or select id from from table group by id;
+    // we don't need to allocate memory for agg states.
+    if (_is_only_group_by_columns) {
+        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_set_variant));
+    } else {
+        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_map_variant));
+    }
+
+    {
+        _agg_states_total_size = 16;
+        _max_agg_state_align_size = 8;
+        if (!_is_only_group_by_columns) {
+            _hash_map_variant.visit([&](auto& variant) {
+                auto& hash_map_with_key = *variant;
+                using HashMapWithKey = std::remove_reference_t<decltype(hash_map_with_key)>;
+                _agg_states_total_size = sizeof(typename HashMapWithKey::KeyType);
+                _max_agg_state_align_size = alignof(typename HashMapWithKey::KeyType);
+            });
+
+            DCHECK_GT(_agg_fn_ctxs.size(), 0);
+            _max_agg_state_align_size = std::max(_max_agg_state_align_size, _agg_functions[0]->alignof_size());
+            _agg_states_total_size += PAD(_agg_states_total_size, _agg_functions[0]->alignof_size());
+
+            // compute agg state total size and offsets
+            for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
+                _agg_states_offsets[i] = _agg_states_total_size;
+                _agg_states_total_size += _agg_functions[i]->size();
+                _max_agg_state_align_size = std::max(_max_agg_state_align_size, _agg_functions[i]->alignof_size());
+
+                // If not the last aggregate_state, we need pad it so that next aggregate_state will be aligned.
+                if (i + 1 < _agg_fn_ctxs.size()) {
+                    size_t next_state_align_size = _agg_functions[i + 1]->alignof_size();
+                    // Extend total_size to next alignment requirement
+                    // Add padding by rounding up '_agg_states_total_size' to be a multiplier of next_state_align_size.
+                    _agg_states_total_size = ALIGN_TO(_agg_states_total_size, next_state_align_size);
+                }
+            }
+            _agg_states_total_size = ALIGN_TO(_agg_states_total_size, _max_agg_state_align_size);
+            _state_allocator.aggregate_key_size = _agg_states_total_size;
+            _state_allocator.pool = _mem_pool.get();
+        }
     }
 
     // AggregateFunction::create needs to call create in JNI,
@@ -246,14 +293,6 @@ Status Aggregator::open(RuntimeState* state) {
         if (_agg_expr_ctxs.empty()) {
             return Status::InternalError("Invalid agg query plan");
         }
-    }
-
-    // For SQL: select distinct id from table or select id from from table group by id;
-    // we don't need to allocate memory for agg states.
-    if (_is_only_group_by_columns) {
-        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_set_variant));
-    } else {
-        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_map_variant));
     }
 
     RETURN_IF_ERROR(check_has_error());
@@ -384,30 +423,6 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     }
 
     _mem_pool = std::make_unique<MemPool>();
-
-    _agg_states_total_size = 16;
-    // compute agg state total size and offsets
-    for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
-        _agg_states_offsets[i] = _agg_states_total_size;
-        _agg_states_total_size += _agg_functions[i]->size();
-        _max_agg_state_align_size = std::max(_max_agg_state_align_size, _agg_functions[i]->alignof_size());
-
-        // If not the last aggregate_state, we need pad it so that next aggregate_state will be aligned.
-        if (i + 1 < _agg_fn_ctxs.size()) {
-            size_t next_state_align_size = _agg_functions[i + 1]->alignof_size();
-            // Extend total_size to next alignment requirement
-            // Add padding by rounding up '_agg_states_total_size' to be a multiplier of next_state_align_size.
-            _agg_states_total_size = (_agg_states_total_size + next_state_align_size - 1) / next_state_align_size *
-                                     next_state_align_size;
-        }
-    }
-    // we need to allocate contiguous memory, so we need some alignment operations
-    _max_agg_state_align_size = std::max(_max_agg_state_align_size, HashTableKeyAllocator::aligned);
-    _agg_states_total_size = (_agg_states_total_size + _max_agg_state_align_size - 1) / _max_agg_state_align_size *
-                             _max_agg_state_align_size;
-    _state_allocator.aggregate_key_size = _agg_states_total_size;
-    _state_allocator.pool = _mem_pool.get();
-
     _is_only_group_by_columns = _agg_expr_ctxs.empty() && !_group_by_expr_ctxs.empty();
 
     _agg_stat = _pool->add(new AggStatistics(_runtime_profile));
@@ -516,7 +531,7 @@ Status Aggregator::spill_aggregate_data(RuntimeState* state, std::function<Statu
         if (chunk_with_st.ok()) {
             if (!chunk_with_st.value()->is_empty()) {
                 RETURN_IF_ERROR(spiller->spill(state, chunk_with_st.value(), *io_executor,
-                                               spill::MemTrackerGuard(tls_mem_tracker)));
+                                               RESOURCE_TLS_MEMTRACER_GUARD(state)));
             }
         } else if (chunk_with_st.status().is_end_of_file()) {
             return Status::OK();
@@ -643,12 +658,19 @@ Status Aggregator::evaluate_agg_input_column(Chunk* chunk, std::vector<ExprConte
         // For simplicity and don't change the overall processing flow,
         // We handle const column as normal data column
         // TODO(kks): improve const column aggregate later
+        ASSIGN_OR_RETURN(auto&& col, agg_expr_ctxs[j]->evaluate(chunk));
+        // if first column is const, we have to unpack it. Most agg function only has one arg, and treat it as non-const column
         if (j == 0) {
-            ASSIGN_OR_RETURN(auto&& col, agg_expr_ctxs[j]->evaluate(chunk));
             _agg_input_columns[i][j] = ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), col);
         } else {
-            ASSIGN_OR_RETURN(auto&& col, agg_expr_ctxs[j]->evaluate(chunk));
-            _agg_input_columns[i][j] = std::move(col);
+            // if function has at least two argument, unpack const column selectively
+            // for function like corr, FE forbid second args to be const, we will always unpack const column for it
+            // for function like percentile_disc, the second args is const, do not unpack it
+            if (agg_expr_ctxs[j]->root()->is_constant()) {
+                _agg_input_columns[i][j] = std::move(col);
+            } else {
+                _agg_input_columns[i][j] = ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), col);
+            }
         }
         _agg_input_raw_columns[i][j] = _agg_input_columns[i][j].get();
     }

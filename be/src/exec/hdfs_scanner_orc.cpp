@@ -18,10 +18,11 @@
 
 #include "exec/exec_node.h"
 #include "exec/iceberg/iceberg_delete_builder.h"
-#include "formats/orc/fill_function.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
+#include "formats/orc/orc_memory_pool.h"
 #include "formats/orc/orc_min_max_decoder.h"
+#include "formats/orc/utils.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
@@ -304,6 +305,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     std::unique_ptr<orc::Reader> reader;
     try {
         orc::ReaderOptions options;
+        options.setMemoryPool(*getOrcMemoryPool());
         reader = orc::createReader(std::move(input_stream), options);
     } catch (std::exception& e) {
         auto s = strings::Substitute("HdfsOrcScanner::do_open failed. reason = $0", e.what());
@@ -407,6 +409,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         }
 
         size_t chunk_size = 0;
+        size_t chunk_size_ori = 0;
         if (_orc_reader->get_cvb_size() != 0) {
             {
                 StatusOr<ChunkPtr> ret;
@@ -425,6 +428,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
             _scanner_ctx.append_not_existed_columns_to_chunk(chunk, ck->num_rows());
             _scanner_ctx.append_partition_column_to_chunk(chunk, ck->num_rows());
             chunk_size = ck->num_rows();
+            chunk_size_ori = chunk_size;
             // do stats before we filter rows which does not match.
             _stats.raw_rows_read += chunk_size;
             _chunk_filter.assign(chunk_size, 1);
@@ -464,6 +468,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
 
         // if has lazy load fields, skip it if chunk_size == 0
         if (chunk_size == 0) {
+            _stats.skip_read_rows += chunk_size_ori;
             continue;
         }
         {

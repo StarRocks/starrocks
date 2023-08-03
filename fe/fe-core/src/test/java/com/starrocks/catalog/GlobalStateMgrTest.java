@@ -70,16 +70,11 @@ import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class GlobalStateMgrTest {
-
-    @Mocked
-    InetAddress addr1;
 
     @Before
     public void setUp() {
@@ -173,7 +168,9 @@ public class GlobalStateMgrTest {
         field.setAccessible(true);
         field.set(globalStateMgr, new Load());
 
-        long checksum1 = globalStateMgr.saveHeader(dos, new Random().nextLong(), 0);
+        long checksum1 = 0;
+        checksum1 = globalStateMgr.saveVersion(dos, checksum1);
+        checksum1 = globalStateMgr.saveHeader(dos, new Random().nextLong(), checksum1);
         globalStateMgr.clear();
         globalStateMgr = null;
         dos.close();
@@ -191,7 +188,7 @@ public class GlobalStateMgrTest {
     private GlobalStateMgr mockGlobalStateMgr() throws Exception {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
 
-        NodeMgr nodeMgr = new NodeMgr(false, globalStateMgr);
+        NodeMgr nodeMgr = new NodeMgr();
 
         Field field1 = nodeMgr.getClass().getDeclaredField("frontends");
         field1.setAccessible(true);
@@ -214,32 +211,6 @@ public class GlobalStateMgrTest {
         field4.set(globalStateMgr, nodeMgr);
 
         return globalStateMgr;
-    }
-
-    private void mockNet() {
-        new MockUp<InetAddress>() {
-            @Mock
-            public InetAddress getByName(String host) throws UnknownHostException {
-                return addr1;
-            }
-        };
-    }
-
-    @Test
-    public void testGetFeByHost() throws Exception {
-        mockNet();
-        new Expectations() {
-            {
-                addr1.getHostAddress();
-                result = "127.0.0.1";
-            }
-        };
-
-        GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
-        Frontend testFeIp = globalStateMgr.getFeByHost("127.0.0.1");
-        Assert.assertNotNull(testFeIp);
-        Frontend testFeHost = globalStateMgr.getFeByHost("sandbox");
-        Assert.assertNotNull(testFeHost);
     }
 
     @Test

@@ -822,6 +822,44 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_true(load_finished, "show bitmap_index timeout")
 
+    def wait_materialized_view_finish(self, check_count=60):
+        """
+        wait materialized view job finish and return status
+        """
+        status = ""
+        show_sql = "SHOW ALTER MATERIALIZED VIEW"
+        count = 0
+        while count < check_count:
+            res = self.execute_sql(show_sql, True)
+            status = res["result"][-1][8]
+            if status != "FINISHED":
+                time.sleep(5)
+            else:
+                # sleep another 5s to avoid FE's async action.
+                time.sleep(5)
+                break
+            count += 1
+        tools.assert_equal("FINISHED", status, "wait alter table finish error")
+
+    def check_hit_materialized_view(self, query, mv_name):
+        """
+        assert mv_name is hit in query
+        """
+        time.sleep(1)
+        sql = "explain %s" % (query)
+        res = self.execute_sql(sql, True)
+        print(res)
+        tools.assert_true(str(res["result"]).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
+
+    def check_no_hit_materialized_view(self, query, mv_name):
+        """
+        assert mv_name is hit in query
+        """
+        time.sleep(1)
+        sql = "explain %s" % (query)
+        res = self.execute_sql(sql, True)
+        tools.assert_false(str(res["result"]).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
+
     def wait_alter_table_finish(self, alter_type="COLUMN"):
         """
         wait alter table job finish and return status
@@ -841,6 +879,57 @@ class StarrocksSQLApiLib(object):
             time.sleep(0.5)
         time.sleep(10)
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
+
+
+    def wait_global_dict_ready(self, column_name, table_name):
+        """
+        wait global dict ready
+        """
+        status = ""
+        count = 0
+        while True:
+            if count > 60:
+                tools.assert_true(False, "acquire dictionary timeout for 60s")
+            sql = "explain costs select distinct %s from %s" % (column_name, table_name)
+            res = self.execute_sql(sql, True)
+            if not res["status"]:
+                tools.assert_true(False, "acquire dictionary error")
+            if str(res["result"]).find("Decode") > 0:
+                return ""
+            time.sleep(1)
+
+    def assert_has_global_dict(self, column_name, table_name):
+        """
+        assert table_name:column_name has global dict
+        """
+        time.sleep(1)
+        sql = "explain costs select distinct %s from %s" % (column_name, table_name)
+        res = self.execute_sql(sql, True)
+        tools.assert_true(str(res["result"]).find("Decode") > 0, "assert dictionary error")
+    
+    def assert_no_global_dict(self, column_name, table_name):
+        """
+        assert table_name:column_name has global dict
+        """
+        time.sleep(1)
+        sql = "explain costs select distinct %s from %s" % (column_name, table_name)
+        res = self.execute_sql(sql, True)
+        tools.assert_true(str(res["result"]).find("Decode") <= 0, "assert dictionary error")
+
+    def wait_submit_task_ready(self, task_name):
+        """
+        wait submit task ready
+        """
+        status = ""
+        while True:
+            sql = "select STATE from information_schema.task_runs where TASK_NAME = '%s'" % task_name
+            res = self.execute_sql(sql, True)
+            if not res["status"]:
+                tools.assert_true(False, "acquire task state error")
+            state = res["result"][0][0]
+            if status != "RUNNING":
+                return ""
+            time.sleep(1)
 
     def check_es_table_metadata_ready(self, table_name):
         check_sql = "SELECT * FROM %s limit 1" % table_name

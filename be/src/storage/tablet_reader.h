@@ -79,6 +79,8 @@ private:
     static Status _to_seek_tuple(const TabletSchema& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
                                  MemPool* mempool);
 
+    Status _init_collector_for_pk_index_read();
+
     TabletSharedPtr _tablet;
     Version _version;
     // version of delete predicates, equal as _version by default
@@ -101,6 +103,9 @@ private:
     bool _is_vertical_merge = false;
     bool _is_key = false;
     RowSourceMaskBuffer* _mask_buffer = nullptr;
+
+    // used for pk index based pointer read
+    const TabletReaderParams* _reader_params = nullptr;
 };
 
 } // namespace starrocks

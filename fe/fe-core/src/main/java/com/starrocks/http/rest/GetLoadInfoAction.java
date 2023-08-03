@@ -96,7 +96,7 @@ public class GetLoadInfoAction extends RestBaseAction {
                 }
             }
         }
-        globalStateMgr.getLoadManager().getLoadJobInfo(info);
+        globalStateMgr.getLoadMgr().getLoadJobInfo(info);
 
         sendResult(request, response, new Result(info));
     }

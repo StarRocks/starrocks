@@ -234,8 +234,9 @@ public class SubqueryTest extends PlanTestBase {
                     ")IS NULL";
 
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  18:Project\n" +
+            assertContains(plan, "18:Project\n" +
                     "  |  <slot 15> : 1\n" +
+                    "  |  limit: 1\n" +
                     "  |  \n" +
                     "  17:NESTLOOP JOIN\n" +
                     "  |  join op: INNER JOIN\n" +
@@ -253,8 +254,9 @@ public class SubqueryTest extends PlanTestBase {
                     "IS NULL";
 
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  18:Project\n" +
+            assertContains(plan, "18:Project\n" +
                     "  |  <slot 15> : 1\n" +
+                    "  |  limit: 1\n" +
                     "  |  \n" +
                     "  17:NESTLOOP JOIN\n" +
                     "  |  join op: INNER JOIN\n" +

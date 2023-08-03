@@ -142,7 +142,7 @@ public class AnalyzeShowTest {
         ConnectContext context = AnalyzeTestUtil.getConnectContext();
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user u1", context);
-        context.getGlobalStateMgr().getAuthenticationManager().createUser(createUserStmt);
+        context.getGlobalStateMgr().getAuthenticationMgr().createUser(createUserStmt);
 
         sql = "SHOW AUTHENTICATION FOR u1";
         stmt = (ShowAuthenticationStmt) analyzeSuccess(sql);
@@ -151,7 +151,7 @@ public class AnalyzeShowTest {
 
         DropUserStmt dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "drop user u1", context);
-        context.getGlobalStateMgr().getAuthenticationManager().dropUser(dropUserStmt);
+        context.getGlobalStateMgr().getAuthenticationMgr().dropUser(dropUserStmt);
     }
 
     @Test

@@ -71,14 +71,34 @@ if [ -e $STARROCKS_HOME/conf/hadoop_env.sh ]; then
 fi
 
 # java
-if [ "$JAVA_HOME" = "" ]; then
-  echo "Error: JAVA_HOME is not set."
-  exit 1
+if [[ -z ${JAVA_HOME} ]]; then
+    if command -v javac &> /dev/null; then
+        export JAVA_HOME="$(dirname $(dirname $(readlink -f $(which javac))))"
+        echo "Infered JAVA_HOME=$JAVA_HOME"
+    else
+      cat << EOF
+Error: The environment variable JAVA_HOME is not set. The FE program requires JDK version 8 or higher in order to run.
+Please take the following steps to resolve this issue:
+1. Install OpenJDK 8 or higher using your Linux distribution's package manager.
+For example:
+sudo apt install openjdk-8-jdk  (on Ubuntu/Debian)
+sudo yum install java-1.8.0-openjdk (on CentOS/RHEL)
+2. Set the JAVA_HOME environment variable to point to your installed OpenJDK directory.
+For example:
+export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+3. Try running this script again.
+EOF
+      exit 1
+    fi
 fi
 
 # cannot be jre
 if [ ! -f "$JAVA_HOME/bin/javac" ]; then
-  echo "Error: JAVA_HOME can not be jre"
+  cat << EOF
+Error: It appears that your JAVA_HOME environment variable is pointing to a non-JDK path: $JAVA_HOME
+The FE program requires the full JDK to be installed and configured properly. Please check that JAVA_HOME
+is set to the installation directory of JDK 8 or higher, rather than the JRE installation directory.
+EOF
   exit 1
 fi
 
@@ -93,6 +113,10 @@ if [[ "$JAVA_VERSION" -gt 8 ]]; then
         exit -1
     fi
     final_java_opt=$JAVA_OPTS_FOR_JDK_9
+fi
+
+if [[ "$JAVA_VERSION" -lt 11 ]]; then
+    echo "Tips: current JDK version is $JAVA_VERSION, JDK 11 or 17 is highly recommended for better GC performance(lower version JDK may not be supported in the future)"
 fi
 
 if [ ${ENABLE_DEBUGGER} -eq 1 ]; then

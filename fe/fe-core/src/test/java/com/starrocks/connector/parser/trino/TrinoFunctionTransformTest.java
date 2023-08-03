@@ -77,6 +77,23 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
     }
 
     @Test
+    public void testArrayFnWithLambdaExpr() throws Exception {
+        String sql = "select filter(array[], x -> true);";
+        assertPlanContains(sql, "array_filter(ARRAY<boolean>[], array_map(<slot 2> -> TRUE, ARRAY<boolean>[]))");
+
+        sql = "select filter(array[5, -6, NULL, 7], x -> x > 0);";
+        assertPlanContains(sql, "array_filter(ARRAY<tinyint(4)>[5,-6,NULL,7], " +
+                "array_map(<slot 2> -> <slot 2> > 0, ARRAY<tinyint(4)>[5,-6,NULL,7]))");
+
+        sql = "select filter(array[5, NULL, 7, NULL], x -> x IS NOT NULL);";
+        assertPlanContains(sql, "array_filter(ARRAY<tinyint(4)>[5,NULL,7,NULL], " +
+                "array_map(<slot 2> -> <slot 2> IS NOT NULL, ARRAY<tinyint(4)>[5,NULL,7,NULL]))");
+
+        sql = "select array_sort(array[1, 2, 3])";
+        assertPlanContains(sql, "array_sort(ARRAY<tinyint(4)>[1,2,3])");
+    }
+
+    @Test
     public void testDateFnTransform() throws Exception {
         String sql = "select to_unixtime(TIMESTAMP '2023-04-22 00:00:00');";
         assertPlanContains(sql, "1682092800");
@@ -91,13 +108,13 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "2014-12-21 12:34:56");
 
         sql = "select day_of_week(timestamp '2022-03-06 01:02:03');";
-        assertPlanContains(sql, "dayofweek('2022-03-06 01:02:03')");
+        assertPlanContains(sql, "dayofweek_iso('2022-03-06 01:02:03')");
 
         sql = "select dow(timestamp '2022-03-06 01:02:03');";
-        assertPlanContains(sql, "dayofweek('2022-03-06 01:02:03')");
+        assertPlanContains(sql, "dayofweek_iso('2022-03-06 01:02:03')");
 
         sql = "select dow(date '2022-03-06');";
-        assertPlanContains(sql, "dayofweek('2022-03-06 00:00:00')");
+        assertPlanContains(sql, "dayofweek_iso('2022-03-06 00:00:00')");
 
         sql = "select day_of_month(timestamp '2022-03-06 01:02:03');";
         assertPlanContains(sql, "dayofmonth('2022-03-06 01:02:03')");
@@ -116,6 +133,30 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select doy(date '2022-03-06');";
         assertPlanContains(sql, "dayofyear('2022-03-06 00:00:00')");
+
+        sql = "select week_of_year(timestamp '2023-01-01 00:00:00');";
+        assertPlanContains(sql, "week_iso('2023-01-01 00:00:00')");
+
+        sql = "select week(timestamp '2023-01-01');";
+        assertPlanContains(sql, "week_iso('2023-01-01 00:00:00')");
+
+        sql = "select week_of_year(date '2023-01-01');";
+        assertPlanContains(sql, "week_iso('2023-01-01 00:00:00')");
+
+        sql = "select week(date '2023-01-01');";
+        assertPlanContains(sql, "week_iso('2023-01-01 00:00:00')");
+
+        sql = "select format_datetime(TIMESTAMP '2023-06-25 11:10:20', 'yyyyMMdd HH:mm:ss')";
+        assertPlanContains(sql, "jodatime_format('2023-06-25 11:10:20', 'yyyyMMdd HH:mm:ss')");
+
+        sql = "select format_datetime(date '2023-06-25', 'yyyyMMdd HH:mm:ss');";
+        assertPlanContains(sql, "jodatime_format('2023-06-25', 'yyyyMMdd HH:mm:ss')");
+
+        sql = "select last_day_of_month(timestamp '2023-07-01 00:00:00');";
+        assertPlanContains(sql, "last_day('2023-07-01 00:00:00', 'month')");
+
+        sql = "select last_day_of_month(date '2023-07-01');";
+        assertPlanContains(sql, "last_day('2023-07-01 00:00:00', 'month')");
     }
 
     @Test
@@ -161,6 +202,18 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select date_add('year', 2, th) from tall;";
         assertPlanContains(sql, "years_add(8: th, 2)");
+
+        sql = "select date_add('quarter', 2, TIMESTAMP '2014-03-08 09:00:00');";
+        assertPlanContains(sql, "quarters_add('2014-03-08 09:00:00', 2)");
+
+        sql = "select date_add('quarter', -1, TIMESTAMP '2014-03-08 09:00:00');";
+        assertPlanContains(sql, "quarters_add('2014-03-08 09:00:00', -1)");
+
+        sql = "select date_add('millisecond', 20, TIMESTAMP '2014-03-08 09:00:00');";
+        assertPlanContains(sql, "milliseconds_add('2014-03-08 09:00:00', 20)");
+
+        sql = "select date_add('millisecond', -100, TIMESTAMP '2014-03-08 09:00:00');";
+        assertPlanContains(sql, "milliseconds_add('2014-03-08 09:00:00', -100)");
     }
 
     @Test
@@ -176,6 +229,9 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select strpos('bccaab', 'aa');";
         assertPlanContains(sql, "locate('aa', 'bccaab')");
+
+        sql = "select length('aaa');";
+        assertPlanContains(sql, "char_length('aaa')");
     }
 
     @Test
@@ -240,4 +296,27 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select from_utf8(to_utf8('123'))";
         assertPlanContains(sql, "from_binary(to_binary('123', 'utf8'), 'utf8')");
     }
+
+    @Test
+    public void testBinaryFunction() throws Exception {
+        String sql = "select x'0012'";
+        assertPlanContains(sql, "'0012'");
+
+        sql = "select md5(x'0012');";
+        assertPlanContains(sql, "md5(from_binary('0012', 'utf8'))");
+
+        sql = "select md5(tk) from tall";
+        assertPlanContains(sql, "md5(from_binary(11: tk, 'utf8'))");
+
+        sql = "select to_hex(tk) from tall";
+        assertPlanContains(sql, "hex(11: tk)");
+
+        sql = "select sha256(x'aaaa');";
+        assertPlanContains(sql, "sha2(from_binary('AAAA', 'utf8'), 256)");
+
+        sql = "select sha256(tk) from tall";
+        assertPlanContains(sql, "sha2(from_binary(11: tk, 'utf8'), 256)");
+        System.out.println(getFragmentPlan(sql));
+    }
+
 }

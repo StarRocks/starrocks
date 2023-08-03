@@ -4,7 +4,7 @@ An Iceberg catalog is a kind of external catalog that enables you to query data 
 
 Also, you can directly transform and load data from Iceberg by using [INSERT INTO](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md) based on Iceberg catalogs. StarRocks supports Iceberg catalogs from v2.4 onwards.
 
-To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster needs to integrate with two important components:
+To ensure successful SQL workloads on your Iceberg cluster, your StarRocks cluster needs to integrate with two important components:
 
 - Object storage or distributed file system like AWS S3, other S3-compatible storage system, Microsoft Azure Storage, Google GCS, or HDFS
 
@@ -45,7 +45,7 @@ For more information, see [Preparation for authentication in AWS IAM](../../inte
 
 If you choose HDFS as storage, configure your StarRocks cluster as follows:
 
-- (Optional) Set the username that is used to access your HDFS cluster and Hive metastore. By default, StarRocks uses the username of the FE and BE processes to access your HDFS cluster and Hive metastore. You can also set the username by using the `HADOOP_USERNAME` parameter in the **fe/conf/hadoop_env.sh** file of each FE and the **be/conf/hadoop_env.sh** file of each BE. After you set the username in these files, restart each FE and each BE to make the parameter settings take effect. You can set only one username for each StarRocks cluster.
+- (Optional) Set the username that is used to access your HDFS cluster and Hive metastore. By default, StarRocks uses the username of the FE and BE processes to access your HDFS cluster and Hive metastore. You can also set the username by adding `export HADOOP_USER_NAME="<user_name>"` at the beginning of the **fe/conf/hadoop_env.sh** file of each FE and at the beginning of the **be/conf/hadoop_env.sh** file of each BE. After you set the username in these files, restart each FE and each BE to make the parameter settings take effect. You can set only one username for each StarRocks cluster.
 - When you query Iceberg data, the FEs and BEs of your StarRocks cluster use the HDFS client to access your HDFS cluster. In most cases, you do not need to configure your StarRocks cluster to achieve that purpose, and StarRocks starts the HDFS client using the default configurations. You need to configure your StarRocks cluster only in the following situations:
 
   - High availability (HA) is enabled for your HDFS cluster: Add the **hdfs-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE.
@@ -77,16 +77,14 @@ PROPERTIES
 )
 ```
 
-For more information, see [CREATE EXTERNAL CATALOG](../../sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md).
-
 ### Parameters
 
 #### catalog_name
 
 The name of the Iceberg catalog. The naming conventions are as follows:
 
-- The name can contain letters, digits 0 through 9, and underscores (_) and must start with a letter.
-- The name cannot exceed 64 characters in length.
+- The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.
+- The name is case-sensitive and cannot exceed 1023 characters in length.
 
 #### comment
 
@@ -105,6 +103,7 @@ A set of parameters about how StarRocks integrates with the metastore of your da
 If you choose Hive metastore as the metastore of your data source, configure `MetastoreParams` as follows:
 
 ```SQL
+"iceberg.catalog.type" = "hive",
 "hive.metastore.uris" = "<hive_metastore_uri>"
 ```
 
@@ -116,6 +115,7 @@ The following table describes the parameter you need to configure in `MetastoreP
 
 | Parameter                           | Required | Description                                                  |
 | ----------------------------------- | -------- | ------------------------------------------------------------ |
+| iceberg.catalog.type                | Yes      | The type of metastore that you use for your Iceberg cluster. Set the value to `hive`. |
 | hive.metastore.uris                 | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br>If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
 
 ##### AWS Glue
@@ -125,7 +125,7 @@ If you choose AWS Glue as the metastore of your data source, which is supported 
 - To choose the instance profile-based authentication method, configure `MetastoreParams` as follows:
 
   ```SQL
-  "hive.metastore.type" = "glue",
+  "iceberg.catalog.type" = "glue",
   "aws.glue.use_instance_profile" = "true",
   "aws.glue.region" = "<aws_glue_region>"
   ```
@@ -133,7 +133,7 @@ If you choose AWS Glue as the metastore of your data source, which is supported 
 - To choose the assumed role-based authentication method, configure `MetastoreParams` as follows:
 
   ```SQL
-  "hive.metastore.type" = "glue",
+  "iceberg.catalog.type" = "glue",
   "aws.glue.use_instance_profile" = "true",
   "aws.glue.iam_role_arn" = "<iam_role_arn>",
   "aws.glue.region" = "<aws_glue_region>"
@@ -142,6 +142,7 @@ If you choose AWS Glue as the metastore of your data source, which is supported 
 - To choose the IAM user-based authentication method, configure `MetastoreParams` as follows:
 
   ```SQL
+  "iceberg.catalog.type" = "glue",
   "aws.glue.use_instance_profile" = "false",
   "aws.glue.access_key" = "<iam_user_access_key>",
   "aws.glue.secret_key" = "<iam_user_secret_key>",
@@ -152,7 +153,7 @@ The following table describes the parameters you need to configure in `Metastore
 
 | Parameter                     | Required | Description                                                  |
 | ----------------------------- | -------- | ------------------------------------------------------------ |
-| hive.metastore.type           | Yes      | The type of metastore that you use for your Iceberg cluster. Set the value to `glue`. |
+| iceberg.catalog.type          | Yes      | The type of metastore that you use for your Iceberg cluster. Set the value to `glue`. |
 | aws.glue.use_instance_profile | Yes      | Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`. |
 | aws.glue.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS Glue Data Catalog. If you use the assumed role-based authentication method to access AWS Glue, you must specify this parameter. |
 | aws.glue.region               | Yes      | The region in which your AWS Glue Data Catalog resides. Example: `us-west-1`. |
@@ -160,18 +161,6 @@ The following table describes the parameters you need to configure in `Metastore
 | aws.glue.secret_key           | No       | The secret key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
 
 For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
-
-##### Custom metadata service
-
-If you use a custom metadata service for your Iceberg cluster, you need to create a custom catalog class (the class name of the custom catalog cannot be the same as the name of any class that already exists in StarRocks) and implement the related interface in StarRocks so that StarRocks can access the custom metadata service. The custom catalog class needs to inherit the abstract class `BaseMetastoreCatalog`. After the custom catalog is created, package the catalog and its related files, place them under the **fe/lib** path of each FE, and then restart each FE.
-
-After you complete the preceding operations, you can create an Iceberg catalog and configure its properties.
-
-| **Property**           | **Required** | **Description**                                              |
-| ---------------------- | ------------ | ------------------------------------------------------------ |
-| type                   | Yes          | The type of the data source. Set the value to `iceberg`.      |
-| iceberg.catalog.type   | Yes          | The type of the catalog configured your Iceberg cluster. Set the value to `CUSTOM`. |
-| iceberg.catalog-impl   | Yes          | The fully qualified class name of the custom catalog. FEs search for the catalog based on this name. If the custom catalog contains custom configuration items, you must add them to the `PROPERTIES` parameter as key-value pairs when you create an Iceberg catalog. |
 
 #### `StorageCredentialParams`
 
@@ -448,9 +437,10 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   PROPERTIES
   (
       "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
-      "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -461,11 +451,11 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   PROPERTIES
   (
       "type" = "iceberg",
-      "aws.s3.use_instance_profile" = "true",
-      "aws.s3.region" = "us-west-2",
-      "hive.metastore.type" = "glue",
+      "iceberg.catalog.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
-      "aws.glue.region" = "us-west-2"
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "true",
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -478,10 +468,11 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   PROPERTIES
   (
       "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
-      "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -492,13 +483,13 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   PROPERTIES
   (
       "type" = "iceberg",
-      "aws.s3.use_instance_profile" = "true",
-      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
-      "aws.s3.region" = "us-west-2",
-      "hive.metastore.type" = "glue",
+      "iceberg.catalog.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
       "aws.glue.iam_role_arn" = "arn:aws:iam::081976408565:role/test_glue_role",
-      "aws.glue.region" = "us-west-2"
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "true",
+      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -511,11 +502,12 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   PROPERTIES
   (
       "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "false",
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_access_key>",
-      "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -526,15 +518,15 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   PROPERTIES
   (
       "type" = "iceberg",
-      "aws.s3.use_instance_profile" = "false",
-      "aws.s3.access_key" = "<iam_user_access_key>",
-      "aws.s3.secret_key" = "<iam_user_secret_key>",
-      "aws.s3.region" = "us-west-2",
-      "hive.metastore.type" = "glue",
+      "iceberg.catalog.type" = "glue",
       "aws.glue.use_instance_profile" = "false",
       "aws.glue.access_key" = "<iam_user_access_key>",
       "aws.glue.secret_key" = "<iam_user_secret_key>",
-      "aws.glue.region" = "us-west-2"
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "false",
+      "aws.s3.access_key" = "<iam_user_access_key>",
+      "aws.s3.secret_key" = "<iam_user_secret_key>",
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -546,7 +538,8 @@ Use MinIO as an example. Run a command like below:
 CREATE EXTERNAL CATALOG iceberg_catalog_hms
 PROPERTIES
 (
-    "type" = "iceberg", 
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
     "hive.metastore.uris" = "thrift://34.132.15.127:9083",
     "aws.s3.enable_ssl" = "true",
     "aws.s3.enable_path_style_access" = "true",
@@ -566,7 +559,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg", 
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.blob.storage_account" = "<blob_storage_account_name>",
       "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
@@ -579,7 +573,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg", 
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.blob.account_name" = "<blob_storage_account_name>",
       "azure.blob.container_name" = "<blob_container_name>",
@@ -595,7 +590,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg", 
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls1.use_managed_service_identity" = "true"    
   );
@@ -607,7 +603,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg", 
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls1.oauth2_client_id" = "<application_client_id>",
       "azure.adls1.oauth2_credential" = "<application_client_credential>",
@@ -623,7 +620,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg", 
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.oauth2_use_managed_identity" = "true",
       "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
@@ -637,7 +635,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg", 
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.storage_account" = "<storage_account_name>",
       "azure.adls2.shared_key" = "<shared_key>"     
@@ -650,7 +649,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg", 
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.oauth2_client_id" = "<service_client_id>",
       "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
@@ -666,7 +666,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg", 
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "gcp.gcs.use_compute_engine_service_account" = "true"    
   );
@@ -678,7 +679,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg", 
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "gcp.gcs.service_account_email" = "<google_service_account_email>",
       "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
@@ -694,7 +696,8 @@ PROPERTIES
     CREATE EXTERNAL CATALOG iceberg_catalog_hms
     PROPERTIES
     (
-        "type" = "iceberg", 
+        "type" = "iceberg",
+        "iceberg.catalog.type" = "hive",
         "hive.metastore.uris" = "thrift://34.132.15.127:9083",
         "gcp.gcs.use_compute_engine_service_account" = "true",
         "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"    
@@ -707,12 +710,13 @@ PROPERTIES
     CREATE EXTERNAL CATALOG iceberg_catalog_hms
     PROPERTIES
     (
-        "type" = "iceberg", 
+        "type" = "iceberg",
+        "iceberg.catalog.type" = "hive",
         "hive.metastore.uris" = "thrift://34.132.15.127:9083",
         "gcp.gcs.service_account_email" = "<google_service_account_email>",
         "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
         "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
-        "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>",  
+        "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     );
     ```
 
@@ -795,24 +799,3 @@ Suppose you have an OLAP table named `olap_tbl`, you can transform and load data
 ```SQL
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM iceberg_table
 ```
-
-## Configure metadata caching
-
-The metadata files of your Iceberg cluster may be stored in remote storage such as AWS S3 or HDFS. By default, StarRocks caches Iceberg metadata in memory. To accelerate queries, StarRocks adopts a two-level metadata caching mechanism, with which it can cache metadata both in memory and on disk. For each initial query, StarRocks caches their computation results. If any subsequent query that is semantically equivalent to a previous query is issued, StarRocks first attempts to retrieve the requested metadata from its caches, and it retrieves the metadata from the remote storage only when the metadata cannot be hit in its caches.
-
-StarRocks uses the Least Recently Used (LRU) algorithm to cache and evict data. The basic rules are as follows:
-
-- StarRocks first attempts to retrieve the requested metadata from the memory. If the metadata cannot be hit in the memory, StarRock attempts to retrieve the metadata from the disks. The metadata that StarRocks has retrieved from the disks will be loaded into the memory. If the metadata cannot be hit in the disks either, StarRock retrieves the metadata from the remote storage and caches the retrieved metadata in the memory.
-- StarRocks writes the metadata evicted out of the memory into the disks, but it directly discards the metadata evicted out of the disks.
-
-The following table describes the FE configuration items that you can use to configure your Iceberg metadata caching mechanism.
-
-| **Configuration item**                           | **Unit** | **Default value**                                    | **Description**                                              |
-| ------------------------------------------------ | -------- | ---------------------------------------------------- | ------------------------------------------------------------ |
-| enable_iceberg_metadata_disk_cache               | N/A      | `false`                                              | Specifies whether to enable the disk cache.                  |
-| iceberg_metadata_cache_disk_path                 | N/A      | `StarRocksFE.STARROCKS_HOME_DIR + "/caches/iceberg"` | The save path of cached metadata files on disk.              |
-| iceberg_metadata_disk_cache_capacity             | Bytes    | `2147483648`, equivalent to 2 GB                     | The maximum size of cached metadata allowed on disk.         |
-| iceberg_metadata_memory_cache_capacity           | Bytes    | `536870912`, equivalent to 512 MB                    | The maximum size of cached metadata allowed in memory.       |
-| iceberg_metadata_memory_cache_expiration_seconds | Seconds  | `86500`                                              | The amount of time after which a cache entry in memory expires counting from its last access. |
-| iceberg_metadata_disk_cache_expiration_seconds   | Seconds  | `604800`, equivalent to one week                     | The amount of time after which a cache entry on disk expires counting from its last access. |
-| iceberg_metadata_cache_max_entry_size            | Bytes    | `8388608`, equivalent to 8 MB                        | The maximum size of a file that can be cached. Files whose size exceeds the value of this parameter cannot be cached. If a query requests these files, StarRocks retrieves them from the remote storage. |

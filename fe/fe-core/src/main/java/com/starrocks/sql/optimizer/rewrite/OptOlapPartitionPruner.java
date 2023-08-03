@@ -47,7 +47,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
+import java.util.concurrent.ConcurrentNavigableMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
 public class OptOlapPartitionPruner {
@@ -185,7 +186,7 @@ public class OptOlapPartitionPruner {
         return Pair.create(Utils.compoundAnd(scanPredicates), prunedPartitionPredicates);
     }
 
-    private static void putValueMapItem(TreeMap<LiteralExpr, Set<Long>> partitionValueToIds,
+    private static void putValueMapItem(ConcurrentNavigableMap<LiteralExpr, Set<Long>> partitionValueToIds,
                                         Long partitionId,
                                         LiteralExpr value) {
         Set<Long> partitionIdSet = partitionValueToIds.get(value);
@@ -199,7 +200,8 @@ public class OptOlapPartitionPruner {
     private static List<Long> listPartitionPrune(OlapTable olapTable, ListPartitionInfo listPartitionInfo,
                                                  LogicalOlapScanOperator operator) {
 
-        Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap = new HashMap<>();
+        Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap =
+                Maps.newConcurrentMap();
         Map<ColumnRefOperator, Set<Long>> columnToNullPartitions = new HashMap<>();
 
         // Currently queries either specify a temporary partition, or do not. There is no situation
@@ -227,13 +229,16 @@ public class OptOlapPartitionPruner {
         }
 
         if (literalExprValuesMap != null && literalExprValuesMap.size() > 0) {
-            TreeMap<LiteralExpr, Set<Long>> partitionValueToIds = new TreeMap<>();
+            ConcurrentNavigableMap<LiteralExpr, Set<Long>> partitionValueToIds = new ConcurrentSkipListMap<>();
             for (Map.Entry<Long, List<LiteralExpr>> entry : literalExprValuesMap.entrySet()) {
                 Long partitionId = entry.getKey();
                 if (!partitionIds.contains(partitionId)) {
                     continue;
                 }
                 List<LiteralExpr> values = entry.getValue();
+                if (values == null || values.isEmpty()) {
+                    continue;
+                }
                 values.forEach(value ->
                         putValueMapItem(partitionValueToIds, partitionId, value));
             }
@@ -249,13 +254,16 @@ public class OptOlapPartitionPruner {
         if (multiLiteralExprValues != null && multiLiteralExprValues.size() > 0) {
             List<Column> columnList = listPartitionInfo.getPartitionColumns();
             for (int i = 0; i < columnList.size(); i++) {
-                TreeMap<LiteralExpr, Set<Long>> partitionValueToIds = new TreeMap<>();
+                ConcurrentNavigableMap<LiteralExpr, Set<Long>> partitionValueToIds = new ConcurrentSkipListMap<>();
                 for (Map.Entry<Long, List<List<LiteralExpr>>> entry : multiLiteralExprValues.entrySet()) {
                     Long partitionId = entry.getKey();
                     if (!partitionIds.contains(partitionId)) {
                         continue;
                     }
                     List<List<LiteralExpr>> multiValues = entry.getValue();
+                    if (multiValues == null || multiValues.isEmpty()) {
+                        continue;
+                    }
                     for (List<LiteralExpr> values : multiValues) {
                         LiteralExpr value = values.get(i);
                         putValueMapItem(partitionValueToIds, partitionId, value);

@@ -67,7 +67,7 @@ public class CompactionScheduler extends Daemon {
     private static final long MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS = 3000L;
     private static final long MIN_COMPACTION_INTERVAL_MS_ON_FAILURE = 6000L;
     private static final long PARTITION_CLEAN_INTERVAL_SECOND = 30;
-    private final CompactionManager compactionManager;
+    private final CompactionMgr compactionManager;
     private final SystemInfoService systemInfoService;
     private final GlobalTransactionMgr transactionMgr;
     private final GlobalStateMgr stateMgr;
@@ -78,7 +78,7 @@ public class CompactionScheduler extends Daemon {
     private long waitTxnId = -1;
     private long lastPartitionCleanTime;
 
-    CompactionScheduler(@NotNull CompactionManager compactionManager, @NotNull SystemInfoService systemInfoService,
+    CompactionScheduler(@NotNull CompactionMgr compactionManager, @NotNull SystemInfoService systemInfoService,
                         @NotNull GlobalTransactionMgr transactionMgr, @NotNull GlobalStateMgr stateMgr) {
         super("COMPACTION_DISPATCH", LOOP_INTERVAL_MS);
         this.compactionManager = compactionManager;

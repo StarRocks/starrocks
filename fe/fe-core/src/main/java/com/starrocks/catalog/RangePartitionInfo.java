@@ -418,6 +418,7 @@ public class RangePartitionInfo extends PartitionInfo {
 
     @Override
     public void gsonPreProcess() throws IOException {
+        super.gsonPreProcess();
         serializedIdToRange = Maps.newConcurrentMap();
         for (Map.Entry<Long, Range<PartitionKey>> entry : idToRange.entrySet()) {
             byte[] serializedRange = serializeRange(entry.getValue());
@@ -433,6 +434,7 @@ public class RangePartitionInfo extends PartitionInfo {
 
     @Override
     public void gsonPostProcess() throws IOException {
+        super.gsonPostProcess();
         idToRange = Maps.newConcurrentMap();
         if (serializedIdToRange != null && !serializedIdToRange.isEmpty()) {
             for (Map.Entry<Long, byte[]> entry : serializedIdToRange.entrySet()) {

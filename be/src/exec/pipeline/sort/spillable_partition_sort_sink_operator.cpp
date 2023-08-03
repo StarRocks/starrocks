@@ -33,11 +33,21 @@ Status SpillablePartitionSortSinkOperator::prepare(RuntimeState* state) {
     if (state->spill_mode() == TSpillMode::FORCE) {
         _chunks_sorter->set_spill_stragety(spill::SpillStrategy::SPILL_ALL);
     }
+    _peak_revocable_mem_bytes = _unique_metrics->AddHighWaterMarkCounter(
+            "PeakRevocableMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
     return Status::OK();
 }
 
 void SpillablePartitionSortSinkOperator::close(RuntimeState* state) {
     PartitionSortSinkOperator::close(state);
+}
+
+size_t SpillablePartitionSortSinkOperator::estimated_memory_reserved(const ChunkPtr& chunk) {
+    return _chunks_sorter->reserved_bytes(chunk);
+}
+
+size_t SpillablePartitionSortSinkOperator::estimated_memory_reserved() {
+    return _chunks_sorter->reserved_bytes(nullptr);
 }
 
 Status SpillablePartitionSortSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
@@ -47,6 +57,7 @@ Status SpillablePartitionSortSinkOperator::push_chunk(RuntimeState* state, const
 }
 
 Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
+    auto defer_set_finishing = DeferOp([this]() { _chunks_sorter->spill_channel()->set_finishing(); });
     if (state->is_cancelled()) {
         _is_finished = true;
         _chunks_sorter->cancel();
@@ -60,7 +71,6 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
     // TODO: test cancel case
     auto io_executor = _chunks_sorter->spill_channel()->io_executor();
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
-        _chunks_sorter->spill_channel()->set_finishing();
         return _chunks_sorter->spiller()->set_flush_all_call_back(
                 [this]() {
                     // Current partition sort is ended, and
@@ -70,24 +80,14 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
                     _is_finished = true;
                     return Status::OK();
                 },
-                state, *io_executor, spill::MemTrackerGuard(tls_mem_tracker));
+                state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
     };
 
     Status ret_status;
     auto defer = DeferOp([&]() {
-        Status st = [&]() {
-            if (_chunks_sorter->spill_channel()->is_working()) {
-                std::function<StatusOr<ChunkPtr>()> task = [state, io_executor,
-                                                            set_call_back_function]() -> StatusOr<ChunkPtr> {
-                    RETURN_IF_ERROR(set_call_back_function(state, io_executor));
-                    return Status::EndOfFile("eos");
-                };
-                _chunks_sorter->spill_channel()->add_spill_task({task});
-            } else {
-                RETURN_IF_ERROR(set_call_back_function(state, io_executor));
-            }
-            return Status::OK();
-        }();
+        SpillProcessTasksBuilder task_builder(state, io_executor);
+        task_builder.finally(set_call_back_function);
+        Status st = _chunks_sorter->spill_channel()->execute(task_builder);
         ret_status = ret_status.ok() ? st : ret_status;
     });
 
@@ -131,7 +131,7 @@ Status SpillablePartitionSortSinkOperatorFactory::prepare(RuntimeState* state) {
 
     // init spill parameters
     _spill_options = std::make_shared<spill::SpilledOptions>(&_sort_exec_exprs, sort_desc);
-    _spill_options->spill_file_size = state->spill_mem_table_size();
+    _spill_options->spill_mem_table_bytes_size = state->spill_mem_table_size();
     _spill_options->mem_table_pool_size = state->spill_mem_table_num();
     _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
     _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();

@@ -50,7 +50,7 @@ StatusOr<ChunkPtr> AggregateStreamingSinkOperator::pull_chunk(RuntimeState* stat
     return Status::InternalError("Not support");
 }
 
-void AggregateStreamingSinkOperator::mark_need_spill() {
+void AggregateStreamingSinkOperator::set_execute_mode(int performance_level) {
     _aggregator->streaming_preaggregation_mode() = TStreamingPreaggregationMode::FORCE_STREAMING;
 }
 
@@ -156,10 +156,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const ChunkPtr& chunk
     const size_t continuous_limit = _auto_context.get_continuous_limit();
     switch (_auto_state) {
     case AggrAutoState::INIT_PREAGG: {
-        size_t real_capacity =
-                _aggregator->hash_map_variant().capacity() - _aggregator->hash_map_variant().capacity() / 8;
-        size_t remain_size = real_capacity - _aggregator->hash_map_variant().size();
-        bool ht_needs_expansion = remain_size < chunk_size;
+        bool ht_needs_expansion = _aggregator->hash_map_variant().need_expand(chunk_size);
         _auto_context.init_preagg_count++;
         if (!ht_needs_expansion ||
             _aggregator->should_expand_preagg_hash_tables(_aggregator->num_input_rows(), chunk_size, allocated_bytes,

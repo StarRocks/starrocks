@@ -18,6 +18,7 @@
 
 #include "column/chunk.h"
 #include "common/statusor.h"
+#include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/source_operator.h"
@@ -26,10 +27,12 @@
 #include "exec/query_cache/multilane_operator.h"
 #include "exec/query_cache/ticket_checker.h"
 #include "exec/workgroup/work_group.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "util/debug/query_trace.h"
 #include "util/defer_op.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks::pipeline {
 
@@ -51,6 +54,8 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _overhead_timer = ADD_TIMER(_runtime_profile, "OverheadTime");
 
     _schedule_timer = ADD_TIMER(_runtime_profile, "ScheduleTime");
+    _global_schedule_counter = ADD_COUNTER(_runtime_profile, "GlobalScheduleCount", TUnit::UNIT);
+    _global_schedule_timer = ADD_TIMER(_runtime_profile, "GlobalScheduleTime");
     _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCount", TUnit::UNIT);
     _yield_by_time_limit_counter =
             ADD_COUNTER_SKIP_MERGE(_runtime_profile, "YieldByTimeLimit", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
@@ -206,6 +211,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
         if (ScanOperator* scan = source_scan_operator()) {
             scan->end_driver_process(this);
         }
+
         _update_statistics(total_chunks_moved, total_rows_moved, time_spent);
     });
 
@@ -230,6 +236,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
         });
 
         SCOPED_RAW_TIMER(&process_time_ns);
+        auto query_mem_tracker = _query_ctx->mem_tracker();
 
         for (size_t i = _first_unfinished; i < num_operators - 1; ++i) {
             {
@@ -241,8 +248,14 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 if (curr_op->is_finished()) {
                     if (i == 0) {
                         // For source operators
+                        // We rely on the exchange operator to pass query statistics,
+                        // so when the scan operator finishes,
+                        // we need to update the scan stats immediately to ensure that the exchange operator can send all the data before the end
+                        _update_scan_statistics();
                         RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));
                     }
+                    _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, nullptr);
+                    RELEASE_RESERVED_GUARD();
                     RETURN_IF_ERROR(return_status = _mark_operator_finishing(next_op, runtime_state));
                     new_first_unfinished = i + 1;
                     continue;
@@ -255,21 +268,6 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
 
                 if (_check_fragment_is_canceled(runtime_state)) {
                     return _state;
-                }
-
-                // Run spill stragety
-                // TODO: FIXME
-                // a simple spill stragety
-                auto query_mem_tracker = _query_ctx->mem_tracker();
-                if (runtime_state->enable_spill() &&
-                    sink_operator()->revocable_mem_bytes() > runtime_state->spill_operator_min_bytes() &&
-                    !sink_operator()->need_mark_spill()) {
-                    auto spill_manager = _query_ctx->spill_manager();
-                    if (query_mem_tracker->consumption() - spill_manager->pending_spilled_bytes() >
-                        query_mem_tracker->limit() * runtime_state->spill_mem_limit_threshold()) {
-                        spill_manager->update_spilled_bytes(sink_operator()->revocable_mem_bytes());
-                        sink_operator()->mark_need_spill();
-                    }
                 }
 
                 // pull chunk from current operator and push the chunk onto next
@@ -297,11 +295,21 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         (maybe_chunk.value()->num_rows() > 0 ||
                          (maybe_chunk.value()->owner_info().is_last_chunk() && is_multilane(next_op)))) {
                         size_t row_num = maybe_chunk.value()->num_rows();
+                        if (UNLIKELY(row_num > runtime_state->chunk_size())) {
+                            return Status::InternalError(
+                                    fmt::format("Intermediate chunk size must not be greater than {}, actually {} "
+                                                "after {}-th operator {} in {}",
+                                                runtime_state->chunk_size(), row_num, i, curr_op->get_name(),
+                                                to_readable_string()));
+                        }
+
                         total_rows_moved += row_num;
                         {
                             SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(next_op);
                             SCOPED_TIMER(next_op->_push_timer);
                             QUERY_TRACE_SCOPED(next_op->get_name(), "push_chunk");
+                            _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, maybe_chunk.value());
+                            RELEASE_RESERVED_GUARD();
                             return_status = next_op->push_chunk(runtime_state, maybe_chunk.value());
                         }
                         // ignore empty chunk generated by per-tablet computation when query cache enabled
@@ -327,12 +335,21 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                     // TODO: need add control flag
                     if (i == 0) {
                         // For source operators
+                        // We rely on the exchange operator to pass query statistics,
+                        // so when the scan operator finishes,
+                        // we need to update the scan stats immediately to ensure that the exchange operator can send all the data before the end
+                        _update_scan_statistics();
                         RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));
                     }
+                    _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, nullptr);
+                    RELEASE_RESERVED_GUARD();
                     RETURN_IF_ERROR(return_status = _mark_operator_finishing(next_op, runtime_state));
                     new_first_unfinished = i + 1;
                     continue;
                 }
+            }
+            if (time_spent >= OVERLOADED_MAX_TIME_SPEND_NS) {
+                StarRocksMetrics::instance()->pipe_driver_overloaded.increment(1);
             }
             // yield when total chunks moved or time spent on-core for evaluation
             // exceed the designated thresholds.
@@ -419,7 +436,11 @@ void PipelineDriver::mark_precondition_ready(RuntimeState* runtime_state) {
     }
 }
 
-void PipelineDriver::start_timers() {
+void PipelineDriver::start_schedule(int64_t start_count, int64_t start_time) {
+    _global_schedule_counter->set(start_count);
+    _global_schedule_timer->set(start_time);
+
+    // start timers
     _total_timer_sw->start();
     _pending_timer_sw->start();
     _precondition_block_timer_sw->start();
@@ -452,7 +473,40 @@ void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
     }
 }
 
-void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
+void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* tracker, OperatorPtr& op,
+                                          const ChunkPtr& chunk) {
+    // a simple spill stragety
+    auto& mem_resource_mgr = op->mem_resource_manager();
+    if (state->enable_spill() && mem_resource_mgr.releaseable() &&
+        op->revocable_mem_bytes() > state->spill_operator_min_bytes()) {
+        int64_t request_reserved = 0;
+        if (chunk == nullptr) {
+            request_reserved = op->estimated_memory_reserved();
+        } else {
+            request_reserved = op->estimated_memory_reserved(chunk);
+        }
+        request_reserved += state->spill_mem_table_num() * state->spill_mem_table_size();
+
+        if (!tls_thread_status.try_mem_reserve(request_reserved, tracker,
+                                               tracker->limit() * state->spill_mem_limit_threshold())) {
+            mem_resource_mgr.to_low_memory_mode();
+        }
+    }
+}
+
+void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state, int64_t schedule_count,
+                              int64_t execution_time) {
+    if (schedule_count > 0) {
+        _global_schedule_counter->set(schedule_count - _global_schedule_counter->value());
+    } else {
+        _global_schedule_counter->set((int64_t)-1);
+    }
+    if (execution_time > 0) {
+        _global_schedule_timer->set(execution_time - _global_schedule_timer->value());
+    } else {
+        _global_schedule_timer->set((int64_t)-1);
+    }
+
     int64_t time_spent = 0;
     // The driver may be destructed after finalizing, so use a temporal driver to record
     // the information about the driver queue and workgroup.
@@ -649,10 +703,7 @@ void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_
     _update_driver_acct(total_chunks_moved, total_rows_moved, time_spent);
 
     // Update statistics of scan operator
-    if (ScanOperator* scan = source_scan_operator()) {
-        query_ctx()->incr_cur_scan_rows_num(scan->get_last_scan_rows_num());
-        query_ctx()->incr_cur_scan_bytes(scan->get_last_scan_bytes());
-    }
+    _update_scan_statistics();
 
     // Update cpu cost of this query
     int64_t runtime_ns = driver_acct().get_last_time_spent();
@@ -660,6 +711,19 @@ void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_
     int64_t sink_operator_last_cpu_time_ns = sink_operator()->get_last_growth_cpu_time_ns();
     int64_t accounted_cpu_cost = runtime_ns + source_operator_last_cpu_time_ns + sink_operator_last_cpu_time_ns;
     query_ctx()->incr_cpu_cost(accounted_cpu_cost);
+}
+
+void PipelineDriver::_update_scan_statistics() {
+    if (ScanOperator* scan = source_scan_operator()) {
+        int64_t scan_rows = scan->get_last_scan_rows_num();
+        int64_t scan_bytes = scan->get_last_scan_bytes();
+        int64_t table_id = scan->get_scan_table_id();
+        if (scan_rows > 0 || scan_bytes > 0) {
+            query_ctx()->incr_cur_scan_rows_num(scan_rows);
+            query_ctx()->incr_cur_scan_bytes(scan_bytes);
+            query_ctx()->update_scan_stats(table_id, scan_rows, scan_bytes);
+        }
+    }
 }
 
 void PipelineDriver::increment_schedule_times() {

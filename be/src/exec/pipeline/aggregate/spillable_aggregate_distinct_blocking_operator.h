@@ -42,14 +42,20 @@ public:
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
-    bool pending_finish() const override {
-        return _aggregator->has_pending_data() || _aggregator->has_pending_restore();
-    }
-
-    void mark_need_spill() override {
-        Operator::mark_need_spill();
+    bool spillable() const override { return true; }
+    void set_execute_mode(int performance_level) override {
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;
         TRACE_SPILL_LOG << "AggregateBlockingSink, mark spill " << (void*)this;
+    }
+
+    size_t estimated_memory_reserved(const ChunkPtr& chunk) override {
+        if (chunk && !chunk->is_empty()) {
+            if (_aggregator->hash_set_variant().need_expand(chunk->num_rows())) {
+                return chunk->memory_usage() + _aggregator->hash_set_memory_usage();
+            }
+            return chunk->memory_usage();
+        }
+        return 0;
     }
 
 private:
