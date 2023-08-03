@@ -455,10 +455,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
             // add message into information_schema
             if (this.getMVTaskRunExtraMessage() != null) {
-                MVTaskRunExtraMessage extraMessage = getMVTaskRunExtraMessage();
-                Map<String, Set<String>> baseTableRefreshedPartitionsByExecPlan =
-                        getBaseTableRefreshedPartitionsByExecPlan(execPlan);
-                extraMessage.setBasePartitionsToRefreshMap(baseTableRefreshedPartitionsByExecPlan);
+                try {
+                    MVTaskRunExtraMessage extraMessage = getMVTaskRunExtraMessage();
+                    Map<String, Set<String>> baseTableRefreshedPartitionsByExecPlan =
+                            getBaseTableRefreshedPartitionsByExecPlan(execPlan);
+                    extraMessage.setBasePartitionsToRefreshMap(baseTableRefreshedPartitionsByExecPlan);
+                } catch (Exception e) {
+                    // just log warn and no throw exceptions for updating task runs message.
+                    LOG.warn("update task run messages failed:", e);
+                }
             }
         } catch (Exception e) {
             LOG.warn("update final meta failed after mv refreshed:", e);

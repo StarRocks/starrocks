@@ -1408,6 +1408,74 @@ public class MvRewriteTest extends MvRewriteTestBase {
     }
 
     @Test
+    public void testJoinWithTypeCast() throws Exception {
+        String sql1 = "create table test.dim_tbl1 (\n" +
+                "    col1 string,\n" +
+                "    col1_name string\n" +
+                ")DISTRIBUTED BY HASH(col1)" +
+                ";\n";
+        String sql2 = "CREATE TABLE test.fact_tbl1( \n" +
+                "          fdate  int,\n" +
+                "          fqqid STRING ,\n" +
+                "          col1 BIGINT  ,\n" +
+                "          flcnt BIGINT\n" +
+                " )PARTITION BY range(fdate) (\n" +
+                "    PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                "    PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                "    PARTITION p3 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                " )\n" +
+                " DISTRIBUTED BY HASH(fqqid);";
+        String mv = "create MATERIALIZED VIEW test.test_mv1\n" +
+                "DISTRIBUTED BY HASH(fdate,col1_name)\n" +
+                "REFRESH MANUAL\n" +
+                "AS \n" +
+                "    select t1.fdate, t2.col1_name,  count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                "    FROM test.fact_tbl1 t1 \n" +
+                "    LEFT JOIN test.dim_tbl1 t2\n" +
+                "    ON t1.`col1` = t2.`col1`\n" +
+                "    WHERE t1.`fdate` >= 20230701 and t1.fdate <= 20230705\n" +
+                "    GROUP BY  fdate, `col1_name`;";
+        starRocksAssert.withTable(sql1);
+        starRocksAssert.withTable(sql2);
+        starRocksAssert.withMaterializedView(mv);
+        String sql = "select t1.fdate, t2.col1_name,  count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                "    FROM test.fact_tbl1 t1 \n" +
+                "    LEFT JOIN test.dim_tbl1 t2\n" +
+                "    ON t1.`col1` = t2.`col1`\n" +
+                "    WHERE t1.`fdate` >= 20230702 and t1.fdate <= 20230705\n" +
+                "    GROUP BY  fdate, `col1_name`;";
+        String plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, "test_mv1");
+
+        sql = "select t2.col1_name,  count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                "    FROM test.fact_tbl1 t1 \n" +
+                "    LEFT JOIN test.dim_tbl1 t2\n" +
+                "    ON t1.`col1` = t2.`col1`\n" +
+                "    WHERE t1.`fdate` = 20230705\n" +
+                "    GROUP BY   `col1_name`;";
+        plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, "test_mv1");
+
+        sql = "select t2.col1_name,  sum(t1.flcnt)as index_xxx\n" +
+                "    FROM test.fact_tbl1 t1 \n" +
+                "    LEFT JOIN test.dim_tbl1 t2\n" +
+                "    ON t1.`col1` = t2.`col1`\n" +
+                "    WHERE t1.`fdate` = 20230705\n" +
+                "    GROUP BY   `col1_name`;";
+        plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, "test_mv1");
+
+        sql = "select t2.col1_name,  sum(t1.flcnt)as index_xxx\n" +
+                "    FROM test.fact_tbl1 t1 \n" +
+                "    LEFT JOIN test.dim_tbl1 t2\n" +
+                "    ON t1.`col1` = t2.`col1`\n" +
+                "    WHERE t1.`fdate` >= 20230702 and t1.fdate <= 20230705\n" +
+                "    GROUP BY   `col1_name`;";
+        plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, "test_mv1");
+    }
+
+    @Test
     public void testPartitionPrune1() throws Exception {
         starRocksAssert.withTable("CREATE TABLE test_partition_tbl1 (\n" +
                 "                            k1 date,\n" +
