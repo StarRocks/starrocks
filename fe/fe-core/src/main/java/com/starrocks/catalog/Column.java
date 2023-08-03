@@ -681,7 +681,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             return false;
         }
 
-        return comment.equals(other.getComment());
+        return comment == null ? other.comment == null : comment.equals(other.getComment());
     }
 
     @Override
