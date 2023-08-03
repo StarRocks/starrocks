@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
@@ -260,8 +259,7 @@ public class CreateFunctionStmt extends DdlStmt {
     public void analyze(ConnectContext context) throws AnalysisException {
         if (!Config.enable_udf) {
             throw new AnalysisException(
-                    "UDF is not enabled in FE, please configure enable_udf=true in fe/conf/fe.conf or " +
-                            "execute the command `admin set frontend config (\"enable_udf\" = \"true\");`");
+                    "UDF is not enabled in FE, please configure enable_udf=true in fe/conf/fe.conf or ");
         }
         analyzeCommon(context.getDatabase());
         Preconditions.checkArgument(isStarrocksJar);

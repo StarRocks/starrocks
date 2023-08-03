@@ -167,7 +167,7 @@ public class AnalyzerUtils {
     }
 
     public static Function getDBUdfFunction(ConnectContext context, FunctionName fnName,
-                                             Type[] argTypes) {
+                                            Type[] argTypes) {
         String dbName = fnName.getDb();
         if (StringUtils.isEmpty(dbName)) {
             dbName = context.getDatabase();
@@ -214,8 +214,7 @@ public class AnalyzerUtils {
         if (fn != null) {
             if (!Config.enable_udf) {
                 throw new StarRocksPlannerException(
-                        "UDF is not enabled in FE, please configure enable_udf=true in fe/conf/fe.conf or " +
-                                "execute the command `admin set frontend config (\"enable_udf\" = \"true\");`",
+                        "UDF is not enabled in FE, please configure enable_udf=true in fe/conf/fe.conf",
                         ErrorType.USER_ERROR);
             }
         }
