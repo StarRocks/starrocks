@@ -568,7 +568,7 @@ inline void Decimal32Or64Or128ColumnReader<DecimalType>::_fill_decimal_column_ge
     }
 }
 
-Status StringColumnReader::new_get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
+Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
     if (_nullable) {
         auto* data = down_cast<orc::StringVectorBatch*>(cvb);
 
@@ -589,7 +589,6 @@ Status StringColumnReader::new_get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& 
         values->get_bytes().reserve(values->get_bytes().size() + len);
 
         auto& vb = values->get_bytes();
-        size_t vb_pos = 0;
         auto& vo = values->get_offset();
 
         int pos = from;
@@ -600,9 +599,7 @@ Status StringColumnReader::new_get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& 
                     nulls[i] = !cvb->notNull[pos];
                     if (cvb->notNull[pos]) {
                         size_t str_size = remove_trailing_spaces(data->data[pos], data->length[pos]);
-                        //                        vb.insert(vb.end(), data->data[pos], data->data[pos] + str_size);
-                        strings::memcpy_inlined(&vb[vb_pos], data->data[pos], str_size);
-                        vb_pos += str_size;
+                        vb.insert(vb.end(), data->data[pos], data->data[pos] + str_size);
                         vo.emplace_back(vb.size());
                     } else {
                         vo.emplace_back(vb.size());
@@ -612,10 +609,7 @@ Status StringColumnReader::new_get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& 
                 for (int i = col_start; i < col_start + size; ++i, ++pos) {
                     nulls[i] = !cvb->notNull[pos];
                     if (cvb->notNull[pos]) {
-                        //                        vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
-                        size_t str_size = data->length[pos];
-                        strings::memcpy_inlined(&vb[vb_pos], data->data[pos], str_size);
-                        vb_pos += str_size;
+                        vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
                         vo.emplace_back(vb.size());
                     } else {
                         vo.emplace_back(vb.size());
@@ -627,17 +621,12 @@ Status StringColumnReader::new_get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& 
                 // Possibly there are some zero padding characters in value, we have to strip them off.
                 for (int i = col_start; i < col_start + size; ++i, ++pos) {
                     size_t str_size = remove_trailing_spaces(data->data[pos], data->length[pos]);
-                    //                    vb.insert(vb.end(), data->data[pos], data->data[pos] + str_size);
-                    strings::memcpy_inlined(&vb[vb_pos], data->data[pos], str_size);
-                    vb_pos += str_size;
+                    vb.insert(vb.end(), data->data[pos], data->data[pos] + str_size);
                     vo.emplace_back(vb.size());
                 }
             } else {
                 for (int i = col_start; i < col_start + size; ++i, ++pos) {
-                    //                    vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
-                    size_t str_size = data->length[pos];
-                    strings::memcpy_inlined(&vb[vb_pos], data->data[pos], str_size);
-                    vb_pos += str_size;
+                    vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
                     vo.emplace_back(vb.size());
                 }
             }
@@ -678,7 +667,6 @@ Status StringColumnReader::new_get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& 
 
         c->update_has_null();
     } else {
-        DCHECK(false);
         auto* data = down_cast<orc::StringVectorBatch*>(cvb);
 
         size_t len = 0;
@@ -737,7 +725,7 @@ Status StringColumnReader::new_get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& 
     return Status::OK();
 }
 
-Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
+Status StringColumnReader::old_get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
     if (_nullable) {
         auto* data = down_cast<orc::StringVectorBatch*>(cvb);
 
