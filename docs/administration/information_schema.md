@@ -54,7 +54,7 @@ The following fields are provided in `loads`:
 | -------------------- | ------------------------------------------------------------ |
 | JOB_ID               | The unique ID assigned by StarRocks to identify the load job. |
 | LABEL                | The label of the load job.                                   |
-| DATABASE_NAME        | The name of the database to which the destination StarRocks tabes belong. |
+| DATABASE_NAME        | The name of the database to which the destination StarRocks tables belong. |
 | STATE                | The state of the load job. Valid values:<ul><li>`PENDING`: The load job is created.</li><li>`QUEUEING`: The load job is in the queue waiting to be scheduled.</li><li>`LOADING`: The load job is running.</li><li>`PREPARED`: The transaction has been committed.</li><li>`FINISHED`: The load job succeeded.</li><li>`CANCELLED`: The load job failed.</li></ul>For more information, see [Asynchronous loading](https://docs.starrocks.io/en-us/main/loading/Loading_intro#asynchronous-loading). |
 | PROGRESS             | The progress of the ETL stage and LOADING stage of the load job. |
 | TYPE                 | The type of the load job. For Broker Load, the return value is `BROKER`. For INSERT, the return value is `INSERT`. |
@@ -63,7 +63,7 @@ The following fields are provided in `loads`:
 | FILTERED_ROWS        | The number of data rows that are filtered out due to inadequate data quality. |
 | UNSELECTED_ROWS      | The number of data rows that are filtered out due to the conditions specified in the WHERE clause. |
 | SINK_ROWS            | The number of data rows that are loaded.                     |
-| ETL_INFO             | The ETL details of the load job. A non-empty is returned only for Spark Load. For any other types of load jobs, an empty value is returned. |
+| ETL_INFO             | The ETL details of the load job. A non-empty value is returned only for Spark Load. For any other types of load jobs, an empty value is returned. |
 | TASK_INFO            | The task execution details of the load job, such as the `timeout` and `max_filter_ratio` settings. |
 | CREATE_TIME          | The time at which the load job was created. Format: `yyyy-MM-dd HH:mm:ss`. Example: `2023-07-24 14:58:58`. |
 | ETL_START_TIME       | The start time of the ETL stage of the load job. Format: `yyyy-MM-dd HH:mm:ss`. Example: `2023-07-24 14:58:58`. |
