@@ -2,8 +2,8 @@
 
 package com.starrocks.epack.sql.analyzer;
 
+import com.starrocks.epack.privilege.AuthorizerEPack;
 import com.starrocks.epack.privilege.PrivilegeTypeEPack;
-import com.starrocks.epack.privilege.SystemAccessControlEPack;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
 import com.starrocks.epack.sql.ast.ApplyMaskingPolicyClause;
 import com.starrocks.epack.sql.ast.ApplyRowAccessPolicyClause;
@@ -25,9 +25,9 @@ import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
 import com.starrocks.privilege.PrivilegeType;
-import com.starrocks.privilege.SystemAccessControl;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.PrivilegeCheckerVisitor;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.AuthorizerStmtVisitor;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -40,9 +40,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-public class PrivilegeCheckerVisitorEPack extends PrivilegeCheckerVisitor {
-    public PrivilegeCheckerVisitorEPack(SystemAccessControl systemAccessControl) {
-        super(systemAccessControl);
+public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor {
+    public AuthorizerStmtVisitorEPack() {
     }
 
     // ---------------------------------------- Table Statement ---------------------------------------
@@ -111,7 +110,7 @@ public class PrivilegeCheckerVisitorEPack extends PrivilegeCheckerVisitor {
     public Void visitCreatePolicyStatement(CreatePolicyStmt statement, ConnectContext context) {
         PrivilegeType privilegeType = statement.getPolicyType().equals(PolicyType.MASKING) ?
                 PrivilegeTypeEPack.CREATE_MASKING_POLICY : PrivilegeTypeEPack.CREATE_ROW_ACCESS_POLICY;
-        systemAccessControl.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getPolicyName().getCatalog(), statement.getPolicyName().getDbName(),
                 privilegeType);
         return null;
@@ -119,7 +118,7 @@ public class PrivilegeCheckerVisitorEPack extends PrivilegeCheckerVisitor {
 
     @Override
     public Void visitDropPolicyStatement(DropPolicyStmt statement, ConnectContext context) {
-        ((SystemAccessControlEPack) systemAccessControl).checkPolicyAction(context.getCurrentUserIdentity(),
+        AuthorizerEPack.checkPolicyAction(context.getCurrentUserIdentity(),
                 context.getCurrentRoleIds(), statement.getPolicyType(), statement.getPolicyName().getCatalog(),
                 statement.getPolicyName().getDbName(), statement.getPolicyName().getName(), PrivilegeType.DROP);
         return null;
@@ -127,7 +126,7 @@ public class PrivilegeCheckerVisitorEPack extends PrivilegeCheckerVisitor {
 
     @Override
     public Void visitAlterPolicyStatement(AlterPolicyStmt statement, ConnectContext context) {
-        ((SystemAccessControlEPack) systemAccessControl).checkPolicyAction(context.getCurrentUserIdentity(),
+        AuthorizerEPack.checkPolicyAction(context.getCurrentUserIdentity(),
                 context.getCurrentRoleIds(), statement.getPolicyType(),
                 statement.getPolicyName().getCatalog(), statement.getPolicyName().getDbName(),
                 statement.getPolicyName().getName(), PrivilegeType.ALTER);
@@ -141,7 +140,7 @@ public class PrivilegeCheckerVisitorEPack extends PrivilegeCheckerVisitor {
 
     @Override
     public Void visitShowCreatePolicyStatement(ShowCreatePolicyStmt statement, ConnectContext context) {
-        ((SystemAccessControlEPack) systemAccessControl).checkAnyActionOnPolicy(context.getCurrentUserIdentity(),
+        AuthorizerEPack.checkAnyActionOnPolicy(context.getCurrentUserIdentity(),
                 context.getCurrentRoleIds(), statement.getPolicyType(),
                 statement.getPolicyName().getCatalog(), statement.getPolicyName().getDbName(),
                 statement.getPolicyName().getName());
@@ -154,7 +153,7 @@ public class PrivilegeCheckerVisitorEPack extends PrivilegeCheckerVisitor {
         if (withColumnMaskingPolicyMap != null) {
             for (WithColumnMaskingPolicy withColumnMaskingPolicy : withColumnMaskingPolicyMap) {
                 PolicyName policyName = withColumnMaskingPolicy.getPolicyName();
-                ((SystemAccessControlEPack) systemAccessControl).checkPolicyAction(context.getCurrentUserIdentity(),
+                AuthorizerEPack.checkPolicyAction(context.getCurrentUserIdentity(),
                         context.getCurrentRoleIds(), PolicyType.MASKING, policyName.getCatalog(), policyName.getDbName(),
                         policyName.getName(), PrivilegeTypeEPack.APPLY);
             }
@@ -163,7 +162,7 @@ public class PrivilegeCheckerVisitorEPack extends PrivilegeCheckerVisitor {
         if (withRowAccessPolicyList != null) {
             for (WithRowAccessPolicy withRowAccessPolicy : withRowAccessPolicyList) {
                 PolicyName policyName = withRowAccessPolicy.getPolicyName();
-                ((SystemAccessControlEPack) systemAccessControl).checkPolicyAction(context.getCurrentUserIdentity(),
+                AuthorizerEPack.checkPolicyAction(context.getCurrentUserIdentity(),
                         context.getCurrentRoleIds(), PolicyType.ROW_ACCESS, policyName.getCatalog(), policyName.getDbName(),
                         policyName.getName(), PrivilegeTypeEPack.APPLY);
             }
@@ -185,14 +184,14 @@ public class PrivilegeCheckerVisitorEPack extends PrivilegeCheckerVisitor {
     // --------------------------------- Warehouse Statement ---------------------------------
     @Override
     public Void visitCreateWarehouseStatement(CreateWarehouseStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeTypeEPack.CREATE_WAREHOUSE);
         return null;
     }
 
     @Override
     public Void visitSuspendWarehouseStatement(SuspendWarehouseStmt statement, ConnectContext context) {
-        ((SystemAccessControlEPack) systemAccessControl).checkWarehouseAction(context.getCurrentUserIdentity(),
+        AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
                 context.getCurrentRoleIds(), statement.getWarehouseName(),
                 PrivilegeType.ALTER);
         return null;
@@ -200,21 +199,21 @@ public class PrivilegeCheckerVisitorEPack extends PrivilegeCheckerVisitor {
 
     @Override
     public Void visitResumeWarehouseStatement(ResumeWarehouseStmt statement, ConnectContext context) {
-        ((SystemAccessControlEPack) systemAccessControl).checkWarehouseAction(context.getCurrentUserIdentity(),
+        AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
                 context.getCurrentRoleIds(), statement.getWarehouseName(),
                 PrivilegeType.ALTER);
         return null;
     }
 
     public Void visitDropWarehouseStatement(DropWarehouseStmt statement, ConnectContext context) {
-        ((SystemAccessControlEPack) systemAccessControl).checkWarehouseAction(context.getCurrentUserIdentity(),
+        AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
                 context.getCurrentRoleIds(), statement.getWarehouseName(),
                 PrivilegeType.DROP);
         return null;
     }
 
     public Void visitSetWarehouseStatement(SetWarehouseStmt statement, ConnectContext context) {
-        ((SystemAccessControlEPack) systemAccessControl).checkWarehouseAction(
+        AuthorizerEPack.checkWarehouseAction(
                 context.getCurrentUserIdentity(), context.getCurrentRoleIds(), statement.getWarehouseName(), PrivilegeType.USAGE);
         return null;
     }
@@ -226,21 +225,21 @@ public class PrivilegeCheckerVisitorEPack extends PrivilegeCheckerVisitor {
     }
 
     public Void visitShowClusterStatement(ShowClustersStmt statement, ConnectContext context) {
-        ((SystemAccessControlEPack) systemAccessControl).checkAnyActionOnWarehouse(context.getCurrentUserIdentity(),
+        AuthorizerEPack.checkAnyActionOnWarehouse(context.getCurrentUserIdentity(),
                 context.getCurrentRoleIds(), statement.getWarehouseName());
         return null;
     }
 
     // --------------------------------- Failover Group Statement ---------------------------------
     @Override
-    public Void visitCreatePrimaryFailoverGroupStatement(CreatePrimaryFailoverGroupStmt statement, 
+    public Void visitCreatePrimaryFailoverGroupStatement(CreatePrimaryFailoverGroupStmt statement,
                                                          ConnectContext context) {
         // TODO
         return null;
     }
 
     @Override
-    public Void visitCreateSecondaryFailoverGroupStatement(CreateSecondaryFailoverGroupStmt statement, 
+    public Void visitCreateSecondaryFailoverGroupStatement(CreateSecondaryFailoverGroupStmt statement,
                                                            ConnectContext context) {
         // TODO
         return null;

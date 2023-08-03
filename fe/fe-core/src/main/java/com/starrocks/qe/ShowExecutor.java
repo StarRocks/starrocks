@@ -101,6 +101,7 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.credential.CloudCredentialUtil;
+import com.starrocks.epack.privilege.AuthorizerEPack;
 import com.starrocks.epack.privilege.DbUID;
 import com.starrocks.epack.privilege.Policy;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
@@ -2623,7 +2624,7 @@ public class ShowExecutor {
         List<List<String>> rowSet = warehouseMgr.getWarehousesInfo().stream()
                 .filter(row -> {
                     try {
-                        PrivilegeChecker.checkAnyActionOnWarehouse(connectContext.getCurrentUserIdentity(),
+                        AuthorizerEPack.checkAnyActionOnWarehouse(connectContext.getCurrentUserIdentity(),
                                 connectContext.getCurrentRoleIds(), row.get(1));
                     } catch (AccessDeniedException e) {
                         return false;

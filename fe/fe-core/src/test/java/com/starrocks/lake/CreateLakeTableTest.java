@@ -326,6 +326,9 @@ public class CreateLakeTableTest {
                         Lists.newArrayList(20008L), Lists.newArrayList(20009L));
                 agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+
+                agent.getWorkersByWorkerGroup(anyLong);
+                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
             }
         };
 

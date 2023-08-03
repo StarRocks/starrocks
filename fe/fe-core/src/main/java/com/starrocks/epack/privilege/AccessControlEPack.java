@@ -3,13 +3,13 @@
 package com.starrocks.epack.privilege;
 
 import com.starrocks.epack.sql.ast.PolicyType;
+import com.starrocks.privilege.AccessControl;
 import com.starrocks.privilege.PrivilegeType;
-import com.starrocks.privilege.SystemAccessControl;
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.util.Set;
 
-public interface SystemAccessControlEPack extends SystemAccessControl {
+public interface AccessControlEPack extends AccessControl {
 
     default void checkPolicyAction(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType, String catalogName,
                                    String db, String policy, PrivilegeType privilegeType) {

@@ -5,8 +5,8 @@ package com.starrocks.epack.privilege;
 import com.google.common.collect.Lists;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.NativeAccessControl;
 import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.sql.ast.UserIdentity;
 
@@ -14,7 +14,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
-public class PrivilegeActionsEPack extends PrivilegeActions implements SystemAccessControlEPack {
+public class NativeAccessControlEPack extends NativeAccessControl implements AccessControlEPack {
     @Override
     public void checkPolicyAction(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType, String catalogName,
                                   String db, String policy, PrivilegeType privilegeType) {

@@ -22,9 +22,10 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.epack.privilege.NativeAccessControlEPack;
+import com.starrocks.epack.sql.analyzer.AuthorizerStmtVisitorEPack;
 import com.starrocks.privilege.AccessControlProvider;
 import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.NativeAccessControl;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
@@ -37,7 +38,7 @@ public class Authorizer {
     private static final AccessControlProvider INSTANCE;
 
     static {
-        INSTANCE = new AccessControlProvider(new AuthorizerStmtVisitor(), new NativeAccessControl());
+        INSTANCE = new AccessControlProvider(new AuthorizerStmtVisitorEPack(), new NativeAccessControlEPack());
     }
 
     public static AccessControlProvider getInstance() {

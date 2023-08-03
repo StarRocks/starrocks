@@ -199,12 +199,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/analyzer/PrivilegeCheckerVisitor.java
-public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
-    protected final SystemAccessControl systemAccessControl;
-=======
 public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
->>>>>>> 3b4f6c61d8 ([Refactor] Unify all authentication interfaces to PrivilegeChecker (#28420)):fe/fe-core/src/main/java/com/starrocks/sql/analyzer/AuthorizerStmtVisitor.java
 
     public AuthorizerStmtVisitor() {
     }
