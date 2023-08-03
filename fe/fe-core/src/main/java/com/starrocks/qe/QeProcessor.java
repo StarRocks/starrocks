@@ -45,4 +45,6 @@ public interface QeProcessor {
     Coordinator getCoordinator(TUniqueId queryId);
 
     List<Coordinator> getCoordinators();
+
+    long getCoordinatorCount();
 }

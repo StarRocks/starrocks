@@ -208,6 +208,11 @@ public final class QeProcessorImpl implements QeProcessor {
         return resultList;
     }
 
+    @Override
+    public long getCoordinatorCount() {
+        return coordinatorMap.size();
+    }
+
     public static final class QueryInfo {
         private final ConnectContext connectContext;
         private final Coordinator coord;

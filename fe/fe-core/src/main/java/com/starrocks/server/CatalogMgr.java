@@ -331,6 +331,15 @@ public class CatalogMgr {
         this.catalogLock.writeLock().unlock();
     }
 
+    public long getCatalogCount() {
+        readLock();
+        try {
+            return catalogs.size();
+        } finally {
+            readUnlock();
+        }
+    }
+
     public class CatalogProcNode implements ProcDirInterface {
         private static final String DEFAULT_CATALOG_COMMENT =
                 "An internal catalog contains this cluster's self-managed tables.";

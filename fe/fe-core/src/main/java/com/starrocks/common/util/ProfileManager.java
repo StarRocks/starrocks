@@ -206,4 +206,13 @@ public class ProfileManager {
             readLock.unlock();
         }
     }
+
+    public long getQueryProfileCount() {
+        readLock.lock();
+        try {
+            return profileMap.size();
+        } finally {
+            readLock.unlock();
+        }
+    }
 }
