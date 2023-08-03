@@ -31,6 +31,11 @@ public @interface ConstantFunction {
 
     PrimitiveType returnType();
 
+    /**
+     * These functions are used to inspect metadata of database objects
+     */
+    boolean isMetaFunction() default false;
+
     @Retention(RetentionPolicy.RUNTIME)
     @Target(ElementType.METHOD)
     @interface List {

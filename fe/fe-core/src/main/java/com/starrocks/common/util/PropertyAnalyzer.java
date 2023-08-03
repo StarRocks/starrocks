@@ -34,6 +34,7 @@
 
 package com.starrocks.common.util;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
@@ -119,6 +120,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_ENABLE_PERSISTENT_INDEX = "enable_persistent_index";
 
+    public static final String PROPERTIES_PERSISTENT_INDEX_TYPE = "persistent_index_type";
+
     public static final String PROPERTIES_BINLOG_VERSION = "binlog_version";
 
     public static final String PROPERTIES_BINLOG_ENABLE = "binlog_enable";
@@ -149,7 +152,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
     public static final String PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE = "force_external_table_query_rewrite";
-    public static final String PROPERTIES_OLAP_TABLE_QUERY_REWRITE = "olap_table_query_rewrite_consistency";
+    public static final String PROPERTIES_QUERY_REWRITE_CONSISTENCY = "query_rewrite_consistency";
     public static final String PROPERTIES_RESOURCE_GROUP = "resource_group";
 
     public static final String PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX = "session.";
@@ -427,9 +430,10 @@ public class PropertyAnalyzer {
             }
         } else {
             if (replicationNum > backendIds.size()) {
-                throw new AnalysisException("Replication num should be less than the number of available BE nodes. "
-                        + "Replication num is " + replicationNum + " available BE nodes is " + backendIds.size() +
-                        ", You can change this default by setting the replication_num table properties.");
+                throw new AnalysisException("Table replication num should be less than " +
+                        "of equal to the number of available BE nodes. "
+                        + "You can change this default by setting the replication_num table properties. "
+                        + "Current alive backend is [" + Joiner.on(",").join(backendIds) + "].");
             }
         }
     }

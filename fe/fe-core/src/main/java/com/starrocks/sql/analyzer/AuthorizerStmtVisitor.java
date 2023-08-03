@@ -43,7 +43,6 @@ import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeType;
-import com.starrocks.privilege.SystemAccessControl;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -200,11 +199,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
-    private final SystemAccessControl systemAccessControl;
+public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
 
-    public PrivilegeCheckerVisitor(SystemAccessControl systemAccessControl) {
-        this.systemAccessControl = systemAccessControl;
+    public AuthorizerStmtVisitor() {
     }
 
     public void check(StatementBase statement, ConnectContext context) {
@@ -227,7 +224,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     public Void visitInsertStatement(InsertStmt statement, ConnectContext context) {
         // For table just created by CTAS statement, we ignore the check of 'INSERT' privilege on it.
         if (!statement.isForCTAS()) {
-            systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     statement.getTableName(), PrivilegeType.INSERT);
         }
 
@@ -237,7 +234,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitDeleteStatement(DeleteStmt statement, ConnectContext context) {
-        systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getTableName(), PrivilegeType.DELETE);
         Map<TableName, Table> allTouchedTables = AnalyzerUtils.collectAllTableAndView(statement);
         allTouchedTables.remove(statement.getTableName());
@@ -247,7 +244,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitUpdateStatement(UpdateStmt statement, ConnectContext context) {
-        systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getTableName(), PrivilegeType.UPDATE);
         Map<TableName, Table> allTouchedTables = AnalyzerUtils.collectAllTableAndView(statement);
         allTouchedTables.remove(statement.getTableName());
@@ -261,17 +258,17 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
             Table table = tableToBeChecked.getValue();
 
             if (table instanceof View) {
-                systemAccessControl.checkViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                Authorizer.checkViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                         tableName, PrivilegeType.SELECT);
             } else if (table instanceof SystemTable && ((SystemTable) table).requireOperatePrivilege()) {
-                systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                         PrivilegeType.OPERATE);
             } else if (table.isMaterializedView()) {
-                systemAccessControl.checkMaterializedViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                Authorizer.checkMaterializedViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                         tableName, PrivilegeType.SELECT);
             } else {
-                systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), tableName,
-                        PrivilegeType.SELECT);
+                Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        tableName.getCatalog(), tableName.getDb(), table.getName(), PrivilegeType.SELECT);
             }
         }
     }
@@ -279,7 +276,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     // --------------------------------- Routine Load Statement ---------------------------------
 
     public Void visitCreateRoutineLoadStatement(CreateRoutineLoadStmt statement, ConnectContext context) {
-        systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 new TableName(statement.getDBName(), statement.getTableName()),
                 PrivilegeType.INSERT);
         return null;
@@ -288,7 +285,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitAlterRoutineLoadStatement(AlterRoutineLoadStmt statement, ConnectContext context) {
         String tableName = getTableNameByRoutineLoadLabel(context, statement.getDbName(), statement.getLabel());
-        systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 new TableName(statement.getDbName(), tableName), PrivilegeType.INSERT);
         return null;
     }
@@ -296,7 +293,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitStopRoutineLoadStatement(StopRoutineLoadStmt statement, ConnectContext context) {
         String tableName = getTableNameByRoutineLoadLabel(context, statement.getDbFullName(), statement.getName());
-        systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 new TableName(statement.getDbFullName(), tableName), PrivilegeType.INSERT);
         return null;
     }
@@ -304,7 +301,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitPauseRoutineLoadStatement(PauseRoutineLoadStmt statement, ConnectContext context) {
         String tableName = getTableNameByRoutineLoadLabel(context, statement.getDbFullName(), statement.getName());
-        systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 new TableName(statement.getDbFullName(), tableName), PrivilegeType.INSERT);
         return null;
     }
@@ -312,7 +309,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitResumeRoutineLoadStatement(ResumeRoutineLoadStmt statement, ConnectContext context) {
         String tableName = getTableNameByRoutineLoadLabel(context, statement.getDbFullName(), statement.getName());
-        systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 new TableName(statement.getDbFullName(), tableName), PrivilegeType.INSERT);
         return null;
     }
@@ -350,7 +347,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
         // check resource privilege
         if (null != statement.getResourceDesc()) {
             String resourceName = statement.getResourceDesc().getName();
-            systemAccessControl.checkResourceAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), resourceName,
+            Authorizer.checkResourceAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), resourceName,
                     PrivilegeType.USAGE);
         }
         // check table privilege
@@ -359,7 +356,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
         statement.getDataDescriptions().forEach(dataDescription -> {
             String tableName = dataDescription.getTableName();
             try {
-                systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                         new TableName(dbName, tableName), PrivilegeType.INSERT);
             } catch (AccessDeniedException e) {
                 forbiddenInsertTableList.add(tableName);
@@ -391,14 +388,14 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitUseDbStatement(UseDbStmt statement, ConnectContext context) {
-        PrivilegeChecker.checkAnyActionOnOrInDb(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkAnyActionOnOrInDb(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 context.getCurrentCatalog(), statement.getDbName());
         return null;
     }
 
     @Override
     public Void visitShowCreateDbStatement(ShowCreateDbStmt statement, ConnectContext context) {
-        systemAccessControl.checkAnyActionOnDb(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkAnyActionOnDb(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getCatalogName(), statement.getDb());
         return null;
     }
@@ -406,39 +403,39 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitRecoverDbStatement(RecoverDbStmt statement, ConnectContext context) {
         // Need to check the `CREATE_DATABASE` action on corresponding catalog
-        systemAccessControl.checkCatalogAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkCatalogAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getCatalogName(), PrivilegeType.CREATE_DATABASE);
         return null;
     }
 
     @Override
     public Void visitAlterDatabaseQuotaStatement(AlterDatabaseQuotaStmt statement, ConnectContext context) {
-        systemAccessControl.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getCatalogName(), statement.getDbName(), PrivilegeType.ALTER);
         return null;
     }
 
     @Override
     public Void visitAlterDatabaseRenameStatement(AlterDatabaseRenameStatement statement, ConnectContext context) {
-        systemAccessControl.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getCatalogName(), statement.getDbName(), PrivilegeType.ALTER);
         return null;
     }
 
     @Override
     public Void visitDropDbStatement(DropDbStmt statement, ConnectContext context) {
-        systemAccessControl.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getCatalogName(), statement.getDbName(), PrivilegeType.DROP);
         return null;
     }
 
     @Override
     public Void visitCreateDbStatement(CreateDbStmt statement, ConnectContext context) {
-        systemAccessControl.checkCatalogAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkCatalogAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 context.getCurrentCatalog(), PrivilegeType.CREATE_DATABASE);
         if (statement.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
             String storageVolume = statement.getProperties().get(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
-            systemAccessControl.checkStorageVolumeAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkStorageVolumeAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     storageVolume, PrivilegeType.USAGE);
         }
         return null;
@@ -448,21 +445,21 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitCreateResourceStatement(CreateResourceStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.CREATE_RESOURCE);
         return null;
     }
 
     @Override
     public Void visitDropResourceStatement(DropResourceStmt statement, ConnectContext context) {
-        systemAccessControl.checkResourceAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkResourceAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getResourceName(), PrivilegeType.DROP);
         return null;
     }
 
     @Override
     public Void visitAlterResourceStatement(AlterResourceStmt statement, ConnectContext context) {
-        systemAccessControl.checkResourceAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkResourceAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getResourceName(), PrivilegeType.ALTER);
         return null;
     }
@@ -476,19 +473,19 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
 
     // --------------------------------- Resource Group Statement -------------------------------------
     public Void visitCreateResourceGroupStatement(CreateResourceGroupStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.CREATE_RESOURCE_GROUP);
         return null;
     }
 
     public Void visitDropResourceGroupStatement(DropResourceGroupStmt statement, ConnectContext context) {
-        systemAccessControl.checkResourceGroupAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkResourceGroupAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getName(), PrivilegeType.DROP);
         return null;
     }
 
     public Void visitAlterResourceGroupStatement(AlterResourceGroupStmt statement, ConnectContext context) {
-        systemAccessControl.checkResourceGroupAction(
+        Authorizer.checkResourceGroupAction(
                 context.getCurrentUserIdentity(), context.getCurrentRoleIds(), statement.getName(), PrivilegeType.ALTER);
         return null;
     }
@@ -507,7 +504,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return null;
         }
-        PrivilegeChecker.checkAnyActionOnOrInCatalog(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), catalogName);
+        Authorizer.checkAnyActionOnOrInCatalog(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), catalogName);
         return null;
     }
 
@@ -518,20 +515,20 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return null;
         }
-        PrivilegeChecker.checkAnyActionOnOrInCatalog(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), catalogName);
+        Authorizer.checkAnyActionOnOrInCatalog(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), catalogName);
         return null;
     }
 
     @Override
     public Void visitCreateCatalogStatement(CreateCatalogStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.CREATE_EXTERNAL_CATALOG);
         return null;
     }
 
     @Override
     public Void visitDropCatalogStatement(DropCatalogStmt statement, ConnectContext context) {
-        systemAccessControl.checkCatalogAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), statement.getName(),
+        Authorizer.checkCatalogAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), statement.getName(),
                 PrivilegeType.DROP);
         return null;
     }
@@ -547,7 +544,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitInstallPluginStatement(InstallPluginStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.PLUGIN);
         return null;
     }
@@ -556,10 +553,10 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitShowBackendsStatement(ShowBackendsStmt statement, ConnectContext context) {
         try {
-            systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.OPERATE);
         } catch (AccessDeniedException e) {
-            systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.NODE);
         }
         return null;
@@ -568,10 +565,10 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitShowFrontendsStatement(ShowFrontendsStmt statement, ConnectContext context) {
         try {
-            systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.OPERATE);
         } catch (AccessDeniedException e) {
-            systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.NODE);
         }
         return null;
@@ -580,10 +577,10 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitShowBrokerStatement(ShowBrokerStmt statement, ConnectContext context) {
         try {
-            systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.OPERATE);
         } catch (AccessDeniedException e) {
-            systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.NODE);
         }
         return null;
@@ -592,10 +589,10 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitShowComputeNodes(ShowComputeNodesStmt statement, ConnectContext context) {
         try {
-            systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.OPERATE);
         } catch (AccessDeniedException e) {
-            systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.NODE);
         }
         return null;
@@ -603,14 +600,14 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitUninstallPluginStatement(UninstallPluginStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.PLUGIN);
         return null;
     }
 
     @Override
     public Void visitShowPluginsStatement(ShowPluginsStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.PLUGIN);
         return null;
     }
@@ -619,23 +616,23 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitCreateFileStatement(CreateFileStmt statement, ConnectContext context) {
-        PrivilegeChecker.checkAnyActionOnOrInDb(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkAnyActionOnOrInDb(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 context.getCurrentCatalog(), statement.getDbName());
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.FILE);
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.FILE);
         return null;
     }
 
     @Override
     public Void visitDropFileStatement(DropFileStmt statement, ConnectContext context) {
-        PrivilegeChecker.checkAnyActionOnOrInDb(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkAnyActionOnOrInDb(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 context.getCurrentCatalog(), statement.getDbName());
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.FILE);
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.FILE);
         return null;
     }
 
     @Override
     public Void visitShowSmallFilesStatement(ShowSmallFilesStmt statement, ConnectContext context) {
-        PrivilegeChecker.checkAnyActionOnOrInDb(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkAnyActionOnOrInDb(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 context.getCurrentCatalog(), statement.getDbName());
         return null;
     }
@@ -644,9 +641,9 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitAnalyzeStatement(AnalyzeStmt statement, ConnectContext context) {
-        systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getTableName(), PrivilegeType.SELECT);
-        systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getTableName(), PrivilegeType.INSERT);
         return null;
     }
@@ -655,9 +652,9 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext context) {
         Set<TableName> tableNames = AnalyzerUtils.getAllTableNamesForAnalyzeJobStmt(statement.getDbId(), statement.getTableId());
         tableNames.forEach(tableName -> {
-            systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     tableName, PrivilegeType.SELECT);
-            systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     tableName, PrivilegeType.INSERT);
         });
         return null;
@@ -665,18 +662,18 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitDropHistogramStatement(DropHistogramStmt statement, ConnectContext context) {
-        systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getTableName(), PrivilegeType.SELECT);
-        systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getTableName(), PrivilegeType.INSERT);
         return null;
     }
 
     @Override
     public Void visitDropStatsStatement(DropStatsStmt statement, ConnectContext context) {
-        systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getTableName(), PrivilegeType.SELECT);
-        systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getTableName(), PrivilegeType.INSERT);
         return null;
     }
@@ -721,21 +718,21 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitAddSqlBlackListStatement(AddSqlBlackListStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.BLACKLIST);
         return null;
     }
 
     @Override
     public Void visitDelSqlBlackListStatement(DelSqlBlackListStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.BLACKLIST);
         return null;
     }
 
     @Override
     public Void visitShowSqlBlackListStatement(ShowSqlBlackListStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.BLACKLIST);
         return null;
     }
@@ -744,20 +741,20 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
         return null;
     }
 
     @Override
     public Void visitDropUserStatement(DropUserStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
         return null;
     }
 
     @Override
     public Void visitShowUserStatement(ShowUserStmt statement, ConnectContext context) {
         if (statement.isAll()) {
-            systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.GRANT);
         }
         return null;
@@ -767,7 +764,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
         UserIdentity user = statement.getUserIdent();
         if (user != null && !user.equals(context.getCurrentUserIdentity()) || statement.isAll()) {
-            systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.GRANT);
         }
         return null;
@@ -785,32 +782,32 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitExecuteScriptStatement(ExecuteScriptStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.OPERATE);
         return null;
     }
 
     @Override
     public Void visitCreateRoleStatement(CreateRoleStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
         return null;
     }
 
     @Override
     public Void visitAlterRoleStatement(AlterRoleStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
         return null;
     }
 
     @Override
     public Void visitDropRoleStatement(DropRoleStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
         return null;
     }
 
     @Override
     public Void visitShowRolesStatement(ShowRolesStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
         return null;
     }
 
@@ -824,7 +821,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
             }
         }
 
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
         return null;
     }
 
@@ -844,7 +841,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
             }
         }
 
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
         return null;
     }
 
@@ -852,7 +849,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     public Void visitSetDefaultRoleStatement(SetDefaultRoleStmt statement, ConnectContext context) {
         UserIdentity user = statement.getUserIdentity();
         if (user != null && !user.equals(context.getCurrentUserIdentity())) {
-            systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.GRANT);
         }
         return null;
@@ -872,14 +869,14 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     public Void visitShowGrantsStatement(ShowGrantsStmt statement, ConnectContext context) {
         UserIdentity user = statement.getUserIdent();
         if (user != null && !user.equals(context.getCurrentUserIdentity())) {
-            systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.GRANT);
         } else if (statement.getRole() != null) {
             AuthorizationMgr authorizationManager = context.getGlobalStateMgr().getAuthorizationMgr();
             try {
                 List<String> roleNames = authorizationManager.getRoleNamesByUser(context.getCurrentUserIdentity());
                 if (!roleNames.contains(statement.getRole())) {
-                    systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                             PrivilegeType.GRANT);
                 }
             } catch (PrivilegeException e) {
@@ -893,7 +890,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     public Void visitShowUserPropertyStatement(ShowUserPropertyStmt statement, ConnectContext context) {
         String user = statement.getUser();
         if (user != null && !user.equals(context.getCurrentUserIdentity().getQualifiedUser())) {
-            systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.GRANT);
         }
         return null;
@@ -903,7 +900,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     public Void visitSetUserPropertyStatement(SetUserPropertyStmt statement, ConnectContext context) {
         String user = statement.getUser();
         if (user != null && !user.equals(context.getCurrentUserIdentity().getQualifiedUser())) {
-            systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.GRANT);
         }
         return null;
@@ -919,7 +916,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
         if (catalog == null) {
             catalog = context.getCurrentCatalog();
         }
-        systemAccessControl.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), catalog,
+        Authorizer.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), catalog,
                 tableName.getDb(), PrivilegeType.CREATE_VIEW);
         // 2. check if user can query
         check(statement.getQueryStatement(), context);
@@ -937,7 +934,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitAlterViewStatement(AlterViewStmt statement, ConnectContext context) {
         // 1. check if user can alter view in this db
-        systemAccessControl.checkViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getTableName(), PrivilegeType.ALTER);
         // 2. check if user can query
         AlterClause alterClause = statement.getAlterClause();
@@ -957,7 +954,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
             catalog = context.getCurrentCatalog();
         }
         String dbName = tableName.getDb() == null ? context.getDatabase() : tableName.getDb();
-        systemAccessControl.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), catalog, dbName,
+        Authorizer.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), catalog, dbName,
                 PrivilegeType.CREATE_TABLE);
 
         if (statement.getProperties() != null) {
@@ -966,13 +963,13 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
                 String resourceProp = properties.get("resource");
                 Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceProp);
                 if (resource != null) {
-                    systemAccessControl.checkResourceAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    Authorizer.checkResourceAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                             resource.getName(), PrivilegeType.USAGE);
                 }
             }
             if (statement.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
                 String storageVolume = properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
-                systemAccessControl.checkStorageVolumeAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                Authorizer.checkStorageVolumeAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                         storageVolume, PrivilegeType.USAGE);
             }
         }
@@ -990,7 +987,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitCreateTableLikeStatement(CreateTableLikeStmt statement, ConnectContext context) {
         visitCreateTableStatement(statement.getCreateTableStmt(), context);
-        systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getExistedDbTbl(), PrivilegeType.SELECT);
         return null;
     }
@@ -998,10 +995,10 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitDropTableStatement(DropTableStmt statement, ConnectContext context) {
         if (statement.isView()) {
-            systemAccessControl.checkViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     statement.getTbl(), PrivilegeType.DROP);
         } else {
-            systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     statement.getTbl(), PrivilegeType.DROP);
         }
         return null;
@@ -1014,14 +1011,14 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
         if (catalog == null) {
             catalog = context.getCurrentCatalog();
         }
-        systemAccessControl.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), catalog,
+        Authorizer.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), catalog,
                 tableName.getDb(), PrivilegeType.CREATE_TABLE);
         return null;
     }
 
     @Override
     public Void visitTruncateTableStatement(TruncateTableStmt statement, ConnectContext context) {
-        systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 new TableName(context.getCurrentCatalog(), statement.getDbName(), statement.getTblName()),
                 PrivilegeType.DELETE);
         return null;
@@ -1029,14 +1026,14 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitRefreshTableStatement(RefreshTableStmt statement, ConnectContext context) {
-        systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getTableName(), PrivilegeType.ALTER);
         return null;
     }
 
     @Override
     public Void visitAlterTableStatement(AlterTableStmt statement, ConnectContext context) {
-        systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), statement.getTbl(),
+        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), statement.getTbl(),
                 PrivilegeType.ALTER);
         return null;
     }
@@ -1058,11 +1055,11 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
                 }
             }
 
-            systemAccessControl.checkMaterializedViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkMaterializedViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     new TableName(statement.getDbName(), statement.getTableName()),
                     PrivilegeType.ALTER);
         } else {
-            systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     statement.getDbTableName(), PrivilegeType.ALTER);
         }
         return null;
@@ -1070,14 +1067,14 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitDescTableStmt(DescribeStmt statement, ConnectContext context) {
-        systemAccessControl.checkAnyActionOnTable(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getDbTableName());
         return null;
     }
 
     @Override
     public Void visitShowCreateTableStatement(ShowCreateTableStmt statement, ConnectContext context) {
-        systemAccessControl.checkAnyActionOnTable(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getTbl());
         return null;
     }
@@ -1091,30 +1088,30 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitShowIndexStatement(ShowIndexStmt statement, ConnectContext context) {
-        systemAccessControl.checkAnyActionOnTable(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getTableName());
         return null;
     }
 
     @Override
     public Void visitShowColumnStatement(ShowColumnStmt statement, ConnectContext context) {
-        systemAccessControl.checkAnyActionOnTable(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getTableName());
         return null;
     }
 
     @Override
     public Void visitRecoverPartitionStatement(RecoverPartitionStmt statement, ConnectContext context) {
-        systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getDbTblName(), PrivilegeType.INSERT);
-        systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getDbTblName(), PrivilegeType.ALTER);
         return null;
     }
 
     @Override
     public Void visitShowPartitionsStatement(ShowPartitionsStmt statement, ConnectContext context) {
-        systemAccessControl.checkAnyActionOnTable(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 new TableName(statement.getDbName(), statement.getTableName()));
         return null;
     }
@@ -1148,7 +1145,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitShowTabletStatement(ShowTabletStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.OPERATE);
         return null;
     }
@@ -1157,21 +1154,21 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitAdminSetConfigStatement(AdminSetConfigStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.OPERATE);
         return null;
     }
 
     @Override
     public Void visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.OPERATE);
         return null;
     }
 
     @Override
     public Void visitAdminShowConfigStatement(AdminShowConfigStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.OPERATE);
         return null;
     }
@@ -1179,35 +1176,35 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement,
                                                            ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.OPERATE);
         return null;
     }
 
     @Override
     public Void visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.OPERATE);
         return null;
     }
 
     @Override
     public Void visitAdminRepairTableStatement(AdminRepairTableStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.OPERATE);
         return null;
     }
 
     @Override
     public Void visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.OPERATE);
         return null;
     }
 
     @Override
     public Void visitAdminCheckTabletsStatement(AdminCheckTabletsStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.OPERATE);
         return null;
     }
@@ -1220,19 +1217,19 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitAlterSystemStatement(AlterSystemStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.NODE);
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.NODE);
         return null;
     }
 
     @Override
     public Void visitCancelAlterSystemStatement(CancelAlterSystemStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.NODE);
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.NODE);
         return null;
     }
 
     @Override
     public Void visitShowProcStmt(ShowProcStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.OPERATE);
         return null;
     }
@@ -1254,13 +1251,13 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
                         throw new SemanticException("Can not set password for root user, except root itself");
                     }
 
-                    systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                             PrivilegeType.GRANT);
                 }
             } else if (setVar instanceof SystemVariable) {
                 SetType type = ((SystemVariable) setVar).getType();
                 if (type != null && type.equals(SetType.GLOBAL)) {
-                    systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                             PrivilegeType.OPERATE);
                 }
             }
@@ -1271,7 +1268,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     // ---------------------------------------- restore & backup Statement --------------------------------
     @Override
     public Void visitExportStatement(ExportStmt statement, ConnectContext context) {
-        systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getTblName(), PrivilegeType.EXPORT);
         return null;
     }
@@ -1289,7 +1286,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
             ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_EXPORT_JOB_NOT_FOUND,
                     statement.getQueryId().toString());
         }
-        PrivilegeChecker.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 exportJob.getTableName().getDb(),
                 exportJob.getTableName().getTbl(),
                 PrivilegeType.EXPORT);
@@ -1305,28 +1302,28 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitCreateRepositoryStatement(CreateRepositoryStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.REPOSITORY);
         return null;
     }
 
     @Override
     public Void visitDropRepositoryStatement(DropRepositoryStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.REPOSITORY);
         return null;
     }
 
     @Override
     public Void visitShowSnapshotStatement(ShowSnapshotStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.REPOSITORY);
         return null;
     }
 
     @Override
     public Void visitBackupStatement(BackupStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.REPOSITORY);
         List<TableRef> tableRefs = statement.getTableRefs();
         if (tableRefs.size() == 0) {
@@ -1335,7 +1332,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
         }
         tableRefs.forEach(tableRef -> {
             TableName tableName = tableRef.getName();
-            systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), tableName,
+            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), tableName,
                     PrivilegeType.EXPORT);
         });
         return null;
@@ -1344,7 +1341,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitShowBackupStatement(ShowBackupStmt statement, ConnectContext context) {
         // Step 1 check system.Repository
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.REPOSITORY);
         // Step 2 check table.export
         // `show backup` only show tables that user has export privilege on, we will check it in
@@ -1354,7 +1351,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitCancelBackupStatement(CancelBackupStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.REPOSITORY);
         AbstractJob job = null;
         try {
@@ -1370,7 +1367,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
             List<TableRef> tableRefs = backupJob.getTableRef();
             tableRefs.forEach(tableRef -> {
                 TableName tableName = tableRef.getName();
-                systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), tableName,
+                Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), tableName,
                         PrivilegeType.EXPORT);
             });
         }
@@ -1381,13 +1378,13 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     public Void visitRestoreStatement(RestoreStmt statement, ConnectContext context) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         // check repository on system
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.REPOSITORY);
 
         List<TableRef> tableRefs = statement.getTableRefs();
         // check create_database on current catalog if we're going to restore the whole database
         if (tableRefs == null || tableRefs.isEmpty()) {
-            systemAccessControl.checkCatalogAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkCatalogAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     context.getCurrentCatalog(), PrivilegeType.CREATE_DATABASE);
         } else {
             // going to restore some tables in database or some partitions in table
@@ -1396,13 +1393,13 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
                 try {
                     db.readLock();
                     // check create_table on specified database
-                    systemAccessControl.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    Authorizer.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                             context.getCurrentCatalog(), db.getFullName(), PrivilegeType.CREATE_TABLE);
                     // check insert on specified table
                     for (TableRef tableRef : tableRefs) {
                         Table table = db.getTable(tableRef.getName().getTbl());
                         if (table != null) {
-                            systemAccessControl.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                                     new TableName(statement.getDbName(), tableRef.getName().getTbl()), PrivilegeType.INSERT);
                         }
                     }
@@ -1417,7 +1414,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitShowRestoreStatement(ShowRestoreStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.REPOSITORY);
         return null;
     }
@@ -1426,7 +1423,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
                                                      ConnectContext context) {
-        systemAccessControl.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                 statement.getTableName().getDb(), PrivilegeType.CREATE_MATERIALIZED_VIEW);
         return null;
@@ -1434,7 +1431,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, ConnectContext context) {
-        systemAccessControl.checkMaterializedViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkMaterializedViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getMvName(),
                 PrivilegeType.ALTER);
         return null;
@@ -1443,7 +1440,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement statement,
                                                       ConnectContext context) {
-        systemAccessControl.checkMaterializedViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkMaterializedViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getMvName(),
                 PrivilegeType.REFRESH);
         return null;
@@ -1452,7 +1449,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitCancelRefreshMaterializedViewStatement(CancelRefreshMaterializedViewStmt statement,
                                                             ConnectContext context) {
-        systemAccessControl.checkMaterializedViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkMaterializedViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getMvName(),
                 PrivilegeType.REFRESH);
         return null;
@@ -1478,10 +1475,10 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     public Void visitCreateFunctionStatement(CreateFunctionStmt statement, ConnectContext context) {
         FunctionName name = statement.getFunctionName();
         if (name.isGlobalFunction()) {
-            systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.CREATE_GLOBAL_FUNCTION);
         } else {
-            systemAccessControl.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, name.getDb(),
                     PrivilegeType.CREATE_FUNCTION);
         }
@@ -1502,7 +1499,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
             FunctionSearchDesc functionSearchDesc = statement.getFunctionSearchDesc();
             Function function = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().getFunction(functionSearchDesc);
             if (function != null) {
-                systemAccessControl.checkGlobalFunctionAction(context.getCurrentUserIdentity(),
+                Authorizer.checkGlobalFunctionAction(context.getCurrentUserIdentity(),
                         context.getCurrentRoleIds(), function, PrivilegeType.DROP);
             }
             return null;
@@ -1515,7 +1512,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
                 db.readLock();
                 Function function = db.getFunction(statement.getFunctionSearchDesc());
                 if (null != function) {
-                    systemAccessControl.checkFunctionAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    Authorizer.checkFunctionAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                             db, function, PrivilegeType.DROP);
                 }
             } finally {
@@ -1528,28 +1525,28 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     // ------------------------------------------- Storage volume Statement ----------------------------------------
     @Override
     public Void visitCreateStorageVolumeStatement(CreateStorageVolumeStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.CREATE_STORAGE_VOLUME);
         return null;
     }
 
     @Override
     public Void visitAlterStorageVolumeStatement(AlterStorageVolumeStmt statement, ConnectContext context) {
-        systemAccessControl.checkStorageVolumeAction(
+        Authorizer.checkStorageVolumeAction(
                 context.getCurrentUserIdentity(), context.getCurrentRoleIds(), statement.getName(), PrivilegeType.ALTER);
         return null;
     }
 
     @Override
     public Void visitDropStorageVolumeStatement(DropStorageVolumeStmt statement, ConnectContext context) {
-        systemAccessControl.checkStorageVolumeAction(
+        Authorizer.checkStorageVolumeAction(
                 context.getCurrentUserIdentity(), context.getCurrentRoleIds(), statement.getName(), PrivilegeType.DROP);
         return null;
     }
 
     @Override
     public Void visitDescStorageVolumeStatement(DescStorageVolumeStmt statement, ConnectContext context) {
-        systemAccessControl.checkAnyActionOnStorageVolume(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkAnyActionOnStorageVolume(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 statement.getName());
         return null;
     }
@@ -1557,7 +1554,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitSetDefaultStorageVolumeStatement(SetDefaultStorageVolumeStmt statement,
                                                       ConnectContext context) {
-        systemAccessControl.checkStorageVolumeAction(
+        Authorizer.checkStorageVolumeAction(
                 context.getCurrentUserIdentity(), context.getCurrentRoleIds(), statement.getName(), PrivilegeType.ALTER);
         return null;
     }
@@ -1566,7 +1563,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitCancelCompactionStatement(CancelCompactionStmt statement, ConnectContext context) {
-        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                 PrivilegeType.OPERATE);
         return null;
     }
@@ -1650,7 +1647,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
             try {
                 if (loadJob instanceof SparkLoadJob) {
                     try {
-                        systemAccessControl.checkResourceAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        Authorizer.checkResourceAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                                 loadJob.getResourceName(), PrivilegeType.USAGE);
                     } catch (AccessDeniedException e) {
                         forbiddenUseResourceList.add(loadJob.getResourceName());
@@ -1658,7 +1655,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
                 }
                 loadJob.getTableNames(true).forEach(tableName -> {
                     try {
-                        PrivilegeChecker.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                                 dbName, tableName, PrivilegeType.INSERT);
                     } catch (AccessDeniedException e) {
                         forbiddenInsertTableList.add(tableName);

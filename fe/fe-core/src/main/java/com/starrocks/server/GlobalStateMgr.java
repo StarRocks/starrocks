@@ -232,7 +232,7 @@ import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
@@ -1619,6 +1619,8 @@ public class GlobalStateMgr {
                 remoteChecksum = dis.readLong();
                 checksum = pipeManager.getRepo().loadImage(dis, checksum);
                 remoteChecksum = dis.readLong();
+                checksum = loadStorageVolumes(dis, checksum);
+                remoteChecksum = dis.readLong();
                 // ** NOTICE **: always add new code at the end
 
                 Preconditions.checkState(remoteChecksum == checksum, remoteChecksum + " vs. " + checksum);
@@ -1858,6 +1860,11 @@ public class GlobalStateMgr {
         return checksum;
     }
 
+    public long loadStorageVolumes(DataInputStream in, long checksum) throws IOException {
+        storageVolumeMgr.load(in);
+        return checksum;
+    }
+
     // Only called by checkpoint thread
     public void saveImage() throws IOException {
         // Write image.ckpt
@@ -1985,6 +1992,8 @@ public class GlobalStateMgr {
                 dos.writeLong(checksum);
                 checksum = pipeManager.getRepo().saveImage(dos, checksum);
                 dos.writeLong(checksum);
+                checksum = storageVolumeMgr.saveStorageVolumes(dos, checksum);
+                dos.writeLong(checksum);
                 // ** NOTICE **: always add new code at the end
 
                 long saveImageEndTime = System.currentTimeMillis();
@@ -2106,6 +2115,12 @@ public class GlobalStateMgr {
             @Override
             protected void runAfterCatalogReady() {
                 globalTransactionMgr.abortTimeoutTxns();
+
+                try {
+                    loadMgr.cancelResidualJob();
+                } catch (Throwable t) {
+                    LOG.warn("load manager cancel residual job failed", t);
+                }
             }
         };
     }
@@ -2641,6 +2656,18 @@ public class GlobalStateMgr {
                         .append(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)
                         .append("\" = \"");
                 sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)).append("\"");
+
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
+                        .append("\" = \"");
+                sb.append(olapTable.enablePersistentIndex()).append("\"");
+
+                if (olapTable.enablePersistentIndex() && !Strings.isNullOrEmpty(olapTable.getPersistentIndexTypeString())) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)
+                            .append("\" = \"");
+                    sb.append(olapTable.getPersistentIndexTypeString()).append("\"");
+                }
             } else {
                 // in memory
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_INMEMORY)
@@ -3003,6 +3030,10 @@ public class GlobalStateMgr {
 
     public Database getDb(String name) {
         return localMetastore.getDb(name);
+    }
+
+    public Optional<Table> mayGetTable(long dbId, long tableId) {
+        return mayGetDb(dbId).flatMap(db -> db.tryGetTable(tableId));
     }
 
     public Optional<Database> mayGetDb(String name) {
@@ -3511,7 +3542,7 @@ public class GlobalStateMgr {
         }
         if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
             try {
-                PrivilegeChecker.checkAnyActionOnOrInCatalog(ctx.getCurrentUserIdentity(),
+                Authorizer.checkAnyActionOnOrInCatalog(ctx.getCurrentUserIdentity(),
                         ctx.getCurrentRoleIds(), newCatalogName);
             } catch (AccessDeniedException e) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
@@ -3542,7 +3573,7 @@ public class GlobalStateMgr {
             }
             if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
                 try {
-                    PrivilegeChecker.checkAnyActionOnOrInCatalog(ctx.getCurrentUserIdentity(),
+                    Authorizer.checkAnyActionOnOrInCatalog(ctx.getCurrentUserIdentity(),
                             ctx.getCurrentRoleIds(), newCatalogName);
                 } catch (AccessDeniedException e) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
@@ -3560,7 +3591,7 @@ public class GlobalStateMgr {
         // Here we check the request permission that sent by the mysql client or jdbc.
         // So we didn't check UseDbStmt permission in PrivilegeCheckerV2.
         try {
-            PrivilegeChecker.checkAnyActionOnOrInDb(ctx.getCurrentUserIdentity(),
+            Authorizer.checkAnyActionOnOrInDb(ctx.getCurrentUserIdentity(),
                     ctx.getCurrentRoleIds(), ctx.getCurrentCatalog(), dbName);
         } catch (AccessDeniedException e) {
             ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
@@ -3984,12 +4015,6 @@ public class GlobalStateMgr {
             loadMgr.removeOldLoadJob();
         } catch (Throwable t) {
             LOG.warn("load manager remove old load jobs failed", t);
-        }
-
-        try {
-            loadMgr.cleanResidualJob();
-        } catch (Throwable t) {
-            LOG.warn("load manager clean residual job failed", t);
         }
 
         try {

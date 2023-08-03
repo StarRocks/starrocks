@@ -43,7 +43,7 @@ import com.starrocks.http.IllegalArgException;
 import com.starrocks.load.Load;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.analyzer.Authorizer;
 import io.netty.handler.codec.http.HttpMethod;
 
 // Get load information of one load job
@@ -75,7 +75,7 @@ public class GetLoadInfoAction extends RestBaseAction {
         }
 
         if (info.tblNames.isEmpty()) {
-            PrivilegeChecker.checkActionInDb(ConnectContext.get().getCurrentUserIdentity(),
+            Authorizer.checkActionInDb(ConnectContext.get().getCurrentUserIdentity(),
                     ConnectContext.get().getCurrentRoleIds(), info.dbName, PrivilegeType.INSERT);
         } else {
             for (String tblName : info.tblNames) {

@@ -266,18 +266,19 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 
     _profile.runtime_profile = _runtime_profile;
     _profile.rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
+    _profile.rows_skip_counter = ADD_COUNTER(_runtime_profile, "RowsSkip", TUnit::UNIT);
     _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
 
-    _profile.reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
-    _profile.open_file_timer = ADD_TIMER(_runtime_profile, "OpenFile");
-    _profile.expr_filter_timer = ADD_TIMER(_runtime_profile, "ExprFilterTime");
+    _profile.reader_init_timer = ADD_CHILD_TIMER(_runtime_profile, "ReaderInit", "IOTaskExecTime");
+    _profile.open_file_timer = ADD_CHILD_TIMER(_runtime_profile, "OpenFile", "IOTaskExecTime");
+    _profile.expr_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ExprFilterTime", "IOTaskExecTime");
 
-    _profile.column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
-    _profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
+    _profile.column_read_timer = ADD_CHILD_TIMER(_runtime_profile, "ColumnReadTime", "IOTaskExecTime");
+    _profile.column_convert_timer = ADD_CHILD_TIMER(_runtime_profile, "ColumnConvertTime", "IOTaskExecTime");
 
     {
         static const char* prefix = "SharedBuffered";
-        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
+        ADD_CHILD_COUNTER(_runtime_profile, prefix, TUnit::UNIT, "IOTaskExecTime");
         _profile.shared_buffered_shared_io_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "SharedIOBytes", TUnit::BYTES, prefix);
         _profile.shared_buffered_shared_io_count =
@@ -292,7 +293,7 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 
     if (_use_block_cache) {
         static const char* prefix = "BlockCache";
-        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
+        ADD_CHILD_COUNTER(_runtime_profile, prefix, TUnit::UNIT, "IOTaskExecTime");
         _profile.block_cache_read_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadCounter", TUnit::UNIT, prefix);
         _profile.block_cache_read_bytes =
@@ -311,7 +312,7 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 
     {
         static const char* prefix = "InputStream";
-        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
+        ADD_CHILD_COUNTER(_runtime_profile, prefix, TUnit::UNIT, "IOTaskExecTime");
         _profile.app_io_bytes_read_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "AppIOBytesRead", TUnit::BYTES, prefix);
         _profile.app_io_timer = ADD_CHILD_TIMER(_runtime_profile, "AppIOTime", prefix);

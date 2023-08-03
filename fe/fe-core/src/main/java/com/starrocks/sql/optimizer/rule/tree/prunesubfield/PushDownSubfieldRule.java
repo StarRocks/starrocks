@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.rule.tree.prunesubfield;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -91,6 +90,11 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
                                                            ColumnRefSet checkColumns) {
             LogicalOperator operator = optExpression.getOp().cast();
             ScalarOperator predicate = operator.getPredicate();
+            return pushDownExpression(predicate, context, checkColumns);
+        }
+
+        private Optional<ScalarOperator> pushDownExpression(ScalarOperator predicate, Context context,
+                                                            ColumnRefSet checkColumns) {
             if (predicate == null) {
                 return Optional.empty();
             }
@@ -113,7 +117,7 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
                 context.put(index, expr);
             }
 
-            // rewrite join predicate
+            // rewrite predicate
             if (needRewritePredicate) {
                 ExpressionReplacer replacer = new ExpressionReplacer(context.pushDownExprRefsIndex);
                 ScalarOperator newPredicate = predicate.accept(replacer, null);
@@ -228,22 +232,28 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
             ColumnRefSet checkColumns = new ColumnRefSet();
 
             // check on-predicate used columns
+            Optional<ScalarOperator> onPredicate = Optional.empty();
             if (join.getOnPredicate() != null) {
                 SubfieldExpressionCollector collector = new SubfieldExpressionCollector();
                 join.getOnPredicate().accept(collector, null);
                 for (ScalarOperator expr : collector.getComplexExpressions()) {
                     // the expression in on-predicate must was push down to children
-                    Preconditions.checkState(expr.isColumnRef());
-                    checkColumns.union(expr.getUsedColumns());
+                    if (expr.isColumnRef()) {
+                        checkColumns.union(expr.getUsedColumns());
+                    }
                 }
+
+                onPredicate = pushDownExpression(join.getOnPredicate(), context, checkColumns);
             }
 
             // handle predicate
             Optional<ScalarOperator> predicate = pushDownPredicate(optExpression, context, checkColumns);
-            if (predicate.isPresent()) {
-                join = LogicalJoinOperator.builder().withOperator(join)
-                        .setOnPredicate(predicate.get())
-                        .build();
+            if (predicate.isPresent() || onPredicate.isPresent()) {
+                LogicalJoinOperator.Builder builder = LogicalJoinOperator.builder().withOperator(join);
+                predicate.ifPresent(builder::setPredicate);
+                onPredicate.ifPresent(builder::setOnPredicate);
+
+                join = builder.build();
                 optExpression = OptExpression.create(join, optExpression.getInputs());
             }
 

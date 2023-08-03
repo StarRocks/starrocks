@@ -20,6 +20,7 @@ package com.starrocks.fs.hdfs;
 import com.amazonaws.util.AwsHostNameUtils;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.UserException;
@@ -1175,10 +1176,26 @@ public class HdfsFsManager {
             fileSystem.getLock().unlock();
         }
     }
-    
+
     public void getTProperties(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
             throws UserException {
         getFileSystem(path, loadProperties, tProperties);
+    }
+
+    public List<FileStatus> listFileMeta(String path, Map<String, String> properties) throws UserException {
+        WildcardURI pathUri = new WildcardURI(path);
+        HdfsFs fileSystem = getFileSystem(path, properties, null);
+        Path pathPattern = new Path(pathUri.getPath());
+        try {
+            FileStatus[] files = fileSystem.getDFSFileSystem().globStatus(pathPattern);
+            return Lists.newArrayList(files);
+        } catch (FileNotFoundException e) {
+            LOG.info("file not found: " + path, e);
+            throw new UserException("file not found: " + path, e);
+        } catch (Exception e) {
+            LOG.error("errors while get file status ", e);
+            throw new UserException("listPath failed", e);
+        }
     }
 
     public List<TBrokerFileStatus> listPath(String path, boolean fileNameOnly, Map<String, String> loadProperties)

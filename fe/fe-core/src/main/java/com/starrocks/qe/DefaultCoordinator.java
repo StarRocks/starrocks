@@ -36,14 +36,12 @@ package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MarkedCountDownLatch;
@@ -58,7 +56,6 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.planner.PlanFragment;
-import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
@@ -66,8 +63,11 @@ import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PQueryStatistics;
-import com.starrocks.qe.QueryStatisticsItem.FragmentInstanceInfo;
 import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.qe.scheduler.Deployer;
+import com.starrocks.qe.scheduler.dag.ExecutionDAG;
+import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.rpc.RpcException;
@@ -75,16 +75,13 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.sql.common.ErrorType;
-import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TDescriptorTable;
-import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPipelineProfileLevel;
-import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TRuntimeFilterDestination;
@@ -95,31 +92,24 @@ import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TTabletFailInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUnit;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.thrift.TException;
 
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Queue;
 import java.util.Set;
-import java.util.concurrent.ConcurrentNavigableMap;
-import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
-
-import static com.starrocks.qe.scheduler.dag.FragmentInstanceExecState.DeploymentResult;
 
 public class DefaultCoordinator extends Coordinator {
     private static final Logger LOG = LogManager.getLogger(DefaultCoordinator.class);
@@ -131,6 +121,7 @@ public class DefaultCoordinator extends Coordinator {
     Status queryStatus = new Status();
 
     private final JobSpec jobSpec;
+    private final ExecutionDAG executionDAG;
 
     // protects all fields below
     private final Lock lock = new ReentrantLock();
@@ -141,13 +132,6 @@ public class DefaultCoordinator extends Coordinator {
     private boolean returnedAllResults;
     private RuntimeProfile queryProfile;
     private List<RuntimeProfile> fragmentProfiles;
-    private final Map<PlanFragmentId, Integer> fragmentId2fragmentProfileIds = Maps.newHashMap();
-    // backend execute state
-    private final ConcurrentNavigableMap<Integer, FragmentInstanceExecState> indexInJobToExecState =
-            new ConcurrentSkipListMap<>();
-    // backend which state need to be checked when joining this coordinator.
-    // It is supposed to be the subset of backendExecStates.
-    private final List<FragmentInstanceExecState> needCheckBackendExecStates = Lists.newArrayList();
     private ResultReceiver receiver;
     // number of instances of this query, equals to
     // number of backends executing plan fragments on behalf of this query;
@@ -182,7 +166,8 @@ public class DefaultCoordinator extends Coordinator {
     private boolean thriftServerHighLoad;
 
     private Supplier<RuntimeProfile> topProfileSupplier;
-    private final AtomicLong lastRuntimeProfileUpdateTime = new AtomicLong(0L);
+    private Supplier<ExecPlan> execPlanSupplier;
+    private final AtomicLong lastRuntimeProfileUpdateTime = new AtomicLong(System.currentTimeMillis());
 
     public static class Factory implements Coordinator.Factory {
 
@@ -190,8 +175,7 @@ public class DefaultCoordinator extends Coordinator {
         public DefaultCoordinator createQueryScheduler(ConnectContext context, List<PlanFragment> fragments,
                                                        List<ScanNode> scanNodes,
                                                        TDescriptorTable descTable) {
-            JobSpec jobSpec =
-                    JobSpec.Factory.fromQuerySpec(context, fragments, scanNodes, descTable, TQueryType.SELECT);
+            JobSpec jobSpec = JobSpec.Factory.fromQuerySpec(context, fragments, scanNodes, descTable, TQueryType.SELECT);
             return new DefaultCoordinator(context, jobSpec, context.getSessionVariable().isEnableProfile());
         }
 
@@ -267,6 +251,7 @@ public class DefaultCoordinator extends Coordinator {
     public DefaultCoordinator(JobSpec jobSpec, StreamLoadPlanner planner, TNetworkAddress address) {
         this.connectContext = planner.getConnectContext();
         this.jobSpec = jobSpec;
+        this.executionDAG = ExecutionDAG.build(jobSpec);
 
         TUniqueId queryId = jobSpec.getQueryId();
 
@@ -280,7 +265,7 @@ public class DefaultCoordinator extends Coordinator {
         profileDoneSignal.addMark(queryId, -1L /* value is meaningless */);
 
         FragmentInstanceExecState execState = FragmentInstanceExecState.createFakeExecution(queryId, address);
-        indexInJobToExecState.put(0, execState);
+        executionDAG.addExecution(execState);
 
         attachInstanceProfileToFragmentProfile();
 
@@ -298,6 +283,7 @@ public class DefaultCoordinator extends Coordinator {
         this.needReport = needReport;
 
         this.coordinatorPreprocessor = new CoordinatorPreprocessor(context, jobSpec);
+        this.executionDAG = coordinatorPreprocessor.getExecutionDAG();
     }
 
     @Override
@@ -369,21 +355,16 @@ public class DefaultCoordinator extends Coordinator {
         jobSpec.setQueryTimeout(timeoutSecond);
     }
 
-    public void addReplicateScanId(Integer scanId) {
-        this.coordinatorPreprocessor.getReplicateScanIds().add(scanId);
-    }
-
     @Override
     public void clearExportStatus() {
         lock.lock();
         try {
-            this.indexInJobToExecState.clear();
+            executionDAG.resetExecutions();
             this.queryStatus.setStatus(new Status());
             if (this.exportFiles == null) {
                 this.exportFiles = Lists.newArrayList();
             }
             this.exportFiles.clear();
-            this.needCheckBackendExecStates.clear();
         } finally {
             lock.unlock();
         }
@@ -410,6 +391,11 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     @Override
+    public void setExecPlanSupplier(Supplier<ExecPlan> execPlanSupplier) {
+        this.execPlanSupplier = execPlanSupplier;
+    }
+
+    @Override
     public boolean isUsingBackend(Long backendID) {
         return coordinatorPreprocessor.getWorkerProvider().isWorkerSelected(backendID);
     }
@@ -422,16 +408,8 @@ public class DefaultCoordinator extends Coordinator {
         lock.unlock();
     }
 
-    public Collection<FragmentInstanceExecState> getExecStates() {
-        return indexInJobToExecState.values();
-    }
-
-    public Collection<Integer> getIndexesInJob() {
-        return indexInJobToExecState.keySet();
-    }
-
-    public Set<TUniqueId> getInstanceIds() {
-        return coordinatorPreprocessor.getInstanceIds();
+    public ExecutionDAG getExecutionDAG() {
+        return executionDAG;
     }
 
     // Initiate asynchronous execState of query. Returns as soon as all plan fragments
@@ -472,16 +450,8 @@ public class DefaultCoordinator extends Coordinator {
         return coordinatorPreprocessor;
     }
 
-    public Map<PlanFragmentId, CoordinatorPreprocessor.FragmentExecParams> getFragmentExecParamsMap() {
-        return coordinatorPreprocessor.getFragmentExecParamsMap();
-    }
-
     public List<PlanFragment> getFragments() {
         return jobSpec.getFragments();
-    }
-
-    public TDescriptorTable getDescTable() {
-        return jobSpec.getDescTable();
     }
 
     public boolean isLoadType() {
@@ -508,342 +478,71 @@ public class DefaultCoordinator extends Coordinator {
 
     private void prepareProfile() {
         queryProfile = new RuntimeProfile("Execution");
-
         fragmentProfiles = new ArrayList<>();
-        for (int i = 0; i < jobSpec.getFragments().size(); i++) {
-            fragmentProfiles.add(new RuntimeProfile("Fragment " + i));
-            fragmentId2fragmentProfileIds.put(jobSpec.getFragments().get(i).getFragmentId(), i);
-            queryProfile.addChild(fragmentProfiles.get(i));
+        for (ExecutionFragment fragment : executionDAG.getFragmentsInCreatedOrder()) {
+            RuntimeProfile fragmentProfile = new RuntimeProfile("Fragment " + fragment.getFragmentIndex());
+            fragmentProfiles.add(fragmentProfile);
+            queryProfile.addChild(fragmentProfile);
         }
 
         // to keep things simple, make async Cancel() calls wait until plan fragment
         // execState has been initiated, otherwise we might try to cancel fragment
         // execState at backends where it hasn't even started
-        profileDoneSignal = new MarkedCountDownLatch<>(coordinatorPreprocessor.getInstanceIds().size());
-        for (TUniqueId instanceId : coordinatorPreprocessor.getInstanceIds()) {
+        profileDoneSignal = new MarkedCountDownLatch<>(executionDAG.getInstanceIds().size());
+        for (TUniqueId instanceId : executionDAG.getInstanceIds()) {
             profileDoneSignal.addMark(instanceId, -1L /* value is meaningless */);
         }
     }
 
-    private void prepareResultSink() throws AnalysisException {
-        PlanFragmentId topId = jobSpec.getFragments().get(0).getFragmentId();
-        CoordinatorPreprocessor.FragmentExecParams topParams =
-                coordinatorPreprocessor.getFragmentExecParamsMap().get(topId);
-        if (topParams.fragment.getSink() instanceof ResultSink) {
-            long workerId = topParams.instanceExecParams.get(0).getWorkerId();
+    private void prepareResultSink() throws Exception {
+        ExecutionFragment rootExecFragment = executionDAG.getRootFragment();
+        if (rootExecFragment.getPlanFragment().getSink() instanceof ResultSink) {
+            long workerId = rootExecFragment.getInstances().get(0).getWorkerId();
             ComputeNode worker = coordinatorPreprocessor.getWorkerProvider().getWorkerById(workerId);
             TNetworkAddress execBeAddr = worker.getAddress();
             receiver = new ResultReceiver(
-                    topParams.instanceExecParams.get(0).instanceId,
+                    rootExecFragment.getInstances().get(0).getInstanceId(),
                     workerId,
                     worker.getBrpcAddress(),
                     jobSpec.getQueryOptions().query_timeout * 1000);
 
             // Select top fragment as global runtime filter merge address
-            setGlobalRuntimeFilterParams(topParams, worker.getBrpcAddress());
+            setGlobalRuntimeFilterParams(rootExecFragment, worker.getBrpcAddress());
 
             if (LOG.isDebugEnabled()) {
                 LOG.debug("dispatch query job: {} to {}", DebugUtil.printId(jobSpec.getQueryId()), execBeAddr);
             }
 
             // set the broker address for OUTFILE sink
-            ResultSink resultSink = (ResultSink) topParams.fragment.getSink();
+            ResultSink resultSink = (ResultSink) rootExecFragment.getPlanFragment().getSink();
             if (resultSink.isOutputFileSink() && resultSink.needBroker()) {
                 FsBroker broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(resultSink.getBrokerName(),
                         execBeAddr.getHostname());
                 resultSink.setBrokerAddr(broker.ip, broker.port);
                 LOG.info("OUTFILE through broker: {}:{}", broker.ip, broker.port);
             }
-
         } else {
             // This is a load process.
-            this.jobSpec.getQueryOptions().setEnable_profile(true);
+            jobSpec.getQueryOptions().setEnable_profile(true);
             deltaUrls = Lists.newArrayList();
             loadCounters = Maps.newHashMap();
             List<Long> relatedBackendIds = coordinatorPreprocessor.getWorkerProvider().getSelectedWorkerIds();
             GlobalStateMgr.getCurrentState().getLoadMgr()
                     .initJobProgress(jobSpec.getLoadJobId(), jobSpec.getQueryId(),
-                            coordinatorPreprocessor.getInstanceIds(),
+                            executionDAG.getInstanceIds(),
                             relatedBackendIds);
             LOG.info("dispatch load job: {} to {}", DebugUtil.printId(jobSpec.getQueryId()),
                     coordinatorPreprocessor.getWorkerProvider().getSelectedWorkerIds());
         }
     }
 
-    private void deliverExecFragments() throws TException, RpcException, UserException {
-        deliverExecFragmentsRequests(coordinatorPreprocessor.isUsePipeline());
-    }
-
-    private void handleErrorExecution(FragmentInstanceExecState errorExecution, DeploymentResult errorRes)
-            throws UserException, RpcException {
-        if (errorExecution != null) {
-            cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
-            switch (Objects.requireNonNull(errorRes.getStatusCode())) {
-                case TIMEOUT:
-                    throw new UserException("query timeout. backend id: " + errorExecution.getWorker().getId());
-                case THRIFT_RPC_ERROR:
-                    SimpleScheduler.addToBlacklist(errorExecution.getWorker().getId());
-                    throw new RpcException(errorExecution.getWorker().getHost(), "rpc failed");
-                default:
-                    throw new UserException(errorRes.getStatus().getErrorMsg());
-            }
-        }
-    }
-
-    /**
-     * Compute the topological order of the fragment tree.
-     * It will divide fragments to several groups.
-     * - There is no data dependency among fragments in a group.
-     * - All the upstream fragments of the fragments in a group must belong to the previous groups.
-     * - Each group should be delivered sequentially, and fragments in a group can be delivered concurrently.
-     * <p>
-     * For example, the following tree will produce four groups: [[1], [2, 3, 4], [5, 6], [7]]
-     * -     *         1
-     * -     *         │
-     * -     *    ┌────┼────┐
-     * -     *    │    │    │
-     * -     *    2    3    4
-     * -     *    │    │    │
-     * -     * ┌──┴─┐  │    │
-     * -     * │    │  │    │
-     * -     * 5    6  │    │
-     * -     *      │  │    │
-     * -     *      └──┼────┘
-     * -     *         │
-     * -     *         7
-     *
-     * @return multiple fragment groups.
-     */
-    private List<List<PlanFragment>> computeTopologicalOrderFragments() {
-        Queue<PlanFragment> queue = Lists.newLinkedList();
-        Map<PlanFragment, Integer> inDegrees = Maps.newHashMap();
-
-        PlanFragment root = jobSpec.getFragments().get(0);
-
-        // Compute in-degree of each fragment by BFS.
-        // `queue` contains the fragments need to visit its in-edges.
-        inDegrees.put(root, 0);
-        queue.add(root);
-        while (!queue.isEmpty()) {
-            PlanFragment fragment = queue.poll();
-            for (PlanFragment child : fragment.getChildren()) {
-                Integer v = inDegrees.get(child);
-                if (v != null) {
-                    // Has added this child to queue before, don't add again.
-                    inDegrees.put(child, v + 1);
-                } else {
-                    inDegrees.put(child, 1);
-                    queue.add(child);
-                }
-            }
-        }
-
-        if (jobSpec.getFragments().size() != inDegrees.size()) {
-            for (PlanFragment fragment : jobSpec.getFragments()) {
-                if (!inDegrees.containsKey(fragment)) {
-                    LOG.warn("This fragment does not belong to the fragment tree: {}", fragment.getFragmentId());
-                }
-            }
-            throw new StarRocksPlannerException("Some fragments do not belong to the fragment tree",
-                    ErrorType.INTERNAL_ERROR);
-        }
-
-        // Compute fragment groups by BFS.
-        // `queue` contains the fragments whose in-degree is zero.
-        queue.add(root);
-        List<List<PlanFragment>> groups = Lists.newArrayList();
-        int numOutputFragments = 0;
-        while (!queue.isEmpty()) {
-            int groupSize = queue.size();
-            List<PlanFragment> group = new ArrayList<>(groupSize);
-            // The next `groupSize` fragments can be delivered concurrently, because zero in-degree indicates that
-            // they don't depend on each other and all the fragments depending on them have been delivered.
-            for (int i = 0; i < groupSize; ++i) {
-                PlanFragment fragment = queue.poll();
-                group.add(fragment);
-
-                for (PlanFragment child : fragment.getChildren()) {
-                    int degree = inDegrees.compute(child, (k, v) -> v - 1);
-                    if (degree == 0) {
-                        queue.add(child);
-                    }
-                }
-            }
-
-            groups.add(group);
-            numOutputFragments += groupSize;
-        }
-
-        if (jobSpec.getFragments().size() != numOutputFragments) {
-            throw new StarRocksPlannerException("There are some circles in the fragment tree",
-                    ErrorType.INTERNAL_ERROR);
-        }
-
-        return groups;
-    }
-
-    /**
-     * Deliver multiple fragments concurrently according to the topological order.
-     */
-    private void deliverExecFragmentsRequests(boolean enablePipelineEngine) throws RpcException, UserException {
-        TQueryOptions queryOptions = jobSpec.getQueryOptions();
-        long queryDeliveryTimeoutMs = Math.min(queryOptions.query_timeout, queryOptions.query_delivery_timeout) * 1000L;
-        List<List<PlanFragment>> fragmentGroups = computeTopologicalOrderFragments();
-
+    private void deliverExecFragments() throws RpcException, UserException {
         lock();
         try {
-            // execute all instances from up to bottom
-            int indexInJob = 0;
-
-            jobSpec.getDescTable().setIs_cached(false);
-            TDescriptorTable emptyDescTable = new TDescriptorTable();
-            emptyDescTable.setIs_cached(true);
-            emptyDescTable.setTupleDescriptors(Collections.emptyList());
-
-            Set<Long> deployedWorkerIds = new HashSet<>();
-            for (List<PlanFragment> fragmentGroup : fragmentGroups) {
-                // Divide requests of fragments in the current group to two stages.
-                // - stage 1, the first request to a host, which need send descTable.
-                // - stage 2, the non-first requests to a host, which needn't send descTable.
-                List<List<FragmentInstanceExecState>> twoStageExecutionsToDeploy =
-                        ImmutableList.of(new ArrayList<>(), new ArrayList<>());
-                for (PlanFragment fragment : fragmentGroup) {
-                    int profileFragmentId = fragmentId2fragmentProfileIds.get(fragment.getFragmentId());
-                    CoordinatorPreprocessor.FragmentExecParams params =
-                            coordinatorPreprocessor.getFragmentExecParamsMap().get(fragment.getFragmentId());
-                    Preconditions.checkState(!params.instanceExecParams.isEmpty());
-
-                    // Fragment instances' ordinals in FragmentExecParams.instanceExecParams determine
-                    // shuffle partitions' ordinals in DataStreamSink. backendIds of Fragment instances that
-                    // contain shuffle join determine the ordinals of GRF components in the GRF. For a
-                    // shuffle join, its shuffle partitions and corresponding one-map-one GRF components
-                    // should have the same ordinals. so here assign monotonic unique backendIds to
-                    // Fragment instances to keep consistent order with Fragment instances in
-                    // FragmentExecParams.instanceExecParams.
-                    for (CoordinatorPreprocessor.FInstanceExecParam fInstanceExecParam : params.instanceExecParams) {
-                        fInstanceExecParam.setBackendNum(indexInJob++);
-                    }
-
-                    List<List<CoordinatorPreprocessor.FInstanceExecParam>> twoStageInstancesToDeploy =
-                            ImmutableList.of(new ArrayList<>(), new ArrayList<>());
-                    if (!enablePipelineEngine) {
-                        twoStageInstancesToDeploy.get(0).addAll(params.instanceExecParams);
-                    } else {
-                        params.instanceExecParams.forEach(instance -> {
-                            if (deployedWorkerIds.contains(instance.getWorkerId())) {
-                                twoStageInstancesToDeploy.get(1).add(instance);
-                            } else {
-                                deployedWorkerIds.add(instance.getWorkerId());
-                                twoStageInstancesToDeploy.get(0).add(instance);
-                            }
-                        });
-                    }
-
-                    // if pipeline is enable and current fragment contain olap table sink, in fe we will 
-                    // calculate the number of all tablet sinks in advance and assign them to each fragment instance
-                    boolean enablePipelineTableSinkDop = enablePipelineEngine &&
-                            (fragment.hasOlapTableSink() || fragment.hasIcebergTableSink());
-                    int tableSinkTotalDop = 0;
-                    int accTabletSinkDop = 0;
-                    if (enablePipelineTableSinkDop) {
-                        tableSinkTotalDop = twoStageInstancesToDeploy.stream()
-                                .flatMap(Collection::stream)
-                                .mapToInt(CoordinatorPreprocessor.FInstanceExecParam::getTableSinkDop)
-                                .sum();
-                    }
-                    Preconditions.checkState(tableSinkTotalDop >= 0,
-                            "tableSinkTotalDop = %d should be >= 0", tableSinkTotalDop);
-
-                    for (int stageIndex = 0; stageIndex < twoStageInstancesToDeploy.size(); stageIndex++) {
-                        List<CoordinatorPreprocessor.FInstanceExecParam> stageInstances =
-                                twoStageInstancesToDeploy.get(stageIndex);
-                        if (stageInstances.isEmpty()) {
-                            continue;
-                        }
-
-                        TDescriptorTable descTable;
-                        if (stageIndex == 0) {
-                            descTable = jobSpec.getDescTable();
-                        } else {
-                            descTable = emptyDescTable;
-                        }
-
-                        Map<TUniqueId, Long> instanceId2WorkerId =
-                                stageInstances.stream().collect(Collectors.toMap(
-                                        CoordinatorPreprocessor.FInstanceExecParam::getInstanceId,
-                                        CoordinatorPreprocessor.FInstanceExecParam::getWorkerId));
-                        List<TExecPlanFragmentParams> tRequests =
-                                params.toThrift(instanceId2WorkerId.keySet(), descTable, enablePipelineEngine,
-                                        accTabletSinkDop, tableSinkTotalDop, false);
-                        if (enablePipelineTableSinkDop) {
-                            accTabletSinkDop += stageInstances.stream()
-                                    .mapToInt(CoordinatorPreprocessor.FInstanceExecParam::getTableSinkDop)
-                                    .sum();
-                        }
-
-                        // This is a load process, and it is the first fragment.
-                        // we should add all BackendExecState of this fragment to needCheckBackendExecStates,
-                        // so that we can check these backends' state when joining this Coordinator
-                        boolean needCheckBackendState = isLoadType() && profileFragmentId == 0;
-
-                        for (TExecPlanFragmentParams tRequest : tRequests) {
-                            // TODO: pool of pre-formatted BackendExecStates?
-                            Long workerId = instanceId2WorkerId.get(tRequest.params.fragment_instance_id);
-                            ComputeNode worker = coordinatorPreprocessor.getWorkerProvider().getWorkerById(workerId);
-                            FragmentInstanceExecState execState = FragmentInstanceExecState.createExecution(
-                                    jobSpec,
-                                    fragment.getFragmentId(),
-                                    tRequest,
-                                    profileFragmentId,
-                                    worker);
-                            indexInJobToExecState.put(tRequest.backend_num, execState);
-                            if (needCheckBackendState) {
-                                needCheckBackendExecStates.add(execState);
-                                if (LOG.isDebugEnabled()) {
-                                    LOG.debug("add need check backend {} for fragment, {} job: {}",
-                                            execState.getWorker().getId(),
-                                            fragment.getFragmentId().asInt(), jobSpec.getLoadJobId());
-                                }
-                            }
-                            twoStageExecutionsToDeploy.get(stageIndex).add(execState);
-                        }
-                    }
-                }
-
-                for (List<FragmentInstanceExecState> stageExecutions : twoStageExecutionsToDeploy) {
-                    stageExecutions.forEach(FragmentInstanceExecState::deployAsync);
-
-                    DeploymentResult firstErrResult = null;
-                    FragmentInstanceExecState firstErrExecution = null;
-                    for (FragmentInstanceExecState execState : stageExecutions) {
-                        DeploymentResult res = execState.waitForDeploymentCompletion(queryDeliveryTimeoutMs);
-                        if (TStatusCode.OK == res.getStatusCode()) {
-                            continue;
-                        }
-
-                        if (queryStatus.ok()) {
-                            queryStatus.setStatus(res.getStatus());
-                        }
-
-                        // Handle error results and cancel fragment instances, excluding TIMEOUT errors,
-                        // until all the delivered fragment instances are completed.
-                        // Otherwise, the cancellation RPC may arrive at BE before the delivery fragment instance RPC,
-                        // causing the instances to become stale and only able to be released after a timeout.
-                        if (firstErrResult == null) {
-                            firstErrResult = res;
-                            firstErrExecution = execState;
-                        }
-                        if (res.getStatusCode() == TStatusCode.TIMEOUT) {
-                            break;
-                        }
-                    }
-
-                    // Handle error results and cancel fragment instances, excluding TIMEOUT errors,
-                    // until all the delivered fragment instances are completed.
-                    // Otherwise, the cancellation RPC may arrive at BE before the delivery fragment instance RPC,
-                    // causing the instances to become stale and only able to be released after a timeout.
-                    handleErrorExecution(firstErrExecution, firstErrResult);
-                }
+            Deployer deployer = new Deployer(connectContext, jobSpec, executionDAG, coordinatorPreprocessor.getCoordAddress(),
+                    this::handleErrorExecution);
+            for (List<ExecutionFragment> concurrentFragments : executionDAG.getFragmentsInTopologicalOrderFromRoot()) {
+                deployer.deployFragments(concurrentFragments);
             }
 
             attachInstanceProfileToFragmentProfile();
@@ -852,21 +551,34 @@ public class DefaultCoordinator extends Coordinator {
         }
     }
 
+    private void handleErrorExecution(Status status, FragmentInstanceExecState execution, Throwable failure)
+            throws UserException, RpcException {
+        cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
+        switch (Objects.requireNonNull(status.getErrorCode())) {
+            case TIMEOUT:
+                throw new UserException("query timeout. backend id: " + execution.getWorker().getId());
+            case THRIFT_RPC_ERROR:
+                SimpleScheduler.addToBlacklist(execution.getWorker().getId());
+                throw new RpcException(execution.getWorker().getHost(), "rpc failed");
+            default:
+                throw new UserException(status.getErrorMsg());
+        }
+    }
+
     // choose at most num FInstances on difference BEs
-    private List<CoordinatorPreprocessor.FInstanceExecParam> pickupFInstancesOnDifferentHosts(
-            List<CoordinatorPreprocessor.FInstanceExecParam> instances, int num) {
+    private List<FragmentInstance> pickupFInstancesOnDifferentHosts(List<FragmentInstance> instances, int num) {
         if (instances.size() <= num) {
             return instances;
         }
 
-        Map<Long, List<CoordinatorPreprocessor.FInstanceExecParam>> workerId2instances = Maps.newHashMap();
-        for (CoordinatorPreprocessor.FInstanceExecParam instance : instances) {
+        Map<Long, List<FragmentInstance>> workerId2instances = Maps.newHashMap();
+        for (FragmentInstance instance : instances) {
             workerId2instances.putIfAbsent(instance.getWorkerId(), Lists.newLinkedList());
             workerId2instances.get(instance.getWorkerId()).add(instance);
         }
-        List<CoordinatorPreprocessor.FInstanceExecParam> picked = Lists.newArrayList();
+        List<FragmentInstance> picked = Lists.newArrayList();
         while (picked.size() < num) {
-            for (List<CoordinatorPreprocessor.FInstanceExecParam> instancesPerHost : workerId2instances.values()) {
+            for (List<FragmentInstance> instancesPerHost : workerId2instances.values()) {
                 if (instancesPerHost.isEmpty()) {
                     continue;
                 }
@@ -887,27 +599,26 @@ public class DefaultCoordinator extends Coordinator {
         ).collect(Collectors.toList());
     }
 
-    private void setGlobalRuntimeFilterParams(CoordinatorPreprocessor.FragmentExecParams topParams,
+    private void setGlobalRuntimeFilterParams(ExecutionFragment topParams,
                                               TNetworkAddress mergeHost) {
 
         Map<Integer, List<TRuntimeFilterProberParams>> broadcastGRFProbersMap = Maps.newHashMap();
         List<RuntimeFilterDescription> broadcastGRFList = Lists.newArrayList();
         Map<Integer, List<TRuntimeFilterProberParams>> idToProbePrams = new HashMap<>();
 
-        for (PlanFragment fragment : jobSpec.getFragments()) {
+        for (ExecutionFragment execFragment : executionDAG.getFragmentsInPreorder()) {
+            PlanFragment fragment = execFragment.getPlanFragment();
             fragment.collectBuildRuntimeFilters(fragment.getPlanRoot());
             fragment.collectProbeRuntimeFilters(fragment.getPlanRoot());
-            CoordinatorPreprocessor.FragmentExecParams params =
-                    coordinatorPreprocessor.getFragmentExecParamsMap().get(fragment.getFragmentId());
             for (Map.Entry<Integer, RuntimeFilterDescription> kv : fragment.getProbeRuntimeFilters().entrySet()) {
                 List<TRuntimeFilterProberParams> probeParamList = Lists.newArrayList();
-                for (final CoordinatorPreprocessor.FInstanceExecParam instance : params.instanceExecParams) {
+                for (final FragmentInstance instance : execFragment.getInstances()) {
                     TRuntimeFilterProberParams probeParam = new TRuntimeFilterProberParams();
-                    probeParam.setFragment_instance_id(instance.instanceId);
+                    probeParam.setFragment_instance_id(instance.getInstanceId());
                     probeParam.setFragment_instance_address(coordinatorPreprocessor.getBrpcAddress(instance.getWorkerId()));
                     probeParamList.add(probeParam);
                 }
-                if (coordinatorPreprocessor.isUsePipeline() && kv.getValue().isBroadcastJoin() &&
+                if (jobSpec.isEnablePipeline() && kv.getValue().isBroadcastJoin() &&
                         kv.getValue().isHasRemoteTargets()) {
                     broadcastGRFProbersMap.computeIfAbsent(kv.getKey(), k -> new ArrayList<>()).addAll(probeParamList);
                 } else {
@@ -916,37 +627,37 @@ public class DefaultCoordinator extends Coordinator {
             }
 
             Set<TUniqueId> broadcastGRfSenders =
-                    pickupFInstancesOnDifferentHosts(params.instanceExecParams, 3).stream().
-                            map(instance -> instance.instanceId).collect(Collectors.toSet());
+                    pickupFInstancesOnDifferentHosts(execFragment.getInstances(), 3).stream().
+                            map(FragmentInstance::getInstanceId).collect(Collectors.toSet());
             for (Map.Entry<Integer, RuntimeFilterDescription> kv : fragment.getBuildRuntimeFilters().entrySet()) {
                 int rid = kv.getKey();
                 RuntimeFilterDescription rf = kv.getValue();
                 if (rf.isHasRemoteTargets()) {
                     if (rf.isBroadcastJoin()) {
                         // for broadcast join, we send at most 3 copy to probers, the first arrival wins.
-                        topParams.runtimeFilterParams.putToRuntime_filter_builder_number(rid, 1);
-                        if (coordinatorPreprocessor.isUsePipeline()) {
+                        topParams.getRuntimeFilterParams().putToRuntime_filter_builder_number(rid, 1);
+                        if (jobSpec.isEnablePipeline()) {
                             rf.setBroadcastGRFSenders(broadcastGRfSenders);
                             broadcastGRFList.add(rf);
                         } else {
-                            rf.setSenderFragmentInstanceId(params.instanceExecParams.get(0).instanceId);
+                            rf.setSenderFragmentInstanceId(execFragment.getInstances().get(0).getInstanceId());
                         }
                     } else {
-                        topParams.runtimeFilterParams
-                                .putToRuntime_filter_builder_number(rid, params.instanceExecParams.size());
+                        topParams.getRuntimeFilterParams()
+                                .putToRuntime_filter_builder_number(rid, execFragment.getInstances().size());
                     }
                 }
             }
             fragment.setRuntimeFilterMergeNodeAddresses(fragment.getPlanRoot(), mergeHost);
         }
-        topParams.runtimeFilterParams.setId_to_prober_params(idToProbePrams);
+        topParams.getRuntimeFilterParams().setId_to_prober_params(idToProbePrams);
 
         broadcastGRFList.forEach(rf -> rf.setBroadcastGRFDestinations(
                 mergeGRFProbers(broadcastGRFProbersMap.get(rf.getFilterId()))));
 
         if (connectContext != null) {
             SessionVariable sessionVariable = connectContext.getSessionVariable();
-            topParams.runtimeFilterParams.setRuntime_filter_max_size(
+            topParams.getRuntimeFilterParams().setRuntime_filter_max_size(
                     sessionVariable.getGlobalRuntimeFilterBuildMaxSize());
         }
     }
@@ -1139,9 +850,9 @@ public class DefaultCoordinator extends Coordinator {
             this.returnedAllResults = true;
 
             // if this query is a block query do not cancel.
-            long numLimitRows = jobSpec.getFragments().get(0).getPlanRoot().getLimit();
+            long numLimitRows = executionDAG.getRootFragment().getPlanFragment().getPlanRoot().getLimit();
             boolean hasLimit = numLimitRows > 0;
-            if (!jobSpec.isBlockQuery() && coordinatorPreprocessor.getInstanceIds().size() > 1 && hasLimit &&
+            if (!jobSpec.isBlockQuery() && executionDAG.getInstanceIds().size() > 1 && hasLimit &&
                     numReceivedRows >= numLimitRows) {
                 LOG.debug("no block query, return num >= limit rows, need cancel");
                 cancelInternal(PPlanFragmentCancelReason.LIMIT_REACH);
@@ -1204,7 +915,7 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     private void cancelRemoteFragmentsAsync(PPlanFragmentCancelReason cancelReason) {
-        for (FragmentInstanceExecState execState : indexInJobToExecState.values()) {
+        for (FragmentInstanceExecState execState : executionDAG.getExecutions()) {
             // If the execState fails to be cancelled, and it has been finished or not been deployed,
             // count down the profileDoneSignal of this execState immediately,
             // because the profile report will not arrive anymore for the finished or non-deployed execState.
@@ -1214,18 +925,17 @@ public class DefaultCoordinator extends Coordinator {
             }
         }
 
-        coordinatorPreprocessor.getFragmentExecParamsMap().values()
-                .stream().flatMap(execFragment -> execFragment.instanceExecParams.stream())
-                .filter(instance -> !indexInJobToExecState.containsKey(instance.getBackendNum()))
+        executionDAG.getInstances().stream()
+                .filter(instance -> executionDAG.getExecution(instance.getIndexInJob()) == null)
                 .forEach(instance -> profileDoneSignal.markedCountDown(instance.getInstanceId(), -1L));
     }
 
     @Override
     public void updateFragmentExecStatus(TReportExecStatusParams params) {
-        FragmentInstanceExecState execState = indexInJobToExecState.get(params.backend_num);
+        FragmentInstanceExecState execState = executionDAG.getExecution(params.getBackend_num());
         if (execState == null) {
-            LOG.warn("unknown backend number: {}, valid backend numbers: {}", params.backend_num,
-                    indexInJobToExecState.keySet());
+            LOG.warn("unknown backend number: {}, valid backend numbers: {}", params.getBackend_num(),
+                    executionDAG.getExecutionIndexesInJob());
             return;
         }
 
@@ -1245,18 +955,19 @@ public class DefaultCoordinator extends Coordinator {
         // So the profile update strategy looks like this: During a short time interval, each instance will report
         // its execState information. However, when receiving the information reported by the first instance of the
         // current batch, the previous reported state will be synchronized to the profile manager.
-        if (!execState.isFinished()) {
-            long now = System.currentTimeMillis();
-            long lastTime = lastRuntimeProfileUpdateTime.get();
-            if (topProfileSupplier != null &&
-                    connectContext != null &&
-                    connectContext.getSessionVariable().isEnableProfile() &&
-                    now - lastTime > connectContext.getSessionVariable().getRuntimeProfileReportInterval() * 1000L &&
-                    lastRuntimeProfileUpdateTime.compareAndSet(lastTime, now)) {
-                RuntimeProfile profile = topProfileSupplier.get();
-                profile.addChild(buildMergedQueryProfile(null));
-                ProfileManager.getInstance().pushProfile(profile);
-            }
+        long now = System.currentTimeMillis();
+        long lastTime = lastRuntimeProfileUpdateTime.get();
+        if (topProfileSupplier != null && execPlanSupplier != null && connectContext != null &&
+                connectContext.getSessionVariable().isEnableProfile() &&
+                // If it's the last done report, avoiding duplicate trigger
+                (!execState.isFinished() || profileDoneSignal.getLeftMarks().size() > 1) &&
+                // Interval * 0.95 * 1000 to allow a certain range of deviation
+                now - lastTime > (connectContext.getSessionVariable().getRuntimeProfileReportInterval() * 950L) &&
+                lastRuntimeProfileUpdateTime.compareAndSet(lastTime, now)) {
+            RuntimeProfile profile = topProfileSupplier.get();
+            ExecPlan execPlan = execPlanSupplier.get();
+            profile.addChild(buildMergedQueryProfile(null));
+            ProfileManager.getInstance().pushProfile(execPlan, profile);
         }
 
         lock();
@@ -1341,7 +1052,7 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     public void endProfile() {
-        if (indexInJobToExecState.isEmpty()) {
+        if (executionDAG.getExecutions().isEmpty()) {
             return;
         }
 
@@ -1427,7 +1138,7 @@ public class DefaultCoordinator extends Coordinator {
             return queryProfile;
         }
 
-        if (!coordinatorPreprocessor.isUsePipeline()) {
+        if (!jobSpec.isEnablePipeline()) {
             return queryProfile;
         }
 
@@ -1459,9 +1170,15 @@ public class DefaultCoordinator extends Coordinator {
                     .collect(Collectors.toList());
 
             Set<String> backendAddresses = Sets.newHashSet();
+            Set<String> instanceIds = Sets.newHashSet();
+            Set<String> missingInstanceIds = Sets.newHashSet();
             for (RuntimeProfile instanceProfile : instanceProfiles) {
-                // Setup backend address infos
+                // Setup backend meta infos
                 backendAddresses.add(instanceProfile.getInfoString("Address"));
+                instanceIds.add(instanceProfile.getInfoString("InstanceId"));
+                if (CollectionUtils.isEmpty(instanceProfile.getChildList())) {
+                    missingInstanceIds.add(instanceProfile.getInfoString("InstanceId"));
+                }
 
                 // Get query level peak memory usage and cpu cost
                 Counter toBeRemove = instanceProfile.getCounter("QueryCumulativeCpuTime");
@@ -1477,6 +1194,10 @@ public class DefaultCoordinator extends Coordinator {
                 instanceProfile.removeCounter("QueryPeakMemoryUsage");
             }
             newFragmentProfile.addInfoString("BackendAddresses", String.join(",", backendAddresses));
+            newFragmentProfile.addInfoString("InstanceIds", String.join(",", instanceIds));
+            if (!missingInstanceIds.isEmpty()) {
+                newFragmentProfile.addInfoString("MissingInstanceIds", String.join(",", missingInstanceIds));
+            }
             Counter backendNum = newFragmentProfile.addCounter("BackendNum", TUnit.UNIT, null);
             backendNum.setValue(backendAddresses.size());
 
@@ -1485,7 +1206,7 @@ public class DefaultCoordinator extends Coordinator {
             counter.setValue(instanceProfiles.size());
 
             RuntimeProfile mergedInstanceProfile =
-                    RuntimeProfile.mergeIsomorphicProfiles(instanceProfiles, Sets.newHashSet("Address"));
+                    RuntimeProfile.mergeIsomorphicProfiles(instanceProfiles, Sets.newHashSet("Address", "InstanceId"));
             Preconditions.checkState(mergedInstanceProfile != null);
 
             newFragmentProfile.copyAllInfoStringsFrom(mergedInstanceProfile, null);
@@ -1537,10 +1258,13 @@ public class DefaultCoordinator extends Coordinator {
                                 newQueryProfile.addCounter("QueryExecutionWallTime", TUnit.TIME_NS, null);
                         executionTotalTime.setValue(executionWallTime);
 
-                        long resultDeliverTime = pipelineProfile.getCounter("OutputFullTime").getValue();
-                        Counter resultDeliverTimer =
-                                newQueryProfile.addCounter("ResultDeliverTime", TUnit.TIME_NS, null);
-                        resultDeliverTimer.setValue(resultDeliverTime);
+                        Counter outputFullTime = pipelineProfile.getCounter("OutputFullTime");
+                        if (outputFullTime != null) {
+                            long resultDeliverTime = outputFullTime.getValue();
+                            Counter resultDeliverTimer =
+                                    newQueryProfile.addCounter("ResultDeliverTime", TUnit.TIME_NS, null);
+                            resultDeliverTimer.setValue(resultDeliverTime);
+                        }
 
                         foundResultSink = true;
                     }
@@ -1638,7 +1362,7 @@ public class DefaultCoordinator extends Coordinator {
      */
     @Override
     public boolean checkBackendState() {
-        for (FragmentInstanceExecState execState : needCheckBackendExecStates) {
+        for (FragmentInstanceExecState execState : executionDAG.getNeedCheckExecutions()) {
             if (!execState.isBackendStateHealthy()) {
                 queryStatus = new Status(TStatusCode.INTERNAL_ERROR,
                         "backend " + execState.getWorker().getId() + " is down");
@@ -1661,25 +1385,15 @@ public class DefaultCoordinator extends Coordinator {
     // consistent with EXPLAIN's fragment index
     @Override
     public List<QueryStatisticsItem.FragmentInstanceInfo> getFragmentInstanceInfos() {
-        final List<QueryStatisticsItem.FragmentInstanceInfo> result = Lists.newArrayList();
-        for (PlanFragment fragment : jobSpec.getFragments()) {
-            for (FragmentInstanceExecState execState : indexInJobToExecState.values()) {
-                if (fragment.getFragmentId() != execState.getFragmentId()) {
-                    continue;
-                }
-                final FragmentInstanceInfo info = execState.buildFragmentInstanceInfo();
-                result.add(info);
-            }
-        }
-        return result;
+        return executionDAG.getFragmentInstanceInfos();
     }
 
     private void attachInstanceProfileToFragmentProfile() {
-        for (FragmentInstanceExecState execState : indexInJobToExecState.values()) {
+        for (FragmentInstanceExecState execState : executionDAG.getExecutions()) {
             if (!execState.computeTimeInProfile(fragmentProfiles.size())) {
                 return;
             }
-            fragmentProfiles.get(execState.getProfileFragmentId()).addChild(execState.getProfile());
+            fragmentProfiles.get(execState.getFragmentIndex()).addChild(execState.getProfile());
         }
     }
 

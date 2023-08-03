@@ -16,7 +16,6 @@ package com.starrocks.server;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
-import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
@@ -52,8 +51,7 @@ public class WarehouseManager implements Writable {
     public static final long DEFAULT_WAREHOUSE_ID = 0L;
 
     private Map<Long, Warehouse> idToWh = new HashMap<>();
-    @SerializedName(value = "fullNameToWh")
-    private Map<String, Warehouse> fullNameToWh = new HashMap<>();
+    private Map<String, Warehouse> nameToWh = new HashMap<>();
 
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
@@ -65,7 +63,7 @@ public class WarehouseManager implements Writable {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             Warehouse wh = new LocalWarehouse(DEFAULT_WAREHOUSE_ID,
                     DEFAULT_WAREHOUSE_NAME);
-            fullNameToWh.put(wh.getFullName(), wh);
+            nameToWh.put(wh.getName(), wh);
             idToWh.put(wh.getId(), wh);
             wh.setExist(true);
         }
@@ -77,7 +75,7 @@ public class WarehouseManager implements Writable {
 
     public Warehouse getWarehouse(String warehouseName) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-            return fullNameToWh.get(warehouseName);
+            return nameToWh.get(warehouseName);
         }
     }
 
@@ -95,7 +93,7 @@ public class WarehouseManager implements Writable {
 
     public boolean warehouseExists(String warehouseName) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-            return fullNameToWh.containsKey(warehouseName);
+            return nameToWh.containsKey(warehouseName);
         }
     }
 
@@ -107,9 +105,9 @@ public class WarehouseManager implements Writable {
         return builder.build();
     }
 
-    // warehouse meta persistence api
+    // not persist anything thereafter, so checksum ^= 0
     public long saveWarehouses(DataOutputStream out, long checksum) throws IOException {
-        checksum ^= fullNameToWh.size();
+        checksum ^= 0;
         write(out);
         return checksum;
     }
@@ -119,8 +117,8 @@ public class WarehouseManager implements Writable {
         try {
             String s = Text.readString(dis);
             WarehouseManager data = GsonUtils.GSON.fromJson(s, WarehouseManager.class);
-            if (data != null && data.fullNameToWh != null) {
-                warehouseCount = data.fullNameToWh.size();
+            if (data != null && data.nameToWh != null) {
+                warehouseCount = data.nameToWh.size();
             }
             checksum ^= warehouseCount;
             LOG.info("finished replaying WarehouseMgr from image");

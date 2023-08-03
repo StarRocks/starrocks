@@ -64,7 +64,7 @@ public:
         unaligned_store<Collection>(dest, dest_value);
     }
 
-    void direct_copy(void* dest, const void* src, MemPool* mem_pool) const override { deep_copy(dest, src, mem_pool); }
+    void direct_copy(void* dest, const void* src) const override { CHECK(false); }
 
     Status from_string(void* buf, const std::string& scan_key) const override {
         return Status::NotSupported("Not supported function");

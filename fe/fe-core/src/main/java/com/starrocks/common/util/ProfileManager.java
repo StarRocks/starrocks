@@ -38,6 +38,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
+import com.starrocks.sql.plan.ExecPlan;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -79,9 +80,27 @@ public class ProfileManager {
             Arrays.asList(QUERY_ID, USER, DEFAULT_DB, SQL_STATEMENT, QUERY_TYPE,
                     START_TIME, END_TIME, TOTAL_TIME, QUERY_STATE));
 
-    private static class ProfileElement {
+    public static class ProfileElement {
         public Map<String, String> infoStrings = Maps.newHashMap();
         public byte[] profileContent;
+
+        public ExecPlan plan;
+        public RuntimeProfile profile;
+
+        public List<String> toRow() {
+            List<String> res = Lists.newArrayList();
+            RuntimeProfile summary = profile.getChildList().get(0).first;
+            res.add(summary.getInfoString(QUERY_ID));
+            res.add(summary.getInfoString(START_TIME));
+            res.add(summary.getInfoString(TOTAL_TIME));
+            res.add(summary.getInfoString(QUERY_STATE));
+            String statement = summary.getInfoString(SQL_STATEMENT);
+            if (statement.length() > 128) {
+                statement = statement.substring(0, 124) + " ...";
+            }
+            res.add(statement);
+            return res;
+        }
     }
 
     private final ReadLock readLock;
@@ -140,9 +159,11 @@ public class ProfileManager {
         return profileString;
     }
 
-    public String pushProfile(RuntimeProfile profile) {
+    public String pushProfile(ExecPlan plan, RuntimeProfile profile) {
         String profileString = generateProfileString(profile);
         ProfileElement element = createElement(profile.getChildList().get(0).first, profileString);
+        element.plan = plan;
+        element.profile = profile;
         String queryId = element.infoStrings.get(ProfileManager.QUERY_ID);
         // check when push in, which can ensure every element in the list has QUERY_ID column,
         // so there is no need to check when remove element from list.
@@ -164,7 +185,7 @@ public class ProfileManager {
         return profileString;
     }
 
-    public String pushLoadProfile(RuntimeProfile profile) {
+    public void pushLoadProfile(RuntimeProfile profile) {
         String profileString = generateProfileString(profile);
 
         ProfileElement element = createElement(profile.getChildList().get(0).first, profileString);
@@ -185,8 +206,6 @@ public class ProfileManager {
         } finally {
             writeLock.unlock();
         }
-
-        return profileString;
     }
 
     public List<List<String>> getAllQueries() {
@@ -207,11 +226,11 @@ public class ProfileManager {
         return result;
     }
 
-    public String getProfile(String queryID) {
+    public String getProfile(String queryId) {
         ProfileElement element = new ProfileElement();
         readLock.lock();
         try {
-            element = profileMap.get(queryID) == null ? loadProfileMap.get(queryID) : profileMap.get(queryID);
+            element = profileMap.get(queryId) == null ? loadProfileMap.get(queryId) : profileMap.get(queryId);
             if (element == null) {
                 return null;
             }
@@ -221,6 +240,44 @@ public class ProfileManager {
             LOG.warn("Decompress profile content failed, length: {}, reason: {}",
                     element.profileContent.length, e.getMessage());
             return null;
+        } finally {
+            readLock.unlock();
+        }
+    }
+
+    public ProfileElement getProfileElement(String queryId) {
+        readLock.lock();
+        try {
+            return profileMap.get(queryId);
+        } finally {
+            readLock.unlock();
+        }
+    }
+
+    public List<ProfileElement> getAllProfileElements() {
+        List<ProfileElement> result = Lists.newArrayList();
+        readLock.lock();
+        try {
+            result.addAll(profileMap.values());
+        } finally {
+            readLock.unlock();
+        }
+        return result;
+    }
+
+    public long getQueryProfileCount() {
+        readLock.lock();
+        try {
+            return profileMap.size();
+        } finally {
+            readLock.unlock();
+        }
+    }
+
+    public long getLoadProfileCount() {
+        readLock.lock();
+        try {
+            return loadProfileMap.size();
         } finally {
             readLock.unlock();
         }

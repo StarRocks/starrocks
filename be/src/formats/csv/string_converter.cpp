@@ -15,6 +15,8 @@
 #include "formats/csv/string_converter.h"
 
 #include "column/binary_column.h"
+#include "common/config.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
 
@@ -58,8 +60,10 @@ bool StringConverter::read_string(Column* column, Slice s, const Options& option
         max_size = options.type_desc->len;
     }
 
-    if (UNLIKELY((s.size > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size > 0 && s.size > max_size))) {
-        LOG(WARNING) << "Column [" << column->get_name() << "]'s length exceed max varchar length.";
+    if (config::enable_check_string_lengths &&
+        ((s.size > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size > 0 && s.size > max_size))) {
+        VLOG(3) << strings::Substitute("Column [$0]'s length exceed max varchar length. str_size($1), max_size($2)",
+                                       column->get_name(), s.size, max_size);
         return false;
     }
     down_cast<BinaryColumn*>(column)->append(s);
@@ -102,9 +106,13 @@ bool StringConverter::read_quoted_string(Column* column, Slice s, const Options&
         max_size = options.type_desc->len;
     }
     size_t ext_size = new_size - old_size;
-    if (UNLIKELY((ext_size > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size > 0 && ext_size > max_size))) {
+    if (config::enable_check_string_lengths &&
+        ((ext_size > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size > 0 && ext_size > max_size))) {
         bytes.resize(old_size);
-        LOG(WARNING) << "Column [" << column->get_name() << "]'s length exceed max varchar length.";
+        VLOG(3) << strings::Substitute(
+                "Column [$0]'s length exceed max varchar length. old_size($1), new_size($2), ext_size($3), "
+                "max_size($4)",
+                column->get_name(), old_size, new_size, ext_size, max_size);
         return false;
     }
     offsets.push_back(bytes.size());

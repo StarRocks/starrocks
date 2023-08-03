@@ -22,8 +22,11 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileBlockDesc;
@@ -85,7 +88,7 @@ public class HiveMetadataTest {
         metastore = new HiveMetastore(client, "hive_catalog");
         cachingHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
                 metastore, executorForHmsRefresh, 100, 10, 1000, false);
-        hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true);
+        hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration());
 
         hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
         FileSystem fs = new MockedRemoteFileSystem(TEST_FILES);
@@ -259,5 +262,38 @@ public class HiveMetadataTest {
         Assert.assertEquals(0.03, dataColumnStats.getNullsFraction(), 0.001);
         Assert.assertEquals(4, dataColumnStats.getAverageRowSize(), 0.001);
         Assert.assertEquals(5, dataColumnStats.getDistinctValuesCount(), 0.001);
+    }
+
+    @Test
+    public void createDbTest() throws AlreadyExistsException {
+        ExceptionChecker.expectThrowsWithMsg(AlreadyExistsException.class,
+                "Database Already Exists",
+                () -> hiveMetadata.createDb("db1", new HashMap<>()));
+
+        Map<String, String> conf = new HashMap<>();
+        conf.put("location", "abs://xxx/zzz");
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Invalid location URI: abs://xxx/zzz",
+                () -> hiveMetadata.createDb("db3", conf));
+
+        conf.clear();
+        conf.put("not_support_prop", "xxx");
+        ExceptionChecker.expectThrowsWithMsg(IllegalArgumentException.class,
+                "Unrecognized property: not_support_prop",
+                () -> hiveMetadata.createDb("db3", conf));
+
+        conf.clear();
+        hiveMetadata.createDb("db4", conf);
+    }
+
+    @Test
+    public void dropDbTest() {
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Database d1 not empty",
+                () -> hiveMetadata.dropDb("d1", true));
+
+        ExceptionChecker.expectThrowsWithMsg(MetaNotFoundException.class,
+                "Failed to access database empty_db",
+                () -> hiveMetadata.dropDb("empty_db", true));
     }
 }

@@ -216,7 +216,7 @@ public class ExportExportingTask extends PriorityLeaderTask {
                 profile.addChild(p);
             }
         }
-        ProfileManager.getInstance().pushProfile(profile);
+        ProfileManager.getInstance().pushProfile(null, profile);
     }
 
     private Status moveTmpFiles() {

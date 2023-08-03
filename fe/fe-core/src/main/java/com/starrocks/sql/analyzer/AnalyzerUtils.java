@@ -184,7 +184,7 @@ public class AnalyzerUtils {
             Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
             if (fn != null) {
-                PrivilegeChecker.checkFunctionAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                Authorizer.checkFunctionAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                         db, fn, PrivilegeType.USAGE);
             }
 
@@ -199,7 +199,7 @@ public class AnalyzerUtils {
         Function fn = context.getGlobalStateMgr().getGlobalFunctionMgr()
                 .getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         if (fn != null) {
-            PrivilegeChecker.checkGlobalFunctionAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkGlobalFunctionAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     fn, PrivilegeType.USAGE);
         }
 
@@ -1119,6 +1119,15 @@ public class AnalyzerUtils {
             }
         };
         return queryStatement.getQueryRelation().accept(slotRefResolver, null);
+    }
+
+    public static boolean containsIgnoreCase(List<String> list, String soughtFor) {
+        for (String current : list) {
+            if (current.equalsIgnoreCase(soughtFor)) {
+                return true;
+            }
+        }
+        return false;
     }
 
 }

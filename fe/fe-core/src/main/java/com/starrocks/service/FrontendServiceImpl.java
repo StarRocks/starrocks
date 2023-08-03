@@ -79,6 +79,7 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.ThriftServerContext;
 import com.starrocks.common.ThriftServerEventProcessor;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.http.BaseAction;
@@ -89,6 +90,11 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
+import com.starrocks.load.pipe.Pipe;
+import com.starrocks.load.pipe.PipeFileRecord;
+import com.starrocks.load.pipe.PipeId;
+import com.starrocks.load.pipe.PipeManager;
+import com.starrocks.load.pipe.filelist.RepoAccessor;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
@@ -126,7 +132,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.QueryStatement;
@@ -196,6 +202,12 @@ import com.starrocks.thrift.TGetWarehousesRequest;
 import com.starrocks.thrift.TGetWarehousesResponse;
 import com.starrocks.thrift.TIsMethodSupportedRequest;
 import com.starrocks.thrift.TListMaterializedViewStatusResult;
+import com.starrocks.thrift.TListPipeFilesInfo;
+import com.starrocks.thrift.TListPipeFilesParams;
+import com.starrocks.thrift.TListPipeFilesResult;
+import com.starrocks.thrift.TListPipesInfo;
+import com.starrocks.thrift.TListPipesParams;
+import com.starrocks.thrift.TListPipesResult;
 import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TLoadJobType;
@@ -266,6 +278,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -314,7 +327,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         for (String fullName : dbNames) {
             try {
-                PrivilegeChecker.checkAnyActionOnOrInDb(currentUser, null, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                Authorizer.checkAnyActionOnOrInDb(currentUser, null, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         fullName);
             } catch (AccessDeniedException e) {
                 continue;
@@ -361,7 +374,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 Table tbl = db.getTable(tableName);
                 if (tbl != null) {
                     try {
-                        PrivilegeChecker.checkAnyActionOnTableLikeObject(currentUser,
+                        Authorizer.checkAnyActionOnTableLikeObject(currentUser,
                                 null, params.db, tbl);
                     } catch (AccessDeniedException e) {
                         continue;
@@ -409,7 +422,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 OUTER:
                 for (Table table : tables) {
                     try {
-                        PrivilegeChecker.checkAnyActionOnTableLikeObject(currentUser,
+                        Authorizer.checkAnyActionOnTableLikeObject(currentUser,
                                 null, params.db, table);
                     } catch (AccessDeniedException e) {
                         continue;
@@ -442,7 +455,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                 Table tbl = db.getTable(tableName.getTbl());
                                 if (tbl != null) {
                                     try {
-                                        PrivilegeChecker.checkAnyActionOnTableLikeObject(currentUser,
+                                        Authorizer.checkAnyActionOnTableLikeObject(currentUser,
                                                 null, tableName.getDb(), tbl);
                                     } catch (AccessDeniedException e) {
                                         continue OUTER;
@@ -488,6 +501,87 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         Preconditions.checkState(params.isSetType() && TTableType.MATERIALIZED_VIEW.equals(params.getType()));
         return listMaterializedViewStatus(limit, matcher, currentUser, params.db);
+    }
+
+    @Override
+    public TListPipesResult listPipes(TListPipesParams params) throws TException {
+        if (!params.isSetUser_ident()) {
+            throw new TException("missed user_identity");
+        }
+        // TODO: check privilege
+        UserIdentity userIdentity = UserIdentity.fromThrift(params.getUser_ident());
+
+        PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
+        Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
+        TListPipesResult result = new TListPipesResult();
+        for (Pipe pipe : pipes.values()) {
+            String databaseName = GlobalStateMgr.getCurrentState().mayGetDb(pipe.getPipeId().getDbId())
+                    .map(Database::getOriginName)
+                    .orElse(null);
+
+            TListPipesInfo row = new TListPipesInfo();
+            row.setPipe_id(pipe.getPipeId().getId());
+            row.setPipe_name(pipe.getName());
+            row.setDatabase_name(databaseName);
+            row.setState(pipe.getState().toString());
+            row.setLoaded_files(pipe.getLoadStatus().loadFiles);
+            row.setLoaded_rows(pipe.getLoadStatus().loadRows);
+            row.setLoaded_bytes(pipe.getLoadStatus().loadBytes);
+
+            result.addToPipes(row);
+        }
+
+        return result;
+    }
+
+    @Override
+    public TListPipeFilesResult listPipeFiles(TListPipeFilesParams params) throws TException {
+        if (!params.isSetUser_ident()) {
+            throw new TException("missed user_identity");
+        }
+        LOG.info("listPipeFiles params={}", params);
+        // TODO: check privilege
+        UserIdentity userIdentity = UserIdentity.fromThrift(params.getUser_ident());
+        TListPipeFilesResult result = new TListPipeFilesResult();
+        PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
+        Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
+        RepoAccessor repo = RepoAccessor.getInstance();
+        List<PipeFileRecord> files = repo.listAllFiles();
+        for (PipeFileRecord record : files) {
+            TListPipeFilesInfo file = new TListPipeFilesInfo();
+            Optional<Pipe> mayPipe = pm.mayGetPipe(record.pipeId);
+            if (!mayPipe.isPresent()) {
+                LOG.warn("Pipe not found with id {}", record.pipeId);
+            }
+
+            file.setPipe_id(record.pipeId);
+            file.setDatabase_name(
+                    mayPipe.flatMap(p ->
+                                    GlobalStateMgr.getCurrentState().mayGetDb(p.getDbAndName().first)
+                                            .map(Database::getOriginName))
+                            .orElse(""));
+            file.setPipe_name(mayPipe.map(Pipe::getName).orElse(""));
+
+            file.setFile_name(record.fileName);
+            file.setFile_version(record.fileVersion);
+            file.setFile_rows(0L); // TODO(murphy)
+            file.setFile_size(record.fileSize);
+            file.setLast_modified(DateUtils.formatDateTimeUnix(record.lastModified));
+
+            file.setState(record.loadState.toString());
+            file.setStaged_time(DateUtils.formatDateTimeUnix(record.stagedTime));
+            file.setStart_load(DateUtils.formatDateTimeUnix(record.startLoadTime));
+            file.setFinish_load(DateUtils.formatDateTimeUnix(record.finishLoadTime));
+
+            // TODO(murphy
+            file.setFirst_error_msg("");
+            file.setError_count(0L);
+            file.setError_line(0L);
+
+            result.addToPipe_files(file);
+        }
+
+        return result;
     }
 
     // list MaterializedView table match pattern
@@ -545,7 +639,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 if (table.isMaterializedView()) {
                     MaterializedView mvTable = (MaterializedView) table;
                     try {
-                        PrivilegeChecker.checkAnyActionOnTableLikeObject(currentUser,
+                        Authorizer.checkAnyActionOnTableLikeObject(currentUser,
                                 null, dbName, mvTable);
                     } catch (AccessDeniedException e) {
                         continue;
@@ -604,7 +698,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
 
             try {
-                PrivilegeChecker.checkAnyActionOnOrInDb(currentUser, null, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                Authorizer.checkAnyActionOnOrInDb(currentUser, null, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         task.getDbName());
             } catch (AccessDeniedException e) {
                 continue;
@@ -652,7 +746,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
 
             try {
-                PrivilegeChecker.checkAnyActionOnOrInDb(currentUser, null, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                Authorizer.checkAnyActionOnOrInDb(currentUser, null, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         status.getDbName());
             } catch (AccessDeniedException e) {
                 continue;
@@ -671,6 +765,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setExpire_time(status.getExpireTime() / 1000);
             info.setProgress(status.getProgress() + "%");
             info.setExtra_message(status.getExtraMessage());
+            info.setProperties(status.getPropertiesJson());
             tasksResult.add(info);
         }
         return result;
@@ -881,7 +976,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     return result;
                 }
                 try {
-                    PrivilegeChecker.checkAnyActionOnTableLikeObject(currentUser,
+                    Authorizer.checkAnyActionOnTableLikeObject(currentUser,
                             null, params.db, table);
                 } catch (AccessDeniedException e) {
                     return result;
@@ -902,7 +997,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         boolean reachLimit;
         for (String fullName : dbNames) {
             try {
-                PrivilegeChecker.checkAnyActionOnOrInDb(currentUser, null,
+                Authorizer.checkAnyActionOnOrInDb(currentUser, null,
                         InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, fullName);
             } catch (AccessDeniedException e) {
                 continue;
@@ -918,7 +1013,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         }
 
                         try {
-                            PrivilegeChecker.checkAnyActionOnTableLikeObject(currentUser,
+                            Authorizer.checkAnyActionOnTableLikeObject(currentUser,
                                     null, fullName, table);
                         } catch (AccessDeniedException e) {
                             continue;
@@ -1084,7 +1179,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         // check INSERT action on table
         try {
-            PrivilegeChecker.checkTableAction(currentUser, null, db, tbl, PrivilegeType.INSERT);
+            Authorizer.checkTableAction(currentUser, null, db, tbl, PrivilegeType.INSERT);
         } catch (AccessDeniedException e) {
             throw new AuthenticationException(
                     "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
@@ -1651,7 +1746,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try {
             String dbName = authParams.getDb_name();
             for (String tableName : authParams.getTable_names()) {
-                PrivilegeChecker.checkTableAction(userIdentity, null, dbName, tableName, PrivilegeType.INSERT);
+                Authorizer.checkTableAction(userIdentity, null, dbName, tableName, PrivilegeType.INSERT);
             }
             return new TStatus(TStatusCode.OK);
         } catch (Exception e) {

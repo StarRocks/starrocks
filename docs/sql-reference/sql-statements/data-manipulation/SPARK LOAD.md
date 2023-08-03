@@ -94,7 +94,7 @@ For example, the separator of hive file \ x01 is specified as "\ \ x01"
 
 file_type:
 
-Used to specify the type of imported file. Currently, only csv is supported.
+Used to specify the type of imported file. Currently, supported file types are csv, orc, and parquet.
 
 column_list:
 

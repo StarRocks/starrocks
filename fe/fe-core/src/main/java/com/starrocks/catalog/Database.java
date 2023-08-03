@@ -71,6 +71,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -594,11 +595,23 @@ public class Database extends MetaObject implements Writable {
         }
     }
 
+    public Optional<Table> tryGetTable(String tableName) {
+        return Optional.ofNullable(nameToTable.get(tableName));
+    }
+
+    public Optional<Table> tryGetTable(long tableId) {
+        return Optional.ofNullable(idToTable.get(tableId));
+    }
+
     public Table getTable(String tableName) {
         if (nameToTable.containsKey(tableName)) {
             return nameToTable.get(tableName);
         }
         return null;
+    }
+
+    public Optional<Table> mayGetTable(String tableName) {
+        return Optional.ofNullable(nameToTable.get(tableName));
     }
 
     public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String mvName) {

@@ -26,6 +26,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.qe.RowBatch;
 import com.starrocks.sql.LoadPlanner;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TNetworkAddress;
@@ -127,6 +128,8 @@ public abstract class Coordinator {
     public abstract void endProfile();
 
     public abstract void setTopProfileSupplier(Supplier<RuntimeProfile> topProfileSupplier);
+
+    public abstract void setExecPlanSupplier(Supplier<ExecPlan> execPlanSupplier);
 
     public abstract RuntimeProfile buildMergedQueryProfile(PQueryStatistics statistics);
 

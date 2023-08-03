@@ -46,6 +46,7 @@
 #include "storage/metadata_util.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_map.h"
+#include "testutil/sync_point.h"
 #include "util/lru_cache.h"
 #include "util/raw_container.h"
 #include "util/trace.h"
@@ -307,6 +308,20 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     tablet_metadata_pb->set_version(1);
     tablet_metadata_pb->set_next_rowset_id(1);
     tablet_metadata_pb->set_cumulative_point(0);
+
+    if (req.__isset.enable_persistent_index) {
+        tablet_metadata_pb->set_enable_persistent_index(req.enable_persistent_index);
+        if (req.__isset.persistent_index_type) {
+            switch (req.persistent_index_type) {
+            case TPersistentIndexType::LOCAL:
+                tablet_metadata_pb->set_persistent_index_type(PersistentIndexTypePB::LOCAL);
+                break;
+            default:
+                return Status::InternalError(
+                        strings::Substitute("Unknown persistent index type, tabletId:$0", req.tablet_id));
+            }
+        }
+    }
 
     if (req.__isset.base_tablet_id && req.base_tablet_id > 0) {
         struct Finder {
@@ -782,22 +797,25 @@ StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, i
     auto clear_task = [=]() {
         // Delete txn logs
         auto st = tablet_mgr->delete_txn_log(tablet_id, txn_id);
-        LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet->txn_log_location(txn_id) << ": " << st;
+        TEST_SYNC_POINT_CALLBACK("publish_version:delete_txn_log", &st);
+        LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet_mgr->txn_log_location(tablet_id, txn_id) << ": " << st;
         // Delete vtxn logs
         if (alter_version != -1 && alter_version + 1 < new_version) {
             for (int64_t v = alter_version + 1; v < new_version; ++v) {
                 auto r = tablet_mgr->delete_txn_vlog(tablet_id, v);
-                LOG_IF(WARNING, !r.ok()) << "Fail to delete " << tablet->txn_vlog_location(v) << ": " << r;
+                LOG_IF(WARNING, !r.ok()) << "Fail to delete " << tablet_mgr->txn_vlog_location(tablet_id, v) << ": "
+                                         << r;
             }
         }
     };
 
-    auto tp = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::DROP);
-    auto st = tp->submit_func(std::move(clear_task));
-    LOG_IF(INFO, !st.ok()) << "Fail to submit clear task of txn " << txn_id << ", ignore this error";
-#ifdef BE_TEST
-    tp->wait();
-#endif
+    auto tp = ExecEnv::GetInstance()->vacuum_thread_pool();
+    if (LIKELY(tp != nullptr)) {
+        auto st = tp->submit_func(std::move(clear_task));
+        LOG_IF(INFO, !st.ok()) << "Fail to submit clear task of txn " << txn_id << ", ignore this error";
+    } else {
+        clear_task();
+    }
     return new_metadata;
 }
 

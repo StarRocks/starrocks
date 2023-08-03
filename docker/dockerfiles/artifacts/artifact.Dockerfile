@@ -2,12 +2,12 @@
 # Please run this command from the git repo root directory to build:
 #
 # Build a CentOS7 based artifact image:
-#  > DOCKER_BUILDKIT=1 docker build --rm=true --build-arg builder=starrocks/dev-env-centos7:main-latest -f docker/dockerfiles/artifacts/artifact.Dockerfile -t starrocks/artifact-centos7:tag .
+#  > DOCKER_BUILDKIT=1 docker build --rm=true --build-arg builder=starrocks/dev-env-centos7:latest -f docker/dockerfiles/artifacts/artifact.Dockerfile -t artifacts-centos7:latest .
 #
 # Build a Ubuntu based artifact image:
-#  > DOCKER_BUILDKIT=1 docker build --rm=true --build-arg builder=starrocks/dev-env-ubuntu:main-latest -f docker/dockerfiles/artifacts/artifact.Dockerfile -t starrocks/artifact-ubuntu:tag .
+#  > DOCKER_BUILDKIT=1 docker build --rm=true --build-arg builder=starrocks/dev-env-ubuntu:latest -f docker/dockerfiles/artifacts/artifact.Dockerfile -t artifacts-ubuntu:latest .
 
-ARG builder=starrocks/dev-env-ubuntu:main-latest
+ARG builder=starrocks/dev-env-ubuntu:latest
 ARG RELEASE_VERSION
 ARG BUILD_TYPE=Release
 ARG MAVEN_OPTS="-Dmaven.artifact.threads=128"

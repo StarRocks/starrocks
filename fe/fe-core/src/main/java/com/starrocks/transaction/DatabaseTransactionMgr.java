@@ -104,6 +104,8 @@ public class DatabaseTransactionMgr {
 
     private static final Logger LOG = LogManager.getLogger(DatabaseTransactionMgr.class);
 
+    public static final String TXN_TIMEOUT_BY_MANAGER = "timeout by txn manager";
+
     private long dbId;
 
     // the lock is used to control the access to transaction states
@@ -731,6 +733,21 @@ public class DatabaseTransactionMgr {
             // find the latest txn (which id is largest)
             long maxTxnId = existingTxnIds.stream().max(Comparator.comparingLong(Long::valueOf)).orElse(Long.MIN_VALUE);
             return unprotectedGetTransactionState(maxTxnId).getTransactionStatus();
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public TransactionState getLabelTransactionState(String label) {
+        readLock();
+        try {
+            Set<Long> existingTxnIds = unprotectedGetTxnIdsByLabel(label);
+            if (existingTxnIds == null || existingTxnIds.isEmpty()) {
+                return null;
+            }
+            // find the latest txn (which id is largest)
+            long maxTxnId = existingTxnIds.stream().max(Comparator.comparingLong(Long::valueOf)).orElse(Long.MIN_VALUE);
+            return unprotectedGetTransactionState(maxTxnId);
         } finally {
             readUnlock();
         }
@@ -1445,7 +1462,12 @@ public class DatabaseTransactionMgr {
     }
 
     public int getTransactionNum() {
-        return idToRunningTransactionState.size() + finalStatusTransactionStateDeque.size();
+        try {
+            readLock();
+            return idToRunningTransactionState.size() + finalStatusTransactionStateDeque.size();
+        } finally {
+            readUnlock();
+        }
     }
 
     public List<Pair<Long, Long>> getTransactionIdByCoordinateBe(String coordinateHost, int limit) {
@@ -1589,7 +1611,7 @@ public class DatabaseTransactionMgr {
         // abort timeout txns
         for (Long txnId : timeoutTxns) {
             try {
-                abortTransaction(txnId, "timeout by txn manager", null);
+                abortTransaction(txnId, TXN_TIMEOUT_BY_MANAGER, null);
                 LOG.info("transaction [" + txnId + "] is timeout, abort it by transaction manager");
             } catch (UserException e) {
                 // abort may be failed. it is acceptable. just print a log

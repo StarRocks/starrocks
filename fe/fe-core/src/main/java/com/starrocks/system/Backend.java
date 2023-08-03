@@ -286,6 +286,11 @@ public class Backend extends ComputeNode {
         return backendStatus;
     }
 
+    @Override
+    public boolean isSetStoragePath() {
+        return true;
+    }
+
     public static Backend read(DataInput in) throws IOException {
         Backend backend = new Backend();
         backend.readFields(in);

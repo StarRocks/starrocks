@@ -93,7 +93,8 @@ public class HiveMetastoreApiConverter {
         if (database == null || database.getName() == null) {
             throw new StarRocksConnectorException("Hive database [%s] doesn't exist");
         }
-        return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), database.getName());
+        return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), database.getName(),
+                database.getLocationUri());
     }
 
     public static org.apache.hadoop.hive.metastore.api.Database toMetastoreApiDatabase(Database database) {

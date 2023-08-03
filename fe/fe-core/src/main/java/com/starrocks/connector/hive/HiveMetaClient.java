@@ -157,7 +157,7 @@ public class HiveMetaClient {
             return (T) method.invoke(client.hiveClient, args);
         } catch (Exception e) {
             LOG.error(messageIfError, e);
-            connectionException = new StarRocksConnectorException(messageIfError + ", msg: " + e.getMessage());
+            connectionException = new StarRocksConnectorException(messageIfError + ", msg: " + e.getMessage(), e);
             throw connectionException;
         } finally {
             if (client == null && connectionException != null) {
@@ -175,6 +175,20 @@ public class HiveMetaClient {
     public List<String> getAllDatabaseNames() {
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getAllDatabases")) {
             return callRPC("getAllDatabases", "Failed to getAllDatabases", new Object[0]);
+        }
+    }
+
+    public void createDatabase(Database database) {
+        Class<?>[] argClasses = {Database.class};
+
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.createDatabase")) {
+            callRPC("createDatabase", "Failed to create database " + database.getName(), argClasses, database);
+        }
+    }
+
+    public void dropDatabase(String dbName, boolean deleteData) {
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.dropDatabase")) {
+            callRPC("dropDatabase", "Failed to drop database " + dbName, dbName, deleteData, false, false);
         }
     }
 

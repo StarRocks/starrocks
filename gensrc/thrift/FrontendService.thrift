@@ -388,6 +388,65 @@ struct TMaterializedViewStatus {
     25: optional string inactive_reason
 }
 
+struct TListPipesParams {
+    1: optional Types.TUserIdentity user_ident
+}
+
+struct TListPipesInfo {
+    // pipe entity
+    1: optional i64 pipe_id
+    2: optional string pipe_name
+    
+    // schema info
+    10: optional string database_name
+
+    // pipe status and statistics
+    20: optional string state
+
+    // pipe statistics
+    30: optional i64 loaded_files
+    31: optional i64 loaded_rows
+    32: optional i64 loaded_bytes
+}
+
+struct TListPipesResult {
+    1: optional list<TListPipesInfo> pipes;
+}
+
+struct TListPipeFilesParams {
+    1: optional Types.TUserIdentity user_ident
+}
+
+struct TListPipeFilesInfo {
+    // pipe entity
+    1: optional i64 pipe_id
+    2: optional string pipe_name
+    3: optional string database_name    
+    
+
+    // file entity
+    10: optional string file_name
+    11: optional string file_version
+    12: optional string state
+    13: optional i64 file_size
+    14: optional i64 file_rows
+    15: optional string last_modified
+    
+    // load status
+    20: optional string staged_time
+    21: optional string start_load
+    22: optional string finish_load
+    
+    // error information
+    30: optional string first_error_msg
+    31: optional i64 error_count
+    32: optional i64 error_line
+}
+
+struct TListPipeFilesResult {
+    1: optional list<TListPipeFilesInfo> pipe_files
+}
+
 struct TListMaterializedViewStatusResult {
     1: optional list<TMaterializedViewStatus> materialized_views
 }
@@ -425,6 +484,7 @@ struct TTaskRunInfo {
     11: optional string progress
 
     12: optional string extra_message
+    13: optional string properties
 }
 
 struct TGetTaskRunInfoResult {
@@ -1064,6 +1124,7 @@ struct TRange {
     2: optional TBasePartitionDesc base_desc
     3: optional binary start_key
     4: optional binary end_key
+    5: optional bool is_temp
 }
 
 struct TRangePartitionDesc {
@@ -1089,6 +1150,7 @@ struct TPartitionMeta {
     7: optional i64 visible_time
     8: optional i64 next_version
     9: optional i64 next_version_hash // Deprecated
+    10: optional bool is_temp
 }
 
 struct THashDistributionInfo {
@@ -1124,7 +1186,7 @@ struct TTableMeta {
     15: optional list<TIndexInfo> index_infos
     16: optional string colocate_group
     17: optional list<string> bloomfilter_columns
-    18: optional string table_type;
+    18: optional string table_type
 }
 
 struct TGetTableMetaResponse {
@@ -1412,6 +1474,8 @@ service FrontendService {
 
     TListTableStatusResult listTableStatus(1:TGetTablesParams params)
     TListMaterializedViewStatusResult listMaterializedViewStatus(1:TGetTablesParams params)
+    TListPipesResult listPipes(1: TListPipesParams params)
+    TListPipeFilesResult listPipeFiles(1: TListPipeFilesParams params)
 
     TGetTaskInfoResult getTasks(1:TGetTasksParams params)
     TGetTaskRunInfoResult getTaskRuns(1:TGetTasksParams params)
