@@ -598,6 +598,13 @@ std::unique_ptr<StripeInformation> ReaderImpl::getStripe(uint64_t stripeIndex) c
             contents->blockSize, contents->readerMetrics));
 }
 
+const orc::proto::StripeInformation& ReaderImpl::getStripeInOrcFormat(uint64_t stripeIndex) const {
+    if (stripeIndex > getNumberOfStripes()) {
+        throw std::logic_error("stripe index out of range");
+    }
+    return footer->stripes(static_cast<int>(stripeIndex));
+}
+
 FileVersion ReaderImpl::getFormatVersion() const {
     if (contents->postscript->version_size() != 2) {
         return FileVersion::v_0_11();
@@ -1052,6 +1059,8 @@ void RowReaderImpl::startNextStripe() {
             }
         }
 
+        contents->stream->prepareCache(InputStream::PrepareCacheScope::READ_FULL_STRIPE, currentStripeInfo.offset(),
+                                       stripeSize);
         if (streamIORangesEnabled) {
             contents->stream->clearIORanges();
         }

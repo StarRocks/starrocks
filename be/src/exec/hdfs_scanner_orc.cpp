@@ -294,6 +294,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(open_random_access_file());
     auto input_stream = std::make_unique<ORCHdfsFileStream>(_file.get(), _file->get_size().value(),
                                                             _shared_buffered_input_stream.get());
+    ORCHdfsFileStream* orc_hdfs_file_stream = input_stream.get();
+
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     std::unique_ptr<orc::Reader> reader;
     try {
@@ -366,6 +368,22 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         _lazy_load_ctx.active_load_slots.size() != 0) {
         _orc_reader->set_lazy_load_context(&_lazy_load_ctx);
     }
+
+    // select out strips we are going to read.
+    {
+        uint64_t stripe_number = reader->getNumberOfStripes();
+        std::vector<ORCHdfsFileStream::StripeInformation> stripes;
+        for (uint64_t idx = 0; idx < stripe_number; idx++) {
+            ORCHdfsFileStream::StripeInformation s;
+            auto stripeInfo = reader->getStripeInOrcFormat(idx);
+            if (_orc_row_reader_filter->filterOnOpeningStripe(idx, &stripeInfo)) continue;
+            s.offset = stripeInfo.offset();
+            s.length = stripeInfo.datalength() + stripeInfo.indexlength() + stripeInfo.footerlength();
+            stripes.emplace_back(s);
+        }
+        orc_hdfs_file_stream->setStripes(std::move(stripes));
+    }
+
     RETURN_IF_ERROR(_orc_reader->init(std::move(reader)));
     return Status::OK();
 }

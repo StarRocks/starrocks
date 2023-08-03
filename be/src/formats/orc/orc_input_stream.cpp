@@ -34,9 +34,15 @@ void ORCHdfsFileStream::prepareCache(PrepareCacheScope scope, uint64_t offset, u
     if (scope == PrepareCacheScope::READ_FULL_ROW_INDEX) {
         cache_max_size = config::orc_row_index_cache_max_size;
     }
+    if (scope == PrepareCacheScope::READ_FULL_STRIPE) {
+        cache_max_size = config::orc_stripe_cache_max_size;
+    }
 
     if (length > cache_max_size) return;
     if (canUseCacheBuffer(offset, length)) return;
+    if (scope == PrepareCacheScope::READ_FULL_STRIPE && _tiny_stripe_read) {
+        length = computeCacheFullStripeSize(offset, length);
+    }
     _cache_buffer.resize(length);
     _cache_offset = offset;
     doRead(_cache_buffer.data(), length, offset);
@@ -91,6 +97,39 @@ void ORCHdfsFileStream::setIORanges(std::vector<IORange>& io_ranges) {
     if (!st.ok()) {
         auto msg = strings::Substitute("Failed to setIORanges $0: $1", _file->filename(), st.to_string());
         throw orc::ParseError(msg);
+    }
+}
+
+uint64_t ORCHdfsFileStream::computeCacheFullStripeSize(uint64_t offset, uint64_t length) {
+    int from = 0;
+    while (from < _stripes.size()) {
+        if (_stripes[from].offset == offset) {
+            break;
+        }
+        from += 1;
+    }
+    assert(from != _stripes.size());
+    int to = from + 1;
+    while (to < _stripes.size()) {
+        // uint64_t gap = _stripes[to].offset - _stripes[to - 1].offset - _stripes[to - 1].length;
+        uint64_t total = _stripes[to].offset + _stripes[to].length - _stripes[from].offset;
+        // if (gap > config::io_coalesce_read_max_distance_size) break;
+        if (total > config::orc_stripe_cache_max_size) break;
+        to += 1;
+    }
+    to -= 1;
+    // VLOG_FILE << "[xxx] prepare cache. from stripe = " << from << ", to stripe = " << to;
+    return _stripes[to].offset + _stripes[to].length - _stripes[from].offset;
+}
+
+void ORCHdfsFileStream::setStripes(std::vector<StripeInformation>&& stripes) {
+    _stripes = std::move(stripes);
+    _tiny_stripe_read = true;
+    for (const StripeInformation& s : _stripes) {
+        if (s.length > config::orc_stripe_cache_max_size) {
+            _tiny_stripe_read = false;
+            break;
+        }
     }
 }
 

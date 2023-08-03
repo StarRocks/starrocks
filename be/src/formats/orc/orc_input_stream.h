@@ -32,6 +32,11 @@ class RandomAccessFile;
 
 class ORCHdfsFileStream : public orc::InputStream {
 public:
+    struct StripeInformation {
+        uint64_t offset;
+        uint64_t length;
+    };
+
     // |file| must outlive ORCHdfsFileStream
     ORCHdfsFileStream(RandomAccessFile* file, uint64_t length, io::SharedBufferedInputStream* sb_stream);
 
@@ -66,15 +71,19 @@ public:
     bool isIORangesEnabled() const override { return config::orc_coalesce_read_enable; }
     void clearIORanges() override;
     void setIORanges(std::vector<IORange>& io_ranges) override;
+    void setStripes(std::vector<StripeInformation>&& stripes);
 
 private:
     void doRead(void* buf, uint64_t length, uint64_t offset);
     bool canUseCacheBuffer(uint64_t offset, uint64_t length);
+    uint64_t computeCacheFullStripeSize(uint64_t offset, uint64_t length);
 
     RandomAccessFile* _file;
     uint64_t _length;
     std::vector<char> _cache_buffer;
     uint64_t _cache_offset;
     io::SharedBufferedInputStream* _sb_stream;
+    bool _tiny_stripe_read;
+    std::vector<StripeInformation> _stripes;
 };
 } // namespace starrocks
