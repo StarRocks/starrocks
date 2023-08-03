@@ -116,4 +116,11 @@ public class InfoSchemaDb extends Database {
         }
         return DATABASE_NAME.equalsIgnoreCase(dbName);
     }
+
+    public static boolean isInfoSchemaDb(Long dbID) {
+        if (dbID == null) {
+            return false;
+        }
+        return dbID.equals(SystemId.INFORMATION_SCHEMA_DB_ID);
+    }
 }

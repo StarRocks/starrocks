@@ -19,6 +19,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.Connector;
+import com.starrocks.connector.ConnectorService;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
@@ -75,7 +76,7 @@ public class IcebergTableSink extends DataSink {
                 compressionType = "default";
         }
         String catalogName = icebergTable.getCatalogName();
-        Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+        ConnectorService connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
         Preconditions.checkState(connector != null,
                 String.format("connector of catalog %s should not be null", catalogName));
 

@@ -34,8 +34,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static com.starrocks.connector.CatalogConnectorMetadata.wrapInfoSchema;
-
 public class HiveConnector implements Connector {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     public static final String HIVE_METASTORE_TYPE = "hive.metastore.type";
@@ -74,7 +72,7 @@ public class HiveConnector implements Connector {
 
     @Override
     public ConnectorMetadata getMetadata() {
-        return wrapInfoSchema(metadataFactory.create(), infoSchemaDb);
+        return metadataFactory.create();
     }
 
     private HiveMetadataFactory createMetadataFactory(HdfsEnvironment hdfsEnvironment) {

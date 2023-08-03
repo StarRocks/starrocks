@@ -29,6 +29,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
+import com.starrocks.connector.ConnectorService;
 import com.starrocks.connector.PredicateUtils;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
@@ -108,8 +109,7 @@ public class IcebergScanNode extends ScanNode {
         if (catalogName == null) {
             return;
         }
-        IcebergConnector connector = (IcebergConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
-                getConnector(catalogName);
+        ConnectorService connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
         if (connector != null) {
             cloudConfiguration = connector.getCloudConfiguration();
         }

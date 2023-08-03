@@ -386,7 +386,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
 
                 try {
-                    PrivilegeChecker.checkAnyActionOnTableLikeObject(currentUser,
+                    Authorizer.checkAnyActionOnTableLikeObject(currentUser,
                             null, params.db, tbl);
                 } catch (AccessDeniedException e) {
                     continue;

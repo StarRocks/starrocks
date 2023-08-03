@@ -25,6 +25,7 @@ import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.connector.ConnectorService;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.delta.DeltaLakeConnector;
 import com.starrocks.connector.delta.DeltaUtils;
@@ -92,8 +93,7 @@ public class DeltaLakeScanNode extends ScanNode {
         if (catalog == null) {
             return;
         }
-        DeltaLakeConnector connector = (DeltaLakeConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
-                getConnector(catalog);
+        ConnectorService connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
         if (connector != null) {
             cloudConfiguration = connector.getCloudConfiguration();
         }

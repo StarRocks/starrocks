@@ -15,7 +15,6 @@
 package com.starrocks.connector.paimon;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -34,7 +33,6 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Map.Entry;
 
-import static com.starrocks.connector.CatalogConnectorMetadata.wrapInfoSchema;
 import static org.apache.paimon.options.CatalogOptions.METASTORE;
 import static org.apache.paimon.options.CatalogOptions.URI;
 import static org.apache.paimon.options.CatalogOptions.WAREHOUSE;
@@ -51,7 +49,6 @@ public class PaimonConnector implements Connector {
     private final String warehousePath;
     private final String catalogName;
     private final Options paimonOptions;
-    private final InfoSchemaDb infoSchemaDb;
 
     public PaimonConnector(ConnectorContext context) {
         Map<String, String> properties = context.getProperties();
@@ -78,7 +75,6 @@ public class PaimonConnector implements Connector {
             throw new StarRocksConnectorException("The property %s must be set.", PAIMON_CATALOG_WAREHOUSE);
         }
         paimonOptions.setString(WAREHOUSE.key(), warehousePath);
-        this.infoSchemaDb = new InfoSchemaDb(catalogName);
 
         Configuration storageConfig = new Configuration();
         cloudConfiguration.applyToConfiguration(storageConfig);
@@ -100,9 +96,7 @@ public class PaimonConnector implements Connector {
 
     @Override
     public ConnectorMetadata getMetadata() {
-        ConnectorMetadata metadata =
-                new PaimonMetadata(catalogName, getPaimonNativeCatalog(), catalogType, metastoreUris, warehousePath);
-        return wrapInfoSchema(metadata, infoSchemaDb);
+        return new PaimonMetadata(catalogName, getPaimonNativeCatalog(), catalogType, metastoreUris, warehousePath);
     }
 
     @Override

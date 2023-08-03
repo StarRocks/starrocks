@@ -20,14 +20,13 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.system.SystemId;
-import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
@@ -54,7 +53,6 @@ import com.starrocks.thrift.TSinkCommitInfo;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.starrocks.catalog.system.information.InfoSchemaDb.isInfoSchemaDb;
@@ -64,227 +62,232 @@ import static java.util.Objects.requireNonNull;
 // Most of its method implementations delegate to the wrapped metadata.
 // Only used for connector metadata of external catalog.
 public class CatalogConnectorMetadata implements ConnectorMetadata {
-    private final ConnectorMetadata metadata;
-    private final InfoSchemaDb infoSchemaDb;
+    private final ConnectorMetadata normal;
+    private final ConnectorMetadata informationSchema;
 
-    public static CatalogConnectorMetadata wrapInfoSchema(ConnectorMetadata metadata, InfoSchemaDb infoSchemaDb) {
-        return new CatalogConnectorMetadata(metadata, infoSchemaDb);
+    public CatalogConnectorMetadata(ConnectorMetadata normal, ConnectorMetadata informationSchema) {
+        requireNonNull(normal, "metadata is null");
+        requireNonNull(informationSchema, "infoSchemaDb is null");
+        checkArgument(informationSchema instanceof InformationSchemaMetadata);
+        this.normal = normal;
+        this.informationSchema = informationSchema;
     }
 
-    public CatalogConnectorMetadata(ConnectorMetadata metadata, InfoSchemaDb infoSchemaDb) {
-        requireNonNull(metadata, "metadata is null");
-        requireNonNull(infoSchemaDb, "infoSchemaDb is null");
-        checkArgument(!(metadata instanceof CatalogConnectorMetadata),
-                "wrapped metadata is CatalogConnectorMetadata");
-        this.metadata = metadata;
-        this.infoSchemaDb = infoSchemaDb;
+    private ConnectorMetadata metadataOfDb(String dBName) {
+        if (isInfoSchemaDb(dBName)) {
+            return informationSchema;
+        }
+        return normal;
+    }
+
+    private ConnectorMetadata metadataOfDb(long dbId) {
+        if (isInfoSchemaDb(dbId)) {
+            return informationSchema;
+        }
+        return normal;
     }
 
     @Override
     public List<String> listDbNames() {
         ImmutableList.Builder<String> builder = ImmutableList.builder();
-        return builder.addAll(metadata.listDbNames())
-                .add(InfoSchemaDb.DATABASE_NAME)
+        return builder.addAll(this.informationSchema.listDbNames())
+                .addAll(this.normal.listDbNames())
                 .build();
     }
 
     @Override
     public List<String> listTableNames(String dbName) {
-        if (isInfoSchemaDb(dbName)) {
-            return infoSchemaDb.getTables().stream().map(Table::getName).collect(Collectors.toList());
-        }
-        return metadata.listTableNames(dbName);
+        ImmutableList.Builder<String> builder = ImmutableList.builder();
+        return builder.addAll(this.informationSchema.listTableNames(dbName))
+                .addAll(this.normal.listTableNames(dbName))
+                .build();
     }
 
     @Override
     public List<String> listPartitionNames(String databaseName, String tableName) {
-        return metadata.listPartitionNames(databaseName, tableName);
+        return normal.listPartitionNames(databaseName, tableName);
     }
 
     @Override
     public List<String> listPartitionNamesByValue(String databaseName, String tableName,
                                                   List<Optional<String>> partitionValues) {
-        return metadata.listPartitionNamesByValue(databaseName, tableName, partitionValues);
+        return normal.listPartitionNamesByValue(databaseName, tableName, partitionValues);
     }
 
     @Override
     public Table getTable(String dbName, String tblName) {
-        if (isInfoSchemaDb(dbName)) {
-            return infoSchemaDb.getTable(tblName);
-        }
+        ConnectorMetadata metadata = metadataOfDb(dbName);
         return metadata.getTable(dbName, tblName);
     }
 
     @Override
     public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String dbName, String tblName) {
-        return metadata.getMaterializedViewIndex(dbName, tblName);
+        return normal.getMaterializedViewIndex(dbName, tblName);
     }
 
     @Override
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys, long snapshotId,
                                                    ScalarOperator predicate, List<String> fieldNames) {
-        return metadata.getRemoteFileInfos(table, partitionKeys, snapshotId, predicate, fieldNames);
+        return normal.getRemoteFileInfos(table, partitionKeys, snapshotId, predicate, fieldNames);
     }
 
     @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
-        return metadata.getPartitions(table, partitionNames);
+        return normal.getPartitions(table, partitionNames);
     }
 
     @Override
     public Statistics getTableStatistics(OptimizerContext session, Table table, Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys, ScalarOperator predicate) {
-        return metadata.getTableStatistics(session, table, columns, partitionKeys, predicate);
+        return normal.getTableStatistics(session, table, columns, partitionKeys, predicate);
     }
 
     @Override
     public void clear() {
-        metadata.clear();
+        normal.clear();
     }
 
     @Override
     public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
-        metadata.refreshTable(srDbName, table, partitionNames, onlyCachedPartitions);
+        normal.refreshTable(srDbName, table, partitionNames, onlyCachedPartitions);
     }
 
     @Override
     public void createDb(String dbName) throws DdlException, AlreadyExistsException {
-        metadata.createDb(dbName);
+        normal.createDb(dbName);
     }
 
     @Override
     public boolean dbExists(String dbName) {
-        return isInfoSchemaDb(dbName) || metadata.dbExists(dbName);
+        ConnectorMetadata metadata = metadataOfDb(dbName);
+        return metadata.dbExists(dbName);
     }
 
     @Override
     public void createDb(String dbName, Map<String, String> properties) throws DdlException, AlreadyExistsException {
-        metadata.createDb(dbName, properties);
+        normal.createDb(dbName, properties);
     }
 
     @Override
     public void dropDb(String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {
-        metadata.dropDb(dbName, isForceDrop);
+        normal.dropDb(dbName, isForceDrop);
     }
 
     @Override
     public Database getDb(long dbId) {
-        if (dbId == SystemId.INFORMATION_SCHEMA_DB_ID) {
-            return infoSchemaDb;
-        }
+        ConnectorMetadata metadata = metadataOfDb(dbId);
         return metadata.getDb(dbId);
     }
 
     @Override
     public Database getDb(String name) {
-        if (isInfoSchemaDb(name)) {
-            return infoSchemaDb;
-        }
+        ConnectorMetadata metadata = metadataOfDb(name);
         return metadata.getDb(name);
     }
 
     @Override
     public List<Long> getDbIds() {
-        List<Long> dbIds = metadata.getDbIds();
-        dbIds.add(infoSchemaDb.getId());
-        return dbIds;
+        ImmutableList.Builder<Long> builder = ImmutableList.builder();
+        return builder.addAll(this.informationSchema.getDbIds())
+                .addAll(this.normal.getDbIds())
+                .build();
     }
 
     @Override
     public boolean createTable(CreateTableStmt stmt) throws DdlException {
-        return metadata.createTable(stmt);
+        return normal.createTable(stmt);
     }
 
     @Override
     public void dropTable(DropTableStmt stmt) throws DdlException {
-        metadata.dropTable(stmt);
+        normal.dropTable(stmt);
     }
 
     @Override
     public void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
-        metadata.finishSink(dbName, table, commitInfos);
+        normal.finishSink(dbName, table, commitInfos);
     }
 
     @Override
     public void alterTable(AlterTableStmt stmt) throws UserException {
-        metadata.alterTable(stmt);
+        normal.alterTable(stmt);
     }
 
     @Override
     public void renameTable(Database db, Table table, TableRenameClause tableRenameClause) throws DdlException {
-        metadata.renameTable(db, table, tableRenameClause);
+        normal.renameTable(db, table, tableRenameClause);
     }
 
     @Override
     public void alterTableComment(Database db, Table table, AlterTableCommentClause clause) {
-        metadata.alterTableComment(db, table, clause);
+        normal.alterTableComment(db, table, clause);
     }
 
     @Override
     public void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {
-        metadata.truncateTable(truncateTableStmt);
+        normal.truncateTable(truncateTableStmt);
     }
 
     @Override
     public void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
-        metadata.createTableLike(stmt);
+        normal.createTableLike(stmt);
     }
 
     @Override
     public void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
             throws DdlException, AnalysisException {
-        metadata.addPartitions(db, tableName, addPartitionClause);
+        normal.addPartitions(db, tableName, addPartitionClause);
     }
 
     @Override
     public void dropPartition(Database db, Table table, DropPartitionClause clause) throws DdlException {
-        metadata.dropPartition(db, table, clause);
+        normal.dropPartition(db, table, clause);
     }
 
     @Override
     public void renamePartition(Database db, Table table, PartitionRenameClause renameClause) throws DdlException {
-        metadata.renamePartition(db, table, renameClause);
+        normal.renamePartition(db, table, renameClause);
     }
 
     @Override
     public void createMaterializedView(CreateMaterializedViewStmt stmt) throws AnalysisException, DdlException {
-        metadata.createMaterializedView(stmt);
+        normal.createMaterializedView(stmt);
     }
 
     @Override
     public void createMaterializedView(CreateMaterializedViewStatement statement) throws DdlException {
-        metadata.createMaterializedView(statement);
+        normal.createMaterializedView(statement);
     }
 
     @Override
     public void dropMaterializedView(DropMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {
-        metadata.dropMaterializedView(stmt);
+        normal.dropMaterializedView(stmt);
     }
 
     @Override
     public void alterMaterializedView(AlterMaterializedViewStmt stmt)
             throws DdlException, MetaNotFoundException, AnalysisException {
-        metadata.alterMaterializedView(stmt);
+        normal.alterMaterializedView(stmt);
     }
 
     @Override
     public String refreshMaterializedView(RefreshMaterializedViewStatement refreshMaterializedViewStatement)
             throws DdlException, MetaNotFoundException {
-        return metadata.refreshMaterializedView(refreshMaterializedViewStatement);
+        return normal.refreshMaterializedView(refreshMaterializedViewStatement);
     }
 
     @Override
     public void cancelRefreshMaterializedView(String dbName, String mvName) throws DdlException, MetaNotFoundException {
-        metadata.cancelRefreshMaterializedView(dbName, mvName);
+        normal.cancelRefreshMaterializedView(dbName, mvName);
     }
 
     @Override
     public void createView(CreateViewStmt stmt) throws DdlException {
-        metadata.createView(stmt);
+        normal.createView(stmt);
     }
 
     @Override
     public void alterView(AlterViewStmt stmt) throws DdlException, UserException {
-        metadata.alterView(stmt);
+        normal.alterView(stmt);
     }
 }

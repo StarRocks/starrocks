@@ -16,7 +16,6 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.Config;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
@@ -36,8 +35,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.Map;
 import java.util.Properties;
 
-import static com.starrocks.connector.CatalogConnectorMetadata.wrapInfoSchema;
-
 public class IcebergConnector implements Connector {
     private static final Logger LOG = LogManager.getLogger(IcebergConnector.class);
     public static final String ICEBERG_CATALOG_TYPE = "iceberg.catalog.type";
@@ -52,14 +49,12 @@ public class IcebergConnector implements Connector {
     private final HdfsEnvironment hdfsEnvironment;
     private final String catalogName;
     private IcebergCatalog icebergNativeCatalog;
-    private final InfoSchemaDb infoSchemaDb;
 
     public IcebergConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
         this.properties = context.getProperties();
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         this.hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
-        this.infoSchemaDb = new InfoSchemaDb(catalogName);
     }
 
     private IcebergCatalog buildIcebergNativeCatalog() {
@@ -98,7 +93,7 @@ public class IcebergConnector implements Connector {
 
     @Override
     public ConnectorMetadata getMetadata() {
-        return wrapInfoSchema(new IcebergMetadata(catalogName, getNativeCatalog()), infoSchemaDb);
+        return new IcebergMetadata(catalogName, getNativeCatalog());
     }
 
     // In order to be compatible with the catalog created with the wrong configuration,

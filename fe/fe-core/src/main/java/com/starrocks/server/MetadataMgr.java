@@ -21,7 +21,6 @@ import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -31,9 +30,9 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
-import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.connector.ConnectorService;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
@@ -50,11 +49,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.parquet.Strings;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class MetadataMgr {
     private static final Logger LOG = LogManager.getLogger(MetadataMgr.class);
@@ -62,7 +59,6 @@ public class MetadataMgr {
     private final LocalMetastore localMetastore;
     private final ConnectorMgr connectorMgr;
     private final ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr;
-    private final Map<String, QueryMetadatas> metadataByQueryId = new ConcurrentHashMap<>();
 
     public MetadataMgr(LocalMetastore localMetastore, ConnectorMgr connectorMgr,
                        ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr) {
@@ -72,44 +68,47 @@ public class MetadataMgr {
         this.connectorTblMetaInfoMgr = connectorTblMetaInfoMgr;
     }
 
+    // get query id from thread local context if possible
+    private Optional<String> getOptionalQueryID() {
+        if (ConnectContext.get() != null && ConnectContext.get().getQueryId() != null) {
+            return Optional.of(ConnectContext.get().getQueryId().toString());
+        }
+        return Optional.empty();
+    }
+
+
     /** get ConnectorMetadata by catalog name
      * if catalog is null or empty will return localMetastore
      * @param catalogName catalog's name
      * @return ConnectorMetadata
      */
     public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
-        if (Strings.isNullOrEmpty(catalogName)) {
-            catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-        }
-        if (CatalogMgr.isInternalCatalog(catalogName)) {
+        if (Strings.isNullOrEmpty(catalogName) || CatalogMgr.isInternalCatalog(catalogName)) {
             return Optional.of(localMetastore);
-        } else {
-            String queryId = ConnectContext.get() != null && ConnectContext.get().getQueryId() != null ?
-                    ConnectContext.get().getQueryId().toString() : null;
-            if (queryId != null) {
-                QueryMetadatas queryMetadatas = metadataByQueryId.computeIfAbsent(queryId, ignored -> new QueryMetadatas());
-                return Optional.ofNullable(queryMetadatas.getConnectorMetadata(catalogName, queryId));
-            } else {
-                Connector connector = connectorMgr.getConnector(catalogName);
-                if (connector == null) {
-                    LOG.error("Failed to get {} catalog", catalogName);
-                    return Optional.empty();
-                } else {
-                    return Optional.of(connector.getMetadata());
-                }
-            }
         }
+
+        ConnectorService connector = connectorMgr.getConnector(catalogName);
+        if (connector == null) {
+            LOG.error("Failed to get {} catalog", catalogName);
+            return Optional.empty();
+        }
+
+        ConnectorMetadata connectorMetadata = null;
+        Optional<String> queryId = getOptionalQueryID();
+        if (queryId.isPresent()) { // use query-level cache if from query
+            connectorMetadata = connector.getCachedMetadata(queryId.get());
+        } else {
+            connectorMetadata = connector.getMetadata();
+        }
+
+        return Optional.of(connectorMetadata);
     }
 
     public void removeQueryMetadata() {
-        String queryId = ConnectContext.get() != null && ConnectContext.get().getQueryId() != null ?
-                ConnectContext.get().getQueryId().toString() : null;
-        if (queryId != null) {
-            QueryMetadatas queryMetadatas = metadataByQueryId.get(queryId);
-            if (queryMetadatas != null) {
-                queryMetadatas.metadatas.values().forEach(ConnectorMetadata::clear);
-                metadataByQueryId.remove(queryId);
-                LOG.info("Succeed to deregister query level connector metadata on query id: {}", queryId);
+        Optional<String> queryId = getOptionalQueryID();
+        if (queryId.isPresent()) {
+            for (ConnectorService connectorService : connectorMgr.listConnectors()) {
+                connectorService.removeMetadata(queryId.get());
             }
         }
     }
@@ -337,28 +336,5 @@ public class MetadataMgr {
                 throw new StarRocksConnectorException(e.getMessage());
             }
         });
-    }
-
-    private class QueryMetadatas {
-        private final Map<String, ConnectorMetadata> metadatas = new HashMap<>();
-
-        public QueryMetadatas() {
-        }
-
-        public synchronized ConnectorMetadata getConnectorMetadata(String catalogName, String queryId) {
-            if (metadatas.containsKey(catalogName)) {
-                return metadatas.get(catalogName);
-            }
-
-            Connector connector = connectorMgr.getConnector(catalogName);
-            if (connector == null) {
-                LOG.error("Connector [{}] doesn't exist", catalogName);
-                return null;
-            }
-            ConnectorMetadata connectorMetadata = connector.getMetadata();
-            metadatas.put(catalogName, connectorMetadata);
-            LOG.info("Succeed to register query level connector metadata [catalog:{}, queryId: {}]", catalogName, queryId);
-            return connectorMetadata;
-        }
     }
 }
