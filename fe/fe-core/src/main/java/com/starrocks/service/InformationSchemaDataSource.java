@@ -60,8 +60,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-
 public class InformationSchemaDataSource {
 
     private static final Logger LOG = LogManager.getLogger(InformationSchemaDataSource.class);
@@ -85,7 +83,7 @@ public class InformationSchemaDataSource {
             }
         }
 
-        String catalogName = DEFAULT_INTERNAL_CATALOG_NAME;
+        String catalogName = null;
         if (authInfo.isSetCatalog_name()) {
             catalogName = authInfo.getCatalog_name();
         }
@@ -305,7 +303,7 @@ public class InformationSchemaDataSource {
         TAuthInfo authInfo = request.getAuth_info();
         AuthDbRequestResult result = getAuthDbRequestResult(authInfo);
 
-        String catalogName = DEFAULT_INTERNAL_CATALOG_NAME;
+        String catalogName = null;
         if (authInfo.isSetCatalog_name()) {
             catalogName = authInfo.getCatalog_name();
         }

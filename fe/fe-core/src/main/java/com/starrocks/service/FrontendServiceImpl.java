@@ -271,7 +271,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
 import static com.starrocks.thrift.TStatusCode.NOT_IMPLEMENTED_ERROR;
 import static com.starrocks.thrift.TStatusCode.OK;
 import static com.starrocks.thrift.TStatusCode.RUNTIME_ERROR;
@@ -303,7 +302,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
         }
 
-        String catalogName = DEFAULT_INTERNAL_CATALOG_NAME;
+        String catalogName = null;
         if (params.isSetCatalog_name()) {
             catalogName = params.getCatalog_name();
         }
@@ -356,7 +355,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         // database privs should be checked in analysis phase
-        String catalogName = DEFAULT_INTERNAL_CATALOG_NAME;
+        String catalogName = null;
         if (params.isSetCatalog_name()) {
             catalogName = params.getCatalog_name();
         }
@@ -897,7 +896,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
 
-        String catalogName = DEFAULT_INTERNAL_CATALOG_NAME;
+        String catalogName = null;
         if (params.isSetCatalog_name()) {
             catalogName = params.getCatalog_name();
         }
@@ -1610,7 +1609,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try {
             // Adapt to the situation that the Fe node before upgrading sends a request to the Fe node after upgrading.
             if (request.getCatalog_name() == null) {
-                request.setCatalog_name(DEFAULT_INTERNAL_CATALOG_NAME);
+                request.setCatalog_name(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
             }
             GlobalStateMgr.getCurrentState().refreshExternalTable(new TableName(request.getCatalog_name(),
                     request.getDb_name(), request.getTable_name()), request.getPartitions());

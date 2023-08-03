@@ -17,7 +17,6 @@ package com.starrocks.connector.hive;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
@@ -43,7 +42,6 @@ public class HiveConnector implements Connector {
     private final String catalogName;
     private final HiveConnectorInternalMgr internalMgr;
     private final HiveMetadataFactory metadataFactory;
-    private final InfoSchemaDb infoSchemaDb;
 
     public HiveConnector(ConnectorContext context) {
         this.properties = context.getProperties();
@@ -52,7 +50,6 @@ public class HiveConnector implements Connector {
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.internalMgr = new HiveConnectorInternalMgr(catalogName, properties, hdfsEnvironment);
         this.metadataFactory = createMetadataFactory(hdfsEnvironment);
-        this.infoSchemaDb = new InfoSchemaDb(catalogName);
         validate();
         onCreate();
     }
