@@ -142,7 +142,7 @@ public class NativeAccessControl implements AccessControl {
 
     @Override
     public void checkAnyActionOnAnyMaterializedView(UserIdentity currentUser, Set<Long> roleIds, String db) {
-        checkAnyActionOnView(currentUser, roleIds, new TableName(db, "*"));
+        checkAnyActionOnMaterializedView(currentUser, roleIds, new TableName(db, "*"));
     }
 
     @Override

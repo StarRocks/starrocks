@@ -1574,6 +1574,22 @@ public class AuthorizationMgrTest {
     }
 
     @Test
+    public void testGrantMaterializedView() throws Exception {
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create user mv_user", ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant select on materialized view db3.mv1 to mv_user", ctx), ctx);
+        UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("mv_user", "%");
+        setCurrentUserAndRoles(ctx, user);
+        new NativeAccessControl().checkMaterializedViewAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                new TableName("db3", "mv1"), PrivilegeType.SELECT);
+        new NativeAccessControl().checkAnyActionOnMaterializedView(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                new TableName("db3", "mv1"));
+        new NativeAccessControl().checkAnyActionOnAnyMaterializedView(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                "db3");
+    }
+
+    @Test
     public void testGrantBrief() throws Exception {
         ctx.setDatabase("db");
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
