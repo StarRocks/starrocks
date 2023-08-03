@@ -2,7 +2,7 @@
 
 StarRocks 支持通过两种方式从 HDFS 导入大批量数据：[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) 和 [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md)。
 
-在 3.0 及以前版本，StarRocks 只支持 Broker Load 导入方式。Broker Load 是一种异步导入方式，即您提交导入作业以后，StarRocks 会异步地执行导入作业。您需要通过 [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) 语句或者 `curl` 命令来查看导入作业的结果。
+在 3.0 及以前版本，StarRocks 只支持 Broker Load 导入方式。Broker Load 是一种异步导入方式，即您提交导入作业以后，StarRocks 会异步地执行导入作业。您可以使用 `SELECT * FROM information_schema.loads` 来查看 Broker Load 作业的结果，该功能自 3.1 版本起支持，具体请参见本文“[查看导入作业](#查看导入作业)”小节。
 
 Broker Load 能够保证单次导入事务的原子性，即单次导入的多个数据文件都成功或者都失败，而不会出现部分导入成功、部分导入失败的情况。
 
@@ -263,51 +263,107 @@ PROPERTIES
 
 ## 查看导入作业
 
-Broker Load 支持通过 SHOW LOAD 语句和 `curl` 命令两种方式来查看导入作业的执行情况。
+通过 [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) 语句从 `information_schema` 数据库中的 `loads` 表来查看 Broker Load 作业的结果。该功能自 3.1 版本起支持。
 
-### 使用 SHOW LOAD 语句
+示例一：通过如下命令查看 `test_db` 数据库中导入作业的执行情况，同时指定查询结果根据作业创建时间 (`CREATE_TIME`) 按降序排列，并且最多显示两条结果数据：
 
-请参见 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md)。
-
-### 使用 curl 命令
-
-命令语法如下：
-
-```Bash
-curl --location-trusted -u <username>:<password> \
-    'http://<fe_host>:<fe_http_port>/api/<database_name>/_load_info?label=<label_name>'
+```SQL
+SELECT * FROM information_schema.loads
+WHERE database_name = 'test_db'
+ORDER BY create_time DESC
+LIMIT 2\G
 ```
 
-> **说明**
->
-> - 如果账号没有设置密码，这里只需要传入 `<username>:`。
-> - 您可以通过 [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW%20FRONTENDS.md) 命令查看 FE 节点的 IP 地址和 HTTP 端口号。
+返回结果如下所示：
 
-例如，可以通过如下命令查看上面 `test_db` 数据库中执行的导入作业之一 `label_brokerload_multiplefile_multipletable` 的执行情况：
-
-```Bash
-curl --location-trusted -u <username>:<password> \
-    'http://<fe_host>:<fe_http_port>/api/test_db/_load_info?label=label_brokerload_multiplefile_multipletable'
+```SQL
+*************************** 1. row ***************************
+              JOB_ID: 20686
+               LABEL: label_brokerload_unqualifiedtest_83
+       DATABASE_NAME: test_db
+               STATE: FINISHED
+            PROGRESS: ETL:100%; LOAD:100%
+                TYPE: BROKER
+            PRIORITY: NORMAL
+           SCAN_ROWS: 8
+       FILTERED_ROWS: 0
+     UNSELECTED_ROWS: 0
+           SINK_ROWS: 8
+            ETL_INFO:
+           TASK_INFO: resource:N/A; timeout(s):14400; max_filter_ratio:1.0
+         CREATE_TIME: 2023-08-02 15:25:22
+      ETL_START_TIME: 2023-08-02 15:25:24
+     ETL_FINISH_TIME: 2023-08-02 15:25:24
+     LOAD_START_TIME: 2023-08-02 15:25:24
+    LOAD_FINISH_TIME: 2023-08-02 15:25:27
+         JOB_DETAILS: {"All backends":{"77fe760e-ec53-47f7-917d-be5528288c08":[10006],"0154f64e-e090-47b7-a4b2-92c2ece95f97":[10005]},"FileNumber":2,"FileSize":84,"InternalTableLoadBytes":252,"InternalTableLoadRows":8,"ScanBytes":84,"ScanRows":8,"TaskNumber":2,"Unfinished backends":{"77fe760e-ec53-47f7-917d-be5528288c08":[],"0154f64e-e090-47b7-a4b2-92c2ece95f97":[]}}
+           ERROR_MSG: NULL
+        TRACKING_URL: NULL
+        TRACKING_SQL: NULL
+REJECTED_RECORD_PATH: NULL
+*************************** 2. row ***************************
+              JOB_ID: 20624
+               LABEL: label_brokerload_unqualifiedtest_82
+       DATABASE_NAME: test_db
+               STATE: FINISHED
+            PROGRESS: ETL:100%; LOAD:100%
+                TYPE: BROKER
+            PRIORITY: NORMAL
+           SCAN_ROWS: 12
+       FILTERED_ROWS: 4
+     UNSELECTED_ROWS: 0
+           SINK_ROWS: 8
+            ETL_INFO:
+           TASK_INFO: resource:N/A; timeout(s):14400; max_filter_ratio:1.0
+         CREATE_TIME: 2023-08-02 15:23:29
+      ETL_START_TIME: 2023-08-02 15:23:34
+     ETL_FINISH_TIME: 2023-08-02 15:23:34
+     LOAD_START_TIME: 2023-08-02 15:23:34
+    LOAD_FINISH_TIME: 2023-08-02 15:23:34
+         JOB_DETAILS: {"All backends":{"78f78fc3-8509-451f-a0a2-c6b5db27dcb6":[10010],"a24aa357-f7de-4e49-9e09-e98463b5b53c":[10006]},"FileNumber":2,"FileSize":158,"InternalTableLoadBytes":333,"InternalTableLoadRows":8,"ScanBytes":158,"ScanRows":12,"TaskNumber":2,"Unfinished backends":{"78f78fc3-8509-451f-a0a2-c6b5db27dcb6":[],"a24aa357-f7de-4e49-9e09-e98463b5b53c":[]}}
+           ERROR_MSG: NULL
+        TRACKING_URL: http://172.26.195.69:8540/api/_load_error_log?file=error_log_78f78fc38509451f_a0a2c6b5db27dcb7
+        TRACKING_SQL: select tracking_log from information_schema.load_tracking_logs where job_id=20624
+REJECTED_RECORD_PATH: 172.26.95.92:/home/disk1/sr/be/storage/rejected_record/test_db/label_brokerload_unqualifiedtest_0728/6/404a20b1e4db4d27_8aa9af1e8d6d8bdc
 ```
 
-命令执行后，以 JSON 格式返回导入作业的结果信息 `jobInfo`，如下所示：
+示例二：通过如下命令查看 `test_db` 数据库中标签为 `label_brokerload_unqualifiedtest_82` 的导入作业的执行情况：
 
-```JSON
-{"jobInfo":{"dbName":"test_db","tblNames":["table1","table2"],"label":"label_brokerload_multiplefile_multipletable","state":"FINISHED","failMsg":"","trackingUrl":""},"status":"OK","msg":"Success"}
+```SQL
+SELECT * FROM information_schema.loads
+WHERE database_name = 'test_db' and label = 'label_brokerload_unqualifiedtest_82'\G
 ```
 
-`jobInfo` 中包含如下参数：
+返回结果如下所示：
 
-| **参数**    | **说明**                                                     |
-| ----------- | ------------------------------------------------------------ |
-| dbName      | 目标 StarRocks 表所在的数据库的名称。                               |
-| tblNames    | 目标 StarRocks 表的名称。                        |
-| label       | 导入作业的标签。                                             |
-| state       | 导入作业的状态，包括：<ul><li>`PENDING`：导入作业正在等待执行中。</li><li>`QUEUEING`：导入作业正在等待执行中。</li><li>`LOADING`：导入作业正在执行中。</li><li>`PREPARED`：事务已提交。</li><li>`FINISHED`：导入作业成功。</li><li>`CANCELLED`：导入作业失败。</li></ul>请参见[异步导入](/loading/Loading_intro.md#异步导入)。 |
-| failMsg     | 导入作业的失败原因。当导入作业的状态为`PENDING`，`LOADING`或`FINISHED`时，该参数值为`NULL`。当导入作业的状态为`CANCELLED`时，该参数值包括 `type` 和 `msg` 两部分：<ul><li>`type` 包括如下取值：</li><ul><li>`USER_CANCEL`：导入作业被手动取消。</li><li>`ETL_SUBMIT_FAIL`：导入任务提交失败。</li><li>`ETL-QUALITY-UNSATISFIED`：数据质量不合格，即导入作业的错误数据率超过了 `max-filter-ratio`。</li><li>`LOAD-RUN-FAIL`：导入作业在 `LOADING` 状态失败。</li><li>`TIMEOUT`：导入作业未在允许的超时时间内完成。</li><li>`UNKNOWN`：未知的导入错误。</li></ul><li>`msg` 显示有关失败原因的详细信息。</li></ul> |
-| trackingUrl | 导入作业中质量不合格数据的访问地址。可以使用 `curl` 命令或 `wget` 命令访问该地址。如果导入作业中不存在质量不合格的数据，则返回空值。 |
-| status      | 导入请求的状态，包括 `OK` 和 `Fail`。                        |
-| msg         | HTTP 请求的错误信息。                                        |
+```SQL
+*************************** 1. row ***************************
+              JOB_ID: 20624
+               LABEL: label_brokerload_unqualifiedtest_82
+       DATABASE_NAME: test_db
+               STATE: FINISHED
+            PROGRESS: ETL:100%; LOAD:100%
+                TYPE: BROKER
+            PRIORITY: NORMAL
+           SCAN_ROWS: 12
+       FILTERED_ROWS: 4
+     UNSELECTED_ROWS: 0
+           SINK_ROWS: 8
+            ETL_INFO:
+           TASK_INFO: resource:N/A; timeout(s):14400; max_filter_ratio:1.0
+         CREATE_TIME: 2023-08-02 15:23:29
+      ETL_START_TIME: 2023-08-02 15:23:34
+     ETL_FINISH_TIME: 2023-08-02 15:23:34
+     LOAD_START_TIME: 2023-08-02 15:23:34
+    LOAD_FINISH_TIME: 2023-08-02 15:23:34
+         JOB_DETAILS: {"All backends":{"78f78fc3-8509-451f-a0a2-c6b5db27dcb6":[10010],"a24aa357-f7de-4e49-9e09-e98463b5b53c":[10006]},"FileNumber":2,"FileSize":158,"InternalTableLoadBytes":333,"InternalTableLoadRows":8,"ScanBytes":158,"ScanRows":12,"TaskNumber":2,"Unfinished backends":{"78f78fc3-8509-451f-a0a2-c6b5db27dcb6":[],"a24aa357-f7de-4e49-9e09-e98463b5b53c":[]}}
+           ERROR_MSG: NULL
+        TRACKING_URL: http://172.26.195.69:8540/api/_load_error_log?file=error_log_78f78fc38509451f_a0a2c6b5db27dcb7
+        TRACKING_SQL: select tracking_log from information_schema.load_tracking_logs where job_id=20624
+REJECTED_RECORD_PATH: 172.26.95.92:/home/disk1/sr/be/storage/rejected_record/test_db/label_brokerload_unqualifiedtest_0728/6/404a20b1e4db4d27_8aa9af1e8d6d8bdc
+```
+
+有关返回字段的说明，参见 [Information Schema > loads](../administration/information_schema.md#loads)。
 
 ### 取消导入作业
 
