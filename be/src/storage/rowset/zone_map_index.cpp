@@ -67,17 +67,17 @@ template <LogicalType type>
 struct ZoneMapDatum final : public ZoneMapDatumBase<type> {};
 
 template <>
-struct ZoneMapDatum<TYPE_DECIMAL32> : public ZoneMapDatumBase<TYPE_DECIMAL32> {
+struct ZoneMapDatum<TYPE_DECIMAL32> final : public ZoneMapDatumBase<TYPE_DECIMAL32> {
     std::string to_zone_map_string(TypeInfo* type_info) const { return get_decimal_zone_map_string(type_info, &value); }
 };
 
 template <>
-struct ZoneMapDatum<TYPE_DECIMAL64> : public ZoneMapDatumBase<TYPE_DECIMAL64> {
+struct ZoneMapDatum<TYPE_DECIMAL64> final : public ZoneMapDatumBase<TYPE_DECIMAL64> {
     std::string to_zone_map_string(TypeInfo* type_info) const { return get_decimal_zone_map_string(type_info, &value); }
 };
 
 template <>
-struct ZoneMapDatum<TYPE_DECIMAL128> : public ZoneMapDatumBase<TYPE_DECIMAL128> {
+struct ZoneMapDatum<TYPE_DECIMAL128> final : public ZoneMapDatumBase<TYPE_DECIMAL128> {
     std::string to_zone_map_string(TypeInfo* type_info) const { return get_decimal_zone_map_string(type_info, &value); }
 };
 
@@ -104,7 +104,7 @@ struct ZoneMapDatum<TYPE_CHAR> : public ZoneMapDatumBase<TYPE_CHAR> {
 };
 
 template <>
-struct ZoneMapDatum<TYPE_VARCHAR> : public ZoneMapDatum<TYPE_CHAR> {};
+struct ZoneMapDatum<TYPE_VARCHAR> final : public ZoneMapDatum<TYPE_CHAR> {};
 
 template <LogicalType type>
 struct ZoneMap {
