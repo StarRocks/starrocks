@@ -166,7 +166,7 @@ public class AnalyzerUtils {
         return !aggregates.isEmpty() || !groupByExpressions.isEmpty();
     }
 
-    private static Function getDBUdfFunction(ConnectContext context, FunctionName fnName,
+    public static Function getDBUdfFunction(ConnectContext context, FunctionName fnName,
                                              Type[] argTypes) {
         String dbName = fnName.getDb();
         if (StringUtils.isEmpty(dbName)) {
