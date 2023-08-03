@@ -1172,14 +1172,6 @@ public class SystemInfoService implements GsonPostProcessable {
             idToReportVersion.put(beId, new AtomicLong(0));
         }
         idToReportVersionRef = ImmutableMap.copyOf(idToReportVersion);
-
-        // update BackendCoreStat
-        for (ComputeNode node : idToBackendRef.values()) {
-            BackendCoreStat.setNumOfHardwareCoresOfBe(node.getId(), node.getCpuCores());
-        }
-        for (ComputeNode node : idToComputeNodeRef.values()) {
-            BackendCoreStat.setNumOfHardwareCoresOfBe(node.getId(), node.getCpuCores());
-        }
     }
 }
 
