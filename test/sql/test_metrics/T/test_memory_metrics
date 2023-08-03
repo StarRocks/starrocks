@@ -110,7 +110,9 @@ shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"compaction_stat
 shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"stream_load_task_count\" | awk '{if ($NF >= 0) print "true"; else print "false";}'
 
 -- name: test_memory_metrics_query_detail_count
+admin set frontend config ("enable_collect_query_detail_info" = "true");
 [UC]show frontends;
+admin set frontend config ("enable_collect_query_detail_info" = "false");
 shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"query_detail_count\" | awk '{if ($NF >= 1) print "true"; else print "false";}'
 
 -- name: test_memory_metrics_query_profile_count
