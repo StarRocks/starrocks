@@ -69,7 +69,12 @@ Rowset::Rowset(const TabletSchema* schema, std::string rowset_path, RowsetMetaSh
           _rowset_path(std::move(rowset_path)),
           _rowset_meta(std::move(rowset_meta)),
           _refs_by_reader(0) {
+<<<<<<< HEAD
     MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
+=======
+    _keys_type = _schema->keys_type();
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
+>>>>>>> a3aedfa85a ([BugFix] Be crash when delete cols file for unused rowset (#28579) (#28580))
 }
 
 Rowset::~Rowset() {
@@ -310,7 +315,7 @@ Status Rowset::_remove_delta_column_group_files(const std::shared_ptr<FileSystem
         // 1. remove dcg files
         for (int i = 0; i < num_segments(); i++) {
             DeltaColumnGroupList list;
-            if (_schema->keys_type() == PRIMARY_KEYS) {
+            if (_keys_type == PRIMARY_KEYS) {
                 RETURN_IF_ERROR(TabletMetaManager::scan_delta_column_group(kvstore, _rowset_meta->tablet_id(),
                                                                            _rowset_meta->get_rowset_seg_id() + i, 0,
                                                                            INT64_MAX, &list));
@@ -332,7 +337,7 @@ Status Rowset::_remove_delta_column_group_files(const std::shared_ptr<FileSystem
             }
         }
         // 2. remove dcg from rocksdb
-        if (_schema->keys_type() == PRIMARY_KEYS) {
+        if (_keys_type == PRIMARY_KEYS) {
             RETURN_IF_ERROR(TabletMetaManager::delete_delta_column_group(
                     kvstore, _rowset_meta->tablet_id(), _rowset_meta->get_rowset_seg_id(), num_segments()));
         } else {
@@ -381,7 +386,7 @@ Status Rowset::_link_delta_column_group_files(KVStore* kvstore, const std::strin
         for (int i = 0; i < num_segments(); i++) {
             DeltaColumnGroupList list;
 
-            if (_schema->keys_type() == PRIMARY_KEYS) {
+            if (_keys_type == PRIMARY_KEYS) {
                 RETURN_IF_ERROR(TabletMetaManager::scan_delta_column_group(
                         kvstore, _rowset_meta->tablet_id(), _rowset_meta->get_rowset_seg_id() + i, 0, version, &list));
             } else {
@@ -468,7 +473,7 @@ Status Rowset::_copy_delta_column_group_files(KVStore* kvstore, const std::strin
         for (int i = 0; i < num_segments(); i++) {
             DeltaColumnGroupList list;
 
-            if (_schema->keys_type() == PRIMARY_KEYS) {
+            if (_keys_type == PRIMARY_KEYS) {
                 RETURN_IF_ERROR(TabletMetaManager::scan_delta_column_group(
                         kvstore, _rowset_meta->tablet_id(), _rowset_meta->get_rowset_seg_id() + i, 0, version, &list));
             } else {
