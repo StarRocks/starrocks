@@ -57,6 +57,9 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* group_active_lazy_coalesce_together = nullptr;
     RuntimeProfile::Counter* group_active_lazy_coalesce_seperately = nullptr;
 
+    // page statistics
+    RuntimeProfile::Counter* has_page_statistics = nullptr;
+
     RuntimeProfile* root = profile->runtime_profile;
     ADD_COUNTER(root, kParquetProfileSectionPrefix, TUnit::UNIT);
     request_bytes_read = ADD_CHILD_COUNTER(root, "RequestBytesRead", TUnit::BYTES, kParquetProfileSectionPrefix);
@@ -80,6 +83,8 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     group_active_lazy_coalesce_seperately =
             ADD_CHILD_COUNTER(root, "GroupActiveLazyCoalesceSeperately", TUnit::UNIT, kParquetProfileSectionPrefix);
 
+    has_page_statistics = ADD_CHILD_COUNTER(root, "HasPageStatistics", TUnit::UNIT, kParquetProfileSectionPrefix);
+
     COUNTER_UPDATE(request_bytes_read, _stats.request_bytes_read);
     COUNTER_UPDATE(request_bytes_read_uncompressed, _stats.request_bytes_read_uncompressed);
     COUNTER_UPDATE(value_decode_timer, _stats.value_decode_ns);
@@ -93,6 +98,8 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     COUNTER_UPDATE(build_iceberg_pos_filter_timer, _stats.build_iceberg_pos_filter_ns);
     COUNTER_UPDATE(group_active_lazy_coalesce_together, _stats.group_active_lazy_coalesce_together);
     COUNTER_UPDATE(group_active_lazy_coalesce_seperately, _stats.group_active_lazy_coalesce_seperately);
+    int64_t page_stats = _stats.has_page_statistics ? 1 : 0;
+    COUNTER_UPDATE(has_page_statistics, page_stats);
 }
 
 Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
