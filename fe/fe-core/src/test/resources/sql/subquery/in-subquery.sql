@@ -533,8 +533,6 @@ CTEAnchor(cteid=1)
 
 /* test QuantifiedApply2OuterJoinRule */
 /* test QuantifiedApply2OuterJoinRule */
-/* test QuantifiedApply2OuterJoinRule */
-/* test QuantifiedApply2OuterJoinRule */
 
 [sql]
 select v1, v2 in (select v5 + v4 from t1 where v1 = 1 and v1 = v4 and v2 + v5 = v6) from t0;
