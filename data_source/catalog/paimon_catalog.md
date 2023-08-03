@@ -95,7 +95,7 @@ StarRocks 访问 Paimon 集群元数据的相关参数配置。
 | 参数                      | 是否必须   | 说明                                                         |
 | ------------------------ | -------- | ------------------------------------------------------------ |
 | paimon.catalog.type      | 是       | Paimon 使用的元数据类型。设置为 `filesystem` 或 `hive`。           |
-| paimon.catalog.warehouse | 是       | Paimon 数据所在的 Warehouse 存储路径，例如：`hdfs://192.168.0.1:9000/user/paimon/warehouse`。 |
+| paimon.catalog.warehouse | 是       | Paimon 数据所在的 Warehouse 存储路径。 |
 | hive.metastore.uris      | 否       | HMS 的 URI， 格式：`thrift://<HMS IP 地址>:<HMS 端口号>`。仅在 `paimon.catalog.type` = `hive` 时设置。<br>如果您的 HMS 开启了高可用模式，此处可以填写多个 HMS 地址并用逗号分隔，例如：`"thrift://<HMS IP 地址 1>:<HMS 端口号 1>,thrift://<HMS IP 地址 2>:<HMS 端口号 2>,thrift://<HMS IP 地址 3>:<HMS 端口号 3>"`。 |
 
 > **说明**
@@ -386,7 +386,7 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
   (
       "type" = "paimon",
       "paimon.catalog.type" = "filesystem",
-      "paimon.catalog.warehouse" = "hdfs://192.168.7.239:9000/user/hive/warehouse",
+      "paimon.catalog.warehouse" = "<s3_paimon_warehouse_path>",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.region" = "us-west-2"
   );
@@ -400,7 +400,7 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
   (
       "type" = "paimon",
       "paimon.catalog.type" = "filesystem",
-      "paimon.catalog.warehouse" = "hdfs://192.168.7.239:9000/user/hive/warehouse",
+      "paimon.catalog.warehouse" = "<s3_paimon_warehouse_path>",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
       "aws.s3.region" = "us-west-2"
@@ -415,7 +415,7 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
   (
       "type" = "paimon",
       "paimon.catalog.type" = "filesystem",
-      "paimon.catalog.warehouse" = "hdfs://192.168.7.239:9000/user/hive/warehouse",
+      "paimon.catalog.warehouse" = "<s3_paimon_warehouse_path>",
       "aws.s3.use_instance_profile" = "false",
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_secret_key>",
@@ -431,7 +431,7 @@ PROPERTIES
 (
     "type" = "paimon",
     "paimon.catalog.type" = "filesystem",
-    "paimon.catalog.warehouse" = "hdfs://192.168.7.239:9000/user/hive/warehouse",
+    "paimon.catalog.warehouse" = "<oss_paimon_warehouse_path>",
     "aliyun.oss.access_key" = "<user_access_key>",
     "aliyun.oss.secret_key" = "<user_secret_key>",
     "aliyun.oss.endpoint" = "<oss_endpoint>"
@@ -448,7 +448,7 @@ PROPERTIES
 (
     "type" = "paimon",
     "paimon.catalog.type" = "filesystem",
-    "paimon.catalog.warehouse" = "hdfs://192.168.7.239:9000/user/hive/warehouse",
+    "paimon.catalog.warehouse" = "<paimon_warehouse_path>",
     "aws.s3.enable_ssl" = "true",
     "aws.s3.enable_path_style_access" = "true",
     "aws.s3.endpoint" = "<s3_endpoint>",
@@ -469,7 +469,7 @@ PROPERTIES
   (
       "type" = "paimon",
       "paimon.catalog.type" = "filesystem",
-      "paimon.catalog.warehouse" = "hdfs://192.168.7.239:9000/user/hive/warehouse",
+      "paimon.catalog.warehouse" = "<blob_paimon_warehouse_path>",
       "azure.blob.storage_account" = "<blob_storage_account_name>",
       "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
   );
@@ -483,7 +483,7 @@ PROPERTIES
   (
       "type" = "paimon",
       "paimon.catalog.type" = "filesystem",
-      "paimon.catalog.warehouse" = "hdfs://192.168.7.239:9000/user/hive/warehouse",
+      "paimon.catalog.warehouse" = "<blob_paimon_warehouse_path>",
       "azure.blob.account_name" = "<blob_storage_account_name>",
       "azure.blob.container_name" = "<blob_container_name>",
       "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
@@ -500,7 +500,7 @@ PROPERTIES
   (
       "type" = "paimon",
       "paimon.catalog.type" = "filesystem",
-      "paimon.catalog.warehouse" = "hdfs://192.168.7.239:9000/user/hive/warehouse",
+      "paimon.catalog.warehouse" = "<adls1_paimon_warehouse_path>",
       "azure.adls1.use_managed_service_identity" = "true"
   );
   ```
@@ -513,7 +513,7 @@ PROPERTIES
   (
       "type" = "paimon",
       "paimon.catalog.type" = "filesystem",
-      "paimon.catalog.warehouse" = "hdfs://192.168.7.239:9000/user/hive/warehouse",
+      "paimon.catalog.warehouse" = "<adls1_paimon_warehouse_path>",
       "azure.adls1.oauth2_client_id" = "<application_client_id>",
       "azure.adls1.oauth2_credential" = "<application_client_credential>",
       "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
@@ -530,7 +530,7 @@ PROPERTIES
   (
       "type" = "paimon",
       "paimon.catalog.type" = "filesystem",
-      "paimon.catalog.warehouse" = "hdfs://192.168.7.239:9000/user/hive/warehouse",
+      "paimon.catalog.warehouse" = "<adls2_paimon_warehouse_path>",
       "azure.adls2.oauth2_use_managed_identity" = "true",
       "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
       "azure.adls2.oauth2_client_id" = "<service_client_id>"
@@ -545,7 +545,7 @@ PROPERTIES
   (
       "type" = "paimon",
       "paimon.catalog.type" = "filesystem",
-      "paimon.catalog.warehouse" = "hdfs://192.168.7.239:9000/user/hive/warehouse",
+      "paimon.catalog.warehouse" = "<adls2_paimon_warehouse_path>",
       "azure.adls2.storage_account" = "<storage_account_name>",
       "azure.adls2.shared_key" = "<shared_key>"
   );
@@ -559,7 +559,7 @@ PROPERTIES
   (
       "type" = "paimon",
       "paimon.catalog.type" = "filesystem",
-      "paimon.catalog.warehouse" = "hdfs://192.168.7.239:9000/user/hive/warehouse",
+      "paimon.catalog.warehouse" = "<adls2_paimon_warehouse_path>",
       "azure.adls2.oauth2_client_id" = "<service_client_id>",
       "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
       "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
@@ -576,7 +576,7 @@ PROPERTIES
   (
       "type" = "paimon",
       "paimon.catalog.type" = "filesystem",
-      "paimon.catalog.warehouse" = "hdfs://192.168.7.239:9000/user/hive/warehouse",
+      "paimon.catalog.warehouse" = "<gcs_paimon_warehouse_path>",
       "gcp.gcs.use_compute_engine_service_account" = "true"
   );
   ```
@@ -589,7 +589,7 @@ PROPERTIES
   (
       "type" = "paimon",
       "paimon.catalog.type" = "filesystem",
-      "paimon.catalog.warehouse" = "hdfs://192.168.7.239:9000/user/hive/warehouse",
+      "paimon.catalog.warehouse" = "<gcs_paimon_warehouse_path>",
       "gcp.gcs.service_account_email" = "<google_service_account_email>",
       "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
       "gcp.gcs.service_account_private_key" = "<google_service_private_key>"
@@ -606,7 +606,7 @@ PROPERTIES
     (
         "type" = "paimon",
         "paimon.catalog.type" = "filesystem",
-        "paimon.catalog.warehouse" = "hdfs://192.168.7.239:9000/user/hive/warehouse",
+        "paimon.catalog.warehouse" = "<gcs_paimon_warehouse_path>",
         "gcp.gcs.use_compute_engine_service_account" = "true",
         "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
     );
@@ -620,7 +620,7 @@ PROPERTIES
     (
         "type" = "paimon",
         "paimon.catalog.type" = "filesystem",
-        "paimon.catalog.warehouse" = "hdfs://192.168.7.239:9000/user/hive/warehouse",
+        "paimon.catalog.warehouse" = "<gcs_paimon_warehouse_path>",
         "gcp.gcs.service_account_email" = "<google_service_account_email>",
         "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
         "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
