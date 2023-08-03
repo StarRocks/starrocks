@@ -104,6 +104,8 @@ public class DatabaseTransactionMgr {
 
     private static final Logger LOG = LogManager.getLogger(DatabaseTransactionMgr.class);
 
+    public static final String TXN_TIMEOUT_BY_MANAGER = "timeout by txn manager";
+
     private long dbId;
 
     // the lock is used to control the access to transaction states
@@ -1604,7 +1606,7 @@ public class DatabaseTransactionMgr {
         // abort timeout txns
         for (Long txnId : timeoutTxns) {
             try {
-                abortTransaction(txnId, "timeout by txn manager", null);
+                abortTransaction(txnId, TXN_TIMEOUT_BY_MANAGER, null);
                 LOG.info("transaction [" + txnId + "] is timeout, abort it by transaction manager");
             } catch (UserException e) {
                 // abort may be failed. it is acceptable. just print a log
