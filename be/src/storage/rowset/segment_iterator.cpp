@@ -1362,7 +1362,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
     }
 
     size_t build_read_index_size = ctx->_read_schema.num_fields();
-    if (late_materialization && (predicate_count < _schema.num_fields() || !_predicate_column_access_paths.empty())) {
+    if (late_materialization && (predicate_count < _schema.num_fields() || !ctx->_subfield_columns.empty())) {
         // ordinal column
         ColumnId cid = -1;
         if (predicate_count < _schema.num_fields()) {
