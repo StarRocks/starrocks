@@ -2,7 +2,7 @@
 
 ## 功能
 
-Broker Load 是一种基于 MySQL 协议的异步导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您需要通过 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) 语句或者 curl 命令来查看导入作业的结果。有关 Broker Load 的背景信息、前提条件、基本原理、支持的数据文件格式和外部存储系统、以及如何执行单表导入 (Single-Table Load) 和多表导入 (Multi-Table Load) 操作等，请参见[从 HDFS 导入](../../../loading/hdfs_load.md)和[从云存储导入](../../../loading/cloud_storage_load.md)。
+Broker Load 是一种基于 MySQL 协议的异步导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您可以使用 `SELECT * FROM information_schema.loads` 来查看 Broker Load 作业的结果，该功能自 3.1 版本起支持。有关 Broker Load 的背景信息、基本原理、支持的数据文件格式、如何执行单表导入 (Single-Table Load) 和多表导入 (Multi-Table Load) 操作、以及如何查看导入作业的结果等信息，请参见[从 HDFS 导入](../../../loading/hdfs_load.md)和[从云存储导入](../../../loading/cloud_storage_load.md)。
 
 > **注意**
 >
