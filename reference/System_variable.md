@@ -333,6 +333,14 @@ SELECT /*+ SET_VAR
 
   其他导入方式，如 Broker Load，STREAM LOAD 的内存限制依然使用 `query_mem_limit`。
 
+* `log_rejected_record_num`
+
+  指定最多允许记录多少条因数据质量不合格而过滤掉的数据行数。该参数自 3.1 版本起支持。取值范围：`0`、`-1`、大于 0 的正整数。默认值：`0`。
+  
+  * 取值为 `0` 表示不记录过滤掉的数据行。
+  * 取值为 `-1` 表示记录所有过滤掉的数据行。
+  * 取值为大于 0 的正整数（比如 `n`）表示每个 BE 节点上最多可以记录 `n` 条过滤掉的数据行。
+
 * lower_case_table_names (global)
 
   用于兼容 MySQL 客户端，无实际作用。StarRocks 中的表名是大小写敏感的。
