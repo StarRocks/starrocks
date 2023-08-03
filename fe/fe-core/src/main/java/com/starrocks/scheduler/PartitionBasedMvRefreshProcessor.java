@@ -251,6 +251,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 mvContext.setExecPlan(execPlan);
             } catch (Exception e) {
                 LOG.warn("Refresh mv {} failed: {}", materializedView.getName(), e);
+                throw e;
             } finally {
                 database.readUnlock();
             }
@@ -435,7 +436,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
             for (Map.Entry<Table, Set<String>> e : baseTableAndPartitionNames.entrySet()) {
                 Table baseTable = e.getKey();
-                if (!(baseTable.isOlapTableOrMaterializedView() || baseTable.isHiveTable()) || baseTable.isView()) {
+                if (!(baseTable.isNativeTableOrMaterializedView() || baseTable.isHiveTable()) || baseTable.isView()) {
                     throw new DmlException(
                             "update meta failed. only OlapTable or HiveTable is supported");
                 }
@@ -454,13 +455,19 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
             // add message into information_schema
             if (this.getMVTaskRunExtraMessage() != null) {
-                MVTaskRunExtraMessage extraMessage = getMVTaskRunExtraMessage();
-                Map<String, Set<String>> baseTableRefreshedPartitionsByExecPlan =
-                        getBaseTableRefreshedPartitionsByExecPlan(execPlan);
-                extraMessage.setBasePartitionsToRefreshMap(baseTableRefreshedPartitionsByExecPlan);
+                try {
+                    MVTaskRunExtraMessage extraMessage = getMVTaskRunExtraMessage();
+                    Map<String, Set<String>> baseTableRefreshedPartitionsByExecPlan =
+                            getBaseTableRefreshedPartitionsByExecPlan(execPlan);
+                    extraMessage.setBasePartitionsToRefreshMap(baseTableRefreshedPartitionsByExecPlan);
+                } catch (Exception e) {
+                    // just log warn and no throw exceptions for updating task runs message.
+                    LOG.warn("update task run messages failed:", e);
+                }
             }
         } catch (Exception e) {
             LOG.warn("update final meta failed after mv refreshed:", e);
+            throw e;
         } finally {
             database.writeUnlock();
         }
@@ -1138,6 +1145,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             executor.handleDMLStmtWithProfile(execPlan, insertStmt, beginTimeInNanoSecond);
         } catch (Exception e) {
             LOG.warn("refresh materialized view {} failed: {}", materializedView.getName(), e);
+            throw e;
         } finally {
             auditAfterExec(mvContext, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
         }
@@ -1388,7 +1396,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             Map<Table, Set<String>> baseTableAndPartitionNames) {
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> changedOlapTablePartitionInfos = Maps.newHashMap();
         for (Map.Entry<Table, Set<String>> entry : baseTableAndPartitionNames.entrySet()) {
-            if (entry.getKey() instanceof OlapTable) {
+            if (entry.getKey().isNativeTableOrMaterializedView()) {
                 Map<String, MaterializedView.BasePartitionInfo> partitionInfos = Maps.newHashMap();
                 OlapTable olapTable = (OlapTable) entry.getKey();
                 for (String partitionName : entry.getValue()) {
@@ -1413,7 +1421,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             Map<Table, Set<String>> baseTableAndPartitionNames) {
         Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> changedOlapTablePartitionInfos = Maps.newHashMap();
         for (Map.Entry<Table, Set<String>> entry : baseTableAndPartitionNames.entrySet()) {
-            if (entry.getKey() instanceof HiveTable) {
+            if (entry.getKey().isHiveTable()) {
                 HiveTable hiveTable = (HiveTable) entry.getKey();
                 Optional<BaseTableInfo> baseTableInfoOptional = materializedView.getBaseTableInfos().stream().filter(
                                 baseTableInfo -> baseTableInfo.getTableIdentifier().equals(hiveTable.getTableIdentifier())).
