@@ -1424,18 +1424,20 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "                        PARTITION p6 VALUES LESS THAN ('2020-06-01')\n" +
                 "                        )\n" +
                 "                        DISTRIBUTED BY HASH(k1);");
-        cluster.runSql("test", "insert into test_partition_tbl1 values (\"2019-01-01\",1,1),(\"2019-01-01\",1,2),(\"2019-01-01\",2,1),(\"2019-01-01\",2,2),\n" +
-                "                                              (\"2020-01-11\",1,1),(\"2020-01-11\",1,2),(\"2020-01-11\",2,1),(\"2020-01-11\",2,2),\n" +
-                "                                              (\"2020-02-11\",1,1),(\"2020-02-11\",1,2),(\"2020-02-11\",2,1),(\"2020-02-11\",2,2);");
-        createAndRefreshMv("test", "test_partition_tbl_mv1",  "CREATE MATERIALIZED VIEW test_partition_tbl_mv1\n" +
-                "               PARTITION BY k1\n" +
-                "               DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                "               REFRESH ASYNC\n" +
-                "               PROPERTIES(\n" +
-                "               \"partition_ttl_number\"=\"4\",\n" +
-                "               \"auto_refresh_partitions_limit\"=\"4\"\n" +
-                "               )\n" +
-                "               AS SELECT k1, sum(v1) as sum_v1 FROM test_partition_tbl1 group by k1;");
+        cluster.runSql("test", "insert into test_partition_tbl1 values (\"2019-01-01\",1,1),(\"2019-01-01\",1,2)," +
+                "(\"2019-01-01\",2,1),(\"2019-01-01\",2,2),\n" +
+                "(\"2020-01-11\",1,1),(\"2020-01-11\",1,2),(\"2020-01-11\",2,1),(\"2020-01-11\",2,2),\n" +
+                "(\"2020-02-11\",1,1),(\"2020-02-11\",1,2),(\"2020-02-11\",2,1),(\"2020-02-11\",2,2);");
+        createAndRefreshMv("test", "test_partition_tbl_mv1",
+                "CREATE MATERIALIZED VIEW test_partition_tbl_mv1\n" +
+                        "               PARTITION BY k1\n" +
+                        "               DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                        "               REFRESH ASYNC\n" +
+                        "               PROPERTIES(\n" +
+                        "               \"partition_ttl_number\"=\"4\",\n" +
+                        "               \"auto_refresh_partitions_limit\"=\"4\"\n" +
+                        "               )\n" +
+                        "               AS SELECT k1, sum(v1) as sum_v1 FROM test_partition_tbl1 group by k1;");
         {
             String query = "select k1, sum(v1) FROM test_partition_tbl1 where k1>='2020-02-11' group by k1;";
             String plan = getFragmentPlan(query);
