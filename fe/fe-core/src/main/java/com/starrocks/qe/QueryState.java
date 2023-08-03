@@ -84,10 +84,14 @@ public class QueryState {
 
     public void reset() {
         stateType = MysqlStateType.OK;
+        errorMessage = "";
         errorCode = null;
         infoMessage = null;
-        serverStatus = 0;
+        errType = ErrType.OTHER_ERR;
         isQuery = false;
+        affectedRows = 0;
+        warningRows = 0;
+        serverStatus = 0;
         isFinished = false;
     }
 
