@@ -56,6 +56,8 @@ struct ZoneMapDatumBase {
     using CppType = typename TypeTraits<type>::CppType;
     CppType value;
 
+    virtual ~ZoneMapDatumBase() = default;
+
     virtual void reset(TypeInfo* type_info) { type_info->set_to_min(&value); }
     virtual void resize_container_for_fit(TypeInfo* type_info, const void* v) {}
     virtual std::string to_zone_map_string(TypeInfo* type_info) const { return type_info->to_string(&value); }
