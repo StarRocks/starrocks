@@ -610,6 +610,10 @@ public class Database extends MetaObject implements Writable {
         return null;
     }
 
+    public Optional<Table> mayGetTable(String tableName) {
+        return Optional.ofNullable(nameToTable.get(tableName));
+    }
+
     public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String mvName) {
         // TODO: add an index to speed it up.
         for (Table table : idToTable.values()) {

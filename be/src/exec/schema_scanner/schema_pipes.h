@@ -21,11 +21,10 @@
 
 namespace starrocks {
 
-class SchemaTablePipeFiles : public SchemaScanner {
+class SchemaTablePipes : public SchemaScanner {
 public:
-    SchemaTablePipeFiles();
-
-    ~SchemaTablePipeFiles() override = default;
+    SchemaTablePipes();
+    ~SchemaTablePipes() override = default;
 
     Status start(RuntimeState* state) override;
     Status get_next(ChunkPtr* chunk, bool* eos) override;
@@ -33,11 +32,11 @@ public:
 private:
     Status _fill_chunk(ChunkPtr* chunk);
     DatumArray _build_row();
-    Status _list_pipe_files();
+    Status _list_pipes();
 
     size_t _cur_row = 0;
     bool _fetched = false;
-    TListPipeFilesResult _pipe_files_result;
+    TListPipesResult _pipes_result;
     static SchemaScanner::ColumnDesc _s_columns[];
 };
 

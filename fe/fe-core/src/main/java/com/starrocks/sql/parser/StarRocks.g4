@@ -1758,7 +1758,7 @@ dropPipeStatement
     ;
 
 alterPipeClause
-    : PAUSE | RESUME
+    : SUSPEND | RESUME
     ;
 
 alterPipeStatement
@@ -1771,6 +1771,7 @@ descPipeStatement
 
 showPipeStatement
     : SHOW PIPES ((LIKE pattern=string) | (WHERE expression) | (FROM qualifiedName))?
+        (ORDER BY sortItem (',' sortItem)*)? limitElement?
     ;
 
 

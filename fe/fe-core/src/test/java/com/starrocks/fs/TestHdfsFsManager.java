@@ -17,14 +17,20 @@
 
 package com.starrocks.fs;
 
+import com.google.common.collect.Maps;
 import com.starrocks.common.UserException;
 import com.starrocks.fs.hdfs.HdfsFs;
 import com.starrocks.fs.hdfs.HdfsFsManager;
 import com.starrocks.thrift.THdfsProperties;
 import junit.framework.TestCase;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.Mockito;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
@@ -32,13 +38,13 @@ import java.util.Map;
 public class TestHdfsFsManager extends TestCase {
 
     private final String testHdfsHost = "hdfs://localhost:9000";
-    
+
     private HdfsFsManager fileSystemManager;
-    
+
     protected void setUp() throws Exception {
         fileSystemManager = new HdfsFsManager();
     }
-    
+
     @Test
     public void testGetFileSystemSuccess() throws IOException {
         Map<String, String> properties = new HashMap<String, String>();
@@ -51,8 +57,8 @@ public class TestHdfsFsManager extends TestCase {
         } catch (UserException e) {
             Assert.fail(e.getMessage());
         }
-    } 
-    
+    }
+
     @Test
     public void testGetFileSystemForS3aScheme() throws IOException {
         Map<String, String> properties = new HashMap<String, String>();
@@ -100,5 +106,32 @@ public class TestHdfsFsManager extends TestCase {
         } catch (UserException e) {
             Assert.fail(e.getMessage());
         }
+    }
+
+    @Test
+    public void testList() throws UserException, IOException {
+        HdfsFsManager hdfsFsManager = Mockito.spy(fileSystemManager);
+        FileSystem fs = Mockito.mock(FileSystem.class);
+        HdfsFs hdfs = Mockito.mock(HdfsFs.class);
+        Mockito.when(hdfs.getDFSFileSystem()).thenReturn(fs);
+        Mockito.when(fs.globStatus(new Path("not_found"))).thenThrow(new FileNotFoundException("not found"));
+        Mockito.when(fs.globStatus(new Path("error"))).thenThrow(new RuntimeException("error"));
+        FileStatus[] files = new FileStatus[] {
+                new FileStatus(1, false, 1, 1, 1, new Path("file1"))
+        };
+        Mockito.when(fs.globStatus(new Path("s3a://dir/"))).thenReturn(files);
+
+        // listFileMeta
+        Assert.assertThrows(UserException.class,
+                () -> hdfsFsManager.listFileMeta("not_found", Maps.newHashMap()));
+        Assert.assertThrows(UserException.class,
+                () -> hdfsFsManager.listFileMeta("error", Maps.newHashMap()));
+        Assert.assertFalse(hdfsFsManager.listFileMeta("s3a://dir/", Maps.newHashMap()).isEmpty());
+
+        // listPath
+        Assert.assertEquals(1,
+                hdfsFsManager.listPath("s3a://dir/", true, Maps.newHashMap()).size());
+        Assert.assertEquals(1,
+                hdfsFsManager.listPath("s3a://dir/", false, Maps.newHashMap()).size());
     }
 }

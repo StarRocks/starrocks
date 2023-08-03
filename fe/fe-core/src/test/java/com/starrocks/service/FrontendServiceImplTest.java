@@ -653,4 +653,5 @@ public class FrontendServiceImplTest {
         Assert.assertEquals(1, tablesInfos.size());
         Assert.assertEquals("t1", tablesInfos.get(0).getTable_name());
     }
+
 }
