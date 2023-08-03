@@ -686,6 +686,18 @@ public final class MetricRepo {
         };
         streamLoadTaskCount.addLabel(new MetricLabel("type", "stream_load_task_count"));
         STARROCKS_METRIC_REGISTER.addMetric(streamLoadTaskCount);
+
+        GaugeMetric<Long> queryDetailCount = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
+                "The count of cahed query details") {
+            @Override
+            public Long getValue() {
+                return null;
+            }
+        };
+        queryDetailCount.addLabel(new MetricLabel("type", "query_detail_count"));
+        STARROCKS_METRIC_REGISTER.addMetric(queryDetailCount);
+
+
     }
 
     // to generate the metrics related to tablets of each backends
