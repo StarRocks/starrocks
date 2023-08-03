@@ -143,7 +143,7 @@ if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
     # force turn off cachelib on arm platform
     WITH_CACHELIB=OFF
 elif [[ -z ${WITH_CACHELIB} ]]; then
-    WITH_CACHELIB=ON
+    WITH_CACHELIB=OFF
 fi
 
 if [[ "${WITH_CACHELIB}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/cachelib/lib/libcachelib_allocator.a ]]; then

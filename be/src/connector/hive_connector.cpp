@@ -92,6 +92,9 @@ Status HiveDataSource::open(RuntimeState* state) {
     if (state->query_options().__isset.enable_populate_block_cache) {
         _enable_populate_block_cache = state->query_options().enable_populate_block_cache;
     }
+    if (state->query_options().__isset.use_filemeta_cache) {
+        _use_filemeta_cache = state->query_options().use_filemeta_cache;
+    }
 
     RETURN_IF_ERROR(_init_conjunct_ctxs(state));
     _init_tuples_and_slots(state);
@@ -469,6 +472,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     }
     scanner_params.use_block_cache = _use_block_cache;
     scanner_params.enable_populate_block_cache = _enable_populate_block_cache;
+    scanner_params.use_filemeta_cache = _use_filemeta_cache;
 
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;

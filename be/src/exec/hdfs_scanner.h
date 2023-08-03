@@ -58,6 +58,7 @@ struct HdfsScanStats {
     int64_t footer_cache_read_ns = 0;
     int64_t footer_cache_read_count = 0;
     int64_t footer_cache_write_count = 0;
+    int64_t footer_cache_write_bytes = 0;
     int64_t column_reader_init_ns = 0;
     // dict filter
     int64_t group_chunk_read_ns = 0;
@@ -180,6 +181,7 @@ struct HdfsScannerParams {
 
     bool use_block_cache = false;
     bool enable_populate_block_cache = false;
+    bool use_filemeta_cache = false;
 };
 
 struct HdfsScannerContext {
@@ -220,6 +222,8 @@ struct HdfsScannerContext {
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
 
     bool case_sensitive = false;
+
+    bool use_filemeta_cache = false;
 
     std::string timezone;
 

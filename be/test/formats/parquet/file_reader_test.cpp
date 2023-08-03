@@ -2483,7 +2483,8 @@ TEST_F(FileReaderTest, CheckLargeParquetHeader) {
     const std::string filepath = "./be/test/formats/parquet/test_data/large_page_header.parquet";
     auto file = _create_file(filepath);
     auto file_reader =
-            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filepath));
+            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filepath),
+                                         100000);
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -2538,7 +2539,8 @@ TEST_F(FileReaderTest, TestMinMaxForIcebergTable) {
             "./be/test/formats/parquet/test_data/iceberg_schema_evolution/iceberg_string_map_string.parquet";
     auto file = _create_file(filepath);
     auto file_reader =
-            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filepath));
+            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filepath),
+                                         100000);
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -2627,8 +2629,6 @@ TEST_F(FileReaderTest, TestMinMaxForIcebergTable) {
 }
 
 TEST_F(FileReaderTest, TestReadFooterCache) {
-    config::file_meta_cache_enable = true;
-
     std::unique_ptr<BlockCache> cache(new BlockCache);
     CacheOptions options;
     options.mem_space_size = 100 * 1024 * 1024;

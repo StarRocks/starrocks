@@ -941,8 +941,6 @@ CONF_Bool(block_cache_page_cache_enable, "true");
 CONF_Bool(block_cache_adaptor_enable, "false");
 CONF_Int64(block_cache_skip_read_factor, "1");
 
-CONF_Bool(file_meta_cache_enable, "true");
-
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
 CONF_mInt64(l0_max_mem_usage, "67108864");  // 64MB

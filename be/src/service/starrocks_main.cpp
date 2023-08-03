@@ -357,8 +357,6 @@ int main(int argc, char** argv) {
         cache_options.enable_cache_adaptor = starrocks::config::block_cache_adaptor_enable;
         cache_options.enable_page_cache = starrocks::config::block_cache_page_cache_enable;
         EXIT_IF_ERROR(cache->init(cache_options));
-    } else {
-        starrocks::config::file_meta_cache_enable = false;
     }
 
     if (as_cn) {

@@ -36,6 +36,10 @@ public:
 
     const SchemaDescriptor& schema() const { return _schema; }
 
+    size_t estimate_memory() const {
+        return sizeof(tparquet::FileMetaData) + sizeof(uint64_t) + _schema.estimate_memory();
+    }
+
 private:
     tparquet::FileMetaData _t_metadata;
     uint64_t _num_rows{0};

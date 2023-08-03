@@ -57,6 +57,8 @@ private:
     // get footer of parquet file from cache or parquet file
     Status _get_footer();
 
+    void _build_meta_cache_key();
+
     // parse footer of parquet file
     Status _parse_footer(FileMetaData** file_metadata, size_t* metadata_size);
 

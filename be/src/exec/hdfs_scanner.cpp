@@ -128,6 +128,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.min_max_conjunct_ctxs = _scanner_params.min_max_conjunct_ctxs;
     ctx.min_max_tuple_desc = _scanner_params.min_max_tuple_desc;
     ctx.case_sensitive = _scanner_params.case_sensitive;
+    ctx.use_filemeta_cache = _scanner_params.use_filemeta_cache;
     ctx.timezone = _runtime_state->timezone();
     ctx.iceberg_schema = _scanner_params.iceberg_schema;
     ctx.stats = &_stats;

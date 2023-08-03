@@ -262,6 +262,8 @@ struct TQueryOptions {
   95: optional double connector_scan_use_query_mem_ratio = 0.3;
   // used to identify which operators allow spill, only meaningful when enable_spill=true
   96: optional i64 spillable_operator_mask;
+
+  97: optional bool use_filemeta_cache;
 }
 
 

@@ -35,30 +35,7 @@ namespace starrocks::parquet {
 
 FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
                        int64_t file_mtime, io::SharedBufferedInputStream* sb_stream)
-    : _chunk_size(chunk_size), _file(file), _file_size(file_size), _file_mtime(file_mtime), _sb_stream(sb_stream) {
-    if (config::file_meta_cache_enable) {
-        auto& filename = _file->filename();
-        //_meta_cache_key = filename + "_" + std::to_string(file_size);
-        _meta_cache_key.resize(14);
-        char* data = _meta_cache_key.data();
-        const std::string footer_suffix = "ft";
-        uint64_t hash_value = HashUtil::hash64(filename.data(), filename.size(), 0);
-        memcpy(data, &hash_value, sizeof(hash_value));
-        memcpy(data + 8, footer_suffix.data(), footer_suffix.length());
-        // The modification time is more appropriate to indicate the different file versions.
-        // While some data source, such as Hudi, have no modification time because their files
-        // cannot be overwritten. So, if the modification time is unsupported, we use file size instead.
-        // Also, to reduce memory usage, we only use the high four bytes to represent the second timestamp.
-        if (file_mtime > 0) {
-            int32_t mtime_s = (file_mtime >> 32) & 0x00000000FFFFFFFF;
-            memcpy(data + 10, &mtime_s, sizeof(mtime_s));
-        } else {
-            int32_t size = file_size;
-            memcpy(data + 10, &size, sizeof(size));
-        }
-        _cache = BlockCache::instance();
-    }
-}
+    : _chunk_size(chunk_size), _file(file), _file_size(file_size), _file_mtime(file_mtime), _sb_stream(sb_stream) {}
 
 FileReader::~FileReader() {
     if (!_is_metadata_cached && _file_metadata) {
@@ -66,8 +43,34 @@ FileReader::~FileReader() {
     }
 }
 
+void FileReader::_build_meta_cache_key() {
+    auto& filename = _file->filename();
+    //_meta_cache_key = filename + "_" + std::to_string(file_size);
+    _meta_cache_key.resize(14);
+    char* data = _meta_cache_key.data();
+    const std::string footer_suffix = "ft";
+    uint64_t hash_value = HashUtil::hash64(filename.data(), filename.size(), 0);
+    memcpy(data, &hash_value, sizeof(hash_value));
+    memcpy(data + 8, footer_suffix.data(), footer_suffix.length());
+    // The modification time is more appropriate to indicate the different file versions.
+    // While some data source, such as Hudi, have no modification time because their files
+    // cannot be overwritten. So, if the modification time is unsupported, we use file size instead.
+    // Also, to reduce memory usage, we only use the high four bytes to represent the second timestamp.
+    if (_file_mtime > 0) {
+        int32_t mtime_s = (_file_mtime >> 32) & 0x00000000FFFFFFFF;
+        memcpy(data + 10, &mtime_s, sizeof(mtime_s));
+    } else {
+        int32_t size = _file_size;
+        memcpy(data + 10, &size, sizeof(size));
+    }
+}
+
 Status FileReader::init(HdfsScannerContext* ctx) {
     _scanner_ctx = ctx;
+    if (ctx->use_filemeta_cache && config::block_cache_enable) {
+        _build_meta_cache_key();
+        _cache = BlockCache::instance();
+    }
     RETURN_IF_ERROR(_get_footer());
 
     if (_scanner_ctx->iceberg_schema != nullptr && _file_metadata->schema().exist_filed_id()) {
@@ -95,7 +98,7 @@ Status FileReader::init(HdfsScannerContext* ctx) {
 
 Status FileReader::_get_footer() {
     _is_metadata_cached = false;
-    if (!config::file_meta_cache_enable) {
+    if (!_cache) {
         size_t metadata_size = 0;
         return _parse_footer(&_file_metadata, &metadata_size);
     }
@@ -115,11 +118,12 @@ Status FileReader::_get_footer() {
     size_t metadata_size = 0;
     FileMetaData* file_metadata = nullptr;
     RETURN_IF_ERROR(_parse_footer(&file_metadata, &metadata_size));
+    size_t metadata_space = metadata_size + 8 + sizeof(file_metadata->estimate_memory());
 
     auto deleter = [file_metadata]() { delete file_metadata; };
-    Status st = _cache->write_object(_meta_cache_key, file_metadata,
-                                    metadata_size + 8 + sizeof(file_metadata->schema()), deleter, &_cache_handle);
+    Status st = _cache->write_object(_meta_cache_key, file_metadata, metadata_space, deleter, &_cache_handle);
     if (st.ok()) {
+        _scanner_ctx->stats->footer_cache_write_bytes += metadata_space;
         _scanner_ctx->stats->footer_cache_write_count += 1;
         _is_metadata_cached = true;
         //LOG(INFO) << "set file meta cache key, filename: " << _file->filename() << ", file_metadata: "

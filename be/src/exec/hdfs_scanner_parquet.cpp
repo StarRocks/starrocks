@@ -34,6 +34,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     // reader init
     RuntimeProfile::Counter* footer_read_timer = nullptr;
     RuntimeProfile::Counter* footer_cache_write_counter = nullptr;
+    RuntimeProfile::Counter* footer_cache_write_bytes = nullptr;
     RuntimeProfile::Counter* footer_cache_read_counter = nullptr;
     RuntimeProfile::Counter* footer_cache_read_timer = nullptr;
     RuntimeProfile::Counter* column_reader_init_timer = nullptr;
@@ -48,6 +49,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     request_bytes_read = ADD_CHILD_COUNTER(root, "RequestBytesRead", TUnit::BYTES, kParquetProfileSectionPrefix);
 
     footer_cache_write_counter = ADD_CHILD_COUNTER(root, "FooterCacheWriteCount", TUnit::UNIT, kParquetProfileSectionPrefix);
+    footer_cache_write_bytes = ADD_CHILD_COUNTER(root, "FooterCacheWriteBytes", TUnit::BYTES, kParquetProfileSectionPrefix);
     footer_cache_read_counter = ADD_CHILD_COUNTER(root, "FooterCacheReadCount", TUnit::UNIT, kParquetProfileSectionPrefix);
     footer_cache_read_timer = ADD_CHILD_TIMER(root, "FooterCacheReadTimer", kParquetProfileSectionPrefix);
 
@@ -68,6 +70,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     COUNTER_UPDATE(page_read_timer, _stats.page_read_ns);
     COUNTER_UPDATE(footer_read_timer, _stats.footer_read_ns);
     COUNTER_UPDATE(footer_cache_write_counter, _stats.footer_cache_write_count);
+    COUNTER_UPDATE(footer_cache_write_bytes, _stats.footer_cache_write_bytes);
     COUNTER_UPDATE(footer_cache_read_counter, _stats.footer_cache_read_count);
     COUNTER_UPDATE(footer_cache_read_timer, _stats.footer_cache_read_ns);
     COUNTER_UPDATE(column_reader_init_timer, _stats.column_reader_init_ns);
