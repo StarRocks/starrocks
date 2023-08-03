@@ -80,6 +80,7 @@ public class PipeManager {
     }
 
     public void dropPipe(DropPipeStmt stmt) throws DdlException {
+        Pipe pipe = null;
         try {
             lock.writeLock().lock();
             Pair<Long, String> dbAndName = resolvePipeNameUnlock(stmt.getPipeName());
@@ -90,13 +91,17 @@ public class PipeManager {
                 }
                 ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_PIPE, stmt.getPipeName());
             }
-            Pipe pipe = pipeMap.get(nameToId.get(dbAndName));
+            pipe = pipeMap.get(nameToId.get(dbAndName));
 
-            pipe.pause();
+            pipe.suspend();
+            pipe.destroy();
             removePipe(pipe);
 
             // persistence
             repo.deletePipe(pipe);
+        } catch (Throwable e) {
+            LOG.error("drop pipe {} failed", pipe, e);
+            throw e;
         } finally {
             lock.writeLock().unlock();
         }
@@ -114,11 +119,14 @@ public class PipeManager {
             for (PipeId id : removed) {
                 Pipe pipe = pipeMap.get(id);
                 if (pipe != null) {
-                    pipe.pause();
+                    pipe.suspend();
+                    pipe.destroy();
                     pipeMap.remove(id);
                 }
             }
             LOG.info("drop pipes in database " + dbName + ": " + removed);
+        } catch (Throwable e) {
+            LOG.error("drop pipes in database {}/{} failed", dbName, dbId, e);
         } finally {
             lock.writeLock().unlock();
         }
@@ -133,8 +141,8 @@ public class PipeManager {
             PipeId pipeId = nameToId.get(dbAndName);
             DdlException.requireNotNull("pipe-" + dbAndName.second, pipeId);
             Pipe pipe = pipeMap.get(pipeId);
-            if (alterClause.isPause()) {
-                pipe.pause();
+            if (alterClause.isSuspend()) {
+                pipe.suspend();
             } else if (alterClause.isResume()) {
                 pipe.resume();
             }
@@ -214,8 +222,23 @@ public class PipeManager {
         }
     }
 
+    public void clear() {
+        try {
+            lock.writeLock().lock();
+            pipeMap.clear();
+            nameToId.clear();
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
     public Map<PipeId, Pipe> getPipesUnlock() {
         return pipeMap;
+    }
+
+    public Optional<Pipe> mayGetPipe(long id) {
+        // TODO: optimize performance
+        return pipeMap.values().stream().filter(x -> x.getId() == id).findAny();
     }
 
     public Optional<Pipe> mayGetPipe(PipeName name) {

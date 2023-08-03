@@ -143,6 +143,10 @@ public class PartitionInfo implements Writable, GsonPreProcessable, GsonPostProc
         return idToReplicationNum.get(partitionId);
     }
 
+    public short getMinReplicationNum() {
+        return idToReplicationNum.values().stream().min(Short::compareTo).orElse((short) 1);
+    }
+
     public void setReplicationNum(long partitionId, short replicationNum) {
         idToReplicationNum.put(partitionId, replicationNum);
     }

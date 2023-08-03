@@ -653,6 +653,7 @@ public class SharedDataStorageVolumeMgrTest {
         Map<Long, String> dbToStorageVolume = svm.dbToStorageVolume;
         Map<Long, String> tableToStorageVolume = svm.tableToStorageVolume;
 
+        // v4
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(out);
         svm.save(dos);
@@ -660,13 +661,28 @@ public class SharedDataStorageVolumeMgrTest {
         InputStream in = new ByteArrayInputStream(out.toByteArray());
         DataInputStream dis = new DataInputStream(in);
         SRMetaBlockReader reader = new SRMetaBlockReader(dis);
-        SharedDataStorageVolumeMgr svm1 = new SharedDataStorageVolumeMgr();
+        StorageVolumeMgr svm1 = new SharedDataStorageVolumeMgr();
         svm1.load(reader);
         Assert.assertEquals(svId, svm1.getDefaultStorageVolumeId());
         Assert.assertEquals(storageVolumeToDbs, svm1.storageVolumeToDbs);
         Assert.assertEquals(storageVolumeToTables, svm1.storageVolumeToTables);
         Assert.assertEquals(dbToStorageVolume, svm1.dbToStorageVolume);
         Assert.assertEquals(tableToStorageVolume, svm1.tableToStorageVolume);
+
+        // v3
+        out = new ByteArrayOutputStream();
+        dos = new DataOutputStream(out);
+        svm.saveStorageVolumes(dos, 0);
+
+        in = new ByteArrayInputStream(out.toByteArray());
+        dis = new DataInputStream(in);
+        StorageVolumeMgr svm2 = new SharedDataStorageVolumeMgr();
+        svm2.load(dis);
+        Assert.assertEquals(svId, svm2.getDefaultStorageVolumeId());
+        Assert.assertEquals(storageVolumeToDbs, svm2.storageVolumeToDbs);
+        Assert.assertEquals(storageVolumeToTables, svm2.storageVolumeToTables);
+        Assert.assertEquals(dbToStorageVolume, svm2.dbToStorageVolume);
+        Assert.assertEquals(tableToStorageVolume, svm2.tableToStorageVolume);
     }
 
     @Test

@@ -22,34 +22,34 @@ import java.util.List;
 
 public class FilePipePiece {
 
-    private List<PipeFile> files;
+    private List<PipeFileRecord> files;
 
     public FilePipePiece() {
         this.files = new ArrayList<>();
     }
 
-    public FilePipePiece(List<PipeFile> files) {
+    public FilePipePiece(List<PipeFileRecord> files) {
         this.files = files;
     }
 
-    public List<PipeFile> getFiles() {
+    public List<PipeFileRecord> getFiles() {
         return files;
     }
 
-    public void setFiles(List<PipeFile> files) {
+    public void setFiles(List<PipeFileRecord> files) {
         this.files = files;
     }
 
-    public void addFiles(List<PipeFile> files) {
+    public void addFiles(List<PipeFileRecord> files) {
         this.files.addAll(files);
     }
 
-    public void addFile(PipeFile file) {
+    public void addFile(PipeFileRecord file) {
         this.files.add(file);
     }
 
     public long getTotalBytes() {
-        return ListUtils.emptyIfNull(files).stream().map(PipeFile::getSize).reduce(0L, Long::sum);
+        return ListUtils.emptyIfNull(files).stream().map(PipeFileRecord::getFileSize).reduce(0L, Long::sum);
     }
 
     public long getTotalRows() {
