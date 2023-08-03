@@ -2427,4 +2427,11 @@ public class Config extends ConfigBase {
     public static int pipe_listener_interval_millis = 1000;
     @ConfField(mutable = false)
     public static int pipe_scheduler_interval_millis = 1000;
+
+    /**
+     * To prevent the external catalog from displaying too many entries in the grantsTo system table,
+     * you can use this variable to ignore the entries in the external catalog
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_show_external_catalog_privilege = true;
 }
