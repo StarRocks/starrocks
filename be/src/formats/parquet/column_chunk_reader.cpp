@@ -74,7 +74,7 @@ Status ColumnChunkReader::skip_page() {
     uint32_t uncompressed_size = header.uncompressed_page_size;
     size_t size = _compress_codec != nullptr ? compressed_size : uncompressed_size;
     RETURN_IF_ERROR(_page_reader->skip_bytes(size));
-    _opts.stats->skip_read_rows += _num_values;
+    _opts.stats->page_skip += 1;
 
     _page_parse_state = PAGE_DATA_PARSED;
     return Status::OK();

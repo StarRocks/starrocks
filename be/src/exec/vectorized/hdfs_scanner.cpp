@@ -267,7 +267,11 @@ void HdfsScanner::update_counter() {
 
     COUNTER_UPDATE(profile->reader_init_timer, _stats.reader_init_ns);
     COUNTER_UPDATE(profile->rows_read_counter, _stats.raw_rows_read);
+<<<<<<< HEAD:be/src/exec/vectorized/hdfs_scanner.cpp
     COUNTER_UPDATE(profile->bytes_read_counter, _stats.bytes_read);
+=======
+    COUNTER_UPDATE(profile->rows_skip_counter, _stats.skip_read_rows);
+>>>>>>> 8a04ff56af ([Enhancement] more profile information about late materialize and bugfix (#28562)):be/src/exec/hdfs_scanner.cpp
     COUNTER_UPDATE(profile->expr_filter_timer, _stats.expr_filter_ns);
     COUNTER_UPDATE(profile->io_timer, _stats.io_ns);
     COUNTER_UPDATE(profile->io_counter, _stats.io_count);

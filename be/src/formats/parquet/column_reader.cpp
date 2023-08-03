@@ -75,7 +75,6 @@ public:
         if (!converter->need_convert) {
             return _reader->read_records(num_records, content_type, dst);
         } else {
-            SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
             auto column = converter->create_src_column();
 
             Status status = _reader->read_records(num_records, content_type, column.get());
@@ -83,7 +82,10 @@ public:
                 return status;
             }
 
-            RETURN_IF_ERROR(converter->convert(column, dst));
+            {
+                SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
+                RETURN_IF_ERROR(converter->convert(column, dst));
+            }
 
             return Status::OK();
         }
