@@ -353,6 +353,7 @@ public class Memo {
         getRootGroup().getFirstLogicalExpression().deriveLogicalPropertyRecursively();
     }
 
+    // debug tool to collect scan group info
     public Map<Table, List<Group>> collectScanGroup() {
         Map<Table, List<Group>> map = Maps.newHashMap();
         for (Group group : groups) {

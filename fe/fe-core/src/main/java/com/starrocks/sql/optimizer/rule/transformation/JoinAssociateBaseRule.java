@@ -60,11 +60,15 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
 
     protected final int[] newBotJoinRightChildLoc;
 
-    protected JoinAssociateBaseRule(RuleType type, Pattern pattern, List<int[]> mode) {
+    // indicate whether the botJoin is inner/cross join.
+    protected final boolean isInnerMode;
+
+    protected JoinAssociateBaseRule(RuleType type, Pattern pattern, List<int[]> mode, boolean isInnerMode) {
         super(type, pattern);
         this.newTopJoinChildLoc = mode.get(0);
         this.newBotJoinLeftChildLoc = mode.get(1);
         this.newBotJoinRightChildLoc = mode.get(2);
+        this.isInnerMode = isInnerMode;
     }
 
     public abstract ScalarOperator rewriteNewTopOnCondition(JoinOperator topJoinType, ProjectionSplitter splitter,

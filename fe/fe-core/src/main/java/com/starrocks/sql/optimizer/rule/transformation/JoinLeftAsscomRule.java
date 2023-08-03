@@ -52,15 +52,14 @@ public class JoinLeftAsscomRule extends JoinAssociateBaseRule {
     public static final JoinLeftAsscomRule OUTER_JOIN_LEFT_ASSCOM_RULE = new JoinLeftAsscomRule(
             RuleType.TF_JOIN_LEFT_ASSCOM_OUTER, false);
 
-    private final boolean isInnerMode;
 
     private JoinLeftAsscomRule(RuleType ruleType, boolean isInnerMode) {
         super(ruleType, Pattern.create(OperatorType.LOGICAL_JOIN)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_JOIN)
                         .addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF))
                         .addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF)))
-                .addChildren(Pattern.create(OperatorType.PATTERN_LEAF)), JoinAssociateBaseRule.LEFTASSCOM_MODE);
-        this.isInnerMode = isInnerMode;
+                .addChildren(Pattern.create(OperatorType.PATTERN_LEAF)), JoinAssociateBaseRule.LEFTASSCOM_MODE,
+                isInnerMode);
     }
 
     @Override

@@ -72,15 +72,13 @@ public class JoinAssociativityRule extends JoinAssociateBaseRule {
     public static final JoinAssociativityRule OUTER_JOIN_ASSOCIATIVITY_RULE = new JoinAssociativityRule(
             RuleType.TF_JOIN_ASSOCIATIVITY_OUTER, false);
 
-    private final boolean isInnerMode;
-
     private JoinAssociativityRule(RuleType ruleType, boolean isInnerMode) {
         super(ruleType, Pattern.create(OperatorType.LOGICAL_JOIN)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_JOIN)
                         .addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF))
                         .addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF)))
-                .addChildren(Pattern.create(OperatorType.PATTERN_LEAF)), JoinAssociateBaseRule.ASSOCIATE_MODE);
-        this.isInnerMode = isInnerMode;
+                .addChildren(Pattern.create(OperatorType.PATTERN_LEAF)), JoinAssociateBaseRule.ASSOCIATE_MODE,
+                isInnerMode);
     }
 
     @Override
