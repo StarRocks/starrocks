@@ -823,6 +823,34 @@ public class DeleteMgr implements Writable {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public long getDeleteJobCount() {
+        return this.idToDeleteJob.size();
+    }
+
+    public long getDeleteInfoCount() {
+        lock.readLock().lock();
+        try {
+            return dbToDeleteInfos.values().stream().mapToLong(List::size).sum();
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        int numJson = 1 + dbToDeleteInfos.size() * 2;
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.DELETE_MGR, numJson);
+
+        writer.writeJson(dbToDeleteInfos.size());
+        for (Map.Entry<Long, List<MultiDeleteInfo>> deleteInfoEntry : dbToDeleteInfos.entrySet()) {
+            writer.writeJson(deleteInfoEntry.getKey());
+            writer.writeJson(deleteInfoEntry.getValue());
+        }
+        writer.close();
+    }
+
+>>>>>>> 7299e5c95c ([Enhancement] Add FE memory related metrics (#28184))
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         int analyzeJobSize = reader.readInt();
         for (int i = 0; i < analyzeJobSize; ++i) {

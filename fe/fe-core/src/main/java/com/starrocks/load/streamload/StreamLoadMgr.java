@@ -441,6 +441,18 @@ public class StreamLoadMgr {
         return (long) idToStreamLoadTask.size() + (long) dbToLabelToStreamLoadTask.size();
     }
 
+<<<<<<< HEAD
+=======
+    public long getStreamLoadTaskCount() {
+        return idToStreamLoadTask.size();
+    }
+
+    // for ut
+    public Map<String, StreamLoadTask> getIdToStreamLoadTask() {
+        return idToStreamLoadTask;
+    }
+
+>>>>>>> 7299e5c95c ([Enhancement] Add FE memory related metrics (#28184))
     public static StreamLoadMgr loadStreamLoadManager(DataInput in) throws IOException {
         int size = in.readInt();
         long currentMs = System.currentTimeMillis();
