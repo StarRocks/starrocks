@@ -34,6 +34,7 @@
 
 package com.starrocks.system;
 
+import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -42,6 +43,7 @@ import com.starrocks.common.util.TimeUtils;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Map;
 
 /**
  * Frontend heartbeat response contains Frontend's query port, rpc port and current replayed journal id.
@@ -62,8 +64,20 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
     @SerializedName(value = "feVersion")
     private String feVersion;
 
+    // Synchronize cpu cores of backends when synchronizing master info to other Frontends.
+    // It is non-empty, only when replaying a 'mocked' master Frontend heartbeat response to other Frontends.
+    @SerializedName(value = "backendId2cpuCores")
+    private Map<Long, Integer> backendId2cpuCores = Maps.newHashMap();
+
     public FrontendHbResponse() {
         super(HeartbeatResponse.Type.FRONTEND);
+    }
+
+    public FrontendHbResponse(String name, int queryPort, int rpcPort,
+                              long replayedJournalId, long hbTime, long feStartTime, String feVersion,
+                              Map<Long, Integer> backendId2cpuCores) {
+        this(name, queryPort, rpcPort, replayedJournalId, hbTime, feStartTime, feVersion);
+        this.backendId2cpuCores = backendId2cpuCores;
     }
 
     public FrontendHbResponse(String name, int queryPort, int rpcPort,
@@ -108,6 +122,10 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
 
     public String getFeVersion() {
         return feVersion;
+    }
+
+    public Map<Long, Integer> getBackendId2cpuCores() {
+        return backendId2cpuCores;
     }
 
     public static FrontendHbResponse read(DataInput in) throws IOException {
