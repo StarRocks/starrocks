@@ -21,9 +21,13 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -35,6 +39,8 @@ import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.SetDefaultStorageVolumeStmt;
 import com.starrocks.storagevolume.StorageVolume;
 
+import java.io.DataInput;
+import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.lang.reflect.Field;
@@ -47,7 +53,7 @@ import java.util.Set;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public abstract class StorageVolumeMgr {
+public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable {
     private static final String ENABLED = "enabled";
 
     public static final String DEFAULT = "default";
@@ -268,7 +274,12 @@ public abstract class StorageVolumeMgr {
         this.storageVolumeToDbs = data.storageVolumeToDbs;
         this.storageVolumeToTables = data.storageVolumeToTables;
         this.defaultStorageVolumeId = data.defaultStorageVolumeId;
+        this.dbToStorageVolume = data.dbToStorageVolume;
+        this.tableToStorageVolume = data.tableToStorageVolume;
+    }
 
+    @Override
+    public void gsonPostProcess() throws IOException {
         for (Map.Entry<String, Set<Long>> entry : storageVolumeToDbs.entrySet()) {
             for (Long dbId : entry.getValue()) {
                 dbToStorageVolume.put(dbId, entry.getKey());
@@ -279,6 +290,21 @@ public abstract class StorageVolumeMgr {
                 tableToStorageVolume.put(tableId, entry.getKey());
             }
         }
+    }
+
+    public long saveStorageVolumes(DataOutputStream dos, long checksum) throws IOException {
+        write(dos);
+        return checksum;
+    }
+
+    public static StorageVolumeMgr read(DataInput in) throws IOException {
+        String json = Text.readString(in);
+        return GsonUtils.GSON.fromJson(json, StorageVolumeMgr.class);
+    }
+
+    @Override
+    public void write(DataOutput out) throws IOException {
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
     public abstract StorageVolume getStorageVolumeByName(String svName);

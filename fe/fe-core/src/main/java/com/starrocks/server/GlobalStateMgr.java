@@ -1619,6 +1619,8 @@ public class GlobalStateMgr {
                 remoteChecksum = dis.readLong();
                 checksum = pipeManager.getRepo().loadImage(dis, checksum);
                 remoteChecksum = dis.readLong();
+                checksum = loadStorageVolumes(dis, checksum);
+                remoteChecksum = dis.readLong();
                 // ** NOTICE **: always add new code at the end
 
                 Preconditions.checkState(remoteChecksum == checksum, remoteChecksum + " vs. " + checksum);
@@ -1858,6 +1860,11 @@ public class GlobalStateMgr {
         return checksum;
     }
 
+    public long loadStorageVolumes(DataInputStream in, long checksum) throws IOException {
+        storageVolumeMgr = StorageVolumeMgr.read(in);
+        return checksum;
+    }
+
     // Only called by checkpoint thread
     public void saveImage() throws IOException {
         // Write image.ckpt
@@ -1984,6 +1991,8 @@ public class GlobalStateMgr {
                 checksum = localMetastore.saveAutoIncrementId(dos, checksum);
                 dos.writeLong(checksum);
                 checksum = pipeManager.getRepo().saveImage(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = storageVolumeMgr.saveStorageVolumes(dos, checksum);
                 dos.writeLong(checksum);
                 // ** NOTICE **: always add new code at the end
 
