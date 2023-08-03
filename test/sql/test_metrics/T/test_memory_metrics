@@ -108,3 +108,27 @@ shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"compaction_stat
 
 -- name: test_memory_metrics_stream_load_task_count
 shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"stream_load_task_count\" | awk '{if ($NF >= 0) print "true"; else print "false";}'
+
+-- name: test_memory_metrics_query_detail_count
+[UC]show frontends;
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"query_detail_count\" | awk '{if ($NF >= 1) print "true"; else print "false";}'
+
+-- name: test_memory_metrics_query_profile_count
+CREATE TABLE `t1` (
+    a int 
+) ENGINE=OLAP
+DUPLICATE KEY(`a`)
+DISTRIBUTED BY HASH(`a`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1"
+);
+set enable_profile=true;
+select count(*) from t1;
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"query_profile_count\" | awk '{if ($NF >= 1) print "true"; else print "false";}'
+
+-- name: test_memory_metrics_load_profile_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"load_profile_count\" | awk '{if ($NF >= 0) print "true"; else print "false";}'
+
+-- name: test_memory_metrics_query_coordinator_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"query_coordinator_count\" | awk '{if ($NF >= 0) print "true"; else print "false";}'
+
