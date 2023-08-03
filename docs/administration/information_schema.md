@@ -50,7 +50,7 @@ StarRocks has optimized the metadata information provided by the tables `tables`
 
 The following fields are provided in `loads`:
 
-| **Parameter**        | **Description**                                              |
+| **Field**            | **Description**                                              |
 | -------------------- | ------------------------------------------------------------ |
 | JOB_ID               | The unique ID assigned by StarRocks to identify the load job. |
 | LABEL                | The label of the load job.                                   |
