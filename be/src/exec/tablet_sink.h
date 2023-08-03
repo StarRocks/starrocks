@@ -301,6 +301,8 @@ private:
 
     std::atomic<bool> _is_automatic_partition_running = false;
     Status _automatic_partition_status;
+
+    RuntimeState* _state = nullptr;
 };
 
 } // namespace stream_load

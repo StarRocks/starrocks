@@ -1,0 +1,41 @@
+-- name: test_logical_materialized_view3
+drop table if exists test;
+CREATE TABLE `test` (
+  `k1` tinyint(4) NULL DEFAULT "0",
+  `k2` varchar(64) NULL DEFAULT "",
+  `k3` bigint NULL DEFAULT "0",
+  `k4` varchar(64) NULL DEFAULT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1"
+);
+
+drop table if exists target;
+CREATE TABLE `target` (
+  `k1` tinyint(4) NULL DEFAULT "0",
+  `k22` int NULL DEFAULT "0",
+  `k33` bigint sum DEFAULT "0"
+) ENGINE=OLAP
+AGGREGATE KEY(`k1`, `k22`)
+DISTRIBUTED BY RANDOM BUCKETS 3
+PROPERTIES (
+"replication_num" = "1"
+);
+
+CREATE MATERIALIZED VIEW test_mv
+to target
+as
+select k1, length(k2) as k22, sum(k3) as k33 from test where k1 > 3 group by k1, k22;
+
+insert into test values (2, 'a', 2, 'aa'), (3, 'bc', 3, 'fsd'), (24, 'sdd', 5, 'fsdf');
+
+select * from target;
+
+insert into test values (32, 'bad', 2, 'aa'), (1, 'bc', 3, 'fsd'), (15, 'sdd', 5, 'fsdf');
+
+select * from target order by k1, k22, k33;
+
+drop table test;
+drop table target;

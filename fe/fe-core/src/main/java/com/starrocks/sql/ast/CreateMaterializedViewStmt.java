@@ -220,10 +220,9 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     public Map<String, Expr> parseDefineExprWithoutAnalyze(String originalSql) throws AnalysisException {
         Map<String, Expr> result = Maps.newHashMap();
         SelectList selectList = null;
-        SelectRelation select = null;
         QueryRelation queryRelation = queryStatement.getQueryRelation();
         if (queryRelation instanceof SelectRelation) {
-            select = (SelectRelation) queryRelation;
+            SelectRelation select = (SelectRelation) queryRelation;
             selectList = select.getSelectList();
             if (select.hasWhereClause()) {
                 result.put(where_col_name, select.getWhereClause());

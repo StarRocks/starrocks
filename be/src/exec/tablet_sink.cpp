@@ -182,6 +182,8 @@ Status OlapTableSink::prepare(RuntimeState* state) {
 
     RETURN_IF_ERROR(DataSink::prepare(state));
 
+    _state = state;
+
     _sender_id = state->per_fragment_instance_idx();
     _num_senders = state->num_per_fragment_instances();
 

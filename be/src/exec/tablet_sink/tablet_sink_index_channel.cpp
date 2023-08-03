@@ -432,7 +432,7 @@ Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_i
     // 1. append data
     /// Filter data
     if (_where_clause != nullptr) {
-        LOG(INFO) << "In node channel filter data";
+        LOG(INFO) << "In node channel filter data, chunk has " << input->num_rows() << " rows data";
         ASSIGN_OR_RETURN(ColumnPtr filter_col, _where_clause->evaluate(input))
 
         size_t size = filter_col->size();
@@ -441,6 +441,7 @@ Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_i
         for (size_t i = 0; i < size; ++i) {
             filter[i] = !col.is_null(i) && col.value(i);
         }
+
         input->filter(filter);
 
         std::vector<uint32_t> new_indexes;
@@ -884,7 +885,11 @@ void NodeChannel::_cancel(int64_t index_id, const Status& err_st) {
     request.release_id();
 }
 
-IndexChannel::~IndexChannel() = default;
+IndexChannel::~IndexChannel() {
+    if (_where_clause != nullptr) {
+        _where_clause->close(_parent->_state);
+    }
+}
 
 Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPartition>& tablets, bool is_incremental) {
     for (const auto& tablet : tablets) {
@@ -914,6 +919,10 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPart
     }
     for (auto& it : _node_channels) {
         RETURN_IF_ERROR(it.second->init(state));
+    }
+    if (_where_clause != nullptr) {
+        RETURN_IF_ERROR(_where_clause->prepare(_parent->_state));
+        RETURN_IF_ERROR(_where_clause->open(_parent->_state));
     }
     _write_quorum_type = _parent->_write_quorum_type;
     return Status::OK();

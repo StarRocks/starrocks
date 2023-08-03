@@ -101,7 +101,7 @@ Status OlapTableSchemaParam::init(const TOlapTableSchemaParam& tschema, RuntimeS
             }
         }
         if (t_index.__isset.where_clause) {
-            Expr::create_expr_tree(&_obj_pool, t_index.where_clause, &index->where_clause, state);
+            RETURN_IF_ERROR(Expr::create_expr_tree(&_obj_pool, t_index.where_clause, &index->where_clause, state));
         }
         _indexes.emplace_back(index);
     }
