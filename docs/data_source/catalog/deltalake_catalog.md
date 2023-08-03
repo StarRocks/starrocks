@@ -6,7 +6,7 @@ Also, you can directly transform and load data from Delta Lake by using [INSERT 
 
 To ensure successful SQL workloads on your Delta Lake cluster, your StarRocks cluster needs to integrate with two important components:
 
-- Object storage or distributed file system like AWS S3, other S3-compatible storage system, Microsoft Azure Storage, Google GCS, or HDFS
+- Distributed file system (HDFS) or object storage like AWS S3, Microsoft Azure Storage, Google GCS, or other S3-compatible storage system (for example, MinIO)
 
 - Metastore like Hive metastore or AWS Glue
 
