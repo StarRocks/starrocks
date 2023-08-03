@@ -39,6 +39,19 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* group_chunk_read_timer = nullptr;
     RuntimeProfile::Counter* group_dict_filter_timer = nullptr;
     RuntimeProfile::Counter* group_dict_decode_timer = nullptr;
+<<<<<<< HEAD
+=======
+    RuntimeProfile::Counter* build_iceberg_pos_filter_timer = nullptr;
+
+    // io coalesce
+    RuntimeProfile::Counter* group_active_lazy_coalesce_together = nullptr;
+    RuntimeProfile::Counter* group_active_lazy_coalesce_seperately = nullptr;
+
+    // page statistics
+    RuntimeProfile::Counter* has_page_statistics = nullptr;
+    // page skip
+    RuntimeProfile::Counter* page_skip = nullptr;
+>>>>>>> 8a04ff56af ([Enhancement] more profile information about late materialize and bugfix (#28562))
 
     RuntimeProfile* root = profile->runtime_profile;
     ADD_COUNTER(root, kParquetProfileSectionPrefix, TUnit::UNIT);
@@ -54,6 +67,18 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     group_chunk_read_timer = ADD_CHILD_TIMER(root, "GroupChunkRead", kParquetProfileSectionPrefix);
     group_dict_filter_timer = ADD_CHILD_TIMER(root, "GroupDictFilter", kParquetProfileSectionPrefix);
     group_dict_decode_timer = ADD_CHILD_TIMER(root, "GroupDictDecode", kParquetProfileSectionPrefix);
+<<<<<<< HEAD
+=======
+    build_iceberg_pos_filter_timer = ADD_CHILD_TIMER(root, "BuildIcebergPosFilter", kParquetProfileSectionPrefix);
+
+    group_active_lazy_coalesce_together =
+            ADD_CHILD_COUNTER(root, "GroupActiveLazyCoalesceTogether", TUnit::UNIT, kParquetProfileSectionPrefix);
+    group_active_lazy_coalesce_seperately =
+            ADD_CHILD_COUNTER(root, "GroupActiveLazyCoalesceSeperately", TUnit::UNIT, kParquetProfileSectionPrefix);
+
+    has_page_statistics = ADD_CHILD_COUNTER(root, "HasPageStatistics", TUnit::UNIT, kParquetProfileSectionPrefix);
+    page_skip = ADD_CHILD_COUNTER(root, "PageSkipCounter", TUnit::UNIT, kParquetProfileSectionPrefix);
+>>>>>>> 8a04ff56af ([Enhancement] more profile information about late materialize and bugfix (#28562))
 
     COUNTER_UPDATE(request_bytes_read, _stats.request_bytes_read);
     COUNTER_UPDATE(value_decode_timer, _stats.value_decode_ns);
@@ -64,6 +89,15 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     COUNTER_UPDATE(group_chunk_read_timer, _stats.group_chunk_read_ns);
     COUNTER_UPDATE(group_dict_filter_timer, _stats.group_dict_filter_ns);
     COUNTER_UPDATE(group_dict_decode_timer, _stats.group_dict_decode_ns);
+<<<<<<< HEAD
+=======
+    COUNTER_UPDATE(build_iceberg_pos_filter_timer, _stats.build_iceberg_pos_filter_ns);
+    COUNTER_UPDATE(group_active_lazy_coalesce_together, _stats.group_active_lazy_coalesce_together);
+    COUNTER_UPDATE(group_active_lazy_coalesce_seperately, _stats.group_active_lazy_coalesce_seperately);
+    int64_t page_stats = _stats.has_page_statistics ? 1 : 0;
+    COUNTER_UPDATE(has_page_statistics, page_stats);
+    COUNTER_UPDATE(page_skip, _stats.page_skip);
+>>>>>>> 8a04ff56af ([Enhancement] more profile information about late materialize and bugfix (#28562))
 }
 
 Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
