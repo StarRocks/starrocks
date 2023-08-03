@@ -133,6 +133,9 @@ public class JDBCResource extends Resource {
     protected void getProcNodeData(BaseProcResult result) {
         String lowerCaseType = type.name().toLowerCase();
         for (Map.Entry<String, String> entry : configs.entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(PASSWORD)) {
+                continue;
+            }
             result.addRow(Lists.newArrayList(name, lowerCaseType, entry.getKey(), entry.getValue()));
         }
     }
