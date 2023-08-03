@@ -909,6 +909,9 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
         case TYPE_CHAR:
         case TYPE_VARCHAR:
         case TYPE_VARBINARY: {
+            if (!config::enable_check_string_lengths) {
+                continue;
+            }
             uint32_t len = desc->type().len;
             Column* data_column = ColumnHelper::get_data_column(column);
             auto* binary = down_cast<BinaryColumn*>(data_column);
