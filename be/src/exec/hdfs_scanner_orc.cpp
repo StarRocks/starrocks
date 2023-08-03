@@ -402,6 +402,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         }
 
         size_t chunk_size = 0;
+        size_t chunk_size_ori = 0;
         if (_orc_reader->get_cvb_size() != 0) {
             chunk_size = _orc_reader->get_cvb_size();
             {
@@ -418,8 +419,15 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
 
             // important to add columns before evaluation
             // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
+<<<<<<< HEAD
             _scanner_ctx.append_not_existed_columns_to_chunk(chunk, chunk_size);
             _scanner_ctx.append_partition_column_to_chunk(chunk, chunk_size);
+=======
+            _scanner_ctx.append_not_existed_columns_to_chunk(chunk, ck->num_rows());
+            _scanner_ctx.append_partition_column_to_chunk(chunk, ck->num_rows());
+            chunk_size = ck->num_rows();
+            chunk_size_ori = chunk_size;
+>>>>>>> cd754b6ef ([Enhancement] more profile message (backport #28562 #28524) (#28578))
             // do stats before we filter rows which does not match.
             _stats.raw_rows_read += chunk_size;
             _chunk_filter.assign(chunk_size, 1);
@@ -459,6 +467,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
 
         // if has lazy load fields, skip it if chunk_size == 0
         if (chunk_size == 0) {
+            _stats.skip_read_rows += chunk_size_ori;
             continue;
         }
         {
