@@ -21,7 +21,9 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
-import org.apache.hadoop.conf.Configuration;
+import com.starrocks.credential.CloudType;
+import com.starrocks.credential.aws.AWSCloudConfiguration;
+import com.starrocks.credential.aws.AWSCloudCredential;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.paimon.catalog.Catalog;
@@ -29,9 +31,7 @@ import org.apache.paimon.catalog.CatalogContext;
 import org.apache.paimon.catalog.CatalogFactory;
 import org.apache.paimon.options.Options;
 
-import java.util.Iterator;
 import java.util.Map;
-import java.util.Map.Entry;
 
 import static org.apache.paimon.options.CatalogOptions.METASTORE;
 import static org.apache.paimon.options.CatalogOptions.URI;
@@ -76,20 +76,30 @@ public class PaimonConnector implements Connector {
         }
         paimonOptions.setString(WAREHOUSE.key(), warehousePath);
 
-        Configuration storageConfig = new Configuration();
-        cloudConfiguration.applyToConfiguration(storageConfig);
-        Iterator<Entry<String, String>> propsIterator = storageConfig.iterator();
-        while (propsIterator.hasNext()) {
-            Entry<String, String> item = propsIterator.next();
-            if (item.getKey().startsWith("fs.s3")) {
-                paimonOptions.setString(item.getKey(), item.getValue());
+        if (this.cloudConfiguration.getCloudType() == CloudType.AWS && this.cloudConfiguration instanceof AWSCloudConfiguration) {
+            AWSCloudConfiguration awsCloudConfiguration = (AWSCloudConfiguration) this.cloudConfiguration;
+            paimonOptions.set("s3.connection.ssl.enabled", String.valueOf(awsCloudConfiguration.getEnableSSL()));
+            paimonOptions.set("s3.path.style.access", String.valueOf(awsCloudConfiguration.getEnablePathStyleAccess()));
+            AWSCloudCredential awsCloudCredential = awsCloudConfiguration.getAWSCloudCredential();
+            if (!awsCloudCredential.getEndpoint().isEmpty()) {
+                paimonOptions.set("s3.endpoint", awsCloudCredential.getEndpoint());
+            }
+            if (!awsCloudCredential.getAccessKey().isEmpty()) {
+                paimonOptions.set("s3.access-key", awsCloudCredential.getAccessKey());
+            }
+            if (!awsCloudCredential.getSecretKey().isEmpty()) {
+                paimonOptions.set("s3.secret-key", awsCloudCredential.getSecretKey());
             }
         }
     }
 
+    public Options getPaimonOptions() {
+        return this.paimonOptions;
+    }
+
     public Catalog getPaimonNativeCatalog() {
         if (paimonNativeCatalog == null) {
-            this.paimonNativeCatalog = CatalogFactory.createCatalog(CatalogContext.create(paimonOptions));
+            this.paimonNativeCatalog = CatalogFactory.createCatalog(CatalogContext.create(getPaimonOptions()));
         }
         return paimonNativeCatalog;
     }

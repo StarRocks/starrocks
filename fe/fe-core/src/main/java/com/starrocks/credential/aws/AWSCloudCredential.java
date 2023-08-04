@@ -115,6 +115,14 @@ public class AWSCloudCredential implements CloudCredential {
         return endpoint;
     }
 
+    public String getAccessKey() {
+        return accessKey;
+    }
+
+    public String getSecretKey() {
+        return secretKey;
+    }
+
     public AWSCredentialsProvider generateAWSCredentialsProvider() {
         if (useAWSSDKDefaultBehavior) {
             return new DefaultAWSCredentialsProviderChain();
