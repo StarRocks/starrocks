@@ -59,6 +59,14 @@ void AggregateFuncResolver::register_others() {
     add_array_mapping<TYPE_BIGINT, TYPE_INT>("window_funnel");
     add_array_mapping<TYPE_DATETIME, TYPE_INT>("window_funnel");
     add_array_mapping<TYPE_DATE, TYPE_INT>("window_funnel");
+<<<<<<< HEAD
+=======
+
+    add_general_mapping<AnyValueSemiState>("any_value", false, AggregateFactory::MakeAnyValueSemiAggregateFunction());
+    add_general_mapping_notnull("array_agg2", false, AggregateFactory::MakeArrayAggAggregateFunctionV2());
+    add_general_mapping_nullable_variadic<GroupConcatAggregateStateV2>(
+            "group_concat2", false, AggregateFactory::MakeGroupConcatAggregateFunctionV2());
+>>>>>>> e31fbe8c1b ([Feature] group_concat() support distinct and order by)
 }
 
 } // namespace starrocks::vectorized

@@ -757,6 +757,17 @@ public class FunctionSet {
                 Lists.newArrayList(Type.ANY_ELEMENT), Type.VARCHAR, Type.BIGINT, true,
                 true, false, true));
 
+<<<<<<< HEAD
+=======
+        addBuiltin(AggregateFunction.createBuiltin(ARRAY_AGG,
+                Lists.newArrayList(Type.ANY_ELEMENT), Type.ANY_ARRAY, Type.ANY_STRUCT, true,
+                true, false, false));
+
+        addBuiltin(AggregateFunction.createBuiltin(GROUP_CONCAT,
+                Lists.newArrayList(Type.ANY_ELEMENT), Type.VARCHAR, Type.ANY_STRUCT, true,
+                false, false, false));
+
+>>>>>>> e31fbe8c1b ([Feature] group_concat() support distinct and order by)
         for (Type t : Type.getSupportedTypes()) {
             if (t.isFunctionType()) {
                 continue;
@@ -993,6 +1004,7 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(RETENTION, Lists.newArrayList(Type.ARRAY_BOOLEAN),
                 Type.ARRAY_BOOLEAN, Type.BIGINT, false, false, false));
 
+<<<<<<< HEAD
         // PercentileCont
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.PERCENTILE_CONT,
                 Lists.newArrayList(Type.DATE, Type.DOUBLE), Type.DATE, Type.VARCHAR,
@@ -1109,6 +1121,8 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(GROUP_CONCAT,
                 Lists.newArrayList(Type.VARCHAR, Type.VARCHAR), Type.VARCHAR, Type.VARCHAR,
                 false, false, false));
+=======
+>>>>>>> e31fbe8c1b ([Feature] group_concat() support distinct and order by)
 
         // Type.DATE must before Type.DATATIME, because DATE could be considered as DATETIME.
         addBuiltin(AggregateFunction.createBuiltin(WINDOW_FUNNEL,

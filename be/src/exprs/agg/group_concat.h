@@ -4,10 +4,16 @@
 
 #include <cmath>
 
+#include "column/array_column.h"
+#include "column/binary_column.h"
 #include "column/column_helper.h"
+#include "column/struct_column.h"
 #include "column/type_traits.h"
+#include "exec/sorting/sorting.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/function_context.h"
 #include "gutil/casts.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
 template <PrimitiveType PT, typename = guard::Guard>
@@ -280,4 +286,237 @@ public:
     std::string get_name() const override { return "group concat"; }
 };
 
+<<<<<<< HEAD
 } // namespace starrocks::vectorized
+=======
+// input columns result in intermediate result: struct{array[col0], array[col1], array[col2]... array[coln]}
+// return ordered string("col0col1...colnSEPcol0col1...coln...")
+struct GroupConcatAggregateStateV2 {
+    void update(FunctionContext* ctx, const Column& column, size_t index, size_t offset, size_t count) {
+        auto notnull = ColumnHelper::get_data_column(&column);
+        (*data_columns)[index]->append(*notnull, offset, count);
+    }
+
+    // release the trailing N-1 order-by columns
+    void release_order_by_columns(int output_col_num) const {
+        DCHECK(data_columns != nullptr);
+        for (auto i = output_col_num; i < data_columns->size(); ++i) {
+            data_columns->at(i).reset();
+        }
+        data_columns->resize(output_col_num);
+    }
+
+    ~GroupConcatAggregateStateV2() {
+        if (data_columns != nullptr) {
+            for (auto& col : *data_columns) {
+                col.reset();
+            }
+            data_columns->clear();
+            delete data_columns;
+            data_columns = nullptr;
+        }
+    }
+    // using pointer rather than vector to avoid variadic size
+    // group_concat(a, b order by c, d), the a,b,c,d are put into data_columns in order.
+    Columns* data_columns = nullptr; // not null
+};
+
+class GroupConcatAggregateFunctionV2
+        : public AggregateFunctionBatchHelper<GroupConcatAggregateStateV2, GroupConcatAggregateFunctionV2> {
+public:
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
+        auto& state_impl = this->data(state);
+        if (state_impl.data_columns != nullptr) {
+            for (auto& col : *state_impl.data_columns) {
+                col->resize(0);
+            }
+        }
+    }
+
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
+        auto num = ctx->get_num_args();
+        GroupConcatAggregateStateV2& state_impl = this->data(state);
+        if (state_impl.data_columns == nullptr) { // init
+            state_impl.data_columns = new Columns;
+            for (auto i = 0; i < num; ++i) {
+                state_impl.data_columns->emplace_back(ctx->create_column(*ctx->get_arg_type(i), false));
+            }
+            DCHECK(ctx->get_is_asc_order().size() == ctx->get_nulls_first().size());
+        }
+        for (auto i = 0; i < num; ++i) {
+            auto* data_col = columns[i];
+            auto tmp_row_num = row_num;
+            if (columns[i]->is_constant()) {
+                // just copy the first const value.
+                data_col = down_cast<const ConstColumn*>(columns[i])->data_column().get();
+                tmp_row_num = 0;
+            }
+            this->data(state).update(ctx, *data_col, i, tmp_row_num, 1);
+            std::cout << fmt::format("after update {} -th col = {} id = {}, result {}", i, columns[i]->debug_string(),
+                                     row_num, (*state_impl.data_columns)[i]->debug_string())
+                      << std::endl;
+        }
+    }
+
+    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
+                                   AggDataPtr __restrict state) const override {
+        auto& state_impl = this->data(state);
+        for (auto& col : *state_impl.data_columns) {
+            col->resize(col->size() + chunk_size);
+        }
+        for (size_t i = 0; i < chunk_size; ++i) {
+            update(ctx, columns, state, i);
+        }
+    }
+
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
+        for (size_t i = frame_start; i < frame_end; ++i) {
+            update(ctx, columns, state, i);
+        }
+    }
+
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
+        if (row_num >= column->size()) {
+            std::cout << fmt::format("row num {} >= size {}", row_num, column->size()) << std::endl;
+            throw std::runtime_error("merge error");
+            return;
+        }
+        std::cout << fmt::format("merge {}", column->debug_string()) << std::endl;
+        auto& input_columns = down_cast<const StructColumn*>(ColumnHelper::get_data_column(column))->fields();
+        auto& state_impl = this->data(state);
+        if (state_impl.data_columns == nullptr) {
+            auto num = ctx->get_num_args();
+            state_impl.data_columns = new Columns;
+            for (auto i = 0; i < num; ++i) {
+                state_impl.data_columns->emplace_back(ctx->create_column(*ctx->get_arg_type(i), false));
+            }
+            DCHECK(ctx->get_is_asc_order().size() == ctx->get_nulls_first().size());
+        }
+        for (auto i = 0; i < input_columns.size(); ++i) {
+            auto array_column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(input_columns[i].get()));
+            auto& offsets = array_column->offsets().get_data();
+            state_impl.update(ctx, array_column->elements(), i, offsets[row_num],
+                              offsets[row_num + 1] - offsets[row_num]);
+        }
+    }
+
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+        std::cout << fmt::format("ser to name = {}, val = {}", to->get_name(), to->debug_string()) << std::endl;
+        auto& state_impl = this->data(state);
+        auto& columns = down_cast<StructColumn*>(ColumnHelper::get_data_column(to))->fields_column();
+        if (to->is_nullable()) {
+            down_cast<NullableColumn*>(to)->null_column_data().emplace_back(0);
+        }
+        for (auto i = 0; i < columns.size(); ++i) {
+            auto elem_size = (*state_impl.data_columns)[i]->size();
+            auto array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(columns[i].get()));
+            if (columns[i]->is_nullable()) {
+                down_cast<NullableColumn*>(columns[i].get())->null_column_data().emplace_back(0);
+            }
+
+            array_col->elements_column()->append(
+                    *ColumnHelper::unpack_and_duplicate_const_column(elem_size, (*state_impl.data_columns)[i]), 0,
+                    elem_size);
+
+            std::cout << fmt::format("after ser {} res {}", (*state_impl.data_columns)[i]->debug_string(),
+                                     array_col->elements_column()->debug_string())
+                      << std::endl;
+            auto& offsets = array_col->offsets_column()->get_data();
+            offsets.push_back(offsets.back() + elem_size);
+        }
+        std::cout << fmt::format("ser to name = {}, val = {}", to->get_name(), to->debug_string()) << std::endl;
+    }
+
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     ColumnPtr* dst) const override {
+        auto columns = down_cast<StructColumn*>(ColumnHelper::get_data_column(dst->get()))->fields_column();
+        if (dst->get()->is_nullable()) {
+            for (size_t i = 0; i < chunk_size; i++) {
+                down_cast<NullableColumn*>(dst->get())->null_column_data().emplace_back(0);
+            }
+        }
+        for (auto j = 0; j < columns.size(); ++j) {
+            auto array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(columns[j].get()));
+            if (columns[j].get()->is_nullable()) {
+                for (size_t i = 0; i < chunk_size; i++) {
+                    down_cast<NullableColumn*>(columns[j].get())->null_column_data().emplace_back(0);
+                }
+            }
+            auto& element_column = array_col->elements_column();
+            auto& offsets = array_col->offsets_column()->get_data();
+            for (size_t i = 0; i < chunk_size; i++) {
+                element_column->append_datum(src[j]->get(i));
+                offsets.emplace_back(offsets.back() + 1);
+            }
+            std::cout << fmt::format("conv ser src {} to {}", src[j]->debug_string(), array_col->debug_string())
+                      << std::endl;
+        }
+    }
+
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+        auto& state_impl = this->data(state);
+        auto elem_size = (*state_impl.data_columns)[0]->size();
+        auto output_col_num = state_impl.data_columns->size() - ctx->get_is_asc_order().size();
+        Columns outputs;
+        outputs.resize(output_col_num);
+        for (auto i = 0; i < output_col_num; ++i) {
+            outputs[i] = (*state_impl.data_columns)[i];
+            std::cout << fmt::format("finalize input i = {}, output = {}", i, outputs[i]->debug_string()) << std::endl;
+        }
+        if (!ctx->get_is_asc_order().empty()) {
+            for (auto i = 0; i < output_col_num; ++i) {
+                outputs[i] = (*state_impl.data_columns)[i]->clone_empty();
+            }
+            Permutation perm;
+            Columns order_by_columns;
+            SortDescs sort_desc(ctx->get_is_asc_order(), ctx->get_nulls_first());
+            order_by_columns.assign(state_impl.data_columns->begin() + output_col_num, state_impl.data_columns->end());
+            Status st = sort_and_tie_columns(ctx->state()->cancelled_ref(), order_by_columns, sort_desc, &perm);
+            // release order-by columns early
+            order_by_columns.clear();
+            state_impl.release_order_by_columns(output_col_num);
+            DCHECK(ctx->state()->cancelled_ref() || st.ok());
+            for (auto i = 0; i < output_col_num; ++i) {
+                materialize_column_by_permutation(outputs[i].get(), {(*state_impl.data_columns)[i]}, perm);
+            }
+        }
+        std::cout << fmt::format("finalize to name = {}, val = {}", to->get_name(), to->debug_string()) << std::endl;
+
+        auto* string = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(to));
+        if (to->is_nullable()) {
+            down_cast<NullableColumn*>(to)->null_column_data().emplace_back(0);
+        }
+        /// TODO(fzh) just consider string type
+        Bytes& bytes = string->get_bytes();
+        size_t offset = bytes.size();
+        size_t length = 0;
+        for (auto i = 0; i < output_col_num; ++i) {
+            std::cout << i << " th col " << outputs[i]->get_name() << std::endl;
+            if (outputs[i]->is_binary()) {
+                length += down_cast<BinaryColumn*>(outputs[i].get())->get_bytes().size();
+            }
+        }
+
+        bytes.resize(offset + length);
+        Slice bstr(bytes.data(), offset);
+        for (auto j = 0; j < elem_size; ++j) {
+            for (auto i = 0; i < output_col_num; ++i) {
+                if (outputs[i]->is_binary()) {
+                    auto str = down_cast<BinaryColumn*>(outputs[i].get())->get_slice(j);
+                    memcpy(bytes.data() + offset, str.get_data(), str.get_size());
+                    offset += str.get_size();
+                }
+            }
+        }
+        string->get_offset().emplace_back(offset);
+        std::cout << fmt::format("from {} to {}", bstr.to_string(), string->debug_string()) << std::endl;
+    }
+
+    std::string get_name() const override { return "group concat2"; }
+};
+
+} // namespace starrocks
+>>>>>>> e31fbe8c1b ([Feature] group_concat() support distinct and order by)

@@ -1788,10 +1788,19 @@ functionCall
 aggregationFunction
     : AVG '(' DISTINCT? expression ')'
     | COUNT '(' ASTERISK_SYMBOL? ')'
+<<<<<<< HEAD
     | COUNT '(' (DISTINCT bracketHint?)? (expression (',' expression)*)? ')'
     | MAX '(' DISTINCT? expression ')'
     | MIN '(' DISTINCT? expression ')'
     | SUM '(' DISTINCT? expression ')'
+=======
+    | COUNT '(' (setQuantifier bracketHint?)? (expression (',' expression)*)? ')'
+    | MAX '(' setQuantifier? expression ')'
+    | MIN '(' setQuantifier? expression ')'
+    | SUM '(' setQuantifier? expression ')'
+    | ARRAY_AGG '(' expression (ORDER BY sortItem (',' sortItem)*)? ')'
+    | GROUP_CONCAT '(' setQuantifier? (expression (',' expression)*)? (ORDER BY sortItem (',' sortItem)*)? (SEPARATOR expression)? ')'
+>>>>>>> e31fbe8c1b ([Feature] group_concat() support distinct and order by)
     ;
 
 userVariable

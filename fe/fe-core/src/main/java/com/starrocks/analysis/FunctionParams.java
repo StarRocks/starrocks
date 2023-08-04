@@ -62,6 +62,39 @@ public class FunctionParams implements Writable {
         return new FunctionParams();
     }
 
+<<<<<<< HEAD
+=======
+    // treat empty as null
+    public List<OrderByElement> getOrderByElements() {
+        return orderByElements == null ? null : orderByElements.isEmpty() ? null : orderByElements;
+    }
+
+    public int getOrderByElemNum() {
+        return orderByElements == null ? 0 : orderByElements.size();
+    }
+
+    public String getOrderByStringToSql() {
+        if (orderByElements != null && !orderByElements.isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(" ORDER BY ").append(orderByElements.stream().map(OrderByElement::toSql).
+                    collect(Collectors.joining(" ")));
+            return sb.toString();
+        } else {
+            return "";
+        }
+    }
+
+    public String getOrderByStringToExplain() {
+        if (orderByElements != null && !orderByElements.isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(" ORDER BY ").append(orderByElements.stream().map(OrderByElement::explain).
+                    collect(Collectors.joining(" ")));
+            return sb.toString();
+        } else {
+            return "";
+        }
+    }
+>>>>>>> e31fbe8c1b ([Feature] group_concat() support distinct and order by)
     public boolean isStar() {
         return isStar;
     }

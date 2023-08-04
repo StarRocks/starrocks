@@ -23,8 +23,125 @@ namespace vectorized {
 Status init_udaf_context(int64_t fid, const std::string& url, const std::string& checksum, const std::string& symbol,
                          starrocks_udf::FunctionContext* context);
 
+<<<<<<< HEAD:be/src/exec/vectorized/aggregator.cpp
 } // namespace vectorized
 Aggregator::Aggregator(const TPlanNode& tnode) : _tnode(tnode) {}
+=======
+AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode) {
+    auto params = std::make_shared<AggregatorParams>();
+    params->conjuncts = tnode.conjuncts;
+    params->limit = tnode.limit;
+
+    // TODO: STREAM_AGGREGATION_NODE will be added later.
+    DCHECK_EQ(tnode.node_type, TPlanNodeType::AGGREGATION_NODE);
+    switch (tnode.node_type) {
+    case TPlanNodeType::AGGREGATION_NODE: {
+        params->needs_finalize = tnode.agg_node.need_finalize;
+        params->streaming_preaggregation_mode = tnode.agg_node.streaming_preaggregation_mode;
+        params->intermediate_tuple_id = tnode.agg_node.intermediate_tuple_id;
+        params->output_tuple_id = tnode.agg_node.output_tuple_id;
+        params->sql_grouping_keys = tnode.agg_node.__isset.sql_grouping_keys ? tnode.agg_node.sql_grouping_keys : "";
+        params->sql_aggregate_functions =
+                tnode.agg_node.__isset.sql_aggregate_functions ? tnode.agg_node.sql_aggregate_functions : "";
+        params->has_outer_join_child =
+                tnode.agg_node.__isset.has_outer_join_child && tnode.agg_node.has_outer_join_child;
+        params->grouping_exprs = tnode.agg_node.grouping_exprs;
+        params->aggregate_functions = tnode.agg_node.aggregate_functions;
+        params->intermediate_aggr_exprs = tnode.agg_node.intermediate_aggr_exprs;
+        break;
+    }
+    default:
+        __builtin_unreachable();
+    }
+    params->init();
+    return params;
+}
+
+void AggregatorParams::init() {
+    size_t agg_size = aggregate_functions.size();
+    agg_fn_types.resize(agg_size);
+    // init aggregate function types
+    for (size_t i = 0; i < agg_size; ++i) {
+        const TExpr& desc = aggregate_functions[i];
+        const TFunction& fn = desc.nodes[0].fn;
+        VLOG_ROW << fn.name.function_name << " is arg nullable " << desc.nodes[0].has_nullable_child;
+        VLOG_ROW << fn.name.function_name << " is result nullable " << desc.nodes[0].is_nullable;
+
+        if (fn.name.function_name == "count") {
+            std::vector<FunctionContext::TypeDesc> arg_typedescs;
+            agg_fn_types[i] = {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT), arg_typedescs, false, false};
+        } else {
+            TypeDescriptor return_type = TypeDescriptor::from_thrift(fn.ret_type);
+            TypeDescriptor serde_type = TypeDescriptor::from_thrift(fn.aggregate_fn.intermediate_type);
+
+            // collect arg_typedescs for aggregate function.
+            std::vector<FunctionContext::TypeDesc> arg_typedescs;
+            for (auto& type : fn.arg_types) {
+                arg_typedescs.push_back(AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_thrift(type)));
+            }
+
+            bool is_input_nullable = has_outer_join_child || desc.nodes[0].has_nullable_child;
+            agg_fn_types[i] = {return_type, serde_type, arg_typedescs, is_input_nullable, desc.nodes[0].is_nullable};
+            if (fn.name.function_name == "array_agg" || fn.name.function_name == "group_concat") {
+                // set order by info
+                if (fn.aggregate_fn.__isset.is_asc_order && fn.aggregate_fn.__isset.nulls_first &&
+                    !fn.aggregate_fn.is_asc_order.empty()) {
+                    agg_fn_types[i].is_asc_order = fn.aggregate_fn.is_asc_order;
+                    agg_fn_types[i].nulls_first = fn.aggregate_fn.nulls_first;
+                }
+            }
+        }
+    }
+
+    // init group by types
+    size_t group_by_size = grouping_exprs.size();
+    group_by_types.resize(group_by_size);
+    for (size_t i = 0; i < group_by_size; ++i) {
+        TExprNode expr = grouping_exprs[i].nodes[0];
+        group_by_types[i].result_type = TypeDescriptor::from_thrift(expr.type);
+        group_by_types[i].is_nullable = expr.is_nullable || has_outer_join_child;
+        has_nullable_key = has_nullable_key || group_by_types[i].is_nullable;
+        VLOG_ROW << "group by column " << i << " result_type " << group_by_types[i].result_type << " is_nullable "
+                 << expr.is_nullable;
+    }
+
+    VLOG_ROW << "has_nullable_key " << has_nullable_key;
+}
+
+ChunkUniquePtr AggregatorParams::create_result_chunk(bool is_serialize_fmt, const TupleDescriptor& desc) {
+    auto result_chunk = std::make_unique<Chunk>();
+
+    const auto& slots = desc.slots();
+    size_t append_offset = 0;
+
+    for (auto& group_by_type : group_by_types) {
+        auto col = ColumnHelper::create_column(group_by_type.result_type, group_by_type.is_nullable);
+        result_chunk->append_column(std::move(col), slots[append_offset++]->id());
+    }
+
+    if (!is_serialize_fmt) {
+        for (auto& agg_fn_type : agg_fn_types) {
+            // For count, count distinct, bitmap_union_int such as never return null function,
+            // we need to create a not-nullable column.
+            auto col = ColumnHelper::create_column(agg_fn_type.result_type,
+                                                   agg_fn_type.has_nullable_child && agg_fn_type.is_nullable);
+            result_chunk->append_column(std::move(col), slots[append_offset++]->id());
+        }
+    } else {
+        for (auto& agg_fn_type : agg_fn_types) {
+            auto col = ColumnHelper::create_column(agg_fn_type.serde_type, agg_fn_type.has_nullable_child);
+            result_chunk->append_column(std::move(col), slots[append_offset++]->id());
+        }
+    }
+
+    return result_chunk;
+}
+
+#define ALIGN_TO(size, align) ((size + align - 1) / align * align)
+#define PAD(size, align) (align - (size % align)) % align;
+
+Aggregator::Aggregator(AggregatorParamsPtr params) : _params(std::move(params)) {}
+>>>>>>> e31fbe8c1b ([Feature] group_concat() support distinct and order by):be/src/exec/aggregator.cpp
 
 Status Aggregator::open(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_group_by_expr_ctxs, state));
@@ -585,6 +702,13 @@ void Aggregator::output_chunk_by_streaming(vectorized::ChunkPtr* chunk) {
 
     if (!_agg_fn_ctxs.empty()) {
         DCHECK(!_group_by_columns.empty());
+<<<<<<< HEAD:be/src/exec/vectorized/aggregator.cpp
+=======
+
+        RETURN_IF_ERROR(evaluate_agg_fn_exprs(input_chunk));
+        std::cout << fmt::format("convert_to_serialize_format by streaming0") << std::endl;
+
+>>>>>>> e31fbe8c1b ([Feature] group_concat() support distinct and order by):be/src/exec/aggregator.cpp
         const auto num_rows = _group_by_columns[0]->size();
         vectorized::Columns agg_result_column = _create_agg_result_columns(num_rows);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
@@ -594,6 +718,7 @@ void Aggregator::output_chunk_by_streaming(vectorized::ChunkPtr* chunk) {
                 DCHECK(i < _agg_input_columns.size() && _agg_input_columns[i].size() >= 1);
                 result_chunk->append_column(std::move(_agg_input_columns[i][0]), slot_id);
             } else {
+                std::cout << fmt::format("convert_to_serialize_format by streaming1") << std::endl;
                 _agg_functions[i]->convert_to_serialize_format(_agg_fn_ctxs[i], _agg_input_columns[i],
                                                                result_chunk->num_rows(), &agg_result_column[i]);
                 result_chunk->append_column(std::move(agg_result_column[i]), slot_id);
