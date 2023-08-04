@@ -65,7 +65,6 @@ jobs:
           !contains(github.event.pull_request.labels.*.name, 'sync') &&
           (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
         run: |
-          cd /var/lib/ci-tool/ && git pull && ./bin/checkout.sh check
           echo "pass=true" >> $GITHUB_OUTPUT
 
       - name: Clean ENV
