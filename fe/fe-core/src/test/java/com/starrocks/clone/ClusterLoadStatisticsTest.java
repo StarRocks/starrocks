@@ -167,8 +167,8 @@ public class ClusterLoadStatisticsTest {
         clusterLoad.init();
 
         BackendLoadStatistic beLoad = clusterLoad.getBackendLoadStatistic(10001);
-        Assert.assertEquals("{\"be_id\":10001,\"cluster_name\":\"default_cluster\",\"is_available\":true," +
-                "\"cpu_cores\":0,\"mem_limit\":0,\"mem_used\":0," +
+        Assert.assertEquals("{\"beId\":10001,\"clusterName\":\"default_cluster\",\"isAvailable\":true," +
+                "\"cpuCores\":0,\"memLimit\":0,\"memUsed\":0," +
                 "\"mediums\":[{\"medium\":\"HDD\",\"replica\":1,\"used\":570000,\"total\":\"1.5MB\"," +
                 "\"score\":1.0040447504302925}," +
                 "{\"medium\":\"SSD\",\"replica\":0,\"used\":0,\"total\":\"0B\",\"score\":NaN}]," +

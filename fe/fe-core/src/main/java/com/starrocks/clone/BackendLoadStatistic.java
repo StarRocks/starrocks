@@ -151,17 +151,17 @@ public class BackendLoadStatistic {
     private SystemInfoService infoService;
     private TabletInvertedIndex invertedIndex;
 
-    @SerializedName(value = "be_id")
+    @SerializedName(value = "beId")
     private long beId;
-    @SerializedName(value = "cluster_name")
+    @SerializedName(value = "clusterName")
     private String clusterName;
-    @SerializedName(value = "is_available")
+    @SerializedName(value = "isAvailable")
     private boolean isAvailable;
-    @SerializedName(value = "cpu_cores")
+    @SerializedName(value = "cpuCores")
     private int cpuCores;
-    @SerializedName(value = "mem_limit")
+    @SerializedName(value = "memLimit")
     private long memLimit;
-    @SerializedName(value = "mem_used")
+    @SerializedName(value = "memUsed")
     private long memUsed;
 
     public static class LoadScore {
@@ -277,6 +277,7 @@ public class BackendLoadStatistic {
         isAvailable = be.isAvailable();
         cpuCores = be.getCpuCores();
         memLimit = be.getMemLimitBytes();
+        memUsed = be.getMemUsedBytes();
 
         ImmutableMap<String, DiskInfo> disks = be.getDisks();
         for (DiskInfo diskInfo : disks.values()) {
