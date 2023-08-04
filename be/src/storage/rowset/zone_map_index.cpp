@@ -182,7 +182,6 @@ ZoneMapIndexWriterImpl<type>::ZoneMapIndexWriterImpl(TypeInfo* type_info) : _typ
 template <LogicalType type>
 void ZoneMapIndexWriterImpl<type>::add_values(const void* values, size_t count) {
     if (count > 0) {
-        _page_zone_map.has_not_null = true;
         const auto* vals = reinterpret_cast<const CppType*>(values);
         auto [pmin, pmax] = std::minmax_element(vals, vals + count);
 
@@ -202,6 +201,7 @@ void ZoneMapIndexWriterImpl<type>::add_values(const void* values, size_t count) 
             _page_zone_map.max_value.resize_container_for_fit(_type_info, pmax);
             _type_info->direct_copy(&_page_zone_map.max_value.value, pmax);
         }
+        _page_zone_map.has_not_null = true;
     }
 }
 
