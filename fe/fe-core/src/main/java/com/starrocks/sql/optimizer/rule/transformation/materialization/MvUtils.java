@@ -901,6 +901,7 @@ public class MvUtils {
     // p2:[2022-01-02, 2022-01-03), p2 is outdated,
     // then this function will return predicate:
     // k1 >= "2022-01-01" and k1 < "2022-01-02"
+    // NOTE: This method can be only used in query rewrite and cannot be used in insert routine.
     public static ScalarOperator getMvPartialPartitionPredicates(MaterializedView mv,
                                                                  OptExpression mvPlan,
                                                                  Set<String> mvPartitionNamesToRefresh) {
@@ -936,11 +937,21 @@ public class MvUtils {
         return null;
     }
 
+    /**
+     * Return the updated partition key ranges of the specific table.
+     *
+     * NOTE: This method can be only used in query rewrite and cannot be used to insert routine.
+     * @param partitionByTable          : the base table of the mv
+     * @param partitionColumn           : the partition column of the base table
+     * @param mv                        : the materialized view
+     * @param mvPartitionNamesToRefresh : the updated partition names  of the materialized view
+     * @return
+     */
     private static List<Range<PartitionKey>> getLatestPartitionRangeForTable(Table partitionByTable,
                                                                              Column partitionColumn,
                                                                              MaterializedView mv,
                                                                              Set<String> mvPartitionNamesToRefresh) {
-        Set<String> modifiedPartitionNames = mv.getUpdatedPartitionNamesOfTable(partitionByTable);
+        Set<String> modifiedPartitionNames = mv.getUpdatedPartitionNamesOfTable(partitionByTable, true);
         List<Range<PartitionKey>> baseTableRanges = getLatestPartitionRange(partitionByTable, partitionColumn,
                 modifiedPartitionNames);
         List<Range<PartitionKey>> mvRanges = getLatestPartitionRangeForNativeTable(mv, mvPartitionNamesToRefresh);
