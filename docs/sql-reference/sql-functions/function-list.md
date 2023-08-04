@@ -366,21 +366,6 @@ You can find a function based on the following categories:
 
 - [hll_cardinality](../sql-functions/scalar-functions/hll_cardinality.md)
 
-<<<<<<< HEAD
-=======
-## Struct functions
-
-- [named_struct](../sql-functions/struct-functions/named_struct.md)
-- [row](../sql-functions/struct-functions/row.md)
-
-## Table functions
-
-- [files](../sql-functions/table-functions/files.md)
-- [generate_series](../sql-functions/table-functions/generate_series.md)
-- [json_each](../sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
-- [unnest](../sql-functions/array-functions/unnest.md)
-
->>>>>>> 4cf65a8b45 ([Doc] Add link to bitmap value and update sys variables (#28604))
 ## Utility functions
 
 - [current_role](../sql-functions/utility-functions/current_role.md)
