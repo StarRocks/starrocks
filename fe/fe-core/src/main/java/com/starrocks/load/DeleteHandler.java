@@ -477,6 +477,11 @@ public class DeleteHandler implements Writable {
                         "is not duplicate or column type is float or double.");
             }
 
+            if (column.getType().isComplexType()) {
+                throw new DdlException(
+                        "unsupported delete condition on Array/Map/Struct type column[" + columnName + "]");
+            }
+
             if (condition instanceof BinaryPredicate) {
                 try {
                     BinaryPredicate binaryPredicate = (BinaryPredicate) condition;
