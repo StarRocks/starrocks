@@ -402,7 +402,7 @@ public class LoadMgr implements Writable {
         List<LoadJob> insertJobs;
         try {
             insertJobs = idToLoadJob.values().stream()
-                    .filter(job -> job.getJobType() == EtlJobType.INSERT && !job.isCompleted())
+                    .filter(job -> job.hasTxn() && job.getJobType() == EtlJobType.INSERT && !job.isCompleted())
                     .collect(Collectors.toList());
         } finally {
             readUnlock();
@@ -411,7 +411,7 @@ public class LoadMgr implements Writable {
         insertJobs.forEach(job -> {
             TransactionState state = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelTransactionState(
                     job.getDbId(), job.getLabel());
-            if (state != null && state.getTransactionStatus() == TransactionStatus.UNKNOWN) {
+            if (state == null || state.getTransactionStatus() == TransactionStatus.UNKNOWN) {
                 try {
                     recordFinishedOrCacnelledLoadJob(
                             job.getId(), EtlJobType.INSERT, "Cancelled since transaction status unknown", "");
