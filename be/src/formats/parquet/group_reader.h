@@ -16,6 +16,7 @@
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/metadata.h"
 #include "gen_cpp/parquet_types.h"
@@ -86,7 +87,13 @@ public:
     Status init();
     // we need load dict for dict_filter, so prepare should be after collec_io_range
     Status prepare();
-    Status get_next(ChunkPtr* chunk, size_t* row_count);
+    Status get_next(ChunkPtr* chunk, size_t* row_count) {
+        if (config::parquet_late_materialization_v2_enable) {
+            return _do_get_next_new(chunk, row_count);
+        } else {
+            return _do_get_next(chunk, row_count);
+        }
+    }
     void close();
     void collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
     void set_end_offset(int64_t value) { _end_offset = value; }
@@ -137,6 +144,11 @@ private:
     static bool _column_all_pages_dict_encoded(const tparquet::ColumnMetaData& column_metadata);
     void _init_read_chunk();
 
+    Status _do_get_next(ChunkPtr* chunk, size_t* row_count);
+    Status _do_get_next_new(ChunkPtr* chunk, size_t* row_count);
+    Status _read_range(const std::vector<int>& read_columns, const Range<uint64_t>& range, const Filter* filter,
+                       ChunkPtr* chunk);
+
     Status _read(const std::vector<int>& read_columns, size_t* row_count, ChunkPtr* chunk);
     Status _lazy_skip_rows(const std::vector<int>& read_columns, const ChunkPtr& chunk, size_t chunk_size);
     void _collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type, bool active,
@@ -179,6 +191,9 @@ private:
     int64_t _end_offset = 0;
 
     DictFilterContext _dict_filter_ctx;
+
+    SparseRange<uint64_t> _range;
+    SparseRangeIterator<uint64_t> _range_iter;
 };
 
 } // namespace starrocks::parquet
