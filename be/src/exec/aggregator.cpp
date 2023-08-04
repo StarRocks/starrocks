@@ -129,7 +129,7 @@ void AggregatorParams::init() {
 
             bool is_input_nullable = has_outer_join_child || desc.nodes[0].has_nullable_child;
             agg_fn_types[i] = {return_type, serde_type, arg_typedescs, is_input_nullable, desc.nodes[0].is_nullable};
-            if (fn.name.function_name == "array_agg") {
+            if (fn.name.function_name == "array_agg" || fn.name.function_name == "group_concat") {
                 // set order by info
                 if (fn.aggregate_fn.__isset.is_asc_order && fn.aggregate_fn.__isset.nulls_first &&
                     !fn.aggregate_fn.is_asc_order.empty()) {
@@ -868,6 +868,7 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
         DCHECK(!_group_by_columns.empty());
 
         RETURN_IF_ERROR(evaluate_agg_fn_exprs(input_chunk));
+        std::cout << fmt::format("convert_to_serialize_format by streaming0") << std::endl;
 
         const auto num_rows = _group_by_columns[0]->size();
         Columns agg_result_column = _create_agg_result_columns(num_rows, true);
@@ -878,6 +879,7 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
                 DCHECK(i < _agg_input_columns.size() && _agg_input_columns[i].size() >= 1);
                 result_chunk->append_column(std::move(_agg_input_columns[i][0]), slot_id);
             } else {
+                std::cout << fmt::format("convert_to_serialize_format by streaming1") << std::endl;
                 _agg_functions[i]->convert_to_serialize_format(_agg_fn_ctxs[i], _agg_input_columns[i],
                                                                result_chunk->num_rows(), &agg_result_column[i]);
                 result_chunk->append_column(std::move(agg_result_column[i]), slot_id);
