@@ -4,6 +4,7 @@ package com.starrocks.epack;
 
 import com.starrocks.common.DdlException;
 import com.starrocks.epack.lake.StarOSAgentEpack;
+import com.starrocks.epack.server.WarehouseManagerEpack;
 import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.epack.sql.ast.DropWarehouseStmt;
 import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
@@ -13,7 +14,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.warehouse.Warehouse;
@@ -109,7 +109,7 @@ public class WarehouseStmtTest {
         connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         CreateWarehouseStmt statement = (CreateWarehouseStmt) stmt;
         DDLStmtExecutor.execute(statement, connectCtx);
-        WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) GlobalStateMgr.getCurrentState().getWarehouseMgr();
         Assert.assertTrue(warehouseMgr.warehouseExists("warehouse_1"));
 
         try {

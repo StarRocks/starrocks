@@ -16,6 +16,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.epack.server.WarehouseManagerEpack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
@@ -60,7 +61,7 @@ public class SetWarehouseStmtTest {
     }
 
     @Test
-    public void testSetWarehouse(@Mocked WarehouseManager warehouseMgr) throws Exception {
+    public void testSetWarehouse(@Mocked WarehouseManagerEpack warehouseMgr) throws Exception {
 
         new MockUp<RunMode>() {
             @Mock

@@ -71,6 +71,7 @@ import com.starrocks.epack.persist.RoleMappingPersistInfo;
 import com.starrocks.epack.persist.SecurityIntegrationPersistInfo;
 import com.starrocks.epack.privilege.DbUID;
 import com.starrocks.epack.privilege.Policy;
+import com.starrocks.epack.server.WarehouseManagerEpack;
 import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.ha.LeaderInfo;
@@ -107,7 +108,6 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.staros.StarMgrServer;
@@ -1164,19 +1164,19 @@ public class EditLog {
                 }
                 case OperationTypeEPack.OP_CREATE_WAREHOUSE: {
                     Warehouse wh = (Warehouse) journal.getData();
-                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) globalStateMgr.getWarehouseMgr();
                     warehouseMgr.replayCreateWarehouse(wh);
                     break;
                 }
                 case OperationTypeEPack.OP_DROP_WAREHOUSE: {
                     DropWarehouseLog log = (DropWarehouseLog) journal.getData();
-                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) globalStateMgr.getWarehouseMgr();
                     warehouseMgr.replayDropWarehouse(log);
                     break;
                 }
                 case OperationTypeEPack.OP_ALTER_WAREHOUSE: {
                     Warehouse wh = (Warehouse) journal.getData();
-                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) globalStateMgr.getWarehouseMgr();
                     warehouseMgr.replayAlterWarehouse(wh);
                     break;
                 }

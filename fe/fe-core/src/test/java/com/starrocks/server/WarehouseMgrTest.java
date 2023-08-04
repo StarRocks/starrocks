@@ -19,6 +19,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.epack.persist.DropWarehouseLog;
+import com.starrocks.epack.server.WarehouseManagerEpack;
 import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.epack.sql.ast.DropWarehouseStmt;
 import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
@@ -86,7 +87,7 @@ public class WarehouseMgrTest {
             }
         };
 
-        WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) GlobalStateMgr.getCurrentState().getWarehouseMgr();
         Warehouse warehouse = new LocalWarehouse(10000, "warehouse_1", 1000, null);
         warehouse.initCluster();
         warehouseMgr.replayCreateWarehouse(warehouse);
@@ -123,7 +124,7 @@ public class WarehouseMgrTest {
     @Test
     public void testNewLoadWarehouse(@Mocked StarOSAgentEpack starOSAgent, @Mocked EditLog editLog)
             throws IOException, DdlException {
-        WarehouseManager warehouseMgr = GlobalStateMgr.getServingState().getWarehouseMgr();
+        WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) GlobalStateMgr.getCurrentState().getWarehouseMgr();
         File file = new File(fileName);
         file.createNewFile();
 

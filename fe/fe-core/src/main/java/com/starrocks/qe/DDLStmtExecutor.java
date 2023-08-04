@@ -26,6 +26,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.epack.privilege.SecurityPolicyMgr;
+import com.starrocks.epack.server.WarehouseManagerEpack;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
 import com.starrocks.epack.sql.ast.AlterRoleMappingStatement;
 import com.starrocks.epack.sql.ast.AlterSecurityIntegrationStatement;
@@ -1060,7 +1061,8 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateWarehouseStatement(CreateWarehouseStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getWarehouseMgr().createWarehouse(stmt);
+                WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) context.getGlobalStateMgr().getWarehouseMgr();
+                warehouseMgr.createWarehouse(stmt);
             });
             return null;
         }
@@ -1068,7 +1070,8 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitSuspendWarehouseStatement(SuspendWarehouseStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getWarehouseMgr().suspendWarehouse(stmt);
+                WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) context.getGlobalStateMgr().getWarehouseMgr();
+                warehouseMgr.suspendWarehouse(stmt);
             });
             return null;
         }
@@ -1076,7 +1079,8 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitResumeWarehouseStatement(ResumeWarehouseStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getWarehouseMgr().resumeWarehouse(stmt);
+                WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) context.getGlobalStateMgr().getWarehouseMgr();
+                warehouseMgr.resumeWarehouse(stmt);
             });
             return null;
         }
@@ -1084,7 +1088,8 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropWarehouseStatement(DropWarehouseStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getWarehouseMgr().dropWarehouse(stmt);
+                WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) context.getGlobalStateMgr().getWarehouseMgr();
+                warehouseMgr.dropWarehouse(stmt);
             });
             return null;
         }

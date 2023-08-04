@@ -14,19 +14,14 @@
 
 package com.starrocks.server;
 
-import autovalue.shaded.com.google.common.common.base.Preconditions;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.epack.persist.DropWarehouseLog;
 import com.starrocks.epack.persist.SRMetaBlockIDEPack;
-import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
-import com.starrocks.epack.sql.ast.DropWarehouseStmt;
-import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
-import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -64,10 +59,10 @@ public class WarehouseManager implements Writable {
     public static final long DEFAULT_WAREHOUSE_ID = 0L;
     public static final long DEFAULT_CLUSTER_ID = 0L;
 
-    private Map<Long, Warehouse> idToWh = new HashMap<>();
-    private Map<String, Warehouse> nameToWh = new HashMap<>();
+    protected Map<Long, Warehouse> idToWh = new HashMap<>();
+    protected Map<String, Warehouse> nameToWh = new HashMap<>();
 
-    private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+    protected final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
     public WarehouseManager() {
     }
@@ -135,118 +130,6 @@ public class WarehouseManager implements Writable {
         return builder.build();
     }
 
-
-
-    public void createWarehouse(CreateWarehouseStmt stmt) throws DdlException {
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
-            throw new DdlException("unsupported statement in shared_nothing mode");
-        }
-
-        String warehouseName = stmt.getWarehouseName();
-
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            if (nameToWh.containsKey(warehouseName)) {
-                if (stmt.isSetIfNotExists()) {
-                    LOG.info("Warehouse '%s' already exists", warehouseName);
-                    return;
-                }
-                throw new DdlException("Warehouse " + warehouseName + " already exists");
-            }
-
-            long id = GlobalStateMgr.getCurrentState().getNextId();
-            long clusterId = GlobalStateMgr.getCurrentState().getNextId();
-            String comment = stmt.getComment();
-            Warehouse wh = new LocalWarehouse(id, warehouseName, clusterId, comment);
-            try {
-                wh.initCluster();
-            } catch (DdlException e) {
-                LOG.warn(e);
-                throw new DdlException("create warehouse " + wh.getName() + " failed, reason: " + e);
-            }
-
-            nameToWh.put(wh.getName(), wh);
-            idToWh.put(wh.getId(), wh);
-            GlobalStateMgr.getCurrentState().getEditLog().logCreateWarehouse(wh);
-            LOG.info("createWarehouse whName = " + warehouseName + ", id = " + id + ", " +
-                    "comment = " + comment);
-        }
-    }
-
-    public void replayCreateWarehouse(Warehouse warehouse) {
-        String whName = warehouse.getName();
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            Preconditions.checkState(!nameToWh.containsKey(whName), "Warehouse '%s' already exists", whName);
-            nameToWh.put(whName, warehouse);
-            idToWh.put(warehouse.getId(), warehouse);
-        }
-    }
-
-    public void dropWarehouse(DropWarehouseStmt stmt) throws DdlException {
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
-            throw new RuntimeException(new DdlException("unsupported statement in shared_nothing mode"));
-        }
-
-        String warehouseName = stmt.getWarehouseName();
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            Preconditions.checkState(nameToWh.containsKey(warehouseName),
-                    "Warehouse '%s' doesn't exist", warehouseName);
-            Warehouse warehouse = nameToWh.get(warehouseName);
-            nameToWh.remove(warehouseName);
-            idToWh.remove(warehouse.getId());
-            warehouse.dropSelf();
-            GlobalStateMgr.getCurrentState().getEditLog().
-                    logDropWarehouse(new DropWarehouseLog(warehouseName));
-        }
-    }
-
-    public void replayDropWarehouse(DropWarehouseLog log) {
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            String warehouseName = log.getWarehouseName();
-            if (nameToWh.containsKey(warehouseName)) {
-                Warehouse warehouse = nameToWh.remove(warehouseName);
-                idToWh.remove(warehouse.getId());
-            }
-        }
-    }
-
-    public void suspendWarehouse(SuspendWarehouseStmt stmt) throws DdlException {
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
-            throw new RuntimeException(new DdlException("unsupported statement in shared_nothing mode"));
-        }
-
-        String warehouseName = stmt.getWarehouseName();
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            Preconditions.checkState(nameToWh.containsKey(warehouseName),
-                    "Warehouse '%s' doesn't exist", warehouseName);
-
-            Warehouse warehouse = nameToWh.get(warehouseName);
-            warehouse.suspendSelf();
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterWarehouse(warehouse);
-        }
-    }
-
-    public void replayAlterWarehouse(Warehouse warehouse) {
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            nameToWh.put(warehouse.getName(), warehouse);
-            idToWh.put(warehouse.getId(), warehouse);
-        }
-    }
-
-    public void resumeWarehouse(ResumeWarehouseStmt stmt) throws DdlException {
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
-            throw new RuntimeException(new DdlException("unsupported statement in shared_nothing mode"));
-        }
-
-        String warehouseName = stmt.getWarehouseName();
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            Preconditions.checkState(nameToWh.containsKey(warehouseName),
-                    "Warehouse '%s' doesn't exist", warehouseName);
-            Warehouse warehouse = nameToWh.get(warehouseName);
-            warehouse.resumeSelf();
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterWarehouse(warehouse);
-        }
-    }
-
     // warehouse meta persistence api
     public long saveWarehouses(DataOutputStream out, long checksum) throws IOException {
         checksum ^= idToWh.size();
@@ -270,6 +153,16 @@ public class WarehouseManager implements Writable {
         return checksum;
     }
 
+    public List<List<String>> getWarehousesInfo() {
+        return new WarehouseProcDir(this).fetchResult().getRows();
+    }
+
+    public List<WarehouseInfo> getWarehouseInfos() {
+        return getWarehouses().stream()
+                .map(WarehouseInfo::fromWarehouse)
+                .collect(Collectors.toList());
+    }
+
     // new image persist func
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockIDEPack.WAREHOUSE_MGR, nameToWh.size() + 1);
@@ -288,16 +181,6 @@ public class WarehouseManager implements Writable {
             this.nameToWh.put(warehouse.getName(), warehouse);
             this.idToWh.put(warehouse.getId(), warehouse);
         }
-    }
-
-    public List<List<String>> getWarehousesInfo() {
-        return new WarehouseProcDir(this).fetchResult().getRows();
-    }
-
-    public List<WarehouseInfo> getWarehouseInfos() {
-        return getWarehouses().stream()
-                .map(WarehouseInfo::fromWarehouse)
-                .collect(Collectors.toList());
     }
 
     @VisibleForTesting
