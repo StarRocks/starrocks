@@ -41,8 +41,16 @@ public class AWSCloudConfiguration implements CloudConfiguration {
         this.enablePathStyleAccess = enablePathStyleAccess;
     }
 
+    public boolean getEnablePathStyleAccess() {
+        return this.enablePathStyleAccess;
+    }
+
     public void setEnableSSL(boolean enableSSL) {
         this.enableSSL = enableSSL;
+    }
+
+    public boolean getEnableSSL() {
+        return this.enableSSL;
     }
 
     public AWSCloudCredential getAWSCloudCredential() {
