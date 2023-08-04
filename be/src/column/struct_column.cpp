@@ -485,7 +485,7 @@ Columns& StructColumn::fields_column() {
     return _fields;
 }
 
-ColumnPtr StructColumn::field_column(const std::string& field_name) {
+ColumnPtr StructColumn::field_column(const std::string& field_name) const {
     for (size_t i = 0; i < _field_names.size(); i++) {
         if (field_name == _field_names[i]) {
             return _fields[i];
@@ -493,6 +493,16 @@ ColumnPtr StructColumn::field_column(const std::string& field_name) {
     }
     DCHECK(false) << "Struct subfield name: " << field_name << " not found!";
     return nullptr;
+}
+
+ColumnPtr& StructColumn::field_column(const std::string& field_name) {
+    for (size_t i = 0; i < _field_names.size(); i++) {
+        if (field_name == _field_names[i]) {
+            return _fields[i];
+        }
+    }
+    DCHECK(false) << "Struct subfield name: " << field_name << " not found!";
+    return _fields[0];
 }
 
 Status StructColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {
