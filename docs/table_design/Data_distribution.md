@@ -242,7 +242,7 @@ If you need to create partitions in advance, you can use other partition creatio
     (
         PARTITION partition_name1 VALUES LESS THAN ("value1", "value2", ...),
         PARTITION partition_name2 VALUES LESS THAN ("value1", "value2", ...),
-        PARTITION partition_name3 VALUES LESS THAN (MAXVALUE)
+        PARTITION partition_name3 VALUES LESS THAN ("value1", "value2", ...)
     )
     ```
 
@@ -252,8 +252,7 @@ If you need to create partitions in advance, you can use other partition creatio
     PARTITION BY RANGE (k1, k2, k3, ...)
     (
         PARTITION partition_name1 VALUES [("k1-lower1", "k2-lower1", "k3-lower1",...), ("k1-upper1", "k2-upper1", "k3-upper1", ...)],
-        PARTITION partition_name2 VALUES [("k1-lower1-2", "k2-lower1-2", ...), ("k1-upper1-2", MAXVALUE, )],
-        "k3-upper1-2", ...
+        PARTITION partition_name2 VALUES [("k1-lower1", "k2-lower1", ...), ("k1-upper1", "k2-upper1", "k3-upper1", ...)],
     )
     ```
 
