@@ -581,6 +581,16 @@ int Expr::get_slot_ids(std::vector<SlotId>* slot_ids) const {
     return n;
 }
 
+int Expr::get_subfields(std::vector<std::vector<std::string>>* subfields) const {
+    int n = 0;
+
+    for (auto i : _children) {
+        n += i->get_subfields(subfields);
+    }
+
+    return n;
+}
+
 Expr* Expr::copy(ObjectPool* pool, Expr* old_expr) {
     auto new_expr = old_expr->clone(pool);
     for (auto child : old_expr->_children) {
