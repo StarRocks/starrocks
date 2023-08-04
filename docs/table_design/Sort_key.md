@@ -12,7 +12,7 @@ In the Aggregate table, sort key columns are defined by using the `AGGREGATE KEY
 
 In the Unique Key table, sort key columns are defined by using the `UNIQUE KEY` keyword.
 
-In versions earlier than v3.0, the primary key and sort key are decoupled in the Primary Key table. The sort key columns are defined by using the `ORDER BY` keyword. The primary key columns are defined by using the `PRIMARY KEY` keyword.
+Since v3.0, the primary key and sort key are decoupled in the Primary Key table. The sort key columns are defined by using the `ORDER BY` keyword. The primary key columns are defined by using the `PRIMARY KEY` keyword.
 
 When you define sort key columns for a Duplicate Key table, an Aggregate table, or a Unique Key table, take note of the following points:
 
