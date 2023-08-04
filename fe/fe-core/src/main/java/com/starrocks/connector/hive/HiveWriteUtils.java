@@ -50,7 +50,7 @@ public class HiveWriteUtils {
             return fileSystem.exists(path);
         } catch (Exception e) {
             LOG.error("Failed checking path {}", path, e);
-            throw new StarRocksConnectorException("Failed checking path: " + path);
+            throw new StarRocksConnectorException("Failed checking path: " + path + " msg:" + e.getMessage());
         }
     }
 
@@ -68,7 +68,7 @@ public class HiveWriteUtils {
         try {
             FileSystem fileSystem = FileSystem.get(path.toUri(), conf);
             if (!fileSystem.mkdirs(path)) {
-                LOG.error("Mkdir returned {} returned false", path);
+                LOG.error("Mkdir {} returned false", path);
                 throw new IOException("mkdirs returned false");
             }
         } catch (IOException e) {

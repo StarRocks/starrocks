@@ -219,8 +219,8 @@ public class ColumnTypeConverter {
             if (type.getColumnSize() <= HiveVarchar.MAX_VARCHAR_LENGTH) {
                 return getVarcharTypeInfo(type.getColumnSize());
             }
-            throw new StarRocksConnectorException("Unsupported Hive type: %s. Supported VARCHAR types: VARCHAR(<=%d)," +
-                    " VARCHAR.", type, HiveVarchar.MAX_VARCHAR_LENGTH);
+            throw new StarRocksConnectorException("Unsupported Hive type: %s. Supported VARCHAR types: VARCHAR(<=%d).",
+                    type, HiveVarchar.MAX_VARCHAR_LENGTH);
         } else if (type.isArrayType()) {
             TypeInfo itemType = toTypeInfo(((ArrayType) type).getItemType());
             return getListTypeInfo(itemType);

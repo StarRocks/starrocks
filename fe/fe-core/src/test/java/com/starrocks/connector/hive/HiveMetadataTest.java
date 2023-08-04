@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
@@ -299,6 +298,13 @@ public class HiveMetadataTest {
         ExceptionChecker.expectThrowsWithMsg(MetaNotFoundException.class,
                 "Failed to access database empty_db",
                 () -> hiveMetadata.dropDb("empty_db", true));
+    }
+
+    @Test
+    public void testMetastoreType() {
+        Assert.assertEquals(MetastoreType.HMS, MetastoreType.get("hive"));
+        Assert.assertEquals(MetastoreType.GLUE, MetastoreType.get("glue"));
+        Assert.assertEquals(MetastoreType.DLF, MetastoreType.get("dlf"));
     }
 
     @Test

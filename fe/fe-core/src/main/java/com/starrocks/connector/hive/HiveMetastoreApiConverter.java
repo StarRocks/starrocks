@@ -181,7 +181,10 @@ public class HiveMetastoreApiConverter {
         tableProperties.put("totalSize", "-1");
         tableProperties.put("comment", table.getComment());
         tableProperties.put("starrocks_version", Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH);
-        tableProperties.put("starrocks_query_id", ConnectContext.get().getQueryId().toString());
+        if (ConnectContext.get() != null && ConnectContext.get().getQueryId() != null) {
+            tableProperties.put("starrocks_query_id", ConnectContext.get().getQueryId().toString());
+        }
+
         return tableProperties.build();
     }
 
