@@ -1,10 +1,10 @@
 -- name: testExternalParquetDictNullPredicate
-shell: ossutil64 mkdir oss://${oss_bucket}/test_external_file/dict_with_null_value >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 mkdir oss://${oss_bucket}/test_parquet_dict_with_null_value/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
 -- result:
 0
 
 -- !result
-shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/dict_with_null_value.parquet oss://${oss_bucket}/test_external_file/dict_with_null_value/dict_with_null_value.parquet | grep -Pv "(average|elapsed)"
+shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/dict_with_null_value.parquet oss://${oss_bucket}/test_parquet_dict_with_null_value/${uuid0}/dict_with_null_value.parquet | grep -Pv "(average|elapsed)"
 -- result:
 0
 
@@ -24,7 +24,7 @@ CREATE EXTERNAL TABLE tpch_customer_null
 ENGINE=file
 PROPERTIES 
 (
-    "path" = "oss://${oss_bucket}/test_external_file/dict_with_null_value/",
+    "path" = "oss://${oss_bucket}/test_parquet_dict_with_null_value/${uuid0}/",
     "format" = "parquet"
 );
 -- result:
@@ -48,4 +48,9 @@ select count(*) from tpch_customer_null where c_mktsegment is null;
 select count(*) from tpch_customer_null where c_mktsegment is not null;
 -- result:
 24
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_parquet_dict_with_null_value/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
 -- !result
