@@ -890,13 +890,12 @@ Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string&
         }
     }
 
-    //RETURN_IF_ERROR(tablet->updates()->load_snapshot(snapshot_meta));
     int64_t expired_stale_sweep_endtime = UnixSeconds() - config::tablet_rowset_stale_sweep_time_sec;
     tablet->updates()->remove_expired_versions(expired_stale_sweep_endtime);
     LOG(INFO) << "Loaded snapshot of tablet " << tablet->tablet_id() << ", removing directory " << clone_dir;
     st = fs::remove_all(clone_dir);
     LOG_IF(WARNING, !st.ok()) << "Fail to remove clone directory " << clone_dir << ": " << st;
-    return Status::OK();
+    return st;
 }
 
 } // namespace starrocks
