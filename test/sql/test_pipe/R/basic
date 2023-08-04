@@ -18,62 +18,60 @@ show pipes;
 show pipes from db_${uuid1};
 -- result:
 -- !result
-create table t1 (id int, name string) duplicate key(id) properties('replication_num' = '1');
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_pipe/col_not_null.parquet >/dev/null || echo "exit 0" >/dev/null
 -- result:
+0
+
 -- !result
-create pipe p1 as 
-    insert into t1 
-    select * from files('path' = 'fake://file.parquet', 'format'='parquet');
+shell: ossutil64 mkdir oss://${oss_bucket}/test_pipe/col_not_null.parquet >/dev/null || echo "exit 0" >/dev/null
 -- result:
+0
+
 -- !result
-[UC]show pipes;
+shell: ossutil64 cp --force test/sql/test_pipe/data/col_not_null.parquet oss://${oss_bucket}/test_pipe/ | grep -Pv "(average|elapsed)"
 -- result:
-452398	452407	p1	db_5e9211be306911eeabf5c9d28a9636a8.t1	RUNNING	0	0	0	2023-08-01 20:46:01
--- !result
-[UC]desc pipe p1;
--- result:
-452398	452407	p1	FILE	db_5e9211be306911eeabf5c9d28a9636a8.t1	FILE_SOURCE(path=fake://file.parquet)	insert into t1 
-    select * from files('path' = 'fake://file.parquet', 'format'='parquet');
--- !result
-alter pipe p1 suspend;
--- result:
--- !result
-[UC]show pipes;
--- result:
-452398	452407	p1	db_5e9211be306911eeabf5c9d28a9636a8.t1	SUSPEND	0	0	0	2023-08-01 20:46:01
--- !result
-alter pipe p1 resume;
--- result:
--- !result
-[UC]show pipes;
--- result:
-452398	452407	p1	db_5e9211be306911eeabf5c9d28a9636a8.t1	RUNNING	0	0	0	2023-08-01 20:46:01
--- !result
-use db_${uuid1};
--- result:
--- !result
-[UC]show pipes from db_${uuid0};
--- result:
-452398	452407	p1	db_5e9211be306911eeabf5c9d28a9636a8.t1	RUNNING	0	0	0	2023-08-01 20:46:01
--- !result
-use db_${uuid0};
--- result:
--- !result
-drop pipe p1;
--- result:
--- !result
-show pipes;
--- result:
--- !result
-drop database db_${uuid0};
--- result:
+0
+Error: stat test/sql/test_pipe/data/col_not_null.parquet: no such file or directory
 -- !result
 create database db_${uuid0};
 -- result:
+E: (1064, "Unexpected exception: Can't create database 'db_35cc2a3a329411eeabf5c9d28a9636a8'; database exists")
 -- !result
 use db_${uuid0};
 -- result:
 -- !result
 show pipes;
+-- result:
+-- !result
+show pipes from db_${uuid0};
+-- result:
+-- !result
+create table t1 (col_int int, col_map map<string, int>, col_struct struct<a string, b int>) 
+properties('replication_num' = '1')
+as select * from files('path' = 'oss://${oss_bucket}/test_pipe/col_not_null.parquet', 'format'='parquet');
+-- result:
+E: (1064, "Getting syntax error at line 3, column 0. Detail message: Unexpected input 'as', the most similar input is {<EOF>, ';'}.")
+-- !result
+create pipe p1 properties('auto_ingest'='false') as 
+    insert into t1 
+    select * from files('path' = 'oss://${oss_bucket}/test_pipe/col_not_null.parquet', 'format'='parquet');
+-- result:
+E: (1064, 'Could not initialize class org.apache.hadoop.fs.aliyun.oss.AliyunOSSFileSystem')
+-- !result
+[UC]show pipes;
+-- result:
+-- !result
+[UC]desc pipe p1;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Unknown pipe 'db_35cc2a3a329411eeabf5c9d28a9636a8.p1'.")
+-- !result
+select * from t1;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Unknown table 'db_35cc2a3a329411eeabf5c9d28a9636a8.t1'.")
+-- !result
+select * from information_schema.pipes where pipe_name = 'p1';
+-- result:
+-- !result
+select * from information_schema.pipe_files where pipe_name = 'p1';
 -- result:
 -- !result
