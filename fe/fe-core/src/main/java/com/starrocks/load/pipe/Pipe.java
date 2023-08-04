@@ -80,6 +80,8 @@ public class Pipe implements GsonPostProcessable {
     private TableName targetTable;
     @SerializedName(value = "properties")
     private Map<String, String> properties;
+    @SerializedName(value = "createdTime")
+    private long createdTime = -1;
     @SerializedName(value = "load_status")
     private LoadStatus loadStatus = new LoadStatus();
 
@@ -97,14 +99,16 @@ public class Pipe implements GsonPostProcessable {
         this.state = State.RUNNING;
         this.pipeSource = sourceTable;
         this.originSql = originSql;
+        this.createdTime = System.currentTimeMillis();
     }
 
     public static Pipe fromStatement(long id, CreatePipeStmt stmt) {
         PipeName pipeName = stmt.getPipeName();
         long dbId = GlobalStateMgr.getCurrentState().getDb(pipeName.getDbName()).getId();
-
-        Pipe res = new Pipe(new PipeId(dbId, id), pipeName.getPipeName(), stmt.getTargetTable(), stmt.getDataSource(),
+        PipeId pipeId = new PipeId(dbId, id);
+        Pipe res = new Pipe(pipeId, pipeName.getPipeName(), stmt.getTargetTable(), stmt.getDataSource(),
                 stmt.getInsertSql());
+        stmt.getDataSource().initPipeId(pipeId);
         res.properties = stmt.getProperties();
         res.processProperties();
         return res;
@@ -133,6 +137,9 @@ public class Pipe implements GsonPostProcessable {
     public void poll() throws UserException {
         long nextPollTime = lastPolledTime + pollIntervalSecond;
         if (System.currentTimeMillis() / 1000 < nextPollTime) {
+            return;
+        }
+        if (pipeSource.eos()) {
             return;
         }
 
@@ -300,7 +307,8 @@ public class Pipe implements GsonPostProcessable {
             isFirst = false;
             if (entry.getKey().equalsIgnoreCase(TableFunctionTable.PROPERTY_PATH)) {
                 // TODO: it's not supported right now
-                String files = piece.getFiles().stream().map(PipeFile::getPath).collect(Collectors.joining(","));
+                String files =
+                        piece.getFiles().stream().map(PipeFileRecord::getFileName).collect(Collectors.joining(","));
                 sb.append("'").append(TableFunctionTable.PROPERTY_PATH).append("'='").append(files).append("'");
             } else {
                 sb.append("'").append(entry.getKey()).append("'='");
@@ -363,21 +371,21 @@ public class Pipe implements GsonPostProcessable {
         }
     }
 
-    public void pause() {
+    public void suspend() {
         try {
             lock.writeLock().lock();
 
             if (this.state == State.RUNNING) {
-                this.state = State.PAUSED;
+                this.state = State.SUSPEND;
 
                 for (PipeTaskDesc task : runningTasks.values()) {
                     task.interrupt();
                 }
-                LOG.info("Pause pipe " + this);
+                LOG.info("suspend pipe " + this);
 
                 if (!runningTasks.isEmpty()) {
                     runningTasks.clear();
-                    LOG.info("pause pipe {} and clear running tasks {}", this, runningTasks);
+                    LOG.info("suspend pipe {} and clear running tasks {}", this, runningTasks);
                 }
             }
         } finally {
@@ -389,7 +397,7 @@ public class Pipe implements GsonPostProcessable {
         try {
             lock.writeLock().lock();
 
-            if (this.state == State.PAUSED || this.state == State.ERROR) {
+            if (this.state == State.SUSPEND || this.state == State.ERROR) {
                 this.state = State.RUNNING;
                 this.failedTaskExecutionCount = 0;
                 LOG.info("Resume pipe " + this);
@@ -398,6 +406,10 @@ public class Pipe implements GsonPostProcessable {
         } finally {
             lock.writeLock().unlock();
         }
+    }
+
+    public void destroy() {
+        getPipeSource().getFileListRepo().destroy();
     }
 
     public boolean isRunnable() {
@@ -458,16 +470,16 @@ public class Pipe implements GsonPostProcessable {
         return pipeSource;
     }
 
-    public void setDataSource(FilePipeSource dataSource) {
-        this.pipeSource = dataSource;
-    }
-
     public String getOriginSql() {
         return originSql;
     }
 
     public LoadStatus getLoadStatus() {
         return loadStatus;
+    }
+
+    public long getCreatedTime() {
+        return createdTime;
     }
 
     public long getLastPolledTime() {
@@ -483,6 +495,7 @@ public class Pipe implements GsonPostProcessable {
     public void gsonPostProcess() throws IOException {
         this.runningTasks = new HashMap<>();
         this.lock = new ReentrantReadWriteLock();
+        pipeSource.initPipeId(id);
         processProperties();
     }
 
@@ -526,7 +539,7 @@ public class Pipe implements GsonPostProcessable {
     }
 
     public enum State {
-        PAUSED,
+        SUSPEND,
         RUNNING,
         FINISHED,
         ERROR,

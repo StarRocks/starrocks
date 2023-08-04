@@ -18,10 +18,13 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedSet;
+import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.util.OrderByPair;
 import com.starrocks.load.pipe.FilePipeSource;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.VariableMgr;
@@ -35,8 +38,11 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 public class PipeAnalyzer {
@@ -162,6 +168,21 @@ public class PipeAnalyzer {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
             }
             stmt.setDbName(context.getDatabase());
+        }
+
+        // Analyze order by
+        if (CollectionUtils.isNotEmpty(stmt.getOrderBy())) {
+            List<OrderByPair> orderByPairs = new ArrayList<>();
+            for (OrderByElement element : stmt.getOrderBy()) {
+                if (!(element.getExpr() instanceof SlotRef)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "only support order by specific column");
+                }
+                SlotRef slot = (SlotRef) element.getExpr();
+                int index = ShowPipeStmt.findSlotIndex(slot.getColumnName());
+                orderByPairs.add(new OrderByPair(index, !element.getIsAsc()));
+            }
+            stmt.setOrderByPairs(orderByPairs);
         }
     }
 

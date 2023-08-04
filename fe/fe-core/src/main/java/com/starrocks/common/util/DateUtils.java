@@ -21,6 +21,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
@@ -85,6 +86,21 @@ public class DateUtils {
         DATETIME_FORMATTERS[1][0][1] = unixDatetimeStrictFormatter("%y-%m-%eT%H:%i:%s", false);
         DATETIME_FORMATTERS[1][1][0] = unixDatetimeStrictFormatter("%y-%m-%e %H:%i:%s.%f", false);
         DATETIME_FORMATTERS[1][1][1] = unixDatetimeStrictFormatter("%y-%m-%eT%H:%i:%s.%f", false);
+    }
+
+    public static String formatDateTimeUnix(LocalDateTime dateTime) {
+        if (dateTime == null) {
+            return null;
+        }
+        return dateTime.format(DATE_TIME_FORMATTER_UNIX);
+    }
+
+    public static LocalDateTime fromEpochMillis(long epochMilli) {
+        return LocalDateTime.ofInstant(Instant.ofEpochMilli(epochMilli), ZoneOffset.UTC);
+    }
+
+    public static LocalDateTime parseUnixDateTime(String str) {
+        return LocalDateTime.parse(str, DATE_TIME_FORMATTER_UNIX);
     }
 
     public static LocalDateTime parseStrictDateTime(String str) {

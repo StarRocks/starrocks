@@ -46,6 +46,10 @@ public class CatalogUtils {
 
     private static final Logger LOG = LogManager.getLogger(CatalogUtils.class);
 
+    public static String normalizeTableName(String dbName, String tableName) {
+        return dbName + "." + tableName;
+    }
+
     // check table exist
     public static void checkTableExist(Database db, String tableName) throws DdlException {
         Table table = db.getTable(tableName);
