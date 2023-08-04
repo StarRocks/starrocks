@@ -1616,32 +1616,9 @@ public class LocalMetastore implements ConnectorMetadata {
         if (partitions.isEmpty()) {
             return;
         }
-<<<<<<< HEAD
         int numAliveBackends = systemInfoService.getAliveBackendNumber();
-        int numReplicas = 0;
-        for (Partition partition : partitions) {
-            numReplicas += partition.getReplicaCount();
-        }
-
-        if (partitions.size() >= 3 && numAliveBackends >= 3 && numReplicas >= numAliveBackends * 500) {
-            LOG.info("creating {} partitions of table {} concurrently", partitions.size(), table.getName());
-            buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveBackends);
-        } else if (numAliveBackends > 0) {
-            buildPartitionsSequentially(db.getId(), table, partitions, numReplicas, numAliveBackends);
-        } else {
-            throw new DdlException("no alive backend");
-=======
-        int numAliveBackends = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            numAliveBackends += GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
-        }
         if (numAliveBackends == 0) {
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                throw new DdlException("no alive compute nodes");
-            } else {
-                throw new DdlException("no alive backends");
-            }
->>>>>>> a98a145d8d ([Enhancement] Add configuration for parallel replica creation (#27418))
+            throw new DdlException("no alive backends");
         }
 
         int numReplicas = 0;
