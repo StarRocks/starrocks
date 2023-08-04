@@ -330,7 +330,11 @@ set(EXEC_FILES
         ./util/block_compression_test.cpp
         ./util/blocking_queue_test.cpp
         ./util/brpc_stub_cache_test.cpp
+        ./util/bthreads/future_test.cpp
+        ./util/bthreads/packaged_task_test.cpp
+        ./util/bthreads/promise_test.cpp
         ./util/bthreads/shared_mutex_test.cpp
+        ./util/bthreads/shared_future_test.cpp
         ./util/c_string_test.cpp
         ./util/cidr_test.cpp
         ./util/coding_test.cpp
