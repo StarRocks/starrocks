@@ -234,7 +234,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: sync-checker
     name: FE FILTER
-    if: needs.sync-checker.outputs.PASS == 'true' || needs.sync-checker.outputs.THIRDPARTY == 'true'
+    if: needs.sync-checker.outputs.PASS == 'true'
     outputs:
       output1: ${{ steps.fe-changes-info.outputs.fe }}
     steps:

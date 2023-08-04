@@ -174,13 +174,22 @@ jobs:
       # Incremental Total Coverage
       - name: Publish Incremental Coverage Report - Total
         if: steps.generate-xml-report.outcome == 'success'
+        env:
+          fe_path: ${{ github.workspace }}/fe
         run: |
           rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
           export JAVA_HOME=/var/local/env/jdk1.8.0_202;
           export PATH=$JAVA_HOME/bin:$PATH;
-          timeout 180 java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
-            --cover ${{ github.workspace }}/result/ --github-token ${{ secrets.PAT }} \
-            --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
+          if [[ -e "${fe_path}/diff.txt" ]]; then
+            java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
+              --cover ${{ github.workspace }}/result/ --github-token ${{ secrets.PAT }} \
+              --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco \
+              -d ${fe_path}/diff.txt -dt file
+          else
+            java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
+              --cover ${{ github.workspace }}/result/ --github-token ${{ secrets.PAT }} \
+              --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
+          fi
           rm -rf coverchecker
           rm -rf ci-tools
 
@@ -198,6 +207,11 @@ jobs:
           override_pr: ${{ needs.INFO.outputs.PR_NUMBER }}
           override_branch: ${{ needs.INFO.outputs.BASE_REF }}
           override_commit: ${{ needs.INFO.outputs.HEAD_SHA }}
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
 
   SQL-Tester-REPORT:
     runs-on: [ self-hosted, quick ]
