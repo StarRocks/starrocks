@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -341,7 +342,23 @@ public class DeleteTest {
         try {
             deleteHandler.process(deleteStmt);
         } catch (DdlException e) {
+<<<<<<< HEAD
             Assert.assertTrue(e.getMessage().contains("Type[ARRAY<bigint(20)>] not supported"));
+=======
+            Assert.assertTrue(e.getMessage().contains("unsupported delete condition on Array/Map/Struct type column"));
+        }
+
+        // Not supported type
+        IsNullPredicate isNull = new IsNullPredicate(new SlotRef(null, "v1"), true);
+        deleteStmt = new DeleteStmt(new TableName(dbName, tableName),
+                new PartitionNames(false, Lists.newArrayList(partitionName)), isNull);
+
+        com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
+        try {
+            deleteHandler.process(deleteStmt);
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("unsupported delete condition on Array/Map/Struct type"));
+>>>>>>> 5b3ec16f51 ([BugFix] Forbidden delete by complex type conditition (#28592))
         }
     }
 }
