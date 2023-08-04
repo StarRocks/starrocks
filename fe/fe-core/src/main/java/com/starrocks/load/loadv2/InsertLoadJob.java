@@ -26,8 +26,8 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.SchemaTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
@@ -195,7 +195,7 @@ public class InsertLoadJob extends LoadJob {
             return true;
         }
 
-        if (table instanceof SystemTable || table instanceof IcebergTable) {
+        if (table instanceof SchemaTable || table instanceof IcebergTable) {
             return false;
         } else {
             return true;
