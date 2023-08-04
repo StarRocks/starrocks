@@ -141,8 +141,7 @@ std::shared_ptr<Aws::Auth::AWSCredentialsProvider> S3ClientFactory::_get_aws_cre
         credential_provider = std::make_shared<Aws::Auth::InstanceProfileCredentialsProvider>();
     } else if (!aws_cloud_credential.access_key.empty() && !aws_cloud_credential.secret_key.empty()) {
         credential_provider = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(
-                aws_cloud_credential.access_key, aws_cloud_credential.secret_key,
-                aws_cloud_credential.session_token);
+                aws_cloud_credential.access_key, aws_cloud_credential.secret_key, aws_cloud_credential.session_token);
     } else {
         DCHECK(false) << "Unreachable!";
         credential_provider = std::make_shared<Aws::Auth::AnonymousAWSCredentialsProvider>();
