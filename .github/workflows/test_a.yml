@@ -1,0 +1,35 @@
+name: Add Comment
+
+on:
+  pull_request:
+    types:
+      - opened
+
+jobs:
+  add_comment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '14'
+
+      - name: Add a Comment
+        uses: actions/github-script@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const issueNumber = context.issue.number;
+
+            const comment = `Hello! Thank you for opening this pull request. We'll review it soon.`;
+
+            const { data: commentData } = await github.issues.createComment({
+              owner,
+              repo,
+              issue_number: issueNumber,
+              body: comment,
+            });
