@@ -51,7 +51,7 @@ public class ExecuteScriptExecutor {
     }
 
     public static ShowResultSet execute(ExecuteScriptStmt stmt, ConnectContext ctx) throws UserException {
-        if (!"127.0.0.1".equals(ctx.getRemoteIP())) {
+        if (!"127.0.0.1".equals(ctx.getRemoteIP()) || Config.enable_remote_script) {
             throw new UserException("script can only be executed on localhost");
         }
         if (stmt.isFrontendScript()) {

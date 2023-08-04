@@ -166,8 +166,8 @@ public class AnalyzerUtils {
         return !aggregates.isEmpty() || !groupByExpressions.isEmpty();
     }
 
-    private static Function getDBUdfFunction(ConnectContext context, FunctionName fnName,
-                                             Type[] argTypes) {
+    public static Function getDBUdfFunction(ConnectContext context, FunctionName fnName,
+                                            Type[] argTypes) {
         String dbName = fnName.getDb();
         if (StringUtils.isEmpty(dbName)) {
             dbName = context.getDatabase();
@@ -213,7 +213,8 @@ public class AnalyzerUtils {
         }
         if (fn != null) {
             if (!Config.enable_udf) {
-                throw new StarRocksPlannerException("CBO Optimizer don't support UDF function: " + fnName,
+                throw new StarRocksPlannerException(
+                        "UDF is not enabled in FE, please configure enable_udf=true in fe/conf/fe.conf",
                         ErrorType.USER_ERROR);
             }
         }
