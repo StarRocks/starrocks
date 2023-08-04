@@ -52,8 +52,6 @@ public:
         if (_opened) return Status::OK();
 
         _scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
-        ADD_TIMER(_runtime_profile, "IOTaskWaitTime");
-        ADD_TIMER(_runtime_profile, "IOTaskExecTime");
         SCOPED_TIMER(_scan_timer);
         RETURN_IF_ERROR(_data_source->open(state));
         _opened = true;

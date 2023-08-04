@@ -101,24 +101,28 @@ void ORCHdfsFileStream::setIORanges(std::vector<IORange>& io_ranges) {
 }
 
 uint64_t ORCHdfsFileStream::computeCacheFullStripeSize(uint64_t offset, uint64_t length) {
-    int from = 0;
+    uint64_t from = _last_stripe_index;
     while (from < _stripes.size()) {
         if (_stripes[from].offset == offset) {
             break;
         }
         from += 1;
     }
-    assert(from != _stripes.size());
-    int to = from + 1;
+    _last_stripe_index = from;
+    DCHECK(from != _stripes.size());
+    if (from == _stripes.size()) {
+        return 0;
+    }
+
+    uint64_t to = from + 1;
     while (to < _stripes.size()) {
-        // uint64_t gap = _stripes[to].offset - _stripes[to - 1].offset - _stripes[to - 1].length;
+        uint64_t gap = _stripes[to].offset - _stripes[to - 1].offset - _stripes[to - 1].length;
         uint64_t total = _stripes[to].offset + _stripes[to].length - _stripes[from].offset;
-        // if (gap > config::io_coalesce_read_max_distance_size) break;
+        if (gap > config::io_coalesce_read_max_distance_size) break;
         if (total > config::orc_stripe_cache_max_size) break;
         to += 1;
     }
     to -= 1;
-    // VLOG_FILE << "[xxx] prepare cache. from stripe = " << from << ", to stripe = " << to;
     return _stripes[to].offset + _stripes[to].length - _stripes[from].offset;
 }
 

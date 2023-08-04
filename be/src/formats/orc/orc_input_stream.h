@@ -83,7 +83,9 @@ private:
     std::vector<char> _cache_buffer;
     uint64_t _cache_offset;
     io::SharedBufferedInputStream* _sb_stream;
-    bool _tiny_stripe_read;
+
+    bool _tiny_stripe_read = false;
+    uint64_t _last_stripe_index = 0;
     std::vector<StripeInformation> _stripes;
 };
 } // namespace starrocks
