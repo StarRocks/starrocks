@@ -22,7 +22,6 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.CachingRemoteFileConf;
 import com.starrocks.connector.CachingRemoteFileIO;
-import com.starrocks.connector.CatalogConnectorMetadata;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import mockit.Expectations;

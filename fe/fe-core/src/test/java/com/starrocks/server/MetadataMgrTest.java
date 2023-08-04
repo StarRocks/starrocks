@@ -18,8 +18,6 @@ package com.starrocks.server;
 import com.google.common.collect.Lists;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.connector.ConnectorMgr;
-import com.starrocks.connector.ConnectorService;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateTableStmt;

@@ -17,7 +17,6 @@ package com.starrocks.connector.paimon;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.connector.CatalogConnectorMetadata;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
