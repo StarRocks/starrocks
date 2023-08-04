@@ -434,9 +434,10 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                         "where l_shipdate < '1998-01-02' and l_orderkey = 100;");
         query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` ";
         plan = getFragmentPlan(query);
-        PlanTestBase.assertContains(plan, "hive_parttbl_mv_4", "partitions=1/6", "lineitem_par",
-                "NON-PARTITION PREDICATES: (((22: l_shipdate < '1998-01-01') OR (22: l_shipdate >= '1998-01-02'))" +
-                        " OR ((22: l_shipdate IS NULL) OR (20: l_orderkey <= 99))) OR (20: l_orderkey >= 101)");
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv_4", "partitions=2/6", "lineitem_par",
+                "NON-PARTITION PREDICATES: ((22: l_shipdate >= '1998-01-02') OR (22: l_shipdate IS NULL)) " +
+                        "OR ((20: l_orderkey <= 99) " +
+                        "OR (20: l_orderkey >= 101))");
         dropMv("test", "hive_parttbl_mv_4");
 
         createAndRefreshMv("test", "hive_parttbl_mv_5",
@@ -540,7 +541,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                     "GROUP BY `c3`, `c1`;");
 
             // test update for null partition
-            cluster.runSql("test", "insert into test_base_part partition(p1) values(null, 1, null, 3)");
+            cluster.runSql("test", "insert into test_base_part values(null, 1, null, 3)");
 
             String query = "select c1, c3, sum(c4) from test_base_part group by c1, c3;";
             String plan = getFragmentPlan(query);
