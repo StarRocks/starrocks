@@ -21,7 +21,20 @@ import org.junit.Test;
 import java.util.HashMap;
 import java.util.Map;
 
-public class AWSCredentialTest {
+public class AWSCloudConfigurationTest {
+
+    @Test
+    public void testUseAWSSDKDefaultBehavior() {
+        // Test hadoop configuration
+        Map<String, String>  properties = new HashMap<>();
+        properties.put("aws.s3.use_aws_sdk_default_behavior", "true");
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        Assert.assertNotNull(cloudConfiguration);
+        Configuration configuration = new Configuration();
+        cloudConfiguration.applyToConfiguration(configuration);
+        Assert.assertEquals("com.amazonaws.auth.DefaultAWSCredentialsProviderChain",
+                configuration.get("fs.s3a.aws.credentials.provider"));
+    }
 
     @Test
     public void testUseAWSSDKDefaultBehaviorPlusAssumeRole() {

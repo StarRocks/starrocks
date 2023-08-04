@@ -193,8 +193,7 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
                                                                  String accessKey, String secretKey, String sessionToken) {
         if (useAWSSDKDefaultBehavior) {
             return DefaultCredentialsProvider.builder().build();
-        }
-        if (useInstanceProfile) {
+        } else if (useInstanceProfile) {
             return InstanceProfileCredentialsProvider.builder().build();
         } else if (!accessKey.isEmpty() && !secretKey.isEmpty()) {
             if (!sessionToken.isEmpty()) {
