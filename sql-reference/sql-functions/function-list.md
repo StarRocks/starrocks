@@ -152,10 +152,11 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [bitmap](/sql-reference/sql-functions/aggregate-functions/bitmap.md)| 通过 bitmap 函数实现聚合。 |
 |  [bitmap_agg](/sql-reference/sql-functions/bitmap-functions/bitmap_agg.md)| 将一列中的多行非 NULL 数值合并成一行 BITMAP 值，即多行转一行。 |
 |  [count](/sql-reference/sql-functions/aggregate-functions/count.md)| 返回满足条件的行数。 |
+|  [group_concat](/sql-reference/sql-functions/string-functions/group_concat.md)| 将结果集中的多行结果连接成一个字符串。|
 |  [grouping](/sql-reference/sql-functions/aggregate-functions/grouping.md)| 判断一个列是否为聚合列，如果是聚合列则返回 0，否则返回 1。|
 |  [grouping_id](/sql-reference/sql-functions/aggregate-functions/grouping_id.md)| 用于区分相同分组标准的分组统计结果。 |
 |  [hll_empty](/sql-reference/sql-functions/aggregate-functions/hll_empty.md)| 生成空 HLL 列，用于 INSERT 或导入数据时补充默认值。 |
-|  [hll_hash](/sql-reference/sql-functions/aggregate-functions/hll_hash.md)| 将一个数值转换为 HLL 类型。通常用于导入中，将源数据中的数值映射到 Starrocks 表中的 HLL 列类型。 |
+|  [hll_hash](/sql-reference/sql-functions/aggregate-functions/hll_hash.md)| 将一个数值转换为 HLL 类型。通常用于导入中，将源数据中的数值映射到 StarRocks 表中的 HLL 列类型。 |
 |  [hll_raw_agg](/sql-reference/sql-functions/aggregate-functions/hll_raw_agg.md)| 用于聚合 HLL 类型的字段，返回 HLL 类型。 |
 |  [hll_union](/sql-reference/sql-functions/aggregate-functions/hll_union.md)| 返回一组 HLL 值的并集。 |
 |  [hll_union_agg](/sql-reference/sql-functions/aggregate-functions/hll_union_agg.md)| 将多个 HLL 类型数据合并成一个 HLL。 |

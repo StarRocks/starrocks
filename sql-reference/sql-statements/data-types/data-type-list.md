@@ -17,10 +17,10 @@ StarRocks 支持以下数据类型：[数值类型](#数值类型)、[字符串�
 
 ## 字符串类型
 
-- [BINARY](/sql-reference/sql-statements/data-types/BINARY.md)
 - [CHAR](/sql-reference/sql-statements/data-types/CHAR.md)
 - [STRING](/sql-reference/sql-statements/data-types/STRING.md)
 - [VARCHAR](/sql-reference/sql-statements/data-types/VARCHAR.md)
+- [BINARY](/sql-reference/sql-statements/data-types/BINARY.md)
 
 ## 日期类型
 
