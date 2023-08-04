@@ -178,8 +178,8 @@ struct HashTableProbeState {
     HashTableProbeState()
             : build_index_column(std::make_shared<UInt32Column>()),
               probe_index_column(std::make_shared<UInt32Column>()),
-              probe_index(probe_index_column->get_data()),
-              build_index(build_index_column->get_data()) {}
+              build_index(build_index_column->get_data()),
+              probe_index(probe_index_column->get_data()) {}
     ~HashTableProbeState() = default;
 
     HashTableProbeState(const HashTableProbeState& rhs)
