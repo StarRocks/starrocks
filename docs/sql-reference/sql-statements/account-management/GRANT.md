@@ -256,7 +256,7 @@ We recommend you customize roles to manage privileges and users. The following e
    CREATE ROLE read_catalog_only;
    -- Switch to the corresponding catalog.
    SET CATALOG hive_catalog;
-   -- Grant the privileges query all tables and all views in all databases.
+   -- Grant the privileges to query all tables and all views in all databases.
    GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE read_catalog_only;
    GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE read_catalog_only;
    ```
