@@ -38,6 +38,7 @@ import org.apache.paimon.utils.InternalRowUtils;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -56,6 +57,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
     private final String tableName;
     private final String splitInfo;
     private final String predicateInfo;
+    private final Map<String, String> optionInfo = new HashMap<>();
     private final String[] requiredFields;
     private ColumnType[] requiredTypes;
     private DataType[] logicalTypes;
@@ -76,10 +78,18 @@ public class PaimonSplitScanner extends ConnectorScanner {
         this.requiredFields = params.get("required_fields").split(",");
         this.splitInfo = params.get("split_info");
         this.predicateInfo = params.get("predicate_info");
-        this.classLoader = this.getClass().getClassLoader();
-        for (Map.Entry<String, String> kv : params.entrySet()) {
-            LOG.debug("key = " + kv.getKey() + ", value = " + kv.getValue());
+
+        String[] optionList = params.get("option_info").split(",");
+        for (String option : optionList) {
+            String[] kv = option.split("=");
+            if (kv.length == 2) {
+                optionInfo.put(kv[0], kv[1]);
+            } else {
+                LOG.warn("Invalid paimon option argument: " + option);
+            }
         }
+
+        this.classLoader = this.getClass().getClassLoader();
     }
 
     private void initTable() throws IOException {
@@ -88,6 +98,9 @@ public class PaimonSplitScanner extends ConnectorScanner {
         options.setString(WAREHOUSE.key(), warehousePath);
         if (!Strings.isNullOrEmpty(metastoreUri)) {
             options.setString(URI.key(), metastoreUri);
+        }
+        for (Map.Entry<String, String> entry : this.optionInfo.entrySet()) {
+            options.set(entry.getKey(), entry.getValue());
         }
         Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(options));
         Identifier identifier = new Identifier(databaseName, tableName);
