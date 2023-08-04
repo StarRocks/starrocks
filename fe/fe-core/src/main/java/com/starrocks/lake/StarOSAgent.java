@@ -527,10 +527,12 @@ public class StarOSAgent {
 
     private Optional<Long> getOrUpdateBackendIdByWorkerInfo(WorkerInfo info) {
         long workerId = info.getWorkerId();
-        // get the backend id directly from workerToBackend
-        Long beId = workerToBackend.get(workerId);
-        if (beId != null) {
-            return Optional.of(beId);
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            // get the backend id directly from workerToBackend
+            Long beId = workerToBackend.get(workerId);
+            if (beId != null) {
+                return Optional.of(beId);
+            }
         }
         String workerAddr = info.getIpPort();
         String[] hostPorts = workerAddr.split(":");
@@ -560,8 +562,10 @@ public class StarOSAgent {
             }
         }
         if (result.isPresent()) {
-            workerToId.put(workerAddr, workerId);
-            workerToBackend.put(workerId, result.get());
+            try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+                workerToId.put(workerAddr, workerId);
+                workerToBackend.put(workerId, result.get());
+            }
         }
         return result;
     }
@@ -590,11 +594,10 @@ public class StarOSAgent {
                     .collect(Collectors.toList());
         }
         Set<Long> backendIds = Sets.newHashSet();
-        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
-            replicas.stream()
-                    .map(x -> getOrUpdateBackendIdByWorkerInfo(x.getWorkerInfo()))
-                    .forEach(x -> x.ifPresent(backendIds::add));
-        }
+        replicas.stream()
+                .map(x -> getOrUpdateBackendIdByWorkerInfo(x.getWorkerInfo()))
+                .forEach(x -> x.ifPresent(backendIds::add));
+
         return backendIds;
     }
 
