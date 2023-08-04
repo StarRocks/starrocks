@@ -117,7 +117,7 @@ public class RangePartitionDesc extends PartitionDesc {
             } else if (partitionType != desc.getPartitionKeyDesc().getPartitionType()) {
                 throw new AnalysisException("You can only use one of these methods to create partitions");
             }
-            desc.analyze(columnDefs.size(), givenProperties);
+            desc.analyze(partitionColNames.size(), givenProperties);
         }
     }
 
