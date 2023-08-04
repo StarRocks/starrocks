@@ -169,7 +169,10 @@ class SpillTest : public ::testing::Test {
 public:
     void SetUp() override {
         TUniqueId dummy_query_id = generate_uuid();
-        auto path = std::filesystem::current_path().string() + "/spill_test_data/" + print_id(dummy_query_id);
+        auto path = config::storage_root_path + "/spill_test_data/" + print_id(dummy_query_id);
+        auto fs = FileSystem::Default();
+        ASSERT_OK(fs->create_dir_recursive(path));
+        LOG(WARNING) << "TRACE:" << path;
         dummy_dir_mgr = std::make_unique<spill::DirManager>();
         ASSERT_OK(dummy_dir_mgr->init(path));
 
