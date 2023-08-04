@@ -128,7 +128,12 @@ public class AnalyzerUtils {
         return !aggregates.isEmpty() || !groupByExpressions.isEmpty();
     }
 
+<<<<<<< HEAD
     public static Function getUdfFunction(ConnectContext session, FunctionName fnName, Type[] argTypes) {
+=======
+    public static Function getDBUdfFunction(ConnectContext context, FunctionName fnName,
+                                            Type[] argTypes) {
+>>>>>>> 02b0da5552 ([Refactor] Make FE udf error message more reasonable (#28478))
         String dbName = fnName.getDb();
         if (StringUtils.isEmpty(dbName)) {
             dbName = session.getDatabase();
@@ -145,6 +150,7 @@ public class AnalyzerUtils {
         if (fn == null) {
             return null;
         }
+<<<<<<< HEAD
 
         if (!session.getGlobalStateMgr().getAuth().checkDbPriv(session, dbName, PrivPredicate.SELECT)) {
             throw new StarRocksPlannerException(String.format("Access denied. " +
@@ -155,6 +161,14 @@ public class AnalyzerUtils {
         if (!Config.enable_udf) {
             throw new StarRocksPlannerException("CBO Optimizer don't support UDF function: " + fnName,
                     ErrorType.USER_ERROR);
+=======
+        if (fn != null) {
+            if (!Config.enable_udf) {
+                throw new StarRocksPlannerException(
+                        "UDF is not enabled in FE, please configure enable_udf=true in fe/conf/fe.conf",
+                        ErrorType.USER_ERROR);
+            }
+>>>>>>> 02b0da5552 ([Refactor] Make FE udf error message more reasonable (#28478))
         }
         return fn;
     }
