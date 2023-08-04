@@ -596,19 +596,7 @@
       + [percentile_hash](./sql-reference/sql-functions/percentile-functions/percentile_hash.md)
       + [percentile_union](./sql-reference/sql-functions/percentile-functions/percentile_union.md)
     + Scalar Functions
-<<<<<<< HEAD
-      + [hll_cardinality](/sql-reference/sql-functions/scalar-functions/hll_cardinality.md)
-=======
       + [hll_cardinality](./sql-reference/sql-functions/scalar-functions/hll_cardinality.md)
-    + Struct Functions
-      + [named_struct](./sql-reference/sql-functions/struct-functions/named_struct.md)
-      + [row](./sql-reference/sql-functions/struct-functions/row.md)
-    + Table Functions
-      + [files](./sql-reference/sql-functions/table-functions/files.md)
-      + [generate_series](./sql-reference/sql-functions/table-functions/generate_series.md)
-      + [json_each](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
-      + [unnest](./sql-reference/sql-functions/array-functions/unnest.md)
->>>>>>> 4cf65a8b45 ([Doc] Add link to bitmap value and update sys variables (#28604))
     + Utility Functions
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
       + [host_name](./sql-reference/sql-functions/utility-functions/host_name.md)
