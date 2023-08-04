@@ -419,6 +419,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static java.lang.String.format;
 import static java.util.stream.Collectors.toList;
 
 public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
@@ -5477,6 +5478,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitAggregationFunctionCall(StarRocksParser.AggregationFunctionCallContext context) {
         NodePosition pos = createPos(context);
         String functionName;
+        boolean isGroupConcat = false;
         if (context.aggregationFunction().COUNT() != null) {
             functionName = FunctionSet.COUNT;
         } else if (context.aggregationFunction().AVG() != null) {
@@ -5487,6 +5489,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             functionName = FunctionSet.MIN;
         } else if (context.aggregationFunction().ARRAY_AGG() != null) {
             functionName = FunctionSet.ARRAY_AGG;
+        } else if (context.aggregationFunction().GROUP_CONCAT() != null) {
+            functionName = FunctionSet.GROUP_CONCAT;
+            isGroupConcat = true;
         } else {
             functionName = FunctionSet.MAX;
         }
@@ -5508,11 +5513,34 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (isDistinct && CollectionUtils.isEmpty(context.aggregationFunction().expression())) {
             throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
         }
-
+        List<Expr> exprs = visit(context.aggregationFunction().expression(), Expr.class);
+        if (isGroupConcat && context.aggregationFunction().SEPARATOR() == null) {
+            Expr sepExpr;
+            String sep = ",";
+            sepExpr = new StringLiteral(sep, pos);
+            exprs.add(sepExpr);
+        }
+        if (orderByElements != null) {
+            int exprSize = exprs.size();
+            if (isGroupConcat) { // the last expr of group_concat is the separator
+                exprSize--;
+            }
+            for (OrderByElement orderByElement : orderByElements) {
+                Expr by = orderByElement.getExpr();
+                if (by instanceof IntLiteral) {
+                    long ordinal = ((IntLiteral) by).getLongValue();
+                    if (ordinal < 1 || ordinal > exprSize) {
+                        throw new ParsingException(format("ORDER BY position %s is not in %s output list", ordinal,
+                                functionName), pos);
+                    }
+                    by = exprs.get((int) ordinal - 1);
+                    orderByElement.setExpr(by);
+                }
+            }
+        }
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(functionName,
                 context.aggregationFunction().ASTERISK_SYMBOL() == null ?
-                        new FunctionParams(isDistinct,
-                                visit(context.aggregationFunction().expression(), Expr.class), orderByElements) :
+                        new FunctionParams(isDistinct, exprs, orderByElements) :
                         FunctionParams.createStarParam(), pos);
 
         functionCallExpr = SyntaxSugars.parse(functionCallExpr);
