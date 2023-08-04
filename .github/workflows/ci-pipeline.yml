@@ -50,25 +50,6 @@ jobs:
           path: ./head_sha.txt
           retention-days: 3
 
-      - name: clean
-        run: |
-          rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}
-
-      - name: Checkout Code
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-
-      - name: Checkout PR
-        run: |
-          cd /var/lib/ci-tool/ && git pull && ./bin/checkout.sh check
-
-      - name: Clean ENV
-        if: always()
-        run: |
-          rm -rf ${{ github.workspace }}/*
-
       - name: Check
         id: check
         if: >
@@ -86,6 +67,12 @@ jobs:
             thirdparty:
             - 'thirdparty/**'
             - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+
+      - name: clean
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
 
   be-checker:
     runs-on: ubuntu-latest
@@ -301,7 +288,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: sync-checker
     name: FE FILTER
-    if: needs.sync-checker.outputs.PASS == 'true' || needs.sync-checker.outputs.THIRDPARTY == 'true'
+    if: needs.sync-checker.outputs.PASS == 'true'
     outputs:
       output1: ${{ steps.fe-changes-info.outputs.fe }}
     steps:
