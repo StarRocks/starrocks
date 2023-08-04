@@ -254,160 +254,180 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
 ### **partition_desc**
 
-`partition_desc` 有三种使用方式，分别为：`LESS THAN，Fixed Range，批量创建分区`。以下为不同方式的详细使用方法：
+支持三种分区方式，[表达式分区](../../../table_design/expression_partitioning.md)（推荐）、[Range 分区](../../../table_design/Data_distribution.md#range-分区) 和 [List 分区](../../../table_design/list_partitioning.md)。
 
-**LESS THAN**
+使用 Range 分区时，提供三种创建方式，其语法、说明和示例如下：
 
-语法：
+* **动态创建分区**
 
-```sql
-PARTITION BY RANGE (k1, k2, ...)
-(
-    PARTITION partition_name1 VALUES LESS THAN MAXVALUE|("value1", "value2", ...),
-    PARTITION partition_name2 VALUES LESS THAN MAXVALUE|("value1", "value2", ...)
-    ...
-)
-```
+    [动态分区](../../../table_design/dynamic_partitioning.md)提供了分区生命周期管理（TTL）。StarRocks 会自动提前创建新的分区，并删除过期的分区，以确保数据时效性。要启用这个功能，您可以在创建表时配置与动态分区相关的属性。
 
-说明：
-使用指定的 key 列和指定的数值范围进行分区。
+* **手动创建分区**
 
-1. 分区名称仅支持字母开头，由字母、数字和下划线组成。
-2. 仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。
-3. 分区为左闭右开区间，首个分区的左边界为最小值。
-4. NULL 值只会存放在包含 **最小值** 的分区中。当包含最小值的分区被删除后，NULL 值将无法导入。
-5. 可以指定一列或多列作为分区列。如果分区值缺省，则会默认填充最小值。
-6. 当分区列为单列时，才支持使用 MAXVALUE。
+  * 仅指定各个分区的上界
 
-注意：
-
-1. 分区一般用于时间维度的数据管理。
-2. 有数据回溯需求的，可以考虑首个分区为空分区，以便后续增加分区。
-
-示例：
-
-1. 数据类型为 DATE 的列 `pay_dt` 为分区列，并且按天分区。
+    语法：
 
     ```sql
-    PARTITION BY RANGE(pay_dt)
+    PARTITION BY RANGE ( <partitioning_column1> [, <partitioning_column2>, ... ] )
+    PARTITION <partition1_name> VALUES LESS THAN ("<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] )
+    [ ,
+    PARTITION <partition2_name> VALUES LESS THAN ("<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] )
+    , ... ] 
+    )
+    ```
+
+    说明：
+
+    使用指定的 key 列和指定的数值范围进行分区。
+
+    * 分区名称仅支持字母开头，由字母、数字和下划线组成。
+    * 仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。
+    * 分区为左闭右开区间，首个分区的左边界为最小值。
+    * NULL 值只会存放在包含 **最小值** 的分区中。当包含最小值的分区被删除后，NULL 值将无法导入。
+    * 可以指定一列或多列作为分区列。如果分区值缺省，则会默认填充最小值。
+    * 当只指定一个列作为分区列时，您可以设置最后一个分区的分区列的上界为 MAXVALUE。
+
+    注意：
+
+    1. 分区一般用于时间维度的数据管理。
+    2. 有数据回溯需求的，可以考虑首个分区为空分区，以便后续增加分区。
+
+    示例：
+
+    1. 分区列 `pay_dt` 为 DATE 类型，并且按天分区。
+
+        ```sql
+        PARTITION BY RANGE(pay_dt)
+        (
+            PARTITION p1 VALUES LESS THAN ("2021-01-02"),
+            PARTITION p2 VALUES LESS THAN ("2021-01-03"),
+            PARTITION p3 VALUES LESS THAN ("2021-01-04")
+        )
+        ```
+
+    2. 分区列 `pay_dt` 为 INT 类型，并且按天分区。
+
+        ```sql
+        PARTITION BY RANGE(pay_dt)
+        (
+            PARTITION p1 VALUES LESS THAN ("20210102"),
+            PARTITION p2 VALUES LESS THAN ("20210103"),
+            PARTITION p3 VALUES LESS THAN ("20210104")
+        )
+        ```
+
+    3. 分区列 `pay_dt` 为 INT 类型，并且按天分区，最后一个分区没有上界。
+
+        ```sql
+        PARTITION BY RANGE(pay_dt)
+        (
+            PARTITION p1 VALUES LESS THAN ("20210102"),
+            PARTITION p2 VALUES LESS THAN ("20210103"),
+            PARTITION p3 VALUES LESS THAN MAXVALUE
+        )
+        ```
+  * 指定各个分区的上界和下界
+
+    语法：
+
+    ```sql
+    PARTITION BY RANGE ( <partitioning_column1> [, <partitioning_column2>, ... ] )
     (
-        PARTITION p1 VALUES LESS THAN ("2021-01-02"),
-        PARTITION p2 VALUES LESS THAN ("2021-01-03"),
-        PARTITION p3 VALUES LESS THAN ("2021-01-04")
+        PARTITION <partition_name1> VALUES [( "<lower_bound_for_partitioning_column1>" [ , "<lower_bound_for_partitioning_column2>", ... ] ), ( "<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] ) ) 
+        [,
+        PARTITION <partition_name2> VALUES [( "<lower_bound_for_partitioning_column1>" [ , "<lower_bound_for_partitioning_column2>", ... ] ), ( "<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] ) ) 
+        , ...]
     )
     ```
 
-2. 数据类型为 INT 的列 `pay_dt` 为分区列，并且按天分区。
+    说明：
 
-    ```sql
-    PARTITION BY RANGE(pay_dt)
-    (
-        PARTITION p1 VALUES LESS THAN ("20210102"),
-        PARTITION p2 VALUES LESS THAN ("20210103"),
-        PARTITION p3 VALUES LESS THAN ("20210104")
-    )
-    ```
+    * 与仅指定分区下界相比，指定各个分区的上界和下界相对灵活，并且您可以自定义左右区间。
+    * 其他与 LESS THAN 保持同步。
+    * 当只指定一个列作为分区列时，您可以设置最后一个分区的分区列的上界为 MAXVALUE。
 
-3. 数据类型为 INT 的列 `pay_dt` 为分区列，并且按天分区，最后一个分区没有上界。
+    示例：
 
-    ```sql
-    PARTITION BY RANGE(pay_dt)
-    (
-        PARTITION p1 VALUES LESS THAN ("20210102"),
-        PARTITION p2 VALUES LESS THAN ("20210103"),
-        PARTITION p3 VALUES LESS THAN MAXVALUE
-    )
-    ```
+    1. 分区列 `pay_dt` 为 DATE 类型，并且按月分区。
 
-**Fixed Range**
+        ```sql
+        PARTITION BY RANGE (pay_dt)
+        (
+            PARTITION p202101 VALUES [("2021-01-01"), ("2021-02-01")),
+            PARTITION p202102 VALUES [("2021-02-01"), ("2021-03-01")),
+            PARTITION p202103 VALUES [("2021-03-01"), ("2021-04-01"))
+        )
+        ```
 
-语法：
+    2. 分区列 `pay_dt` 为 INT 类型，并且按月分区。
 
-```sql
-PARTITION BY RANGE (k1, k2, k3, ...)
-(
-    PARTITION partition_name1 VALUES [("k1-lower1", "k2-lower1", "k3-lower1",...), ("k1-upper1", "k2-upper1", "k3-upper1", ...)),
-    PARTITION partition_name2 VALUES [("k1-lower1-2", "k2-lower1-2", ...), ("k1-upper1-2", "k2-upper1-2", "k3-upper1-2", ...))
-    ...
-)
-```
+        ```sql
+        PARTITION BY RANGE (pay_dt)
+        (
+            PARTITION p202101 VALUES [("20210101"), ("20210201")),
+            PARTITION p202102 VALUES [("20210201"), ("20210301")),
+            PARTITION p202103 VALUES [("20210301"), ("20210401"))
+        )
+        ```
 
-说明：
+    3. 分区列 `pay_dt` 为 INT 类型，并且按月分区，最后一个分区没有上界。
 
-1. Fixed Range 比 LESS THAN 相对灵活些，左右区间完全由用户自己确定。
-2. 其他与 LESS THAN 保持同步。
-3. 当分区列为单列时，才支持使用 MAXVALUE。
+        ```sql
+        PARTITION BY RANGE (pay_dt)
+        (
+            PARTITION p202101 VALUES [("20210101"), ("20210201")),
+            PARTITION p202102 VALUES [("20210201"), ("20210301")),
+            PARTITION p202103 VALUES [("20210301"), (MAXVALUE))
+        )
 
-示例：
+* **批量创建分区**
 
-1. 数据类型为 DATE 的列 `pay_dt` 为分区列，并且按月分区。
+    语法：
 
-    ```sql
-    PARTITION BY RANGE (pay_dt)
-    (
-        PARTITION p202101 VALUES [("2021-01-01"), ("2021-02-01")),
-        PARTITION p202102 VALUES [("2021-02-01"), ("2021-03-01")),
-        PARTITION p202103 VALUES [("2021-03-01"), ("2021-04-01"))
-    )
-    ```
+    * 如果分区列为时间类型
 
-2. 数据类型为 INT 的列 `pay_dt` 为分区列，并且按月分区。
+        ```sql
+        PARTITION BY RANGE (<partitioning_column>) (
+            START ("<start_date>") END ("<end_date>") EVERY (INTERVAL <N> <time_unit>)
+        )
+        ```
 
-    ```sql
-    PARTITION BY RANGE (pay_dt)
-    (
-        PARTITION p202101 VALUES [("20210101"), ("20210201")),
-        PARTITION p202102 VALUES [("20210201"), ("20210301")),
-        PARTITION p202103 VALUES [("20210301"), ("20210401"))
-    )
-    ```
+    * 如果分区列为整数类型
 
-3. 数据类型为 INT 的列 `pay_dt` 为分区列，并且按月分区，最后一个分区没有上界。
+        ```sql
+        PARTITION BY RANGE (<partitioning_column>) (
+            START ("<start_integer>") END ("<end_integer>") EVERY (<partitioning_granularity>)
+        )
+        ```
 
-    ```sql
-    PARTITION BY RANGE (pay_dt)
-    (
-        PARTITION p202101 VALUES [("20210101"), ("20210201")),
-        PARTITION p202102 VALUES [("20210201"), ("20210301")),
-        PARTITION p202103 VALUES [("20210301"), (MAXVALUE))
-    )
+    说明：
+    用户可以通过给出一个 START 值、一个 END 值以及一个定义分区增量值的 EVERY 子句批量产生分区。
 
-**批量创建分区**
+    * 当前分区列仅支持日期类型和整数类型。
+    * 当分区列为日期类型时，需要指定 `INTERVAL` 关键字来表示日期间隔。目前日期间隔支持 hour (v3.0）、day、week、month、year，分区的命名规则同动态分区一样。
+    * 当分区列为整数类型时，START 值、END 值仍需要用双引号包裹。
+    * 仅支持指定一列作为分区列。
 
-语法：
+    更多信息，请参见[批量创建分区](/table_design/Data_distribution.md#range-分区)。
 
-```sql
-PARTITION BY RANGE (pay_dt) (
-    START ("2021-01-01") END ("2021-01-04") EVERY (INTERVAL 1 day)
-)
-```
+    示例：
 
-说明：
-用户可以通过给出一个 START 值、一个 END 值以及一个定义分区增量值的 EVERY 子句批量产生分区。
+    1. 分区列 `pay_dt` 为 DATE 类型，并且按年分区。
 
-1. 当前分区列仅支持 **日期类型** 和 **整数类型**，分区类型需要与 EVERY 里的表达式匹配。
-2. 当分区列为日期类型的时候需要指定 `INTERVAL` 关键字来表示日期间隔，目前日期仅支持 `day、week、month、year`，分区的命名规则同动态分区一样。
-3. 当分区列的数据类型为 INT 时，START 值、END 值仍需要用双引号包裹。
-4. 仅支持指定一列作为分区列。
-5. 更详细的语法规则，请参见[批量创建分区](/table_design/Data_distribution.md#批量创建分区)。
+        ```sql
+        PARTITION BY RANGE (pay_dt) (
+            START ("2018-01-01") END ("2023-01-01") EVERY (INTERVAL 1 YEAR)
+        )
+        ```
 
-示例：
+    2. 分区列 `pay_dt` 为 INT 类型，并且按年分区。
 
-1. 数据类型为 DATE 的列 `pay_dt` 为分区列，并且按年分区。
-
-    ```sql
-    PARTITION BY RANGE (pay_dt) (
-        START ("2018-01-01") END ("2023-01-01") EVERY (INTERVAL 1 YEAR)
-    )
-    ```
-
-2. 数据类型为 INT 的列 `pay_dt` 为分区列，并且按年分区。
-
-    ```sql
-    PARTITION BY RANGE (pay_dt) (
-        START ("2018") END ("2023") EVERY (1)
-    )
-    ```
+        ```sql
+        PARTITION BY RANGE (pay_dt) (
+            START ("2018") END ("2023") EVERY (1)
+        )
+        ```
 
 ### **distribution_desc**
 
