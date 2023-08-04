@@ -164,7 +164,9 @@ public:
     }
 
     // Update column according to whether the dest column and source column are nullable or not.
-    static ColumnPtr update_column_nullable(bool dst_nullable, const ColumnPtr& src_column, int num_rows) {
+    // when force is set true, the column would be converted as required, ignoring the actual type of column.
+    static ColumnPtr update_column_nullable(bool dst_nullable, const ColumnPtr& src_column, int num_rows,
+                                            bool force = false) {
         if (src_column->is_nullable()) {
             if (dst_nullable) {
                 // 1. Src column and dest column are both nullable.
@@ -172,7 +174,7 @@ public:
             } else {
                 // 2. src column is nullable, and dest column is non-nullable.
                 auto* nullable_column = as_raw_column<NullableColumn>(src_column);
-                DCHECK(!nullable_column->has_null());
+                DCHECK(force || !nullable_column->has_null());
                 return nullable_column->data_column();
             }
         } else {

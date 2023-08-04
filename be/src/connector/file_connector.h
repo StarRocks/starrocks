@@ -91,5 +91,7 @@ private:
     void _init_counter();
 
     void _update_counter();
+
+    void _validate_nullable(ChunkPtr chunk);
 };
 } // namespace starrocks::connector

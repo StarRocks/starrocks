@@ -195,4 +195,38 @@ void FileDataSource::_update_counter() {
     COUNTER_UPDATE(_scanner_file_reader_timer, _counter.file_read_ns);
 }
 
+void FileDataSource::_validate_nullable(ChunkPtr chunk) {
+    auto num_rows = chunk->num_rows();
+    Filter filter(num_rows, 1);
+
+    for (size_t i = 0; i < _tuple_desc->slots().size(); i++) {
+        auto slot = _tuple_desc->slots()[i];
+        auto column = chunk->get_column_by_slot_id(slot->id());
+
+        // filter null values in non-nullable column.
+        if (column->is_nullable() && !slot->is_nullable()) {
+            auto* nullable = down_cast<NullableColumn*>(column.get());
+            if (nullable->has_null()) {
+                NullData& nulls = nullable->null_column_data();
+                for (size_t j = 0; j < num_rows; ++j) {
+                    if (nulls[j]) {
+                        filter[j] = 0;
+
+                        if (!_runtime_state->has_reached_max_error_msg_num()) {
+                            std::stringstream ss;
+                            ss << "NULL value in non-nullable column '" << slot->col_name() << "'";
+                            _runtime_state->append_error_msg_to_file(chunk->debug_row(j), ss.str());
+                        }
+                    }
+                }
+            }
+        }
+
+        // update column nullable property according to the slot descriptor.
+        column = ColumnHelper::update_column_nullable(slot->is_nullable(), column, num_rows, true);
+        chunk->update_column(column, slot->id());
+    }
+    chunk->filter(filter);
+}
+
 } // namespace starrocks::connector
