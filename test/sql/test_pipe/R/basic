@@ -3,21 +3,6 @@ show pipes;
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: No database selected.')
 -- !result
-create database db_${uuid0};
--- result:
--- !result
-create database db_${uuid1};
--- result:
--- !result
-use db_${uuid0};
--- result:
--- !result
-show pipes;
--- result:
--- !result
-show pipes from db_${uuid1};
--- result:
--- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_pipe/col_not_null.parquet >/dev/null || echo "exit 0" >/dev/null
 -- result:
 0
@@ -28,50 +13,76 @@ shell: ossutil64 mkdir oss://${oss_bucket}/test_pipe/col_not_null.parquet >/dev/
 0
 
 -- !result
-shell: ossutil64 cp --force test/sql/test_pipe/data/col_not_null.parquet oss://${oss_bucket}/test_pipe/ | grep -Pv "(average|elapsed)"
+shell: ossutil64 cp --force ./sql/test_pipe/data/col_not_null.parquet oss://${oss_bucket}/test_pipe/col_not_null.parquet | grep -Pv "(average|elapsed)"
 -- result:
 0
-Error: stat test/sql/test_pipe/data/col_not_null.parquet: no such file or directory
+
+Succeed: Total num: 1, size: 1,617. OK num: 1(upload 1 files).
 -- !result
 create database db_${uuid0};
 -- result:
-E: (1064, "Unexpected exception: Can't create database 'db_35cc2a3a329411eeabf5c9d28a9636a8'; database exists")
 -- !result
 use db_${uuid0};
 -- result:
 -- !result
-show pipes;
--- result:
--- !result
-show pipes from db_${uuid0};
--- result:
--- !result
-create table t1 (col_int int, col_map map<string, int>, col_struct struct<a string, b int>) 
+create table t1 
 properties('replication_num' = '1')
 as select * from files('path' = 'oss://${oss_bucket}/test_pipe/col_not_null.parquet', 'format'='parquet');
 -- result:
-E: (1064, "Getting syntax error at line 3, column 0. Detail message: Unexpected input 'as', the most similar input is {<EOF>, ';'}.")
+-- !result
+desc t1;
+-- result:
+col_int	int	YES	true	None	
+col_map	varchar(1048576)	YES	true	None	
+col_struct	varchar(1048576)	YES	false	None	
+-- !result
+select count(*) from t1;
+-- result:
+3
 -- !result
 create pipe p1 properties('auto_ingest'='false') as 
     insert into t1 
     select * from files('path' = 'oss://${oss_bucket}/test_pipe/col_not_null.parquet', 'format'='parquet');
 -- result:
-E: (1064, 'Could not initialize class org.apache.hadoop.fs.aliyun.oss.AliyunOSSFileSystem')
 -- !result
-[UC]show pipes;
+alter pipe p1 suspend;
 -- result:
 -- !result
-[UC]desc pipe p1;
+select pipe_name, state from information_schema.pipes where database_name = 'db_${uuid0}' and pipe_name = 'p1';
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown pipe 'db_35cc2a3a329411eeabf5c9d28a9636a8.p1'.")
+p1	SUSPEND
 -- !result
-select * from t1;
--- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'db_35cc2a3a329411eeabf5c9d28a9636a8.t1'.")
--- !result
-select * from information_schema.pipes where pipe_name = 'p1';
+select pipe_name, file_name, file_version, file_size, load_state
+    from information_schema.pipe_files where database_name = 'db_${uuid0}' and pipe_name = 'p1';
 -- result:
 -- !result
-select * from information_schema.pipe_files where pipe_name = 'p1';
+alter pipe p1 resume;
+-- result:
+-- !result
+select sleep(5);
+-- result:
+1
+-- !result
+select count(*) from t1;
+-- result:
+6
+-- !result
+select pipe_name, state from information_schema.pipes where database_name = 'db_${uuid0}' and pipe_name = 'p1';
+-- result:
+p1	FINISHED
+-- !result
+select pipe_name, file_name, file_version, file_size, load_state
+    from information_schema.pipe_files where database_name = 'db_${uuid0}' and pipe_name = 'p1';
+-- result:
+p1	test_pipe/col_not_null.parquet	1691135984000	1617	LOADED
+-- !result
+drop pipe p1;
+-- result:
+-- !result
+select pipe_name, state from information_schema.pipes where database_name = 'db_${uuid0}' and pipe_name = 'p1';
+-- result:
+-- !result
+select pipe_name, file_name, file_version, file_size, load_state
+    from information_schema.pipe_files where database_name = 'db_${uuid0}' and pipe_name = 'p1';
 -- result:
 -- !result
