@@ -68,6 +68,10 @@ public class SlotDescriptor {
     // (and physical layout parameters are invalid)
     private boolean isMaterialized;
 
+    // if false, this slot only used in scan node, if it's dict encoded,
+    // just filter in dict code, there is no need to be decoded.
+    private boolean isOutputColumn = true;
+
     // if false, this slot cannot be NULL
     private boolean isNullable;
 
@@ -89,6 +93,7 @@ public class SlotDescriptor {
         this.parent = parent;
         this.byteOffset = -1;  // invalid
         this.isMaterialized = false;
+        this.isOutputColumn = false;
         this.isNullable = true;
     }
 
@@ -108,6 +113,7 @@ public class SlotDescriptor {
         this.nullIndicatorByte = src.nullIndicatorByte;
         this.slotIdx = src.slotIdx;
         this.isMaterialized = src.isMaterialized;
+        this.isOutputColumn = src.isOutputColumn;
         this.column = src.column;
         this.isNullable = src.isNullable;
         this.byteSize = src.byteSize;
@@ -181,6 +187,14 @@ public class SlotDescriptor {
 
     public void setIsMaterialized(boolean value) {
         isMaterialized = value;
+    }
+
+    public boolean isOutputColumn() {
+        return isOutputColumn;
+    }
+
+    public void setIsOutputColumn(boolean value) {
+        isOutputColumn = value;
     }
 
     public boolean getIsNullable() {
@@ -263,10 +277,12 @@ public class SlotDescriptor {
     // TODO
     public TSlotDescriptor toThrift() {
         if (originType != null) {
-            return new TSlotDescriptor(id.asInt(), parent.getId().asInt(), originType.toThrift(), -1,
+            TSlotDescriptor tSlotDescriptor = new TSlotDescriptor(id.asInt(), parent.getId().asInt(), originType.toThrift(), -1,
                     byteOffset, nullIndicatorByte,
                     nullIndicatorBit, ((column != null) ? column.getName() : ""),
                     slotIdx, isMaterialized);
+            tSlotDescriptor.setIsOutputColumn(isOutputColumn);
+            return tSlotDescriptor;
         } else {
             /**
              * Refer to {@link Expr#treeToThrift}
@@ -274,10 +290,12 @@ public class SlotDescriptor {
             if (type.isNull()) {
                 type = ScalarType.BOOLEAN;
             }
-            return new TSlotDescriptor(id.asInt(), parent.getId().asInt(), type.toThrift(), -1,
+            TSlotDescriptor tSlotDescriptor = new TSlotDescriptor(id.asInt(), parent.getId().asInt(), type.toThrift(), -1,
                     byteOffset, nullIndicatorByte,
                     nullIndicatorBit, ((column != null) ? column.getName() : ""),
                     slotIdx, isMaterialized);
+            tSlotDescriptor.setIsOutputColumn(isOutputColumn);
+            return tSlotDescriptor;
         }
     }
 
@@ -287,6 +305,7 @@ public class SlotDescriptor {
         String parentTupleId = (parent == null) ? "null" : parent.getId().toString();
         return MoreObjects.toStringHelper(this).add("id", id.asInt()).add("parent", parentTupleId)
                 .add("col", colStr).add("type", typeStr).add("materialized", isMaterialized)
+                .add("isOutputColumns", isOutputColumn)
                 .add("byteSize", byteSize).add("byteOffset", byteOffset)
                 .add("nullIndicatorByte", nullIndicatorByte)
                 .add("nullIndicatorBit", nullIndicatorBit)
