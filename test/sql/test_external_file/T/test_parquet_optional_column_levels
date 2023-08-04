@@ -1,7 +1,7 @@
 -- name: testParquetOptionalColumnLevels
 
-shell: ossutil64 mkdir oss://${oss_bucket}/test_external_file/optional_column_levels >/dev/null || echo "exit 0" >/dev/null
-shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/optional_column_levels.parq oss://${oss_bucket}/test_external_file/optional_column_levels/optional_column_levels.parq | grep -Pv "(average|elapsed)"
+shell: ossutil64 mkdir oss://${oss_bucket}/test_parquet_optional_column_levels/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/optional_column_levels.parq oss://${oss_bucket}/test_parquet_optional_column_levels/${uuid0}/optional_column_levels.parq | grep -Pv "(average|elapsed)"
 
 CREATE EXTERNAL TABLE opt_col_levels
 (
@@ -11,9 +11,11 @@ CREATE EXTERNAL TABLE opt_col_levels
 ENGINE=file
 PROPERTIES
 (
-    "path" = "oss://${oss_bucket}/test_external_file/optional_column_levels/optional_column_levels.parq",
+    "path" = "oss://${oss_bucket}/test_parquet_optional_column_levels/${uuid0}/optional_column_levels.parq",
     "format" = "parquet"
 );
 
 select * from opt_col_levels where c0 = 403350;
 select * from opt_col_levels where c0 = 403376;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_parquet_optional_column_levels/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
