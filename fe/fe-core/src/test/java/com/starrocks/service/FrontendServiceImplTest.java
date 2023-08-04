@@ -36,6 +36,7 @@ import com.starrocks.thrift.TCreatePartitionResult;
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTablesParams;
+import com.starrocks.thrift.TGetTablesResult;
 import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TStatusCode;
@@ -439,6 +440,22 @@ public class FrontendServiceImplTest {
         request.setType(TTableType.VIEW);
 
         return request;
+    }
+
+    @Test
+    public void testGetTableNames() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesParams params = new TGetTablesParams();
+        params.setCatalog_name("default_catalog");
+        params.setDb("test");
+        TUserIdentity tUserIdentity = new TUserIdentity();
+        tUserIdentity.setUsername("root");
+        tUserIdentity.setHost("%");
+        tUserIdentity.setIs_domain(false);
+        params.setCurrent_user_ident(tUserIdentity);
+
+        TGetTablesResult result = impl.getTableNames(params);
+        Assert.assertEquals(13, result.tables.size());
     }
 
     @Test

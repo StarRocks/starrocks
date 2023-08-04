@@ -99,7 +99,7 @@ public class PaimonConnectorTest {
         };
 
         ConnectorMetadata metadata = connector.getMetadata();
-        Assert.assertTrue(metadata instanceof CatalogConnectorMetadata);
+        Assert.assertTrue(metadata instanceof PaimonMetadata);
         com.starrocks.catalog.Table table = metadata.getTable("db1", "tbl1");
         PaimonTable paimonTable = (PaimonTable) table;
         Assert.assertEquals("db1", paimonTable.getDbName());

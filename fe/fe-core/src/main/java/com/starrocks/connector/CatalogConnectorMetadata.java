@@ -96,10 +96,8 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listTableNames(String dbName) {
-        ImmutableList.Builder<String> builder = ImmutableList.builder();
-        return builder.addAll(this.informationSchema.listTableNames(dbName))
-                .addAll(this.normal.listTableNames(dbName))
-                .build();
+        ConnectorMetadata metadata = metadataOfDb(dbName);
+        return metadata.listTableNames(dbName);
     }
 
     @Override
