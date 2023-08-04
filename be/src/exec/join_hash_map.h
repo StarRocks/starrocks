@@ -590,7 +590,6 @@ private:
         for (size_t i = 0; i < _table_items->build_column_count; i++) {
             HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
             SlotDescriptor* slot = hash_table_slot.slot;
-            ColumnPtr& column = _table_items->build_chunk->columns()[i];
             if (hash_table_slot.need_materialize) {
                 // always output nulls.
                 DCHECK(to_nullable);
