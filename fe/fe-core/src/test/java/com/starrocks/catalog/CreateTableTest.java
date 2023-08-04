@@ -1282,6 +1282,19 @@ public class CreateTableTest {
                                 "\"foreign_key_constraints\" = \"(k3,k4) REFERENCES parent_table2(k1)\"\n" +
                                 ");"
                 ));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "Not support MAXVALUE in multi partition range values.",
+                () -> createTable(
+                        "create table test_multi_partition_max_value (\n" +
+                                "f1 bigint, f2 date, f3 string, f4 bigint\n" +
+                                ")\n" +
+                                "partition by range(f1, f2, f4) (\n" +
+                                "        partition p1 values less than('10', '2020-01-01', '100'),\n" +
+                                "        partition p2 values less than('20', '2020-01-01', '200'),\n" +
+                                "        partition p3 values less than(MAXVALUE)\n" +
+                                ");"
+                ));
     }
 
     @Test
