@@ -267,7 +267,7 @@ public class HiveMetastoreOperations {
         metastore.invalidateAll();
     }
 
-    private Path getDefaultLocation(String dbName, String tableName) {
+    public Path getDefaultLocation(String dbName, String tableName) {
         Database database = getDb(dbName);
 
         if (database == null) {
@@ -286,7 +286,7 @@ public class HiveMetastoreOperations {
 
         if (!isDirectory(databasePath, hadoopConf)) {
             throw new StarRocksConnectorException("Database '%s' location is not a directory: %s",
-                    databasePath, databasePath);
+                    dbName, databasePath);
         }
 
         Path targetPath = new Path(databasePath, tableName);
