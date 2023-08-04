@@ -389,7 +389,7 @@ jobs:
   sonarcloud-fe-checker:
     runs-on: ubuntu-latest
     needs: fe-checker
-    if: needs.fe-checker.outputs.output1 == 'true'
+    if: needs.fe-checker.outputs.output1 == 'true' && github.repository == 'StarRocks/starrocks'
     name: FE Sonarcloud Check
     env:
       PR_NUMBER: ${{ github.event.number }}
