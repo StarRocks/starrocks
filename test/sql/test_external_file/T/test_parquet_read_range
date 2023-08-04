@@ -1,0 +1,51 @@
+-- name: testParquetReadRange
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_external_file/test_parquet_read_range >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ../be/test/formats/parquet/test_data/read_range_test.parquet oss://${oss_bucket}/test_external_file/test_parquet_read_range/read_range_test.parquet | grep -Pv "(average|elapsed)"
+
+CREATE EXTERNAL TABLE read_range_test (
+    c0 int,
+    c1 int,
+    c2 string,
+    c3 array<int>
+)
+ENGINE=file
+PROPERTIES (
+    "path" = "oss://${oss_bucket}/test_external_file/test_parquet_read_range/read_range_test.parquet",
+    "format" = "parquet"
+);
+
+-- no skip -> read
+select * from read_range_test where c0 >= 900 and c0 < 902;
+
+select * from read_range_test where c0 >= 1190 and c0 < 1192;
+
+select * from read_range_test where c0 >= 4000 and c0 < 4002;
+
+-- skip -> read
+select * from read_range_test where c0 > 4200 and c0 < 4202;
+
+select * from read_range_test where c0 > 6000 and c0 < 6002;
+
+select * from read_range_test where c0 > 8100 and c0 < 8102;
+
+-- read -> read
+select * from read_range_test where (c0 > 900 and c0 < 902) or (c0 > 4097 and c0 < 4099);
+
+select * from read_range_test where (c0 > 900 and c0 < 902) or (c0 > 6000 and c0 < 6002);
+
+select * from read_range_test where (c0 > 900 and c0 < 902) or (c0 > 8100 and c0 < 8102);
+
+-- read -> skip -> read
+select * from read_range_test where (c0 > 1190 and c0 < 1192) or (c0 > 8200 and c0 < 8202);
+
+select * from read_range_test where (c0 > 1190 and c0 < 1192) or (c0 > 9000 and c0 < 9002);
+
+-- next RowGroup
+select * from read_range_test where c0 >= 10900 and c0 < 10902;
+
+-- two RowGroup
+select * from read_range_test where (c0 >= 900 and c0 < 902) or (c0 >= 10900 and c0 < 10902);
+
+-- last page
+select * from read_range_test where c0 < 3 or c0 > 19998;

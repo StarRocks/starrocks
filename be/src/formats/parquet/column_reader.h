@@ -17,6 +17,7 @@
 #include "formats/parquet/column_converter.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "io/shared_buffered_input_stream.h"
+#include "storage/range.h"
 
 namespace starrocks {
 class RandomAccessFile;
@@ -39,6 +40,7 @@ struct ColumnReaderOptions {
     HdfsScanStats* stats = nullptr;
     RandomAccessFile* file = nullptr;
     const tparquet::RowGroup* row_group_meta = nullptr;
+    uint64_t first_row_index = 0;
     ColumnReaderContext* context = nullptr;
 };
 
@@ -72,6 +74,9 @@ public:
         RETURN_IF_ERROR(prepare_batch(num_records, content_type, column));
         return finish_batch();
     }
+
+    virtual Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
+                              Column* dst) = 0;
 
     virtual void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) = 0;
 

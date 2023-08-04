@@ -54,10 +54,12 @@ Status GroupReader::prepare() {
     RETURN_IF_ERROR(_dict_filter_ctx.rewrite_conjunct_ctxs_to_predicates(_param, _column_readers, &_obj_pool,
                                                                          &_is_group_filtered));
     _init_read_chunk();
+    _range = SparseRange<uint64_t>(_row_group_first_row, _row_group_first_row + _row_group_metadata->num_rows);
+    _range_iter = _range.new_iterator();
     return Status::OK();
 }
 
-Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
+Status GroupReader::_do_get_next(ChunkPtr* chunk, size_t* row_count) {
     if (_is_group_filtered) {
         *row_count = 0;
         return Status::EndOfFile("");
@@ -87,7 +89,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
     }
 
     bool has_filter = false;
-    int chunk_size = -1;
+    int32_t chunk_size = -1;
     Filter chunk_filter(count, 1);
     DCHECK_EQ(active_chunk->num_rows(), count);
 
@@ -170,6 +172,127 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
     return status;
 }
 
+Status GroupReader::_do_get_next_new(ChunkPtr* chunk, size_t* row_count) {
+    if (_is_group_filtered) {
+        *row_count = 0;
+        return Status::EndOfFile("");
+    }
+
+    _read_chunk->reset();
+
+    ChunkPtr active_chunk = _create_read_chunk(_active_column_indices);
+    // to complicity with _do_get_next will break and return even active_row is all filtered.
+    // but a better choice is don't return until really have some results.
+    while (true) {
+        if (!_range_iter.has_more()) {
+            *row_count = 0;
+            return Status::EndOfFile("");
+        }
+
+        auto r = _range_iter.next(*row_count);
+        auto count = r.span_size();
+        _param.stats->raw_rows_read += count;
+
+        RETURN_IF_ERROR(_read_range(_active_column_indices, r, nullptr, &active_chunk));
+
+        bool has_filter = false;
+        Filter chunk_filter(count, 1);
+        // dict filter chunk
+        // because _dict_filter_ctx.filter_chunk will ignore the original filter, must execute first
+        {
+            SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
+            SCOPED_RAW_TIMER(&_param.stats->group_dict_filter_ns);
+            has_filter = _dict_filter_ctx.filter_chunk(&active_chunk, &chunk_filter);
+        }
+
+        // row id filter
+        if ((nullptr != _need_skip_rowids) && !_need_skip_rowids->empty()) {
+            {
+                SCOPED_RAW_TIMER(&_param.stats->build_iceberg_pos_filter_ns);
+                auto start_str = _need_skip_rowids->lower_bound(r.begin());
+                auto end_str = _need_skip_rowids->upper_bound(r.end() - 1);
+
+                for (; start_str != end_str; start_str++) {
+                    chunk_filter[*start_str - r.begin()] = 0;
+                    has_filter = true;
+                }
+            }
+        }
+
+        int32_t chunk_size = -1;
+        // other filter that not dict
+        if (!_left_conjunct_ctxs.empty()) {
+            SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
+            ASSIGN_OR_RETURN(chunk_size, ExecNode::eval_conjuncts_into_filter(_left_conjunct_ctxs, active_chunk.get(),
+                                                                              &chunk_filter));
+            has_filter = true;
+        }
+
+        if (has_filter) {
+            size_t hit_count = chunk_size >= 0 ? chunk_size : SIMD::count_nonzero(chunk_filter.data(), count);
+            // no hit, continue read active column
+            if (hit_count == 0) {
+                _param.stats->skip_read_rows += count;
+                continue;
+            }
+        }
+
+        if (has_filter) {
+            active_chunk->filter_range(chunk_filter, 0, count);
+        }
+
+        // deal with lazy columns
+        if (!_lazy_column_indices.empty()) {
+            _lazy_column_needed = true;
+            ChunkPtr lazy_chunk = _create_read_chunk(_lazy_column_indices);
+
+            SCOPED_RAW_TIMER(&_param.stats->group_chunk_read_ns);
+
+            if (has_filter) {
+                RETURN_IF_ERROR(_read_range(_lazy_column_indices, r, &chunk_filter, &lazy_chunk));
+            } else {
+                RETURN_IF_ERROR(_read_range(_lazy_column_indices, r, nullptr, &lazy_chunk));
+            }
+
+            if (has_filter) {
+                lazy_chunk->filter_range(chunk_filter, 0, count);
+            }
+            if (lazy_chunk->num_rows() != active_chunk->num_rows()) {
+                return Status::InternalError(strings::Substitute("Unmatched row count, active_rows=$0, lazy_rows=$1",
+                                                                 active_chunk->num_rows(), lazy_chunk->num_rows()));
+            }
+            active_chunk->merge(std::move(*lazy_chunk));
+        }
+
+        _read_chunk->swap_chunk(*active_chunk);
+        *row_count = _read_chunk->num_rows();
+
+        SCOPED_RAW_TIMER(&_param.stats->group_dict_decode_ns);
+        // convert from _read_chunk to chunk.
+        RETURN_IF_ERROR(_dict_filter_ctx.decode_chunk(_param, _column_readers, _read_chunk, chunk));
+        break;
+    }
+
+    return _range_iter.has_more() ? Status::OK() : Status::EndOfFile("");
+}
+
+Status GroupReader::_read_range(const std::vector<int>& read_columns, const Range<uint64_t>& range,
+                                const Filter* filter, ChunkPtr* chunk) {
+    if (read_columns.empty()) {
+        return Status::OK();
+    }
+
+    for (int col_idx : read_columns) {
+        auto& column = _param.read_cols[col_idx];
+        ColumnContentType content_type = _dict_filter_ctx.column_content_type(col_idx);
+        SlotId slot_id = column.slot_id;
+        RETURN_IF_ERROR(_column_readers[slot_id]->read_range(range, filter, content_type,
+                                                             (*chunk)->get_column_by_slot_id(slot_id).get()));
+    }
+
+    return Status::OK();
+}
+
 void GroupReader::close() {
     if (_param.sb_stream) {
         _param.sb_stream->release_to_offset(_end_offset);
@@ -191,6 +314,7 @@ Status GroupReader::_init_column_readers() {
     opts.stats = _param.stats;
     opts.file = _param.file;
     opts.row_group_meta = _row_group_metadata;
+    opts.first_row_index = _row_group_first_row;
     opts.context = _obj_pool.add(new ColumnReaderContext);
     for (const auto& column : _param.read_cols) {
         RETURN_IF_ERROR(_create_column_reader(column));

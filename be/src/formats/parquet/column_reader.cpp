@@ -104,6 +104,19 @@ public:
         }
     }
 
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
+                      Column* dst) override {
+        DCHECK(_field->is_nullable ? dst->is_nullable() : true);
+        if (!converter->need_convert) {
+            return _reader->read_range(range, filter, content_type, dst);
+        } else {
+            SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
+            auto column = converter->create_src_column();
+            RETURN_IF_ERROR(_reader->read_range(range, filter, content_type, column.get()));
+            return converter->convert(column, dst);
+        }
+    }
+
     Status finish_batch() override { return Status::OK(); }
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
@@ -175,6 +188,47 @@ public:
         }
 
         return st;
+    }
+
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
+                      Column* dst) override {
+        NullableColumn* nullable_column = nullptr;
+        ArrayColumn* array_column = nullptr;
+        if (dst->is_nullable()) {
+            nullable_column = down_cast<NullableColumn*>(dst);
+            DCHECK(nullable_column->mutable_data_column()->is_array());
+            array_column = down_cast<ArrayColumn*>(nullable_column->mutable_data_column());
+        } else {
+            DCHECK(dst->is_array());
+            DCHECK(!_field->is_nullable);
+            array_column = down_cast<ArrayColumn*>(dst);
+        }
+        auto* child_column = array_column->elements_column().get();
+        RETURN_IF_ERROR(_element_reader->read_range(range, filter, content_type, child_column));
+
+        level_t* def_levels = nullptr;
+        level_t* rep_levels = nullptr;
+        size_t num_levels = 0;
+        _element_reader->get_levels(&def_levels, &rep_levels, &num_levels);
+
+        auto& offsets = array_column->offsets_column()->get_data();
+        offsets.resize(num_levels + 1);
+        NullColumn null_column(num_levels);
+        auto& is_nulls = null_column.get_data();
+        size_t num_offsets = 0;
+        bool has_null = false;
+        def_rep_to_offset(_field->level_info, def_levels, rep_levels, num_levels, &offsets[0], &is_nulls[0],
+                          &num_offsets, &has_null);
+        offsets.resize(num_offsets + 1);
+        is_nulls.resize(num_offsets);
+
+        if (dst->is_nullable()) {
+            DCHECK(nullable_column != nullptr);
+            nullable_column->mutable_null_column()->swap_column(null_column);
+            nullable_column->set_has_null(has_null);
+        }
+
+        return Status::OK();
     }
 
     Status finish_batch() override { return Status::OK(); }
@@ -295,6 +349,74 @@ public:
         return st;
     }
 
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
+                      Column* dst) override {
+        NullableColumn* nullable_column = nullptr;
+        MapColumn* map_column = nullptr;
+        if (dst->is_nullable()) {
+            nullable_column = down_cast<NullableColumn*>(dst);
+            DCHECK(nullable_column->mutable_data_column()->is_map());
+            map_column = down_cast<MapColumn*>(nullable_column->mutable_data_column());
+        } else {
+            DCHECK(dst->is_map());
+            DCHECK(!_field->is_nullable);
+            map_column = down_cast<MapColumn*>(dst);
+        }
+        auto* key_column = map_column->keys_column().get();
+        auto* value_column = map_column->values_column().get();
+        if (_key_reader != nullptr) {
+            RETURN_IF_ERROR(_key_reader->read_range(range, filter, content_type, key_column));
+        }
+
+        if (_value_reader != nullptr) {
+            RETURN_IF_ERROR(_value_reader->read_range(range, filter, content_type, value_column));
+        }
+
+        // if neither key_reader not value_reader is nullptr , check the value_column size is the same with key_column
+        DCHECK((_key_reader == nullptr) || (_value_reader == nullptr) || (value_column->size() == key_column->size()));
+
+        level_t* def_levels = nullptr;
+        level_t* rep_levels = nullptr;
+        size_t num_levels = 0;
+
+        if (_key_reader != nullptr) {
+            _key_reader->get_levels(&def_levels, &rep_levels, &num_levels);
+        } else if (_value_reader != nullptr) {
+            _value_reader->get_levels(&def_levels, &rep_levels, &num_levels);
+        } else {
+            DCHECK(false) << "Unreachable!";
+        }
+
+        auto& offsets = map_column->offsets_column()->get_data();
+        offsets.resize(num_levels + 1);
+        NullColumn null_column(num_levels);
+        auto& is_nulls = null_column.get_data();
+        size_t num_offsets = 0;
+        bool has_null = false;
+
+        // ParquetFiled Map -> Map<Struct<key,value>>
+        def_rep_to_offset(_field->level_info, def_levels, rep_levels, num_levels, &offsets[0], &is_nulls[0],
+                          &num_offsets, &has_null);
+        offsets.resize(num_offsets + 1);
+        is_nulls.resize(num_offsets);
+
+        // fill with default
+        if (_key_reader == nullptr) {
+            key_column->append_default(offsets.back());
+        }
+        if (_value_reader == nullptr) {
+            value_column->append_default(offsets.back());
+        }
+
+        if (dst->is_nullable()) {
+            DCHECK(nullable_column != nullptr);
+            nullable_column->mutable_null_column()->swap_column(null_column);
+            nullable_column->set_has_null(has_null);
+        }
+
+        return Status::OK();
+    }
+
     Status finish_batch() override { return Status::OK(); }
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
@@ -385,6 +507,54 @@ public:
             Column* child_column = fields_column[i].get();
             if (_child_readers[i] == nullptr) {
                 child_column->append_default(*num_records);
+            }
+        }
+
+        if (dst->is_nullable()) {
+            DCHECK(nullable_column != nullptr);
+            size_t row_nums = fields_column[0]->size();
+            NullColumn null_column(row_nums, 0);
+            auto& is_nulls = null_column.get_data();
+            bool has_null = false;
+            _handle_null_rows(is_nulls.data(), &has_null, row_nums);
+
+            nullable_column->mutable_null_column()->swap_column(null_column);
+            nullable_column->set_has_null(has_null);
+        }
+        return Status::OK();
+    }
+
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
+                      Column* dst) override {
+        NullableColumn* nullable_column = nullptr;
+        StructColumn* struct_column = nullptr;
+        if (dst->is_nullable()) {
+            nullable_column = down_cast<NullableColumn*>(dst);
+            DCHECK(nullable_column->mutable_data_column()->is_struct());
+            struct_column = down_cast<StructColumn*>(nullable_column->mutable_data_column());
+        } else {
+            DCHECK(dst->is_struct());
+            DCHECK(!_field->is_nullable);
+            struct_column = down_cast<StructColumn*>(dst);
+        }
+
+        Columns fields_column = struct_column->fields_column();
+
+        DCHECK_EQ(fields_column.size(), _child_readers.size());
+
+        // Fill data for non-nullptr subfield column reader
+        for (size_t i = 0; i < fields_column.size(); i++) {
+            Column* child_column = fields_column[i].get();
+            if (_child_readers[i] != nullptr) {
+                RETURN_IF_ERROR(_child_readers[i]->read_range(range, filter, content_type, child_column));
+            }
+        }
+
+        // Append default value for not selected subfield
+        for (size_t i = 0; i < fields_column.size(); i++) {
+            Column* child_column = fields_column[i].get();
+            if (_child_readers[i] == nullptr) {
+                child_column->append_default(range.span_size());
             }
         }
 
