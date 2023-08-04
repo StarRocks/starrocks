@@ -449,4 +449,73 @@ Status HashJoiner::_process_where_conjunct(ChunkPtr* chunk) {
     return ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
 }
 
+<<<<<<< HEAD:be/src/exec/vectorized/hash_joiner.cpp
 } // namespace starrocks::vectorized
+=======
+Status HashJoiner::_create_runtime_in_filters(RuntimeState* state) {
+    SCOPED_TIMER(build_metrics().build_runtime_filter_timer);
+    size_t ht_row_count = get_ht_row_count();
+    auto& ht = _hash_join_builder->hash_table();
+
+    if (ht_row_count > config::max_pushdown_conditions_per_column) {
+        return Status::OK();
+    }
+
+    if (ht_row_count > 0) {
+        // there is a bug (DSDB-3860) in old planner if probe_expr is not slot-ref, and this fix is workaround.
+        size_t size = _build_expr_ctxs.size();
+        std::vector<bool> to_build(size, true);
+        for (int i = 0; i < size; i++) {
+            ExprContext* expr_ctx = _probe_expr_ctxs[i];
+            to_build[i] = (expr_ctx->root()->is_slotref());
+        }
+
+        for (size_t i = 0; i < size; i++) {
+            if (!to_build[i]) continue;
+            ColumnPtr column = ht.get_key_columns()[i];
+            Expr* probe_expr = _probe_expr_ctxs[i]->root();
+            // create and fill runtime in filter.
+            VectorizedInConstPredicateBuilder builder(state, _pool, probe_expr);
+            builder.set_eq_null(_is_null_safes[i]);
+            builder.use_as_join_runtime_filter();
+            Status st = builder.create();
+            if (!st.ok()) {
+                _runtime_in_filters.push_back(nullptr);
+                continue;
+            }
+            if (probe_expr->type().is_string_type()) {
+                _string_key_columns.emplace_back(column);
+            }
+            builder.add_values(column, kHashJoinKeyColumnOffset);
+            _runtime_in_filters.push_back(builder.get_in_const_predicate());
+        }
+    }
+
+    COUNTER_UPDATE(build_metrics().runtime_filter_num, static_cast<int64_t>(_runtime_in_filters.size()));
+    return Status::OK();
+}
+
+Status HashJoiner::_create_runtime_bloom_filters(RuntimeState* state, int64_t limit) {
+    auto& ht = _hash_join_builder->hash_table();
+    for (auto* rf_desc : _build_runtime_filters) {
+        rf_desc->set_is_pipeline(true);
+        // skip if it does not have consumer.
+        if (!rf_desc->has_consumer()) {
+            _runtime_bloom_filter_build_params.emplace_back();
+            continue;
+        }
+        if (!rf_desc->has_remote_targets() && ht.get_row_count() > limit) {
+            _runtime_bloom_filter_build_params.emplace_back();
+            continue;
+        }
+
+        int expr_order = rf_desc->build_expr_order();
+        ColumnPtr column = ht.get_key_columns()[expr_order];
+        bool eq_null = _is_null_safes[expr_order];
+        _runtime_bloom_filter_build_params.emplace_back(pipeline::RuntimeBloomFilterBuildParam(eq_null, column));
+    }
+    return Status::OK();
+}
+
+} // namespace starrocks
+>>>>>>> c2239ea206 ([Enhancement] make runtime filter number as config (#28217)):be/src/exec/hash_joiner.cpp
