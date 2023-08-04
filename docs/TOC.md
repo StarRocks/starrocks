@@ -341,6 +341,7 @@
       + [bitmap](./sql-reference/sql-functions/aggregate-functions/bitmap.md)
       + [bitmap_agg](./sql-reference/sql-functions/bitmap-functions/bitmap_agg.md)
       + [count](./sql-reference/sql-functions/aggregate-functions/count.md)
+      + [group_concat](./sql-reference/sql-functions/string-functions/group_concat.md)
       + [grouping](./sql-reference/sql-functions/aggregate-functions/grouping.md)
       + [grouping_id](./sql-reference/sql-functions/aggregate-functions/grouping_id.md)
       + [hll_empty](./sql-reference/sql-functions/aggregate-functions/hll_empty.md)
@@ -673,6 +674,8 @@
     + Table Functions
       + [files](./sql-reference/sql-functions/table-functions/files.md)
       + [generate_series](./sql-reference/sql-functions/table-functions/generate_series.md)
+      + [json_each](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
+      + [unnest](./sql-reference/sql-functions/array-functions/unnest.md)
     + Utility Functions
       + [current_role](./sql-reference/sql-functions/utility-functions/current_role.md)
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
