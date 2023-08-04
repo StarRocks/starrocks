@@ -19,11 +19,16 @@
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
+#include "exec/exec_node.h"
 #include "exec/hdfs_scanner.h"
+#include "exprs/expr.h"
 #include "formats/parquet/column_converter.h"
 #include "formats/parquet/stored_column_reader.h"
 #include "gutil/strings/substitute.h"
+#include "simd/batch_run_counter.h"
+#include "storage/column_or_predicate.h"
 #include "util/runtime_profile.h"
+#include "utils.h"
 
 namespace starrocks {
 class RandomAccessFile;
@@ -79,12 +84,15 @@ public:
     Status init(const ParquetField* field, const TypeDescriptor& col_type,
                 const tparquet::ColumnChunk* chunk_metadata) {
         _field = field;
+        _col_type = &col_type;
         RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*field, col_type, _opts.timezone, &converter));
         return StoredColumnReader::create(_opts, field, chunk_metadata, &_reader);
     }
 
-    Status prepare_batch(size_t* num_records, ColumnContentType content_type, Column* dst) override {
+    Status prepare_batch(size_t* num_records, Column* dst) override {
         DCHECK(_field->is_nullable ? dst->is_nullable() : true);
+        ColumnContentType content_type =
+                _dict_filter_ctx == nullptr ? ColumnContentType::VALUE : ColumnContentType::DICT_CODE;
         if (!converter->need_convert) {
             return _reader->read_records(num_records, content_type, dst);
         } else {
@@ -104,9 +112,10 @@ public:
         }
     }
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
-                      Column* dst) override {
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
         DCHECK(_field->is_nullable ? dst->is_nullable() : true);
+        ColumnContentType content_type =
+                _dict_filter_ctx == nullptr ? ColumnContentType::VALUE : ColumnContentType::DICT_CODE;
         if (!converter->need_convert) {
             return _reader->read_range(range, filter, content_type, dst);
         } else {
@@ -123,8 +132,6 @@ public:
         _reader->get_levels(def_levels, rep_levels, num_levels);
     }
 
-    Status get_dict_values(Column* column) override { return _reader->get_dict_values(column); }
-
     Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
                            Column* column) override {
         return _reader->get_dict_values(dict_codes, nulls, column);
@@ -132,12 +139,251 @@ public:
 
     void set_need_parse_levels(bool need_parse_levels) override { _reader->set_need_parse_levels(need_parse_levels); }
 
+    bool try_to_use_dict_filter(ExprContext* ctx, bool is_output_column, const SlotId slotId,
+                                const std::vector<std::string>& sub_field_path, const size_t& layer) override {
+        if (sub_field_path.size() != layer) {
+            return false;
+        }
+
+        if (!_col_type->is_string_type()) {
+            return false;
+        }
+
+        if (_column_all_pages_dict_encoded()) {
+            if (_dict_filter_ctx == nullptr) {
+                _dict_filter_ctx = std::make_unique<ColumnDictFilterContext>();
+                _dict_filter_ctx->is_output_column = is_output_column;
+                _dict_filter_ctx->sub_field_path = sub_field_path;
+                _dict_filter_ctx->slot_id = slotId;
+            }
+            _dict_filter_ctx->conjunct_ctxs.push_back(ctx);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    Status rewrite_conjunct_ctxs_to_predicate(bool* is_group_filtered, const std::vector<std::string>& sub_field_path,
+                                              const size_t& layer) override {
+        DCHECK_EQ(sub_field_path.size(), layer);
+        return _dict_filter_ctx->rewrite_conjunct_ctxs_to_predicate(_reader.get(), is_group_filtered);
+    }
+
+    void init_dict_column(ColumnPtr& column, const std::vector<std::string>& sub_field_path,
+                          const size_t& layer) override {
+        DCHECK_EQ(sub_field_path.size(), layer);
+        auto dict_code_column = ColumnHelper::create_column(
+                TypeDescriptor::from_logical_type(ColumnDictFilterContext::kDictCodePrimitiveType), true);
+        dict_code_column->reserve(column->size());
+        column = dict_code_column;
+    }
+
+    void filter_dict_column(const ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
+                            const size_t& layer) override {
+        DCHECK_EQ(sub_field_path.size(), layer);
+        _dict_filter_ctx->predicate->evaluate_and(column.get(), filter->data());
+    }
+
+    Status fill_dst_column(ColumnPtr& dst, const ColumnPtr& src) override {
+        if (_dict_filter_ctx == nullptr) {
+            dst->swap_column(*src);
+        } else {
+            if (_dict_filter_ctx->is_output_column) {
+                ColumnPtr& dict_values = dst;
+                dict_values->resize(0);
+
+                // decode dict code to dict values.
+                // note that in dict code, there could be null value.
+                const ColumnPtr& dict_codes = src;
+                auto* codes_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(dict_codes);
+                auto* codes_column =
+                        ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(codes_nullable_column->data_column());
+                RETURN_IF_ERROR(get_dict_values(codes_column->get_data(), *codes_nullable_column, dict_values.get()));
+                DCHECK_EQ(dict_codes->size(), dict_values->size());
+                if (dict_values->is_nullable()) {
+                    auto* nullable_codes = down_cast<NullableColumn*>(dict_codes.get());
+                    auto* nullable_values = down_cast<NullableColumn*>(dict_values.get());
+                    nullable_values->null_column_data().swap(nullable_codes->null_column_data());
+                    nullable_values->set_has_null(nullable_codes->has_null());
+                }
+            } else {
+                dst->append_default(src->size());
+            }
+
+            src->reset_column();
+        }
+        return Status::OK();
+    }
+
 private:
+    // Returns true if all of the data pages in the column chunk are dict encoded
+    bool _column_all_pages_dict_encoded();
+
     const ColumnReaderOptions& _opts;
 
     std::unique_ptr<StoredColumnReader> _reader;
     const ParquetField* _field = nullptr;
+
+    std::unique_ptr<ColumnDictFilterContext> _dict_filter_ctx;
+    const TypeDescriptor* _col_type = nullptr;
 };
+
+bool ScalarColumnReader::_column_all_pages_dict_encoded() {
+    // The Parquet spec allows for column chunks to have mixed encodings
+    // where some data pages are dictionary-encoded and others are plain
+    // encoded. For example, a Parquet file writer might start writing
+    // a column chunk as dictionary encoded, but it will switch to plain
+    // encoding if the dictionary grows too large.
+    //
+    // In order for dictionary filters to skip the entire row group,
+    // the conjuncts must be evaluated on column chunks that are entirely
+    // encoded with the dictionary encoding. There are two checks
+    // available to verify this:
+    // 1. The encoding_stats field on the column chunk metadata provides
+    //    information about the number of data pages written in each
+    //    format. This allows for a specific check of whether all the
+    //    data pages are dictionary encoded.
+    // 2. The encodings field on the column chunk metadata lists the
+    //    encodings used. If this list contains the dictionary encoding
+    //    and does not include unexpected encodings (i.e. encodings not
+    //    associated with definition/repetition levels), then it is entirely
+    //    dictionary encoded.
+    const tparquet::ColumnMetaData& column_metadata =
+            _opts.row_group_meta->columns[_field->physical_column_index].meta_data;
+    if (column_metadata.__isset.encoding_stats) {
+        // Condition #1 above
+        for (const tparquet::PageEncodingStats& enc_stat : column_metadata.encoding_stats) {
+            if (enc_stat.page_type == tparquet::PageType::DATA_PAGE &&
+                (enc_stat.encoding != tparquet::Encoding::PLAIN_DICTIONARY &&
+                 enc_stat.encoding != tparquet::Encoding::RLE_DICTIONARY) &&
+                enc_stat.count > 0) {
+                return false;
+            }
+        }
+    } else {
+        // Condition #2 above
+        bool has_dict_encoding = false;
+        bool has_nondict_encoding = false;
+        for (const tparquet::Encoding::type& encoding : column_metadata.encodings) {
+            if (encoding == tparquet::Encoding::PLAIN_DICTIONARY || encoding == tparquet::Encoding::RLE_DICTIONARY) {
+                has_dict_encoding = true;
+            }
+
+            // RLE and BIT_PACKED are used for repetition/definition levels
+            if (encoding != tparquet::Encoding::PLAIN_DICTIONARY && encoding != tparquet::Encoding::RLE_DICTIONARY &&
+                encoding != tparquet::Encoding::RLE && encoding != tparquet::Encoding::BIT_PACKED) {
+                has_nondict_encoding = true;
+                break;
+            }
+        }
+        // Not entirely dictionary encoded if:
+        // 1. No dictionary encoding listed
+        // OR
+        // 2. Some non-dictionary encoding is listed
+        if (!has_dict_encoding || has_nondict_encoding) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnReader* reader,
+                                                                   bool* is_group_filtered) {
+    // create dict value chunk for evaluation.
+    ColumnPtr dict_value_column = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    RETURN_IF_ERROR(reader->get_dict_values(dict_value_column.get()));
+    // append a null value to check if null is ok or not.
+    dict_value_column->append_default();
+
+    ColumnPtr result_column = dict_value_column;
+    for (int32_t i = sub_field_path.size() - 1; i >= 0; i--) {
+        if (!result_column->is_nullable()) {
+            result_column =
+                    NullableColumn::create(std::move(result_column), NullColumn::create(result_column->size(), 0));
+        }
+        Columns columns;
+        columns.emplace_back(result_column);
+        std::vector<std::string> field_names;
+        field_names.emplace_back(sub_field_path[i]);
+        result_column = StructColumn::create(std::move(columns), std::move(field_names));
+    }
+
+    ChunkPtr dict_value_chunk = std::make_shared<Chunk>();
+    dict_value_chunk->append_column(result_column, slot_id);
+    Filter filter(dict_value_column->size(), 1);
+    int dict_values_after_filter = 0;
+    ASSIGN_OR_RETURN(dict_values_after_filter,
+                     ExecNode::eval_conjuncts_into_filter(conjunct_ctxs, dict_value_chunk.get(), &filter));
+
+    // dict column is empty after conjunct eval, file group can be skipped
+    if (dict_values_after_filter == 0) {
+        *is_group_filtered = true;
+        return Status::OK();
+    }
+
+    // ---------
+    // get dict codes according to dict values pos.
+    std::vector<int32_t> dict_codes;
+    BatchRunCounter<32> batch_run(filter.data(), 0, filter.size() - 1);
+    BatchCount batch = batch_run.next_batch();
+    int index = 0;
+    while (batch.length > 0) {
+        if (batch.AllSet()) {
+            for (int32_t i = 0; i < batch.length; i++) {
+                dict_codes.emplace_back(index + i);
+            }
+        } else if (batch.NoneSet()) {
+            // do nothing
+        } else {
+            for (int32_t i = 0; i < batch.length; i++) {
+                if (filter[index + i]) {
+                    dict_codes.emplace_back(index + i);
+                }
+            }
+        }
+        index += batch.length;
+        batch = batch_run.next_batch();
+    }
+
+    bool null_is_ok = filter[filter.size() - 1] == 1;
+
+    // eq predicate is faster than in predicate
+    // TODO: improve not eq and not in
+    if (dict_codes.size() == 0) {
+        predicate = nullptr;
+    } else if (dict_codes.size() == 1) {
+        predicate = obj_pool.add(
+                new_column_eq_predicate(get_type_info(kDictCodeFieldType), slot_id, std::to_string(dict_codes[0])));
+    } else {
+        std::vector<std::string> str_codes;
+        str_codes.reserve(dict_codes.size());
+        for (int code : dict_codes) {
+            str_codes.emplace_back(std::to_string(code));
+        }
+        predicate = obj_pool.add(new_column_in_predicate(get_type_info(kDictCodeFieldType), slot_id, str_codes));
+    }
+
+    // deal with if NULL works or not.
+    if (null_is_ok) {
+        ColumnPredicate* result = nullptr;
+        ColumnPredicate* is_null_pred =
+                obj_pool.add(new_column_null_predicate(get_type_info(kDictCodeFieldType), slot_id, true));
+
+        if (predicate != nullptr) {
+            ColumnOrPredicate* or_pred =
+                    obj_pool.add(new ColumnOrPredicate(get_type_info(kDictCodeFieldType), slot_id));
+            or_pred->add_child(predicate);
+            or_pred->add_child(is_null_pred);
+            result = or_pred;
+        } else {
+            result = is_null_pred;
+        }
+        predicate = result;
+    }
+
+    return Status::OK();
+}
 
 class ListColumnReader : public ColumnReader {
 public:
@@ -150,7 +396,7 @@ public:
         return Status::OK();
     }
 
-    Status prepare_batch(size_t* num_records, ColumnContentType content_type, Column* dst) override {
+    Status prepare_batch(size_t* num_records, Column* dst) override {
         NullableColumn* nullable_column = nullptr;
         ArrayColumn* array_column = nullptr;
         if (dst->is_nullable()) {
@@ -163,7 +409,7 @@ public:
             array_column = down_cast<ArrayColumn*>(dst);
         }
         auto* child_column = array_column->elements_column().get();
-        auto st = _element_reader->prepare_batch(num_records, content_type, child_column);
+        auto st = _element_reader->prepare_batch(num_records, child_column);
 
         level_t* def_levels = nullptr;
         level_t* rep_levels = nullptr;
@@ -190,8 +436,7 @@ public:
         return st;
     }
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
-                      Column* dst) override {
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
         NullableColumn* nullable_column = nullptr;
         ArrayColumn* array_column = nullptr;
         if (dst->is_nullable()) {
@@ -204,7 +449,7 @@ public:
             array_column = down_cast<ArrayColumn*>(dst);
         }
         auto* child_column = array_column->elements_column().get();
-        RETURN_IF_ERROR(_element_reader->read_range(range, filter, content_type, child_column));
+        RETURN_IF_ERROR(_element_reader->read_range(range, filter, child_column));
 
         level_t* def_levels = nullptr;
         level_t* rep_levels = nullptr;
@@ -265,7 +510,7 @@ public:
         return Status::OK();
     }
 
-    Status prepare_batch(size_t* num_records, ColumnContentType content_type, Column* dst) override {
+    Status prepare_batch(size_t* num_records, Column* dst) override {
         NullableColumn* nullable_column = nullptr;
         MapColumn* map_column = nullptr;
         if (dst->is_nullable()) {
@@ -287,7 +532,7 @@ public:
         size_t origin_rows_to_skip = _opts.context->rows_to_skip;
 
         if (_key_reader != nullptr) {
-            st = _key_reader->prepare_batch(num_records, content_type, key_column);
+            st = _key_reader->prepare_batch(num_records, key_column);
             if (!st.ok() && !st.is_end_of_file()) {
                 return st;
             }
@@ -298,7 +543,7 @@ public:
             _opts.context->next_row = origin_next_row;
             _opts.context->rows_to_skip = origin_rows_to_skip;
 
-            st = _value_reader->prepare_batch(num_records, content_type, value_column);
+            st = _value_reader->prepare_batch(num_records, value_column);
             if (!st.ok() && !st.is_end_of_file()) {
                 return st;
             }
@@ -349,8 +594,7 @@ public:
         return st;
     }
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
-                      Column* dst) override {
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
         NullableColumn* nullable_column = nullptr;
         MapColumn* map_column = nullptr;
         if (dst->is_nullable()) {
@@ -365,11 +609,11 @@ public:
         auto* key_column = map_column->keys_column().get();
         auto* value_column = map_column->values_column().get();
         if (_key_reader != nullptr) {
-            RETURN_IF_ERROR(_key_reader->read_range(range, filter, content_type, key_column));
+            RETURN_IF_ERROR(_key_reader->read_range(range, filter, key_column));
         }
 
         if (_value_reader != nullptr) {
-            RETURN_IF_ERROR(_value_reader->read_range(range, filter, content_type, value_column));
+            RETURN_IF_ERROR(_value_reader->read_range(range, filter, value_column));
         }
 
         // if neither key_reader not value_reader is nullptr , check the value_column size is the same with key_column
@@ -452,9 +696,11 @@ public:
     explicit StructColumnReader(const ColumnReaderOptions& opts) : _opts(opts) {}
     ~StructColumnReader() override = default;
 
-    Status init(const ParquetField* field, std::vector<std::unique_ptr<ColumnReader>>&& child_readers) {
+    Status init(const ParquetField* field, std::vector<std::unique_ptr<ColumnReader>>&& child_readers,
+                std::map<std::string, size_t>&& field_name_to_reader_idx) {
         _field = field;
         _child_readers = std::move(child_readers);
+        _field_name_to_reader_idx = std::move(field_name_to_reader_idx);
 
         if (_child_readers.empty()) {
             return Status::InternalError("No avaliable parquet subfield column reader in StructColumn");
@@ -470,7 +716,7 @@ public:
         return Status::InternalError("No existed parquet subfield column reader in StructColumn");
     }
 
-    Status prepare_batch(size_t* num_records, ColumnContentType content_type, Column* dst) override {
+    Status prepare_batch(size_t* num_records, Column* dst) override {
         NullableColumn* nullable_column = nullptr;
         StructColumn* struct_column = nullptr;
         if (dst->is_nullable()) {
@@ -498,7 +744,7 @@ public:
             if (_child_readers[i] != nullptr) {
                 _opts.context->next_row = origin_next_row;
                 _opts.context->rows_to_skip = origin_rows_to_skip;
-                RETURN_IF_ERROR(_child_readers[i]->prepare_batch(num_records, content_type, child_column));
+                RETURN_IF_ERROR(_child_readers[i]->prepare_batch(num_records, child_column));
             }
         }
 
@@ -524,8 +770,7 @@ public:
         return Status::OK();
     }
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
-                      Column* dst) override {
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
         NullableColumn* nullable_column = nullptr;
         StructColumn* struct_column = nullptr;
         if (dst->is_nullable()) {
@@ -546,7 +791,7 @@ public:
         for (size_t i = 0; i < fields_column.size(); i++) {
             Column* child_column = fields_column[i].get();
             if (_child_readers[i] != nullptr) {
-                RETURN_IF_ERROR(_child_readers[i]->read_range(range, filter, content_type, child_column));
+                RETURN_IF_ERROR(_child_readers[i]->read_range(range, filter, child_column));
             }
         }
 
@@ -594,6 +839,91 @@ public:
                 reader->set_need_parse_levels(need_parse_levels);
             }
         }
+    }
+
+    bool try_to_use_dict_filter(ExprContext* ctx, bool is_output_column, const SlotId slotId,
+                                const std::vector<std::string>& sub_field_path, const size_t& layer) override {
+        if (sub_field_path.size() <= layer) {
+            return false;
+        }
+        size_t index = _field_name_to_reader_idx[sub_field_path[layer]];
+        if (_child_readers[index] == nullptr) {
+            return false;
+        }
+        return _child_readers[index]->try_to_use_dict_filter(ctx, is_output_column, slotId, sub_field_path, layer + 1);
+    }
+
+    Status rewrite_conjunct_ctxs_to_predicate(bool* is_group_filtered, const std::vector<std::string>& sub_field_path,
+                                              const size_t& layer) override {
+        return _child_readers[_field_name_to_reader_idx[sub_field_path[layer]]]->rewrite_conjunct_ctxs_to_predicate(
+                is_group_filtered, sub_field_path, layer + 1);
+    }
+
+    void init_dict_column(ColumnPtr& column, const std::vector<std::string>& sub_field_path,
+                          const size_t& layer) override {
+        size_t index = _field_name_to_reader_idx[sub_field_path[layer]];
+        StructColumn* struct_column = nullptr;
+        if (column->is_nullable()) {
+            NullableColumn* nullable_column = down_cast<NullableColumn*>(column.get());
+            DCHECK(nullable_column->mutable_data_column()->is_struct());
+            struct_column = down_cast<StructColumn*>(nullable_column->mutable_data_column());
+        } else {
+            DCHECK(column->is_struct());
+            DCHECK(!_field->is_nullable);
+            struct_column = down_cast<StructColumn*>(column.get());
+        }
+        return _child_readers[index]->init_dict_column(struct_column->fields_column()[index], sub_field_path,
+                                                       layer + 1);
+    }
+
+    void filter_dict_column(const ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
+                            const size_t& layer) override {
+        size_t index = _field_name_to_reader_idx[sub_field_path[layer]];
+        StructColumn* struct_column = nullptr;
+        if (column->is_nullable()) {
+            NullableColumn* nullable_column = down_cast<NullableColumn*>(column.get());
+            DCHECK(nullable_column->mutable_data_column()->is_struct());
+            struct_column = down_cast<StructColumn*>(nullable_column->mutable_data_column());
+        } else {
+            DCHECK(column->is_struct());
+            DCHECK(!_field->is_nullable);
+            struct_column = down_cast<StructColumn*>(column.get());
+        }
+        return _child_readers[index]->filter_dict_column(struct_column->fields_column()[index], filter, sub_field_path,
+                                                         layer + 1);
+    }
+
+    Status fill_dst_column(ColumnPtr& dst, const ColumnPtr& src) override {
+        StructColumn* struct_column_src = nullptr;
+        StructColumn* struct_column_dst = nullptr;
+        if (src->is_nullable()) {
+            NullableColumn* nullable_column_src = down_cast<NullableColumn*>(src.get());
+            DCHECK(nullable_column_src->mutable_data_column()->is_struct());
+            struct_column_src = down_cast<StructColumn*>(nullable_column_src->mutable_data_column());
+            NullColumn* null_column_src = nullable_column_src->mutable_null_column();
+            NullableColumn* nullable_column_dst = down_cast<NullableColumn*>(dst.get());
+            DCHECK(nullable_column_dst->mutable_data_column()->is_struct());
+            struct_column_dst = down_cast<StructColumn*>(nullable_column_dst->mutable_data_column());
+            NullColumn* null_column_dst = nullable_column_dst->mutable_null_column();
+            null_column_dst->swap_column(*null_column_src);
+            nullable_column_src->update_has_null();
+            nullable_column_dst->update_has_null();
+        } else {
+            DCHECK(src->is_struct());
+            DCHECK(dst->is_struct());
+            DCHECK(!_field->is_nullable);
+            struct_column_src = down_cast<StructColumn*>(src.get());
+            struct_column_dst = down_cast<StructColumn*>(dst.get());
+        }
+        for (size_t i = 0; i < _child_readers.size(); i++) {
+            if (_child_readers[i] == nullptr) {
+                struct_column_dst->fields_column()[i]->swap_column(*(struct_column_src->fields_column()[i]));
+            } else {
+                RETURN_IF_ERROR(_child_readers[i]->fill_dst_column(struct_column_dst->fields_column()[i],
+                                                                   struct_column_src->fields_column()[i]));
+            }
+        }
+        return Status::OK();
     }
 
 private:
@@ -651,6 +981,7 @@ private:
     // First non-nullptr child ColumnReader, used to get def & rep levels
     const std::unique_ptr<ColumnReader>* _def_rep_level_child_reader = nullptr;
     const ColumnReaderOptions& _opts;
+    std::map<std::string, size_t> _field_name_to_reader_idx;
 };
 
 void ColumnReader::get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
@@ -757,9 +1088,11 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
     } else if (field->type.type == LogicalType::TYPE_STRUCT) {
         std::vector<int32_t> subfield_pos(col_type.children.size());
         get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, subfield_pos);
+        std::map<std::string, size_t> field_name_to_reader_idx;
 
         std::vector<std::unique_ptr<ColumnReader>> children_readers;
         for (size_t i = 0; i < col_type.children.size(); i++) {
+            field_name_to_reader_idx.insert({col_type.field_names[i], i});
             if (subfield_pos[i] == -1) {
                 // -1 means subfield not existed, we need to emplace_back nullptr
                 children_readers.emplace_back(nullptr);
@@ -772,7 +1105,7 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
         }
 
         std::unique_ptr<StructColumnReader> reader(new StructColumnReader(opts));
-        RETURN_IF_ERROR(reader->init(field, std::move(children_readers)));
+        RETURN_IF_ERROR(reader->init(field, std::move(children_readers), std::move(field_name_to_reader_idx)));
         *output = std::move(reader);
         return Status::OK();
     } else {
@@ -823,9 +1156,11 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
         std::vector<const TIcebergSchemaField*> iceberg_schema_subfield(col_type.children.size());
         get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, iceberg_schema_field, subfield_pos,
                                           iceberg_schema_subfield);
+        std::map<std::string, size_t> field_name_to_reader_idx;
 
         std::vector<std::unique_ptr<ColumnReader>> children_readers;
         for (size_t i = 0; i < col_type.children.size(); i++) {
+            field_name_to_reader_idx.insert({col_type.field_names[i], i});
             if (subfield_pos[i] == -1) {
                 // -1 means subfield not existed, we need to emplace_back nullptr
                 children_readers.emplace_back(nullptr);
@@ -839,7 +1174,7 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
         }
 
         std::unique_ptr<StructColumnReader> reader(new StructColumnReader(opts));
-        RETURN_IF_ERROR(reader->init(field, std::move(children_readers)));
+        RETURN_IF_ERROR(reader->init(field, std::move(children_readers), std::move(field_name_to_reader_idx)));
         *output = std::move(reader);
         return Status::OK();
     } else {
