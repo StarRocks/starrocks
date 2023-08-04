@@ -48,7 +48,8 @@ import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
 
 public class PaimonMetadataTest {
-    @Mocked Catalog paimonNativeCatalog;
+    @Mocked
+    Catalog paimonNativeCatalog;
     private PaimonMetadata metadata;
     private final List<DataSplit> splits = new ArrayList<>();
 
@@ -162,5 +163,12 @@ public class PaimonMetadataTest {
         Assert.assertEquals(1, result.size());
         Assert.assertEquals(1, result.get(0).getFiles().size());
         Assert.assertEquals(2, result.get(0).getFiles().get(0).getPaimonSplitsInfo().getPaimonSplits().size());
+    }
+
+    @Test
+    public void testUUID(@Mocked AbstractFileStoreTable paimonNativeTable,
+                         @Mocked ReadBuilder readBuilder) {
+        PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1");
+        Assert.assertTrue(paimonTable.getUUID().startsWith("paimon_catalog.db1.tbl1"));
     }
 }
