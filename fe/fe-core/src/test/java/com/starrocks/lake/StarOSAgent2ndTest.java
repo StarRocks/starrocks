@@ -23,18 +23,21 @@ import com.staros.client.StarClientException;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
 import com.staros.proto.ShardInfo;
+import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerInfo;
 import com.staros.proto.WorkerState;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.Collections;
 import java.util.Map;
 
 /**
@@ -57,22 +60,28 @@ public class StarOSAgent2ndTest {
         String workerHost = "127.0.0.1";
         int workerStarletPort = 9070;
         long beId = 123L;
-        int workerBePort = 9060;
+        int workerHeartbeatPort = 9050;
         long shardId = 10;
+
+        WorkerInfo workerInfo = WorkerInfo.newBuilder()
+                .setIpPort(String.format("%s:%d", workerHost, workerStarletPort))
+                .setWorkerId(1L)
+                .setWorkerState(WorkerState.ON)
+                .putWorkerProperties("be_heartbeat_port", String.valueOf(workerHeartbeatPort))
+                .putWorkerProperties("be_brpc_port", "8060")
+                .build();
 
         ReplicaInfo replica = ReplicaInfo.newBuilder()
                 .setReplicaRole(ReplicaRole.PRIMARY)
-                .setWorkerInfo(WorkerInfo.newBuilder()
-                        .setIpPort(String.format("%s:%d", workerHost, workerStarletPort))
-                        .setWorkerId(1L)
-                        .setWorkerState(WorkerState.ON)
-                        .putWorkerProperties("be_port", String.valueOf(workerBePort))
-                        .putWorkerProperties("be_brpc_port", "8060")
-                        .build())
+                .setWorkerInfo(workerInfo.toBuilder().build())
                 .build();
 
         ShardInfo shardInfo = ShardInfo.newBuilder().setShardId(shardId)
                 .addReplicaInfo(replica)
+                .build();
+
+        WorkerGroupDetailInfo wgDetailInfo = WorkerGroupDetailInfo.newBuilder()
+                .addWorkersInfo(workerInfo.toBuilder().build())
                 .build();
 
         new Expectations() {
@@ -80,6 +89,10 @@ public class StarOSAgent2ndTest {
                 client.getShardInfo("1", Lists.newArrayList(shardId), StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 minTimes = 0;
                 result = Lists.newArrayList(shardInfo);
+
+                client.listWorkerGroup("1", Collections.singletonList(0L), true);
+                minTimes = 0;
+                result = Lists.newArrayList(wgDetailInfo);
             }
         };
 
@@ -87,32 +100,73 @@ public class StarOSAgent2ndTest {
         Map<Long, Long> workerToBackend = Maps.newHashMap();
         Deencapsulation.setField(starosAgent, "workerToBackend", workerToBackend);
 
-        { // give a correct starlet port, wrong bePort
-            Backend backend = new Backend(beId, workerHost, 0);
+        // Test Backend
+        { // give a correct starlet port, wrong heartbeat port
+            Backend backend = new Backend(beId, workerHost, workerHeartbeatPort + 1);
             backend.setStarletPort(workerStarletPort);
-            backend.setBePort(workerBePort + 1);
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend);
             Assert.assertEquals(Sets.newHashSet(beId), starosAgent.getBackendIdsByShard(shardId, 0));
             GlobalStateMgr.getCurrentSystemInfo().dropBackend(backend);
             workerToBackend.clear();
         }
-        { // No starlet port in backend, be port mismatch
-            Backend backend = new Backend(beId, workerHost, 0);
+        { // No starlet port in backend, mismatch heartbeat port
+            Backend backend = new Backend(beId, workerHost, workerHeartbeatPort + 1);
             backend.setStarletPort(0);
-            backend.setBePort(workerBePort + 1);
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend);
             // empty result
             Assert.assertTrue(starosAgent.getBackendIdsByShard(shardId, 0).isEmpty());
             GlobalStateMgr.getCurrentSystemInfo().dropBackend(backend);
             workerToBackend.clear();
         }
-        { // No starlet port in backend, correct be port, can find the correct backend!
-            Backend backend = new Backend(beId, workerHost, 0);
+        { // No starlet port in backend, correct heartbeat port, can find the correct backend!
+            Backend backend = new Backend(beId, workerHost, workerHeartbeatPort);
             backend.setStarletPort(0);
-            backend.setBePort(workerBePort);
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend);
             Assert.assertEquals(Sets.newHashSet(beId), starosAgent.getBackendIdsByShard(shardId, 0));
             GlobalStateMgr.getCurrentSystemInfo().dropBackend(backend);
+            workerToBackend.clear();
+        }
+        { // No starlet port in backend, correct heartbeat port, can find the correct backend for the workerGroup!
+            Backend backend = new Backend(beId, workerHost, workerHeartbeatPort);
+            backend.setStarletPort(0);
+            GlobalStateMgr.getCurrentSystemInfo().addBackend(backend);
+            Assert.assertEquals(Lists.newArrayList(beId), starosAgent.getWorkersByWorkerGroup(0));
+            GlobalStateMgr.getCurrentSystemInfo().dropBackend(backend);
+            workerToBackend.clear();
+        }
+
+        // Test ComputeNode
+        { // give a correct starlet port, wrong heartbeat port
+            ComputeNode cn = new ComputeNode(beId, workerHost, workerHeartbeatPort + 1);
+            cn.setStarletPort(workerStarletPort);
+            GlobalStateMgr.getCurrentSystemInfo().addComputeNode(cn);
+            Assert.assertEquals(Sets.newHashSet(beId), starosAgent.getBackendIdsByShard(shardId, 0));
+            GlobalStateMgr.getCurrentSystemInfo().dropComputeNode(cn);
+            workerToBackend.clear();
+        }
+        { // No starlet port in backend, mismatch heartbeat port
+            ComputeNode cn = new ComputeNode(beId, workerHost, workerHeartbeatPort + 1);
+            cn.setStarletPort(0);
+            GlobalStateMgr.getCurrentSystemInfo().addComputeNode(cn);
+            // empty result
+            Assert.assertTrue(starosAgent.getBackendIdsByShard(shardId, 0).isEmpty());
+            GlobalStateMgr.getCurrentSystemInfo().dropComputeNode(cn);
+            workerToBackend.clear();
+        }
+        { // No starlet port in backend, correct heartbeat port, can find the correct computeNode!
+            ComputeNode cn = new ComputeNode(beId, workerHost, workerHeartbeatPort);
+            cn.setStarletPort(0);
+            GlobalStateMgr.getCurrentSystemInfo().addComputeNode(cn);
+            Assert.assertEquals(Sets.newHashSet(beId), starosAgent.getBackendIdsByShard(shardId, 0));
+            GlobalStateMgr.getCurrentSystemInfo().dropComputeNode(cn);
+            workerToBackend.clear();
+        }
+        { // No starlet port in backend, correct heartbeat port, can find the correct computeNode for the workerGroup!
+            ComputeNode cn = new ComputeNode(beId, workerHost, workerHeartbeatPort);
+            cn.setStarletPort(0);
+            GlobalStateMgr.getCurrentSystemInfo().addComputeNode(cn);
+            Assert.assertEquals(Lists.newArrayList(beId), starosAgent.getWorkersByWorkerGroup(0));
+            GlobalStateMgr.getCurrentSystemInfo().dropComputeNode(cn);
             workerToBackend.clear();
         }
     }
