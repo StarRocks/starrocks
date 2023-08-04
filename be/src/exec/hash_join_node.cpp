@@ -181,8 +181,8 @@ Status HashJoinNode::prepare(RuntimeState* state) {
     _init_hash_table_param(&param);
     _ht.create(param);
 
-    _probe_column_count = _ht.get_probe_column_count();
-    _build_column_count = _ht.get_build_column_count();
+    _probe_column_count = _ht.get_first_probe_column_count();
+    _build_column_count = _ht.get_first_build_column_count();
 
     return Status::OK();
 }
@@ -201,6 +201,16 @@ void HashJoinNode::_init_hash_table_param(HashTableParam* param) {
     param->output_slots = _output_slots;
 
     std::set<SlotId> predicate_slots;
+    for (ExprContext* expr_context : _probe_expr_ctxs) {
+        std::vector<SlotId> expr_slots;
+        expr_context->root()->get_slot_ids(&expr_slots);
+        predicate_slots.insert(expr_slots.begin(), expr_slots.end());
+    }
+    for (ExprContext* expr_context : _build_expr_ctxs) {
+        std::vector<SlotId> expr_slots;
+        expr_context->root()->get_slot_ids(&expr_slots);
+        predicate_slots.insert(expr_slots.begin(), expr_slots.end());
+    }
     for (ExprContext* expr_context : _conjunct_ctxs) {
         std::vector<SlotId> expr_slots;
         expr_context->root()->get_slot_ids(&expr_slots);
@@ -211,7 +221,12 @@ void HashJoinNode::_init_hash_table_param(HashTableParam* param) {
         expr_context->root()->get_slot_ids(&expr_slots);
         predicate_slots.insert(expr_slots.begin(), expr_slots.end());
     }
-    param->predicate_slots = std::move(predicate_slots);
+    for (ExprContext* expr_context : _runtime_in_filters) {
+        std::vector<SlotId> expr_slots;
+        expr_context->root()->get_slot_ids(&expr_slots);
+        predicate_slots.insert(expr_slots.begin(), expr_slots.end());
+    }
+    param->predicate_slots = predicate_slots;
 
     for (auto i = 0; i < _build_expr_ctxs.size(); i++) {
         Expr* expr = _build_expr_ctxs[i]->root();
@@ -595,6 +610,7 @@ Status HashJoinNode::_evaluate_build_keys(const ChunkPtr& chunk) {
 
 Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>& probe_timer, ChunkPtr* chunk,
                             bool& eos) {
+    ChunkPtr tmp_chunk = std::make_shared<Chunk>();
     while (true) {
         if (!_ht_has_remain) {
             while (true) {
@@ -679,33 +695,36 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
             }
         }
 
-        TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.probe(state, _key_columns, &_probing_chunk, chunk, &_ht_has_remain)));
+        TRY_CATCH_BAD_ALLOC(
+                RETURN_IF_ERROR(_ht.probe(state, _key_columns, &_probing_chunk, &tmp_chunk, &_ht_has_remain)));
         if (!_ht_has_remain) {
             _probing_chunk = nullptr;
         }
 
-        eval_join_runtime_filters(chunk);
+        eval_join_runtime_filters(&tmp_chunk);
 
-        if (check_chunk_zero_and_create_new(chunk)) {
+        if (check_chunk_zero_and_create_new(&tmp_chunk)) {
             continue;
         }
 
         if (!_other_join_conjunct_ctxs.empty()) {
             SCOPED_TIMER(_other_join_conjunct_evaluate_timer);
-            RETURN_IF_ERROR(_process_other_conjunct(chunk));
-            if (check_chunk_zero_and_create_new(chunk)) {
+            RETURN_IF_ERROR(_process_other_conjunct(&tmp_chunk));
+            if (check_chunk_zero_and_create_new(&tmp_chunk)) {
                 continue;
             }
         }
 
         if (!_conjunct_ctxs.empty()) {
             SCOPED_TIMER(_where_conjunct_evaluate_timer);
-            RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
+            RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, tmp_chunk.get()));
 
-            if (check_chunk_zero_and_create_new(chunk)) {
+            if (check_chunk_zero_and_create_new(&tmp_chunk)) {
                 continue;
             }
         }
+
+        _ht.lazy_materialize(&_probing_chunk, &tmp_chunk, chunk);
 
         break;
     }

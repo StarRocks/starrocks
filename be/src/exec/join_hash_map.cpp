@@ -300,14 +300,22 @@ void JoinHashTable::create(const HashTableParam& param) {
         for (const auto& slot : tuple_desc->slots()) {
             HashTableSlotDescriptor hash_table_slot;
             hash_table_slot.slot = slot;
-            if (param.output_slots.empty() ||
-                std::find(param.output_slots.begin(), param.output_slots.end(), slot->id()) !=
-                        param.output_slots.end() ||
-                std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
-                        param.predicate_slots.end()) {
+            if (param.output_slots.empty()) {
                 hash_table_slot.need_output = true;
+                hash_table_slot.need_materialize = true;
+                _table_items->first_build_column_count++;
+            } else if (std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
+                       param.predicate_slots.end()) {
+                hash_table_slot.need_output = true;
+                hash_table_slot.need_materialize = true;
+                _table_items->first_build_column_count++;
+            } else if (std::find(param.output_slots.begin(), param.output_slots.end(), slot->id()) !=
+                       param.output_slots.end()) {
+                hash_table_slot.need_output = true;
+                hash_table_slot.need_materialize = false;
             } else {
                 hash_table_slot.need_output = false;
+                hash_table_slot.need_materialize = false;
             }
 
             _table_items->probe_slots.emplace_back(hash_table_slot);
@@ -317,20 +325,29 @@ void JoinHashTable::create(const HashTableParam& param) {
             _table_items->output_probe_tuple_ids.emplace_back(tuple_desc->id());
         }
     }
+    _table_items->first_build_column_count++;
 
     const auto& build_desc = *param.build_row_desc;
     for (const auto& tuple_desc : build_desc.tuple_descriptors()) {
         for (const auto& slot : tuple_desc->slots()) {
             HashTableSlotDescriptor hash_table_slot;
             hash_table_slot.slot = slot;
-            if (param.output_slots.empty() ||
-                std::find(param.output_slots.begin(), param.output_slots.end(), slot->id()) !=
-                        param.output_slots.end() ||
-                std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
-                        param.predicate_slots.end()) {
+            if (param.output_slots.empty()) {
                 hash_table_slot.need_output = true;
+                hash_table_slot.need_materialize = true;
+                _table_items->first_probe_column_count++;
+            } else if (std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
+                       param.predicate_slots.end()) {
+                hash_table_slot.need_output = true;
+                hash_table_slot.need_materialize = true;
+                _table_items->first_probe_column_count++;
+            } else if (std::find(param.output_slots.begin(), param.output_slots.end(), slot->id()) !=
+                       param.output_slots.end()) {
+                hash_table_slot.need_output = true;
+                hash_table_slot.need_materialize = false;
             } else {
                 hash_table_slot.need_output = false;
+                hash_table_slot.need_materialize = false;
             }
 
             _table_items->build_slots.emplace_back(hash_table_slot);
@@ -348,6 +365,7 @@ void JoinHashTable::create(const HashTableParam& param) {
             _table_items->output_build_tuple_ids.emplace_back(tuple_desc->id());
         }
     }
+    _table_items->first_probe_column_count++;
 
     for (const auto& key_desc : _table_items->join_keys) {
         if (key_desc.col_ref) {
@@ -531,6 +549,40 @@ StatusOr<ChunkPtr> JoinHashTable::convert_to_spill_schema(const ChunkPtr& chunk)
     }
 
     return output;
+}
+
+Status JoinHashTable::lazy_materialize_remain(ChunkPtr* src_chunk, ChunkPtr* dest_chunk) {
+    switch (_hash_map_type) {
+#define M(NAME)                                                          \
+    case JoinHashMapType::NAME:                                          \
+        _##NAME->lazy_output_remain(src_chunk, dest_chunk); \
+        break;
+        APPLY_FOR_JOIN_VARIANTS(M)
+#undef M
+    default:
+        assert(false);
+    }
+    if (_table_items->has_large_column) {
+        RETURN_IF_ERROR((*dest_chunk)->downgrade());
+    }
+    return Status::OK();
+}
+
+Status JoinHashTable::lazy_materialize(ChunkPtr* probe_chunk, ChunkPtr* src_chunk, ChunkPtr* dest_chunk) {
+    switch (_hash_map_type) {
+#define M(NAME)                                                   \
+    case JoinHashMapType::NAME:                                   \
+        _##NAME->lazy_output(probe_chunk, src_chunk, dest_chunk); \
+        break;
+        APPLY_FOR_JOIN_VARIANTS(M)
+#undef M
+    default:
+        assert(false);
+    }
+    if (_table_items->has_large_column) {
+        RETURN_IF_ERROR((*dest_chunk)->downgrade());
+    }
+    return Status::OK();
 }
 
 void JoinHashTable::remove_duplicate_index(Filter* filter) {

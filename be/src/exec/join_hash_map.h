@@ -91,6 +91,7 @@ struct JoinKeyDesc {
 struct HashTableSlotDescriptor {
     SlotDescriptor* slot;
     bool need_output;
+    bool need_materialize;
 };
 
 struct JoinHashTableItems {
@@ -117,6 +118,8 @@ struct JoinHashTableItems {
     uint32_t row_count = 0; // real row count
     size_t build_column_count = 0;
     size_t probe_column_count = 0;
+    size_t first_build_column_count = 0;
+    size_t first_probe_column_count = 0;
     bool with_other_conjunct = false;
     bool need_create_tuple_columns = true;
     bool left_to_nullable = false;
@@ -133,6 +136,8 @@ struct HashTableProbeState {
     //TODO: memory release
     Buffer<uint8_t> is_nulls;
     Buffer<uint32_t> buckets;
+    std::shared_ptr<NullableColumn> build_index_column;
+    std::shared_ptr<NullableColumn> probe_index_column;
     Buffer<uint32_t> build_index;
     Buffer<uint32_t> probe_index;
     Buffer<uint32_t> next;
@@ -172,12 +177,23 @@ struct HashTableProbeState {
     RuntimeProfile::Counter* output_tuple_column_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
 
-    HashTableProbeState() = default;
+    HashTableProbeState() {
+            auto build_data_column = std::make_shared<UInt32Column>();
+            auto probe_data_column = std::make_shared<UInt32Column>();
+            build_index_column = NullableColumn::create(build_data_column, NullColumn::create());
+            probe_index_column = NullableColumn::create(probe_data_column, NullColumn::create());
+    }
     ~HashTableProbeState() = default;
 
     HashTableProbeState(const HashTableProbeState& rhs)
             : is_nulls(rhs.is_nulls),
               buckets(rhs.buckets),
+              build_index_column(rhs.build_index_column == nullptr
+                                         ? nullptr
+                                         : std::make_shared<NullableColumn>(*rhs.build_index_column)),
+              probe_index_column(rhs.probe_index_column == nullptr
+                                         ? nullptr
+                                         : std::make_shared<NullableColumn>(*rhs.probe_index_column)),
               build_index(rhs.build_index),
               probe_index(rhs.probe_index),
               next(rhs.next),
@@ -471,7 +487,6 @@ public:
             _probe_state->count = (*probe_chunk)->num_rows();
             _probe_output(probe_chunk, chunk);
             _build_output(chunk);
-            _probe_state->count = 0;
             break;
         }
         default: {
@@ -488,6 +503,71 @@ public:
         return;
     }
 
+    void lazy_output_remain(ChunkPtr* src_chunk, ChunkPtr* dest_chunk) { return; }
+
+    void lazy_output(ChunkPtr* probe_chunk, ChunkPtr* src_chunk, ChunkPtr* dest_chunk) {
+        if ((*src_chunk)->num_rows() < _probe_state->count) {
+            _probe_state->match_flag = JoinMatchFlag::NORMAL;
+            _probe_state->count = (*src_chunk)->num_rows();
+        }
+
+        lazy_probe_output(probe_chunk, src_chunk, dest_chunk);
+        lazy_build_output(src_chunk, dest_chunk);
+        _probe_state->count = 0;
+    }
+
+    void lazy_probe_output(ChunkPtr* probe_chunk, ChunkPtr* src_chunk, ChunkPtr* dest_chunk) {
+        SCOPED_TIMER(_probe_state->output_probe_column_timer);
+        bool to_nullable = _table_items->left_to_nullable;
+        for (size_t i = 0; i < _table_items->probe_column_count; i++) {
+            HashTableSlotDescriptor hash_table_slot = _table_items->probe_slots[i];
+            SlotDescriptor* slot = hash_table_slot.slot;
+            auto& column = (*probe_chunk)->get_column_by_slot_id(slot->id());
+            if (hash_table_slot.need_materialize) {
+                (*dest_chunk)->append_column((*src_chunk)->get_column_by_slot_id(slot->id()), slot->id());
+            } else if (hash_table_slot.need_output) {
+                if (to_nullable && !column->is_nullable()) {
+                    DCHECK_EQ(column->size(), _probe_state->count);
+                    ColumnPtr dest_column =
+                            NullableColumn::create(std::move(column), NullColumn::create(_probe_state->count));
+                    (*dest_chunk)->append_column(std::move(dest_column), slot->id());
+                } else {
+                    // DCHECK_EQ(column->is_nullable(), to_nullable);
+                    (*dest_chunk)->append_column(std::move(column), slot->id());
+                }
+            } else {
+                ColumnPtr default_column =
+                        ColumnHelper::create_column(slot->type(), column->is_nullable() || to_nullable);
+                default_column->append_default(_probe_state->count);
+                (*dest_chunk)->append_column(std::move(default_column), slot->id());
+            }
+        }
+    }
+
+    void lazy_build_output(ChunkPtr* src_chunk, ChunkPtr* dest_chunk) {
+        SCOPED_TIMER(_probe_state->output_build_column_timer);
+        bool to_nullable = _table_items->right_to_nullable;
+        for (size_t i = 0; i < _table_items->build_column_count; i++) {
+            HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
+            SlotDescriptor* slot = hash_table_slot.slot;
+            ColumnPtr& column = _table_items->build_chunk->columns()[i];
+            if (hash_table_slot.need_materialize) {
+                (*dest_chunk)->append_column((*src_chunk)->get_column_by_slot_id(slot->id()), slot->id());
+            } else if (hash_table_slot.need_output) {
+                // always output nulls.
+                DCHECK(to_nullable);
+                ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), true);
+                dest_column->append_nulls(_probe_state->count);
+                (*dest_chunk)->append_column(std::move(dest_column), slot->id());
+            } else {
+                ColumnPtr default_column =
+                        ColumnHelper::create_column(slot->type(), column->is_nullable() || to_nullable);
+                default_column->append_default(_probe_state->count);
+                (*dest_chunk)->append_column(std::move(default_column), slot->id());
+            }
+        }
+    }
+
 private:
     void _probe_output(ChunkPtr* probe_chunk, ChunkPtr* chunk) {
         SCOPED_TIMER(_probe_state->output_probe_column_timer);
@@ -496,7 +576,7 @@ private:
             HashTableSlotDescriptor hash_table_slot = _table_items->probe_slots[i];
             SlotDescriptor* slot = hash_table_slot.slot;
             auto& column = (*probe_chunk)->get_column_by_slot_id(slot->id());
-            if (hash_table_slot.need_output) {
+            if (hash_table_slot.need_materialize) {
                 if (to_nullable && !column->is_nullable()) {
                     DCHECK_EQ(column->size(), _probe_state->count);
                     ColumnPtr dest_column =
@@ -506,34 +586,36 @@ private:
                     // DCHECK_EQ(column->is_nullable(), to_nullable);
                     (*chunk)->append_column(std::move(column), slot->id());
                 }
-            } else {
-                ColumnPtr default_column =
-                        ColumnHelper::create_column(slot->type(), column->is_nullable() || to_nullable);
-                default_column->append_default(_probe_state->count);
-                (*chunk)->append_column(std::move(default_column), slot->id());
             }
         }
+        _probe_state->probe_index_column->resize(_probe_state->count);
+        for (size_t i = 0; i < _probe_state->count; i++) {
+            ColumnHelper::as_raw_column<UInt32Column>(_probe_state->probe_index_column->data_column())->get_data()[i] = i;
+            _probe_state->probe_index_column->null_column()->get_data()[i] = 0;
+            _probe_state->probe_index_column->set_has_null(false);
+        }
+        (*chunk)->append_column(_probe_state->probe_index_column, INT32_MAX - 1);
     }
+
     void _build_output(ChunkPtr* chunk) {
         SCOPED_TIMER(_probe_state->output_build_column_timer);
         bool to_nullable = _table_items->right_to_nullable;
         for (size_t i = 0; i < _table_items->build_column_count; i++) {
             HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
             SlotDescriptor* slot = hash_table_slot.slot;
-            ColumnPtr& column = _table_items->build_chunk->columns()[i];
-            if (hash_table_slot.need_output) {
+            if (hash_table_slot.need_materialize) {
                 // always output nulls.
                 DCHECK(to_nullable);
                 ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), true);
                 dest_column->append_nulls(_probe_state->count);
                 (*chunk)->append_column(std::move(dest_column), slot->id());
-            } else {
-                ColumnPtr default_column =
-                        ColumnHelper::create_column(slot->type(), column->is_nullable() || to_nullable);
-                default_column->append_default(_probe_state->count);
-                (*chunk)->append_column(std::move(default_column), slot->id());
             }
         }
+
+        _probe_state->build_index_column->append_nulls(_probe_state->count);
+        (*chunk)->append_column(_probe_state->probe_index_column, INT32_MAX - 2);
+        //_probe_state->build_index_column->resize(_probe_state->count);
+        //(*chunk)->append_column(_probe_state->build_index_column, INT32_MAX - 2);
     }
 
     JoinHashTableItems* _table_items = nullptr;
@@ -555,23 +637,34 @@ public:
     void probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
                bool* has_remain);
     void probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* has_remain);
+    void lazy_output(ChunkPtr* probe_chunk, ChunkPtr* src_chunk, ChunkPtr* dest_chunk);
+    void lazy_output_remain(ChunkPtr* src_chunk, ChunkPtr* dest_chunk);
+    void lazy_probe_output(ChunkPtr* probe_chunk, ChunkPtr* src_chunk, ChunkPtr* dest_chunk);
+    void lazy_build_output(ChunkPtr* src_chunk, ChunkPtr* dest_chunk);
 
 private:
     void _probe_output(ChunkPtr* probe_chunk, ChunkPtr* chunk);
     void _probe_tuple_output(ChunkPtr* probe_chunk, ChunkPtr* chunk);
+    void _lazy_probe_null_output(ChunkPtr* src_chunk, ChunkPtr* chunk, size_t count);
     void _probe_null_output(ChunkPtr* chunk, size_t count);
 
     void _build_output(ChunkPtr* chunk);
     void _build_tuple_output(ChunkPtr* chunk);
     void _build_default_output(ChunkPtr* chunk, size_t count);
+    void _lazy_build_default_output(ChunkPtr* src_chunk, ChunkPtr* chunk, size_t count);
 
+    void _lazy_copy_probe_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable);
     void _copy_probe_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable);
 
+    void _lazy_copy_probe_nullable_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
     void _copy_probe_nullable_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
 
     void _copy_build_column(const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable);
+    void _lazy_copy_build_column(const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot,
+                                 bool to_nullable);
 
     void _copy_build_nullable_column(const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
+    void _lazy_copy_build_nullable_column(const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
 
     void _search_ht(RuntimeState* state, ChunkPtr* probe_chunk);
     void _search_ht_remain(RuntimeState* state);
@@ -703,13 +796,18 @@ public:
     Columns& get_key_columns() { return _table_items->key_columns; }
     uint32_t get_row_count() const { return _table_items->row_count; }
     size_t get_probe_column_count() const { return _table_items->probe_column_count; }
+    size_t get_first_probe_column_count() const { return _table_items->first_probe_column_count; }
     size_t get_build_column_count() const { return _table_items->build_column_count; }
+    size_t get_first_build_column_count() const { return _table_items->first_build_column_count; }
     size_t get_bucket_size() const { return _table_items->bucket_size; }
     size_t get_used_bucket_count() const;
 
     void remove_duplicate_index(Filter* filter);
 
     int64_t mem_usage() const;
+
+    Status lazy_materialize(ChunkPtr* probe_chunk, ChunkPtr* src_chunk, ChunkPtr* dest_chunk);
+    Status lazy_materialize_remain(ChunkPtr* src_chunk, ChunkPtr* dest_chunk);
 
 private:
     JoinHashMapType _choose_join_hash_map();
