@@ -77,6 +77,11 @@ public class PaimonTable extends Table {
     }
 
     @Override
+    public String getUUID() {
+        return String.join(".", catalogName, databaseName, tableName, Long.toString(createTime));
+    }
+
+    @Override
     public String getTableLocation() {
         return paimonNativeTable.location().toString();
     }
