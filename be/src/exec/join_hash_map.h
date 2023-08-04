@@ -91,6 +91,7 @@ struct JoinKeyDesc {
 struct HashTableSlotDescriptor {
     SlotDescriptor* slot;
     bool need_output;
+    bool need_materialize;
 };
 
 struct JoinHashTableItems {
@@ -133,8 +134,10 @@ struct HashTableProbeState {
     //TODO: memory release
     Buffer<uint8_t> is_nulls;
     Buffer<uint32_t> buckets;
-    Buffer<uint32_t> build_index;
-    Buffer<uint32_t> probe_index;
+    UInt32Column build_index_column;
+    UInt32Column probe_index_column;
+    Buffer<uint32_t>& build_index;
+    Buffer<uint32_t>& probe_index;
     Buffer<uint32_t> next;
     Buffer<Slice> probe_slice;
     Buffer<uint8_t>* null_array = nullptr;
@@ -172,14 +175,16 @@ struct HashTableProbeState {
     RuntimeProfile::Counter* output_tuple_column_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
 
-    HashTableProbeState() = default;
+    HashTableProbeState() : probe_index(probe_index_column.get_data()), build_index(build_index_column.get_data()) {}
     ~HashTableProbeState() = default;
 
     HashTableProbeState(const HashTableProbeState& rhs)
             : is_nulls(rhs.is_nulls),
               buckets(rhs.buckets),
-              build_index(rhs.build_index),
-              probe_index(rhs.probe_index),
+              build_index_column(rhs.build_index_column),
+              probe_index_column(rhs.probe_index_column),
+              build_index(build_index_column.get_data()),
+              probe_index(probe_index_column.get_data()),
               next(rhs.next),
               probe_slice(rhs.probe_slice),
               null_array(rhs.null_array),
