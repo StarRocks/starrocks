@@ -1,12 +1,12 @@
 # 系统变量
 
-StarRocks 提供多个系统变量（system variables），方便您根据业务情况进行调整。本文介绍 StarRocks 支持的变量。您可以在 MySQL 客户端通过命令 [SHOW VARIABLES](../sql-reference/sql-statements/Administration/SHOW%20VARIABLES.md) 查看当前变量。也可以通过 [SET](../sql-reference/sql-statements/Administration/SET.md) 命令动态设置或者修改变量。您可以设置变量在系统全局 (global) 范围内生效，仅在当前会话 (session) 中生效，或者仅在单个查询语句中生效。
+StarRocks 提供多个系统变量（system variables），方便您根据业务情况进行调整。本文介绍 StarRocks 支持的变量。您可以在 MySQL 客户端通过命令 [SHOW VARIABLES](../sql-reference/sql-statements/Administration/SHOW%20VARIABLES.md) 查看当前变量。也可以通过 [SET](../sql-reference/sql-statements/Administration/SET.md) 命令动态设置或者修改变量。您可以设置变量在系统全局 (global) 范围内生效、仅在当前会话 (session) 中生效、或者仅在单个查询语句中生效。
 
 StarRocks 中的变量参考 MySQL 中的变量设置，但**部分变量仅用于兼容 MySQL 客户端协议，并不产生其在 MySQL 数据库中的实际意义**。
 
 > **说明**
 >
-> 任何用户都有权限通过 SHOW VARIABLES 查看变量，设置变量在 Session 级别生效。只有 admin 用户才可以设置变量为全局生效。 权限的用户才可以设置变量为全局生效。全局生效的变量不影响当前会话，仅影响后续新的会话。
+> 任何用户都有权限通过 SHOW VARIABLES 查看变量。任何用户都有权限设置变量在 Session 级别生效。只有拥有 System 级 OPERATE 权限的用户才可以设置变量为全局生效。设置全局生效后，后续所有新的会话都会使用新配置，当前会话仍然使用老的配置。
 
 ## 查看变量
 
@@ -21,13 +21,11 @@ SHOW VARIABLES;
 SHOW VARIABLES LIKE '%time_zone%';
 ```
 
-更多信息，参见 [SHOW VARIABLES](../sql-reference/sql-statements/Administration/SHOW%20VARIABLES.md)。
-
 ## 设置变量
 
 ### 设置变量全局生效或在会话中生效
 
-变量一般可以设置为**全局**生效或**仅当前会话**生效。设置为全局生效后，**后续新的会话**连接中会使用新设置的值，当前会话还会继续使用之前设置的值；设置为仅当前会话生效时，变量仅对当前会话产生作用。
+变量一般可以设置为**全局**生效或**仅当前会话**生效。设置为全局生效后，**后续所有新的会话**连接中会使用新设置的值，当前会话还会继续使用之前设置的值；设置为仅当前会话生效时，变量仅对当前会话产生作用。
 
 通过 `SET <var_name> = xxx;` 语句设置的变量仅在当前会话生效。如：
 
@@ -44,8 +42,6 @@ SET time_zone = "Asia/Shanghai";
  ```SQL
 SET GLOBAL exec_mem_limit = 137438953472;
 ```
-
-更多信息，参见 [SET](../sql-reference/sql-statements/Administration/SET.md)。
 
 只支持全局生效的变量包括：
 
