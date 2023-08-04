@@ -439,7 +439,7 @@ public class StarOSAgentTest {
         Deencapsulation.setField(starosAgent, "workerToBackend", workerToBackend);
 
         ExceptionChecker.expectThrowsWithMsg(UserException.class,
-                "Failed to get backend by worker. worker id",
+                "Failed to get primary backend. shard id: 10",
                 () -> starosAgent.getPrimaryComputeNodeIdByShard(10L));
 
         Assert.assertEquals(Sets.newHashSet(), starosAgent.getBackendIdsByShard(10L, 0));

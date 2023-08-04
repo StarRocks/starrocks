@@ -57,6 +57,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
@@ -504,14 +505,69 @@ public class StarOSAgent {
         }
     }
 
-    private long getAvailableBackendId(String host, int starletPort) {
+    private Optional<Long> getBackendIdByHostStarletPort(String host, int starletPort) {
         long backendId = GlobalStateMgr.getCurrentSystemInfo()
                 .getBackendIdWithStarletPort(host, starletPort);
         if (backendId == -1L) {
             backendId = GlobalStateMgr.getCurrentSystemInfo().
                     getComputeNodeIdWithStarletPort(host, starletPort);
         }
-        return backendId;
+        return backendId == -1 ? Optional.empty() : Optional.of(backendId);
+    }
+
+    private Optional<Long> getBackendIdByHostHeartbeatPort(String host, int heartbeatPort) {
+        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo()
+                .getBackendWithHeartbeatPort(host, heartbeatPort);
+        if (node == null) {
+            node = GlobalStateMgr.getCurrentSystemInfo().
+                    getComputeNodeWithHeartbeatPort(host, heartbeatPort);
+        }
+        return node == null ? Optional.empty() : Optional.of(node.getId());
+    }
+
+    private Optional<Long> getOrUpdateBackendIdByWorkerInfo(WorkerInfo info) {
+        long workerId = info.getWorkerId();
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            // get the backend id directly from workerToBackend
+            Long beId = workerToBackend.get(workerId);
+            if (beId != null) {
+                return Optional.of(beId);
+            }
+        }
+        String workerAddr = info.getIpPort();
+        String[] hostPorts = workerAddr.split(":");
+        String host = hostPorts[0];
+        int starletPort = -1;
+        try {
+            starletPort = Integer.parseInt(hostPorts[1]);
+        } catch (NumberFormatException ex) {
+            LOG.warn("Malformed worker address info:" + workerAddr);
+            return Optional.empty();
+        }
+        Optional<Long> result = getBackendIdByHostStarletPort(host, starletPort);
+        if (!result.isPresent()) {
+            LOG.info("can't find backendId with starletPort for {}, try using be_heartbeat_port to search again",
+                    workerAddr);
+            // FIXME: workaround fix of missing starletPort due to Backend::write() missing the field during
+            //  saveImage(). Refer to: https://starrocks.atlassian.net/browse/SR-16340
+            if (info.getWorkerPropertiesMap().containsKey("be_heartbeat_port")) {
+                int heartbeatPort = -1;
+                try {
+                    heartbeatPort = Integer.parseInt(info.getWorkerPropertiesMap().get("be_heartbeat_port"));
+                } catch (NumberFormatException ex) {
+                    LOG.warn("Malformed be_heartbeat_port for worker:" + workerAddr);
+                    return Optional.empty();
+                }
+                result = getBackendIdByHostHeartbeatPort(host, heartbeatPort);
+            }
+        }
+        if (result.isPresent()) {
+            try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+                workerToId.put(workerAddr, workerId);
+                workerToBackend.put(workerId, result.get());
+            }
+        }
+        return result;
     }
 
     public long getPrimaryComputeNodeIdByShard(long shardId) throws UserException {
@@ -519,84 +575,29 @@ public class StarOSAgent {
     }
 
     public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws UserException {
-        List<ReplicaInfo> replicas = getShardReplicas(shardId, workerGroupId);
-
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            for (ReplicaInfo replicaInfo : replicas) {
-                if (replicaInfo.getReplicaRole() == ReplicaRole.PRIMARY) {
-                    WorkerInfo workerInfo = replicaInfo.getWorkerInfo();
-                    long workerId = workerInfo.getWorkerId();
-                    if (!workerToBackend.containsKey(workerId)) {
-                        // get backendId from system info by host & starletPort
-                        String workerAddr = workerInfo.getIpPort();
-                        String[] pair = workerAddr.split(":");
-
-                        long backendId = getAvailableBackendId(pair[0], Integer.parseInt(pair[1]));
-                        if (backendId == -1L) {
-                            throw new UserException("Failed to get backend by worker. worker id: " + workerId);
-                        }
-                        // put it into map
-                        workerToId.put(workerAddr, workerId);
-                        workerToBackend.put(workerId, backendId);
-                        return backendId;
-                    }
-                    return workerToBackend.get(workerId);
-                }
-            }
+        Set<Long> backendIds = getAllBackendIdsByShard(shardId, workerGroupId, true);
+        if (backendIds.isEmpty()) {
+            throw new UserException("Failed to get primary backend. shard id: " + shardId);
         }
-        throw new UserException("Failed to get primary backend. shard id: " + shardId);
+        return backendIds.iterator().next();
     }
 
     public Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws UserException {
+        return getAllBackendIdsByShard(shardId, workerGroupId, false);
+    }
+
+    private Set<Long> getAllBackendIdsByShard(long shardId, long workerGroupId, boolean onlyPrimary)
+            throws UserException {
         List<ReplicaInfo> replicas = getShardReplicas(shardId, workerGroupId);
-
-        Set<Long> backendIds = Sets.newHashSet();
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            for (ReplicaInfo replicaInfo : replicas) {
-                // TODO: check worker state
-                WorkerInfo workerInfo = replicaInfo.getWorkerInfo();
-                long workerId = workerInfo.getWorkerId();
-                if (!workerToBackend.containsKey(workerId)) {
-                    // get backendId from system info
-                    String workerAddr = workerInfo.getIpPort();
-                    String[] pair = workerAddr.split(":");
-                    long backendId = getAvailableBackendId(pair[0], Integer.parseInt(pair[1]));
-
-                    if (backendId == -1L) {
-                        LOG.info("can't find backendId with starletPort for {}.", workerAddr);
-                        // FIXME: workaround fix of missing starletPort due to Backend::write() missing the field during
-                        //  saveImage(). Refer to: https://starrocks.atlassian.net/browse/SR-16340
-                        if (workerInfo.getWorkerPropertiesMap().containsKey("be_port")) {
-                            int bePort = Integer.parseInt(workerInfo.getWorkerPropertiesMap().get("be_port"));
-                            ComputeNode cn = GlobalStateMgr.getCurrentSystemInfo()
-                                    .getBackendWithBePort(pair[0], bePort);
-                            if (cn == null) {
-                                cn = GlobalStateMgr.getCurrentSystemInfo()
-                                        .getComputeNodeWithBePort(pair[0], bePort);
-                                if (cn == null) {
-                                    LOG.warn("can't find backendId with bePort:{} for {}.", bePort, workerAddr);
-                                } else {
-                                    backendId = cn.getId();
-                                }
-                            } else {
-                                backendId = cn.getId();
-                            }
-                        }
-                        // Can't find the backendId, give up
-                        if (backendId == -1L) {
-                            continue;
-                        }
-                    }
-
-                    // put it into map
-                    workerToId.put(workerAddr, workerId);
-                    workerToBackend.put(workerId, backendId);
-                    backendIds.add(backendId);
-                } else {
-                    backendIds.add(workerToBackend.get(workerId));
-                }
-            }
+        if (onlyPrimary) {
+            replicas = replicas.stream().filter(x -> x.getReplicaRole() == ReplicaRole.PRIMARY)
+                    .collect(Collectors.toList());
         }
+        Set<Long> backendIds = Sets.newHashSet();
+        replicas.stream()
+                .map(x -> getOrUpdateBackendIdByWorkerInfo(x.getWorkerInfo()))
+                .forEach(x -> x.ifPresent(backendIds::add));
+
         return backendIds;
     }
 
@@ -660,26 +661,8 @@ public class StarOSAgent {
             List<WorkerGroupDetailInfo> workerGroupDetailInfos = client.
                     listWorkerGroup(serviceId, Collections.singletonList(workerGroupId), true);
             for (WorkerGroupDetailInfo detailInfo : workerGroupDetailInfos) {
-                List<WorkerInfo> workerInfos = detailInfo.getWorkersInfoList();
-                for (WorkerInfo workerInfo : workerInfos) {
-                    if (workerToBackend.containsKey(workerInfo.getWorkerId())) {
-                        nodeIds.add(workerToBackend.get(workerInfo.getWorkerId()));
-                    } else {
-                        // workerToBackend may not container this worker, so need to get it from systemInfoSerivce
-                        // and fill it
-                        long workerId = workerInfo.getWorkerId();
-                        String workerAddr = workerInfo.getIpPort();
-                        String[] pair = workerAddr.split(":");
-                        long nodeId = getAvailableBackendId(pair[0], Integer.parseInt(pair[1]));
-                        if (nodeId != -1L) {
-                            nodeIds.add(nodeId);
-
-                            // put it into map
-                            workerToId.put(workerAddr, workerId);
-                            workerToBackend.put(workerId, nodeId);
-                        }
-                    }
-                }
+                detailInfo.getWorkersInfoList()
+                        .forEach(x -> getOrUpdateBackendIdByWorkerInfo(x).ifPresent(nodeIds::add));
             }
             return nodeIds;
         } catch (StarClientException e) {
@@ -711,8 +694,7 @@ public class StarOSAgent {
         try {
             return client.dump();
         } catch (StarClientException e) {
-            String str = "Fail to dump starmgr meta, " + e.getMessage();
-            return str;
+            return "Fail to dump starmgr meta, " + e.getMessage();
         }
     }
 }
