@@ -1043,8 +1043,11 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean ignore_materialized_view_error = false;
 
-    @ConfField(mutable = true)
+    @ConfField
     public static boolean enable_udf = false;
+
+    @ConfField
+    public static boolean enable_remote_script = false;
 
     @ConfField(mutable = true)
     public static boolean enable_decimal_v3 = true;
