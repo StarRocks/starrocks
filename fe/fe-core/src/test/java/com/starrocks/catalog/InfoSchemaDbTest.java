@@ -20,7 +20,10 @@ import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.GrantsTo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.privilege.AuthorizationMgr;
+import com.starrocks.privilege.ObjectType;
+import com.starrocks.privilege.PrivilegeEntry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -51,6 +54,9 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public class InfoSchemaDbTest {
     ConnectContext ctx;
@@ -399,5 +405,14 @@ public class InfoSchemaDbTest {
             Assert.assertFalse(GrantsTo.getGrantsTo(request).grants_to.contains(item3));
         }
         Config.enable_show_external_catalog_privilege = true;
+    }
+
+    @Test
+    public void testRoot() {
+        AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+        Map<ObjectType, List<PrivilegeEntry>> privileges =
+                authorizationManager.getTypeToPrivilegeEntryListByRole("root");
+        Set<TGetGrantsToRolesOrUserItem> s = Deencapsulation.invoke(GrantsTo.class, "getGrantItems",
+                authorizationMgr, "root", privileges);
     }
 }

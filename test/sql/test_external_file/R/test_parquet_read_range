@@ -1,0 +1,96 @@
+-- name: testParquetReadRange
+shell: ossutil64 mkdir oss://${oss_bucket}/test_external_file/test_parquet_read_range >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp --force ../be/test/formats/parquet/test_data/read_range_test.parquet oss://${oss_bucket}/test_external_file/test_parquet_read_range/read_range_test.parquet | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 237,073. OK num: 1(upload 1 files).
+-- !result
+CREATE EXTERNAL TABLE read_range_test (
+    c0 int,
+    c1 int,
+    c2 string,
+    c3 array<int>
+)
+ENGINE=file
+PROPERTIES (
+    "path" = "oss://${oss_bucket}/test_external_file/test_parquet_read_range/read_range_test.parquet",
+    "format" = "parquet"
+);
+-- result:
+-- !result
+select * from read_range_test where c0 >= 900 and c0 < 902;
+-- result:
+900	19101	None	None
+901	19100	1	[901,null,100]
+-- !result
+select * from read_range_test where c0 >= 1190 and c0 < 1192;
+-- result:
+1190	18811	None	None
+1191	18810	91	[191,null,810]
+-- !result
+select * from read_range_test where c0 >= 4000 and c0 < 4002;
+-- result:
+4000	16001	None	None
+4001	16000	1	[1,null,0]
+-- !result
+select * from read_range_test where c0 > 4200 and c0 < 4202;
+-- result:
+4201	15800	1	[201,null,800]
+-- !result
+select * from read_range_test where c0 > 6000 and c0 < 6002;
+-- result:
+6001	14000	1	[1,null,0]
+-- !result
+select * from read_range_test where c0 > 8100 and c0 < 8102;
+-- result:
+8101	11900	1	[101,null,900]
+-- !result
+select * from read_range_test where (c0 > 900 and c0 < 902) or (c0 > 4097 and c0 < 4099);
+-- result:
+901	19100	1	[901,null,100]
+4098	15903	98	[98,null,903]
+-- !result
+select * from read_range_test where (c0 > 900 and c0 < 902) or (c0 > 6000 and c0 < 6002);
+-- result:
+901	19100	1	[901,null,100]
+6001	14000	1	[1,null,0]
+-- !result
+select * from read_range_test where (c0 > 900 and c0 < 902) or (c0 > 8100 and c0 < 8102);
+-- result:
+901	19100	1	[901,null,100]
+8101	11900	1	[101,null,900]
+-- !result
+select * from read_range_test where (c0 > 1190 and c0 < 1192) or (c0 > 8200 and c0 < 8202);
+-- result:
+1191	18810	91	[191,null,810]
+8201	11800	1	[201,null,800]
+-- !result
+select * from read_range_test where (c0 > 1190 and c0 < 1192) or (c0 > 9000 and c0 < 9002);
+-- result:
+1191	18810	91	[191,null,810]
+9001	11000	1	[1,null,0]
+-- !result
+select * from read_range_test where c0 >= 10900 and c0 < 10902;
+-- result:
+10900	9101	None	None
+10901	9100	1	[901,null,100]
+-- !result
+select * from read_range_test where (c0 >= 900 and c0 < 902) or (c0 >= 10900 and c0 < 10902);
+-- result:
+900	19101	None	None
+901	19100	1	[901,null,100]
+10900	9101	None	None
+10901	9100	1	[901,null,100]
+-- !result
+select * from read_range_test where c0 < 3 or c0 > 19998;
+-- result:
+1	20000	1	[1,null,0]
+2	19999	2	[2,null,999]
+19999	2	99	[999,null,2]
+20000	1	None	None
+-- !result

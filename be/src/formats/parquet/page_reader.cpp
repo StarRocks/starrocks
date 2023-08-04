@@ -76,7 +76,9 @@ Status PageReader::next_header() {
     DCHECK(header_length > 0);
     _offset += header_length;
     _next_header_pos = _offset + _cur_header.compressed_page_size;
-    _num_values_read += _cur_header.data_page_header.num_values;
+    if (_cur_header.type == tparquet::PageType::DATA_PAGE) {
+        _num_values_read += _cur_header.data_page_header.num_values;
+    }
     return Status::OK();
 }
 
