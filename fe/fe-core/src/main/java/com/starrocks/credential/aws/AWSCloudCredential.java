@@ -124,10 +124,6 @@ public class AWSCloudCredential implements CloudCredential {
     }
 
     public AWSCredentialsProvider generateAWSCredentialsProvider() {
-        if (useAWSSDKDefaultBehavior) {
-            return new DefaultAWSCredentialsProviderChain();
-        }
-
         AWSCredentialsProvider awsCredentialsProvider = getBaseAWSCredentialsProvider();
         if (!iamRoleArn.isEmpty()) {
             // Generate random session name
@@ -147,7 +143,9 @@ public class AWSCloudCredential implements CloudCredential {
     }
 
     private AWSCredentialsProvider getBaseAWSCredentialsProvider() {
-        if (useInstanceProfile) {
+        if (useAWSSDKDefaultBehavior) {
+            return new DefaultAWSCredentialsProviderChain();
+        } else if (useInstanceProfile) {
             return new InstanceProfileCredentialsProvider(true);
         } else if (!accessKey.isEmpty() && !secretKey.isEmpty()) {
             if (!sessionToken.isEmpty()) {
@@ -166,8 +164,17 @@ public class AWSCloudCredential implements CloudCredential {
     @Override
     public void applyToConfiguration(Configuration configuration) {
         if (useAWSSDKDefaultBehavior) {
-            configuration.set("fs.s3a.aws.credentials.provider",
-                    "com.amazonaws.auth.DefaultAWSCredentialsProviderChain");
+            if (!iamRoleArn.isEmpty()) {
+                configuration.set("fs.s3a.assumed.role.credentials.provider",
+                        "com.amazonaws.auth.DefaultAWSCredentialsProviderChain");
+                configuration.set("fs.s3a.aws.credentials.provider",
+                        "com.starrocks.credential.provider.AssumedRoleCredentialProvider");
+                configuration.set("fs.s3a.assumed.role.arn", iamRoleArn);
+                configuration.set(AssumedRoleCredentialProvider.CUSTOM_CONSTANT_HADOOP_EXTERNAL_ID, externalId);
+            } else {
+                configuration.set("fs.s3a.aws.credentials.provider",
+                        "com.amazonaws.auth.DefaultAWSCredentialsProviderChain");
+            }
         } else if (useInstanceProfile) {
             if (!iamRoleArn.isEmpty()) {
                 configuration.set("fs.s3a.assumed.role.credentials.provider",

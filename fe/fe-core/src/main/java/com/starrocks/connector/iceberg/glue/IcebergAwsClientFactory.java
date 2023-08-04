@@ -140,13 +140,9 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
 
     @Override
     public S3Client s3() {
-        if (s3UseAWSSDKDefaultBehavior) {
-            AwsCredentialsProvider provider = DefaultCredentialsProvider.builder().build();
-            return S3Client.builder().credentialsProvider(provider).build();
-        }
-
         AwsCredentialsProvider baseAWSCredentialsProvider =
-                getBaseAWSCredentialsProvider(s3UseInstanceProfile, s3AccessKey, s3SecretKey, s3SessionToken);
+                getBaseAWSCredentialsProvider(s3UseAWSSDKDefaultBehavior, s3UseInstanceProfile, s3AccessKey,
+                        s3SecretKey, s3SessionToken);
         S3ClientBuilder s3ClientBuilder = S3Client.builder();
         if (!s3IamRoleArn.isEmpty()) {
             s3ClientBuilder.credentialsProvider(getAssumeRoleCredentialsProvider(baseAWSCredentialsProvider,
@@ -170,13 +166,9 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
 
     @Override
     public GlueClient glue() {
-        if (glueUseAWSSDKDefaultBehavior) {
-            AwsCredentialsProvider provider = DefaultCredentialsProvider.builder().build();
-            return GlueClient.builder().credentialsProvider(provider).build();
-        }
-
         AwsCredentialsProvider baseAWSCredentialsProvider =
-                getBaseAWSCredentialsProvider(glueUseInstanceProfile, glueAccessKey, glueSecretKey, glueSessionToken);
+                getBaseAWSCredentialsProvider(glueUseAWSSDKDefaultBehavior, glueUseInstanceProfile, glueAccessKey,
+                        glueSecretKey, glueSessionToken);
         GlueClientBuilder glueClientBuilder = GlueClient.builder();
         if (!glueIamRoleArn.isEmpty()) {
             glueClientBuilder.credentialsProvider(getAssumeRoleCredentialsProvider(baseAWSCredentialsProvider,
@@ -197,8 +189,11 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
         return glueClientBuilder.build();
     }
 
-    private AwsCredentialsProvider getBaseAWSCredentialsProvider(boolean useInstanceProfile, String accessKey,
-                                                                 String secretKey, String sessionToken) {
+    private AwsCredentialsProvider getBaseAWSCredentialsProvider(boolean useAWSSDKDefaultBehavior, boolean useInstanceProfile,
+                                                                 String accessKey, String secretKey, String sessionToken) {
+        if (useAWSSDKDefaultBehavior) {
+            return DefaultCredentialsProvider.builder().build();
+        }
         if (useInstanceProfile) {
             return InstanceProfileCredentialsProvider.builder().build();
         } else if (!accessKey.isEmpty() && !secretKey.isEmpty()) {
