@@ -1812,15 +1812,9 @@ public class AuthorizationMgr {
     }
 
     public void grantStorageVolumeUsageToPublicRole(String storageVolumeId) throws PrivilegeException {
-        roleWriteLock();
-        try {
-            RolePrivilegeCollectionV2 collection = getRolePrivilegeCollectionUnlocked(PrivilegeBuiltinConstants.PUBLIC_ROLE_ID,
-                    true);
-            List<PEntryObject> object = Collections.singletonList(new StorageVolumePEntryObject(storageVolumeId));
-            collection.grant(ObjectType.STORAGE_VOLUME, Collections.singletonList(PrivilegeType.USAGE), object, false);
-        } finally {
-            roleWriteUnlock();
-        }
+        List<PEntryObject> object = Collections.singletonList(new StorageVolumePEntryObject(storageVolumeId));
+        grantToRole(ObjectType.STORAGE_VOLUME, Collections.singletonList(PrivilegeType.USAGE), object, false,
+                PrivilegeBuiltinConstants.PUBLIC_ROLE_NAME);
     }
 
     public void loadV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
