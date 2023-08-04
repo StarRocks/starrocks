@@ -38,6 +38,9 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -46,6 +49,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.monitor.unit.ByteSizeValue;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
@@ -147,10 +151,18 @@ public class BackendLoadStatistic {
     private SystemInfoService infoService;
     private TabletInvertedIndex invertedIndex;
 
+    @SerializedName(value = "be_id")
     private long beId;
+    @SerializedName(value = "cluster_name")
     private String clusterName;
-
+    @SerializedName(value = "is_available")
     private boolean isAvailable;
+    @SerializedName(value = "cpu_cores")
+    private int cpuCores;
+    @SerializedName(value = "mem_limit")
+    private long memLimit;
+    @SerializedName(value = "mem_used")
+    private long memUsed;
 
     public static class LoadScore {
         public double replicaNumCoefficient = 0.5;
@@ -263,6 +275,8 @@ public class BackendLoadStatistic {
         }
 
         isAvailable = be.isAvailable();
+        cpuCores = be.getCpuCores();
+        memLimit = be.getMemLimitBytes();
 
         ImmutableMap<String, DiskInfo> disks = be.getDisks();
         for (DiskInfo diskInfo : disks.values()) {
@@ -498,20 +512,30 @@ public class BackendLoadStatistic {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("be id: ").append(beId).append(", is available: ").append(isAvailable).append(", mediums: [");
+        // Basic information
+        JsonObject json = (JsonObject) GsonUtils.GSON.toJsonTree(this);
+
+        // Mediums
+        JsonArray mediums = new JsonArray();
         for (TStorageMedium medium : TStorageMedium.values()) {
-            sb.append("{medium: ").append(medium).append(", replica: ").append(totalReplicaNumMap.get(medium));
-            sb.append(", used: ").append(totalUsedCapacityMap.getOrDefault(medium, 0L));
-            final Long totalCapacity = totalCapacityMap.getOrDefault(medium, 0L);
-            sb.append(", total: ").append(new ByteSizeValue(totalCapacity));
-            sb.append(", score: ").append(loadScoreMap.getOrDefault(medium, LoadScore.DUMMY).score).append("},");
+            JsonObject mediumJson = new JsonObject();
+            mediumJson.addProperty("medium", medium.toString());
+            mediumJson.addProperty("replica", totalReplicaNumMap.get(medium));
+            mediumJson.addProperty("used", totalUsedCapacityMap.getOrDefault(medium, 0L));
+            mediumJson.addProperty("total", new ByteSizeValue(totalCapacityMap.getOrDefault(medium, 0L)).toString());
+            mediumJson.addProperty("score", loadScoreMap.getOrDefault(medium, LoadScore.DUMMY).score);
+            mediums.add(mediumJson);
         }
-        sb.append("], paths: [");
+        json.add("mediums", mediums);
+
+        // Paths
+        JsonArray paths = new JsonArray();
         for (RootPathLoadStatistic pathStat : pathStatistics) {
-            sb.append("{").append(pathStat).append("},");
+            paths.add(pathStat.toJson());
         }
-        return sb.append("]").toString();
+        json.add("paths", paths);
+
+        return json.toString();
     }
 
     public List<String> getInfo(TStorageMedium medium) {

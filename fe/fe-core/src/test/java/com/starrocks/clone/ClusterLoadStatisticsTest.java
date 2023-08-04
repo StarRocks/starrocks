@@ -161,4 +161,25 @@ public class ClusterLoadStatisticsTest {
         Assert.assertEquals(3, infos.size());
     }
 
+    @Test
+    public void testToString() {
+        ClusterLoadStatistic clusterLoad = new ClusterLoadStatistic(systemInfoService, invertedIndex);
+        clusterLoad.init();
+
+        BackendLoadStatistic beLoad = clusterLoad.getBackendLoadStatistic(10001);
+        Assert.assertEquals("{\"be_id\":10001,\"cluster_name\":\"default_cluster\",\"is_available\":true," +
+                "\"cpu_cores\":0,\"mem_limit\":0,\"mem_used\":0," +
+                "\"mediums\":[{\"medium\":\"HDD\",\"replica\":1,\"used\":570000,\"total\":\"1.5MB\"," +
+                "\"score\":1.0040447504302925}," +
+                "{\"medium\":\"SSD\",\"replica\":0,\"used\":0,\"total\":\"0B\",\"score\":NaN}]," +
+                "\"paths\":[" +
+                "{\"beId\":10001,\"path\":\"/path3\",\"pathHash\":0,\"storageMedium\":\"HDD\"," +
+                "\"total\":500000,\"used\":10000}," +
+                "{\"beId\":10001,\"path\":\"/path2\",\"pathHash\":0,\"storageMedium\":\"HDD\"," +
+                "\"total\":180000,\"used\":80000}," +
+                "{\"beId\":10001,\"path\":\"/path1\",\"pathHash\":0,\"storageMedium\":\"HDD\"," +
+                "\"total\":980000,\"used\":480000}]}", beLoad.toString());
+
+    }
+
 }
