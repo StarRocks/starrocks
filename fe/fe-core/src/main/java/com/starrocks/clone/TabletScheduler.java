@@ -73,6 +73,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.PriorityQueue;
 import java.util.Queue;
@@ -764,6 +765,7 @@ public class TabletScheduler extends LeaderDaemon {
                         "table is in alter process, but tablet status is " + statusPair.first.name());
             }
 
+            TabletStatus oldStatus = tabletCtx.getTabletStatus();
             tabletCtx.setTabletStatus(statusPair.first);
             if (statusPair.first == TabletStatus.HEALTHY && tabletCtx.getType() == TabletSchedCtx.Type.REPAIR) {
                 throw new SchedException(Status.UNRECOVERABLE, "tablet is healthy");
@@ -785,7 +787,14 @@ public class TabletScheduler extends LeaderDaemon {
                     partition.getCommittedVersion(), partition.getVisibleTxnId());
             tabletCtx.setSchemaHash(tbl.getSchemaHashByIndexId(idx.getId()));
             tabletCtx.setStorageMedium(dataProperty.getStorageMedium());
-
+            if (!Objects.equals(oldStatus, statusPair.first)) {
+                LOG.info("change TabletSchedCtx status from {} to {}, partition visible version: {}," +
+                                " visibleTxnId: {}, tablet: {}, all version infos: {}",
+                        oldStatus, statusPair.first, tabletCtx.getVisibleVersion(),
+                        tabletCtx.getVisibleTxnId(),
+                        tabletCtx.getTabletId(),
+                        tabletCtx.getTablet().getReplicaInfos());
+            }
         } finally {
             db.readUnlock();
         }

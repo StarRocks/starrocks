@@ -742,6 +742,10 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 && decommissionedReplica.getState() == ReplicaState.DECOMMISSION
                 && decommissionedReplicaPreviousState != null) {
             decommissionedReplica.setState(decommissionedReplicaPreviousState);
+            decommissionedReplica.setWatermarkTxnId(-1);
+            LOG.debug("reset replica {} on backend {} with state from DECOMMISSION to {}, tablet: {}",
+                    decommissionedReplica.getId(), decommissionedReplica.getBackendId(),
+                    decommissionedReplica.getState(), tabletId);
         }
     }
 
