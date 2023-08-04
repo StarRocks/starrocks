@@ -1,0 +1,26 @@
+-- name: test_materialized_view_staleness
+drop table if exists t1;
+CREATE TABLE t1 (
+    k1 int,
+    k2 int
+) DUPLICATE KEY(k1)
+properties (
+    "replication_num" = "1"
+);
+INSERT INTO t1 VALUES (1,1),(1,2),(null,null);
+
+drop materialized view if exists mv1;
+CREATE MATERIALIZED VIEW mv1 REFRESH MANUAL
+properties (
+    "replication_num" = "1",
+    "mv_rewrite_staleness_second" = "10",
+    "session.enable_optimizer_trace_log" = "true"
+)
+ AS SELECT k1,sum(k2) FROM t1 group by k1;
+
+REFRESH MATERIALIZED VIEW mv1 with sync mode;
+select * from mv1 order by k1;
+
+INSERT INTO t1 VALUES (2,2);
+REFRESH MATERIALIZED VIEW mv1 with sync mode;
+select * from mv1 order by k1;
