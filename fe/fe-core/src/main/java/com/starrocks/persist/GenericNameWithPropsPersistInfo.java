@@ -25,13 +25,13 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Map;
 
-public class SecurityIntegrationInfo implements Writable {
+public class GenericNameWithPropsPersistInfo implements Writable {
     @SerializedName(value = "n")
     public String name;
     @SerializedName(value = "m")
     public Map<String, String> propertyMap;
 
-    public SecurityIntegrationInfo(String name, Map<String, String> propertyMap) {
+    public GenericNameWithPropsPersistInfo(String name, Map<String, String> propertyMap) {
         this.name = name;
         this.propertyMap = propertyMap;
     }
@@ -41,9 +41,9 @@ public class SecurityIntegrationInfo implements Writable {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
-    public static SecurityIntegrationInfo read(DataInput in) throws IOException {
+    public static GenericNameWithPropsPersistInfo read(DataInput in) throws IOException {
         String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, SecurityIntegrationInfo.class);
+        return GsonUtils.GSON.fromJson(json, GenericNameWithPropsPersistInfo.class);
     }
 
 }

@@ -114,7 +114,9 @@ import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
 import com.starrocks.epack.persist.AlterPolicyLog;
+import com.starrocks.epack.privilege.LDAPRoleMapping;
 import com.starrocks.epack.privilege.PolicyPEntryObject;
+import com.starrocks.epack.privilege.RoleMapping;
 import com.starrocks.epack.privilege.WarehousePEntryObject;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
@@ -311,6 +313,10 @@ public class GsonUtils {
                     .registerSubtype(PolicyPEntryObject.class, "PolicyPEntryObject")
                     .registerSubtype(WarehousePEntryObject.class, "WarehousePEntryObject");
 
+    private static final RuntimeTypeAdapterFactory<RoleMapping> ROLE_MAPPING_RUNTIME_TYPE_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(RoleMapping.class, "clazz")
+                    .registerSubtype(LDAPRoleMapping.class, LDAPRoleMapping.class.getSimpleName());
+
     private static final RuntimeTypeAdapterFactory<SecurityIntegration> SEC_INTEGRATION_RUNTIME_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(SecurityIntegration.class, "clazz")
                     .registerSubtype(LDAPSecurityIntegration.class, "LDAPSecurityIntegration");
@@ -418,6 +424,7 @@ public class GsonUtils {
             .registerTypeAdapterFactory(SNAPSHOT_INFO_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(P_ENTRY_OBJECT_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(SEC_INTEGRATION_RUNTIME_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(ROLE_MAPPING_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(WAREHOUSE_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(LOAD_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(TXN_COMMIT_ATTACHMENT_TYPE_RUNTIME_ADAPTER_FACTORY)

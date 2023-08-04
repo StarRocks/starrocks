@@ -46,13 +46,19 @@ import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.connector.parser.trino.PlaceholderExpr;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
+import com.starrocks.epack.sql.ast.AlterRoleMappingStatement;
+import com.starrocks.epack.sql.ast.AlterSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ApplyMaskingPolicyClause;
 import com.starrocks.epack.sql.ast.ApplyRowAccessPolicyClause;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.CreateRoleMappingStatement;
 import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
+import com.starrocks.epack.sql.ast.DropRoleMappingStatement;
+import com.starrocks.epack.sql.ast.DropSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.DropWarehouseStmt;
 import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.epack.sql.ast.RevokeMaskingPolicyClause;
@@ -60,7 +66,10 @@ import com.starrocks.epack.sql.ast.RevokeRowAccessPolicyClause;
 import com.starrocks.epack.sql.ast.SetWarehouseStmt;
 import com.starrocks.epack.sql.ast.ShowClustersStmt;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
+import com.starrocks.epack.sql.ast.ShowCreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
+import com.starrocks.epack.sql.ast.ShowRoleMappingStatement;
+import com.starrocks.epack.sql.ast.ShowSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ShowWarehousesStmt;
 import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.sql.ast.pipe.AlterPipeClause;
@@ -682,6 +691,42 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDropSecurityIntegrationStatement(DropSecurityIntegrationStatement statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAlterSecurityIntegrationStatement(AlterSecurityIntegrationStatement statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowCreateSecurityIntegrationStatement(ShowCreateSecurityIntegrationStatement statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowSecurityIntegrationStatement(ShowSecurityIntegrationStatement statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitCreateRoleMappingStatement(CreateRoleMappingStatement statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAlterRoleMappingStatement(AlterRoleMappingStatement statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDropRoleMappingStatement(DropRoleMappingStatement statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowRoleMappingStatement(ShowRoleMappingStatement statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitRefreshRoleMappingStatement(RefreshRoleMappingStatement statement, C context) {
         return visitStatement(statement, context);
     }
 

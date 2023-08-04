@@ -64,7 +64,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                             PrivilegeType.CREATE_RESOURCE_GROUP,
                             PrivilegeType.CREATE_GLOBAL_FUNCTION,
                             PrivilegeType.CREATE_STORAGE_VOLUME,
-                            PrivilegeTypeEPack.CREATE_WAREHOUSE))
+                            PrivilegeTypeEPack.CREATE_WAREHOUSE,
+                            PrivilegeTypeEPack.SECURITY))
 
                     .put(ObjectType.USER, ImmutableList.of(
                             PrivilegeType.IMPERSONATE))

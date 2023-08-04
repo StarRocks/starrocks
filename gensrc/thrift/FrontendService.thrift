@@ -1187,6 +1187,14 @@ struct TSetConfigResponse {
     1: required Status.TStatus status
 }
 
+struct TRefreshRoleMappingRequest {
+    1: optional list<string> role_mapping_names
+}
+
+struct TRefreshRoleMappingResponse {
+    1: required Status.TStatus status
+}
+
 struct TCreatePartitionRequest {
     1: optional i64 txn_id
     2: optional i64 db_id
@@ -1458,6 +1466,7 @@ service FrontendService {
     TAbortRemoteTxnResponse  abortRemoteTxn(1: TAbortRemoteTxnRequest request)
 
     TSetConfigResponse setConfig(1: TSetConfigRequest request)
+    TRefreshRoleMappingResponse refreshRoleMapping(1: TRefreshRoleMappingRequest request)
     TCreatePartitionResult createPartition(1: TCreatePartitionRequest request)
 
     TUpdateResourceUsageResponse updateResourceUsage(1: TUpdateResourceUsageRequest request)

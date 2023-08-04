@@ -536,6 +536,12 @@ public class PrivilegeStmtAnalyzer {
 
         @Override
         public Void visitSetRoleStatement(SetRoleStmt stmt, ConnectContext session) {
+            UserIdentity currentUser = session.getCurrentUserIdentity();
+            if (currentUser != null && currentUser.isEphemeral()) {
+                throw new SemanticException(
+                        "set role statement is not supported for ephemeral user " + currentUser);
+            }
+
             for (String roleName : stmt.getRoles()) {
                 validRoleName(roleName, "Cannot set role", true);
             }
@@ -544,6 +550,12 @@ public class PrivilegeStmtAnalyzer {
 
         @Override
         public Void visitSetDefaultRoleStatement(SetDefaultRoleStmt stmt, ConnectContext session) {
+            UserIdentity currentUser = session.getCurrentUserIdentity();
+            if (currentUser != null && currentUser.isEphemeral()) {
+                throw new SemanticException(
+                        "set default role statement is not supported for ephemeral user " + currentUser);
+            }
+
             analyseUser(stmt.getUserIdentity(), true);
             try {
                 for (String roleName : stmt.getRoles()) {

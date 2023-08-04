@@ -44,14 +44,19 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TUserIdentity;
+import com.starrocks.thrift.TUserRoles;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
 
 // https://dev.mysql.com/doc/refman/8.0/en/account-names.html
 // username must be literally matched.
@@ -67,7 +72,8 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
      * destroyed after disconnected, currently it's used by ldap security integration where we use external ldap server
      * to authenticate and the metadata of a user is not stored on StarRocks.
      */
-    private boolean ephemeral;
+    private boolean ephemeral = false;
+    Set<Long> mappedRoleIds;
 
     private final NodePosition pos;
 
@@ -113,7 +119,15 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
     }
 
     public static UserIdentity fromThrift(TUserIdentity tUserIdent) {
-        return new UserIdentity(tUserIdent.getUsername(), tUserIdent.getHost(), tUserIdent.is_domain);
+        UserIdentity userIdentity =
+                new UserIdentity(tUserIdent.getUsername(), tUserIdent.getHost(), tUserIdent.is_domain);
+        if (tUserIdent.isSetIs_ephemeral()) {
+            userIdentity.setEphemeral(tUserIdent.is_ephemeral);
+        }
+        if (tUserIdent.isSetCurrent_role_ids()) {
+            userIdentity.setMappedRoleIds(new HashSet<>(tUserIdent.current_role_ids.getRole_id_list()));
+        }
+        return userIdentity;
     }
 
     public static UserIdentity createEphemeralUserIdent(String user, String host) {
@@ -134,6 +148,18 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
 
     public boolean isEphemeral() {
         return ephemeral;
+    }
+
+    public void setEphemeral(boolean ephemeral) {
+        this.ephemeral = ephemeral;
+    }
+
+    public void setMappedRoleIds(Set<Long> mappedRoleIds) {
+        this.mappedRoleIds = mappedRoleIds;
+    }
+
+    public Set<Long> getMappedRoleIds() {
+        return mappedRoleIds;
     }
 
     public void analyze() {
@@ -179,6 +205,11 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
         tUserIdent.setHost(host);
         tUserIdent.setUsername(user);
         tUserIdent.setIs_domain(isDomain);
+        UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
+        tUserIdent.setIs_ephemeral(currentUser.isEphemeral());
+        TUserRoles tUserRoles = new TUserRoles();
+        tUserRoles.setRole_id_list(new ArrayList<>(ConnectContext.get().getCurrentRoleIds()));
+        tUserIdent.setCurrent_role_ids(tUserRoles);
         return tUserIdent;
     }
 

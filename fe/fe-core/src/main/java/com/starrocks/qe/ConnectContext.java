@@ -169,8 +169,8 @@ public class ConnectContext {
 
     protected volatile boolean closed;
 
-    // set with the randomstring extracted from the handshake data at connecting stage
-    // used for authdata(password) salting
+    // set with the random string extracted from the handshake data at connecting stage
+    // used for auth data(password) salting
     protected byte[] authDataSalt;
 
     protected QueryDetail queryDetail;
@@ -268,7 +268,11 @@ public class ConnectContext {
     }
 
     public String getRemoteIP() {
-        return remoteIP;
+        if (currentUserIdentity != null && currentUserIdentity.isEphemeral()) {
+            return currentUserIdentity.getHost();
+        } else {
+            return remoteIP;
+        }
     }
 
     public void setRemoteIP(String remoteIP) {
@@ -320,6 +324,11 @@ public class ConnectContext {
     }
 
     public void setCurrentRoleIds(UserIdentity user) {
+        if (user.isEphemeral()) {
+            this.currentRoleIds = user.getMappedRoleIds();
+            return;
+        }
+
         try {
             Set<Long> defaultRoleIds;
             if (GlobalVariable.isActivateAllRolesOnLogin()) {

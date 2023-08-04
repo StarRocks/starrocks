@@ -9,14 +9,20 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Type;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
+import com.starrocks.epack.sql.ast.AlterRoleMappingStatement;
+import com.starrocks.epack.sql.ast.AlterSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ApplyMaskingPolicyClause;
 import com.starrocks.epack.sql.ast.ApplyRowAccessPolicyClause;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.CreateRoleMappingStatement;
 import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.epack.sql.ast.DatabaseName;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
+import com.starrocks.epack.sql.ast.DropRoleMappingStatement;
+import com.starrocks.epack.sql.ast.DropSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.DropWarehouseStmt;
 import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.epack.sql.ast.PolicyType;
@@ -26,7 +32,10 @@ import com.starrocks.epack.sql.ast.RevokeRowAccessPolicyClause;
 import com.starrocks.epack.sql.ast.SetWarehouseStmt;
 import com.starrocks.epack.sql.ast.ShowClustersStmt;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
+import com.starrocks.epack.sql.ast.ShowCreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
+import com.starrocks.epack.sql.ast.ShowRoleMappingStatement;
+import com.starrocks.epack.sql.ast.ShowSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ShowWarehousesStmt;
 import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
@@ -45,6 +54,7 @@ import com.starrocks.sql.ast.DropComputeNodeClause;
 import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.RefreshRoleMappingStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.ParsingException;
@@ -241,7 +251,100 @@ public class AstBuilderEPack extends AstBuilder {
         return new WithRowAccessPolicy(policyName, columnList, createPos(context));
     }
 
-    // ---------------------------------------- Security Policy Statement ---------------------------------------------------
+    // ---------------------------------------- Security Integration Statement --------------------------------------
+
+    @Override
+    public ParseNode visitCreateSecurityIntegrationStatement(
+            StarRocksParser.CreateSecurityIntegrationStatementContext context) {
+        String name = ((Identifier) visit(context.identifier())).getValue();
+        Map<String, String> propertyMap = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                propertyMap.put(property.getKey(), property.getValue());
+            }
+        }
+        return new CreateSecurityIntegrationStatement(name, propertyMap, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterSecurityIntegrationStatement(
+            StarRocksParser.AlterSecurityIntegrationStatementContext context) {
+        String name = ((Identifier) visit(context.identifier())).getValue();
+        Map<String, String> properties = new HashMap<>();
+        List<Property> propertyList = visit(context.propertyList().property(), Property.class);
+        for (Property property : propertyList) {
+            properties.put(property.getKey(), property.getValue());
+        }
+        return new AlterSecurityIntegrationStatement(name, properties, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropSecurityIntegrationStatement(
+            StarRocksParser.DropSecurityIntegrationStatementContext context) {
+        String name = ((Identifier) visit(context.identifier())).getValue();
+        return new DropSecurityIntegrationStatement(name, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowCreateSecurityIntegrationStatement(
+            StarRocksParser.ShowCreateSecurityIntegrationStatementContext context) {
+        String name = ((Identifier) visit(context.identifier())).getValue();
+        return new ShowCreateSecurityIntegrationStatement(name, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowSecurityIntegrationStatement(
+            StarRocksParser.ShowSecurityIntegrationStatementContext context) {
+        return new ShowSecurityIntegrationStatement();
+    }
+
+    @Override
+    public ParseNode visitCreateRoleMappingStatement(
+            StarRocksParser.CreateRoleMappingStatementContext context) {
+        String name = ((Identifier) visit(context.identifier())).getValue();
+        Map<String, String> propertyMap = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                propertyMap.put(property.getKey(), property.getValue());
+            }
+        }
+        return new CreateRoleMappingStatement(name, propertyMap, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterRoleMappingStatement(
+            StarRocksParser.AlterRoleMappingStatementContext context) {
+        String name = ((Identifier) visit(context.identifier())).getValue();
+        Map<String, String> properties = new HashMap<>();
+        List<Property> propertyList = visit(context.propertyList().property(), Property.class);
+        for (Property property : propertyList) {
+            properties.put(property.getKey(), property.getValue());
+        }
+        return new AlterRoleMappingStatement(name, properties, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropRoleMappingStatement(
+            StarRocksParser.DropRoleMappingStatementContext context) {
+        String name = ((Identifier) visit(context.identifier())).getValue();
+        return new DropRoleMappingStatement(name, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowRoleMappingStatement(
+            StarRocksParser.ShowRoleMappingStatementContext context) {
+        return new ShowRoleMappingStatement();
+    }
+
+    @Override
+    public ParseNode visitRefreshRoleMappingStatement(
+            StarRocksParser.RefreshRoleMappingStatementContext context) {
+        return new RefreshRoleMappingStatement();
+    }
+
+    // ---------------------------------------- Security Policy Statement -------------------------------------------
 
     @Override
     public ParseNode visitCreateMaskingPolicyStatement(StarRocksParser.CreateMaskingPolicyStatementContext context) {

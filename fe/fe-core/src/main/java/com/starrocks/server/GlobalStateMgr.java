@@ -50,6 +50,7 @@ import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.LDAPGroupCacheMgr;
 import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.binlog.BinlogConfig;
@@ -145,6 +146,8 @@ import com.starrocks.credential.CloudCredentialUtil;
 import com.starrocks.epack.failover.FailoverGroupMgr;
 import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.epack.persist.SRMetaBlockIDEPack;
+import com.starrocks.epack.privilege.AuthenticationMgrEPack;
+import com.starrocks.epack.privilege.AuthorizationMgrEpack;
 import com.starrocks.epack.privilege.SecurityPolicyMgr;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
@@ -267,6 +270,7 @@ import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
+import com.starrocks.sql.ast.RefreshRoleMappingStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RestoreStmt;
@@ -458,6 +462,7 @@ public class GlobalStateMgr {
     private DomainResolver domainResolver;
 
     private SecurityPolicyMgr securityPolicyManager;
+    private LDAPGroupCacheMgr ldapGroupCacheMgr;
 
     private TabletSchedulerStat stat;
 
@@ -881,6 +886,10 @@ public class GlobalStateMgr {
         return securityPolicyManager;
     }
 
+    public LDAPGroupCacheMgr getLdapGroupCacheMgr() {
+        return ldapGroupCacheMgr;
+    }
+
     public ResourceGroupMgr getResourceGroupMgr() {
         return resourceGroupMgr;
     }
@@ -1141,10 +1150,11 @@ public class GlobalStateMgr {
         this.auth = new Auth();
         this.usingNewPrivilege = new AtomicBoolean(usingNewPrivilege);
         if (usingNewPrivilege) {
-            this.authenticationMgr = new AuthenticationMgr();
+            this.authenticationMgr = new AuthenticationMgrEPack();
             this.domainResolver = new DomainResolver(authenticationMgr);
-            this.authorizationMgr = new AuthorizationMgr(this, null);
+            this.authorizationMgr = new AuthorizationMgrEpack(this, null);
             this.securityPolicyManager = new SecurityPolicyMgr();
+            this.ldapGroupCacheMgr = new LDAPGroupCacheMgr(authenticationMgr, authorizationMgr);
             LOG.info("using new privilege framework..");
         } else {
             this.domainResolver = new DomainResolver(auth);
@@ -1281,6 +1291,7 @@ public class GlobalStateMgr {
                     // upgrade metadata in old privilege framework to the new one
                     upgrader.upgradeAsLeader();
                     this.domainResolver.setAuthenticationManager(authenticationMgr);
+                    this.ldapGroupCacheMgr.setAuthzManager(authenticationMgr, authorizationMgr);
                 }
                 LOG.info("set usingNewPrivilege to true after transfer to leader");
                 usingNewPrivilege.set(true);
@@ -1431,6 +1442,7 @@ public class GlobalStateMgr {
 
         // domain resolver
         domainResolver.start();
+        ldapGroupCacheMgr.start();
         if (RunMode.allowCreateLakeTable()) {
             compactionMgr.start();
         }
@@ -1788,6 +1800,7 @@ public class GlobalStateMgr {
             this.authenticationMgr = AuthenticationMgr.load(dis);
             this.authorizationMgr = AuthorizationMgr.load(dis, this, null);
             this.domainResolver = new DomainResolver(authenticationMgr);
+            this.ldapGroupCacheMgr = new LDAPGroupCacheMgr(authenticationMgr, authorizationMgr);
         }
     }
 
@@ -3830,6 +3843,15 @@ public class GlobalStateMgr {
         nodeMgr.setFrontendConfig(configs);
     }
 
+    /**
+     * Run on leader, need to forward to all followers and observers.
+     *
+     * @param stmt role mapping refresh statement
+     */
+    public void refreshRoleMapping(RefreshRoleMappingStatement stmt) throws DdlException {
+        nodeMgr.refreshRoleMapping(ldapGroupCacheMgr);
+    }
+
     public void replayBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {
         localMetastore.replayBackendTabletsInfo(backendTabletsInfo);
     }
@@ -3972,11 +3994,11 @@ public class GlobalStateMgr {
         // In the case where we upgrade again, i.e. upgrade->rollback->upgrade,
         // we may already load the image from last upgrade, in this case we should
         // discard the privilege data from last upgrade and only use the data from
-        // current image to upgrade, so we initialize a new AuthorizationManager and AuthenticationManger
+        // current image to upgrade, so we initialize a new AuthorizationMgr and AuthenticationMgr
         // instance here
         LOG.info("reinitialize privilege info before upgrade");
-        this.authenticationMgr = new AuthenticationMgr();
-        this.authorizationMgr = new AuthorizationMgr(this, null);
+        this.authenticationMgr = new AuthenticationMgrEPack();
+        this.authorizationMgr = new AuthorizationMgrEpack(this, null);
     }
 
     public void replayAuthUpgrade(AuthUpgradeInfo info) throws AuthUpgrader.AuthUpgradeUnrecoverableException {
@@ -3986,6 +4008,7 @@ public class GlobalStateMgr {
         LOG.info("set usingNewPrivilege to true after auth upgrade log replayed");
         usingNewPrivilege.set(true);
         domainResolver.setAuthenticationManager(authenticationMgr);
+        ldapGroupCacheMgr.setAuthzManager(authenticationMgr, authorizationMgr);
     }
 
     // entry of checking tablets operation

@@ -179,7 +179,7 @@ public class RoleManager implements Writable {
                 if (entry.getKey().getPrivLevel() == PrivLevel.GLOBAL) {
                     hasGlobal = true;
                     info.add(entry.getValue().toString());
-                    // global priv should only has one
+                    // global priv should only have one
                     break;
                 }
             }

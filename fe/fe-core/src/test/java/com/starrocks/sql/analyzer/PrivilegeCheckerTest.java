@@ -2748,6 +2748,112 @@ public class PrivilegeCheckerTest {
         DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
     }
 
+    private void executeDdlAsRoot(String ddl) throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(ddl, ctx), ctx);
+        ctxToTestUser();
+    }
+
+    @Test
+    public void testSecurityStatements() throws Exception {
+        String sql = "create security integration ldap2\n" +
+                "properties (\n" +
+                "\"type\" = \"ldap\",\n" +
+                "\"ldap_server_host\" = \"172.26.92.123\",\n" +
+                "\"ldap_bind_base_dn\" = \"dc=apple,dc=com\",\n" +
+                "\"ldap_bind_root_dn\" = \"cn=admin,dc=apple,dc=com\",\n" +
+                "\"ldap_bind_root_pwd\" = \"123456\",\n" +
+                "\"comment\" = \"test\"\n" +
+                ");";
+        verifyGrantRevoke(
+                sql,
+                "grant security on system to test",
+                "revoke security on system from test",
+                "Access denied; you need (at least one of) the SECURITY privilege(s) on SYSTEM for this operation");
+
+        executeDdlAsRoot(sql);
+        verifyGrantRevoke(
+                "alter security integration ldap2 set(\n" +
+                        "\"ldap_server_host\" = \"172.26.92.155\",\n" +
+                        "\"comment\" = \"test2\"\n" +
+                        ");",
+                "grant security on system to test",
+                "revoke security on system from test",
+                "Access denied; you need (at least one of) the SECURITY privilege(s) on SYSTEM for this operation");
+
+        verifyGrantRevoke(
+                "drop security integration ldap2",
+                "grant security on system to test",
+                "revoke security on system from test",
+                "Access denied; you need (at least one of) the SECURITY privilege(s) on SYSTEM for this operation");
+
+        verifyGrantRevoke(
+                "show security integrations",
+                "grant security on system to test",
+                "revoke security on system from test",
+                "Access denied; you need (at least one of) the SECURITY privilege(s) on SYSTEM for this operation");
+
+        verifyGrantRevoke(
+                "show create security integration ldap2",
+                "grant security on system to test",
+                "revoke security on system from test",
+                "Access denied; you need (at least one of) the SECURITY privilege(s) on SYSTEM for this operation");
+
+        executeDdlAsRoot("create role role11read;");
+        verifyGrantRevoke(
+                "create role mapping rm2\n" +
+                        "properties (\n" +
+                        "\"integration_name\" = \"ldap2\",\n" +
+                        "\"role\" = \"role11read\",\n" +
+                        "\"ldap_group_list\" = \"cn=sr_read_only_group,ou=Group,dc=apple,dc=com;" +
+                        "cn=sr_read_only_group2,ou=Group,dc=apple,dc=com\"\n" +
+                        ");",
+                "grant security on system to test",
+                "revoke security on system from test",
+                "Access denied; you need (at least one of) the SECURITY privilege(s) on SYSTEM for this operation");
+
+        verifyGrantRevoke(
+                "alter role mapping rm2 set (\"ldap_group_list\" = \"cn=sr_read_only_group,ou=Group,dc=apple,dc=com\");",
+                "grant security on system to test",
+                "revoke security on system from test",
+                "Access denied; you need (at least one of) the SECURITY privilege(s) on SYSTEM for this operation");
+
+        verifyGrantRevoke(
+                "drop role mapping rm2",
+                "grant security on system to test",
+                "revoke security on system from test",
+                "Access denied; you need (at least one of) the SECURITY privilege(s) on SYSTEM for this operation");
+
+        verifyGrantRevoke(
+                "show role mappings",
+                "grant security on system to test",
+                "revoke security on system from test",
+                "Access denied; you need (at least one of) the SECURITY privilege(s) on SYSTEM for this operation");
+
+        verifyGrantRevoke(
+                "refresh all role mappings",
+                "grant security on system to test",
+                "revoke security on system from test",
+                "Access denied; you need (at least one of) the SECURITY privilege(s) on SYSTEM for this operation");
+
+        // test built-in role security_admin
+        verifyGrantRevoke(
+                "show role mappings",
+                "grant security_admin to test",
+                "revoke security_admin from test",
+                "Access denied; you need (at least one of) the SECURITY privilege(s) on SYSTEM for this operation");
+
+        verifyGrantRevoke(
+                "admin set frontend config (\"authentication_chain\"=\"ldap2,native\");",
+                "grant security_admin to test",
+                "revoke security_admin from test",
+                "Access denied; you need (at least one of) the OPERATE privilege(s) on SYSTEM for this operation");
+
+        // clean
+        executeDdlAsRoot("drop security integration ldap2;");
+        executeDdlAsRoot("drop role role11read");
+    }
 
     @Test
     public void testQueryAndDML() throws Exception {

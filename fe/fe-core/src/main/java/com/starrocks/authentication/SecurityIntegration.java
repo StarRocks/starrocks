@@ -43,6 +43,10 @@ public abstract class SecurityIntegration {
         return propertyMap;
     }
 
+    public String getName() {
+        return name;
+    }
+
     public String getComment() {
         return propertyMap.getOrDefault("comment", "");
     }

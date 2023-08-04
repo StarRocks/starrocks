@@ -47,6 +47,8 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.LDAPSecurityIntegration;
+import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
@@ -69,6 +71,7 @@ import com.starrocks.catalog.MetadataViewer;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -82,6 +85,7 @@ import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
@@ -103,13 +107,18 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.credential.CloudCredentialUtil;
 import com.starrocks.epack.privilege.AuthorizerEPack;
 import com.starrocks.epack.privilege.DbUID;
+import com.starrocks.epack.privilege.LDAPRoleMapping;
 import com.starrocks.epack.privilege.Policy;
+import com.starrocks.epack.privilege.RoleMapping;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.epack.sql.ast.ShowClustersStmt;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
+import com.starrocks.epack.sql.ast.ShowCreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
+import com.starrocks.epack.sql.ast.ShowRoleMappingStatement;
+import com.starrocks.epack.sql.ast.ShowSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ShowWarehousesStmt;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportJob;
@@ -244,6 +253,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -360,6 +370,12 @@ public class ShowExecutor {
             handleShowGrants();
         } else if (stmt instanceof ShowRolesStmt) {
             handleShowRoles();
+        } else if (stmt instanceof ShowSecurityIntegrationStatement) {
+            handleShowSecurityIntegration();
+        } else if (stmt instanceof ShowRoleMappingStatement) {
+            handleShowRoleMapping();
+        } else if (stmt instanceof ShowCreateSecurityIntegrationStatement) {
+            handleShowCreateSecurityIntegration();
         } else if (stmt instanceof AdminShowReplicaStatusStmt) {
             handleAdminShowTabletStatus();
         } else if (stmt instanceof AdminShowReplicaDistributionStmt) {
@@ -432,23 +448,29 @@ public class ShowExecutor {
             authenticationInfoMap.putAll(authenticationManager.getUserToAuthenticationInfo());
         } else {
             UserAuthenticationInfo userAuthenticationInfo;
+            UserIdentity userIdentity;
             if (showAuthenticationStmt.getUserIdent() == null) {
-                userAuthenticationInfo = authenticationManager
-                        .getUserAuthenticationInfoByUserIdentity(connectContext.getCurrentUserIdentity());
+                userIdentity = connectContext.getCurrentUserIdentity();
             } else {
-                userAuthenticationInfo =
-                        authenticationManager.getUserAuthenticationInfoByUserIdentity(
-                                showAuthenticationStmt.getUserIdent());
+                userIdentity = showAuthenticationStmt.getUserIdent();
             }
-            authenticationInfoMap.put(showAuthenticationStmt.getUserIdent(), userAuthenticationInfo);
+            userAuthenticationInfo = authenticationManager
+                    .getUserAuthenticationInfoByUserIdentity(userIdentity);
+            authenticationInfoMap.put(userIdentity, userAuthenticationInfo);
         }
         for (Map.Entry<UserIdentity, UserAuthenticationInfo> entry : authenticationInfoMap.entrySet()) {
             UserAuthenticationInfo userAuthenticationInfo = entry.getValue();
-            userAuthInfos.add(Lists.newArrayList(
-                    entry.getKey().toString(),
-                    userAuthenticationInfo.getPassword().length == 0 ? "No" : "Yes",
-                    userAuthenticationInfo.getAuthPlugin(),
-                    userAuthenticationInfo.getTextForAuthPlugin()));
+            UserIdentity userIdentity = entry.getKey();
+            if (userIdentity.isEphemeral()) {
+                userAuthInfos.add(Arrays.asList(userIdentity.toString(), "Yes",
+                        FeConstants.NULL_STRING, FeConstants.NULL_STRING));
+            } else {
+                userAuthInfos.add(Lists.newArrayList(
+                        userIdentity.toString(),
+                        userAuthenticationInfo.getPassword().length == 0 ? "No" : "Yes",
+                        userAuthenticationInfo.getAuthPlugin(),
+                        userAuthenticationInfo.getTextForAuthPlugin()));
+            }
         }
 
         resultSet = new ShowResultSet(showAuthenticationStmt.getMetaData(), userAuthInfos);
@@ -2265,15 +2287,19 @@ public class ShowExecutor {
                 infos.addAll(privilegeToRowString(authorizationManager,
                         new GrantRevokeClause(null, showStmt.getRole()), typeToPrivilegeEntryList));
             } else {
-                List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForUser(showStmt.getUserIdent());
+                UserIdentity userIdentity = showStmt.getUserIdent();
+                List<String> granteeRole =
+                        authorizationManager.getGranteeRoleDetailsForUser(userIdentity);
                 if (granteeRole != null) {
                     infos.add(granteeRole);
                 }
 
-                Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
-                        authorizationManager.getTypeToPrivilegeEntryListByUser(showStmt.getUserIdent());
-                infos.addAll(privilegeToRowString(authorizationManager,
-                        new GrantRevokeClause(showStmt.getUserIdent(), null), typeToPrivilegeEntryList));
+                if (!userIdentity.isEphemeral()) {
+                    Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
+                            authorizationManager.getTypeToPrivilegeEntryListByUser(showStmt.getUserIdent());
+                    infos.addAll(privilegeToRowString(authorizationManager,
+                            new GrantRevokeClause(showStmt.getUserIdent(), null), typeToPrivilegeEntryList));
+                }
             }
             resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
         } catch (PrivilegeException e) {
@@ -2292,6 +2318,86 @@ public class ShowExecutor {
                 authorizationManager.getRoleComment(e))));
 
         resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
+    }
+
+    private void handleShowCreateSecurityIntegration() {
+        ShowCreateSecurityIntegrationStatement showStmt = (ShowCreateSecurityIntegrationStatement) stmt;
+        String name = showStmt.getName();
+        List<List<String>> infos = new ArrayList<>();
+        SecurityIntegration securityIntegration = GlobalStateMgr.getCurrentState().getAuthenticationMgr()
+                .getSecurityIntegration(name);
+        if (securityIntegration != null) {
+            Map<String, String> propertyMap = securityIntegration.getPropertyMap();
+            String propString = propertyMap.entrySet().stream()
+                    .map(entry -> "\"" + entry.getKey() + "\" = \"" + entry.getValue() + "\"")
+                    .collect(Collectors.joining(",\n"));
+            infos.add(Lists.newArrayList(name,
+                    "CREATE SECURITY INTEGRATION `" + name +
+                            "` PROPERTIES (\n" + propString + "\n)"));
+        }
+        resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
+    }
+
+    private void handleShowSecurityIntegration() {
+        ShowSecurityIntegrationStatement statement = (ShowSecurityIntegrationStatement) stmt;
+        AuthenticationMgr authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        Set<SecurityIntegration> securityIntegrations = authenticationManager.getAllSecurityIntegrations();
+        List<List<String>> infos = new ArrayList<>();
+        for (SecurityIntegration securityIntegration : securityIntegrations) {
+            List<String> info = new ArrayList<>();
+            info.add(securityIntegration.getName());
+            info.add(securityIntegration.getType());
+            if (securityIntegration.getComment().isEmpty()) {
+                info.add(FeConstants.NULL_STRING);
+            } else {
+                info.add(securityIntegration.getComment());
+            }
+            infos.add(info);
+        }
+
+        // sort by type, then by name
+        List<List<String>> sortedList = infos.stream()
+                .sorted(
+                        Comparator.comparing((List<String> sublist) -> sublist.get(1))
+                                .thenComparing((List<String> sublist) -> sublist.get(0))
+                )
+                .collect(Collectors.toList());
+
+        resultSet = new ShowResultSet(statement.getMetaData(), sortedList);
+    }
+
+    private void handleShowRoleMapping() {
+        ShowRoleMappingStatement statement = (ShowRoleMappingStatement) stmt;
+        AuthorizationMgr authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+        Set<RoleMapping> roleMappings = authorizationManager.getRoleMappingMetaMgr().getAllRoleMappings();
+        List<List<String>> infos = new ArrayList<>();
+        for (RoleMapping roleMapping : roleMappings) {
+            SecurityIntegration securityIntegration = GlobalStateMgr.getCurrentState().getAuthenticationMgr()
+                    .getSecurityIntegration(roleMapping.getIntegrationName());
+            if (securityIntegration == null) {
+                continue;
+            }
+            List<String> info = new ArrayList<>();
+            info.add(roleMapping.getName());
+            info.add(roleMapping.getIntegrationName());
+            info.add(roleMapping.getRoleName());
+            info.add(roleMapping instanceof LDAPRoleMapping ?
+                    String.join(";", ((LDAPRoleMapping) roleMapping).getGroupSet()) : FeConstants.NULL_STRING);
+            info.add(securityIntegration instanceof LDAPSecurityIntegration ?
+                    TimeUtils.format(new Date(((LDAPSecurityIntegration) securityIntegration).getLastRefreshTime()),
+                            PrimitiveType.DATETIME) : FeConstants.NULL_STRING);
+            infos.add(info);
+        }
+
+        // sort by integration name, then by role mapping name
+        List<List<String>> sortedList = infos.stream()
+                .sorted(
+                        Comparator.comparing((List<String> sublist) -> sublist.get(1))
+                                .thenComparing((List<String> sublist) -> sublist.get(0))
+                )
+                .collect(Collectors.toList());
+
+        resultSet = new ShowResultSet(statement.getMetaData(), sortedList);
     }
 
     private void handleShowUser() {

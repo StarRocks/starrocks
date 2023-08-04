@@ -39,6 +39,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.authentication.LDAPGroupCacheMgr;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
@@ -74,6 +75,8 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TGetWarehousesRequest;
 import com.starrocks.thrift.TGetWarehousesResponse;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TRefreshRoleMappingRequest;
+import com.starrocks.thrift.TRefreshRoleMappingResponse;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
@@ -1148,6 +1151,41 @@ public class NodeMgr {
         }
 
         return warehouseInfos;
+    }
+
+    public void refreshRoleMapping(LDAPGroupCacheMgr ldapGroupCacheMgr) throws DdlException {
+        // refresh leader itself
+        ldapGroupCacheMgr.refreshGroupCache(true);
+
+        // refresh followers and observers
+        List<Frontend> allFrontends = getFrontends(null);
+        int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000
+                + Config.thrift_rpc_timeout_ms;
+        StringBuilder errMsg = new StringBuilder();
+        for (Frontend fe : allFrontends) {
+            if (fe.getHost().equals(getSelfNode().first)) {
+                continue;
+            }
+
+            // TODO(yiming): set role name list if we support to refresh a single role mapping in future version
+            TRefreshRoleMappingRequest request = new TRefreshRoleMappingRequest();
+            try {
+                // Currently, the responded status is always OK.
+                TRefreshRoleMappingResponse response = FrontendServiceProxy
+                        .call(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
+                                timeout,
+                                Config.thrift_rpc_retry_times,
+                                client -> client.refreshRoleMapping(request));
+            } catch (Exception e) {
+                errMsg.append("refresh role mapping for fe[").append(fe.getHost()).append("] failed, error msg: ")
+                        .append(e.getMessage());
+                LOG.warn("{}", errMsg, e);
+            }
+        }
+
+        if (errMsg.length() > 0) {
+            ErrorReport.reportDdlException(ErrorCode.ERROR_SET_CONFIG_FAILED, errMsg.toString());
+        }
     }
 
     public void setConfig(AdminSetConfigStmt stmt) throws DdlException {

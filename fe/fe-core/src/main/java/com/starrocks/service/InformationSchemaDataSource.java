@@ -95,12 +95,12 @@ public class InformationSchemaDataSource {
         for (String fullName : dbNames) {
 
             try {
-                Authorizer.checkAnyActionOnOrInDb(currentUser, null,
+                Authorizer.checkAnyActionOnOrInDb(currentUser,
+                        currentUser.isEphemeral() ? currentUser.getMappedRoleIds() : null,
                         InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, fullName);
             } catch (AccessDeniedException e) {
                 continue;
             }
-
             final String db1 = ClusterNamespace.getNameFromFullName(fullName);
             if (matcher != null && !matcher.match(db1)) {
                 continue;
@@ -137,8 +137,9 @@ public class InformationSchemaDataSource {
                     List<Table> allTables = db.getTables();
                     for (Table table : allTables) {
                         try {
-                            Authorizer.checkAnyActionOnTableLikeObject(result.currentUser,
-                                    null, dbName, table);
+                            UserIdentity currentUser = result.currentUser;
+                            Authorizer.checkAnyActionOnTableLikeObject(currentUser,
+                                    currentUser.isEphemeral() ? currentUser.getMappedRoleIds() : null, dbName, table);
                         } catch (AccessDeniedException e) {
                             continue;
                         }
@@ -304,7 +305,9 @@ public class InformationSchemaDataSource {
                     List<Table> allTables = db.getTables();
                     for (Table table : allTables) {
                         try {
-                            Authorizer.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table);
+                            UserIdentity currentUser = result.currentUser;
+                            Authorizer.checkAnyActionOnTableLikeObject(currentUser,
+                                    currentUser.isEphemeral() ? currentUser.getMappedRoleIds() : null, dbName, table);
                         } catch (AccessDeniedException e) {
                             continue;
                         }

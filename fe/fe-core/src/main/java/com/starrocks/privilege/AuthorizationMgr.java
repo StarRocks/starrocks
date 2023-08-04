@@ -31,6 +31,9 @@ import com.starrocks.common.Pair;
 import com.starrocks.epack.privilege.AuthorizationProviderEPack;
 import com.starrocks.epack.privilege.ObjectTypeEPack;
 import com.starrocks.epack.privilege.PolicyPEntryObject;
+import com.starrocks.epack.privilege.PrivilegeBuiltinConstantsEPack;
+import com.starrocks.epack.privilege.PrivilegeTypeEPack;
+import com.starrocks.epack.privilege.RoleMappingMetaMgr;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -108,6 +111,9 @@ public class AuthorizationMgr {
     // set by load() to distinguish brand-new environment with upgraded environment
     private boolean isLoaded = false;
 
+    @SerializedName("rmmgr")
+    private RoleMappingMetaMgr roleMappingMetaMgr;
+
     // only used in deserialization
     protected AuthorizationMgr() {
         roleNameToId = new HashMap<>();
@@ -115,6 +121,7 @@ public class AuthorizationMgr {
         roleIdToPrivilegeCollection = new HashMap<>();
         userLock = new ReentrantReadWriteLock();
         roleLock = new ReentrantReadWriteLock();
+        roleMappingMetaMgr = new RoleMappingMetaMgr();
     }
 
     public AuthorizationMgr(GlobalStateMgr globalStateMgr, AuthorizationProvider provider) {
@@ -131,6 +138,7 @@ public class AuthorizationMgr {
         roleLock = new ReentrantReadWriteLock();
         userToPrivilegeCollection = new HashMap<>();
         roleIdToPrivilegeCollection = new HashMap<>();
+        roleMappingMetaMgr = new RoleMappingMetaMgr();
         initBuiltinRolesAndUsers();
     }
 
@@ -223,6 +231,28 @@ public class AuthorizationMgr {
             // all initial privileges are supposed to be legal
             throw new RuntimeException("Fatal error when initializing built-in role and user", e);
         }
+
+        initBuiltinRolesAndUsersEPack();
+    }
+
+    private void initBuiltinRolesAndUsersEPack() {
+        // security_admin role
+        RolePrivilegeCollectionV2 rolePrivilegeCollection = initBuiltinRoleUnlocked(
+                PrivilegeBuiltinConstantsEPack.SECURITY_ADMIN_ROLE_ID,
+                PrivilegeBuiltinConstantsEPack.SECURITY_ADMIN_ROLE_NAME,
+                "built-in security administration role");
+        // GRANT SECURITY ON SYSTEM
+        try {
+            initPrivilegeCollections(
+                    rolePrivilegeCollection,
+                    ObjectType.SYSTEM,
+                    Arrays.asList(PrivilegeTypeEPack.SECURITY, PrivilegeType.OPERATE),
+                    null,
+                    false);
+        } catch (PrivilegeException e) {
+            throw new RuntimeException("Fatal error when initializing built-in role and user for EPack", e);
+        }
+        rolePrivilegeCollection.disableMutable(); // not mutable
     }
 
     // called by initBuiltinRolesAndUsers()
@@ -1209,6 +1239,12 @@ public class AuthorizationMgr {
             List<String> roleNameToBeDropped = new ArrayList<>();
             Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModified = new HashMap<>();
             for (String roleName : stmt.getRoles()) {
+                Set<String> roleMappings = getRoleMappingMetaMgr().getRoleMappingsForRole(roleName);
+                if (!roleMappings.isEmpty()) {
+                    throw new DdlException(
+                            "cannot drop role '" + roleName + "' because role mappings '" + roleMappings +
+                                    "' are using this role, you need to drop them first");
+                }
                 if (!roleNameToId.containsKey(roleName)) {
                     // Existence verification has been performed in the Analyzer stage. If it not exists here,
                     // it may be that other threads have performed the same operation, and return directly here
@@ -1271,7 +1307,7 @@ public class AuthorizationMgr {
     }
 
     public boolean isBuiltinRole(String name) {
-        return PrivilegeBuiltinConstants.BUILT_IN_ROLE_NAMES.contains(name);
+        return PrivilegeBuiltinConstantsEPack.BUILT_IN_ROLE_NAMES.contains(name);
     }
 
     public String getRoleComment(String name) {
@@ -1398,6 +1434,10 @@ public class AuthorizationMgr {
             throw new PrivilegeException(String.format("Role %s doesn't exist!", name));
         }
         return roleId;
+    }
+
+    public RoleMappingMetaMgr getRoleMappingMetaMgr() {
+        return roleMappingMetaMgr;
     }
 
     public PEntryObject generateObject(ObjectType objectType, List<String> objectTokenList) throws PrivilegeException {
@@ -1774,7 +1814,7 @@ public class AuthorizationMgr {
                     // Use hard-code PrivilegeCollection in the memory as the built-in role permission.
                     // The reason why need to replay from the image here
                     // is because the associated information of the role-id is stored in the image.
-                    if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
+                    if (PrivilegeBuiltinConstantsEPack.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
                         RolePrivilegeCollectionV2 builtInRolePrivilegeCollection =
                                 ret.roleIdToPrivilegeCollection.get(roleId);
                         rolePrivilegeCollection.typeToPrivilegeEntryList
@@ -1883,7 +1923,7 @@ public class AuthorizationMgr {
                 // Use hard-code PrivilegeCollection in the memory as the built-in role permission.
                 // The reason why need to replay from the image here
                 // is because the associated information of the role-id is stored in the image.
-                if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
+                if (PrivilegeBuiltinConstantsEPack.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
                     RolePrivilegeCollectionV2 builtInRolePrivilegeCollection =
                             ret.roleIdToPrivilegeCollection.get(roleId);
                     collection.typeToPrivilegeEntryList = builtInRolePrivilegeCollection.typeToPrivilegeEntryList;
@@ -1902,6 +1942,7 @@ public class AuthorizationMgr {
             pluginVersion = ret.pluginVersion;
             userToPrivilegeCollection = ret.userToPrivilegeCollection;
             roleIdToPrivilegeCollection = ret.roleIdToPrivilegeCollection;
+            roleMappingMetaMgr = ret.roleMappingMetaMgr;
         } catch (PrivilegeException e) {
             throw new IOException("failed to load AuthorizationManager!", e);
         }

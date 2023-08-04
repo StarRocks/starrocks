@@ -30,6 +30,12 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
     public static final String LDAP_SEC_INTEGRATION_PROP_ROOT_PWD_KEY = "ldap_bind_root_pwd";
     public static final String LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY = "ldap_cache_refresh_interval";
 
+    /**
+     * last refresh time of group membership for all role
+     * mappings connected with this security integration.
+     */
+    private long lastRefreshTime = -1;
+
 
     public LDAPSecurityIntegration(String name, Map<String, String> propertyMap) {
         super(name, propertyMap);
@@ -79,6 +85,14 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
         maskedMap.put(LDAP_SEC_INTEGRATION_PROP_ROOT_PWD_KEY, "******");
 
         return maskedMap;
+    }
+
+    public long getLastRefreshTime() {
+        return lastRefreshTime;
+    }
+
+    public void setLastRefreshTime(long lastRefreshTime) {
+        this.lastRefreshTime = lastRefreshTime;
     }
 
     @Override

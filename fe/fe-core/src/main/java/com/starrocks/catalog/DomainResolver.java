@@ -79,7 +79,7 @@ public class DomainResolver extends FrontendDaemon {
     }
 
     /**
-     * if a follower has just transfered to leader, or if it is replaying a AuthUpgrade journal.
+     * if a follower has just transferred to leader, or if it is replaying a AuthUpgrade journal.
      * this function will be called to switch from using Auth to using AuthenticationManager.
      */
     public void setAuthenticationManager(AuthenticationMgr manager) {

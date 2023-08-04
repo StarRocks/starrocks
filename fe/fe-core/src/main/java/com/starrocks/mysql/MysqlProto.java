@@ -50,9 +50,8 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
-
-import static com.starrocks.mysql.MysqlHandshakePacket.AUTHENTICATION_KERBEROS_CLIENT;
 
 // MySQL protocol util
 public class MysqlProto {
@@ -93,8 +92,8 @@ public class MysqlProto {
 
 
         context.setCurrentUserIdentity(currentUser);
+        context.setCurrentRoleIds(currentUser);
         if (!currentUser.isEphemeral()) {
-            context.setCurrentRoleIds(currentUser);
             context.setAuthDataSalt(randomString);
         }
         context.setQualifiedUser(user);
@@ -181,7 +180,7 @@ public class MysqlProto {
             // 1. clear the serializer
             serializer.reset();
             // 2. build the auth switch request and send to the client
-            if (authPluginName.equals(AUTHENTICATION_KERBEROS_CLIENT)) {
+            if (authPluginName.equals(MysqlHandshakePacket.AUTHENTICATION_KERBEROS_CLIENT)) {
                 if (GlobalStateMgr.getCurrentState().getAuthenticationMgr().isSupportKerberosAuth()) {
                     try {
                         handshakePacket.buildKrb5AuthRequest(serializer, context.getRemoteIP(), authPacket.getUser());
@@ -217,7 +216,9 @@ public class MysqlProto {
         serializer.setCapability(context.getCapability());
 
         // NOTE: when we behind proxy, we need random string sent by proxy.
-        byte[] randomString = handshakePacket.getAuthPluginData();
+        byte[] randomString =
+                Objects.equals(authPluginName, MysqlHandshakePacket.CLEAR_PASSWORD_PLUGIN_NAME) ?
+                        null : handshakePacket.getAuthPluginData();
         // check authenticate
         if (!authenticate(context, authPacket.getAuthResponse(), randomString, authPacket.getUser())) {
             sendResponsePacket(context);

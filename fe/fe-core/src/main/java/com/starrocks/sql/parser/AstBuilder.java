@@ -170,7 +170,6 @@ import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
-import com.starrocks.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
@@ -5162,20 +5161,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         grantRevokePrivilegeObjects.setPrivilegeObjectNameTokensList(objectNameList);
         return grantRevokePrivilegeObjects;
-    }
-
-    @Override
-    public ParseNode visitCreateSecurityIntegrationStatement(
-            StarRocksParser.CreateSecurityIntegrationStatementContext context) {
-        String name = ((Identifier) visit(context.identifier())).getValue();
-        Map<String, String> propertyMap = new HashMap<>();
-        if (context.properties() != null) {
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                propertyMap.put(property.getKey(), property.getValue());
-            }
-        }
-        return new CreateSecurityIntegrationStatement(name, propertyMap, createPos(context));
     }
 
     // ------------------------------------------- Expression ----------------------------------------------------------

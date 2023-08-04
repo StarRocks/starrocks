@@ -297,7 +297,8 @@ public abstract class BaseAction implements IAction {
     // For new RBAC privilege framework
     protected void checkActionOnSystem(UserIdentity currentUser, PrivilegeType... systemActions) {
         for (PrivilegeType systemAction : systemActions) {
-            Authorizer.checkSystemAction(currentUser, null, systemAction);
+            Authorizer.checkSystemAction(currentUser,
+                    currentUser.isEphemeral() ? currentUser.getMappedRoleIds() : null, systemAction);
         }
     }
 

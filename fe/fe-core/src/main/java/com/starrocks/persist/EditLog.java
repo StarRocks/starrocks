@@ -67,6 +67,8 @@ import com.starrocks.epack.persist.CreateTableInfoEPack;
 import com.starrocks.epack.persist.DropPolicyLog;
 import com.starrocks.epack.persist.DropWarehouseLog;
 import com.starrocks.epack.persist.OperationTypeEPack;
+import com.starrocks.epack.persist.RoleMappingPersistInfo;
+import com.starrocks.epack.persist.SecurityIntegrationPersistInfo;
 import com.starrocks.epack.privilege.DbUID;
 import com.starrocks.epack.privilege.Policy;
 import com.starrocks.epack.sql.ast.PolicyName;
@@ -1036,10 +1038,38 @@ public class EditLog {
                     globalStateMgr.getAuthenticationMgr().replayDropUser(userIdentity);
                     break;
                 }
-                case OperationType.OP_CREATE_SECURITY_INTEGRATION: {
-                    SecurityIntegrationInfo info = (SecurityIntegrationInfo) journal.getData();
+                case OperationTypeEPack.OP_CREATE_SECURITY_INTEGRATION: {
+                    SecurityIntegrationPersistInfo info = (SecurityIntegrationPersistInfo) journal.getData();
                     globalStateMgr.getAuthenticationMgr().replayCreateSecurityIntegration(
                             info.name, info.propertyMap);
+                    break;
+                }
+                case OperationTypeEPack.OP_ALTER_SECURITY_INTEGRATION: {
+                    SecurityIntegrationPersistInfo info = (SecurityIntegrationPersistInfo) journal.getData();
+                    globalStateMgr.getAuthenticationMgr().replayAlterSecurityIntegration(
+                            info.name, info.propertyMap);
+                    break;
+                }
+                case OperationTypeEPack.OP_DROP_SECURITY_INTEGRATION: {
+                    SecurityIntegrationPersistInfo info = (SecurityIntegrationPersistInfo) journal.getData();
+                    globalStateMgr.getAuthenticationMgr().replayDropSecurityIntegration(info.name);
+                    break;
+                }
+                case OperationTypeEPack.OP_CREATE_ROLE_MAPPING: {
+                    RoleMappingPersistInfo info = (RoleMappingPersistInfo) journal.getData();
+                    globalStateMgr.getAuthorizationMgr().getRoleMappingMetaMgr().replayCreateRoleMapping(
+                            info.name, info.propertyMap);
+                    break;
+                }
+                case OperationTypeEPack.OP_ALTER_ROLE_MAPPING: {
+                    RoleMappingPersistInfo info = (RoleMappingPersistInfo) journal.getData();
+                    globalStateMgr.getAuthorizationMgr().getRoleMappingMetaMgr().replayAlterRoleMapping(
+                            info.name, info.propertyMap);
+                    break;
+                }
+                case OperationTypeEPack.OP_DROP_ROLE_MAPPING: {
+                    RoleMappingPersistInfo info = (RoleMappingPersistInfo) journal.getData();
+                    globalStateMgr.getAuthorizationMgr().getRoleMappingMetaMgr().replayDropRoleMapping(info.name);
                     break;
                 }
                 case OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2: {
@@ -2044,8 +2074,33 @@ public class EditLog {
     }
 
     public void logCreateSecurityIntegration(String name, Map<String, String> propertyMap) {
-        SecurityIntegrationInfo info = new SecurityIntegrationInfo(name, propertyMap);
-        logEdit(OperationType.OP_CREATE_SECURITY_INTEGRATION, info);
+        SecurityIntegrationPersistInfo info = new SecurityIntegrationPersistInfo(name, propertyMap);
+        logEdit(OperationTypeEPack.OP_CREATE_SECURITY_INTEGRATION, info);
+    }
+
+    public void logAlterSecurityIntegration(String name, Map<String, String> alterProps) {
+        SecurityIntegrationPersistInfo info = new SecurityIntegrationPersistInfo(name, alterProps);
+        logEdit(OperationTypeEPack.OP_ALTER_SECURITY_INTEGRATION, info);
+    }
+
+    public void logDropSecurityIntegration(String name) {
+        SecurityIntegrationPersistInfo info = new SecurityIntegrationPersistInfo(name, null);
+        logEdit(OperationTypeEPack.OP_DROP_SECURITY_INTEGRATION, info);
+    }
+
+    public void logCreateRoleMapping(String name, Map<String, String> propertyMap) {
+        RoleMappingPersistInfo info = new RoleMappingPersistInfo(name, propertyMap);
+        logEdit(OperationTypeEPack.OP_CREATE_ROLE_MAPPING, info);
+    }
+
+    public void logAlterRoleMapping(String name, Map<String, String> alterProps) {
+        RoleMappingPersistInfo info = new RoleMappingPersistInfo(name, alterProps);
+        logEdit(OperationTypeEPack.OP_ALTER_ROLE_MAPPING, info);
+    }
+
+    public void logDropRoleMapping(String name) {
+        RoleMappingPersistInfo info = new RoleMappingPersistInfo(name, null);
+        logEdit(OperationTypeEPack.OP_DROP_ROLE_MAPPING, info);
     }
 
     public void logUpdateUserPrivilege(

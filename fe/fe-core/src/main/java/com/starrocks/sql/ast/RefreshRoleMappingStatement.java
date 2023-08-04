@@ -17,28 +17,18 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.Map;
+public class RefreshRoleMappingStatement extends DdlStmt {
+    public RefreshRoleMappingStatement() {
+        this(NodePosition.ZERO);
+    }
 
-public class CreateSecurityIntegrationStatement extends DdlStmt {
-    private final String name;
-    private final Map<String, String> propertyMap;
-
-    public CreateSecurityIntegrationStatement(String name, Map<String, String> propertyMap, NodePosition pos) {
+    public RefreshRoleMappingStatement(NodePosition pos) {
         super(pos);
-        this.name = name;
-        this.propertyMap = propertyMap;
-    }
-
-    public Map<String, String> getPropertyMap() {
-        return propertyMap;
-    }
-
-    public String getName() {
-        return name;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateSecurityIntegrationStatement(this, context);
+        return visitor.visitRefreshRoleMappingStatement(this, context);
     }
+
 }

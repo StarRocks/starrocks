@@ -16,6 +16,7 @@
 package com.starrocks.authentication;
 
 import com.starrocks.common.AnalysisException;
+import com.starrocks.epack.privilege.AuthenticationMgrEPack;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.CreateUserInfo;
@@ -77,7 +78,7 @@ public class AuthenticationManagerTest {
         byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
         byte[] scramble = MysqlPassword.scramble(seed, "abc");
 
-        AuthenticationMgr masterManager = new AuthenticationMgr();
+        AuthenticationMgr masterManager = new AuthenticationMgrEPack();
         Assert.assertNull(masterManager.checkPassword(
                 testUserWithIp.getQualifiedUser(), testUserWithIp.getHost(), scramble, seed));
         Assert.assertFalse(masterManager.doesUserExist(testUser));

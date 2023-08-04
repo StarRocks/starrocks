@@ -69,11 +69,11 @@ public class UserPEntryObject implements PEntryObject {
     }
 
     /**
-     * normally we check if a user exists by AuthenticationManager,
-     * but here we checked by AuthorizationManager to avoid deadlock.
+     * normally we check if a user exists by AuthenticationMgr,
+     * but here we checked by AuthorizationMgr to avoid deadlock.
      * lock order should always be:
-     * AuthenticationManager.lock -> AuthorizationManager.userLock -> AuthorizationManager.roleLock
-     * All validation are made in com.starrocks.privilege.AuthorizationManager#removeInvalidObject()
+     * AuthenticationMgr.lock -> AuthorizationMgr.userLock -> AuthorizationMgr.roleLock
+     * All validation are made in com.starrocks.privilege.AuthorizationMgr#removeInvalidObject()
      */
     @Override
     public boolean validate(GlobalStateMgr globalStateMgr) {

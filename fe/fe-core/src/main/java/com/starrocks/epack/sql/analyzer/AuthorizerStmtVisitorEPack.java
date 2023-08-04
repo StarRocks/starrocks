@@ -5,13 +5,19 @@ package com.starrocks.epack.sql.analyzer;
 import com.starrocks.epack.privilege.AuthorizerEPack;
 import com.starrocks.epack.privilege.PrivilegeTypeEPack;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
+import com.starrocks.epack.sql.ast.AlterRoleMappingStatement;
+import com.starrocks.epack.sql.ast.AlterSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ApplyMaskingPolicyClause;
 import com.starrocks.epack.sql.ast.ApplyRowAccessPolicyClause;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.CreateRoleMappingStatement;
 import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
+import com.starrocks.epack.sql.ast.DropRoleMappingStatement;
+import com.starrocks.epack.sql.ast.DropSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.DropWarehouseStmt;
 import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.epack.sql.ast.PolicyType;
@@ -19,7 +25,10 @@ import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.epack.sql.ast.SetWarehouseStmt;
 import com.starrocks.epack.sql.ast.ShowClustersStmt;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
+import com.starrocks.epack.sql.ast.ShowCreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
+import com.starrocks.epack.sql.ast.ShowRoleMappingStatement;
+import com.starrocks.epack.sql.ast.ShowSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ShowWarehousesStmt;
 import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
@@ -35,6 +44,7 @@ import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.RefreshRoleMappingStatement;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -179,6 +189,82 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor {
             WithRowAccessPolicy withRowAccessPolicy = applyMaskingPolicyClause.getRowAccessPolicyContext();
             checkPolicyApply(null, Collections.singletonList(withRowAccessPolicy), context);
         }
+    }
+
+    // ---------------------------------------- Security Integration Statement ---------------------------------------
+    @Override
+    public Void visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement statement,
+                                                        ConnectContext context) {
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(),
+                context.getCurrentRoleIds(), PrivilegeTypeEPack.SECURITY);
+        return null;
+    }
+
+    @Override
+    public Void visitDropSecurityIntegrationStatement(DropSecurityIntegrationStatement statement,
+                                                      ConnectContext context) {
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(),
+                context.getCurrentRoleIds(), PrivilegeTypeEPack.SECURITY);
+        return null;
+    }
+
+    @Override
+    public Void visitAlterSecurityIntegrationStatement(AlterSecurityIntegrationStatement statement,
+                                                       ConnectContext context) {
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(),
+                context.getCurrentRoleIds(), PrivilegeTypeEPack.SECURITY);
+        return null;
+    }
+
+    @Override
+    public Void visitShowSecurityIntegrationStatement(ShowSecurityIntegrationStatement statement,
+                                                      ConnectContext context) {
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(),
+                context.getCurrentRoleIds(), PrivilegeTypeEPack.SECURITY);
+        return null;
+    }
+
+    @Override
+    public Void visitShowCreateSecurityIntegrationStatement(ShowCreateSecurityIntegrationStatement statement,
+                                                            ConnectContext context) {
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(),
+                context.getCurrentRoleIds(), PrivilegeTypeEPack.SECURITY);
+        return null;
+    }
+
+    @Override
+    public Void visitCreateRoleMappingStatement(CreateRoleMappingStatement statement, ConnectContext context) {
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(),
+                context.getCurrentRoleIds(), PrivilegeTypeEPack.SECURITY);
+        return null;
+    }
+
+    @Override
+    public Void visitAlterRoleMappingStatement(AlterRoleMappingStatement statement, ConnectContext context) {
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(),
+                context.getCurrentRoleIds(), PrivilegeTypeEPack.SECURITY);
+        return null;
+    }
+
+    @Override
+    public Void visitDropRoleMappingStatement(DropRoleMappingStatement statement, ConnectContext context) {
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(),
+                context.getCurrentRoleIds(), PrivilegeTypeEPack.SECURITY);
+        return null;
+    }
+
+    @Override
+    public Void visitShowRoleMappingStatement(ShowRoleMappingStatement statement, ConnectContext context) {
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(),
+                context.getCurrentRoleIds(), PrivilegeTypeEPack.SECURITY);
+        return null;
+    }
+
+    @Override
+    public Void visitRefreshRoleMappingStatement(RefreshRoleMappingStatement statement, ConnectContext context) {
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(),
+                context.getCurrentRoleIds(), PrivilegeTypeEPack.SECURITY);
+        return null;
     }
 
     // --------------------------------- Warehouse Statement ---------------------------------

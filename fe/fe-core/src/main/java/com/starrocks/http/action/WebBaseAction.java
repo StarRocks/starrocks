@@ -191,7 +191,6 @@ public class WebBaseAction extends BaseAction {
             ctx.setCurrentUserIdentity(currentUser);
             ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
             ctx.setCurrentRoleIds(currentUser);
-
             ctx.setThreadLocalInfo();
 
             return true;

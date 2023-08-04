@@ -27,11 +27,17 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.epack.privilege.SecurityPolicyMgr;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
+import com.starrocks.epack.sql.ast.AlterRoleMappingStatement;
+import com.starrocks.epack.sql.ast.AlterSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.CreateRoleMappingStatement;
 import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
+import com.starrocks.epack.sql.ast.DropRoleMappingStatement;
+import com.starrocks.epack.sql.ast.DropSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.DropWarehouseStmt;
 import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
@@ -80,7 +86,6 @@ import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
-import com.starrocks.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -109,6 +114,7 @@ import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
+import com.starrocks.sql.ast.RefreshRoleMappingStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
@@ -529,7 +535,72 @@ public class DDLStmtExecutor {
                                                                      ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getAuthenticationMgr().createSecurityIntegration(
-                        stmt.getName(), stmt.getPropertyMap());
+                        stmt.getName(), stmt.getPropertyMap(), false);
+            });
+
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterSecurityIntegrationStatement(AlterSecurityIntegrationStatement stmt,
+                                                                    ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getAuthenticationMgr().alterSecurityIntegration(
+                        stmt.getName(), stmt.getProperties(), false);
+            });
+
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropSecurityIntegrationStatement(DropSecurityIntegrationStatement stmt,
+                                                                   ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getAuthenticationMgr().dropSecurityIntegration(
+                        stmt.getName(), false);
+            });
+
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreateRoleMappingStatement(CreateRoleMappingStatement stmt,
+                                                             ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getAuthorizationMgr().getRoleMappingMetaMgr().createRoleMapping(
+                        stmt.getName(), stmt.getPropertyMap(), false);
+            });
+
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterRoleMappingStatement(AlterRoleMappingStatement stmt,
+                                                            ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getAuthorizationMgr().getRoleMappingMetaMgr().alterRoleMapping(
+                        stmt.getName(), stmt.getProperties(), false);
+            });
+
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropRoleMappingStatement(DropRoleMappingStatement stmt,
+                                                           ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getAuthorizationMgr().getRoleMappingMetaMgr().dropRoleMapping(
+                        stmt.getName(), false);
+            });
+
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitRefreshRoleMappingStatement(RefreshRoleMappingStatement stmt,
+                                                              ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().refreshRoleMapping(stmt);
             });
 
             return null;
@@ -552,6 +623,7 @@ public class DDLStmtExecutor {
                         context.getGlobalStateMgr().getSecurityPolicyManager();
                 securityPolicyManagerEE.dropPolicy(stmt);
             });
+
             return null;
         }
 
@@ -562,6 +634,7 @@ public class DDLStmtExecutor {
                         context.getGlobalStateMgr().getSecurityPolicyManager();
                 securityPolicyManagerEE.alterPolicy(stmt);
             });
+
             return null;
         }
 
@@ -570,6 +643,7 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().alterCluster(stmt);
             });
+
             return null;
         }
 

@@ -119,7 +119,7 @@ public class GrantsTo {
         } else {
             List<String> roles = authorizationManager.getAllRoles();
             for (String grantee : roles) {
-                if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_NAMES.contains(grantee)) {
+                if (PrivilegeBuiltinConstantsEPack.IMMUTABLE_BUILT_IN_ROLE_NAMES.contains(grantee)) {
                     continue;
                 }
 

@@ -22,6 +22,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.epack.privilege.PrivilegeBuiltinConstantsEPack;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -30,7 +31,6 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.RolePrivilegeCollectionV2;
 import com.starrocks.qe.ConnectContext;
@@ -185,7 +185,7 @@ public class ResourceGroupMgr implements Writable {
                 }
             }
 
-            return validRoles.stream().filter(r -> !PrivilegeBuiltinConstants.BUILT_IN_ROLE_NAMES.contains(r))
+            return validRoles.stream().filter(r -> !PrivilegeBuiltinConstantsEPack.BUILT_IN_ROLE_NAMES.contains(r))
                     .collect(Collectors.toList());
         } catch (PrivilegeException e) {
             LOG.info("getUnqualifiedRole failed for resource group, error message: " + e.getMessage());
