@@ -1617,9 +1617,9 @@ public class GlobalStateMgr {
                 remoteChecksum = dis.readLong();
                 checksum = localMetastore.loadAutoIncrementId(dis, checksum);
                 remoteChecksum = dis.readLong();
-                checksum = pipeManager.getRepo().loadImage(dis, checksum);
-                remoteChecksum = dis.readLong();
                 checksum = loadStorageVolumes(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = pipeManager.getRepo().loadImage(dis, checksum);
                 remoteChecksum = dis.readLong();
                 // ** NOTICE **: always add new code at the end
 
@@ -1990,9 +1990,9 @@ public class GlobalStateMgr {
                 dos.writeLong(checksum);
                 checksum = localMetastore.saveAutoIncrementId(dos, checksum);
                 dos.writeLong(checksum);
-                checksum = pipeManager.getRepo().saveImage(dos, checksum);
-                dos.writeLong(checksum);
                 checksum = storageVolumeMgr.saveStorageVolumes(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = pipeManager.getRepo().saveImage(dos, checksum);
                 dos.writeLong(checksum);
                 // ** NOTICE **: always add new code at the end
 
