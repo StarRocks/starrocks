@@ -46,7 +46,10 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.UserException;
+import com.starrocks.load.routineload.KafkaRoutineLoadJob;
+import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadInfo;
+import com.starrocks.load.streamload.StreamLoadParam;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TStreamLoadPutRequest;
@@ -59,6 +62,7 @@ import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 
 public class StreamLoadPlannerTest {
     @Injectable
@@ -156,6 +160,17 @@ public class StreamLoadPlannerTest {
         StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
         StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadInfo);
         planner.plan(streamLoadInfo.getId());
+    }
+
+    @Test
+    public void testPartialUpdateMode() throws UserException {
+        StreamLoadParam param = new StreamLoadParam();
+        param.partialUpdateMode = "column";
+        UUID uuid = UUID.randomUUID();
+        TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+        StreamLoadInfo streamLoadInfo2 = StreamLoadInfo.fromStreamLoadContext(loadId, 100, 100, param);
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+        StreamLoadInfo streamLoadInfo3 = StreamLoadInfo.fromRoutineLoadJob(routineLoadJob);
     }
 
     @Test

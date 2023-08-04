@@ -31,6 +31,14 @@ class Segment;
 class RandomAccessFile;
 class ColumnIterator;
 
+struct RowsetSegmentStat {
+    int64_t num_rows_written = 0;
+    int64_t total_row_size = 0;
+    int64_t total_data_size = 0;
+    int64_t total_index_size = 0;
+    int64_t num_segment = 0;
+};
+
 // This struct can serve as the unique identifier for a specific segment.
 // The unique identifier contructed by rowset_id + segment_id.
 // There are two kinds of rowset_id in our implementations:
@@ -51,16 +59,21 @@ struct ColumnPartialUpdateState {
     EditVersion read_version;
     // Maintains the mapping of source row to update segment's row
     std::map<uint64_t, uint32_t> rss_rowid_to_update_rowid;
+    // Maintains the rowids in update segment, which are need to be inserted
+    std::vector<uint32> insert_rowids;
 
     // build `rss_rowid_to_update_rowid` from `src_rss_rowids`
     void build_rss_rowid_to_update_rowid() {
         rss_rowid_to_update_rowid.clear();
-        for (uint32_t upt_id = 0; upt_id < src_rss_rowids.size(); upt_id++) {
-            uint64_t each_rss_rowid = src_rss_rowids[upt_id];
+        insert_rowids.clear();
+        for (uint32_t upt_row_id = 0; upt_row_id < src_rss_rowids.size(); upt_row_id++) {
+            uint64_t each_rss_rowid = src_rss_rowids[upt_row_id];
             // build rssid & rowid -> update file's rowid
             // each_rss_rowid == UINT64_MAX means that key not exist in pk index
             if (each_rss_rowid < UINT64_MAX) {
-                rss_rowid_to_update_rowid[each_rss_rowid] = upt_id;
+                rss_rowid_to_update_rowid[each_rss_rowid] = upt_row_id;
+            } else {
+                insert_rowids.push_back(upt_row_id);
             }
         }
     }
@@ -90,10 +103,14 @@ public:
 
     // Generate delta columns by partial update states and rowset,
     // And distribute partial update column data to different `.col` files
-    // |rowset| : the rowset that we want to handle it to generate delta column group
     // |tablet| : current tablet
+    // |rowset| : the rowset that we want to handle it to generate delta column group
+    // |rowset_id| : the new rowset's id
+    // |index_meta| : persistent index's meta
+    // |delvecs| : new generate delvecs
     // |index| : tablet's primary key index
-    Status finalize(Tablet* tablet, Rowset* rowset, const PrimaryIndex& index);
+    Status finalize(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, PersistentIndexMetaPB& index_meta,
+                    vector<std::pair<uint32_t, DelVectorPtr>>& delvecs, PrimaryIndex& index);
 
     const std::vector<ColumnUniquePtr>& upserts() const { return _upserts; }
 
@@ -146,6 +163,21 @@ private:
                                    Chunk* result_chunk);
 
     void _check_if_preload_column_mode_update_data(Rowset* rowset, MemTracker* update_mem_tracker);
+
+    StatusOr<std::unique_ptr<SegmentWriter>> _prepare_segment_writer(Rowset* rowset, const TabletSchema& tablet_schema,
+                                                                     int segment_id);
+
+    Status _fill_default_columns(const TabletSchema& tablet_schema, const std::vector<uint32_t>& column_ids,
+                                 const int64_t row_cnt, vector<std::shared_ptr<Column>>* columns);
+    Status _update_primary_index(const TabletSchema& tablet_schema, Tablet* tablet, const EditVersion& edit_version,
+                                 uint32_t rowset_id, std::map<int, ChunkUniquePtr>& segid_to_chunk,
+                                 int64_t insert_row_cnt, PersistentIndexMetaPB& index_meta,
+                                 vector<std::pair<uint32_t, DelVectorPtr>>& delvecs, PrimaryIndex& index);
+    Status _update_rowset_meta(const RowsetSegmentStat& stat, Rowset* rowset);
+
+    Status _insert_new_rows(const TabletSchema& tablet_schema, Tablet* tablet, const EditVersion& edit_version,
+                            Rowset* rowset, uint32_t rowset_id, PersistentIndexMetaPB& index_meta,
+                            vector<std::pair<uint32_t, DelVectorPtr>>& delvecs, PrimaryIndex& index);
 
 private:
     int64_t _tablet_id = 0;

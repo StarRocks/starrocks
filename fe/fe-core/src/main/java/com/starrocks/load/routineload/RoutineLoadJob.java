@@ -610,7 +610,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     public String getPartialUpdateMode() {
-        return jobProperties.get(LoadStmt.PARTIAL_UPDATE_MODE);
+        // RoutineLoad job only support row mode.
+        return "row";
     }
 
     public RoutineLoadProgress getProgress() {

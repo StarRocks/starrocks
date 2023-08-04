@@ -509,8 +509,8 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
 
     // _read_version is equal to latest_applied_version which means there is no other rowset is applied
     // the data of write_columns can be write to segment file directly
-    LOG(INFO) << "latest_applied_version is " << latest_applied_version.to_string() << " read version is "
-              << _partial_update_states[segment_id].read_version.to_string();
+    VLOG(2) << "latest_applied_version is " << latest_applied_version.to_string() << " read version is "
+            << _partial_update_states[segment_id].read_version.to_string();
     if (latest_applied_version == _partial_update_states[segment_id].read_version) {
         return Status::OK();
     }

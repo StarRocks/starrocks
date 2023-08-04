@@ -90,6 +90,8 @@ public:
 
     int64_t num_rows() const { return _rowset_meta_pb->num_rows(); }
 
+    void set_num_rows(int64_t num_rows) { _rowset_meta_pb->set_num_rows(num_rows); }
+
     int64_t total_row_size() { return _rowset_meta_pb->total_row_size(); }
 
     void set_total_row_size(int64_t total_size) { _rowset_meta_pb->set_total_row_size(total_size); }
@@ -105,6 +107,8 @@ public:
     void set_data_disk_size(size_t data_size) { _rowset_meta_pb->set_data_disk_size(data_size); }
 
     size_t index_disk_size() const { return _rowset_meta_pb->index_disk_size(); }
+
+    void set_index_disk_size(int64_t index_disk_size) { _rowset_meta_pb->set_index_disk_size(index_disk_size); }
 
     bool has_delete_predicate() const { return _rowset_meta_pb->has_delete_predicate(); }
 
@@ -142,6 +146,10 @@ public:
 
     int64_t num_segments() const { return _rowset_meta_pb->num_segments(); }
 
+    void set_num_segments(int64_t num_segments) { _rowset_meta_pb->set_num_segments(num_segments); }
+
+    void set_empty(bool empty) { _rowset_meta_pb->set_empty(empty); }
+
     void to_rowset_pb(RowsetMetaPB* rs_meta_pb) const { *rs_meta_pb = *_rowset_meta_pb; }
 
     RowsetMetaPB to_rowset_pb() const {
@@ -164,6 +172,10 @@ public:
     bool is_remove_from_rowset_meta() const { return _is_removed_from_rowset_meta; }
 
     SegmentsOverlapPB segments_overlap() const { return _rowset_meta_pb->segments_overlap_pb(); }
+
+    void set_segments_overlap_pb(SegmentsOverlapPB overlap) {
+        return _rowset_meta_pb->set_segments_overlap_pb(overlap);
+    }
 
     // return true if segments in this rowset has overlapping data.
     // this is not same as `segments_overlap()` method.
