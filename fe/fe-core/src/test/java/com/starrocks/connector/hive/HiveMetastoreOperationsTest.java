@@ -23,6 +23,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.hadoop.conf.Configuration;
@@ -55,7 +56,7 @@ public class HiveMetastoreOperationsTest {
         executor = Executors.newFixedThreadPool(5);
         cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
-        hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration());
+        hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration(), MetastoreType.HMS, "hive_catalog");
     }
 
     @After
@@ -199,7 +200,8 @@ public class HiveMetastoreOperationsTest {
         ExecutorService executor = Executors.newFixedThreadPool(5);
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
-        HiveMetastoreOperations hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration());
+        HiveMetastoreOperations hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true,
+                new Configuration(), MetastoreType.HMS, "hive_catalog");
 
         HiveMetastoreOperations finalHmsOps = hmsOps;
         ExceptionChecker.expectThrowsWithMsg(MetaNotFoundException.class,
@@ -227,7 +229,7 @@ public class HiveMetastoreOperationsTest {
         executor = Executors.newFixedThreadPool(5);
         cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
-        hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration());
+        hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration(), MetastoreType.HMS, "hive_catalog");
 
         hmsOps.dropDb("db1", false);
     }
