@@ -810,11 +810,9 @@ public class SchemaChangeHandler extends AlterHandler {
         // do not support adding new column which already exist in base schema.
         Optional<Column> foundColumn = olapTable.getBaseSchema().stream()
                 .filter(c -> c.getName().equalsIgnoreCase(newColName)).findFirst();
-        if (foundColumn.isPresent()) {
-            if (newColumn.equals(foundColumn.get())) {
-                throw new DdlException(
-                        "Can not add column which already exists in base table: " + newColName);
-            }
+        if (foundColumn.isPresent() && newColumn.equals(foundColumn.get())) {
+            throw new DdlException(
+                    "Can not add column which already exists in base table: " + newColName);
         }
 
         /*
@@ -1363,7 +1361,7 @@ public class SchemaChangeHandler extends AlterHandler {
         boolean lightSchemaChange = true;
         //for multi add colmuns clauses
         IntSupplier colUniqueIdSupplier = new IntSupplier() {
-            public int pendingMaxColUniqueId = olapTable.getMaxColUniqueId();
+            private int pendingMaxColUniqueId = olapTable.getMaxColUniqueId();
 
             @Override
             public int getAsInt() {
@@ -2271,7 +2269,7 @@ public class SchemaChangeHandler extends AlterHandler {
             // should not happen
             LOG.warn("failed to replay modify table add or drop columns", e);
         } catch (NotImplementedException e) {
-            e.printStackTrace();
+            LOG.error("InternalError", e);
         } finally {
             db.writeUnlock();
         }

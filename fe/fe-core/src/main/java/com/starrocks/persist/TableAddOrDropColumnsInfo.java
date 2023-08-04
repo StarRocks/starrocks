@@ -48,6 +48,7 @@ import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * PersistInfo for Table properties
@@ -115,9 +116,14 @@ public class TableAddOrDropColumnsInfo implements Writable {
 
         TableAddOrDropColumnsInfo info = (TableAddOrDropColumnsInfo) obj;
 
-        return (dbId == info.dbId && tableId == tableId
+        return (dbId == info.dbId && tableId == info.tableId
                 && indexSchemaMap.equals(info.indexSchemaMap) && indexes.equals(info.indexes)
                 && jobId == info.jobId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(dbId, tableId, indexSchemaMap, indexes, jobId);
     }
 
     @Override

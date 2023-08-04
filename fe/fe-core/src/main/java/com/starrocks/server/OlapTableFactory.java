@@ -232,7 +232,6 @@ public class OlapTableFactory implements AbstractTableFactory {
                 throw new DdlException(e.getMessage());
             }
             // only support olap table use light schema change optimization
-            useLightSchemaChange = useLightSchemaChange;
             table.setUseLightSchemaChange(useLightSchemaChange);
             if (useLightSchemaChange) {
                 for (Column column : baseSchema) {
