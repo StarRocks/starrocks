@@ -17,6 +17,9 @@ package com.starrocks.server;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.DdlException;
+import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.connector.ConnectorService;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -35,6 +38,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Optional;
 
 public class MetadataMgrTest {
     @BeforeClass
@@ -231,5 +235,14 @@ public class MetadataMgrTest {
 
         createTableStmt.setIfNotExists();
         Assert.assertFalse(metadataMgr.createTable(createTableStmt));
+    }
+
+    @Test
+    public void testGetOptionalMetadata() {
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        Optional<ConnectorMetadata> metadata = metadataMgr.getOptionalMetadata("hive_catalog");
+        Assert.assertTrue(metadata.isPresent());
+        metadata = metadataMgr.getOptionalMetadata("hive_catalog_not_exist");
+        Assert.assertFalse(metadata.isPresent());
     }
 }
