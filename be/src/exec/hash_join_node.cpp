@@ -594,6 +594,7 @@ Status HashJoinNode::_evaluate_build_keys(const ChunkPtr& chunk) {
 
 Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>& probe_timer, ChunkPtr* chunk,
                             bool& eos) {
+    ChunkPtr tmp_chunk = std::make_shared<Chunk>();
     while (true) {
         if (!_ht_has_remain) {
             while (true) {
@@ -678,33 +679,36 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
             }
         }
 
-        TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.probe(state, _key_columns, &_probing_chunk, chunk, &_ht_has_remain)));
+        TRY_CATCH_BAD_ALLOC(
+                RETURN_IF_ERROR(_ht.probe(state, _key_columns, &_probing_chunk, &tmp_chunk, &_ht_has_remain)));
         if (!_ht_has_remain) {
             _probing_chunk = nullptr;
         }
 
-        eval_join_runtime_filters(chunk);
+        eval_join_runtime_filters(&tmp_chunk);
 
-        if (check_chunk_zero_and_create_new(chunk)) {
+        if (check_chunk_zero_and_create_new(&tmp_chunk)) {
             continue;
         }
 
         if (!_other_join_conjunct_ctxs.empty()) {
             SCOPED_TIMER(_other_join_conjunct_evaluate_timer);
-            RETURN_IF_ERROR(_process_other_conjunct(chunk));
-            if (check_chunk_zero_and_create_new(chunk)) {
+            RETURN_IF_ERROR(_process_other_conjunct(&tmp_chunk));
+            if (check_chunk_zero_and_create_new(&tmp_chunk)) {
                 continue;
             }
         }
 
         if (!_conjunct_ctxs.empty()) {
             SCOPED_TIMER(_where_conjunct_evaluate_timer);
-            RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
+            RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, tmp_chunk.get()));
 
-            if (check_chunk_zero_and_create_new(chunk)) {
+            if (check_chunk_zero_and_create_new(&tmp_chunk)) {
                 continue;
             }
         }
+
+        _ht.lazy_materialize(&_probing_chunk, &tmp_chunk, chunk);
 
         break;
     }
