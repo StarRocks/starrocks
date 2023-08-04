@@ -1,25 +1,33 @@
 # System variables
 
-StarRocks provides many system variables that can be changed to suit your requirements. This section describes the variables supported by StarRocks. You can view these variables by running the [SHOW VARIABLES](../sql-reference/sql-statements/Administration/SHOW%20VARIABLES.md) command on your MySQL client. You can also use the [SET](../sql-reference/sql-statements/Administration/SET.md) command to dynamically set or modify variables. You can make these variables take effect globally on the entire system, only in the current session, or only in a single query statement.
+StarRocks provides many system variables that can be set and modified to suit your requirements. This section describes the variables supported by StarRocks. You can view the settings of these variables by running the [SHOW VARIABLES](../sql-reference/sql-statements/Administration/SHOW%20VARIABLES.md) command on your MySQL client. You can also use the [SET](../sql-reference/sql-statements/Administration/SET.md) command to dynamically set or modify variables. You can make these variables take effect globally on the entire system, only in the current session, or only in a single query statement.
 
 The variables in StarRocks refer to the variable sets in MySQL, but **some variables are only compatible with the MySQL client protocol and do not function on the MySQL database**.
 
 > **NOTE**
 >
+<<<<<<< HEAD
 > Any user has the privilege to run SHOW VARIABLES and make a variable take effect at session level. However, only users with the ADMIN_PRIV privilege can make a variable take effect globally. Globally effective variables do not affect the current session, only subsequent new sessions.
+=======
+> Any user has the privilege to run SHOW VARIABLES and make a variable take effect at session level. However, only users with the SYSTEM-level OPERATE privilege can make a variable take effect globally. Globally effective variables take effect on all the future sessions (excluding the current session).
+>
+> If you want to make a setting change for the current session and also make that setting change apply to all future sessions, you can make the change twice, once without the `GLOBAL` modifier and once with it. For example:
+>
+> ```SQL
+> SET query_mem_limit = 137438953472; -- Apply to the current session.
+> SET GLOBAL query_mem_limit = 137438953472; -- Apply to all future sessions.
+> ```
+>>>>>>> 4cf65a8b45 ([Doc] Add link to bitmap value and update sys variables (#28604))
 
 ## View variables
 
 You can view all or some variables by using `SHOW VARIABLES [LIKE 'xxx']`. Example:
 
 ```SQL
-
 -- Show all variables in the system.
-
 SHOW VARIABLES;
 
 -- Show variables that match a certain pattern.
-
 SHOW VARIABLES LIKE '%time_zone%';
 ```
 
@@ -27,7 +35,7 @@ SHOW VARIABLES LIKE '%time_zone%';
 
 ### Set variables globally or for a single session
 
-You can set variables to take effect **globally** or **only on the current session**. When set to global, the new value will be used for subsequent new sessions, while the current session still uses the original value. When set to "current session only", the variable will only take effect on the current session.
+You can set variables to take effect **globally** or **only on the current session**. When set to global, the new value will be used for all the future sessions, while the current session still uses the original value. When set to "current session only", the variable will only take effect on the current session.
 
 A variable set by `SET var_name = xxx;` only takes effect for the current session. Example:
 
@@ -106,7 +114,7 @@ SELECT /*+ SET_VAR
 
 ## Descriptions of variables
 
-The variables are described in alphabetical order. Variables with the `global` label can only take effect globally. Other variables can take effect either globally or for a single session.
+The variables are described **in alphabetical order**. Variables with the `global` label can only take effect globally. Other variables can take effect either globally or for a single session.
 
 * auto_increment_increment
 
