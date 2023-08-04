@@ -37,7 +37,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.epack.persist.CreateTableInfoEPack;
+import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageType;
@@ -72,7 +72,7 @@ public class DatabaseTest {
         db = new Database(dbId, "dbTest");
         new Expectations() {
             {
-                editLog.logCreateTable((CreateTableInfoEPack) any);
+                editLog.logCreateTable((CreateTableInfo) any);
                 minTimes = 0;
 
                 globalStateMgr.getEditLog();
