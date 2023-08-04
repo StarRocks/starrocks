@@ -6,10 +6,7 @@ The variables in StarRocks refer to the variable sets in MySQL, but **some varia
 
 > **NOTE**
 >
-<<<<<<< HEAD
-> Any user has the privilege to run SHOW VARIABLES and make a variable take effect at session level. However, only users with the SYSTEM-level OPERATE privilege can make a variable take effect globally. Globally effective variables do not affect the current session, only subsequent new sessions.
-=======
-> Any user has the privilege to run SHOW VARIABLES and make a variable take effect at session level. However, only users with the SYSTEM-level OPERATE privilege can make a variable take effect globally. Globally effective variables take effect on all the future sessions (excluding the current session).
+> Any user has the privilege to run SHOW VARIABLES and make a variable take effect at session level. However, only users with the SYSTEM-level OPERATE privilege can make a variable take effect globally. Globally effective variables take effect on all future sessions (excluding the current session).
 >
 > If you want to make a setting change for the current session and also make that setting change apply to all future sessions, you can make the change twice, once without the `GLOBAL` modifier and once with it. For example:
 >
@@ -17,7 +14,6 @@ The variables in StarRocks refer to the variable sets in MySQL, but **some varia
 > SET query_mem_limit = 137438953472; -- Apply to the current session.
 > SET GLOBAL query_mem_limit = 137438953472; -- Apply to all future sessions.
 > ```
->>>>>>> 4cf65a8b45 ([Doc] Add link to bitmap value and update sys variables (#28604))
 
 ## View variables
 
