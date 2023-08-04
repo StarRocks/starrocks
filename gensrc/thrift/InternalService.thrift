@@ -59,7 +59,7 @@ const i64 DEFAULT_PARTITION_ID = -1;
 
 // constants for function version
 enum TFunctionVersion {
-    RUNTIME_FILTER_SERIALIZE_VERSION_2 = 6,
+    RUNTIME_FILTER_SERIALIZE_VERSION_2 = 7,
 }
 
 enum TQueryType {

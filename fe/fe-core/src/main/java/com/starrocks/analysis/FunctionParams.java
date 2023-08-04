@@ -98,6 +98,10 @@ public class FunctionParams implements Writable {
         return orderByElements == null ? null : orderByElements.isEmpty() ? null : orderByElements;
     }
 
+    public int getOrderByElemNum() {
+        return orderByElements == null ? 0 : orderByElements.size();
+    }
+
     public String getOrderByStringToSql() {
         if (orderByElements != null && !orderByElements.isEmpty()) {
             StringBuilder sb = new StringBuilder();

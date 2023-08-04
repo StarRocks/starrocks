@@ -115,8 +115,9 @@ public class FunctionAnalyzer {
         }
 
         if (fnName.getFunction().equals(FunctionSet.GROUP_CONCAT)) {
-            if (functionCallExpr.getChildren().size() > 2 || functionCallExpr.getChildren().isEmpty()) {
+            if (functionCallExpr.getChildren().isEmpty()) {
                 throw new SemanticException(
+<<<<<<< HEAD
                         "group_concat requires one or two parameters: " + functionCallExpr.toSql());
             }
 
@@ -137,6 +138,18 @@ public class FunctionAnalyzer {
                             "group_concat requires second parameter to be of getType() STRING: " +
                                     functionCallExpr.toSql());
                 }
+=======
+                        "group_concat requires at least one parameter: " + functionCallExpr.toSql(),
+                        functionCallExpr.getPos());
+            }
+
+            int sepPos = functionCallExpr.getParams().exprs().size() - functionCallExpr.getParams().getOrderByElemNum() - 1;
+            Expr arg1 = functionCallExpr.getChild(sepPos);
+            if (!arg1.getType().isStringType() && !arg1.getType().isNull()) {
+                throw new SemanticException(
+                        "group_concat requires separator to be of getType() STRING: " +
+                                functionCallExpr.toSql(), arg1.getPos());
+>>>>>>> e31fbe8c1b ([Feature] group_concat() support distinct and order by)
             }
             return;
         }

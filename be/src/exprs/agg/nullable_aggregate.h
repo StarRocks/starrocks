@@ -895,6 +895,7 @@ public:
             this->nested_function->convert_to_serialize_format(ctx, data_columns, chunk_size,
                                                                &dst_nullable_column->data_column());
         }
+        std::cout << fmt::format("convert_to_serialize_format res = {}", (*dst)->debug_string()) << std::endl;
     }
 
     void retract(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
