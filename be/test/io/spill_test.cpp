@@ -50,6 +50,7 @@
 #include "types/logical_type.h"
 #include "util/defer_op.h"
 #include "util/runtime_profile.h"
+#include "util/uid_util.h"
 
 namespace starrocks::vectorized {
 class TExprBuilder {
@@ -167,14 +168,11 @@ using SpilledOptions = spill::SpilledOptions;
 class SpillTest : public ::testing::Test {
 public:
     void SetUp() override {
-        config::storage_root_path = std::filesystem::current_path().string() + "/spill_test_data";
-        auto fs = FileSystem::Default();
-        fs->delete_dir_recursive(config::storage_root_path);
-        ASSERT_OK(fs->create_dir_recursive(config::storage_root_path));
+        TUniqueId dummy_query_id = generate_uuid();
+        auto path = std::filesystem::current_path().string() + "/spill_test_data/" + print_id(dummy_query_id);
         dummy_dir_mgr = std::make_unique<spill::DirManager>();
-        ASSERT_OK(dummy_dir_mgr->init());
+        ASSERT_OK(dummy_dir_mgr->init(path));
 
-        TUniqueId dummy_query_id;
         dummy_block_mgr = std::make_unique<spill::LogBlockManager>(dummy_query_id);
         dummy_block_mgr->set_dir_manager(dummy_dir_mgr.get());
 
