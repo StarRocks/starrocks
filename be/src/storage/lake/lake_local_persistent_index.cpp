@@ -102,12 +102,12 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
     }
 
     // 1. create and set key column schema
-    std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
+    std::shared_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
     vector<ColumnId> pk_columns(tablet_schema->num_key_columns());
     for (auto i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
     }
-    auto pkey_schema = ChunkHelper::convert_schema(*tablet_schema, pk_columns);
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
 
     size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
 

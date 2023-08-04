@@ -460,8 +460,8 @@ StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t uc
                 */
                 DCHECK(_dcg_segments[column_file]->num_columns() <= dcg->column_ids()[idx.first].size());
                 if (_dcg_segments[column_file]->num_columns() < dcg->column_ids()[idx.first].size()) {
-                    const auto& new_schema =
-                            TabletSchema::create_with_uid(_segment->tablet_schema(), dcg->column_ids()[idx.first]);
+                    const auto& new_schema = TabletSchema::create_with_uid(_segment->tablet_schema_share_ptr(),
+                                                                           dcg->column_ids()[idx.first]);
 
                     *col_index = INT32_MIN;
                     for (int i = 0; i < new_schema->columns().size(); ++i) {

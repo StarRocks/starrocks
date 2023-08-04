@@ -613,8 +613,8 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
 
     if (txn_meta.has_auto_increment_partial_update_column_id()) {
         uint32_t id = 0;
-        for (int i = 0; i < tablet->tablet_schema().num_columns(); ++i) {
-            if (tablet->tablet_schema().column(i).is_auto_increment()) {
+        for (int i = 0; i < tablet->tablet_schema()->num_columns(); ++i) {
+            if (tablet->tablet_schema()->column(i).is_auto_increment()) {
                 id = i;
                 break;
             }

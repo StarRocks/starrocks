@@ -81,7 +81,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest_path));
 
     uint32_t auto_increment_column_id = 0;
-    for (const auto& col : tschema.columns()) {
+    for (const auto& col : tschema->columns()) {
         if (col.is_auto_increment()) {
             break;
         }
@@ -171,7 +171,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest_path));
 
     uint32_t auto_increment_column_id = 0;
-    for (const auto& col : tschema.columns()) {
+    for (const auto& col : tschema->columns()) {
         if (col.is_auto_increment()) {
             break;
         }

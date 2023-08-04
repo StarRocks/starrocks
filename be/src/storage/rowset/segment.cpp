@@ -175,12 +175,6 @@ Status Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterP
 
 Segment::Segment(const private_type&, std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
                  TabletSchemaCSPtr tablet_schema)
-        : _fs(std::move(fs)), _fname(std::move(path)), _tablet_schema(tablet_schema), _segment_id(segment_id) {
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
-}
-
-Segment::Segment(const private_type&, std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
-                 std::shared_ptr<const TabletSchema> tablet_schema)
         : _fs(std::move(fs)),
           _fname(std::move(path)),
           _tablet_schema(std::move(tablet_schema)),
@@ -406,7 +400,6 @@ Status Segment::new_bitmap_index_iterator(uint32_t cid, const IndexReadOptions& 
     }
     return Status::OK();
 }
-
 
 StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx) {
     return Segment::open(_fs, dcg.column_files(parent_name(_fname))[idx], 0,

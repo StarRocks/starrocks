@@ -62,7 +62,6 @@
 
 namespace starrocks {
 
-
 Rowset::Rowset(const TabletSchemaCSPtr& schema, std::string rowset_path, RowsetMetaSharedPtr rowset_meta)
         : _schema(schema),
           _rowset_path(std::move(rowset_path)),

@@ -356,7 +356,7 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
                 }
             }
             status = chunk_changer->append_materialized_columns(read_chunk, new_chunk, all_ref_columns_ids,
-                                                                base_tablet->tablet_schema().num_columns());
+                                                                base_tablet->tablet_schema()->num_columns());
             if (!status.ok()) {
                 LOG(WARNING) << "failed to append materialized columns";
                 return Status::InternalError("failed to append materialized columns");
@@ -370,7 +370,7 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
         // must record unique column id in delta column group
         std::vector<uint32_t> unique_column_ids;
         for (const auto& iter : *chunk_changer->get_mc_exprs()) {
-            ColumnUID unique_id = new_tablet->tablet_schema().column(iter.first).unique_id();
+            ColumnUID unique_id = new_tablet->tablet_schema()->column(iter.first).unique_id();
             unique_column_ids.emplace_back(unique_id);
         }
         std::sort(unique_column_ids.begin(), unique_column_ids.end());
@@ -381,7 +381,7 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
         ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(opts, path));
         SegmentWriterOptions writer_options;
         auto segment_writer =
-                std::make_unique<SegmentWriter>(std::move(wfile), idx, cols_file_schema.get(), writer_options);
+                std::make_unique<SegmentWriter>(std::move(wfile), idx, cols_file_schema, writer_options);
         RETURN_IF_ERROR(segment_writer->init(false));
 
         uint64_t segment_file_size = 0;
@@ -608,9 +608,9 @@ Status SchemaChangeWithSorting::_internal_sorting(std::vector<ChunkPtr>& chunk_a
         return st;
     }
 
-    std::vector<ColumnId> sort_key_idxes = tablet->tablet_schema().sort_key_idxes();
+    std::vector<ColumnId> sort_key_idxes = tablet->tablet_schema()->sort_key_idxes();
     if (sort_key_idxes.empty()) {
-        sort_key_idxes.resize(tablet->tablet_schema().num_key_columns());
+        sort_key_idxes.resize(tablet->tablet_schema()->num_key_columns());
         std::iota(sort_key_idxes.begin(), sort_key_idxes.end(), 0);
     }
     ChunkMerger merger(std::move(tablet), std::move(sort_key_idxes));

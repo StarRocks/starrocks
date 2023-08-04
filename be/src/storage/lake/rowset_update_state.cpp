@@ -160,9 +160,9 @@ void RowsetUpdateState::plan_read_by_rssid(const std::vector<uint64_t>& rowids, 
     }
 }
 
-
-Status RowsetUpdateState::_do_load_upserts_deletes(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tablet_schema,
-                                                   Tablet* tablet, Rowset* rowset_ptr) {
+Status RowsetUpdateState::_do_load_upserts_deletes(const TxnLogPB_OpWrite& op_write,
+                                                   const TabletSchemaCSPtr& tablet_schema, Tablet* tablet,
+                                                   Rowset* rowset_ptr) {
     vector<uint32_t> pk_columns;
     for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
@@ -268,8 +268,8 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(const Tx
     _auto_increment_delete_pks.resize(num_segments);
 
     uint32_t auto_increment_column_id = 0;
-    for (int i = 0; i < tablet_schema.num_columns(); ++i) {
-        if (tablet_schema.column(i).is_auto_increment()) {
+    for (int i = 0; i < tablet_schema->num_columns(); ++i) {
+        if (tablet_schema->column(i).is_auto_increment()) {
             auto_increment_column_id = i;
             break;
         }

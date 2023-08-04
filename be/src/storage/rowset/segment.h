@@ -151,6 +151,8 @@ public:
 
     const TabletSchema& tablet_schema() const { return *_tablet_schema; }
 
+    const TabletSchemaCSPtr tablet_schema_share_ptr() { return _tablet_schema.schema(); }
+
     const std::string& file_name() const { return _fname; }
 
     uint32_t num_rows() const { return _num_rows; }

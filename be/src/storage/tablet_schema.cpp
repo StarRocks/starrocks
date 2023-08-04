@@ -301,7 +301,7 @@ void TabletSchema::copy_from(const std::shared_ptr<const TabletSchema>& tablet_s
     TabletSchemaPB tablet_schema_pb;
     tablet_schema->to_schema_pb(&tablet_schema_pb);
     _init_from_pb(tablet_schema_pb);
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
 }
 
 void TabletColumn::add_sub_column(const TabletColumn& sub_column) {

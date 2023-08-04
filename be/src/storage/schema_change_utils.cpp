@@ -624,7 +624,7 @@ Status SchemaChangeUtils::parse_request(const TabletSchemaCSPtr& base_schema, co
                                         std::unordered_set<int>* materialized_column_idxs) {
     std::map<ColumnId, ColumnId> base_to_new;
     bool is_modify_materialized_column = false;
-    for (int i = 0; i < new_schema.num_columns(); ++i) {
+    for (int i = 0; i < new_schema->num_columns(); ++i) {
         const TabletColumn& new_column = new_schema->column(i);
         std::string column_name(new_column.name());
         ColumnMapping* column_mapping = chunk_changer->get_mutable_column_mapping(i);
@@ -748,7 +748,6 @@ Status SchemaChangeUtils::parse_request(const TabletSchemaCSPtr& base_schema, co
         if (column_mapping->ref_column < 0) {
             continue;
         } else {
-
             auto& new_column = new_schema->column(i);
             auto& ref_column = base_schema->column(column_mapping->ref_column);
             if (new_column.type() != ref_column.type() || is_modify_materialized_column) {
