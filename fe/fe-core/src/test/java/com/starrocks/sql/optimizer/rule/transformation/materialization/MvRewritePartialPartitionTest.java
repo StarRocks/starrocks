@@ -284,6 +284,43 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
     }
 
     @Test
+    public void testOlapPartialPartitionWithTTL() throws Exception {
+        cluster.runSql("test", "insert into table_with_day_partition partition(p19910401)" +
+                " values(\"varchar-19910401\", '1991-04-01', 2, 1, 0)");
+        cluster.runSql("test", "insert into table_with_day_partition2 partition(p19910401)" +
+                " values(\"varchar-19910401\", '1991-04-01', 2)");
+        createAndRefreshMv("test", "partial_mv_olap_partition_ttl",
+                "create materialized view partial_mv_olap_partition_ttl" +
+                        " partition by id_date" +
+                        " distributed by hash(`t1a`)" +
+                        " PROPERTIES ( " +
+                        "   \"partition_ttl_number\" = \"2\" " +
+                        ")" +
+                        " as" +
+                        " SELECT a.t1a, a.id_date, b.t2b\n" +
+                        "FROM test.table_with_day_partition AS a JOIN test.table_with_day_partition2 AS b " +
+                        "ON (a.t1a = b.t2a) AND (a.id_date = b.id2_date);");
+        GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().runOnceForTest();
+        MaterializedView ttlMv = getMv("test", "partial_mv_olap_partition_ttl");
+        Assert.assertEquals(2, ttlMv.getPartitions().size());
+
+        String query = "SELECT a.t1a, a.id_date, b.t2b\n" +
+                "FROM test.table_with_day_partition AS a JOIN test.table_with_day_partition2 AS b " +
+                "ON (a.t1a = b.t2a) AND (a.id_date = b.id2_date) where a.id_date >= '1991-04-01' and a.id_date < '1991-04-02';";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "partial_mv_olap_partition_ttl");
+
+        // NOTE: only insert to base table, do not affect mv ['1991-04-01', '1991-04-02')
+        cluster.runSql("test", "insert into table_with_day_partition partition(p19910331)" +
+                " values(\"varchar-19910301\", '1991-03-31', 2, 1, 0)");
+        cluster.runSql("test", "insert into table_with_day_partition2 partition(p19910331)" +
+                " values(\"varchar-19910301\", '1991-03-31', 2)");
+        plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "partial_mv_olap_partition_ttl");
+        dropMv("test", "partial_mv_olap_partition_ttl");
+    }
+
+    @Test
     public void testHivePartialPartitionWithTTL() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         createAndRefreshMv("test", "hive_parttbl_mv",

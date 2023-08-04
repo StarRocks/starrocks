@@ -197,6 +197,23 @@ public class MvRewriteTestBase {
                 "\"replication_num\" = \"1\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `table_with_day_partition2` (\n" +
+                "  `t2a` varchar(20) NULL COMMENT \"\",\n" +
+                "  `id2_date` date NULL COMMENT \"\", \n" +
+                "  `t2b` smallint(6) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`t2a`,`id2_date`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(`id2_date`)\n" +
+                "(PARTITION p19910330 VALUES [('1991-03-30'), ('1991-03-31')),\n" +
+                "PARTITION p19910331 VALUES [('1991-03-31'), ('1991-04-01')),\n" +
+                "PARTITION p19910401 VALUES [('1991-04-01'), ('1991-04-02')),\n" +
+                "PARTITION p19910402 VALUES [('1991-04-02'), ('1991-04-03')))" +
+                "DISTRIBUTED BY HASH(`t2a`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
         starRocksAssert.withTable("create table test_base_part(c1 int, c2 bigint, c3 bigint, c4 bigint)" +
                 " partition by range(c3) (" +
                 " partition p1 values less than (\"100\")," +

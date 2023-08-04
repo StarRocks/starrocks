@@ -1353,6 +1353,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             }
             // If the non ref table has already changed, need refresh all materialized views' partitions.
             Set<String> partitionNames = getUpdatedPartitionNamesOfTable(baseTable, true, isQueryRewrite);
+            // NOTE: to check whether the existing partition is updated
+            Set<String> mvPartitionsNames = getRangePartitionMap().keySet();
+            partitionNames.retainAll(mvPartitionsNames);
             if (CollectionUtils.isNotEmpty(partitionNames)) {
                 return getPartitionNames();
             }
