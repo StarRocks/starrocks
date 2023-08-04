@@ -99,7 +99,6 @@ set(UTIL_FILES
   random.cc
   stack_trace_mutex.cpp
   failpoint/fail_point.cpp
-  bthreads/future.h
 )
 
 add_library(Util STATIC
