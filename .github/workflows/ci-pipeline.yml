@@ -58,21 +58,7 @@ jobs:
             - 'thirdparty/**'
             - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
 
-      - name: clean
-        run: |
-          rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}
-
-      - name: Checkout Code
-        uses: actions/checkout@v3
-        if: >
-          !contains(github.event.pull_request.title, '(sync #') &&
-          !contains(github.event.pull_request.labels.*.name, 'sync') &&
-          (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
-        with:
-          fetch-depth: 0
-
-      - name: Checkout PR
+      - name: Check
         id: check
         if: >
           !contains(github.event.pull_request.title, '(sync #') &&
