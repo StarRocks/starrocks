@@ -14,8 +14,6 @@
 
 package com.starrocks.sql.plan;
 
-import com.google.common.collect.Sets;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
@@ -28,21 +26,12 @@ import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 
-import java.util.Set;
-
 public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
         ReplayFromDumpTestBase.beforeClass();
         connectContext.getSessionVariable().setEnableMVOptimizerTraceLog(true);
-
-        new MockUp<MaterializedView>() {
-            @Mock
-            Set<String> getPartitionNamesToRefreshForMv() {
-                return Sets.newHashSet();
-            }
-        };
 
         new MockUp<UtFrameUtils>() {
             @Mock
