@@ -746,7 +746,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     private boolean needToRefreshTable(Table table) {
-        return CollectionUtils.isNotEmpty(materializedView.getUpdatedPartitionNamesOfTable(table));
+        return CollectionUtils.isNotEmpty(materializedView.getUpdatedPartitionNamesOfTable(table, false));
     }
 
     private boolean needToRefreshNonPartitionTable(Table partitionTable) {
@@ -891,7 +891,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             return Sets.newHashSet(mvRangePartitionNames);
         }
         // check if there is a load in the base table and add it to the refresh candidate
-        Set<String> updatePartitionNames = materializedView.getUpdatedPartitionNamesOfTable(partitionTable);
+        Set<String> updatePartitionNames = materializedView.getUpdatedPartitionNamesOfTable(partitionTable, false);
         if (updatePartitionNames == null) {
             return mvRangePartitionNames;
         }
