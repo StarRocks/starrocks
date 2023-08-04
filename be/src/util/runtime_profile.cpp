@@ -967,7 +967,7 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool,
     // merge children
     {
         for (auto i = 0; i < profiles[0]->_children.size(); i++) {
-            auto& first_child_pair = profiles[0]->_children[0];
+            auto& first_child_pair = profiles[0]->_children[i];
             std::vector<RuntimeProfile*> sub_profiles;
             for (auto profile : profiles) {
                 if (i >= profile->num_children()) {
@@ -984,7 +984,6 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool,
             merged_profile->add_child(merged_child, first_child_pair.second, nullptr);
         }
     }
-
     return merged_profile;
 }
 

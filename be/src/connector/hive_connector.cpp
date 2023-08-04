@@ -263,64 +263,12 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
 
 void HiveDataSource::_init_counter(RuntimeState* state) {
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
+    _profile.runtime_profile = _data_source_profile;
 
-    _profile.runtime_profile = _runtime_profile;
+    // profile items at top level.
     _profile.rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
     _profile.rows_skip_counter = ADD_COUNTER(_runtime_profile, "RowsSkip", TUnit::UNIT);
     _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
-
-    _profile.reader_init_timer = ADD_CHILD_TIMER(_runtime_profile, "ReaderInit", "IOTaskExecTime");
-    _profile.open_file_timer = ADD_CHILD_TIMER(_runtime_profile, "OpenFile", "IOTaskExecTime");
-    _profile.expr_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ExprFilterTime", "IOTaskExecTime");
-
-    _profile.column_read_timer = ADD_CHILD_TIMER(_runtime_profile, "ColumnReadTime", "IOTaskExecTime");
-    _profile.column_convert_timer = ADD_CHILD_TIMER(_runtime_profile, "ColumnConvertTime", "IOTaskExecTime");
-
-    {
-        static const char* prefix = "SharedBuffered";
-        ADD_CHILD_COUNTER(_runtime_profile, prefix, TUnit::UNIT, "IOTaskExecTime");
-        _profile.shared_buffered_shared_io_bytes =
-                ADD_CHILD_COUNTER(_runtime_profile, "SharedIOBytes", TUnit::BYTES, prefix);
-        _profile.shared_buffered_shared_io_count =
-                ADD_CHILD_COUNTER(_runtime_profile, "SharedIOCount", TUnit::UNIT, prefix);
-        _profile.shared_buffered_shared_io_timer = ADD_CHILD_TIMER(_runtime_profile, "SharedIOTime", prefix);
-        _profile.shared_buffered_direct_io_bytes =
-                ADD_CHILD_COUNTER(_runtime_profile, "DirectIOBytes", TUnit::BYTES, prefix);
-        _profile.shared_buffered_direct_io_count =
-                ADD_CHILD_COUNTER(_runtime_profile, "DirectIOCount", TUnit::UNIT, prefix);
-        _profile.shared_buffered_direct_io_timer = ADD_CHILD_TIMER(_runtime_profile, "DirectIOTime", prefix);
-    }
-
-    if (_use_block_cache) {
-        static const char* prefix = "BlockCache";
-        ADD_CHILD_COUNTER(_runtime_profile, prefix, TUnit::UNIT, "IOTaskExecTime");
-        _profile.block_cache_read_counter =
-                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadCounter", TUnit::UNIT, prefix);
-        _profile.block_cache_read_bytes =
-                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadBytes", TUnit::BYTES, prefix);
-        _profile.block_cache_read_timer = ADD_CHILD_TIMER(_runtime_profile, "BlockCacheReadTimer", prefix);
-        _profile.block_cache_write_counter =
-                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteCounter", TUnit::UNIT, prefix);
-        _profile.block_cache_write_bytes =
-                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteBytes", TUnit::BYTES, prefix);
-        _profile.block_cache_write_timer = ADD_CHILD_TIMER(_runtime_profile, "BlockCacheWriteTimer", prefix);
-        _profile.block_cache_write_fail_counter =
-                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteFailCounter", TUnit::UNIT, prefix);
-        _profile.block_cache_write_fail_bytes =
-                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteFailBytes", TUnit::BYTES, prefix);
-    }
-
-    {
-        static const char* prefix = "InputStream";
-        ADD_CHILD_COUNTER(_runtime_profile, prefix, TUnit::UNIT, "IOTaskExecTime");
-        _profile.app_io_bytes_read_counter =
-                ADD_CHILD_COUNTER(_runtime_profile, "AppIOBytesRead", TUnit::BYTES, prefix);
-        _profile.app_io_timer = ADD_CHILD_TIMER(_runtime_profile, "AppIOTime", prefix);
-        _profile.app_io_counter = ADD_CHILD_COUNTER(_runtime_profile, "AppIOCounter", TUnit::UNIT, prefix);
-        _profile.fs_bytes_read_counter = ADD_CHILD_COUNTER(_runtime_profile, "FSBytesRead", TUnit::BYTES, prefix);
-        _profile.fs_io_counter = ADD_CHILD_COUNTER(_runtime_profile, "FSIOCounter", TUnit::UNIT, prefix);
-        _profile.fs_io_timer = ADD_CHILD_TIMER(_runtime_profile, "FSIOTime", prefix);
-    }
 
     if (hdfs_scan_node.__isset.table_name) {
         _runtime_profile->add_info_string("Table", hdfs_scan_node.table_name);
@@ -333,6 +281,51 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     }
     if (hdfs_scan_node.__isset.partition_sql_predicates) {
         _runtime_profile->add_info_string("PredicatesPartition", hdfs_scan_node.partition_sql_predicates);
+    }
+
+    // profile items under "DataSource"
+    RuntimeProfile* parent = _data_source_profile;
+    {
+        _profile.reader_init_timer = ADD_TIMER(parent, "ReaderInit");
+        _profile.open_file_timer = ADD_TIMER(parent, "OpenFile");
+        _profile.expr_filter_timer = ADD_TIMER(parent, "ExprFilterTime");
+        _profile.column_read_timer = ADD_TIMER(parent, "ColumnReadTime");
+        _profile.column_convert_timer = ADD_TIMER(parent, "ColumnConvertTime");
+    }
+    {
+        static const char* prefix = "SharedBuffered";
+        ADD_COUNTER(parent, prefix, TUnit::UNIT);
+        _profile.shared_buffered_shared_io_bytes = ADD_CHILD_COUNTER(parent, "SharedIOBytes", TUnit::BYTES, prefix);
+        _profile.shared_buffered_shared_io_count = ADD_CHILD_COUNTER(parent, "SharedIOCount", TUnit::UNIT, prefix);
+        _profile.shared_buffered_shared_io_timer = ADD_CHILD_TIMER(parent, "SharedIOTime", prefix);
+        _profile.shared_buffered_direct_io_bytes = ADD_CHILD_COUNTER(parent, "DirectIOBytes", TUnit::BYTES, prefix);
+        _profile.shared_buffered_direct_io_count = ADD_CHILD_COUNTER(parent, "DirectIOCount", TUnit::UNIT, prefix);
+        _profile.shared_buffered_direct_io_timer = ADD_CHILD_TIMER(parent, "DirectIOTime", prefix);
+    }
+
+    if (_use_block_cache) {
+        static const char* prefix = "BlockCache";
+        ADD_COUNTER(parent, prefix, TUnit::UNIT);
+        _profile.block_cache_read_counter = ADD_CHILD_COUNTER(parent, "BlockCacheReadCounter", TUnit::UNIT, prefix);
+        _profile.block_cache_read_bytes = ADD_CHILD_COUNTER(parent, "BlockCacheReadBytes", TUnit::BYTES, prefix);
+        _profile.block_cache_read_timer = ADD_CHILD_TIMER(parent, "BlockCacheReadTimer", prefix);
+        _profile.block_cache_write_counter = ADD_CHILD_COUNTER(parent, "BlockCacheWriteCounter", TUnit::UNIT, prefix);
+        _profile.block_cache_write_bytes = ADD_CHILD_COUNTER(parent, "BlockCacheWriteBytes", TUnit::BYTES, prefix);
+        _profile.block_cache_write_timer = ADD_CHILD_TIMER(parent, "BlockCacheWriteTimer", prefix);
+        _profile.block_cache_write_fail_counter =
+                ADD_CHILD_COUNTER(parent, "BlockCacheWriteFailCounter", TUnit::UNIT, prefix);
+        _profile.block_cache_write_fail_bytes =
+                ADD_CHILD_COUNTER(parent, "BlockCacheWriteFailBytes", TUnit::BYTES, prefix);
+    }
+    {
+        static const char* prefix = "InputStream";
+        ADD_COUNTER(parent, prefix, TUnit::UNIT);
+        _profile.app_io_bytes_read_counter = ADD_CHILD_COUNTER(parent, "AppIOBytesRead", TUnit::BYTES, prefix);
+        _profile.app_io_timer = ADD_CHILD_TIMER(parent, "AppIOTime", prefix);
+        _profile.app_io_counter = ADD_CHILD_COUNTER(parent, "AppIOCounter", TUnit::UNIT, prefix);
+        _profile.fs_bytes_read_counter = ADD_CHILD_COUNTER(parent, "FSBytesRead", TUnit::BYTES, prefix);
+        _profile.fs_io_counter = ADD_CHILD_COUNTER(parent, "FSIOCounter", TUnit::UNIT, prefix);
+        _profile.fs_io_timer = ADD_CHILD_TIMER(parent, "FSIOTime", prefix);
     }
 }
 

@@ -312,7 +312,6 @@ void HdfsScanner::update_counter() {
         COUNTER_UPDATE(profile->shared_buffered_direct_io_bytes, _shared_buffered_input_stream->direct_io_bytes());
         COUNTER_UPDATE(profile->shared_buffered_direct_io_timer, _shared_buffered_input_stream->direct_io_timer());
     }
-
     {
         COUNTER_UPDATE(profile->app_io_timer, _stats.io_ns);
         COUNTER_UPDATE(profile->app_io_counter, _stats.io_count);

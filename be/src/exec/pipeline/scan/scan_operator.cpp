@@ -31,6 +31,8 @@
 
 namespace starrocks::pipeline {
 
+const char* kDataSourceProfile = "DataSource";
+
 // ========== ScanOperator ==========
 
 ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
@@ -44,6 +46,7 @@ ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_
           _chunk_sources(_io_tasks_per_scan_operator) {
     for (auto i = 0; i < _io_tasks_per_scan_operator; i++) {
         _chunk_source_profiles[i] = std::make_shared<RuntimeProfile>(strings::Substitute("ChunkSource$0", i));
+        _chunk_source_profiles[i]->create_child(kDataSourceProfile, true, true);
     }
 }
 
@@ -520,6 +523,13 @@ void ScanOperator::_merge_chunk_source_profiles(RuntimeState* state) {
 
     _unique_metrics->copy_all_info_strings_from(merged_profile);
     _unique_metrics->copy_all_counters_from(merged_profile);
+
+    RuntimeProfile* src = merged_profile->get_child(kDataSourceProfile);
+    if (src != nullptr) {
+        RuntimeProfile* dst = _unique_metrics->create_child(kDataSourceProfile);
+        dst->copy_all_counters_from(src);
+        dst->copy_all_info_strings_from(src);
+    }
 }
 
 void ScanOperator::set_query_ctx(const QueryContextPtr& query_ctx) {
