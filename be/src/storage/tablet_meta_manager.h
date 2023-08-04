@@ -165,6 +165,8 @@ public:
     // used in column mode partial update
     static Status apply_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid, const EditVersion& version,
                                       const std::map<uint32_t, DeltaColumnGroupPtr>& delta_column_groups,
+                                      const vector<std::pair<uint32_t, DelVectorPtr>>& delvecs,
+                                      const PersistentIndexMetaPB& index_meta, bool enable_persistent_index,
                                       const starrocks::RowsetMetaPB* rowset_meta);
 
     // traverse all the op logs for a tablet

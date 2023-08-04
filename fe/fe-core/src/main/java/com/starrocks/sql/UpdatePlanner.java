@@ -117,7 +117,7 @@ public class UpdatePlanner {
                                 olapTable.supportedAutomaticPartition(), session.getCurrentWarehouse());
                 if (updateStmt.usePartialUpdate()) {
                     // using column mode partial update in UPDATE stmt
-                    ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.COLUMN_MODE);
+                    ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.COLUMN_UPDATE_MODE);
                 }
                 execPlan.getFragments().get(0).setSink(dataSink);
                 execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);

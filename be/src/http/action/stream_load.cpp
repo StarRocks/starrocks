@@ -539,7 +539,7 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         } else if (http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "auto") {
             request.__set_partial_update_mode(TPartialUpdateMode::type::AUTO_MODE);
         } else if (http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "column") {
-            request.__set_partial_update_mode(TPartialUpdateMode::type::COLUMN_MODE);
+            request.__set_partial_update_mode(TPartialUpdateMode::type::COLUMN_UPSERT_MODE);
         }
     }
     if (!http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE).empty()) {
