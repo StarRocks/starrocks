@@ -227,16 +227,6 @@ build_llvm() {
     fi
 
     check_if_source_exist $LLVM_SOURCE
-    # check_if_source_exist $CLANG_SOURCE
-    # check_if_source_exist $COMPILER_RT_SOURCE
-
-    # if [ ! -d $TP_SOURCE_DIR/$LLVM_SOURCE/tools/clang ]; then
-    #     cp -rf $TP_SOURCE_DIR/$CLANG_SOURCE $TP_SOURCE_DIR/$LLVM_SOURCE/tools/clang
-    # fi
-
-    # if [ ! -d $TP_SOURCE_DIR/$LLVM_SOURCE/projects/compiler-rt ]; then
-    #     cp -rf $TP_SOURCE_DIR/$COMPILER_RT_SOURCE $TP_SOURCE_DIR/$LLVM_SOURCE/projects/compiler-rt
-    # fi
 
     cd $TP_SOURCE_DIR
     mkdir -p llvm-build
@@ -248,10 +238,10 @@ build_llvm() {
     -DLLVM_ENABLE_EH:Bool=True \
     -DLLVM_ENABLE_RTTI:Bool=True \
     -DLLVM_ENABLE_PIC:Bool=True \
+    -DLLVM_ENABLE_TERMINFO:Bool=False \
     -DLLVM_TARGETS_TO_BUILD=${LLVM_TARGET} \
-    -DLLVM_ENABLE_TERMINFO=OFF \
-    -DLLVM_BUILD_LLVM_DYLIB:BOOL=OFF \
-    -DBUILD_SHARED_LIBS=OFF \
+    -DLLVM_BUILD_LLVM_DYLIB:BOOL=False \
+    -DBUILD_SHARED_LIBS:BOOL=False \
     -DCMAKE_BUILD_TYPE="RELEASE" \
     -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}/llvm ../${LLVM_SOURCE}
 
