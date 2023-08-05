@@ -67,6 +67,7 @@ public:
     hdfsFile getFile() { return _file; }
     int64_t getOpenTimeNs() const { return _open_time_ns; }
     const std::string& getPath() const { return _path; }
+    void setOffset(int64_t offset) { _offset = offset; }
 
     Status seek(int64_t offset) {
         hdfsFS fs = getFS();
@@ -83,12 +84,70 @@ public:
         return Status::OK();
     }
 
-    void close() {
+    int close() {
+        int r = 0;
         if (_file != nullptr) {
             hdfsFS fs = getFS();
-            hdfsCloseFile(fs, _file);
+            r = hdfsCloseFile(fs, _file);
             _file = nullptr;
         }
+        return r;
+    }
+
+    StatusOr<int64_t> pread(uint8_t* data, int64_t size, int retry = 0) {
+        RETURN_IF_ERROR(ensureOpened());
+        hdfsFS fs = getFS();
+        for (int i = 0; i < (retry + 1); i++) {
+            tSize r = hdfsPread(fs, _file, _offset, data, static_cast<tSize>(size));
+            if (r == -1) {
+                (void)close();
+                RETURN_IF_ERROR(ensureOpened());
+            } else {
+                _offset += r;
+                return r;
+            }
+        }
+        return Status::IOError(fmt::format("fail to hdfsPread {}: {}", _path, get_hdfs_err_msg()));
+    }
+
+    StatusOr<int64_t> read(uint8_t* data, int64_t size, int retry = 0) {
+        RETURN_IF_ERROR(ensureOpened());
+        RETURN_IF_ERROR(seek(_offset));
+
+        hdfsFS fs = getFS();
+        int64_t now = 0;
+        uint8_t* buf = data;
+
+        while (now < size) {
+            tSize r = 0;
+            for (int i = 0; i < (retry + 1); i++) {
+                r = hdfsRead(fs, _file, buf + now, size - now);
+                if (r != -1) break;
+                if (i == retry) {
+                    return Status::IOError(fmt::format("fail to hdfsRead {}: {}", _path, get_hdfs_err_msg()));
+                } else {
+                    (void)close();
+                    RETURN_IF_ERROR(ensureOpened());
+                    RETURN_IF_ERROR(seek(_offset));
+                }
+            }
+            if (r == 0) break;
+            now += r;
+            _offset += r;
+        }
+        return now;
+    }
+
+    StatusOr<int64_t> getSize() {
+        RETURN_IF_ERROR(getOrCreateFS());
+        hdfsFS fs = getFS();
+        auto info = hdfsGetPathInfo(fs, _path.c_str());
+        if (UNLIKELY(info == nullptr)) {
+            return Status::IOError(fmt::format("Fail to get path info of {}: {}", _path, get_hdfs_err_msg()));
+        }
+        int64_t size = info->mSize;
+        hdfsFreeFileInfo(info, 1);
+        return size;
     }
 
 private:
@@ -98,6 +157,7 @@ private:
     std::shared_ptr<HdfsFsClient> _hdfs_client = nullptr;
     hdfsFile _file = nullptr;
     int64_t _open_time_ns = 0;
+    int64_t _offset = 0;
 };
 
 // ==================================  HdfsInputStream  ==========================================
@@ -122,16 +182,11 @@ private:
     std::unique_ptr<GetHdfsFileReadOnlyHandle> _handle;
     int64_t _offset{0};
     int64_t _file_size{0};
-    bool _seek = false;
 };
 
 HdfsInputStream::~HdfsInputStream() {
     auto ret = call_hdfs_scan_function_in_pthread([this]() {
-        hdfsFile file = _handle->getFile();
-        if (file == nullptr) {
-            return Status::OK();
-        }
-        int r = hdfsCloseFile(_handle->getFS(), file);
+        int r = _handle->close();
         if (r == -1) {
             auto error_msg = fmt::format("Fail to close file {}: {}", _handle->getPath(), get_hdfs_err_msg());
             LOG(WARNING) << error_msg;
@@ -147,73 +202,25 @@ StatusOr<int64_t> HdfsInputStream::read(void* data, int64_t size) {
     if (UNLIKELY(size > std::numeric_limits<tSize>::max())) {
         size = std::numeric_limits<tSize>::max();
     }
-    // auto st = _handle->getOrCreateFile();
-    // if (!st.ok()) {
-    //     return st.status();
-    // }
-    // hdfsFile file = st.value();
-
-    // tSize r = hdfsPread(_fs, file, _offset, data, static_cast<tSize>(size));
-    // if (r == -1) {
-    //     return Status::IOError(fmt::format("fail to hdfsPread {}: {}", _handle->getPath(), get_hdfs_err_msg()));
-    // }
-    // _offset += r;
-    // return r;
-
-    RETURN_IF_ERROR(_handle->ensureOpened());
-    RETURN_IF_ERROR(_handle->seek(_offset));
-
-    int64_t now = 0;
-    uint8_t* buf = static_cast<uint8_t*>(data);
-    const int retry = 3;
-
-    while (now < size) {
-        tSize r = 0;
-        for (int i = 0; i < (retry + 1); i++) {
-            r = hdfsRead(_handle->getFS(), _handle->getFile(), buf + now, size - now);
-            // if (i == 0) r = -1;
-            if (r != -1) break;
-            if (i == retry) {
-                return Status::IOError(fmt::format("fail to hdfsRead {}: {}", _handle->getPath(), get_hdfs_err_msg()));
-            } else {
-                _handle->close();
-                RETURN_IF_ERROR(_handle->ensureOpened());
-                RETURN_IF_ERROR(_handle->seek(_offset));
-            }
-        }
-        if (r == 0) break;
-        now += r;
-        _offset += r;
-    }
-    return now;
+    return _handle->pread(static_cast<uint8_t*>(data), size, config::hdfs_client_io_read_retry);
+    // return _handle->read(static_cast<uint8_t*>(data), size, config::hdfs_client_io_read_retry);
 }
 
 Status HdfsInputStream::seek(int64_t offset) {
     if (offset < 0) return Status::InvalidArgument(fmt::format("Invalid offset {}", offset));
-    if (_offset != offset) {
-        _offset = offset;
-        _seek = false;
-    }
+    _handle->setOffset(offset);
     return Status::OK();
 }
 
 StatusOr<int64_t> HdfsInputStream::get_size() {
     if (_file_size == 0) {
         auto ret = call_hdfs_scan_function_in_pthread([this] {
-            auto st = _handle->getOrCreateFS();
+            auto st = _handle->getSize();
             if (!st.ok()) return st.status();
-            hdfsFS fs = st.value();
-            auto info = hdfsGetPathInfo(fs, _handle->getPath().c_str());
-            if (UNLIKELY(info == nullptr)) {
-                return Status::IOError(
-                        fmt::format("Fail to get path info of {}: {}", _handle->getPath(), get_hdfs_err_msg()));
-            }
-            this->_file_size = info->mSize;
-            hdfsFreeFileInfo(info, 1);
+            this->_file_size = st.value();
             return Status::OK();
         });
-        Status st = ret->get_future().get();
-        if (!st.ok()) return st;
+        RETURN_IF_ERROR(ret->get_future().get());
     }
     return _file_size;
 }
