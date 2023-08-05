@@ -245,6 +245,13 @@ public class ScalarOperatorFunctions {
         }
     }
 
+    @ConstantFunction(name = "to_date", argTypes = {DATETIME}, returnType = DATE)
+    public static ConstantOperator toDate(ConstantOperator date) {
+        LocalDate ld = LocalDate.of(date.getDatetime().getYear(),
+                date.getDatetime().getMonthValue(), date.getDatetime().getDayOfMonth());
+        return ConstantOperator.createDate(ld.atTime(0, 0, 0));
+    }
+
     @ConstantFunction(name = "str_to_date", argTypes = {VARCHAR, VARCHAR}, returnType = DATETIME)
     public static ConstantOperator dateParse(ConstantOperator date, ConstantOperator fmtLiteral) {
         DateTimeFormatter builder = DateUtils.unixDatetimeFormatter(fmtLiteral.getVarchar(), false);
