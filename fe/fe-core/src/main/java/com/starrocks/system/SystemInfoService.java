@@ -70,6 +70,7 @@ import com.starrocks.system.Backend.BackendState;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -89,6 +90,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -660,16 +662,34 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public List<Long> seqChooseBackendIdsByStorageMedium(int backendNum, boolean needAvailable, boolean isCreate,
                                                          TStorageMedium storageMedium) {
-        final List<Backend> backends =
-                getBackends().stream().filter(v -> !v.diskExceedLimitByStorageMedium(storageMedium))
-                        .collect(Collectors.toList());
-        return seqChooseBackendIds(backendNum, needAvailable, isCreate, backends);
+
+        return seqChooseBackendIds(backendNum, needAvailable, isCreate,
+                v -> !v.diskExceedLimitByStorageMedium(storageMedium));
     }
 
     public List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate) {
-        final List<Backend> backends =
-                getBackends().stream().filter(v -> !v.diskExceedLimit()).collect(Collectors.toList());
-        return seqChooseBackendIds(backendNum, needAvailable, isCreate, backends);
+
+        return seqChooseBackendIds(backendNum, needAvailable, isCreate, v -> !v.diskExceedLimit());
+    }
+
+    public List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate,
+                                          Predicate<? super Backend> predicate) {
+        final List<Backend> wholeAliveBackends = getBackends();
+        if (CollectionUtils.isEmpty(wholeAliveBackends)) {
+            LOG.info("failed to find any alive backend");
+            return Collections.emptyList();
+        }
+
+        final List<Backend> filteredBackends = wholeAliveBackends.stream()
+                .filter(predicate)
+                .collect(Collectors.toList());
+
+        if (CollectionUtils.isEmpty(filteredBackends)) {
+            LOG.info("failed to find any qualify backend from current %s alive backend",
+                    getBackends().size());
+            return Collections.emptyList();
+        }
+        return seqChooseBackendIds(backendNum, needAvailable, isCreate, filteredBackends);
     }
 
     // choose backends by round-robin
