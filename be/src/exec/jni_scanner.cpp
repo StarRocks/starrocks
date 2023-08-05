@@ -58,6 +58,7 @@ Status JniScanner::do_open(RuntimeState* state) {
 void JniScanner::do_update_counter(HdfsScanProfile* profile) {}
 
 void JniScanner::do_close(RuntimeState* runtime_state) noexcept {
+    if (_jni_scanner_obj == nullptr) return;
     JNIEnv* _jni_env = JVMFunctionHelper::getInstance().getEnv();
     _jni_env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_close);
     _check_jni_exception(_jni_env, "Failed to close the off-heap table scanner.");
@@ -124,7 +125,6 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* _jni_env, RuntimeState* runti
     int fetch_size = runtime_state->chunk_size();
     _jni_scanner_obj = _jni_env->NewObject(_jni_scanner_cls, scanner_constructor, fetch_size, hashmap_object);
     _jni_env->DeleteLocalRef(hashmap_object);
-
     DCHECK(_jni_scanner_obj != nullptr);
     RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to initialize a scanner instance."));
 
