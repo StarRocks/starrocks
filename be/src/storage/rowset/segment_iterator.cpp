@@ -496,7 +496,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_new_dcg_column_itera
         if (filename != nullptr) {
             *filename = dcg_segment->file_name();
         }
-        return dcg_segment->new_column_iterator(col_index, path, _opts.tablet_schema);
+        return dcg_segment->new_column_iterator(col_index, path);
     }
     return nullptr;
 }
@@ -540,7 +540,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     ASSIGN_OR_RETURN(auto col_iter, _new_dcg_column_iterator((uint32_t)ucid, &dcg_filename, access_path));
     if (col_iter == nullptr) {
         // not found in delta column group, create normal column iterator
-        ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator(cid, access_path, _opts.tablet_schema));
+        ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator(cid, access_path));
         ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file(opts, _segment->file_name()));
         iter_opts.read_file = rfile.get();
         _column_files[cid] = std::move(rfile);
