@@ -18,6 +18,7 @@ import com.google.gson.annotations.SerializedName;
 
 import java.util.List;
 
+// refer to Trino ConnectorViewDefinition
 public class TrinoViewDefinition {
     @SerializedName(value = "originalSql")
     private final String originalSql;
