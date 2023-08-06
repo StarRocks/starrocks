@@ -235,7 +235,7 @@ Status TabletUpdates::_load_pending_rowsets() {
                 auto rowset_meta = std::make_shared<RowsetMeta>(rowset_meta_data, &parse_ok);
                 CHECK(parse_ok) << "Corrupted rowset meta";
                 RowsetSharedPtr rowset;
-                auto st = RowsetFactory::create_rowset(_tablet.tablet_schema(), _tablet.schema_hash_path(),
+                auto st = RowsetFactory::create_rowset(_tablet.thread_safe_get_tablet_schema(), _tablet.schema_hash_path(),
                                                        rowset_meta, &rowset);
                 if (st.ok()) {
                     _pending_commits.emplace(version, rowset);
@@ -1082,8 +1082,8 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
     int32_t conditional_column = -1;
     const auto& txn_meta = rowset->rowset_meta()->get_meta_pb().txn_meta();
     if (txn_meta.has_merge_condition()) {
-        for (int i = 0; i < _tablet.tablet_schema()->columns().size(); ++i) {
-            if (_tablet.tablet_schema()->column(i).name() == txn_meta.merge_condition()) {
+        for (int i = 0; i < _tablet.thread_safe_get_tablet_schema()->columns().size(); ++i) {
+            if (_tablet.thread_safe_get_tablet_schema()->column(i).name() == txn_meta.merge_condition()) {
                 conditional_column = i;
                 break;
             }
@@ -1464,7 +1464,7 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
                                  const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, int64_t tablet_id,
                                  DeletesMap* new_deletes) {
     if (condition_column >= 0) {
-        auto tablet_column = _tablet.tablet_schema()->column(condition_column);
+        auto tablet_column = _tablet.thread_safe_get_tablet_schema()->column(condition_column);
         std::vector<uint32_t> read_column_ids;
         read_column_ids.push_back(condition_column);
 
@@ -1573,7 +1573,7 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
     context.partition_id = _tablet.partition_id();
     context.tablet_schema_hash = _tablet.schema_hash();
     context.rowset_path_prefix = _tablet.schema_hash_path();
-    context.tablet_schema = _tablet.tablet_schema();
+    context.tablet_schema = _tablet.thread_safe_get_tablet_schema();
     context.rowset_state = COMMITTED;
     context.segments_overlap = NONOVERLAPPING;
     context.max_rows_per_segment =
@@ -3156,7 +3156,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     uint32_t next_rowset_id = 0;
     std::vector<RowsetLoadInfo> new_rowset_load_infos(src_rowsets.size());
 
-    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
+    Schema base_schema = ChunkHelper::convert_schema(base_tablet->thread_safe_get_tablet_schema());
 
     OlapReaderStatistics stats;
 
@@ -3182,7 +3182,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         writer_context.partition_id = _tablet.partition_id();
         writer_context.tablet_schema_hash = _tablet.schema_hash();
         writer_context.rowset_path_prefix = _tablet.schema_hash_path();
-        writer_context.tablet_schema = _tablet.tablet_schema();
+        writer_context.tablet_schema = _tablet.thread_safe_get_tablet_schema();
         writer_context.rowset_state = VISIBLE;
         writer_context.version = src_rowset->version();
         writer_context.segments_overlap = NONOVERLAPPING;
@@ -3322,10 +3322,10 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
 Status TabletUpdates::_convert_from_base_rowset(const std::shared_ptr<Tablet>& base_tablet,
                                                 const ChunkIteratorPtr& seg_iterator, ChunkChanger* chunk_changer,
                                                 const std::unique_ptr<RowsetWriter>& rowset_writer) {
-    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
+    Schema base_schema = ChunkHelper::convert_schema(base_tablet->thread_safe_get_tablet_schema());
     ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
 
-    Schema new_schema = ChunkHelper::convert_schema(_tablet.tablet_schema());
+    Schema new_schema = ChunkHelper::convert_schema(_tablet.thread_safe_get_tablet_schema());
     ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
@@ -3411,7 +3411,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
 
     std::vector<ChunkPtr> chunk_arr;
 
-    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
+    Schema base_schema = ChunkHelper::convert_schema(base_tablet->thread_safe_get_tablet_schema());
     ChunkSorter chunk_sorter;
 
     OlapReaderStatistics stats;
@@ -3439,7 +3439,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
         writer_context.partition_id = _tablet.partition_id();
         writer_context.tablet_schema_hash = _tablet.schema_hash();
         writer_context.rowset_path_prefix = _tablet.schema_hash_path();
-        writer_context.tablet_schema = _tablet.tablet_schema();
+        writer_context.tablet_schema = _tablet.thread_safe_get_tablet_schema();
         writer_context.rowset_state = VISIBLE;
         writer_context.version = src_rowset->version();
         writer_context.segments_overlap = src_rowset->rowset_meta()->segments_overlap();
@@ -3454,7 +3454,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
 
         ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
 
-        Schema new_schema = ChunkHelper::convert_schema(_tablet.tablet_schema());
+        Schema new_schema = ChunkHelper::convert_schema(_tablet.thread_safe_get_tablet_schema());
 
         for (auto& seg_iterator : seg_iterators) {
             if (seg_iterator.get() == nullptr) {
@@ -3828,7 +3828,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
             if (rowset_meta->tablet_id() != _tablet.tablet_id()) {
                 return Status::InternalError("mismatched tablet id");
             }
-            RETURN_IF_ERROR(RowsetFactory::create_rowset(_tablet.tablet_schema(), _tablet.schema_hash_path(),
+            RETURN_IF_ERROR(RowsetFactory::create_rowset(_tablet.thread_safe_get_tablet_schema(), _tablet.schema_hash_path(),
                                                          rowset_meta, &rowset));
             if (rowset->start_version() != rowset->end_version()) {
                 return Status::InternalError("mismatched start and end version");
@@ -4142,7 +4142,7 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
                                         vector<std::unique_ptr<Column>>* columns, void* state) {
     std::vector<uint32_t> unique_column_ids;
     for (unsigned int column_id : column_ids) {
-        const TabletColumn& tablet_column = _tablet.tablet_schema()->column(column_id);
+        const TabletColumn& tablet_column = _tablet.thread_safe_get_tablet_schema()->column(column_id);
         unique_column_ids.push_back(tablet_column.unique_id());
     }
 
@@ -4163,7 +4163,7 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
     }
     if (with_default && state == nullptr) {
         for (auto i = 0; i < column_ids.size(); ++i) {
-            const TabletColumn& tablet_column = _tablet.tablet_schema()->column(column_ids[i]);
+            const TabletColumn& tablet_column = _tablet.thread_safe_get_tablet_schema()->column(column_ids[i]);
             if (tablet_column.has_default_value()) {
                 const TypeInfoPtr& type_info = get_type_info(tablet_column);
                 std::unique_ptr<DefaultValueColumnIterator> default_value_iter =
@@ -4255,7 +4255,7 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
             ASSIGN_OR_RETURN(auto col_iter, new_dcg_column_iterator(ctx, fs, iter_opts, unique_column_ids[i]));
             if (col_iter == nullptr) {
                 // not found in delta column file, build iterator from main segment
-                ASSIGN_OR_RETURN(col_iter, (*segment)->new_column_iterator(id, nullptr, _tablet.tablet_schema()));
+                ASSIGN_OR_RETURN(col_iter, (*segment)->new_column_iterator(id));
                 iter_opts.read_file = read_file.get();
             }
             RETURN_IF_ERROR(col_iter->init(iter_opts));
