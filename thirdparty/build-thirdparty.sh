@@ -1131,11 +1131,6 @@ build_libdeflate() {
     $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_BUILD_TYPE=Release
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
-
-    mkdir -p $TP_INSTALL_DIR/include/libdeflate
-    cp $TP_SOURCE_DIR/$LIBDEFLATE_SOURCE/libdeflate.h $TP_INSTALL_DIR/include/libdeflate/
-    cp $TP_SOURCE_DIR/$LIBDEFLATE_SOURCE/common_defs.h $TP_INSTALL_DIR/include/libdeflate/
-    cp $TP_SOURCE_DIR/$LIBDEFLATE_SOURCE/build/libdeflate.a $TP_INSTALL_DIR/lib/
 }
 
 # restore cxxflags/cppflags/cflags to default one
