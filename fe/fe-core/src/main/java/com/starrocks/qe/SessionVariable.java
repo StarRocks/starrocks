@@ -261,6 +261,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_CTE_REUSE_RATE = "cbo_cte_reuse_rate";
     public static final String CBO_CTE_MAX_LIMIT = "cbo_cte_max_limit";
     public static final String CBO_CTE_REUSE_RATE_V2 = "cbo_cte_reuse_rate_v2";
+    public static final String PREFER_CTE_REUSE_REWRITE = "prefer_cte_reuse_rewrite";
     public static final String ENABLE_SQL_DIGEST = "enable_sql_digest";
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
@@ -670,6 +671,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_CTE_MAX_LIMIT, flag = VariableMgr.INVISIBLE)
     private int cboCTEMaxLimit = 10;
+
+    @VarAttr(name = PREFER_CTE_REUSE_REWRITE, flag = VariableMgr.INVISIBLE)
+    private boolean preferCTEReuseRewrite = false;
 
     @VarAttr(name = CBO_PRUNE_SUBFIELD, flag = VariableMgr.INVISIBLE)
     private boolean cboPruneSubfield = true;
@@ -1913,6 +1917,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboCteReuse(boolean cboCteReuse) {
         this.cboCteReuse = cboCteReuse;
+    }
+
+    public boolean isPreferCTEReuseRewrite() {
+        return preferCTEReuseRewrite;
     }
 
     public void setSingleNodeExecPlan(boolean singleNodeExecPlan) {
