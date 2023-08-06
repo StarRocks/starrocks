@@ -793,7 +793,7 @@ set(STARROCKS_DEPENDENCIES
     avro
     serdes
     fiu
-    libdeflate::libdeflate_static
+    libdeflate
     ${WL_END_GROUP}
 )
 
