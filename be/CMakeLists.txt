@@ -166,14 +166,6 @@ endif()
 include_directories(${Boost_INCLUDE_DIRS})
 message(STATUS ${Boost_LIBRARIES})
 
-add_subdirectory(${SRC_DIR}/thirdparty/libdeflate)
-include_directories(libdeflate)
-set(libdeflate_DIR ${BUILD_DIR}/src/thirdparty/libdeflate)
-message(STATUS "Using libdeflate Dir: ${libdeflate_DIR}")
-if(NOT TARGET libdeflate::libdeflate_static)
-    find_package(libdeflate CONFIG REQUIRED)
-endif()
-
 set(GPERFTOOLS_HOME "${THIRDPARTY_DIR}/gperftools")
 
 # Set all libraries
@@ -364,6 +356,9 @@ set_target_properties(serdes PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/
 
 add_library(opentelemetry_exporter_jaeger_trace STATIC IMPORTED GLOBAL)
 set_target_properties(opentelemetry_exporter_jaeger_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_exporter_jaeger_trace.a)
+
+add_library(libdeflate STATIC IMPORTED GLOBAL)
+set_target_properties(libdeflate PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libdeflate.a)
 
 # cachelib
 set(CACHELIB_DEPENDENCIES
@@ -798,7 +793,7 @@ set(STARROCKS_DEPENDENCIES
     avro
     serdes
     fiu
-    libdeflate::libdeflate_static
+    libdeflate
     ${WL_END_GROUP}
 )
 

@@ -44,7 +44,7 @@
 
 #include "gutil/endian.h"
 #include "gutil/strings/substitute.h"
-#include "thirdparty/libdeflate/libdeflate.h"
+#include "libdeflate/libdeflate.h"
 #include "util/compression/compression_context_pool_singletons.h"
 #include "util/faststring.h"
 
