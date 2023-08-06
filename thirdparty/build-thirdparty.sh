@@ -1123,6 +1123,21 @@ build_fiu() {
     cp $TP_SOURCE_DIR/$FIU_SOURCE/installed/lib/libfiu.a $TP_INSTALL_DIR/lib/
 }
 
+# libdeflate
+build_libdeflate() {
+    check_if_source_exist $LIBDEFLATE_SOURCE
+    mkdir -p $TP_SOURCE_DIR/$LIBDEFLATE_SOURCE/build
+    cd $TP_SOURCE_DIR/$LIBDEFLATE_SOURCE/build
+    $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_BUILD_TYPE=Release
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
+
+    mkdir -p $TP_INSTALL_DIR/include/libdeflate
+    cp $TP_SOURCE_DIR/$LIBDEFLATE_SOURCE/libdeflate.h $TP_INSTALL_DIR/include/libdeflate/
+    cp $TP_SOURCE_DIR/$LIBDEFLATE_SOURCE/common_defs.h $TP_INSTALL_DIR/include/libdeflate/
+    cp $TP_SOURCE_DIR/$LIBDEFLATE_SOURCE/build/libdeflate.a $TP_INSTALL_DIR/lib/
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1207,6 +1222,7 @@ build_serdes
 build_datasketches
 build_async_profiler
 build_fiu
+build_libdeflate
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
