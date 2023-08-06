@@ -2678,7 +2678,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
         }
     }
 
-    auto tablet_schema_ptr = tablet->tablet_schema();
+    auto tablet_schema_ptr = tablet->thread_safe_get_tablet_schema();
     vector<ColumnId> pk_columns(tablet_schema_ptr->num_key_columns());
     for (auto i = 0; i < tablet_schema_ptr->num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
