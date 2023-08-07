@@ -82,7 +82,7 @@ select group_concat(name,subject order by 1,2), group_concat(distinct name,score
 TiEnglish	Ti98
 TiPhy	Ti98
 TomEnglish	None
-TomEnglish,TomMath	Tom80,Tom90
+TomEnglish,TomMath	Tom90,Tom80
 -- !result
 select group_concat(distinct name,subject order by 1,2), group_concat(distinct score) from ss group by id order by 1;
 -- result:
@@ -261,7 +261,7 @@ E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 50. Deta
 -- !result
 select group_concat(distinct name,subject order by 1,2), count(distinct id), group_concat(name) from ss order by 1;
 -- result:
-TiEnglish,TiPhy,TomEnglish,TomMath	3	Tom,Tom,May,Ti,Ti,Tom,Tom
+TiEnglish,TiPhy,TomEnglish,TomMath	3	Ti,Tom,Tom,Tom,Tom,May,Ti
 -- !result
 select group_concat(distinct name,subject order by 1,2) from ss order by 1;
 -- result:
@@ -269,15 +269,15 @@ TiEnglish,TiPhy,TomEnglish,TomMath
 -- !result
 select group_concat(name,subject order by 1,2), group_concat(name,score) from ss order by 1;
 -- result:
-TiEnglish,TiPhy,TomEnglish,TomEnglish,TomMath	Tom90,Tom80,Ti98,Ti98
+TiEnglish,TiPhy,TomEnglish,TomEnglish,TomMath	Ti98,Ti98,Tom90,Tom80
 -- !result
 select group_concat(name,subject order by 1,2), group_concat(distinct name,score) from ss order by 1;
 -- result:
-TiEnglish,TiPhy,TomEnglish,TomEnglish,TomMath	Tom90,Tom80,Ti98
+TiEnglish,TiPhy,TomEnglish,TomEnglish,TomMath	Ti98,Tom90,Tom80
 -- !result
 select group_concat(distinct name,subject order by 1,2), group_concat(distinct score) from ss order by 1;
 -- result:
-TiEnglish,TiPhy,TomEnglish,TomMath	98,80,90
+TiEnglish,TiPhy,TomEnglish,TomMath	80,90,98
 -- !result
 select group_concat(distinct name,subject order by 1,2) from ss order by 1;
 -- result:
@@ -297,7 +297,7 @@ E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 58. Deta
 -- !result
 select group_concat(distinct name,subject order by score,4.00) from ss order by 1;
 -- result:
-TomMath,TomEnglish,TiEnglish,TiPhy
+TomMath,TomEnglish,TiPhy,TiEnglish
 -- !result
 select group_concat(distinct name,null order by score,4.00) from ss order by 1;
 -- result:
@@ -313,7 +313,7 @@ None
 -- !result
 select group_concat(distinct name order by score,4.00),group_concat(subject order by score,4.00),array_agg(subject order by score,4.00)  from ss order by 1;
 -- result:
-Tom,Tom,Ti	Math,English,English,Phy	[null,null,"English",null,"Math","English","English","Phy"]
+Tom,Tom,Ti	Math,English,Phy,English	[null,"English",null,null,"Math","English","Phy","English"]
 -- !result
 select group_concat(distinct score order by 1,2) from ss order by 1;
 -- result:
@@ -396,9 +396,9 @@ set streaming_preaggregation_mode = force_streaming;
 select group_concat(name,subject order by 1,2), group_concat(name,score) from ss group by id;
 -- result:
 TomEnglish,TomMath	Tom90,Tom80
-TiEnglish	Ti98
 TomEnglish	None
 TiPhy	Ti98
+TiEnglish	Ti98
 -- !result
 select group_concat(distinct name,subject order by 1,2), count(distinct id), group_concat(name) from ss group by id order by 1;
 -- result:
@@ -605,7 +605,7 @@ E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 50. Deta
 -- !result
 select group_concat(distinct name,subject order by 1,2), count(distinct id), group_concat(name) from ss order by 1;
 -- result:
-TiEnglish,TiPhy,TomEnglish,TomMath	3	Tom,Tom,Ti,Tom,Tom,May,Ti
+TiEnglish,TiPhy,TomEnglish,TomMath	3	May,Ti,Ti,Tom,Tom,Tom,Tom
 -- !result
 select group_concat(distinct name,subject order by 1,2) from ss order by 1;
 -- result:
@@ -613,15 +613,15 @@ TiEnglish,TiPhy,TomEnglish,TomMath
 -- !result
 select group_concat(name,subject order by 1,2), group_concat(name,score) from ss order by 1;
 -- result:
-TiEnglish,TiPhy,TomEnglish,TomEnglish,TomMath	Tom90,Tom80,Ti98,Ti98
+TiEnglish,TiPhy,TomEnglish,TomEnglish,TomMath	Ti98,Ti98,Tom90,Tom80
 -- !result
 select group_concat(name,subject order by 1,2), group_concat(distinct name,score) from ss order by 1;
 -- result:
-TiEnglish,TiPhy,TomEnglish,TomEnglish,TomMath	Tom80,Ti98,Tom90
+TiEnglish,TiPhy,TomEnglish,TomEnglish,TomMath	Ti98,Tom80,Tom90
 -- !result
 select group_concat(distinct name,subject order by 1,2), group_concat(distinct score) from ss order by 1;
 -- result:
-TiEnglish,TiPhy,TomEnglish,TomMath	98,90,80
+TiEnglish,TiPhy,TomEnglish,TomMath	98,80,90
 -- !result
 select group_concat(distinct name,subject order by 1,2) from ss order by 1;
 -- result:
@@ -633,7 +633,7 @@ TiEnglish,TiPhy,TomMath,TomEnglish
 -- !result
 select group_concat(distinct name,subject order by score), count(distinct id), max(score)  from ss order by 1;
 -- result:
-TomMath,TomEnglish,TiPhy,TiEnglish	3	98
+TomMath,TomEnglish,TiEnglish,TiPhy	3	98
 -- !result
 select group_concat(distinct name,subject order by score,4) from ss order by 1;
 -- result:
@@ -657,7 +657,7 @@ None
 -- !result
 select group_concat(distinct name order by score,4.00),group_concat(subject order by score,4.00),array_agg(subject order by score,4.00)  from ss order by 1;
 -- result:
-Tom,Tom,Ti	Math,English,English,Phy	["English",null,null,null,"Math","English","English","Phy"]
+Tom,Tom,Ti	Math,English,Phy,English	[null,null,null,"English","Math","English","English","Phy"]
 -- !result
 select group_concat(distinct score order by 1,2) from ss order by 1;
 -- result:
@@ -685,11 +685,11 @@ TiEnglish,TiPhy,TomEnglish,TomEnglish,TomMath	3	98
 -- !result
 select group_concat( name,subject order by 1,score), count(distinct id), max(score)  from ss order by 1;
 -- result:
-TiEnglish,TiPhy,TomMath,TomEnglish	3	98
+TiPhy,TiEnglish,TomMath,TomEnglish	3	98
 -- !result
 select group_concat( name,subject order by score), count(distinct id), max(score)  from ss order by 1;
 -- result:
-TomMath,TomEnglish,TiPhy,TiEnglish	3	98
+TomMath,TomEnglish,TiEnglish,TiPhy	3	98
 -- !result
 select group_concat( name,subject order by score,4), count(distinct id), max(score)  from ss order by 1;
 -- result:
@@ -730,4 +730,58 @@ select group_concat( 1,2 order by score,2) from ss order by 1;
 select group_concat( 3.1323,subject order by 1,-20) from ss order by 1;
 -- result:
 E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 50. Detail message: ORDER BY position -20 is not in group_concat output list.')
+-- !result
+select group_concat();
+-- result:
+E: (1064, "Getting analyzing error from line 1, column 7 to line 1, column 20. Detail message: group_concat requires at least one parameter: group_concat(',').")
+-- !result
+select group_concat() from ss;
+-- result:
+E: (1064, "Getting analyzing error from line 1, column 7 to line 1, column 20. Detail message: group_concat requires at least one parameter: group_concat(',').")
+-- !result
+select group_concat("中国",name) from ss;
+-- result:
+中国Tom,中国Tom,中国Ti,中国Tom,中国Tom,中国May,中国Ti
+-- !result
+select group_concat("中国",name order by "第一") from ss;
+-- result:
+中国May,中国Ti,中国Ti,中国Tom,中国Tom,中国Tom,中国Tom
+-- !result
+select group_concat("中国",name order by "第一" separator '\n') from ss;
+-- result:
+中国Ti
+中国Tom
+中国Tom
+中国May
+中国Ti
+中国Tom
+中国Tom
+-- !result
+select group_concat("中国",name order by "第一" separator subject) from ss;
+-- result:
+中国TomEnglish中国TomMath中国TomEnglish中国TiPhy中国Ti
+-- !result
+select group_concat("中国" order by "第一" separator score) from ss;
+-- result:
+E: (1064, "Getting analyzing error at line 1, column 49. Detail message: group_concat requires separator to be of getType() STRING: group_concat('中国', `test_db_5c8b74bc353511eeaf8600163e04d4c2`.`ss`.`score` ORDER BY '第一' ASC).")
+-- !result
+select group_concat(  order by score) from ss order by 1;
+-- result:
+E: (1064, "Getting analyzing error from line 1, column 7 to line 1, column 36. Detail message: group_concat requires at least one parameter: group_concat(',' ORDER BY `test_db_5c8b74bc353511eeaf8600163e04d4c2`.`ss`.`score` ASC).")
+-- !result
+select group_concat(distinct  order by score) from ss order by 1;
+-- result:
+E: (1064, "Getting syntax error from line 1, column 7 to line 1, column 44. Detail message: Incorrect number of arguments in expr 'group_concat'.")
+-- !result
+select group_concat([1,2]) from ss;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 25. Detail message: No matching function with signature: group_concat(array<tinyint(4)>, varchar).')
+-- !result
+select group_concat(json_object("2:3")) from ss;
+-- result:
+{"2:3": null},{"2:3": null},{"2:3": null},{"2:3": null},{"2:3": null},{"2:3": null},{"2:3": null},{"2:3": null}
+-- !result
+select group_concat(map(2,3)) from ss;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 28. Detail message: No matching function with signature: group_concat(map<tinyint(4),tinyint(4)>, varchar).')
 -- !result

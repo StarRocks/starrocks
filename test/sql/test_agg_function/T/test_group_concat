@@ -170,3 +170,16 @@ select group_concat( score order by 1,name) from ss order by 1;
 select group_concat( 1,2 order by 1,2) from ss order by 1;
 select group_concat( 1,2 order by score,2) from ss order by 1;
 select group_concat( 3.1323,subject order by 1,-20) from ss order by 1;
+
+select group_concat();
+select group_concat() from ss;
+select group_concat("中国",name) from ss;
+select group_concat("中国",name order by "第一") from ss;
+select group_concat("中国",name order by "第一" separator '\n') from ss;
+select group_concat("中国",name order by "第一" separator subject) from ss;
+select group_concat("中国" order by "第一" separator score) from ss;
+select group_concat(  order by score) from ss order by 1;
+select group_concat(distinct  order by score) from ss order by 1;
+select group_concat([1,2]) from ss;
+select group_concat(json_object("2:3")) from ss;
+select group_concat(map(2,3)) from ss;
