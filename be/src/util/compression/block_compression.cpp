@@ -34,6 +34,7 @@
 
 #include "util/compression/block_compression.h"
 
+#include <libdeflate.h>
 #include <lz4/lz4.h>
 #include <lz4/lz4frame.h>
 #include <snappy/snappy-sinksource.h>
@@ -44,7 +45,6 @@
 
 #include "gutil/endian.h"
 #include "gutil/strings/substitute.h"
-#include "thirdparty/libdeflate/libdeflate.h"
 #include "util/compression/compression_context_pool_singletons.h"
 #include "util/faststring.h"
 
