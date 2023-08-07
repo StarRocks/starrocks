@@ -43,13 +43,13 @@ You can use one of the following solutions to resolve this issue:
 
 #### Hedged Read
 
-Use the following parameters (supported from v3.1 onwards) in the BE configuration file `be.conf` to enable and configure the Hedged Read feature in your HDFS cluster.
+Use the following parameters (supported from v3.0 onwards) in the BE configuration file `be.conf` to enable and configure the Hedged Read feature in your HDFS cluster.
 
 | Parameter                                | Default value | Description                                                         |
 | ---------------------------------------- | ------------- | ------------------------------------------------------------------- |
 | hdfs_client_enable_hedged_read           | false         | Specifies whether to enable the hedged read feature.                                    |
-| hdfs_client_hedged_read_threadpool_size  | 128           | Specifies the size of the Hedged Read thread pool on your client. The thread pool size limits the number of threads to dedicate to the running of hedged reads in your client. This parameter is equivalent to the `dfs.client.hedged.read.threadpool.size` parameter in the `hdfs-site.xml` file of your HDFS cluster. |
-| hdfs_client_hedged_read_threshold_millis | 2500          | Specifies the number of milliseconds to wait before starting up a hedged read. For example, you have set this parameter to `30`. In this situation, if a read from a block has not returned within 30 milliseconds, StarRocks immediately starts up a hedged read against a different block replica. This parameter is equivalent to the `dfs.client.hedged.read.threshold.millis` parameter in the `hdfs-site.xml` file of your HDFS cluster. |
+| hdfs_client_hedged_read_threadpool_size  | 128           | Specifies the size of the Hedged Read thread pool on your HDFS client. The thread pool size limits the number of threads to dedicate to the running of hedged reads in your HDFS client. This parameter is equivalent to the `dfs.client.hedged.read.threadpool.size` parameter in the `hdfs-site.xml` file of your HDFS cluster. |
+| hdfs_client_hedged_read_threshold_millis | 2500          | Specifies the number of milliseconds to wait before starting up a hedged read. For example, you have set this parameter to `30`. In this situation, if a read from a block has not returned within 30 milliseconds, your HDFS client immediately starts up a hedged read against a different block replica. This parameter is equivalent to the `dfs.client.hedged.read.threshold.millis` parameter in the `hdfs-site.xml` file of your HDFS cluster. |
 
 If the value of any of the following metrics in your query profiles exceeds `0`, the Hedged Read feature is enabled.
 
