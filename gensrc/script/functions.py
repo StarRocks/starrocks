@@ -297,6 +297,8 @@ vectorized_functions = [
 
     [30320, 'regexp_extract', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'BIGINT'], 'StringFunctions::regexp_extract',
      'StringFunctions::regexp_extract_prepare', 'StringFunctions::regexp_close'],
+    [30321, 'regexp_extract_all', 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR', 'BIGINT'], 'StringFunctions::regexp_extract_all',
+     'StringFunctions::regexp_extract_prepare', 'StringFunctions::regexp_close'],
     [30330, 'regexp_replace', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'], 'StringFunctions::regexp_replace',
      'StringFunctions::regexp_replace_prepare', 'StringFunctions::regexp_close'],
     # @Deprecated: 'replace_old' will be deleted in the future version, keep it just for compatible

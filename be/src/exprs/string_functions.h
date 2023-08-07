@@ -314,6 +314,14 @@ public:
     DEFINE_VECTORIZED_FN(regexp_extract);
 
     /**
+     * return all match sub-string
+     * @param: [string_value, pattern_value]
+     * @paramType: [BinaryColumn, BinaryColumn]
+     * @return: Array<BinaryColumn>
+     */
+    DEFINE_VECTORIZED_FN(regexp_extract_all);
+
+    /**
      * @param: [string_value, pattern_value, replace_value]
      * @paramType: [BinaryColumn, BinaryColumn, BinaryColumn]
      * @return: BinaryColumn
