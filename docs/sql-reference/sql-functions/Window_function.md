@@ -21,8 +21,9 @@ Currently supported functions include:
 * MIN(), MAX(), COUNT(), SUM(), AVG()
 * FIRST_VALUE(), LAST_VALUE(), LEAD(), LAG()
 * ROW_NUMBER(), RANK(), DENSE_RANK()
-* CUME_DIST(), PERCENT_RANK()
-* QUALIFY()
+* CUME_DIST(), PERCENT_RANK(), QUALIFY()
+* NTILE()
+* VARIANCE(), VAR_SAMP(), STD(), STDDEV_SAMP(), COVAR_SAMP(), COVAR_POP(), CORR()
 
 ### PARTITION BY clause
 
@@ -122,7 +123,7 @@ This section describes the window functions supported in StarRocks.
 Syntax:
 
 ~~~SQL
-AVG(expression) [OVER (*analytic_clause*)]
+AVG(expr) [OVER (*analytic_clause*)]
 ~~~
 
 Example:
@@ -163,7 +164,7 @@ where property in ('odd','even');
 Syntax:
 
 ~~~SQL
-COUNT(expression) [OVER (analytic_clause)]
+COUNT(expr) [OVER (analytic_clause)]
 ~~~
 
 Example:
@@ -636,7 +637,7 @@ Returns the maximum value of the specified rows in the current window.
 Syntax
 
 ~~~SQL
-MAX(expression) [OVER (analytic_clause)]
+MAX(expr) [OVER (analytic_clause)]
 ~~~
 
 Example:
@@ -689,7 +690,7 @@ Returns the minimum value of the specified rows in the current window.
 Syntax:
 
 ~~~SQL
-MIN(expression) [OVER (analytic_clause)]
+MIN(expr) [OVER (analytic_clause)]
 ~~~
 
 Example:
@@ -990,7 +991,7 @@ The execution order of clauses in a query with QUALIFY is evaluated in the follo
 Syntax:
 
 ~~~SQL
-SUM(expression) [OVER (analytic_clause)]
+SUM(expr) [OVER (analytic_clause)]
 ~~~
 
 Example:
@@ -1022,4 +1023,354 @@ from int_t where property in ('odd','even');
 | 5  | odd      | 15           |
 | 7  | odd      | 21           |
 +----+----------+--------------+
+~~~
+
+## VARIANCE, VAR_POP, VARIANCE_POP
+
+Returns the population variance of an expression. VAR_POP and VARIANCE_POP are aliases of VARIANCE. These functions can be used as window functions since v2.5.10.
+
+**Syntax:**
+
+~~~SQL
+VARIANCE(expr) [OVER (partition_by_clause)]
+~~~
+
+> **NOTE**
+>
+> VARIANCE() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
+
+**Parameters:**
+
+If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
+
+**Examples:**
+
+Suppose table `agg` has the following data:
+
+~~~plaintext
+mysql> select * from agg;
++------+-------+-------+
+| no   | k     | v     |
++------+-------+-------+
+|    1 | 10.00 |  NULL |
+|    2 | 10.00 | 11.00 |
+|    2 | 20.00 | 22.00 |
+|    2 | 25.00 |  NULL |
+|    2 | 30.00 | 35.00 |
++------+-------+-------+
+~~~
+
+Use the VARIANCE() function.
+
+~~~plaintext
+mysql> select variance(k) over (partition by no) FROM agg;
++-------------------------------------+
+| variance(k) OVER (PARTITION BY no ) |
++-------------------------------------+
+|                                   0 |
+|                             54.6875 |
+|                             54.6875 |
+|                             54.6875 |
+|                             54.6875 |
++-------------------------------------+
+~~~
+
+## VAR_SAMP, VARIANCE_SAMP
+
+Returns the sample variance of an expression. These functions can be used as window functions since v2.5.10.
+
+**Syntax:**
+
+~~~sql
+VAR_SAMP(expr) [OVER (partition_by_clause)]
+~~~
+
+> **NOTE**
+>
+> VAR_SAMP() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
+
+**Parameters:**
+
+If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
+
+**Examples:**
+
+Suppose table `agg` has the following data:
+
+~~~plaintext
+mysql> select * from agg;
++------+-------+-------+
+| no   | k     | v     |
++------+-------+-------+
+|    1 | 10.00 |  NULL |
+|    2 | 10.00 | 11.00 |
+|    2 | 20.00 | 22.00 |
+|    2 | 25.00 |  NULL |
+|    2 | 30.00 | 35.00 |
++------+-------+-------+
+~~~
+
+Use the VAR_SAMP() window function.
+
+~~~plaintext
+mysql> select VAR_SAMP(k) over (partition by no) FROM agg;
++-------------------------------------+
+| var_samp(k) OVER (PARTITION BY no ) |
++-------------------------------------+
+|                                   0 |
+|                   72.91666666666667 |
+|                   72.91666666666667 |
+|                   72.91666666666667 |
+|                   72.91666666666667 |
++-------------------------------------+
+~~~
+
+## STD, STDDEV, STDDEV_POP
+
+Returns the standard deviation of an expression. These functions can be used as window functions since v2.5.10.
+
+**Syntax:**
+
+~~~sql
+STD(expr) [OVER (partition_by_clause)]
+~~~
+
+> **NOTE**
+>
+> STD() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
+
+**Parameters:**
+
+If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
+
+**Examples:**
+
+Suppose table `agg` has the following data:
+
+~~~plaintext
+mysql> select * from agg;
++------+-------+-------+
+| no   | k     | v     |
++------+-------+-------+
+|    1 | 10.00 |  NULL |
+|    2 | 10.00 | 11.00 |
+|    2 | 20.00 | 22.00 |
+|    2 | 25.00 |  NULL |
+|    2 | 30.00 | 35.00 |
++------+-------+-------+
+~~~
+
+Use the STD() window function.
+
+~~~plaintext
+mysql> select STD(k) over (partition by no) FROM agg;
++--------------------------------+
+| std(k) OVER (PARTITION BY no ) |
++--------------------------------+
+|                              0 |
+|               7.39509972887452 |
+|               7.39509972887452 |
+|               7.39509972887452 |
+|               7.39509972887452 |
++--------------------------------+
+~~~
+
+## STDDEV_SAMP
+
+Returns the sample standard deviation of an expression. This function can be used as a window function since v2.5.10.
+
+**Syntax:**
+
+~~~sql
+STDDEV_SAMP(expr) [OVER (partition_by_clause)]
+~~~
+
+> **NOTE**
+>
+> STDDEV_SAMP() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
+
+**Parameters:**
+
+If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
+
+**Examples:**
+
+Suppose table `agg` has the following data:
+
+~~~plaintext
+mysql> select * from agg;
++------+-------+-------+
+| no   | k     | v     |
++------+-------+-------+
+|    1 | 10.00 |  NULL |
+|    2 | 10.00 | 11.00 |
+|    2 | 20.00 | 22.00 |
+|    2 | 25.00 |  NULL |
+|    2 | 30.00 | 35.00 |
++------+-------+-------+
+~~~
+
+Use the STDDEV_SAMP() window function.
+
+~~~plaintext
+mysql> select STDDEV_SAMP(k) over (partition by no) FROM agg;
++----------------------------------------+
+| stddev_samp(k) OVER (PARTITION BY no ) |
++----------------------------------------+
+|                                      0 |
+|                      8.539125638299666 |
+|                      8.539125638299666 |
+|                      8.539125638299666 |
+|                      8.539125638299666 |
++----------------------------------------+
+~~~
+
+## COVAR_SAMP
+
+Returns the sample covariance of two expressions. This function is supported from v2.5.10. It is also an aggregate function.
+
+**Syntax:**
+
+~~~sql
+COVAR_SAMP(expr1,expr2) [OVER (partition_by_clause)]
+~~~
+
+> **NOTE**
+>
+> COVAR_SAMP() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
+
+**Parameters:**
+
+If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
+
+**Examples:**
+
+Suppose table `agg` has the following data:
+
+~~~plaintext
+mysql> select * from agg;
++------+-------+-------+
+| no   | k     | v     |
++------+-------+-------+
+|    1 | 10.00 |  NULL |
+|    2 | 10.00 | 11.00 |
+|    2 | 20.00 | 22.00 |
+|    2 | 25.00 |  NULL |
+|    2 | 30.00 | 35.00 |
++------+-------+-------+
+~~~
+
+Use the COVAR_SAMP() window function.
+
+~~~plaintext
+mysql> select COVAR_SAMP(k, v) over (partition by no) FROM agg;
++------------------------------------------+
+| covar_samp(k, v) OVER (PARTITION BY no ) |
++------------------------------------------+
+|                                     NULL |
+|                       119.99999999999999 |
+|                       119.99999999999999 |
+|                       119.99999999999999 |
+|                       119.99999999999999 |
++------------------------------------------+
+~~~
+
+## COVAR_POP
+
+Returns the population covariance of two expressions. This function is supported from v2.5.10. It is also an aggregate function.
+
+**Syntax:**
+
+~~~sql
+COVAR_POP(expr1, expr2) [OVER (partition_by_clause)]
+~~~
+
+> **NOTE**
+>
+> COVAR_POP() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
+
+**Parameters:**
+
+If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
+
+**Examples:**
+
+Suppose table `agg` has the following data:
+
+~~~plaintext
+mysql> select * from agg;
++------+-------+-------+
+| no   | k     | v     |
++------+-------+-------+
+|    1 | 10.00 |  NULL |
+|    2 | 10.00 | 11.00 |
+|    2 | 20.00 | 22.00 |
+|    2 | 25.00 |  NULL |
+|    2 | 30.00 | 35.00 |
++------+-------+-------+
+~~~
+
+Use the COVAR_POP() window function.
+
+~~~plaintext
+mysql> select COVAR_POP(k, v) over (partition by no) FROM agg;
++-----------------------------------------+
+| covar_pop(k, v) OVER (PARTITION BY no ) |
++-----------------------------------------+
+|                                    NULL |
+|                       79.99999999999999 |
+|                       79.99999999999999 |
+|                       79.99999999999999 |
+|                       79.99999999999999 |
++-----------------------------------------+
+~~~
+
+## CORR
+
+Returns the Pearson correlation coefficient between two expressions. This function is supported from v2.5.10. It is also an aggregate function.
+
+**Syntax:**
+
+~~~sql
+CORR(expr1, expr2) [OVER (partition_by_clause)]
+~~~
+
+> **NOTE**
+>
+> CORR() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
+
+**Parameters:**
+
+If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
+
+**Examples:**
+
+Suppose table `agg` has the following data:
+
+~~~plaintext
+mysql> select * from agg;
++------+-------+-------+
+| no   | k     | v     |
++------+-------+-------+
+|    1 | 10.00 |  NULL |
+|    2 | 10.00 | 11.00 |
+|    2 | 20.00 | 22.00 |
+|    2 | 25.00 |  NULL |
+|    2 | 30.00 | 35.00 |
++------+-------+-------+
+~~~
+
+Use the CORR() window function.
+
+~~~plaintext
+mysql> select CORR(k, v) over (partition by no) FROM agg;
++------------------------------------+
+| corr(k, v) OVER (PARTITION BY no ) |
++------------------------------------+
+|                               NULL |
+|                 0.9988445981121532 |
+|                 0.9988445981121532 |
+|                 0.9988445981121532 |
+|                 0.9988445981121532 |
++------------------------------------+
 ~~~
