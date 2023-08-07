@@ -17,7 +17,10 @@ package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.Type;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hive.HiveClassNames;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -148,5 +151,33 @@ public class HiveMetastoreApiConverterTest {
         } catch (Exception e) {
             Assert.fail();
         }
+    }
+
+    @Test
+    public void testToMetastoreApiTable() {
+        HiveTable hiveTable = HiveTable.builder()
+                .setCatalogName("hive_catalog")
+                .setHiveDbName("hive_db")
+                .setHiveTableName("hive_table")
+                .setPartitionColumnNames(Lists.newArrayList("p1"))
+                .setFullSchema(Lists.newArrayList(new Column("c1", Type.INT), new Column("p1", Type.INT)))
+                .setDataColumnNames(Lists.newArrayList("c1"))
+                .setTableLocation("table_location")
+                .build();
+        hiveTable.setComment("my_comment");
+        Table table = HiveMetastoreApiConverter.toMetastoreApiTable(hiveTable);
+        Assert.assertEquals("hive_table", table.getTableName());
+        Assert.assertEquals("hive_db", table.getDbName());
+        Assert.assertEquals("p1", table.getPartitionKeys().get(0).getName());
+        Assert.assertEquals("table_location", table.getSd().getLocation());
+        Assert.assertEquals("c1", table.getSd().getCols().get(0).getName());
+        Assert.assertEquals("int", table.getSd().getCols().get(0).getType());
+
+        Assert.assertEquals(HiveClassNames.PARQUET_HIVE_SERDE_CLASS, table.getSd().getSerdeInfo().getSerializationLib());
+        Assert.assertEquals(HiveClassNames.MAPRED_PARQUET_INPUT_FORMAT_CLASS, table.getSd().getInputFormat());
+        Assert.assertEquals(HiveClassNames.MAPRED_PARQUET_OUTPUT_FORMAT_CLASS, table.getSd().getOutputFormat());
+
+        Assert.assertEquals("my_comment", table.getParameters().get("comment"));
+        Assert.assertEquals("-1", table.getParameters().get("numFiles"));
     }
 }
