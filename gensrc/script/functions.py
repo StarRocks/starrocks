@@ -297,6 +297,8 @@ vectorized_functions = [
 
     [30320, 'regexp_extract', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'BIGINT'], 'StringFunctions::regexp_extract',
      'StringFunctions::regexp_extract_prepare', 'StringFunctions::regexp_close'],
+    [30321, 'regexp_extract_all', 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR', 'BIGINT'], 'StringFunctions::regexp_extract_all',
+     'StringFunctions::regexp_extract_prepare', 'StringFunctions::regexp_close'],
     [30330, 'regexp_replace', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'], 'StringFunctions::regexp_replace',
      'StringFunctions::regexp_replace_prepare', 'StringFunctions::regexp_close'],
     # @Deprecated: 'replace_old' will be deleted in the future version, keep it just for compatible
@@ -423,6 +425,9 @@ vectorized_functions = [
     [50250, 'time_to_sec', 'BIGINT', ['TIME'], 'TimeFunctions::time_to_sec'],
     [50260, 'jodatime_format', 'VARCHAR', ['DATETIME', 'VARCHAR'], 'TimeFunctions::jodadatetime_format', 'TimeFunctions::jodatime_format_prepare', 'TimeFunctions::jodatime_format_close'],
     [50261, 'jodatime_format', 'VARCHAR', ['DATE', 'VARCHAR'], 'TimeFunctions::jodadate_format', 'TimeFunctions::jodatime_format_prepare', 'TimeFunctions::jodatime_format_close'],
+
+    [50262, 'to_iso8601', 'VARCHAR', ['DATETIME'], 'TimeFunctions::datetime_to_iso8601'],
+    [50263, 'to_iso8601', 'VARCHAR', ['DATE'], 'TimeFunctions::date_to_iso8601'],
 
     # unix timestamp extended version to int64
     # be sure to put before int32 version, so fe will find signature in order.

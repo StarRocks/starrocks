@@ -26,20 +26,20 @@
 #include "util/random.h"
 
 /* test result
-|value_count|start|end|mem usage|
-|----|----|---|----|
-|10000|1|5000000000|350K|
-|100000|1|5000000000|2.1M|
-|1000000|1|5000000000|4.9M|
-|10000|1|200000000|104K|
-|100000|1|200000000|377K|
-|1000000|1|200000000|2.8M|
-|10000|1|100000000|63K|
-|100000|1|100000000|293K|
-|1000000|1|100000000|2.3M|
-|10000|1|10000000|20K|
-|100000|1|10000000|230K|
-|1000000|1|10000000|1.2M|
+|value_count|start|end|mem usage|disk size (v1)|disk size (v2)|
+|----|----|---|----|----|----|
+|10000|1|5000000000|350K|94K|40K|
+|100000|1|5000000000|2.1M|647K|400K|
+|1000000|1|5000000000|4.9M|2.6M|2.6M|
+|10000|1|200000000|104K|43K|40K|
+|100000|1|200000000|377K|224K|224K|
+|1000000|1|200000000|2.8M|2M|2M|
+|10000|1|100000000|63K|32K|32K|
+|100000|1|100000000|293K|212K|212|
+|1000000|1|100000000|2.3M|2M|2M|
+|10000|1|10000000|20K|21K|21K|
+|100000|1|10000000|230K|200K|200K|
+|1000000|1|10000000|1.2M|1.2M|1.2M|
  */
 
 namespace starrocks {
@@ -82,6 +82,8 @@ void RoaringBitmapMemTest::do_bench(benchmark::State& state) {
     size_t end_size = CurrentThread::current().mem_tracker()->consumption();
 
     LOG(INFO) << "MEM_USAGE: " << (end_size - start_size) / 100;
+    LOG(INFO) << "DISK_SIZE(V1): " << _bitmap[0].getSizeInBytes(1);
+    LOG(INFO) << "DISK_SIZE(v2): " << _bitmap[0].getSizeInBytes(2);
     CurrentThread::current().set_mem_tracker(nullptr);
 }
 

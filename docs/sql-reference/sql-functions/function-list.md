@@ -38,6 +38,7 @@ You can find a function based on the following categories:
 - [bitmap](../sql-functions/aggregate-functions/bitmap.md)
 - [bitmap_agg](../sql-functions/bitmap-functions/bitmap_agg.md)
 - [count](../sql-functions/aggregate-functions/count.md)
+- [group_concat](../sql-functions/string-functions/group_concat.md)
 - [grouping](../sql-functions/aggregate-functions/grouping.md)
 - [grouping_id](../sql-functions/aggregate-functions/grouping_id.md)
 - [hll_empty](../sql-functions/aggregate-functions/hll_empty.md)
@@ -402,7 +403,10 @@ You can find a function based on the following categories:
 
 ## Table functions
 
+- [files](../sql-functions/table-functions/files.md)
 - [generate_series](../sql-functions/table-functions/generate_series.md)
+- [json_each](../sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
+- [unnest](../sql-functions/array-functions/unnest.md)
 
 ## Utility functions
 

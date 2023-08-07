@@ -665,7 +665,24 @@ public class UtFrameUtils {
         }
     }
 
-    private static Pair<String, ExecPlan> getQueryExecPlan(QueryStatement statement, ConnectContext connectContext) {
+    private static Pair<String, ExecPlan> getQueryExecPlan(QueryStatement statement, ConnectContext connectContext)
+            throws Exception {
+        Map<String, String> optHints = null;
+        SessionVariable sessionVariableBackup = connectContext.getSessionVariable();
+        if (statement.getQueryRelation() instanceof SelectRelation) {
+            SelectRelation selectRelation = (SelectRelation) statement.getQueryRelation();
+            optHints = selectRelation.getSelectList().getOptHints();
+        }
+
+        if (optHints != null) {
+            SessionVariable sessionVariable = (SessionVariable) sessionVariableBackup.clone();
+            for (String key : optHints.keySet()) {
+                VariableMgr.setSystemVariable(sessionVariable,
+                        new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
+            }
+            connectContext.setSessionVariable(sessionVariable);
+        }
+
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
 
         LogicalPlan logicalPlan;

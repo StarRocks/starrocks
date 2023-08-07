@@ -139,7 +139,7 @@ public:
         writer_context.version.first = 0;
         writer_context.version.second = 0;
         writer_context.segments_overlap = NONOVERLAPPING;
-        writer_context.partial_update_mode = PartialUpdateMode::COLUMN_MODE;
+        writer_context.partial_update_mode = PartialUpdateMode::COLUMN_UPDATE_MODE;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(partial_schema);

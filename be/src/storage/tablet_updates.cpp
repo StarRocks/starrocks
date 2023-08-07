@@ -658,7 +658,9 @@ Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetShare
         }
     }
     edit.add_deltas(rowsetid);
-    uint32_t rowsetid_add = std::max(1U, (uint32_t)rowset->num_segments());
+    // reserve id if .upt files exist, because we may transfer them to .dat files later.
+    uint32_t rowsetid_add =
+            std::max(std::max(1U, (uint32_t)rowset->num_update_files()), (uint32_t)rowset->num_segments());
     edit.set_rowsetid_add(rowsetid_add);
     // TODO: is rollback modification of rowset meta required if commit failed?
     rowset->make_commit(version, rowsetid);
@@ -873,6 +875,7 @@ void TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo& v
     auto scoped = trace::Scope(span);
 
     auto tablet_id = _tablet.tablet_id();
+    uint32_t rowset_id = version_info.deltas[0];
     auto& version = version_info.version;
     auto manager = StorageEngine::instance()->update_manager();
 
@@ -913,10 +916,20 @@ void TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo& v
             return;
         }
     }
+    bool enable_persistent_index = index.enable_persistent_index();
+    PersistentIndexMetaPB index_meta;
+    if (enable_persistent_index) {
+        st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), _tablet.tablet_id(), &index_meta);
+        if (!st.ok() && !st.is_not_found()) {
+            failure_handler("get persistent index meta failed", st);
+            return;
+        }
+    }
 
+    vector<std::pair<uint32_t, DelVectorPtr>> new_del_vecs;
     span->AddEvent("gen_delta_column_group");
     // 3. finalize and generate delta column group
-    st = state.finalize(&_tablet, rowset.get(), index);
+    st = state.finalize(&_tablet, rowset.get(), rowset_id, index_meta, new_del_vecs, index);
     if (!st.ok()) {
         failure_handler("finalize failed", st);
         return;
@@ -931,8 +944,8 @@ void TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo& v
         }
 
         st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version,
-                                                    state.delta_column_groups(),
-                                                    &(rowset->rowset_meta()->get_meta_pb()));
+                                                    state.delta_column_groups(), new_del_vecs, index_meta,
+                                                    enable_persistent_index, &(rowset->rowset_meta()->get_meta_pb()));
 
         if (!st.ok()) {
             failure_handler("apply_rowset_commit failed", st);
@@ -947,19 +960,51 @@ void TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo& v
                 return;
             }
         }
+        size_t num_dels = 0;
+        // put delvec in cache
+        TabletSegmentId tsid;
+        tsid.tablet_id = tablet_id;
+        for (auto& delvec_pair : new_del_vecs) {
+            tsid.segment_id = delvec_pair.first;
+            manager->set_cached_del_vec(tsid, delvec_pair.second);
+            // try to set empty dcg cache, for improving latency when reading
+            manager->set_cached_empty_delta_column_group(_tablet.data_dir()->get_meta(), tsid);
+            num_dels += delvec_pair.second->cardinality();
+        }
+        if (rowset->num_segments() > 0) {
+            // update rowset stats if insert missing rows
+            auto rowset_stats = std::make_unique<RowsetStats>();
+            rowset_stats->num_segments = rowset->num_segments();
+            rowset_stats->num_rows = rowset->num_rows();
+            rowset_stats->num_dels = num_dels;
+            rowset_stats->byte_size = rowset->data_disk_size();
+            rowset_stats->row_size = rowset->total_row_size();
+            rowset_stats->partial_update_by_column = false;
+            _calc_compaction_score(rowset_stats.get());
+
+            std::lock_guard lg(_rowset_stats_lock);
+            _rowset_stats[rowset_id] = std::move(rowset_stats);
+        }
         // 5. apply memory
         _next_log_id++;
         _apply_version_idx++;
         _apply_version_changed.notify_all();
     }
 
+    st = index.on_commited();
+    if (!st.ok()) {
+        failure_handler("primary index on_commit failed", st);
+        return;
+    }
+
     // 6. clear state and index cache
     manager->update_column_state_cache().remove(state_entry);
-    if (index.enable_persistent_index() ^ _tablet.get_enable_persistent_index()) {
+    if (enable_persistent_index ^ _tablet.get_enable_persistent_index()) {
         manager->index_cache().remove(index_entry);
     } else {
         manager->index_cache().release(index_entry);
     }
+    _update_total_stats(version_info.rowsets, nullptr, nullptr);
 }
 
 void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {

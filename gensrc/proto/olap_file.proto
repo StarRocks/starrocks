@@ -87,8 +87,9 @@ message FooterPointerPB {
 enum PartialUpdateMode {
     UNKNOWN_MODE = 0;
     ROW_MODE = 1;
-    COLUMN_MODE = 2;
+    COLUMN_UPSERT_MODE = 2;
     AUTO_MODE = 3;
+    COLUMN_UPDATE_MODE = 4;
 }
 message RowsetTxnMetaPB {
     repeated uint32 partial_update_column_ids = 1;
@@ -237,8 +238,8 @@ message TabletMetaOpPB {
     optional EditVersionPB apply = 3;
 }
 
-message TabletMetaLogPB { 
-    repeated TabletMetaOpPB ops = 1; 
+message TabletMetaLogPB {
+    repeated TabletMetaOpPB ops = 1;
 }
 
 message TabletUpdatesPB {
