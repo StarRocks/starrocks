@@ -546,9 +546,9 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::lazy_probe_output(ChunkPtr* probe_ch
         } else if (hash_table_slot.need_output) {
             auto& column = (*probe_chunk)->get_column_by_slot_id(slot->id());
             if (!column->is_nullable()) {
-                _copy_probe_column(&column, dest_chunk, slot, to_nullable);
+                _lazy_copy_probe_column(&column, dest_chunk, slot, to_nullable);
             } else {
-                _copy_probe_nullable_column(&column, dest_chunk, slot);
+                _lazy_copy_probe_nullable_column(&column, dest_chunk, slot);
             }
         } else {
             auto& column = (*probe_chunk)->get_column_by_slot_id(slot->id());
@@ -575,7 +575,10 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_output(ChunkPtr* probe_chunk,
             }
         }
     }
-    (*chunk)->append_column(_probe_state->probe_key_column, INT32_MAX);
+    _probe_state->probe_index_column->resize(0);
+    _probe_state->probe_index_column->append_numbers((const void*)_probe_state->probe_index.data(),
+                                                     _probe_state->count * sizeof(uint32_t));
+    (*chunk)->append_column(_probe_state->probe_index_column, INT32_MAX);
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
@@ -633,9 +636,9 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::lazy_build_output(ChunkPtr* src_chun
             (*dest_chunk)->append_column((*src_chunk)->get_column_by_slot_id(slot->id()), slot->id());
         } else if (hash_table_slot.need_output) {
             if (!column->is_nullable()) {
-                _copy_build_column(column, dest_chunk, slot, to_nullable);
+                _lazy_copy_build_column(column, dest_chunk, slot, to_nullable);
             } else {
-                _copy_build_nullable_column(column, dest_chunk, slot);
+                _lazy_copy_build_nullable_column(column, dest_chunk, slot);
             }
         } else {
             ColumnPtr default_column = ColumnHelper::create_column(slot->type(), column->is_nullable() || to_nullable);
@@ -660,6 +663,9 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_build_output(ChunkPtr* chunk) {
             }
         }
     }
+    _probe_state->build_index_column->resize(0);
+    _probe_state->build_index_column->append_numbers((const void*)_probe_state->build_index.data(),
+                                                     _probe_state->count * sizeof(uint32_t));
     (*chunk)->append_column(_probe_state->build_index_column, INT32_MAX);
 }
 
@@ -722,6 +728,33 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_build_default_output(ChunkPtr* chun
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_lazy_copy_probe_column(ColumnPtr* src_column, ChunkPtr* chunk,
+                                                                    const SlotDescriptor* slot, bool to_nullable) {
+    const auto& probe_index = _probe_state->probe_index_column->get_data();
+    if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE) {
+        if (to_nullable) {
+            ColumnPtr dest_column = NullableColumn::create(*src_column, NullColumn::create((*src_column)->size()));
+            (*chunk)->append_column(std::move(dest_column), slot->id());
+        } else {
+            (*chunk)->append_column(*src_column, slot->id());
+        }
+    } else if (_probe_state->match_flag == JoinMatchFlag::MOST_MATCH_ONE) {
+        if (to_nullable) {
+            (*src_column)->filter(_probe_state->probe_match_filter, _probe_state->probe_row_count);
+            ColumnPtr dest_column = NullableColumn::create(*src_column, NullColumn::create((*src_column)->size()));
+            (*chunk)->append_column(std::move(dest_column), slot->id());
+        } else {
+            (*src_column)->filter(_probe_state->probe_match_filter, _probe_state->probe_row_count);
+            (*chunk)->append_column(*src_column, slot->id());
+        }
+    } else {
+        ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), to_nullable);
+        dest_column->append_selective(**src_column, probe_index.data(), 0, _probe_state->count);
+        (*chunk)->append_column(std::move(dest_column), slot->id());
+    }
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_probe_column(ColumnPtr* src_column, ChunkPtr* chunk,
                                                                const SlotDescriptor* slot, bool to_nullable) {
     if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE) {
@@ -748,6 +781,22 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_probe_column(ColumnPtr* src_co
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_lazy_copy_probe_nullable_column(ColumnPtr* src_column, ChunkPtr* chunk,
+                                                                             const SlotDescriptor* slot) {
+    const auto& probe_index = _probe_state->probe_index_column->get_data();
+    if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE) {
+        (*chunk)->append_column(*src_column, slot->id());
+    } else if (_probe_state->match_flag == JoinMatchFlag::MOST_MATCH_ONE) {
+        (*src_column)->filter(_probe_state->probe_match_filter, _probe_state->probe_row_count);
+        (*chunk)->append_column(*src_column, slot->id());
+    } else {
+        ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), true);
+        dest_column->append_selective(**src_column, probe_index.data(), 0, _probe_state->count);
+        (*chunk)->append_column(std::move(dest_column), slot->id());
+    }
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_probe_nullable_column(ColumnPtr* src_column, ChunkPtr* chunk,
                                                                         const SlotDescriptor* slot) {
     if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE) {
@@ -758,6 +807,34 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_probe_nullable_column(ColumnPt
     } else {
         ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), true);
         dest_column->append_selective(**src_column, _probe_state->probe_index.data(), 0, _probe_state->count);
+        (*chunk)->append_column(std::move(dest_column), slot->id());
+    }
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_lazy_copy_build_column(const ColumnPtr& src_column, ChunkPtr* chunk,
+                                                                    const SlotDescriptor* slot, bool to_nullable) {
+    const auto& build_index = _probe_state->build_index_column->get_data();
+    if (to_nullable) {
+        auto data_column = src_column->clone_empty();
+        data_column->append_selective_shallow_copy(*src_column, build_index.data(), 0, _probe_state->count);
+
+        // When left outer join is executed,
+        // build_index[i] Equal to 0 means it is not found in the hash table,
+        // but append_selective_shallow_copy() has set item of NullColumn to not null
+        // so NullColumn needs to be set back to null
+        auto null_column = NullColumn::create(_probe_state->count, 0);
+        size_t end = _probe_state->count;
+        for (size_t i = 0; i < end; i++) {
+            if (build_index[i] == 0) {
+                null_column->get_data()[i] = 1;
+            }
+        }
+        auto dest_column = NullableColumn::create(std::move(data_column), null_column);
+        (*chunk)->append_column(std::move(dest_column), slot->id());
+    } else {
+        auto dest_column = src_column->clone_empty();
+        dest_column->append_selective_shallow_copy(*src_column, build_index.data(), 0, _probe_state->count);
         (*chunk)->append_column(std::move(dest_column), slot->id());
     }
 }
@@ -789,6 +866,30 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_build_column(const ColumnPtr& 
                                                    _probe_state->count);
         (*chunk)->append_column(std::move(dest_column), slot->id());
     }
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_lazy_copy_build_nullable_column(const ColumnPtr& src_column,
+                                                                             ChunkPtr* chunk,
+                                                                             const SlotDescriptor* slot) {
+    const auto& build_index = _probe_state->build_index_column->get_data();
+    ColumnPtr dest_column = src_column->clone_empty();
+
+    dest_column->append_selective_shallow_copy(*src_column, build_index.data(), 0, _probe_state->count);
+
+    // When left outer join is executed,
+    // build_index[i] Equal to 0 means it is not found in the hash table,
+    // but append_selective_shallow_copy() has set item of NullColumn to not null
+    // so NullColumn needs to be set back to null
+    auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(dest_column);
+    size_t end = _probe_state->count;
+    for (size_t i = 0; i < end; i++) {
+        if (build_index[i] == 0) {
+            null_column->set_null(i);
+        }
+    }
+
+    (*chunk)->append_column(std::move(dest_column), slot->id());
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>

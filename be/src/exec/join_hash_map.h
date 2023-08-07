@@ -136,8 +136,8 @@ struct HashTableProbeState {
     Buffer<uint32_t> buckets;
     std::shared_ptr<UInt32Column> build_index_column;
     std::shared_ptr<UInt32Column> probe_index_column;
-    Buffer<uint32_t>& build_index;
-    Buffer<uint32_t>& probe_index;
+    Buffer<uint32_t> build_index;
+    Buffer<uint32_t> probe_index;
     Buffer<uint32_t> next;
     Buffer<Slice> probe_slice;
     Buffer<uint8_t>* null_array = nullptr;
@@ -178,8 +178,8 @@ struct HashTableProbeState {
     HashTableProbeState()
             : build_index_column(std::make_shared<UInt32Column>()),
               probe_index_column(std::make_shared<UInt32Column>()),
-              build_index(build_index_column->get_data()),
-              probe_index(probe_index_column->get_data()) {}
+              build_index(),
+              probe_index() {}
     ~HashTableProbeState() = default;
 
     HashTableProbeState(const HashTableProbeState& rhs)
@@ -191,8 +191,8 @@ struct HashTableProbeState {
               probe_index_column(rhs.probe_index_column == nullptr
                                          ? nullptr
                                          : std::make_shared<UInt32Column>(*rhs.probe_index_column)),
-              build_index(build_index_column->get_data()),
-              probe_index(probe_index_column->get_data()),
+              build_index(rhs.build_index),
+              probe_index(rhs.probe_index),
               next(rhs.next),
               probe_slice(rhs.probe_slice),
               null_array(rhs.null_array),
@@ -632,13 +632,18 @@ private:
     void _build_tuple_output(ChunkPtr* chunk);
     void _build_default_output(ChunkPtr* chunk, size_t count);
 
+    void _lazy_copy_probe_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable);
     void _copy_probe_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable);
 
+    void _lazy_copy_probe_nullable_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
     void _copy_probe_nullable_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
 
     void _copy_build_column(const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable);
+    void _lazy_copy_build_column(const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot,
+                                 bool to_nullable);
 
     void _copy_build_nullable_column(const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
+    void _lazy_copy_build_nullable_column(const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
 
     void _search_ht(RuntimeState* state, ChunkPtr* probe_chunk);
     void _search_ht_remain(RuntimeState* state);
