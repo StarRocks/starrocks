@@ -72,6 +72,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -230,7 +231,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             HiveResource hiveResource = (HiveResource) resource;
             hiveProperties.put(HIVE_METASTORE_URIS, hiveResource.getHiveMetastoreURIs());
         }
-        return hiveProperties;
+        return hiveProperties == null ? new HashMap<>() : hiveProperties;
     }
 
     public void modifyTableSchema(String dbName, String tableName, HiveTable updatedTable) {

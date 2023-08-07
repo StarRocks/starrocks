@@ -15,21 +15,30 @@
 
 package com.starrocks.connector.hive;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.Util;
 import com.starrocks.connector.CachingRemoteFileConf;
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.ReentrantExecutor;
 import com.starrocks.connector.RemoteFileIO;
+import com.starrocks.sql.analyzer.SemanticException;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import static com.starrocks.connector.CachingRemoteFileIO.NEVER_REFRESH;
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 
 public class HiveConnectorInternalMgr {
+    public static final List<String> SUPPORTED_METASTORE_TYPE = Lists.newArrayList("hive", "glue", "dlf");
     private final String catalogName;
     private final HdfsEnvironment hdfsEnvironment;
     private final Map<String, String> properties;
@@ -48,6 +57,7 @@ public class HiveConnectorInternalMgr {
     private final boolean enableHmsEventsIncrementalSync;
 
     private final boolean enableBackgroundRefreshHiveMetadata;
+    private final MetastoreType metastoreType;
 
     public HiveConnectorInternalMgr(String catalogName, Map<String, String> properties, HdfsEnvironment hdfsEnvironment) {
         this.catalogName = catalogName;
@@ -67,6 +77,18 @@ public class HiveConnectorInternalMgr {
 
         this.enableBackgroundRefreshHiveMetadata = Boolean.parseBoolean(properties.getOrDefault(
                 "enable_background_refresh_connector_metadata", "true"));
+
+        String hiveMetastoreType = properties.getOrDefault(HIVE_METASTORE_TYPE, "hive").toLowerCase();
+        if (!SUPPORTED_METASTORE_TYPE.contains(hiveMetastoreType)) {
+            throw new SemanticException("hive metastore type [%s] is not supported", hiveMetastoreType);
+        }
+
+        if (hiveMetastoreType.equals("hive")) {
+            String hiveMetastoreUris = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
+                    "%s must be set in properties when creating hive catalog", HIVE_METASTORE_URIS);
+            Util.validateMetastoreUris(hiveMetastoreUris);
+        }
+        this.metastoreType = MetastoreType.get(hiveMetastoreType);
     }
 
     public void shutdown() {
@@ -156,5 +178,9 @@ public class HiveConnectorInternalMgr {
 
     public boolean isEnableBackgroundRefreshHiveMetadata() {
         return enableBackgroundRefreshHiveMetadata;
+    }
+
+    public MetastoreType getMetastoreType() {
+        return metastoreType;
     }
 }

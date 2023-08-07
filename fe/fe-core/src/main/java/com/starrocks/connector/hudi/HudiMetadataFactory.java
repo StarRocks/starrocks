@@ -17,6 +17,7 @@ package com.starrocks.connector.hudi;
 
 import com.starrocks.connector.CachingRemoteFileConf;
 import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.hive.CacheUpdateProcessor;
@@ -41,6 +42,7 @@ public class HudiMetadataFactory {
     private final ExecutorService pullRemoteFileExecutor;
     private final boolean isRecursive;
     private final Configuration hadoopConf;
+    private final MetastoreType metastoreType;
 
     public HudiMetadataFactory(String catalogName,
                                IHiveMetastore metastore,
@@ -49,7 +51,8 @@ public class HudiMetadataFactory {
                                CachingRemoteFileConf fileConf,
                                ExecutorService pullRemoteFileExecutor,
                                boolean isRecursive,
-                               Configuration hadoopConf) {
+                               Configuration hadoopConf,
+                               MetastoreType metastoreType) {
         this.catalogName = catalogName;
         this.metastore = metastore;
         this.remoteFileIO = remoteFileIO;
@@ -58,13 +61,14 @@ public class HudiMetadataFactory {
         this.pullRemoteFileExecutor = pullRemoteFileExecutor;
         this.isRecursive = isRecursive;
         this.hadoopConf = hadoopConf;
+        this.metastoreType = metastoreType;
     }
 
     public HudiMetadata create() {
         HiveMetastoreOperations hiveMetastoreOperations = new HiveMetastoreOperations(
                 createQueryLevelInstance(metastore, perQueryMetastoreMaxNum),
                 metastore instanceof CachingHiveMetastore,
-                hadoopConf);
+                hadoopConf, metastoreType, catalogName);
         RemoteFileOperations remoteFileOperations = new RemoteFileOperations(
                 CachingRemoteFileIO.createQueryLevelInstance(remoteFileIO, perQueryCacheRemotePathMaxNum),
                 pullRemoteFileExecutor,

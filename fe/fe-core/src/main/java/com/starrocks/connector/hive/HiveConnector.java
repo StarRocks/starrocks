@@ -15,9 +15,6 @@
 
 package com.starrocks.connector.hive;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
-import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -27,16 +24,13 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.SemanticException;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 public class HiveConnector implements Connector {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     public static final String HIVE_METASTORE_TYPE = "hive.metastore.type";
-    public static final List<String> SUPPORTED_METASTORE_TYPE = Lists.newArrayList("hive", "glue", "dlf");
     private final Map<String, String> properties;
     private final CloudConfiguration cloudConfiguration;
     private final String catalogName;
@@ -50,21 +44,7 @@ public class HiveConnector implements Connector {
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.internalMgr = new HiveConnectorInternalMgr(catalogName, properties, hdfsEnvironment);
         this.metadataFactory = createMetadataFactory(hdfsEnvironment);
-        validate();
         onCreate();
-    }
-
-    public void validate() {
-        String hiveMetastoreType = properties.getOrDefault(HIVE_METASTORE_TYPE, "hive").toLowerCase();
-        if (!SUPPORTED_METASTORE_TYPE.contains(hiveMetastoreType)) {
-            throw new SemanticException("hive metastore type [%s] is not supported", hiveMetastoreType);
-        }
-
-        if (hiveMetastoreType.equals("hive")) {
-            String hiveMetastoreUris = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
-                    "%s must be set in properties when creating hive catalog", HIVE_METASTORE_URIS);
-            Util.validateMetastoreUris(hiveMetastoreUris);
-        }
     }
 
     @Override
@@ -75,7 +55,6 @@ public class HiveConnector implements Connector {
     private HiveMetadataFactory createMetadataFactory(HdfsEnvironment hdfsEnvironment) {
         IHiveMetastore metastore = internalMgr.createHiveMetastore();
         RemoteFileIO remoteFileIO = internalMgr.createRemoteFileIO();
-
         return new HiveMetadataFactory(
                 catalogName,
                 metastore,
@@ -85,7 +64,8 @@ public class HiveConnector implements Connector {
                 internalMgr.getPullRemoteFileExecutor(),
                 internalMgr.isSearchRecursive(),
                 internalMgr.enableHmsEventsIncrementalSync(),
-                hdfsEnvironment.getConfiguration()
+                hdfsEnvironment.getConfiguration(),
+                internalMgr.getMetastoreType()
         );
     }
 
