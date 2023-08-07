@@ -58,7 +58,7 @@ public class OuterJoinReorderTest extends PlanTestBase {
         planList.add("7:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 12: add = 1: v1");
+                "  |  equal join conjunct: 10: add = 1: v1");
         sqlList.add("select * from t0 left join (select v4 from t1 union select v7 from t2) t1 on v2 > v4 " +
                 "left semi join t2 on v1 = v7");
         planList.add("3:HASH JOIN\n" +

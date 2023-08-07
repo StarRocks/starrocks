@@ -46,10 +46,10 @@ RESULT SINK
 distribution type: GATHER
 cardinality: 40000
 column statistics:
-* s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 * s_name-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 * s_address-->[-Infinity, Infinity, 0.0, 40.0, 40000.0] ESTIMATE
-* ps_suppkey-->[1.0, 1000000.0, 0.0, 8.0, 40000.0] ESTIMATE
+* s_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+* n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 1(F13)
 
@@ -62,10 +62,10 @@ OutPut Exchange Id: 26
 |  offset: 0
 |  cardinality: 40000
 |  column statistics:
-|  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 |  * s_name-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 |  * s_address-->[-Infinity, Infinity, 0.0, 40.0, 40000.0] ESTIMATE
-|  * ps_suppkey-->[1.0, 1000000.0, 0.0, 8.0, 40000.0] ESTIMATE
+|  * s_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 24:Project
 |  output columns:
@@ -84,10 +84,10 @@ OutPut Exchange Id: 26
 |  output columns: 2, 3
 |  cardinality: 40000
 |  column statistics:
-|  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 |  * s_name-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 |  * s_address-->[-Infinity, Infinity, 0.0, 40.0, 40000.0] ESTIMATE
-|  * ps_suppkey-->[1.0, 1000000.0, 0.0, 8.0, 40000.0] ESTIMATE
+|  * s_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 |----22:EXCHANGE
 |       distribution type: SHUFFLE

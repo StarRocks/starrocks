@@ -1964,11 +1964,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 5: v5 = 7: v7");
-        assertContains(plan, "  6:HASH JOIN\n" +
+        assertContains(plan, "6:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 3: v3 = 6: v6\n" +
-                "  |  equal join conjunct: 2: v2 = 8: v8");
+                "  |  equal join conjunct: 2: v2 = 8: v8\n" +
+                "  |  equal join conjunct: 3: v3 = 6: v6");
 
         sql = "Select * " +
                 " from t0 join[unreorder] t1 on t0.v3 = t1.v6 " +

@@ -96,13 +96,11 @@ OutPut Exchange Id: 26
 |  output columns: 23, 24, 42
 |  cardinality: 16391888
 |  column statistics:
-|  * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.0031873E7] ESTIMATE
-|  * c_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
-|  * o_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.0031873E7] ESTIMATE
 |  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 3736520.0] ESTIMATE
 |  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
-|  * s_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * n_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * r_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 16.0, 3736520.0] ESTIMATE
 |
 |----22:EXCHANGE
@@ -209,7 +207,7 @@ OutPut Exchange Id: 14
 |  42 <-> [42: n_name, VARCHAR, true]
 |  cardinality: 120007580
 |  column statistics:
-|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.2000758039999999E8] ESTIMATE
+|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.200075804E8] ESTIMATE
 |  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 3736520.0] ESTIMATE
 |  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |  * s_nationkey-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
@@ -223,12 +221,11 @@ OutPut Exchange Id: 14
 |  output columns: 18, 23, 24, 37, 42
 |  cardinality: 120007580
 |  column statistics:
-|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.2000758039999999E8] ESTIMATE
-|  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 200000.0] ESTIMATE
+|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.200075804E8] ESTIMATE
 |  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 3736520.0] ESTIMATE
 |  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
-|  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 200000.0] ESTIMATE
 |  * s_nationkey-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
+|  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |
 |----11:EXCHANGE

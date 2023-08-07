@@ -18,7 +18,9 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -349,5 +351,17 @@ public class Memo {
 
     public void deriveAllGroupLogicalProperty() {
         getRootGroup().getFirstLogicalExpression().deriveLogicalPropertyRecursively();
+    }
+
+    // debug tool to collect scan group info
+    public Map<Table, List<Group>> collectScanGroup() {
+        Map<Table, List<Group>> map = Maps.newHashMap();
+        for (Group group : groups) {
+            if (group.getFirstLogicalExpression().getOp() instanceof LogicalOlapScanOperator) {
+                LogicalOlapScanOperator scanOperator = group.getFirstLogicalExpression().getOp().cast();
+                map.computeIfAbsent(scanOperator.getTable(), e -> Lists.newArrayList()).add(group);
+            }
+        }
+        return map;
     }
 }
