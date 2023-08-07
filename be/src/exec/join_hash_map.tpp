@@ -546,6 +546,22 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::lazy_output(ChunkPtr* probe_chunk, C
             SCOPED_TIMER(_probe_state->output_build_column_timer);
             lazy_build_output(src_chunk, dest_chunk);
         }
+    } else if (_table_items->join_type == TJoinOp::LEFT_SEMI_JOIN ||
+               _table_items->join_type == TJoinOp::LEFT_ANTI_JOIN ||
+               _table_items->join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN) {
+        {
+            SCOPED_TIMER(_probe_state->output_probe_column_timer);
+            lazy_probe_output(probe_chunk, src_chunk, dest_chunk);
+        }
+        {
+            // output default values for build-columns as placeholder.
+            SCOPED_TIMER(_probe_state->output_build_column_timer);
+            if (!_table_items->with_other_conjunct) {
+                _lazy_build_default_output(src_chunk, dest_chunk, _probe_state->count);
+            } else {
+                lazy_build_output(dest_chunk);
+            }
+        }
     } else {
         lazy_probe_output(probe_chunk, src_chunk, dest_chunk);
         lazy_build_output(src_chunk, dest_chunk);
@@ -597,7 +613,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_output(ChunkPtr* probe_chunk,
     _probe_state->probe_index_column->resize(0);
     _probe_state->probe_index_column->append_numbers((const void*)_probe_state->probe_index.data(),
                                                      _probe_state->count * sizeof(uint32_t));
-    (*chunk)->append_column(_probe_state->probe_index_column, INT32_MAX);
+    (*chunk)->append_column(_probe_state->probe_index_column, INT32_MAX - 1);
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
@@ -707,7 +723,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_build_output(ChunkPtr* chunk) {
     _probe_state->build_index_column->resize(0);
     _probe_state->build_index_column->append_numbers((const void*)_probe_state->build_index.data(),
                                                      _probe_state->count * sizeof(uint32_t));
-    (*chunk)->append_column(_probe_state->build_index_column, INT32_MAX);
+    (*chunk)->append_column(_probe_state->build_index_column, INT32_MAX - 2);
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
@@ -754,6 +770,25 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_build_tuple_output(ChunkPtr* chunk)
                     (*chunk)->append_tuple_column(dest_column, tuple_id);
                 }
             }
+        }
+    }
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_lazy_build_default_output(ChunkPtr* src_chunk, ChunkPtr* chunk, size_t count) {
+    for (size_t i = 0; i < _table_items->build_column_count; i++) {
+        HashTableSlotDescriptor hash_table_slot = _table_items->probe_slots[i];
+        SlotDescriptor* slot = hash_table_slot.slot;
+        if (hash_table_slot.need_materialize) {
+            (*chunk)->append_column((*src_chunk)->get_column_by_slot_id(slot->id()), slot->id());
+        } else if (hash_table_slot.need_output) {
+            ColumnPtr column = ColumnHelper::create_column(slot->type(), true);
+            column->append_nulls(count);
+            (*chunk)->append_column(std::move(column), slot->id());
+        } else {
+            ColumnPtr column = ColumnHelper::create_column(slot->type(), true);
+            column->append_nulls(count);
+            (*chunk)->append_column(std::move(column), slot->id());
         }
     }
 }
