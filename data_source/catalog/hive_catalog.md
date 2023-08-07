@@ -1,8 +1,8 @@
 # Hive catalog
 
-Hive Catalog 是一种 External Catalog。通过 Hive Catalog，您不需要执行数据导入就可以直接查询 Apache Hive™ 里的数据。
+Hive Catalog 是一种 External Catalog。通过 Hive Catalog，您不需要执行数据导入就可以直接查询 Apache Hive™ 里的数据。此外，您还可以基于 Hive Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 能力来实现数据转换和导入。
 
-此外，您还可以基于 Hive Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 能力来实现数据转换和导入。StarRocks 从 2.3 版本开始支持 Hive Catalog。
+StarRocks 从 2.3 版本开始支持 Hive Catalog。另外从 3.1 版本起，还支持访问 Hive Catalog 内的视图。
 
 为保证正常访问 Hive 内的数据，StarRocks 集群必须集成以下两个关键组件：
 
@@ -843,6 +843,38 @@ DROP Catalog hive_catalog_glue;
 
 ```SQL
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM hive_table
+```
+
+## 赋予 Hive 表和视图的权限
+
+您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 来赋予角色某个 Hive Catalog 内所有表或视图的查询权限。
+
+- 赋予角色某个 Hive Catalog 内所有表的查询权限：
+
+  ```SQL
+  GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE <role_name>
+  ```
+
+- 赋予角色某个 Hive Catalog 内所有视图的查询权限：
+
+  ```SQL
+  GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE <role_name>
+  ```
+
+例如，通过如下命令创建角色 `hive_role_table`，切换至 Hive Catalog `hive_catalog`，然后把 `hive_catalog` 内所有表和视图的查询权限都赋予 `hive_role_table`：
+
+```SQL
+-- 创建角色 hive_role_table。
+CREATE ROLE hive_role_table;
+
+-- 切换到数据目录 hive_catalog。
+SET CATALOG hive_catalog;
+
+-- 把 hive_catalog 内所有表的查询权限赋予 hive_role_table。
+GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE hive_role_table;
+
+-- 把 hive_catalog 内所有视图的查询权限赋予 hive_role_table。
+GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE hive_role_table;
 ```
 
 ## 手动或自动更新元数据缓存
