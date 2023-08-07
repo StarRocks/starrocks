@@ -43,6 +43,11 @@ public class MockedRemoteFileSystem extends FileSystem {
         this.files = files;
     }
 
+    @Override
+    public boolean exists(Path f) throws IOException {
+        return false;
+    }
+
     public static LocatedFileStatus locatedFileStatus(Path path) {
         return locatedFileStatus(path, 20, 1234567890);
     }
@@ -134,11 +139,11 @@ public class MockedRemoteFileSystem extends FileSystem {
 
     @Override
     public boolean mkdirs(Path path, FsPermission fsPermission) {
-        throw new UnsupportedOperationException();
+        return false;
     }
 
     @Override
     public FileStatus getFileStatus(Path path) {
-        throw new UnsupportedOperationException();
+        return TEST_FILES.get(0);
     }
 }

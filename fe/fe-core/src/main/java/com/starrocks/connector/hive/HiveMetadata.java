@@ -34,6 +34,7 @@ import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -110,15 +111,8 @@ public class HiveMetadata implements ConnectorMetadata {
         return hmsOps.getAllTableNames(dbName);
     }
 
-    @Override
-    public List<String> listPartitionNames(String dbName, String tblName) {
-        return hmsOps.getPartitionKeys(dbName, tblName);
-    }
-
-    @Override
-    public List<String> listPartitionNamesByValue(String dbName, String tblName,
-                                                  List<Optional<String>> partitionValues) {
-        return hmsOps.getPartitionKeysByValue(dbName, tblName, partitionValues);
+    public boolean createTable(CreateTableStmt stmt) throws DdlException {
+        return hmsOps.createTable(stmt);
     }
 
     @Override
@@ -132,6 +126,17 @@ public class HiveMetadata implements ConnectorMetadata {
         }
 
         return table;
+    }
+
+    @Override
+    public List<String> listPartitionNames(String dbName, String tblName) {
+        return hmsOps.getPartitionKeys(dbName, tblName);
+    }
+
+    @Override
+    public List<String> listPartitionNamesByValue(String dbName, String tblName,
+                                                  List<Optional<String>> partitionValues) {
+        return hmsOps.getPartitionKeysByValue(dbName, tblName, partitionValues);
     }
 
     @Override

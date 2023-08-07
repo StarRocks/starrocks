@@ -378,7 +378,6 @@ public class AnalyzeCreateTableTest {
             }
         };
 
-        analyzeFail("create external table hive_catalog.hive_db.hive_table (k1 int, k2 int) partition by (k2)");
         analyzeFail("create external table hive_catalog.hive_db.hive_table (k1 int, k2 int) engine=iceberg partition by (k2)");
 
         AnalyzeTestUtil.getConnectContext().setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);

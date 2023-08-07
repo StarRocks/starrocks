@@ -69,7 +69,8 @@ public class DeltaLakeConnector implements Connector {
                 metastore,
                 internalMgr.getHiveMetastoreConf(),
                 properties.get(HIVE_METASTORE_URIS),
-                internalMgr.getHdfsEnvironment()
+                internalMgr.getHdfsEnvironment(),
+                internalMgr.getMetastoreType()
         );
     }
 
