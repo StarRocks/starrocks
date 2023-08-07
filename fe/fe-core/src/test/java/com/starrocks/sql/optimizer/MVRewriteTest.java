@@ -1620,6 +1620,8 @@ public class MVRewriteTest {
         starRocksAssert.withTable(t1)
                 .withTable(t2)
                 .withMaterializedView(mv1);
+        starRocksAssert.query("select k1, k1 * 2 as k1, length(k2) as k2, sum(k3) as k4, hll_union(hll_hash(k4)) as k5 " +
+                              "from test3 group by k1, k2;")
                 .explainWithout("target1");
         starRocksAssert.dropTable("test3");
         starRocksAssert.dropTable("target3");
