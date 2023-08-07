@@ -1,5 +1,43 @@
 # StarRocks version 2.5
 
+## 2.5.10
+
+Release date: August 7, 2023
+
+### New features
+
+- Supports aggregate functions [COVAR_SAMP](../sql-reference/sql-functions/aggregate-functions/covar_samp.md), [COVAR_POP](../sql-reference/sql-functions/aggregate-functions/covar_pop.md), and [CORR](../sql-reference/sql-functions/aggregate-functions/corr.md).
+- Supports the following [window functions](../sql-reference/sql-functions/Window_function.md): COVAR_SAMP, COVAR_POP, CORR, VARIANCE, VAR_SAMP, STD, and STDDEV_SAMP.
+
+### Improvements
+
+- Optimized the scheduling logic of TabletChecker to prevent the checker from repeatedly scheduling tablets that are not repaired. [#27648](https://github.com/StarRocks/starrocks/pull/27648)
+- When Schema Change and Routine Load occur simultaneously, Routine Load jobs may fail if Schema Change completes first. The error message reported in this situation is optimized. [#28425](https://github.com/StarRocks/starrocks/pull/28425)
+- Users are prohibited from defining NOT NULL columns when they create external tables (If NOT NULL columns are defined, errors will occur after an upgrade and the table must be created again). External catalogs are recommended starting from v2.3.0 to replace external tables. [#25485](https://github.com/StarRocks/starrocks/pull/25441)
+- Added an error message when Broker Load retries encounter an error. This facilitates troubleshooting and debugging during data loading. [#21982](https://github.com/StarRocks/starrocks/pull/21982)
+- Supports large-scale data writes when a load job involves both UPSERT and DELETE operations. [#17264](https://github.com/StarRocks/starrocks/pull/17264)
+- Optimized query rewrite using materialized views. [#27934](https://github.com/StarRocks/starrocks/pull/27934) [#25542](https://github.com/StarRocks/starrocks/pull/25542) [#22300](https://github.com/StarRocks/starrocks/pull/22300) [#27557](https://github.com/StarRocks/starrocks/pull/27557) [#22300](https://github.com/StarRocks/starrocks/pull/22300) [#26957](https://github.com/StarRocks/starrocks/pull/26957) [#27728](https://github.com/StarRocks/starrocks/pull/27728) [#27900](https://github.com/StarRocks/starrocks/pull/27900)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- When CAST is used to convert a string into an array, the result may be incorrect if the input includes constants. [#19793](https://github.com/StarRocks/starrocks/pull/19793)
+- SHOW TABLET returns incorrect results if it contains ORDER BY and LIMIT. [#23375](https://github.com/StarRocks/starrocks/pull/23375)
+- Outer join and Anti join rewrite errors for materialized views. [#28028](https://github.com/StarRocks/starrocks/pull/28028)
+- Incorrect table-level scan statistics in FE cause inaccurate metrics for table queries and loading. [#27779](https://github.com/StarRocks/starrocks/pull/27779)
+- `An exception occurred when using the current long link to access metastore. msg: Failed to get next notification based on last event id: 707602` is reported in FE logs if event listener is configured on the HMS to incrementally update Hive metadata. [#21056](https://github.com/StarRocks/starrocks/pull/21056)
+- The query result is not stable if the sort key is modified for a partitioned table. [#27850](https://github.com/StarRocks/starrocks/pull/27850)
+- Data loaded using Spark Load may be distributed to the wrong buckets if the bucketing column is a DATE, DATETIME, or DECIMAL column. [#27005](https://github.com/StarRocks/starrocks/pull/27005)
+- The regex_replace function may cause BEs to crash in some scenarios. [#27117](https://github.com/StarRocks/starrocks/pull/27117)
+- BE crashes if the input of the sub_bitmap function is not a BITMAP value. [#27982](https://github.com/StarRocks/starrocks/pull/27982)
+- "Unknown error" is returned for a query when Join Reorder is enabled. [#27472](https://github.com/StarRocks/starrocks/pull/27472)
+- Inaccurate estimation of average row size causes Primary Key partial updates to occupy excessively large memory. [#27485](https://github.com/StarRocks/starrocks/pull/27485)
+- Some INSERT jobs return `[42000][1064] Dict Decode failed, Dict can't take cover all key :0` if low-cardinality optimization is enabled. [#26463](https://github.com/StarRocks/starrocks/pull/26463)
+- If users specify `"hadoop.security.authentication" = "simple"` in their Broker Load jobs created to load data from HDFS, the job fails. [#27774](https://github.com/StarRocks/starrocks/pull/27774)
+- Modifying the refresh mode of materialized views causes inconsistent metadata between the leader FE and follower FE. [#28082](https://github.com/StarRocks/starrocks/pull/28082) [#28097](https://github.com/StarRocks/starrocks/pull/28097)
+- Passwords are not hidden when SHOW CREATE CATALOG and SHOW RESOURCES are used to query specific information. [#28059](https://github.com/StarRocks/starrocks/pull/28059)
+
 ## 2.5.9
 
 Release date: July 19, 2023
