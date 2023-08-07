@@ -41,10 +41,10 @@ StarRocks has optimized the metadata information provided by the tables `tables`
 
 | **Information Schema table name** | **Description**                                              |
 | --------------------------------- | ------------------------------------------------------------ |
-| tables                            | Provides general metadata information of tables.             |
-| tables_config                     | Provides additional table metadata information that is unique to StarRocks. |
-| load_tracking_logs                | Provides error information (if any) of load jobs. |
-| loads                             | Provides the results of load jobs. This table is supported from v3.1 onwards. Currently, you can only view the results of [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) and [Insert](../sql-reference/sql-statements/data-manipulation/insert.md) jobs from this table.                 |
+| [tables](#tables)                            | Provides general metadata information of tables.             |
+| [tables_config](#tables_config)                     | Provides additional table metadata information that is unique to StarRocks. |
+| [load_tracking_logs](#load_tracking_logs)                | Provides error information (if any) of load jobs. |
+| [loads](#loads)                             | Provides the results of load jobs. This table is supported from v3.1 onwards. Currently, you can only view the results of [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) and [Insert](../sql-reference/sql-statements/data-manipulation/insert.md) jobs from this table.                 |
 
 ### loads
 
