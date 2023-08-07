@@ -583,7 +583,13 @@ private:
                 }
             }
         }
+        _probe_state->probe_index_column->resize(_probe_state->count);
+        for (size_t i=0; i < _probe_state->count; i++) {
+            _probe_state->probe_index_column->get_data()[i] = i;
+        }
+        (*chunk)->append_column(_probe_state->probe_index_column, INT32_MAX - 1);
     }
+
     void _build_output(ChunkPtr* chunk) {
         SCOPED_TIMER(_probe_state->output_build_column_timer);
         bool to_nullable = _table_items->right_to_nullable;
@@ -598,6 +604,10 @@ private:
                 (*chunk)->append_column(std::move(dest_column), slot->id());
             }
         }
+
+        _probe_state->build_index_column->resize(0);
+        _probe_state->build_index_column->append_nulls(_probe_state->count);
+        (*chunk)->append_column(_probe_state->build_index_column, INT32_MAX - 2);
     }
 
     JoinHashTableItems* _table_items = nullptr;
