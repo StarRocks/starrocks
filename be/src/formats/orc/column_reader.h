@@ -18,6 +18,7 @@
 #include <utility>
 
 #include "column/array_column.h"
+#include "column/column_helper.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "common/status.h"
@@ -70,6 +71,9 @@ public:
             : _type(type), _orc_type(orc_type), _nullable(nullable), _reader(reader) {}
     virtual ~ORCColumnReader() = default;
     virtual Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) = 0;
+    virtual Status old_get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
+        return Status::OK();
+    };
 
     static StatusOr<std::unique_ptr<ORCColumnReader>> create(const TypeDescriptor& type, const orc::Type* orc_type,
                                                              bool nullable, const OrcMappingPtr& orc_mapping,
@@ -77,6 +81,23 @@ public:
     const orc::Type* get_orc_type() { return _orc_type; }
 
 protected:
+    inline void handle_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t column_from, size_t cvb_from, size_t size) {
+        DCHECK(_nullable);
+        DCHECK(col->is_nullable());
+        if (!cvb->hasNulls) {
+            return;
+        }
+        auto c = ColumnHelper::as_raw_column<NullableColumn>(col);
+        uint8_t* column_nulls = c->null_column()->get_data().data();
+        uint8_t* cvb_not_nulls = reinterpret_cast<uint8_t*>(cvb->notNull.data());
+
+        for (size_t column_pos = column_from, cvb_pos = cvb_from; column_pos < column_from + size; column_pos++, cvb_pos++) {
+            column_nulls[column_pos] = !cvb_not_nulls[cvb_pos];
+        }
+        c->update_has_null();
+    }
+
+
     const TypeDescriptor& _type;
     const orc::Type* _orc_type;
     bool _nullable;
@@ -96,6 +117,7 @@ public:
             : PrimitiveColumnReader(type, orc_type, nullable, reader) {}
     ~BooleanColumnReader() override = default;
     Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
+    Status old_get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
 };
 
 template <LogicalType Type>

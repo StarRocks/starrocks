@@ -126,7 +126,7 @@ StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create(const TypeDes
     }
 }
 
-Status BooleanColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
+Status BooleanColumnReader::old_get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
     if (_nullable) {
         auto* data = down_cast<orc::LongVectorBatch*>(cvb);
         int col_start = col->size();
@@ -161,6 +161,24 @@ Status BooleanColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col
         for (int i = col_start; i < col_start + size; ++i, ++from) {
             values[i] = (cvbd[from] != 0);
         }
+    }
+    return Status::OK();
+}
+
+Status BooleanColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& column, size_t from, size_t size) {
+    auto* data = down_cast<orc::LongVectorBatch*>(cvb);
+    size_t column_start = column->size();
+    column->resize_uninitialized(column_start + size);
+    if (_nullable) {
+        handle_null(cvb, column, column_start, from, size);
+    }
+
+    Column* data_column = ColumnHelper::get_data_column(column.get());
+    uint8_t* values = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(data_column)->get_data().data();
+    int64_t* cvb_data = data->data.data();
+
+    for (size_t column_pos = column_start, vb_pos = from; column_pos <  column_start + size; column_pos++, vb_pos++) {
+        values[column_pos] = (cvb_data[vb_pos] != 0);
     }
     return Status::OK();
 }
