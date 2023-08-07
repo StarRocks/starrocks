@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
@@ -113,11 +112,17 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         for (MaterializationContext mvContext : mvCandidateContexts) {
             MvRewriteContext mvRewriteContext;
             if (mvContext.getMv().getRefreshScheme().isSync()) {
-                Preconditions.checkState(queryPredicateWithoutCompensate != null);
+                if (queryPredicateWithoutCompensate == null) {
+                    logMVRewrite(context, this, "Query partition compensate failed from sync mv.");
+                    return results;
+                }
                 mvRewriteContext = new MvRewriteContext(mvContext, queryTables, queryExpression,
                         queryColumnRefRewriter, queryPredicateWithoutCompensate, onPredicates, this);
             } else {
-                Preconditions.checkState(queryPredicateSplit != null);
+                if (queryPredicateSplit == null) {
+                    logMVRewrite(context, this, "Query partition compensate failed.");
+                    return results;
+                }
                 mvRewriteContext = new MvRewriteContext(mvContext, queryTables, queryExpression,
                         queryColumnRefRewriter, queryPredicateSplit, onPredicates, this);
             }
