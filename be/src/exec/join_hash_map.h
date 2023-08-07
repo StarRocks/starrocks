@@ -609,8 +609,7 @@ private:
             }
         }
 
-        _probe_state->build_index_column->resize(0);
-        _probe_state->build_index_column->append_nulls(_probe_state->count);
+        _probe_state->build_index_column->resize(_probe_state->count);
         (*chunk)->append_column(_probe_state->build_index_column, INT32_MAX - 2);
     }
 
