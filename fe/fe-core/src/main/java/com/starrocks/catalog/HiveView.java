@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.QueryStatement;
@@ -33,6 +34,10 @@ public class HiveView extends Table {
     private static final Logger LOG = LogManager.getLogger(HiveView.class);
     private final String catalogName;
     private final String inlineViewDef;
+
+    public static final String PRESTO_VIEW_PREFIX = "/* Presto View: ";
+    public static final String PRESTO_VIEW_SUFFIX = " */";
+
     public HiveView(long id, String catalogName, String name, List<Column> schema, String definition) {
         super(id, name, TableType.HIVE_VIEW, schema);
         this.catalogName = requireNonNull(catalogName, "Hive view catalog name is null");
@@ -42,8 +47,10 @@ public class HiveView extends Table {
     public QueryStatement getQueryStatementWithSRParser() throws StarRocksPlannerException {
         Preconditions.checkNotNull(inlineViewDef);
         ParseNode node;
+        SessionVariable sessionVariable = ConnectContext.get() != null ? ConnectContext.get().getSessionVariable()
+                : new SessionVariable();
         try {
-            node = com.starrocks.sql.parser.SqlParser.parse(inlineViewDef, new SessionVariable()).get(0);
+            node = com.starrocks.sql.parser.SqlParser.parse(inlineViewDef, sessionVariable).get(0);
         } catch (Exception e) {
             LOG.warn("stmt is {}", inlineViewDef);
             LOG.warn("exception because: ", e);
