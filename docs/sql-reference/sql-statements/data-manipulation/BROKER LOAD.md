@@ -2,7 +2,7 @@
 
 ## Description
 
-StarRocks provides the MySQL-based loading method Broker Load. After you submit a load job, StarRocks asynchronously runs the job. You need to use [SHOW LOAD](../../../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) or `curl` to check the job result. For more information about the background information, prerequisites, principles, supported data file formats, supported external storage systems, and how to perform single-table loads and multi-table loads, see [Load data from HDFS](../../../loading/hdfs_load.md) and [Load data from cloud storage](../../../loading/cloud_storage_load.md).
+StarRocks provides the MySQL-based loading method Broker Load. After you submit a load job, StarRocks asynchronously runs the job. You can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information about the background information, principles, supported data file formats, how to perform single-table loads and multi-table loads, and how to view job results, see [Load data from HDFS](../../../loading/hdfs_load.md) and [Load data from cloud storage](../../../loading/cloud_storage_load.md).
 
 > **NOTICE**
 >
@@ -593,7 +593,7 @@ The following parameters are supported:
 
   Specifies the maximum number of unqualified data rows that can be logged. This parameter is supported from v3.1 onwards. Valid values: `0`, `-1`, and any non-zero positive integer. Default value: `0`.
   
-  - The value `0` specifies that no data rows that are filtered out will be logged.
+  - The value `0` specifies that data rows that are filtered out will not be logged.
   - The value `-1` specifies that all data rows that are filtered out will be logged.
   - A non-zero positive integer such as `n` specifies that up to `n` data rows that are filtered out can be logged on each BE.
 
