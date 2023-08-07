@@ -366,19 +366,18 @@ public class ColumnTypeConverter {
                 int precision = ((io.delta.standalone.types.DecimalType) dataType).getPrecision();
                 int scale = ((io.delta.standalone.types.DecimalType) dataType).getScale();
                 return ScalarType.createUnifiedDecimalType(precision, scale);
-            case ARRAY:
-                Type type = convertToArrayTypeForDeltaLake((io.delta.standalone.types.ArrayType) dataType);
-                if (type.isArrayType()) {
-                    return type;
-                } else {
-                    return Type.UNKNOWN_TYPE;
-                }
             case NULL:
                 primitiveType = PrimitiveType.NULL_TYPE;
                 break;
             case BINARY:
+                primitiveType = PrimitiveType.VARBINARY;
+                break;
+            case ARRAY:
+                return convertToArrayTypeForDeltaLake((io.delta.standalone.types.ArrayType) dataType);
             case MAP:
+                return convertToMapTypeForDeltaLake((io.delta.standalone.types.MapType) dataType);
             case STRUCT:
+                return convertToStructTypeForDeltaLake(((io.delta.standalone.types.StructType) dataType));
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
         }
@@ -564,8 +563,40 @@ public class ColumnTypeConverter {
         return new MapType(keyType, valueType);
     }
 
-    private static ArrayType convertToArrayTypeForDeltaLake(io.delta.standalone.types.ArrayType arrayType) {
-        return new ArrayType(fromDeltaLakeType(arrayType.getElementType()));
+    private static Type convertToArrayTypeForDeltaLake(io.delta.standalone.types.ArrayType arrayType) {
+        Type itemType = fromDeltaLakeType(arrayType.getElementType());
+        if (itemType.isUnknown()) {
+            return Type.UNKNOWN_TYPE;
+        }
+        return new ArrayType(itemType);
+    }
+
+    private static Type convertToMapTypeForDeltaLake(io.delta.standalone.types.MapType mapType) {
+        Type keyType = fromDeltaLakeType(mapType.getKeyType());
+        // do not support complex type as key in map type
+        if (keyType.isComplexType() || keyType.isUnknown()) {
+            return Type.UNKNOWN_TYPE;
+        }
+        Type valueType = fromDeltaLakeType(mapType.getValueType());
+        if (valueType.isUnknown()) {
+            return Type.UNKNOWN_TYPE;
+        }
+        return new MapType(keyType, valueType);
+    }
+
+    private static Type convertToStructTypeForDeltaLake(io.delta.standalone.types.StructType structType) {
+        io.delta.standalone.types.StructField[] fields = structType.getFields();
+        Preconditions.checkArgument(fields.length > 0);
+        ArrayList<StructField> structFields = new ArrayList<>(fields.length);
+        for (io.delta.standalone.types.StructField field : fields) {
+            String fieldName = field.getName();
+            Type fieldType = fromDeltaLakeType(field.getDataType());
+            if (fieldType.isUnknown()) {
+                return Type.UNKNOWN_TYPE;
+            }
+            structFields.add(new StructField(fieldName, fieldType));
+        }
+        return new StructType(structFields);
     }
 
     public static String getTypeKeyword(String type) {
