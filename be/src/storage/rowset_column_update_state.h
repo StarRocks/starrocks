@@ -164,18 +164,18 @@ private:
 
     void _check_if_preload_column_mode_update_data(Rowset* rowset, MemTracker* update_mem_tracker);
 
-    StatusOr<std::unique_ptr<SegmentWriter>> _prepare_segment_writer(Rowset* rowset, const TabletSchema& tablet_schema,
+    StatusOr<std::unique_ptr<SegmentWriter>> _prepare_segment_writer(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema,
                                                                      int segment_id);
 
-    Status _fill_default_columns(const TabletSchema& tablet_schema, const std::vector<uint32_t>& column_ids,
+    Status _fill_default_columns(const TabletSchemaCSPtr& tablet_schema, const std::vector<uint32_t>& column_ids,
                                  const int64_t row_cnt, vector<std::shared_ptr<Column>>* columns);
-    Status _update_primary_index(const TabletSchema& tablet_schema, Tablet* tablet, const EditVersion& edit_version,
+    Status _update_primary_index(const TabletSchemaCSPtr& tablet_schema, Tablet* tablet, const EditVersion& edit_version,
                                  uint32_t rowset_id, std::map<int, ChunkUniquePtr>& segid_to_chunk,
                                  int64_t insert_row_cnt, PersistentIndexMetaPB& index_meta,
                                  vector<std::pair<uint32_t, DelVectorPtr>>& delvecs, PrimaryIndex& index);
     Status _update_rowset_meta(const RowsetSegmentStat& stat, Rowset* rowset);
 
-    Status _insert_new_rows(const TabletSchema& tablet_schema, Tablet* tablet, const EditVersion& edit_version,
+    Status _insert_new_rows(const TabletSchemaCSPtr& tablet_schema, Tablet* tablet, const EditVersion& edit_version,
                             Rowset* rowset, uint32_t rowset_id, PersistentIndexMetaPB& index_meta,
                             vector<std::pair<uint32_t, DelVectorPtr>>& delvecs, PrimaryIndex& index);
 
