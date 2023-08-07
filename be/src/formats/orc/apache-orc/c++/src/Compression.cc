@@ -38,10 +38,12 @@
 #include <algorithm>
 #include <iomanip>
 #include <iostream>
+#include <libdeflate.h>
 
 #include "Adaptor.hh"
 #include "LzoDecompressor.hh"
 #include "Utils.hh"
+#include "common/config.h"
 #include "lz4.h"
 #include "orc/Exceptions.hh"
 #include "wrap/snappy-wrapper.h"
@@ -723,6 +725,36 @@ void BlockDecompressionStream::NextDecompress(const void** data, int* size, size
     outputBufferLength = 0;
 }
 
+class LibDeflateDecompressionStream : public BlockDecompressionStream {
+public:
+    LibDeflateDecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize, MemoryPool& _pool,
+                                  ReaderMetrics* _metrics)
+            : BlockDecompressionStream(std::move(inStream), blockSize, _pool, _metrics) {
+        decompressor = libdeflate_alloc_decompressor();
+    }
+
+    ~LibDeflateDecompressionStream() override { libdeflate_free_decompressor(decompressor); }
+
+    std::string getName() const override {
+        std::ostringstream result;
+        result << "LibDeflate(" << getStreamName() << ")";
+        return result.str();
+    }
+
+protected:
+    uint64_t decompress(const char* input, uint64_t length, char* output, size_t maxOutputLength) override {
+        size_t actual = 0;
+        auto res = libdeflate_deflate_decompress(decompressor, input, length, output, maxOutputLength, &actual);
+        if (res != LIBDEFLATE_SUCCESS) {
+            throw ParseError("LibDefalte decompress failed");
+        }
+        return actual;
+    }
+
+private:
+    libdeflate_decompressor* decompressor;
+};
+
 class SnappyDecompressionStream : public BlockDecompressionStream {
 public:
     SnappyDecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize, MemoryPool& _pool,
@@ -1110,8 +1142,13 @@ std::unique_ptr<SeekableInputStream> createDecompressor(CompressionKind kind,
     case CompressionKind_NONE:
         return REDUNDANT_MOVE(input);
     case CompressionKind_ZLIB:
-        return std::unique_ptr<SeekableInputStream>(
-                new ZlibDecompressionStream(std::move(input), blockSize, pool, metrics));
+        if (starrocks::config::enable_orc_libdeflate_decompression) {
+            return std::unique_ptr<SeekableInputStream>(
+                    new LibDeflateDecompressionStream(std::move(input), blockSize, pool, metrics));
+        } else {
+            return std::unique_ptr<SeekableInputStream>(
+                    new ZlibDecompressionStream(std::move(input), blockSize, pool, metrics));
+        }
     case CompressionKind_SNAPPY:
         return std::unique_ptr<SeekableInputStream>(
                 new SnappyDecompressionStream(std::move(input), blockSize, pool, metrics));
