@@ -31,7 +31,10 @@ import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.trino.TrinoViewColumnTypeConverter;
+import com.starrocks.connector.trino.TrinoViewDefinition;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import org.apache.avro.Schema;
@@ -49,6 +52,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -78,7 +82,7 @@ public class HiveMetastoreApiConverter {
     }
 
     public static boolean isHudiTable(String inputFormat) {
-        return HudiTable.fromInputFormat(inputFormat) != HudiTable.HudiTableType.UNKNOWN;
+        return inputFormat != null && HudiTable.fromInputFormat(inputFormat) != HudiTable.HudiTableType.UNKNOWN;
     }
 
     public static String toTableLocation(StorageDescriptor sd, Map<String, String> tableParams) {
@@ -129,8 +133,24 @@ public class HiveMetastoreApiConverter {
     }
 
     public static HiveView toHiveView(Table table, String catalogName) {
-        HiveView hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
-                table.getTableName(), toFullSchemasForHiveTable(table), table.getViewExpandedText());
+        HiveView hiveView;
+        if (table.getViewOriginalText() != null && table.getViewOriginalText().startsWith(HiveView.PRESTO_VIEW_PREFIX)
+                && table.getViewOriginalText().endsWith(HiveView.PRESTO_VIEW_SUFFIX)) {
+            // for trino view
+            String hiveViewText = table.getViewOriginalText();
+            hiveViewText = hiveViewText.substring(HiveView.PRESTO_VIEW_PREFIX.length());
+            hiveViewText = hiveViewText.substring(0, hiveViewText.length() - HiveView.PRESTO_VIEW_SUFFIX.length());
+            byte[] bytes = Base64.getDecoder().decode(hiveViewText);
+            TrinoViewDefinition trinoViewDefinition = GsonUtils.GSON.fromJson(new String(bytes),
+                    TrinoViewDefinition.class);
+            hiveViewText = trinoViewDefinition.getOriginalSql();
+            hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
+                    table.getTableName(), toFullSchemasForTrinoView(table, trinoViewDefinition), hiveViewText);
+        } else {
+            hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
+                    table.getTableName(), toFullSchemasForHiveTable(table), table.getViewExpandedText());
+        }
+
         try {
             hiveView.getQueryStatementWithSRParser();
         } catch (StarRocksPlannerException e) {
@@ -203,6 +223,23 @@ public class HiveMetastoreApiConverter {
                 type = Type.UNKNOWN_TYPE;
             }
             Column column = new Column(fieldSchema.getName(), type, true);
+            fullSchema.add(column);
+        }
+        return fullSchema;
+    }
+
+    public static List<Column> toFullSchemasForTrinoView(Table table, TrinoViewDefinition definition) {
+        List<TrinoViewDefinition.ViewColumn> viewColumns = definition.getColumns();
+        List<Column> fullSchema = Lists.newArrayList();
+        for (TrinoViewDefinition.ViewColumn col : viewColumns) {
+            Type type;
+            try {
+                type = TrinoViewColumnTypeConverter.fromTrinoType(col.getType());
+            } catch (InternalError | Exception e) {
+                LOG.error("Failed to convert trino view type {} on {}", col.getType(), table.getTableName(), e);
+                type = Type.UNKNOWN_TYPE;
+            }
+            Column column = new Column(col.getName(), type, true);
             fullSchema.add(column);
         }
         return fullSchema;
