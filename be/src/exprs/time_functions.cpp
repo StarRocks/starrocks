@@ -1732,6 +1732,10 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(yyyyImpl, v) {
     return format_for_yyyyImpl((DateValue)v);
 }
 
+DEFINE_STRING_UNARY_FN_WITH_IMPL(to_iso8601Impl, v) {
+    return timestamp::to_string<true>(((TimestampValue)v).timestamp());
+}
+
 bool standard_format_one_row(const TimestampValue& timestamp_value, char* buf, const std::string& fmt) {
     int year, month, day, hour, minute, second, microsecond;
     timestamp_value.to_timestamp(&year, &month, &day, &hour, &minute, &second, &microsecond);
@@ -2055,6 +2059,18 @@ StatusOr<ColumnPtr> TimeFunctions::jodadate_format(FunctionContext* context, con
         }
         return builder.build(ColumnHelper::is_all_const(columns));
     }
+}
+
+StatusOr<ColumnPtr> TimeFunctions::date_to_iso8601(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    return date_format_func<yyyy_MM_dd_Impl, TYPE_DATE>(columns, 10);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::datetime_to_iso8601(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    return date_format_func<to_iso8601Impl, TYPE_DATETIME>(columns, 26);
 }
 
 Status TimeFunctions::datetime_trunc_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
