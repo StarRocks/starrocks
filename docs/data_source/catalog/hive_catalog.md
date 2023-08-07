@@ -843,15 +843,15 @@ You can use the [GRANT](../../sql-reference/sql-statements/account-management/GR
 
 - Grant a role the privilege to query all tables within a Hive catalog:
 
-  - ```SQL
-    GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE <role_name>
-    ```
+  ```SQL
+  GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE <role_name>
+  ```
 
 - Grant a role the privilege to query all views within a Hive catalog:
 
-  - ```SQL
-    GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE <role_name>
-    ```
+  ```SQL
+  GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE <role_name>
+  ```
 
 For example, use the following commands to create a role named `hive_role_table`, switch to the Hive catalog `hive_catalog`, and then grant the role `hive_role_table` the privilege to query all tables and views within the Hive catalog `hive_catalog`:
 
