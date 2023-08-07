@@ -400,7 +400,7 @@ bool GeoPolygon::contains(const GeoShape* rhs) const {
     }
     case GEO_SHAPE_MULTI_POLYGON: {
         const GeoMultiPolygon* multi_polygon = (const GeoMultiPolygon*)rhs;
-        for (auto polygon : multi_polygon->polygons()) {
+        for (auto& polygon : multi_polygon->polygons()) {
             if (!_polygon.Contains(polygon)) {
                 return false;
             }
@@ -462,7 +462,7 @@ bool GeoCircle::contains(const GeoShape* rhs) const {
     }
     case GEO_SHAPE_MULTI_LINE_STRING: {
         const GeoMultiLine* multi_line = (const GeoMultiLine*)rhs;
-        for (auto line : multi_line->lines()) {
+        for (auto& line : multi_line->lines()) {
             if (!_polygon.Contains(line)) {
                 return false;
             }
@@ -471,7 +471,7 @@ bool GeoCircle::contains(const GeoShape* rhs) const {
     }
     case GEO_SHAPE_MULTI_POLYGON: {
         const GeoMultiPolygon* multi_polygon = (const GeoMultiPolygon*)rhs;
-        for (auto polygon : multi_polygon->polygons()) {
+        for (auto& polygon : multi_polygon->polygons()) {
             if (!_polygon.Contains(polygon)) {
                 return false;
             }
@@ -508,7 +508,7 @@ std::string GeoCircle::as_wkt() const {
 
 template<typename T>
 bool GeoMultiPolygon::_contains(const T rhs) {
-    for (auto polygon : _polygons) {
+    for (auto& polygon : _polygons) {
         if (polygon->Contains(point->point())) {
             return true;
         }
@@ -532,7 +532,7 @@ bool GeoMultiPolygon::contains(const GeoShape* rhs) {
     }
     case GEO_SHAPE_MULTI_POINT: {
         const GeoMultiPoint* multi_point = (const GeoMultiPoint*)rhs;
-        for (auto point : multi_point->points()) {
+        for (auto& point : multi_point->points()) {
             if (!_contains(point)) {
                 return false;
             }
@@ -541,7 +541,7 @@ bool GeoMultiPolygon::contains(const GeoShape* rhs) {
     }
     case GEO_SHAPE_LINE_STRING: {
         const GeoMultiLine* multi_line = (const GeoMultiLine*)rhs;
-        for (auto line : multi_line->lines()) {
+        for (auto& line : multi_line->lines()) {
             if (!_contains(line)) {
                 return false;
             }
@@ -550,7 +550,7 @@ bool GeoMultiPolygon::contains(const GeoShape* rhs) {
     }
     case GEO_SHAPE_POLYGON: {
         const GeoMultiPolygon* multi_polygon = (const GeoMultiPolygon*)rhs;
-        for (auto polygon : multi_polygon->polygons()) {
+        for (auto& polygon : multi_polygon->polygons()) {
             if (!_contains(polygon)) {
                 return false;
             }
