@@ -2216,6 +2216,16 @@ public class OlapTable extends Table {
         tableProperty.buildDataCachePartitionDuration();
     }
 
+
+    public void setStorageCoolDownTTL(PeriodDuration duration) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL,
+                TimeUtils.toHumanReadableString(duration));
+        tableProperty.buildStorageCoolDownTTL();
+    }
+
     public boolean hasForbitGlobalDict() {
         if (tableProperty == null) {
             return false;

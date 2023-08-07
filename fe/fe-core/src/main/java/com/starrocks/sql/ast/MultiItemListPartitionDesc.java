@@ -69,7 +69,7 @@ public class MultiItemListPartitionDesc extends SinglePartitionDesc {
 
         FeNameFormat.checkPartitionName(getPartitionName());
         analyzeValues(columnDefList.size());
-        analyzeProperties(tableProperties);
+        analyzeProperties(tableProperties, null);
         this.columnDefList = columnDefList;
 
         isAnalyzed = true;
