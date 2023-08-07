@@ -8,10 +8,11 @@
 
 当前 StarRocks 支持的窗口函数包括：
 
-* `MIN()`, `MAX()`, `COUNT()`, `SUM()`, `AVG()`
-* `FIRST_VALUE()`, `LAST_VALUE()`, `LEAD()`, `LAG()`
-* `ROW_NUMBER()`, `RANK()`, `DENSE_RANK()`, `QUALIFY()`
-* `NTILE()`
+* MIN(), MAX(), COUNT(), SUM(), AVG()
+* FIRST_VALUE(), LAST_VALUE(), LEAD(), LAG()
+* ROW_NUMBER(), RANK(), DENSE_RANK(), QUALIFY()
+* NTILE()
+* VARIANCE(), VAR_SAMP(), STD(), STDDEV_SAMP(), COVAR_SAMP(), COVAR_POP(), CORR()
 
 ## 窗口函数语法及参数
 
@@ -914,3 +915,353 @@ from int_t where property in ('odd','even');
 | 7  | odd      | 21           |
 +----+----------+--------------+
 ~~~
+
+## 使用 VARIANCE, VAR_POP, VARIANCE_POP 窗口函数
+
+VARIANCE() 窗口函数用于统计表达式的总体方差。VAR_POP 和 VARIANCE_POP 是 VARIANCE 窗口函数的别名。
+
+**语法：**
+
+~~~SQL
+VARIANCE(expression) [OVER (partition_by_clause)]
+~~~
+
+> 注意
+>
+> `VARIANCE()` 函数只支持 PARTITION BY，不支持 ORDER BY 和 Window 子句。
+
+**参数说明：**
+
+当表达式expression为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL
+
+**示例：**
+
+假设表 `agg` 有以下数据：
+
+```plaintext
+mysql> select * from agg;
++------+-------+-------+
+| no   | k     | v     |
++------+-------+-------+
+|    1 | 10.00 |  NULL |
+|    2 | 10.00 | 11.00 |
+|    2 | 20.00 | 22.00 |
+|    2 | 25.00 |  NULL |
+|    2 | 30.00 | 35.00 |
++------+-------+-------+
+```
+
+使用 VARIANCE() 窗口函数。
+
+```plaintext
+mysql> select variance(k) over (partition by no) FROM agg;
++-------------------------------------+
+| variance(k) OVER (PARTITION BY no ) |
++-------------------------------------+
+|                                   0 |
+|                             54.6875 |
+|                             54.6875 |
+|                             54.6875 |
+|                             54.6875 |
++-------------------------------------+
+```
+
+## 使用 VAR_SAMP, VARIANCE_SAMP 窗口函数
+
+VAR_SAMP() 窗口函数用于统计表达式的样本方差。
+
+**语法：**
+
+```sql
+VAR_SAMP(expression) [OVER (partition_by_clause)]
+```
+
+> 注意
+>
+> VAR_SAMP() 函数只支持 PARTITION BY，不支持 ORDER BY 和 Window 子句。
+
+**参数说明：**
+
+当表达式expression为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL
+
+**示例：**
+
+假设表 `agg` 有以下数据：
+
+```plaintext
+mysql> select * from agg;
++------+-------+-------+
+| no   | k     | v     |
++------+-------+-------+
+|    1 | 10.00 |  NULL |
+|    2 | 10.00 | 11.00 |
+|    2 | 20.00 | 22.00 |
+|    2 | 25.00 |  NULL |
+|    2 | 30.00 | 35.00 |
++------+-------+-------+
+```
+
+使用 VAR_SAMP() 窗口函数。
+
+```plaintext
+mysql> select VAR_SAMP(k) over (partition by no) FROM agg;
++-------------------------------------+
+| var_samp(k) OVER (PARTITION BY no ) |
++-------------------------------------+
+|                                   0 |
+|                   72.91666666666667 |
+|                   72.91666666666667 |
+|                   72.91666666666667 |
+|                   72.91666666666667 |
++-------------------------------------+
+```
+
+## 使用 STD, STDDEV, STDDEV_POP 窗口函数
+
+STD() 窗口函数用于统计表达式的总体标准差。
+
+**语法：**
+
+```sql
+STD(expression) [OVER (partition_by_clause)]
+```
+
+> 注意
+>
+> STD() 函数只支持 PARTITION BY，不支持 ORDER BY 和 Window 子句。
+
+**参数说明：**
+
+当表达式expression为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL
+
+**示例：**
+
+假设表 `agg` 有以下数据：
+
+```plaintext
+mysql> select * from agg;
++------+-------+-------+
+| no   | k     | v     |
++------+-------+-------+
+|    1 | 10.00 |  NULL |
+|    2 | 10.00 | 11.00 |
+|    2 | 20.00 | 22.00 |
+|    2 | 25.00 |  NULL |
+|    2 | 30.00 | 35.00 |
++------+-------+-------+
+```
+
+使用 STD() 窗口函数。
+
+```plaintext
+mysql> select STD(k) over (partition by no) FROM agg;
++--------------------------------+
+| std(k) OVER (PARTITION BY no ) |
++--------------------------------+
+|                              0 |
+|               7.39509972887452 |
+|               7.39509972887452 |
+|               7.39509972887452 |
+|               7.39509972887452 |
++--------------------------------+
+```
+
+## 使用 STDDEV_SAMP 窗口函数
+
+STDDEV_SAMP() 窗口函数用于统计表达式的样本标准差。
+
+**语法：**
+
+```sql
+STDDEV_SAMP(expression) [OVER (partition_by_clause)]
+```
+
+> 注意
+>
+> STDDEV_SAMP() 函数只支持 PARTITION BY，不支持 ORDER BY 和 Window 子句。
+
+**参数说明：**
+
+当表达式expression为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL
+
+**示例：**
+
+假设表 `agg` 有以下数据：
+
+```plaintext
+mysql> select * from agg;
++------+-------+-------+
+| no   | k     | v     |
++------+-------+-------+
+|    1 | 10.00 |  NULL |
+|    2 | 10.00 | 11.00 |
+|    2 | 20.00 | 22.00 |
+|    2 | 25.00 |  NULL |
+|    2 | 30.00 | 35.00 |
++------+-------+-------+
+```
+
+使用 STDDEV_SAMP() 窗口函数。
+
+```plaintext
+mysql> select STDDEV_SAMP(k) over (partition by no) FROM agg;
++----------------------------------------+
+| stddev_samp(k) OVER (PARTITION BY no ) |
++----------------------------------------+
+|                                      0 |
+|                      8.539125638299666 |
+|                      8.539125638299666 |
+|                      8.539125638299666 |
+|                      8.539125638299666 |
++----------------------------------------+
+```
+
+## 使用 COVAR_SAMP 窗口函数
+
+COVAR_SAMP() 窗口函数用于统计表达式的样本协方差。
+
+**语法：**
+
+```sql
+COVAR_SAMP(expression) [OVER (partition_by_clause)]
+```
+
+> 注意
+>
+> COVAR_SAMP() 函数只支持 PARTITION BY，不支持 ORDER BY 和 Window 子句。
+
+**参数说明：**
+
+当表达式expression为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL
+
+**示例：**
+
+假设表 `agg` 有以下数据：
+
+```plaintext
+mysql> select * from agg;
++------+-------+-------+
+| no   | k     | v     |
++------+-------+-------+
+|    1 | 10.00 |  NULL |
+|    2 | 10.00 | 11.00 |
+|    2 | 20.00 | 22.00 |
+|    2 | 25.00 |  NULL |
+|    2 | 30.00 | 35.00 |
++------+-------+-------+
+```
+
+使用 COVAR_SAMP() 窗口函数。
+
+```plaintext
+mysql> select COVAR_SAMP(k, v) over (partition by no) FROM agg;
++------------------------------------------+
+| covar_samp(k, v) OVER (PARTITION BY no ) |
++------------------------------------------+
+|                                     NULL |
+|                       119.99999999999999 |
+|                       119.99999999999999 |
+|                       119.99999999999999 |
+|                       119.99999999999999 |
++------------------------------------------+
+```
+
+## 使用 COVAR_POP 窗口函数
+
+COVAR_POP() 窗口函数用于统计表达式的总体协方差。
+
+**语法：**
+
+```sql
+COVAR_POP(expression, expression) [OVER (partition_by_clause)]
+```
+
+> 注意
+>
+> COVAR_POP() 函数只支持 PARTITION BY，不支持 ORDER BY 和 Window 子句。
+
+**参数说明：**
+
+当表达式expression为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL
+
+**示例：**
+
+假设表 `agg` 有以下数据：
+
+```plaintext
+mysql> select * from agg;
++------+-------+-------+
+| no   | k     | v     |
++------+-------+-------+
+|    1 | 10.00 |  NULL |
+|    2 | 10.00 | 11.00 |
+|    2 | 20.00 | 22.00 |
+|    2 | 25.00 |  NULL |
+|    2 | 30.00 | 35.00 |
++------+-------+-------+
+```
+
+使用 COVAR_POP() 窗口函数。
+
+```plaintext
+mysql> select COVAR_POP(k, v) over (partition by no) FROM agg;
++-----------------------------------------+
+| covar_pop(k, v) OVER (PARTITION BY no ) |
++-----------------------------------------+
+|                                    NULL |
+|                       79.99999999999999 |
+|                       79.99999999999999 |
+|                       79.99999999999999 |
+|                       79.99999999999999 |
++-----------------------------------------+
+```
+
+## 使用 CORR 窗口函数
+
+CORR() 窗口函数用于统计表达式的相关系数。
+
+**语法：**
+
+```sql
+CORR(expression, expression) [OVER (partition_by_clause)]
+```
+
+> 注意
+>
+> CORR() 函数只支持 PARTITION BY，不支持 ORDER BY 和 Window 子句。
+
+**参数说明：**
+
+当表达式expression为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL
+
+**示例：**
+
+假设表 `agg` 有以下数据：
+
+```plaintext
+mysql> select * from agg;
++------+-------+-------+
+| no   | k     | v     |
++------+-------+-------+
+|    1 | 10.00 |  NULL |
+|    2 | 10.00 | 11.00 |
+|    2 | 20.00 | 22.00 |
+|    2 | 25.00 |  NULL |
+|    2 | 30.00 | 35.00 |
++------+-------+-------+
+```
+
+使用 CORR() 窗口函数。
+
+```plaintext
+mysql> select CORR(k, v) over (partition by no) FROM agg;
++------------------------------------+
+| corr(k, v) OVER (PARTITION BY no ) |
++------------------------------------+
+|                               NULL |
+|                 0.9988445981121532 |
+|                 0.9988445981121532 |
+|                 0.9988445981121532 |
+|                 0.9988445981121532 |
++------------------------------------+
+```
