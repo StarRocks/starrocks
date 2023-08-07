@@ -51,7 +51,7 @@ public class HDFSBackendSelectorTest {
     final int computeNodePort = 9030;
     final String hostFormat = "Host%02d";
 
-    private List<TScanRangeLocations> createScanRanges(int number, int size) {
+    private List<TScanRangeLocations> createScanRanges(long number, long size) {
         List<TScanRangeLocations> ans = new ArrayList<>();
 
         for (int i = 0; i < number; i++) {
@@ -149,6 +149,66 @@ public class HDFSBackendSelectorTest {
         for (Map.Entry<Long, Long> entry : stats.entrySet()) {
             System.out.printf("%s -> %d bytes\n", entry.getKey(), entry.getValue());
             Assert.assertTrue(Math.abs(entry.getValue() - avg) < variance);
+        }
+    }
+
+    @Test
+    public void testHdfsScanNodeScanRangeReBalance() throws Exception {
+        new MockUp<PlannerProfile>() {
+            @Mock
+            public void addCustomProperties(String name, String value) {
+            }
+        };
+        SessionVariable sessionVariable = new SessionVariable();
+        new Expectations() {
+            {
+                hdfsScanNode.getId();
+                result = scanNodeId;
+
+                hdfsScanNode.getTableName();
+                result = "hive_tbl";
+
+                hiveTable.getTableLocation();
+                result = "hdfs://dfs00/dataset/";
+
+                ConnectContext.get();
+                result = context;
+
+                context.getSessionVariable();
+                result = sessionVariable;
+            }
+        };
+
+        long scanRangeNumber = 100;
+        long scanRangeSize = 10000;
+        int hostNumber = 3;
+        List<TScanRangeLocations> locations = createScanRanges(scanRangeNumber, scanRangeSize);
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        ImmutableMap<Long, ComputeNode> computeNodes = createComputeNodes(hostNumber);
+        DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
+                ImmutableMap.of(),
+                computeNodes,
+                ImmutableMap.of(),
+                computeNodes,
+                true
+        );
+
+        HDFSBackendSelector selector =
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider, false, false);
+        selector.computeScanRangeAssignment();
+
+        long avg = (scanRangeNumber * scanRangeSize) / hostNumber + 1;
+        double variance = 0.2 * avg;
+        Map<Long, Long> stats = computeWorkerIdToReadBytes(assignment, scanNodeId);
+        for (Map.Entry<Long, Long> entry : stats.entrySet()) {
+            System.out.printf("%s -> %d bytes\n", entry.getKey(), entry.getValue());
+            Assert.assertTrue(Math.abs(entry.getValue() - avg) < variance);
+        }
+
+        variance = 2 * scanRangeSize;
+        for (Map.Entry<ComputeNode, Long> entry : selector.reBalanceBytesPerComputeNode.entrySet()) {
+            System.out.printf("%s -> %d bytes re-balance\n", entry.getKey(), entry.getValue());
+            Assert.assertTrue(entry.getValue() <= variance);
         }
     }
 

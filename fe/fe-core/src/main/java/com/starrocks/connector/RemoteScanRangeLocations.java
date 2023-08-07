@@ -85,18 +85,10 @@ public class RemoteScanRangeLocations {
         long length = blockDesc.getLength();
         long offset = blockDesc.getOffset();
         do {
-            if (remainingBytes <= splitSize) {
+            if (remainingBytes < 2 * splitSize) {
                 createScanRangeLocationsForSplit(partitionId, partition, fileDesc,
                         blockDesc, offset + length - remainingBytes,
                         remainingBytes);
-                remainingBytes = 0;
-            } else if (remainingBytes <= 2 * splitSize) {
-                long mid = (remainingBytes + 1) / 2;
-                createScanRangeLocationsForSplit(partitionId, partition, fileDesc,
-                        blockDesc, offset + length - remainingBytes, mid);
-                createScanRangeLocationsForSplit(partitionId, partition, fileDesc,
-                        blockDesc, offset + length - remainingBytes + mid,
-                        remainingBytes - mid);
                 remainingBytes = 0;
             } else {
                 createScanRangeLocationsForSplit(partitionId, partition, fileDesc,
