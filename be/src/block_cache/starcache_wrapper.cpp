@@ -43,8 +43,9 @@ Status StarCacheWrapper::init(const CacheOptions& options) {
         opt.disk_dir_spaces.push_back({.path = dir.path, .quota_bytes = dir.size});
     }
     opt.block_size = options.block_size;
-    opt.enable_disk_checksum = options.checksum;
+    opt.enable_disk_checksum = options.enable_checksum;
     opt.max_concurrent_writes = options.max_concurrent_inserts;
+    opt.enable_os_page_cache = !options.enable_direct_io;
 
     _cache = std::make_unique<starcache::StarCache>();
     return to_status(_cache->init(opt));
