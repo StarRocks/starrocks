@@ -706,9 +706,12 @@ void Aggregator::output_chunk_by_streaming(vectorized::ChunkPtr* chunk) {
 =======
 
         RETURN_IF_ERROR(evaluate_agg_fn_exprs(input_chunk));
+<<<<<<< HEAD:be/src/exec/vectorized/aggregator.cpp
         std::cout << fmt::format("convert_to_serialize_format by streaming0") << std::endl;
 
 >>>>>>> e31fbe8c1b ([Feature] group_concat() support distinct and order by):be/src/exec/aggregator.cpp
+=======
+>>>>>>> 90cb92b479 (update tests):be/src/exec/aggregator.cpp
         const auto num_rows = _group_by_columns[0]->size();
         vectorized::Columns agg_result_column = _create_agg_result_columns(num_rows);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
@@ -718,7 +721,6 @@ void Aggregator::output_chunk_by_streaming(vectorized::ChunkPtr* chunk) {
                 DCHECK(i < _agg_input_columns.size() && _agg_input_columns[i].size() >= 1);
                 result_chunk->append_column(std::move(_agg_input_columns[i][0]), slot_id);
             } else {
-                std::cout << fmt::format("convert_to_serialize_format by streaming1") << std::endl;
                 _agg_functions[i]->convert_to_serialize_format(_agg_fn_ctxs[i], _agg_input_columns[i],
                                                                result_chunk->num_rows(), &agg_result_column[i]);
                 result_chunk->append_column(std::move(agg_result_column[i]), slot_id);
