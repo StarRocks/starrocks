@@ -350,12 +350,12 @@ if [ ${BUILD_BE} -eq 1 ] ; then
     ${BUILD_SYSTEM} install
 
     # Build JDBC Bridge
-    echo "Build Java Extensions"
-    cd ${STARROCKS_HOME}/java-extensions
-    if [ ${CLEAN} -eq 1 ]; then
-        ${MVN_CMD} clean
-    fi
-    ${MVN_CMD} package -DskipTests
+    # echo "Build Java Extensions"
+    # cd ${STARROCKS_HOME}/java-extensions
+    # if [ ${CLEAN} -eq 1 ]; then
+    #     ${MVN_CMD} clean
+    # fi
+    # ${MVN_CMD} package -DskipTests
     cd ${STARROCKS_HOME}
 fi
 
