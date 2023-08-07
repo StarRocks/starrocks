@@ -39,7 +39,7 @@ You can use one of the following solutions to resolve this issue:
 
 #### [Recommended] Data Cache
 
-参见 [Data Cache](../data_source/data_cache.md)。
+See [Data Cache](../data_source/data_cache.md).
 
 #### Hedged Read
 
