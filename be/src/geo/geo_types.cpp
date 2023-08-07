@@ -508,7 +508,7 @@ std::string GeoCircle::as_wkt() const {
 
 template<typename T>
 bool GeoMultiPolygon::_contains(const T rhs) {
-    for (auto& polygon : _polygons) {
+    for (auto polygon : _polygons) {
         if (polygon->Contains(point->point())) {
             return true;
         }
