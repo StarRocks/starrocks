@@ -32,6 +32,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.RemoteFileInfo;
@@ -850,7 +851,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         HiveMetastore metastore = new HiveMetastore(metaClient, MOCKED_HIVE_CATALOG_NAME);
         CachingHiveMetastore cachingHiveMetastore = createCatalogLevelInstance(
                 metastore, Executors.newSingleThreadExecutor(), 0, 0, 0, false);
-        HiveMetastoreOperations hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, false, new Configuration());
+        HiveMetastoreOperations hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, false,
+                new Configuration(), MetastoreType.HMS, "hive_catalog");
         RemoteFileIO remoteFileIO = new HiveRemoteFileIO(new Configuration());
         CachingRemoteFileIO cacheIO = CachingRemoteFileIO.createCatalogLevelInstance(remoteFileIO,
                 Executors.newSingleThreadExecutor(), 0, 0, 0);

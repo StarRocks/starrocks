@@ -12,33 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+package com.starrocks.connector;
 
-#include <string>
-#include <vector>
+import com.starrocks.connector.exception.StarRocksConnectorException;
 
-namespace starrocks {
+public enum MetastoreType {
+    HMS,
+    GLUE,
+    DLF;
 
-struct DirSpace {
-    std::string path;
-    size_t size;
-};
+    public static MetastoreType get(String type) {
+        if (type.equalsIgnoreCase("hive")) {
+            return HMS;
+        }
 
-struct CacheOptions {
-    // basic
-    size_t mem_space_size;
-    std::vector<DirSpace> disk_spaces;
-    std::string meta_path;
-
-    // advanced
-    size_t block_size;
-    bool enable_checksum;
-    bool enable_direct_io;
-    std::string engine;
-    size_t max_concurrent_inserts;
-    // The following options are only valid for cachelib engine currently
-    size_t max_parcel_memory_mb;
-    uint8_t lru_insertion_point;
-};
-
-} // namespace starrocks
+        for (MetastoreType metastoreType : MetastoreType.values()) {
+            if (metastoreType.name().equalsIgnoreCase(type)) {
+                return metastoreType;
+            }
+        }
+        throw new StarRocksConnectorException("Unsupported metastore type %s", type);
+    }
+}
