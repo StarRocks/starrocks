@@ -1,8 +1,8 @@
 # Hive catalog
 
-A Hive catalog is a kind of external catalog that enables you to query data from Apache Hive™ without ingestion.
+A Hive catalog is a kind of external catalog that enables you to query data from Apache Hive™ without ingestion. Also, you can directly transform and load data from Hive by using [INSERT INTO](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md) based on Hive catalogs.
 
-Also, you can directly transform and load data from Hive by using [INSERT INTO](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md) based on Hive catalogs. StarRocks supports Hive catalogs from v2.4 onwards.
+StarRocks supports Hive catalogs from v2.4 onwards, and from v3.1 onwards StarRocks supports accessing views that are created on tables within Hive catalogs.
 
 To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster needs to integrate with two important components:
 
@@ -835,6 +835,38 @@ Suppose you have an OLAP table named `olap_tbl`, you can transform and load data
 
 ```SQL
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM hive_table
+```
+
+## Grant privileges on Hive tales and views
+
+You can use the [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) statement to grant the privileges on all tables or views within a Hive catalog to a specific role.
+
+- Grant a role the privilege to query all tables within a Hive catalog:
+
+  ```SQL
+  GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE <role_name>
+  ```
+
+- Grant a role the privilege to query all views within a Hive catalog:
+
+  ```SQL
+  GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE <role_name>
+  ```
+
+For example, use the following commands to create a role named `hive_role_table`, switch to the Hive catalog `hive_catalog`, and then grant the role `hive_role_table` the privilege to query all tables and views within the Hive catalog `hive_catalog`:
+
+```SQL
+-- Create a role named hive_role_table.
+CREATE ROLE hive_role_table;
+
+-- Switch to the Hive catalog hive_catalog.
+SET CATALOG hive_catalog;
+
+-- Grant the role hive_role_table the privilege to query all tables within the Hive catalog hive_catalog.
+GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE hive_role_table;
+
+-- Grant the role hive_role_table the privilege to query all views within the Hive catalog hive_catalog.
+GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE hive_role_table;
 ```
 
 ## Manually or automatically update metadata cache
