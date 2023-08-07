@@ -559,7 +559,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::lazy_output(ChunkPtr* probe_chunk, C
             if (!_table_items->with_other_conjunct) {
                 _lazy_build_default_output(src_chunk, dest_chunk, _probe_state->count);
             } else {
-                lazy_build_output(dest_chunk);
+                lazy_build_output(src_chunk, dest_chunk);
             }
         }
     } else {
