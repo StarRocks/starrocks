@@ -1,33 +1,41 @@
 -- name: test_pipe_basic
 show pipes;
 
--- show pipes
-create database db_${uuid0};
-create database db_${uuid1};
-use db_${uuid0};
-show pipes;
-show pipes from db_${uuid1};
+-- prepare data
+-- {"col_int":1,"col_map":{"key_value":[{"key":"a","value":1}]},"col_struct":{"a":"a","b":1}}
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_pipe/col_not_null.parquet >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 mkdir oss://${oss_bucket}/test_pipe/col_not_null.parquet >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ./sql/test_pipe/data/col_not_null.parquet oss://${oss_bucket}/test_pipe/col_not_null.parquet | grep -Pv "(average|elapsed)"
 
--- create/alter/show/drop/desc
-create table t1 (id int, name string) duplicate key(id) properties('replication_num' = '1');
-create pipe p1 as 
+create database db_${uuid0};
+use db_${uuid0};
+
+-- load data
+create table t1 
+properties('replication_num' = '1')
+as select * from files('path' = 'oss://${oss_bucket}/test_pipe/col_not_null.parquet', 'format'='parquet');
+desc t1;
+select count(*) from t1;
+
+create pipe p1 properties('auto_ingest'='false') as 
     insert into t1 
-    select * from files('path' = 'fake://file.parquet', 'format'='parquet');
+    select * from files('path' = 'oss://${oss_bucket}/test_pipe/col_not_null.parquet', 'format'='parquet');
 
-[UC]show pipes;
-[UC]desc pipe p1;
 alter pipe p1 suspend;
-[UC]show pipes;
-alter pipe p1 resume;
-[UC]show pipes;
-use db_${uuid1};
-[UC]show pipes from db_${uuid0};
-use db_${uuid0};
-drop pipe p1;
-show pipes;
+select pipe_name, state from information_schema.pipes where database_name = 'db_${uuid0}' and pipe_name = 'p1';
+select pipe_name, file_name, file_size, load_state
+    from information_schema.pipe_files where database_name = 'db_${uuid0}' and pipe_name = 'p1';
 
--- drop database
-drop database db_${uuid0};
-create database db_${uuid0};
-use db_${uuid0};
-show pipes;
+alter pipe p1 resume;
+select sleep(5);
+
+select count(*) from t1;
+select pipe_name, state from information_schema.pipes where database_name = 'db_${uuid0}' and pipe_name = 'p1';
+select pipe_name, parse_url(file_name, 'FILE'), file_size, load_state
+    from information_schema.pipe_files where database_name = 'db_${uuid0}' and pipe_name = 'p1';
+
+
+drop pipe p1;
+select pipe_name, state from information_schema.pipes where database_name = 'db_${uuid0}' and pipe_name = 'p1';
+select pipe_name, parse_url(file_name, 'FILE'), file_size, load_state
+    from information_schema.pipe_files where database_name = 'db_${uuid0}' and pipe_name = 'p1';
