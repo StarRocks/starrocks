@@ -1218,6 +1218,7 @@ build_serdes
 build_datasketches
 build_async_profiler
 build_fiu
+build_llvm
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
