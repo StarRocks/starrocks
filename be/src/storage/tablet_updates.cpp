@@ -252,6 +252,7 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
 
     RETURN_IF_ERROR(_load_meta_and_log(tablet_updates_pb));
 
+    _rowset_stats.clear();
     std::set<uint32_t> unapplied_rowsets;
     auto st = _load_rowsets_and_check_consistency(unapplied_rowsets);
     if (st.is_corruption()) {
