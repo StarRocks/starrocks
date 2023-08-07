@@ -1,5 +1,43 @@
 # StarRocks version 2.5
 
+## 2.5.10
+
+发布日期：2023 年 8 月 7 日
+
+### 新增特性
+
+- 支持聚合函数 [COVAR_SAMP](../sql-reference/sql-functions/aggregate-functions/covar_samp.md)、[COVAR_POP](../sql-reference/sql-functions/aggregate-functions/covar_pop.md)、[CORR](../sql-reference/sql-functions/aggregate-functions/corr.md)。
+- 支持[窗口函数](../sql-reference/sql-functions/Window_function.md) COVAR_SAMP、COVAR_POP、CORR、VARIANCE、VAR_SAMP、STD、 STDDEV_SAMP。
+
+### 功能优化
+
+- 优化 TabletChecker 的调度逻辑，避免重复调度暂时无法修复的 Tablet。 [#27648](https://github.com/StarRocks/starrocks/pull/27648)
+- 优化了 Schema Change 和 Routine load 同时执行，当 Schema Change 先完成时可能引起 Routine Load 失败时的报错信息。[#28425](https://github.com/StarRocks/starrocks/pull/28425)
+- 禁止创建外表时定义 Not Null 列（如果原来定义了 Not Null 列，升级后会报错，需重建表）。建议 2.3.0 版本后使用 Catalog，不要再使用外表。 [#25485](https://github.com/StarRocks/starrocks/pull/25441)
+- 增加 Broker Load 重试过程中出现报错时的错误信息，方便导入出现问题时进行排查调试。 [#21982](https://github.com/StarRocks/starrocks/pull/21982)
+- 主键模型导入时，包含 UPSERT 和 DELETE 的大量数据写入也可以支持。 [#17264](https://github.com/StarRocks/starrocks/pull/17264)
+- 优化物化视图改写功能。[#27934](https://github.com/StarRocks/starrocks/pull/27934) [#25542](https://github.com/StarRocks/starrocks/pull/25542) [#22300](https://github.com/StarRocks/starrocks/pull/22300) [#27557](https://github.com/StarRocks/starrocks/pull/27557)  [#22300](https://github.com/StarRocks/starrocks/pull/22300) [#26957](https://github.com/StarRocks/starrocks/pull/26957) [#27728](https://github.com/StarRocks/starrocks/pull/27728) [#27900](https://github.com/StarRocks/starrocks/pull/27900)
+
+### 问题修复
+
+修复了如下问题：
+
+- 使用 cast 函数将字符串转换为数组时，如果输入包括常量，无法返回正确结果。 [#19793](https://github.com/StarRocks/starrocks/pull/19793)
+- SHOW TABLET 如果包括 ORDER BY 和 LIMIT 返回结果不正确。 [#23375](https://github.com/StarRocks/starrocks/pull/23375)
+- 物化视图 Outer join 和 Anti join 改写错误。 [#28028](https://github.com/StarRocks/starrocks/pull/28028)
+- FE 中表级别 scan 统计信息错误，导致表查询和导入的 metrics 信息不正确。 [#27779](https://github.com/StarRocks/starrocks/pull/27779)
+- 如果 HMS 上通过配置事件侦听器来自动增量更新 Hive 元数据，FE 日志中会报 `An exception occurred when using the current long link to access metastore. msg: Failed to get next notification based on last event id: 707602`。 [#21056](https://github.com/StarRocks/starrocks/pull/21056)
+- 分区表中修改 sort key 列后查询结果不稳定。 [#27850](https://github.com/StarRocks/starrocks/pull/27850)
+- 使用 DATE，DATETIME，DECIMAL 做分桶列时，Spark Load 导入数据会被导入到错误的分桶。 [#27005](https://github.com/StarRocks/starrocks/pull/27005)
+- 某些情况下 regex_replace 函数会导致 BE crash。 [#27117](https://github.com/StarRocks/starrocks/pull/27117)
+- sub_bitmap 函数的参数取值不是 BITMAP 类型时，会导致 BE crash。 [#27982](https://github.com/StarRocks/starrocks/pull/27982)
+- 开启 Join Reorder 后，某些情况下查询会报 unknown error。 [#27472](https://github.com/StarRocks/starrocks/pull/27472)
+- 主键模型部分列更新时平均 row size 预估不准导致内存占用过多。 [#27485](https://github.com/StarRocks/starrocks/pull/27485)
+- 低基数优化开启时，某些情况下 INSERT 导入报错 `[42000][1064] Dict Decode failed, Dict can't take cover all key :0`。 [#26463](https://github.com/StarRocks/starrocks/pull/26463)
+- 使用 Broker Load 从 HDFS 导入数据时，如果作业中认证方式设置为 `simple` 则会导致作业失败。 [#27774](https://github.com/StarRocks/starrocks/pull/27774)
+- 物化视图在修改刷新模式时会导致元数据不一致。[#28082](https://github.com/StarRocks/starrocks/pull/28082) [#28097](https://github.com/StarRocks/starrocks/pull/28097)
+- 使用 SHOW CREATE CATALOG、SHOW RESOURCES 查看某些特殊信息时，PASSWORD 未被隐藏。 [#28059](https://github.com/StarRocks/starrocks/pull/28059)
+
 ## 2.5.9
 
 发布日期：2023 年 7 月 19 日
