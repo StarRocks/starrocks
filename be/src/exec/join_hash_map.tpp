@@ -777,7 +777,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_build_tuple_output(ChunkPtr* chunk)
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_lazy_build_default_output(ChunkPtr* src_chunk, ChunkPtr* chunk, size_t count) {
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
-        HashTableSlotDescriptor hash_table_slot = _table_items->probe_slots[i];
+        HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
         SlotDescriptor* slot = hash_table_slot.slot;
         if (hash_table_slot.need_materialize) {
             (*chunk)->append_column((*src_chunk)->get_column_by_slot_id(slot->id()), slot->id());
