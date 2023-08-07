@@ -626,6 +626,7 @@ public:
 private:
     void _probe_output(ChunkPtr* probe_chunk, ChunkPtr* chunk);
     void _probe_tuple_output(ChunkPtr* probe_chunk, ChunkPtr* chunk);
+    void _lazy_probe_null_output(ChunkPtr* src_chunk, ChunkPtr* chunk, size_t count);
     void _probe_null_output(ChunkPtr* chunk, size_t count);
 
     void _build_output(ChunkPtr* chunk);
