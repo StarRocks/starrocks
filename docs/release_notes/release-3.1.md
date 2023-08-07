@@ -1,38 +1,6 @@
 # StarRocks version 3.1
 
-## 3.1.0-RC02
-
-Release date: July 21, 2023
-
-### New Features
-
-#### Shared-data cluster
-
-Supports [abstraction of storage volumes](../deployment/deploy_shared_data.md#create-default-storage-volume), in which users can configure storage location and authentication information, in StarRocks shared-data clusters. Users can directly reference an existing storage volume when creating a database or table, making authentication configuration easier.
-
-#### Storage engine, data ingestion, and query
-
-- Upgraded automatic partitioning to expression partitioning. Users only need to use a simple partition expression (either a time function expression or a column expression) to specify a partitioning method at table creation, and StarRocks will automatically create partitions based on the data characteristics and the rule defined in the partition expression during data loading. This method of partition creation is suitable for most scenarios and is more flexible and user-friendly.
-- Supports list partitioning. Data is partitioned based on a list of values predefined for a particular column, which can accelerate queries and manage clearly categorized data more efficiently.
-
-#### SQL reference
-
-- Added the following storage volume-related statements: [CREATE STORAGE VOLUME](../sql-reference/sql-statements/Administration/CREATE%20STORAGE%20VOLUME.md), [ALTER STORAGE VOLUME](../sql-reference/sql-statements/Administration/ALTER%20STORAGE%20VOLUME.md), [DROP STORAGE VOLUME](../sql-reference/sql-statements/Administration/DROP%20STORAGE%20VOLUME.md), [SET DEFAULT STORAGE VOLUME](../sql-reference/sql-statements/Administration/SET%20DEFAULT%20STORAGE%20VOLUME.md), [DESC STORAGE VOLUME](../sql-reference/sql-statements/Administration/DESC%20STORAGE%20VOLUME.md), [SHOW STORAGE VOLUMES](../sql-reference/sql-statements/Administration/SHOW%20STORAGE%20VOLUMES.md).
-- The table function TABLE() is renamed as [FILES()](../sql-reference/sql-functions/table-functions/files.md), which can be used to read files in an external data source for loading or direct query.
-
-#### Privileges and security
-
-Added [privilege items](../administration/privilege_item.md#storage-volume) related to Storage Volume and supports using [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md) to grant and revoke related privileges.
-
-### Improvements
-
-#### Storage engine, data ingestion, and query
-
-- Optimized the collection of statistics for the CBO. This reduces the impact of statistics collection on data ingestion and increases statistics collection performance.
-- Optimized the merge algorithm to increase the overall performance by up to 2 times in permutation scenarios.
-- Optimized the query logic to reduce dependency on database locks.
-
-## 3.1.0-RC01
+## 3.1.0
 
 Release date: July 7, 2023
 
