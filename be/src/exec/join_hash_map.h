@@ -501,6 +501,16 @@ public:
         return;
     }
 
+    void lazy_output_remain(ChunkPtr* probe_chunk, ChunkPtr* src_chunk, ChunkPtr* dest_chunk) {
+        if ((*src_chunk)->num_rows() < _probe_state->count) {
+            _probe_state->match_flag = JoinMatchFlag::NORMAL;
+            _probe_state->count = (*src_chunk)->num_rows();
+        }
+
+        lazy_probe_output(probe_chunk, src_chunk, dest_chunk);
+        lazy_build_output(src_chunk, dest_chunk);
+    }
+
     void lazy_output(ChunkPtr* probe_chunk, ChunkPtr* src_chunk, ChunkPtr* dest_chunk) {
         if ((*src_chunk)->num_rows() < _probe_state->count) {
             _probe_state->match_flag = JoinMatchFlag::NORMAL;
@@ -630,6 +640,7 @@ public:
                bool* has_remain);
     void probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* has_remain);
     void lazy_output(ChunkPtr* probe_chunk, ChunkPtr* src_chunk, ChunkPtr* dest_chunk);
+    void lazy_output_remain(ChunkPtr* probe_chunk, ChunkPtr* src_chunk, ChunkPtr* dest_chunk);
     void lazy_probe_output(ChunkPtr* probe_chunk, ChunkPtr* src_chunk, ChunkPtr* dest_chunk);
     void lazy_build_output(ChunkPtr* src_chunk, ChunkPtr* dest_chunk);
 
@@ -796,6 +807,7 @@ public:
     int64_t mem_usage() const;
 
     Status lazy_materialize(ChunkPtr* probe_chunk, ChunkPtr* src_chunk, ChunkPtr* dest_chunk);
+    Status lazy_materialize_remain(ChunkPtr* probe_chunk, ChunkPtr* src_chunk, ChunkPtr* dest_chunk);
 
 private:
     JoinHashMapType _choose_join_hash_map();

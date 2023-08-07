@@ -545,6 +545,23 @@ StatusOr<ChunkPtr> JoinHashTable::convert_to_spill_schema(const ChunkPtr& chunk)
     return output;
 }
 
+Status JoinHashTable::lazy_materialize_remain(ChunkPtr* probe_chunk, ChunkPtr* src_chunk, ChunkPtr* dest_chunk) {
+    switch (_hash_map_type) {
+#define M(NAME)                                                          \
+    case JoinHashMapType::NAME:                                          \
+        _##NAME->lazy_output_remain(probe_chunk, src_chunk, dest_chunk); \
+        break;
+        APPLY_FOR_JOIN_VARIANTS(M)
+#undef M
+    default:
+        assert(false);
+    }
+    if (_table_items->has_large_column) {
+        RETURN_IF_ERROR((*dest_chunk)->downgrade());
+    }
+    return Status::OK();
+}
+
 Status JoinHashTable::lazy_materialize(ChunkPtr* probe_chunk, ChunkPtr* src_chunk, ChunkPtr* dest_chunk) {
     switch (_hash_map_type) {
 #define M(NAME)                                                   \

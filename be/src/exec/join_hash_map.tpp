@@ -522,6 +522,25 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe_remain(RuntimeState* state, Ch
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::lazy_output_remain(ChunkPtr* probe_chunk, ChunkPtr* src_chunk,
+                                                               ChunkPtr* dest_chunk) {
+    if ((*src_chunk)->num_rows() < _probe_state->count) {
+        _probe_state->match_flag = JoinMatchFlag::NORMAL;
+        _probe_state->count = (*src_chunk)->num_rows();
+    }
+
+    if (_table_items->join_type == TJoinOp::RIGHT_ANTI_JOIN || _table_items->join_type == TJoinOp::RIGHT_SEMI_JOIN) {
+        // right anti/semi join without other conjunct output default value of probe-columns as placeholder.
+        _lazy_probe_null_output(src_chunk, dest_chunk, _probe_state->count);
+        _build_output(probe_chunk, src_chunk, dest_chunk);
+    } else {
+        // RIGHT_OUTER_JOIN || FULL_OUTER_JOIN
+        _lazy_probe_null_output(src_chunk, dest_chunk, _probe_state->count);
+        lazy_build_output(src_chunk, dest_chunk);
+    }
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::lazy_output(ChunkPtr* probe_chunk, ChunkPtr* src_chunk,
                                                         ChunkPtr* dest_chunk) {
     if ((*src_chunk)->num_rows() < _probe_state->count) {
@@ -650,7 +669,8 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_tuple_output(ChunkPtr* probe_
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
-void JoinHashMap<LT, BuildFunc, ProbeFunc>::_lazy_probe_null_output(ChunkPtr* src_chunk, ChunkPtr* chunk, size_t count) {
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_lazy_probe_null_output(ChunkPtr* src_chunk, ChunkPtr* chunk,
+                                                                    size_t count) {
     for (size_t i = 0; i < _table_items->probe_column_count; i++) {
         HashTableSlotDescriptor hash_table_slot = _table_items->probe_slots[i];
         SlotDescriptor* slot = hash_table_slot.slot;
@@ -775,7 +795,8 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_build_tuple_output(ChunkPtr* chunk)
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
-void JoinHashMap<LT, BuildFunc, ProbeFunc>::_lazy_build_default_output(ChunkPtr* src_chunk, ChunkPtr* chunk, size_t count) {
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_lazy_build_default_output(ChunkPtr* src_chunk, ChunkPtr* chunk,
+                                                                       size_t count) {
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
         HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
         SlotDescriptor* slot = hash_table_slot.slot;
