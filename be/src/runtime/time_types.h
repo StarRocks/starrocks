@@ -18,6 +18,8 @@
 #include <string>
 
 #include "common/compiler_util.h"
+#include "util/raw_container.h"
+
 namespace starrocks {
 
 // Date: Julian Date -2000-01-01 ~ 9999-01-01
@@ -206,10 +208,12 @@ public:
     template <TimeUnit UNIT>
     static Timestamp add(Timestamp timestamp, int count);
 
+    template <bool use_iso8601_format = false>
     static std::string to_string(Timestamp timestamp);
 
     // Returns the length of formatted string or -1 if the size of buffer too
     // small to fill the formatted string.
+    template <bool use_iso8601_format = false>
     static int to_string(Timestamp timestamp, char* s, size_t n);
 
     inline static double time_to_literal(double time);
@@ -448,4 +452,61 @@ inline void date::to_date_with_cache(JulianDate julian, int* year, int* month, i
 
     return to_date(julian, year, month, day);
 }
+
+template <bool use_iso8601_format>
+std::string timestamp::to_string(Timestamp timestamp) {
+    std::string s;
+    raw::make_room(&s, 26);
+    int len = to_string<use_iso8601_format>(timestamp, s.data(), s.size());
+    s.resize(len);
+    return s;
+}
+
+template <bool use_iso8601_format>
+int timestamp::to_string(Timestamp timestamp, char* to, size_t n) {
+    int year, month, day;
+    int hour, minute, second, microsecond;
+    date::to_date_with_cache(timestamp::to_julian(timestamp), &year, &month, &day);
+    to_time(timestamp, &hour, &minute, &second, &microsecond);
+
+    if (n < 19) {
+        return -1;
+    }
+
+    date::to_string(year, month, day, to);
+
+    if constexpr (use_iso8601_format) {
+        to[10] = (char)('T');
+    } else {
+        to[10] = (char)(' ');
+    }
+    to[11] = (char)('0' + (hour / 10));
+    to[12] = (char)('0' + (hour % 10));
+    to[13] = ':';
+    // Minute
+    to[14] = (char)('0' + (minute / 10));
+    to[15] = (char)('0' + (minute % 10));
+    to[16] = ':';
+    /* Second */
+    to[17] = (char)('0' + (second / 10));
+    to[18] = (char)('0' + (second % 10));
+    if (use_iso8601_format || microsecond > 0) {
+        if (n < 26) {
+            return -1;
+        }
+        to[19] = '.';
+        uint32_t first = microsecond / 10000;
+        uint32_t second = (microsecond % 10000) / 100;
+        uint32_t third = microsecond % 100;
+        to[20] = (char)('0' + first / 10);
+        to[21] = (char)('0' + first % 10);
+        to[22] = (char)('0' + second / 10);
+        to[23] = (char)('0' + second % 10);
+        to[24] = (char)('0' + third / 10);
+        to[25] = (char)('0' + third % 10);
+        return 26;
+    }
+    return 19;
+}
+
 } // namespace starrocks
