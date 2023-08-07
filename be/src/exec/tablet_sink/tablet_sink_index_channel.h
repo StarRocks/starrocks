@@ -172,6 +172,9 @@ private:
     Status _send_request(bool eos, bool wait_all_sender_close = false);
     void _cancel(int64_t index_id, const Status& err_st);
 
+    Status _filter_indexes_with_where_expr(Chunk* input, const std::vector<uint32_t>& indexes,
+                                           std::vector<uint32_t>& filtered_indexes);
+
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
 
     OlapTableSink* _parent = nullptr;

@@ -431,35 +431,18 @@ Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_i
     SCOPED_TIMER(_parent->_pack_chunk_timer);
     // 1. append data
     /// Filter data
-    if (_where_clause != nullptr) {
-        LOG(INFO) << "In node channel filter data, chunk has " << input->num_rows() << " rows data";
-        ASSIGN_OR_RETURN(ColumnPtr filter_col, _where_clause->evaluate(input))
-
-        size_t size = filter_col->size();
-        Buffer<uint8_t> filter(size, 0);
-        ColumnViewer<TYPE_BOOLEAN> col(filter_col);
-        for (size_t i = 0; i < size; ++i) {
-            filter[i] = !col.is_null(i) && col.value(i);
-        }
-
-        input->filter(filter);
-
-        std::vector<uint32_t> new_indexes;
-        for (auto index : indexes) {
-            if (filter[index]) new_indexes.emplace_back(index);
-        }
-
-        size_t row_size = new_indexes.size();
-        _cur_chunk->append_selective(*input, new_indexes.data(), 0, row_size);
-        auto req = _rpc_request.mutable_requests(0);
-        for (size_t i = 0; i < row_size; ++i) {
-            req->add_tablet_ids(tablet_ids[new_indexes[i]]);
+    auto req = _rpc_request.mutable_requests(0);
+    if (_where_clause == nullptr) {
+        _cur_chunk->append_selective(*input, indexes.data(), from, size);
+        for (size_t i = from; i < size; ++i) {
+            req->add_tablet_ids(tablet_ids[indexes[from + i]]);
         }
     } else {
-        _cur_chunk->append_selective(*input, indexes.data(), from, size);
-        auto req = _rpc_request.mutable_requests(0);
-        for (size_t i = 0; i < size; ++i) {
-            req->add_tablet_ids(tablet_ids[indexes[from + i]]);
+        std::vector<uint32_t> filtered_indexes;
+        RETURN_IF_ERROR(_filter_indexes_with_where_expr(input, indexes, filtered_indexes));
+        _cur_chunk->append_selective(*input, filtered_indexes.data(), from, filtered_indexes.size());
+        for (size_t i = from; i < filtered_indexes.size(); ++i) {
+            req->add_tablet_ids(tablet_ids[filtered_indexes[from + i]]);
         }
     }
 
@@ -506,11 +489,23 @@ Status NodeChannel::add_chunks(Chunk* input, const std::vector<std::vector<int64
 
     SCOPED_TIMER(_parent->_pack_chunk_timer);
     // 1. append data
-    _cur_chunk->append_selective(*input, indexes.data(), from, size);
-    for (size_t index_i = 0; index_i < tablet_ids.size(); ++index_i) {
-        auto req = _rpc_request.mutable_requests(index_i);
-        for (size_t i = from; i < size; ++i) {
-            req->add_tablet_ids(tablet_ids[index_i][indexes[from + i]]);
+    if (_where_clause == nullptr) {
+        _cur_chunk->append_selective(*input, indexes.data(), from, size);
+        for (size_t index_i = 0; index_i < tablet_ids.size(); ++index_i) {
+            auto req = _rpc_request.mutable_requests(index_i);
+            for (size_t i = from; i < size; ++i) {
+                req->add_tablet_ids(tablet_ids[index_i][indexes[from + i]]);
+            }
+        }
+    } else {
+        std::vector<uint32_t> filtered_indexes;
+        RETURN_IF_ERROR(_filter_indexes_with_where_expr(input, indexes, filtered_indexes));
+        _cur_chunk->append_selective(*input, filtered_indexes.data(), from, filtered_indexes.size());
+        for (size_t index_i = 0; index_i < tablet_ids.size(); ++index_i) {
+            auto req = _rpc_request.mutable_requests(index_i);
+            for (size_t i = from; i < filtered_indexes.size(); ++i) {
+                req->add_tablet_ids(tablet_ids[index_i][filtered_indexes[from + i]]);
+            }
         }
     }
 
@@ -537,6 +532,29 @@ Status NodeChannel::add_chunks(Chunk* input, const std::vector<std::vector<int64
     }
 
     return _send_request(false);
+}
+
+Status NodeChannel::_filter_indexes_with_where_expr(Chunk* input, const std::vector<uint32_t>& indexes,
+                                                    std::vector<uint32_t>& filtered_indexes) {
+    DCHECK(_where_clause != nullptr);
+    // Filter data
+    LOG(INFO) << "In node channel filter data, chunk has " << input->num_rows() << " rows data";
+    ASSIGN_OR_RETURN(ColumnPtr filter_col, _where_clause->evaluate(input))
+
+    size_t size = filter_col->size();
+    Buffer<uint8_t> filter(size, 0);
+    ColumnViewer<TYPE_BOOLEAN> col(filter_col);
+    for (size_t i = 0; i < size; ++i) {
+        filter[i] = !col.is_null(i) && col.value(i);
+    }
+
+    // input->filter(filter);
+    for (auto index : indexes) {
+        if (filter[index]) {
+            filtered_indexes.emplace_back(index);
+        }
+    }
+    return Status::OK();
 }
 
 Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
