@@ -121,7 +121,7 @@ public class FunctionAnalyzer {
         }
 
         if (fnName.getFunction().equals(FunctionSet.GROUP_CONCAT)) {
-            if (functionCallExpr.getChildren().isEmpty()) {
+            if (functionCallExpr.getChildren().size() - fnParams.getOrderByElemNum() < 2) {
                 throw new SemanticException(
                         "group_concat requires at least one parameter: " + functionCallExpr.toSql(),
                         functionCallExpr.getPos());
