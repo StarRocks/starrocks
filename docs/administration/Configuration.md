@@ -421,6 +421,9 @@ BE static parameters are as follows.
 
 | Configuration item | Default | Unit | Description |
 | -------------------------------------------------- | ------------------------------------------------------------ | ------ | ------------------------------------------------------------ |
+| hdfs_client_enable_hedged_read           | false         | Specifies whether to enable the hedged read feature. This parameter is supported from v3.0 onwards.                                    |
+| hdfs_client_hedged_read_threadpool_size  | 128           | Specifies the size of the Hedged Read thread pool on your HDFS client. The thread pool size limits the number of threads to dedicate to the running of hedged reads in your HDFS client. This parameter is supported from v3.0 onwards. It is equivalent to the `dfs.client.hedged.read.threadpool.size` parameter in the `hdfs-site.xml` file of your HDFS cluster. |
+| hdfs_client_hedged_read_threshold_millis | 2500          | Specifies the number of milliseconds to wait before starting up a hedged read. For example, you have set this parameter to `30`. In this situation, if a read from a block has not returned within 30 milliseconds, your HDFS client immediately starts up a new read against a different block replica. This parameter is supported from v3.0 onwards. It is equivalent to the `dfs.client.hedged.read.threshold.millis` parameter in the `hdfs-site.xml` file of your HDFS cluster. |
 | be_port | 9060 | N/A | The BE thrift server port, which is used to receive requests from FEs. |
 | brpc_port | 8060 | N/A | The BE BRPC port, which is used to view the network statistics of BRPCs. |
 | brpc_num_threads | -1 | N/A | The number of bthreads of a BRPC. The value -1 indicates the same number with the CPU threads. |
