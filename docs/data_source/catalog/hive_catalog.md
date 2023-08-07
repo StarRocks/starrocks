@@ -839,7 +839,7 @@ INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM hive_table
 
 ## Grant privileges on Hive tales and views
 
-You can use the [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) statement to grant the privileges on all tables or views within a Hive catalog to a specific role. This feature is supported from v3.1 onwards.
+You can use the [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) statement to grant the privileges on all tables or views within a Hive catalog to a specific role.
 
 - Grant a role the privilege to query all tables within a Hive catalog:
 
