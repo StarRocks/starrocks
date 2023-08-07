@@ -652,6 +652,12 @@ public class SystemInfoService implements GsonPostProcessable {
         return Lists.newArrayList(idToBackendRef.values());
     }
 
+    public List<Backend> getAvailableBackends() {
+        return getBackends().stream()
+                .filter(v -> v.isAvailable())
+                .collect(Collectors.toList());
+    }
+
     public List<ComputeNode> getComputeNodes() {
         return Lists.newArrayList(idToComputeNodeRef.values());
     }
@@ -672,9 +678,10 @@ public class SystemInfoService implements GsonPostProcessable {
         return seqChooseBackendIds(backendNum, needAvailable, isCreate, v -> !v.diskExceedLimit());
     }
 
-    public List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate,
-                                          Predicate<? super Backend> predicate) {
-        final List<Backend> wholeAliveBackends = getBackends();
+    private List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate,
+                                           Predicate<? super Backend> predicate) {
+
+        final List<Backend> wholeAliveBackends = getAvailableBackends();
         if (CollectionUtils.isEmpty(wholeAliveBackends)) {
             LOG.info("failed to find any alive backend");
             return Collections.emptyList();
@@ -685,8 +692,12 @@ public class SystemInfoService implements GsonPostProcessable {
                 .collect(Collectors.toList());
 
         if (CollectionUtils.isEmpty(filteredBackends)) {
-            LOG.info("failed to find any qualify backend from current %s alive backend",
-                    getBackends().size());
+            String backendInfo = wholeAliveBackends.stream()
+                    .map(backend -> "[host=" + backend.getHost() + ", bePort=" + backend.getBePort() + "]")
+                    .collect(Collectors.joining("; "));
+
+            LOG.info("failed to find any backend with qualified disk usage from current %s alive backends, [%s]",
+                    wholeAliveBackends.size(), backendInfo);
             return Collections.emptyList();
         }
         return seqChooseBackendIds(backendNum, needAvailable, isCreate, filteredBackends);
