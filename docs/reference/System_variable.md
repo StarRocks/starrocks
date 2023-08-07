@@ -337,6 +337,14 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
   Other import methods such as `BROKER LOAD`, `STREAM LOAD` still use `exec_mem_limit` for memory limit.
 
+* `log_rejected_record_num`
+
+  Specifies the maximum number of unqualified data rows that can be logged. This parameter is supported from v3.1 onwards. Valid values: `0`, `-1`, and any non-zero positive integer. Default value: `0`.
+  
+  * The value `0` specifies that data rows that are filtered out will not be logged.
+  * The value `-1` specifies that all data rows that are filtered out will be logged.
+  * A non-zero positive integer such as `n` specifies that up to `n` data rows that are filtered out can be logged on each BE.
+
 * lower_case_table_names (global)
 
   Used for MySQL client compatibility. No practical usage. Table names in StarRocks are case-sensitive.
