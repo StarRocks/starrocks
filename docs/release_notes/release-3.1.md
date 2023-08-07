@@ -2,7 +2,7 @@
 
 ## 3.1.0
 
-Release date: July 7, 2023
+Release date: August 7, 2023
 
 ### New Features
 
