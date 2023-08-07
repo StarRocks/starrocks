@@ -1,0 +1,215 @@
+-- name: test_nested_mv_rewrite_with_case_when
+create table dal_aaaa (
+ffund_union string,
+ famt bigint, 
+  fuser_id string,
+  fdate bigint
+)PARTITION BY range(fdate) (
+    PARTITION p1 VALUES LESS THAN ("20230703"),
+    PARTITION p2 VALUES LESS THAN ("20230706"),
+    PARTITION p3 VALUES LESS THAN ("20230716")
+ )
+  DISTRIBUTED BY HASH(fuser_id) 
+  PROPERTIES (
+    "replication_num" = "1"
+);
+
+insert into  dal_aaaa (ffund_union,famt,fuser_id,fdate)
+values ('xfdfdf',100,'xxxxx',20230702);
+insert into  dal_aaaa (ffund_union,famt,fuser_id,fdate)
+values ('xfdafdf',100,'xxxdxx',20230715);
+
+create table dal_bbb(
+    ffund_union string, 
+    famt bigint, 
+    fuser_id string,
+    fdate bigint
+)PARTITION BY range(fdate) (
+    PARTITION p1 VALUES LESS THAN ("20230703"),
+    PARTITION p2 VALUES LESS THAN ("20230706"),
+    PARTITION p3 VALUES LESS THAN ("20230716")
+ )
+ DISTRIBUTED BY HASH(fuser_id) 
+ PROPERTIES (
+    "replication_num" = "1"
+);
+
+create table dim_ccc(
+     fdate bigint,
+     `lvl1` string,
+     `ffund_union`  string
+) DISTRIBUTED BY HASH(ffund_union)
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+create MATERIALIZED VIEW join_mv1
+DISTRIBUTED BY HASH(a_ds, dim_1_ffund_union_5061_lvl1)
+REFRESH MANUAL
+AS
+SELECT `fdate` AS a_ds, a.`ffund_union_5061_lvl1` AS `dim_1_ffund_union_5061_lvl1`, SUM(CASE 
+                WHEN `1154_famt` IS NOT NULL THEN `1154_famt`
+            END) / 100 AS `1154_7969`
+        FROM (
+            SELECT t1.*, t3.`lvl1` AS `ffund_union_5061_lvl1`
+            FROM (
+                SELECT *, t8.`1154_ffund_union` AS `ffund_union`, t8.`1154_fuser_id` AS `fuser_id`, t8.`1154_fdate` AS `fdate`, t8.`1154_fdd_event_code` AS `fdd_event_code`
+                    , t8.`1154_ds` AS `ds`
+                FROM (
+                    SELECT t7.`1154_fdate` AS `1154_fdate`, t7.`1154_ffund_union` AS `1154_ffund_union`, t7.`1154_fdd_event_code` AS `1154_fdd_event_code`, t7.`1154_fuser_id` AS `1154_fuser_id`, t7.`1154_ds` AS `1154_ds`
+                        , t7.`1154_famt` AS `1154_famt`
+                    FROM (
+                        SELECT ffund_union AS `1154_ffund_union`, famt AS `1154_famt`, fdate AS `1154_fdate`, fuser_id AS `1154_fuser_id`, 'all' AS `1154_fdd_event_code`
+                            , fdate AS `1154_ds`
+                        FROM dal_aaaa
+                        WHERE fdate >= 20230713
+                            AND fdate < 20230720
+                    ) t7
+                ) t8
+            ) t1
+                LEFT JOIN (
+                    SELECT  
+                        t2.`lvl1` AS lvl1 , t2.`ffund_union` AS ffund_union
+                    FROM dim_ccc t2
+                    WHERE t2.`fdate` = 20230719
+                ) t3
+                ON t1.`ffund_union` = t3.`ffund_union`
+        ) a
+        GROUP BY a_ds, `dim_1_ffund_union_5061_lvl1`;
+
+
+
+create MATERIALIZED VIEW join_mv2
+DISTRIBUTED BY HASH(a_ds, dim_1_ffund_union_5061_lvl1)
+REFRESH MANUAL
+AS
+SELECT `fdate` AS a_ds, a.`ffund_union_5061_lvl1` AS `dim_1_ffund_union_5061_lvl1`, SUM(CASE 
+                    WHEN `1162_famt` IS NOT NULL THEN `1162_famt`
+                END) / 100 AS `1162_7970`
+            FROM (
+                SELECT t12.*, t14.`lvl1` AS `ffund_union_5061_lvl1`
+                FROM (
+                    SELECT *, t19.`1162_ffund_union` AS `ffund_union`, t19.`1162_fuser_id` AS `fuser_id`, t19.`1162_fdate` AS `fdate`, t19.`1162_fdd_event_code` AS `fdd_event_code`
+                        , t19.`1162_ds` AS `ds`
+                    FROM (
+                        SELECT t18.`1162_fdate` AS `1162_fdate`, t18.`1162_ffund_union` AS `1162_ffund_union`, t18.`1162_fdd_event_code` AS `1162_fdd_event_code`, t18.`1162_fuser_id` AS `1162_fuser_id`, t18.`1162_ds` AS `1162_ds`
+                            , t18.`1162_famt` AS `1162_famt`
+                        FROM (
+                            SELECT ffund_union AS `1162_ffund_union`, famt AS `1162_famt`, fdate AS `1162_fdate`, fuser_id AS `1162_fuser_id`, 'all' AS `1162_fdd_event_code`
+                                , fdate AS `1162_ds`
+                            FROM dal_bbb
+                            WHERE fdate >= 20230713
+                                AND fdate < 20230720
+                        ) t18
+                    ) t19
+                ) t12
+                    LEFT JOIN (
+                        SELECT t13.`lvl1` AS lvl1 , t13.`ffund_union` AS ffund_union
+                        FROM dim_ccc t13
+                        WHERE t13.`fdate` = 20230719
+                    ) t14
+                    ON t12.`ffund_union` = t14.`ffund_union`
+            ) a
+            GROUP BY a_ds, `dim_1_ffund_union_5061_lvl1`
+
+create MATERIALIZED VIEW join_mv3
+DISTRIBUTED BY HASH(a_ds, dim_1_ffund_union_5061_lvl1)
+REFRESH MANUAL
+AS
+
+    SELECT CASE 
+            WHEN t_join0.a_ds IS NOT NULL THEN t_join0.a_ds
+            WHEN t_join1.a_ds IS NOT NULL THEN t_join1.a_ds
+            ELSE NULL
+        END AS a_ds
+        , CASE 
+            WHEN t_join0.`dim_1_ffund_union_5061_lvl1` IS NOT NULL THEN t_join0.`dim_1_ffund_union_5061_lvl1`
+            WHEN t_join1.`dim_1_ffund_union_5061_lvl1` IS NOT NULL THEN t_join1.`dim_1_ffund_union_5061_lvl1`
+            ELSE NULL
+        END AS `dim_1_ffund_union_5061_lvl1`
+        , COALESCE(`1154_7969`, 0) - COALESCE(`1162_7970`, 0) AS index_0_8179
+    FROM join_mv1 t_join0
+        FULL JOIN join_mv2 t_join1
+        ON coalesce(CAST(t_join0.a_ds AS string), '无值') = coalesce(CAST(t_join1.a_ds AS string), '无值')
+            AND coalesce(CAST(t_join0.`dim_1_ffund_union_5061_lvl1` AS string), '无值') = coalesce(CAST(t_join1.`dim_1_ffund_union_5061_lvl1` AS string), '无值');
+ 
+
+refresh materialized view join_mv1 with sync mode;
+refresh materialized view join_mv2 with sync mode;
+refresh materialized view join_mv3 with sync mode;
+
+explain logical
+  SELECT CASE 
+            WHEN t_join0.a_ds IS NOT NULL THEN t_join0.a_ds
+            WHEN t_join1.a_ds IS NOT NULL THEN t_join1.a_ds
+            ELSE NULL
+        END AS a_ds
+        , CASE 
+            WHEN t_join0.`dim_1_ffund_union_5061_lvl1` IS NOT NULL THEN t_join0.`dim_1_ffund_union_5061_lvl1`
+            WHEN t_join1.`dim_1_ffund_union_5061_lvl1` IS NOT NULL THEN t_join1.`dim_1_ffund_union_5061_lvl1`
+            ELSE NULL
+        END AS `dim_1_ffund_union_5061_lvl1`
+        , COALESCE(`1154_7969`, 0) - COALESCE(`1162_7970`, 0) AS index_0_8179
+    FROM (
+        SELECT `fdate` AS a_ds, a.`ffund_union_5061_lvl1` AS `dim_1_ffund_union_5061_lvl1`, SUM(CASE 
+                WHEN `1154_famt` IS NOT NULL THEN `1154_famt`
+            END) / 100 AS `1154_7969`
+        FROM (
+            SELECT t1.*, t3.`lvl1` AS `ffund_union_5061_lvl1`
+            FROM (
+                SELECT *, t8.`1154_ffund_union` AS `ffund_union`, t8.`1154_fuser_id` AS `fuser_id`, t8.`1154_fdate` AS `fdate`, t8.`1154_fdd_event_code` AS `fdd_event_code`
+                    , t8.`1154_ds` AS `ds`
+                FROM (
+                    SELECT t7.`1154_fdate` AS `1154_fdate`, t7.`1154_ffund_union` AS `1154_ffund_union`, t7.`1154_fdd_event_code` AS `1154_fdd_event_code`, t7.`1154_fuser_id` AS `1154_fuser_id`, t7.`1154_ds` AS `1154_ds`
+                        , t7.`1154_famt` AS `1154_famt`
+                    FROM (
+                        SELECT ffund_union AS `1154_ffund_union`, famt AS `1154_famt`, fdate AS `1154_fdate`, fuser_id AS `1154_fuser_id`, 'all' AS `1154_fdd_event_code`
+                            , fdate AS `1154_ds`
+                        FROM dal_aaaa
+                        WHERE fdate >= 20230713
+                            AND fdate < 20230720
+                    ) t7
+                ) t8
+            ) t1
+                LEFT JOIN (
+                    SELECT  
+                        t2.`lvl1` AS lvl1 , t2.`ffund_union` AS ffund_union
+                    FROM dim_ccc t2
+                    WHERE t2.`fdate` = 20230719
+                ) t3
+                ON t1.`ffund_union` = t3.`ffund_union`
+        ) a
+        GROUP BY a_ds, `dim_1_ffund_union_5061_lvl1`
+    ) t_join0
+        FULL JOIN (
+            SELECT `fdate` AS a_ds, a.`ffund_union_5061_lvl1` AS `dim_1_ffund_union_5061_lvl1`, SUM(CASE 
+                    WHEN `1162_famt` IS NOT NULL THEN `1162_famt`
+                END) / 100 AS `1162_7970`
+            FROM (
+                SELECT t12.*, t14.`lvl1` AS `ffund_union_5061_lvl1`
+                FROM (
+                    SELECT *, t19.`1162_ffund_union` AS `ffund_union`, t19.`1162_fuser_id` AS `fuser_id`, t19.`1162_fdate` AS `fdate`, t19.`1162_fdd_event_code` AS `fdd_event_code`
+                        , t19.`1162_ds` AS `ds`
+                    FROM (
+                        SELECT t18.`1162_fdate` AS `1162_fdate`, t18.`1162_ffund_union` AS `1162_ffund_union`, t18.`1162_fdd_event_code` AS `1162_fdd_event_code`, t18.`1162_fuser_id` AS `1162_fuser_id`, t18.`1162_ds` AS `1162_ds`
+                            , t18.`1162_famt` AS `1162_famt`
+                        FROM (
+                            SELECT ffund_union AS `1162_ffund_union`, famt AS `1162_famt`, fdate AS `1162_fdate`, fuser_id AS `1162_fuser_id`, 'all' AS `1162_fdd_event_code`
+                                , fdate AS `1162_ds`
+                            FROM dal_bbb
+                            WHERE fdate >= 20230713
+                                AND fdate < 20230720
+                        ) t18
+                    ) t19
+                ) t12
+                    LEFT JOIN (
+                        SELECT t13.`lvl1` AS lvl1 , t13.`ffund_union` AS ffund_union
+                        FROM dim_ccc t13
+                        WHERE t13.`fdate` = 20230719
+                    ) t14
+                    ON t12.`ffund_union` = t14.`ffund_union`
+            ) a
+            GROUP BY a_ds, `dim_1_ffund_union_5061_lvl1`
+        ) t_join1
+        ON coalesce(CAST(t_join0.a_ds AS string), '无值') = coalesce(CAST(t_join1.a_ds AS string), '无值')
+            AND coalesce(CAST(t_join0.`dim_1_ffund_union_5061_lvl1` AS string), '无值') = coalesce(CAST(t_join1.`dim_1_ffund_union_5061_lvl1` AS string), '无值');
