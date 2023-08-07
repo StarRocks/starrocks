@@ -144,4 +144,4 @@ Fixed the following issues:
 - The FE configuration items `max_broker_concurrency` and `load_parallel_instance_num` are deprecated.
 - The FE configuration item `max_routine_load_job_num` is deprecated. Now StarRocks dynamically infers the maximum number of Routine Load tasks supported by each individual BE node based on the `max_routine_load_task_num_per_be` parameter and provides suggestions on task failures.
 - Two new Routine Load job properties, `task_consume_second` and `task_timeout_second`, are added to control the maximum amount of time to consume data and the timeout duration for individual load tasks within a Routine Load job, making job adjustment more flexible. If users do not specify these two properties in their Routine Load job, the FE configuration items `routine_load_task_consume_second` and `routine_load_task_timeout_second` prevail.
-- TWo new reserved keywords, COMPACTION and TEXT, are added.
+- Two new reserved keywords, COMPACTION and TEXT, are added.
