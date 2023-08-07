@@ -257,12 +257,32 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         sd = new StorageDescriptor(cols, "", "",  "", false, -1, null, Lists.newArrayList(),
                 Lists.newArrayList(), Maps.newHashMap());
 
-        Table hmsView2 = new Table("customer_view", "tpch", null, 0, 0, 0, sd, Lists.newArrayList(), Maps.newHashMap(), null,
+        Table hmsView2 = new Table("customer_nation_view", "tpch", null, 0,
+                0, 0, sd, Lists.newArrayList(), Maps.newHashMap(), null,
                 "select c_custkey,c_name, c_address, c_nationkey, n_nationkey, n_name, n_regionkey from " +
                         "tpch.customer join tpch.nation on c_nationkey = n_nationkey",
                 "VIRTUAL_VIEW");
         HiveView view2 = HiveMetastoreApiConverter.toHiveView(hmsView2, MOCKED_HIVE_CATALOG_NAME);
         mockTables.put(hmsView2.getTableName(), new HiveTableInfo(view2));
+
+        cols = Lists.newArrayList();
+        cols.add(new FieldSchema("c_custkey", "int", null));
+        cols.add(new FieldSchema("c_name", "string", null));
+        cols.add(new FieldSchema("c_address", "string", null));
+        cols.add(new FieldSchema("c_nationkey", "int", null));
+        cols.add(new FieldSchema("c_phone", "string", null));
+        cols.add(new FieldSchema("c_mktsegment", "string", null));
+        cols.add(new FieldSchema("c_comment", "string", null));
+        sd = new StorageDescriptor(cols, "", "",  "", false, -1, null, Lists.newArrayList(),
+                Lists.newArrayList(), Maps.newHashMap());
+
+        Table hmsView3 = new Table("customer_alias_view", "tpch", null, 0,
+                0, 0, sd, Lists.newArrayList(), Maps.newHashMap(), null,
+                "select c_custkey, c_name, c_address, c_nationkey, c_phone, c_mktsegment, c_comment from " +
+                        "(select * from tpch.customer)",
+                "VIRTUAL_VIEW");
+        HiveView view3 = HiveMetastoreApiConverter.toHiveView(hmsView3, MOCKED_HIVE_CATALOG_NAME);
+        mockTables.put(hmsView3.getTableName(), new HiveTableInfo(view3));
     }
 
     public static void mockTPCHTable() {
