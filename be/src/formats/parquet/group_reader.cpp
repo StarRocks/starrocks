@@ -193,6 +193,8 @@ Status GroupReader::_do_get_next_new(ChunkPtr* chunk, size_t* row_count) {
         auto count = r.span_size();
         _param.stats->raw_rows_read += count;
 
+        active_chunk->reset();
+
         RETURN_IF_ERROR(_read_range(_active_column_indices, r, nullptr, &active_chunk));
 
         bool has_filter = false;
