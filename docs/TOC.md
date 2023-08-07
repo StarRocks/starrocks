@@ -82,6 +82,7 @@
   + [External table](./data_source/External_table.md)
   + [File external table](./data_source/file_external_table.md)
   + [Data Cache](./data_source/data_cache.md)
+  + [Data lake-related FAQ](./data_source/datalake_faq.md)
 + Query Acceleration
   + [Gather CBO statistics](./using_starrocks/Cost_based_optimizer.md)
   + [Synchronous materialized view](./using_starrocks/Materialized_view-single_table.md)
