@@ -27,6 +27,7 @@
 #include <stdexcept>
 #include <string>
 
+#include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
@@ -2766,7 +2767,7 @@ Status StringFunctions::regexp_extract_prepare(FunctionContext* context, Functio
 
     state->options = std::make_unique<re2::RE2::Options>();
     state->options->set_log_errors(false);
-    state->options->set_longest_match(true);
+    state->options->set_longest_match(false);
     state->options->set_dot_nl(true);
 
     // go row regex
@@ -2934,6 +2935,7 @@ static ColumnPtr regexp_extract_const(re2::RE2* const_re, const Columns& columns
 }
 
 StatusOr<ColumnPtr> StringFunctions::regexp_extract(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
     auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
 
     if (state->const_pattern) {
@@ -2943,6 +2945,210 @@ StatusOr<ColumnPtr> StringFunctions::regexp_extract(FunctionContext* context, co
 
     re2::RE2::Options* options = state->options.get();
     return regexp_extract_general(context, options, columns);
+}
+
+static ColumnPtr regexp_extract_all_general(FunctionContext* context, re2::RE2::Options* options,
+                                            const Columns& columns) {
+    auto content_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto ptn_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    auto group_viewer = ColumnViewer<TYPE_BIGINT>(columns[2]);
+
+    auto size = columns[0]->size();
+
+    auto str_col = BinaryColumn::create();
+    auto offset_col = UInt32Column::create();
+    auto nl_col = NullColumn::create();
+    offset_col->append(0);
+    uint32_t index = 0;
+
+    for (int row = 0; row < size; ++row) {
+        if (content_viewer.is_null(row) || ptn_viewer.is_null(row)) {
+            offset_col->append(index);
+            nl_col->append(1);
+            continue;
+        }
+
+        std::string ptn_value = ptn_viewer.value(row).to_string();
+        re2::RE2 local_re(ptn_value, *options);
+        if (!local_re.ok()) {
+            context->set_error(strings::Substitute("Invalid regex: $0", ptn_value).c_str());
+            offset_col->append(index);
+            nl_col->append(1);
+            continue;
+        }
+
+        nl_col->append(0);
+        auto group = group_viewer.value(row);
+        if (group < 0) {
+            offset_col->append(index);
+            continue;
+        }
+
+        int max_matches = 1 + local_re.NumberOfCapturingGroups();
+        if (group >= max_matches) {
+            offset_col->append(index);
+            continue;
+        }
+
+        auto str_value = content_viewer.value(row);
+        re2::StringPiece str_sp(str_value.get_data(), str_value.get_size());
+
+        re2::StringPiece find[group];
+        const RE2::Arg* args[group];
+        RE2::Arg argv[group];
+
+        for (size_t i = 0; i < group; i++) {
+            argv[i] = &find[i];
+            args[i] = &argv[i];
+        }
+        while (re2::RE2::FindAndConsumeN(&str_sp, local_re, args, group)) {
+            str_col->append(Slice(find[group - 1].data(), find[group - 1].size()));
+            index += 1;
+        }
+        offset_col->append(index);
+    }
+
+    auto array =
+            ArrayColumn::create(NullableColumn::create(str_col, NullColumn::create(str_col->size(), 0)), offset_col);
+    return NullableColumn::create(array, nl_col);
+}
+
+static ColumnPtr regexp_extract_all_const_pattern(re2::RE2* const_re, const Columns& columns) {
+    auto content_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto group_viewer = ColumnViewer<TYPE_BIGINT>(columns[2]);
+
+    auto size = ColumnHelper::is_all_const(columns) ? 1 : columns[0]->size();
+
+    auto str_col = BinaryColumn::create();
+    auto offset_col = UInt32Column::create();
+    auto nl_col = NullColumn::create();
+    offset_col->append(0);
+    uint32_t index = 0;
+
+    for (int row = 0; row < size; ++row) {
+        if (content_viewer.is_null(row)) {
+            offset_col->append(index);
+            nl_col->append(1);
+            continue;
+        }
+
+        nl_col->append(0);
+        auto group = group_viewer.value(row);
+        if (group < 0) {
+            offset_col->append(index);
+            continue;
+        }
+
+        int max_matches = 1 + const_re->NumberOfCapturingGroups();
+        if (group >= max_matches) {
+            offset_col->append(index);
+            continue;
+        }
+
+        auto str_value = content_viewer.value(row);
+        re2::StringPiece str_sp(str_value.get_data(), str_value.get_size());
+
+        re2::StringPiece find[group];
+        const RE2::Arg* args[group];
+        RE2::Arg argv[group];
+
+        for (size_t i = 0; i < group; i++) {
+            argv[i] = &find[i];
+            args[i] = &argv[i];
+        }
+        while (re2::RE2::FindAndConsumeN(&str_sp, *const_re, args, group)) {
+            str_col->append(Slice(find[group - 1].data(), find[group - 1].size()));
+            index += 1;
+        }
+        offset_col->append(index);
+    }
+
+    auto array =
+            ArrayColumn::create(NullableColumn::create(str_col, NullColumn::create(str_col->size(), 0)), offset_col);
+    if (ColumnHelper::is_all_const(columns)) {
+        return ConstColumn::create(array, columns[0]->size());
+    }
+    return NullableColumn::create(array, nl_col);
+}
+
+static ColumnPtr regexp_extract_all_const(re2::RE2* const_re, const Columns& columns) {
+    auto content_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto group = ColumnHelper::get_const_value<TYPE_BIGINT>(columns[2]);
+
+    auto size = ColumnHelper::is_all_const(columns) ? 1 : columns[0]->size();
+
+    auto str_col = BinaryColumn::create();
+    auto offset_col = UInt32Column::create();
+    offset_col->append(0);
+
+    NullColumnPtr nl_col;
+    if (columns[0]->is_nullable()) {
+        auto x = down_cast<NullableColumn*>(columns[0].get())->null_column();
+        nl_col = ColumnHelper::as_column<NullColumn>(x->clone_shared());
+    } else {
+        nl_col = NullColumn::create(size, 0);
+    }
+
+    uint64_t index = 0;
+    int max_matches = 1 + const_re->NumberOfCapturingGroups();
+    if (group < 0 || group >= max_matches) {
+        offset_col->append_value_multiple_times(&index, size);
+        auto array = ArrayColumn::create(NullableColumn::create(str_col, NullColumn::create(0, 0)), offset_col);
+
+        if (ColumnHelper::is_all_const(columns)) {
+            return ConstColumn::create(array, columns[0]->size());
+        }
+        return NullableColumn::create(array, nl_col);
+    }
+
+    re2::StringPiece find[group];
+    const RE2::Arg* args[group];
+    RE2::Arg argv[group];
+
+    for (size_t i = 0; i < group; i++) {
+        argv[i] = &find[i];
+        args[i] = &argv[i];
+    }
+    for (int row = 0; row < size; ++row) {
+        if (content_viewer.is_null(row)) {
+            offset_col->append(index);
+            continue;
+        }
+
+        auto str_value = content_viewer.value(row);
+        re2::StringPiece str_sp(str_value.get_data(), str_value.get_size());
+        while (re2::RE2::FindAndConsumeN(&str_sp, *const_re, args, group)) {
+            str_col->append(Slice(find[group - 1].data(), find[group - 1].size()));
+
+            index += 1;
+        }
+        offset_col->append(index);
+    }
+
+    auto array =
+            ArrayColumn::create(NullableColumn::create(str_col, NullColumn::create(str_col->size(), 0)), offset_col);
+
+    if (ColumnHelper::is_all_const(columns)) {
+        return ConstColumn::create(array, columns[0]->size());
+    }
+    return NullableColumn::create(array, nl_col);
+}
+
+StatusOr<ColumnPtr> StringFunctions::regexp_extract_all(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+
+    if (state->const_pattern) {
+        re2::RE2* const_re = state->get_or_prepare_regex();
+        if (columns[2]->is_constant()) {
+            return regexp_extract_all_const(const_re, columns);
+        } else {
+            return regexp_extract_all_const_pattern(const_re, columns);
+        }
+    }
+
+    re2::RE2::Options* options = state->options.get();
+    return regexp_extract_all_general(context, options, columns);
 }
 
 static ColumnPtr regexp_replace_general(FunctionContext* context, re2::RE2::Options* options, const Columns& columns) {
