@@ -41,8 +41,8 @@ StarRocks have optimized the metadata information provided by the following tabl
 
 | **Information Schema table name** | **Description**                                              |
 | --------------------------------- | ------------------------------------------------------------ |
-| tables                            | Provides general metadata information of tables.             |
-| tables_config                     | Provides additional table metadata information that is unique to StarRocks. |
+| t[tables](#tables)                            | Provides general metadata information of tables.             |
+| [tables_config](#tables_config)                     | Provides additional table metadata information that is unique to StarRocks. |
 
 ### tables
 
