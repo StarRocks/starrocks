@@ -613,6 +613,10 @@ public:
      */
     DEFINE_VECTORIZED_FN(jodadate_format);
 
+    DEFINE_VECTORIZED_FN(date_to_iso8601);
+
+    DEFINE_VECTORIZED_FN(datetime_to_iso8601);
+
     /**
      * @param: [timestampstr, formatstr]
      * @paramType columns: [BinaryColumn, BinaryColumn]
