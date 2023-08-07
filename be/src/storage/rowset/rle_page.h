@@ -93,7 +93,7 @@ public:
         for (int i = 0; i < count; ++i) {
             // note: vals is not guaranteed to be aligned for now, thus memcpy here
             CppType value;
-            if constexpr (std::is_same<CppType, bool>::value) {
+            if constexpr (std::is_same_v<CppType, bool>) {
                 value = (new_vals[i] != 0);
             } else {
                 memcpy(&value, &new_vals[i], SIZE_OF_TYPE);
