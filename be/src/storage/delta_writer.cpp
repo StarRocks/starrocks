@@ -22,6 +22,7 @@
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/memtable_rowset_writer_sink.h"
+#include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/segment_replicate_executor.h"
 #include "storage/storage_engine.h"
@@ -102,7 +103,9 @@ Status DeltaWriter::_init() {
     _tablet = tablet_mgr->get_tablet(_opt.tablet_id, false);
     if (_tablet == nullptr) {
         std::stringstream ss;
-        ss << "Fail to get tablet. tablet_id=" << _opt.tablet_id;
+        ss << "Fail to get tablet, perhaps this table is doing schema change, or it has already been deleted. Please "
+              "try again. tablet_id="
+           << _opt.tablet_id;
         LOG(WARNING) << ss.str();
         Status st = Status::InternalError(ss.str());
         _set_state(kUninitialized, st);
@@ -112,7 +115,7 @@ Status DeltaWriter::_init() {
         auto tracker = _storage_engine->update_manager()->mem_tracker();
         if (tracker->limit_exceeded()) {
             auto msg = strings::Substitute(
-                    "Primary-key index exceeds the limit. tablet_id: $0, consumption: $1, limit: $2."
+                    "primary key memory usage exceeds the limit. tablet_id: $0, consumption: $1, limit: $2."
                     " Memory stats of top five tablets: $3",
                     _opt.tablet_id, tracker->consumption(), tracker->limit(),
                     _storage_engine->update_manager()->topn_memory_stats(5));
@@ -133,8 +136,12 @@ Status DeltaWriter::_init() {
         if (config::enable_event_based_compaction_framework) {
             StorageEngine::instance()->compaction_manager()->update_tablet_async(_tablet);
         }
-        auto msg = fmt::format("Too many versions. tablet_id: {}, version_count: {}, limit: {}, replica_state: {}",
-                               _opt.tablet_id, _tablet->version_count(), config::tablet_max_versions, _replica_state);
+        auto msg = fmt::format(
+                "Failed to load data into tablet {}, because of too many versions, current/limit: {}/{}. You can "
+                "reduce the loading job concurrency, or increase loading data batch size. If you are loading data with "
+                "Routine Load, you can increase FE configs routine_load_task_consume_second and "
+                "max_routine_load_batch_size,",
+                _opt.tablet_id, _tablet->version_count(), config::tablet_max_versions);
         LOG(ERROR) << msg;
         Status st = Status::ServiceUnavailable(msg);
         _set_state(kUninitialized, st);
@@ -214,15 +221,31 @@ Status DeltaWriter::_init() {
         std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
         if (!std::includes(writer_context.referenced_column_ids.begin(), writer_context.referenced_column_ids.end(),
                            sort_key_idxes.begin(), sort_key_idxes.end())) {
-            LOG(WARNING) << "table with sort key do not support partial update";
-            return Status::NotSupported("table with sort key do not support partial update");
+            _partial_schema_with_sort_key = true;
         }
         writer_context.tablet_schema = writer_context.partial_update_tablet_schema.get();
+        writer_context.partial_update_mode = _opt.partial_update_mode;
     } else {
         writer_context.tablet_schema = &_tablet->tablet_schema();
         if (_tablet->tablet_schema().keys_type() == KeysType::PRIMARY_KEYS && !_opt.merge_condition.empty()) {
             writer_context.merge_condition = _opt.merge_condition;
         }
+    }
+
+    auto sort_key_idxes = _tablet->tablet_schema().sort_key_idxes();
+    std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
+    bool auto_increment_in_sort_key = false;
+    for (auto& idx : sort_key_idxes) {
+        auto& col = _tablet->tablet_schema().column(idx);
+        if (col.is_auto_increment()) {
+            auto_increment_in_sort_key = true;
+            break;
+        }
+    }
+
+    if (auto_increment_in_sort_key && _opt.miss_auto_increment_column) {
+        LOG(WARNING) << "auto increment column in sort key do not support partial update";
+        return Status::NotSupported("auto increment column in sort key do not support partial update");
     }
 
     writer_context.rowset_id = _storage_engine->next_rowset_id();
@@ -236,6 +259,7 @@ Status DeltaWriter::_init() {
     writer_context.load_id = _opt.load_id;
     writer_context.segments_overlap = OVERLAPPING;
     writer_context.global_dicts = _opt.global_dicts;
+    writer_context.miss_auto_increment_column = _opt.miss_auto_increment_column;
     Status st = RowsetFactory::create_rowset_writer(writer_context, &_rowset_writer);
     if (!st.ok()) {
         auto msg = strings::Substitute("Fail to create rowset writer. tablet_id: $0, error: $1", _opt.tablet_id,
@@ -277,8 +301,25 @@ void DeltaWriter::_set_state(State state, const Status& st) {
     }
 }
 
+Status DeltaWriter::_check_partial_update_with_sort_key(const Chunk& chunk) {
+    if (_tablet->updates() != nullptr && _partial_schema_with_sort_key && _opt.slots != nullptr &&
+        _opt.slots->back()->col_name() == "__op") {
+        size_t op_column_id = chunk.num_columns() - 1;
+        const auto& op_column = chunk.get_column_by_index(op_column_id);
+        auto* ops = reinterpret_cast<const uint8_t*>(op_column->raw_data());
+        for (size_t i = 0; i < chunk.num_rows(); i++) {
+            if (ops[i] == TOpType::UPSERT) {
+                LOG(WARNING) << "table with sort key do not support partial update";
+                return Status::NotSupported("table with sort key do not support partial update");
+            }
+        }
+    }
+    return Status::OK();
+}
+
 Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    RETURN_IF_ERROR(_check_partial_update_with_sort_key(chunk));
     // Delay the creation memtables until we write data.
     // Because for the tablet which doesn't have any written data, we will not use their memtables.
     if (_mem_table == nullptr) {
@@ -298,6 +339,7 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
         return Status::InternalError(fmt::format("Fail to write chunk, tablet_id: {}, replica_state: {}",
                                                  _opt.tablet_id, _replica_state_name(_replica_state)));
     }
+
     Status st;
     bool full = _mem_table->insert(chunk, indexes, from, size);
     if (_mem_tracker->limit_exceeded()) {
@@ -370,6 +412,10 @@ Status DeltaWriter::_flush_memtable_async(bool eos) {
     if (_mem_table != nullptr) {
         RETURN_IF_ERROR(_mem_table->finalize());
     }
+    if (_mem_table != nullptr && _opt.miss_auto_increment_column && _replica_state == Primary &&
+        _mem_table->get_result_chunk() != nullptr) {
+        RETURN_IF_ERROR(_fill_auto_increment_id(*_mem_table->get_result_chunk()));
+    }
     if (_replica_state == Primary) {
         // have secondary replica
         if (_replicate_token != nullptr) {
@@ -414,6 +460,7 @@ void DeltaWriter::_reset_mem_table() {
                                                 _mem_table_sink.get(), "", _mem_tracker);
     }
     _mem_table->set_write_buffer_row(_memtable_buffer_row);
+    _mem_table->set_partial_schema_with_sort_key(_partial_schema_with_sort_key);
 }
 
 Status DeltaWriter::commit() {
@@ -524,7 +571,7 @@ void DeltaWriter::abort(bool with_log) {
     }
 
     VLOG(1) << "Aborted delta writer. tablet_id: " << _tablet->tablet_id() << " txn_id: " << _opt.txn_id
-            << " load_id: " << print_id(_opt.load_id);
+            << " load_id: " << print_id(_opt.load_id) << " partition_id: " << partition_id();
 }
 
 int64_t DeltaWriter::partition_id() const {
@@ -557,6 +604,57 @@ const char* DeltaWriter::_replica_state_name(ReplicaState state) const {
         return "Peer Replica";
     }
     return "";
+}
+
+Status DeltaWriter::_fill_auto_increment_id(const Chunk& chunk) {
+    // 1. get pk column from chunk
+    vector<uint32_t> pk_columns;
+    for (size_t i = 0; i < _tablet_schema->num_key_columns(); i++) {
+        pk_columns.push_back((uint32_t)i);
+    }
+    Schema pkey_schema = ChunkHelper::convert_schema(*_tablet_schema, pk_columns);
+    std::unique_ptr<Column> pk_column;
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+        CHECK(false) << "create column for primary key encoder failed";
+    }
+    auto col = pk_column->clone();
+
+    PrimaryKeyEncoder::encode(pkey_schema, chunk, 0, chunk.num_rows(), col.get());
+    std::unique_ptr<Column> upserts = std::move(col);
+
+    std::vector<uint64_t> rss_rowids;
+    rss_rowids.resize(upserts->size());
+
+    // 2. probe index
+    RETURN_IF_ERROR(_tablet->updates()->get_rss_rowids_by_pk(_tablet.get(), *upserts, nullptr, &rss_rowids));
+
+    std::vector<uint8_t> filter;
+    uint32_t gen_num = 0;
+    for (unsigned long v : rss_rowids) {
+        uint32_t rssid = v >> 32;
+        if (rssid == (uint32_t)-1) {
+            filter.emplace_back(1);
+            ++gen_num;
+        } else {
+            filter.emplace_back(0);
+        }
+    }
+
+    // 3. fill the non-existing rows
+    std::vector<int64_t> ids(gen_num);
+    int64_t table_id = _tablet->tablet_meta()->table_id();
+    RETURN_IF_ERROR(StorageEngine::instance()->get_next_increment_id_interval(table_id, gen_num, ids));
+
+    for (int i = 0; i < _vectorized_schema.num_fields(); i++) {
+        const TabletColumn& tablet_column = _tablet_schema->column(i);
+        if (tablet_column.is_auto_increment()) {
+            auto& column = chunk.get_column_by_index(i);
+            RETURN_IF_ERROR((std::dynamic_pointer_cast<Int64Column>(column))->fill_range(ids, filter));
+            break;
+        }
+    }
+
+    return Status::OK();
 }
 
 } // namespace starrocks

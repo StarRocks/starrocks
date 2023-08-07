@@ -42,8 +42,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
@@ -53,9 +51,7 @@ import com.starrocks.thrift.TStorageType;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Test;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -88,7 +84,7 @@ public class DropMaterializedViewStmtTest {
         OlapTable table = new OlapTable(30000, "table",
                 baseSchema, KeysType.AGG_KEYS, singlePartitionInfo, null);
         table.setBaseIndexId(100);
-        db.createTable(table);
+        db.registerTableUnlocked(table);
         table.addPartition(new Partition(100, "p",
                 new MaterializedIndex(200, MaterializedIndex.IndexState.NORMAL), null));
         table.setIndexMeta(200, "mvname", baseSchema, 0, 0, (short) 0,

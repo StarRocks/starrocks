@@ -35,7 +35,6 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -46,10 +45,11 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.MetricVisitor;
 import com.starrocks.metric.PrometheusMetricVisitor;
 import com.starrocks.metric.SimpleCoreMetricVisitor;
-import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpMethod;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 //fehost:port/metrics
 //fehost:port/metrics?type=core
@@ -87,19 +87,20 @@ public class MetricsAction extends RestBaseAction {
         boolean collectTableMetrics = false;
         boolean minifyTableMetrics = true;
         String withTableMetrics = request.getSingleParameter(WITH_TABLE_METRICS_PARAM);
+        UserIdentity currentUser = null;
         if (WITH_TABLE_METRICS_MINIFIED.equalsIgnoreCase(withTableMetrics) ||
                 WITH_TABLE_METRICS_ALL.equalsIgnoreCase(withTableMetrics)) {
             try {
-                // Right now the table-level metrics could only be viewed by users with `admin_priv`.
                 ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
-                UserIdentity currentUser = checkPassword(authInfo);
-                checkGlobalAuth(currentUser, PrivPredicate.ADMIN);
+                currentUser = checkPassword(authInfo);
+                checkUserOwnsAdminRole(currentUser);
                 collectTableMetrics = true;
                 if (WITH_TABLE_METRICS_ALL.equalsIgnoreCase(withTableMetrics)) {
                     minifyTableMetrics = false;
                 }
-            } catch (Exception ex) {
-                LOG.warn("`Admin_priv` is needed to view the table-level metrics.");
+            } catch (AccessDeniedException e) {
+                LOG.warn("Auth failure when getting table level metrics, current user: {}, error msg: {}",
+                        currentUser, e.getMessage(), e);
             }
         }
         response.setContentType("text/plain");

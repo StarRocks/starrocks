@@ -57,6 +57,7 @@ struct FlushStatistic {
     int64_t flush_count = 0;
     int64_t flush_size_bytes = 0;
     int64_t cur_flush_count = 0;
+    std::atomic<int64_t> queueing_memtable_num = 0;
 };
 
 std::ostream& operator<<(std::ostream& os, const FlushStatistic& stat);
@@ -138,6 +139,8 @@ public:
     // NOTE: we use SERIAL mode here to ensure all mem-tables from one tablet are flushed in order.
     std::unique_ptr<FlushToken> create_flush_token(
             ThreadPool::ExecutionMode execution_mode = ThreadPool::ExecutionMode::SERIAL);
+
+    ThreadPool* get_thread_pool() { return _flush_pool.get(); }
 
 private:
     std::unique_ptr<ThreadPool> _flush_pool;

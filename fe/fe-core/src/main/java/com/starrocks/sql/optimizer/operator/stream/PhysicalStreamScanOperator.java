@@ -20,15 +20,17 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public class PhysicalStreamScanOperator extends PhysicalStreamOperator {
 
@@ -36,15 +38,12 @@ public class PhysicalStreamScanOperator extends PhysicalStreamOperator {
     protected List<ColumnRefOperator> outputColumns;
     protected final ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
 
-    public PhysicalStreamScanOperator(Table table,
-                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-                                      ScalarOperator predicate,
-                                      Projection projection) {
+    public PhysicalStreamScanOperator(LogicalScanOperator scanOperator) {
         super(OperatorType.PHYSICAL_STREAM_SCAN);
-        this.table = Objects.requireNonNull(table, "table is null");
-        this.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
-        this.predicate = predicate;
-        this.projection = projection;
+        this.table = Objects.requireNonNull(scanOperator.getTable(), "table is null");
+        this.colRefToColumnMetaMap = ImmutableMap.copyOf(scanOperator.getColRefToColumnMetaMap());
+        this.predicate = scanOperator.getPredicate();
+        this.projection = scanOperator.getProjection();
         if (this.projection != null) {
             outputColumns = projection.getOutputColumns();
         } else {
@@ -62,6 +61,12 @@ public class PhysicalStreamScanOperator extends PhysicalStreamOperator {
 
     public Table getTable() {
         return table;
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        return new RowOutputInfo(colRefToColumnMetaMap.keySet().stream()
+                .collect(Collectors.toMap(Function.identity(), Function.identity())));
     }
 
     @Override

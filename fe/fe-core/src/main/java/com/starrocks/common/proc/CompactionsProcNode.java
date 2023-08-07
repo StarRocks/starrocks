@@ -12,44 +12,40 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.common.proc;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.lake.compaction.CompactionContext;
-import com.starrocks.lake.compaction.CompactionManager;
-import com.starrocks.lake.compaction.PartitionIdentifier;
+import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.lake.compaction.CompactionRecord;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class CompactionsProcNode implements ProcNodeInterface {
-    private List<String> titles = new ArrayList<>();
+    private static final List<String> TITLES = Collections.unmodifiableList(Arrays.asList(
+            "Partition", "TxnID", "StartTime", "CommitTime", "FinishTime", "Error"));
 
     public CompactionsProcNode() {
-        titles.add("Partition");
-        titles.add("TxnID");
-        titles.add("StartTime");
     }
 
     @Override
     public ProcResult fetchResult() throws AnalysisException {
         BaseProcResult result = new BaseProcResult();
-        result.setNames(titles);
-        CompactionManager compactionManager = GlobalStateMgr.getCurrentState().getCompactionManager();
-        if (compactionManager == null) {
-            return result;
-        }
-        ConcurrentHashMap<PartitionIdentifier, CompactionContext> runningCompactions = compactionManager.getRunningCompactions();
-        for (CompactionContext context : runningCompactions.values()) {
+        result.setNames(TITLES);
+        CompactionMgr compactionManager = GlobalStateMgr.getCurrentState().getCompactionMgr();
+        List<CompactionRecord> history = compactionManager.getHistory();
+        for (CompactionRecord record : history) {
             List<String> row = new ArrayList<>();
-            row.add(String.valueOf(context.getFullPartitionName()));
-            row.add(String.valueOf(context.getTxnId()));
-            row.add(TimeUtils.longToTimeString(context.getStartTs()));
-
+            row.add(record.getPartitionName());
+            row.add(String.valueOf(record.getTxnId()));
+            row.add(TimeUtils.longToTimeString(record.getStartTs()));
+            row.add(record.getCommitTs().map(TimeUtils::longToTimeString).orElse(null));
+            row.add(record.getFinishTs().map(TimeUtils::longToTimeString).orElse(null));
+            row.add(record.getErrorMessage().orElse(null));
             result.addRow(row);
         }
         return result;

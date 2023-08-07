@@ -31,8 +31,9 @@
 
 namespace starrocks {
 
+template <LogicalType LT>
 StatusOr<ColumnPtr> BitmapFunctions::to_bitmap(FunctionContext* context, const starrocks::Columns& columns) {
-    ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
+    ColumnViewer<LT> viewer(columns[0]);
 
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_OBJECT> builder(size);
@@ -42,30 +43,58 @@ StatusOr<ColumnPtr> BitmapFunctions::to_bitmap(FunctionContext* context, const s
             continue;
         }
 
-        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        uint64_t value;
+        if constexpr (lt_is_integer<LT> || lt_is_boolean<LT>) {
+            auto raw_value = viewer.value(row);
+            // To be compatible with varchar type, set it null if raw value is less than 0 and less than uint64::max.
+            if (UNLIKELY(raw_value < 0 || raw_value > std::numeric_limits<uint64_t>::max())) {
+                context->set_error(strings::Substitute("The input: {0} is not valid, to_bitmap only "
+                                                       "support bigint value from 0 to "
+                                                       "18446744073709551615 currently",
+                                                       raw_value)
+                                           .c_str());
 
-        auto slice = viewer.value(row);
-        auto value = StringParser::string_to_unsigned_int<uint64_t>(slice.data, slice.size, &parse_result);
+                builder.append_null();
+                continue;
+            }
+            value = static_cast<uint64_t>(raw_value);
+        } else {
+            StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+            auto slice = viewer.value(row);
+            value = StringParser::string_to_unsigned_int<uint64_t>(slice.data, slice.size, &parse_result);
+            if (parse_result != StringParser::PARSE_SUCCESS) {
+                context->set_error(strings::Substitute("The input: {0} is not valid, to_bitmap only "
+                                                       "support bigint value from 0 to "
+                                                       "18446744073709551615 currently",
+                                                       slice.to_string())
+                                           .c_str());
 
-        if (parse_result != StringParser::PARSE_SUCCESS) {
-            context->set_error(strings::Substitute("The input: {0} is not valid, to_bitmap only "
-                                                   "support bigint value from 0 to "
-                                                   "18446744073709551615 currently",
-                                                   slice.to_string())
-                                       .c_str());
-
-            builder.append_null();
-            continue;
+                builder.append_null();
+                continue;
+            }
         }
 
-        BitmapValue bitmap;
-        bitmap.add(value);
+        BitmapValue bitmap(value);
 
         builder.append(&bitmap);
     }
 
     return builder.build(ColumnHelper::is_all_const(columns));
 }
+template StatusOr<ColumnPtr> BitmapFunctions::to_bitmap<TYPE_BOOLEAN>(FunctionContext* context,
+                                                                      const starrocks::Columns& columns);
+template StatusOr<ColumnPtr> BitmapFunctions::to_bitmap<TYPE_TINYINT>(FunctionContext* context,
+                                                                      const starrocks::Columns& columns);
+template StatusOr<ColumnPtr> BitmapFunctions::to_bitmap<TYPE_SMALLINT>(FunctionContext* context,
+                                                                       const starrocks::Columns& columns);
+template StatusOr<ColumnPtr> BitmapFunctions::to_bitmap<TYPE_INT>(FunctionContext* context,
+                                                                  const starrocks::Columns& columns);
+template StatusOr<ColumnPtr> BitmapFunctions::to_bitmap<TYPE_BIGINT>(FunctionContext* context,
+                                                                     const starrocks::Columns& columns);
+template StatusOr<ColumnPtr> BitmapFunctions::to_bitmap<TYPE_LARGEINT>(FunctionContext* context,
+                                                                       const starrocks::Columns& columns);
+template StatusOr<ColumnPtr> BitmapFunctions::to_bitmap<TYPE_VARCHAR>(FunctionContext* context,
+                                                                      const starrocks::Columns& columns);
 
 StatusOr<ColumnPtr> BitmapFunctions::bitmap_hash(FunctionContext* context, const starrocks::Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
@@ -500,15 +529,7 @@ StatusOr<ColumnPtr> BitmapFunctions::sub_bitmap(FunctionContext* context, const 
 
     ColumnViewer<TYPE_OBJECT> bitmap_viewer(columns[0]);
     ColumnViewer<TYPE_BIGINT> offset_viewer(columns[1]);
-
-    ColumnPtr len_column = nullptr;
-    if (columns.size() > 2) {
-        len_column = columns[2];
-    } else {
-        len_column = ColumnHelper::create_const_column<TYPE_BIGINT>(INT32_MAX, bitmap_viewer.size());
-    }
-
-    ColumnViewer<TYPE_BIGINT> len_viewer(len_column);
+    ColumnViewer<TYPE_BIGINT> len_viewer(columns[2]);
 
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_OBJECT> builder(size);
@@ -569,4 +590,88 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_base64(FunctionContext* context, 
     }
     return builder.build(ColumnHelper::is_all_const(columns));
 }
+
+StatusOr<ColumnPtr> BitmapFunctions::bitmap_subset_limit(FunctionContext* context, const starrocks::Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    ColumnViewer<TYPE_OBJECT> bitmap_viewer(columns[0]);
+    ColumnViewer<TYPE_BIGINT> range_start_viewer(columns[1]);
+    ColumnViewer<TYPE_BIGINT> limit_viewer(columns[2]);
+
+    size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_OBJECT> builder(size);
+
+    for (int row = 0; row < size; row++) {
+        if (bitmap_viewer.is_null(row) || range_start_viewer.is_null(row) || limit_viewer.is_null(row)) {
+            builder.append_null();
+            continue;
+        }
+
+        auto bitmap = bitmap_viewer.value(row);
+        auto range_start = range_start_viewer.value(row);
+        auto limit = limit_viewer.value(row);
+
+        if (range_start < 0) {
+            range_start = 0;
+        }
+
+        if (bitmap->cardinality() == 0) {
+            builder.append_null();
+            continue;
+        }
+
+        BitmapValue ret_bitmap;
+        if (bitmap->bitmap_subset_limit_internal(range_start, limit, &ret_bitmap) == 0) {
+            builder.append_null();
+            continue;
+        }
+
+        builder.append(std::move(ret_bitmap));
+    }
+
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> BitmapFunctions::bitmap_subset_in_range(FunctionContext* context,
+                                                            const starrocks::Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    ColumnViewer<TYPE_OBJECT> bitmap_viewer(columns[0]);
+    ColumnViewer<TYPE_BIGINT> range_start_viewer(columns[1]);
+    ColumnViewer<TYPE_BIGINT> range_end_viewer(columns[2]);
+
+    size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_OBJECT> builder(size);
+
+    for (int row = 0; row < size; row++) {
+        if (bitmap_viewer.is_null(row) || range_start_viewer.is_null(row) || range_end_viewer.is_null(row)) {
+            builder.append_null();
+            continue;
+        }
+
+        auto bitmap = bitmap_viewer.value(row);
+        auto range_start = range_start_viewer.value(row);
+        auto range_end = range_end_viewer.value(row);
+
+        if (range_start < 0) {
+            range_start = 0;
+        }
+
+        if (bitmap->cardinality() == 0 || range_start >= range_end) {
+            builder.append_null();
+            continue;
+        }
+
+        BitmapValue ret_bitmap;
+        if (bitmap->bitmap_subset_in_range_internal(range_start, range_end, &ret_bitmap) == 0) {
+            builder.append_null();
+            continue;
+        }
+
+        builder.append(std::move(ret_bitmap));
+    }
+
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
 } // namespace starrocks

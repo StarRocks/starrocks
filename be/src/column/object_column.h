@@ -18,9 +18,11 @@
 
 #include "column/column.h"
 #include "column/datum.h"
+#include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "types/bitmap_value.h"
 #include "types/hll.h"
+#include "util/percentile_value.h"
 
 namespace starrocks {
 
@@ -93,15 +95,22 @@ public:
 
     void append(T&& object);
 
+    void append(const T& object);
+
     void append_datum(const Datum& datum) override { append(datum.get<T*>()); }
 
     void remove_first_n_values(size_t count) override;
 
     void append(const Column& src, size_t offset, size_t count) override;
 
+    void append_shallow_copy(const Column& src, size_t offset, size_t count) override;
+
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
-    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
+    void append_selective_shallow_copy(const Column& src, const uint32_t* indexes, uint32_t from,
+                                       uint32_t size) override;
+
+    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) override;
 
     bool append_nulls(size_t count) override { return false; }
 
@@ -118,7 +127,7 @@ public:
 
     void fill_default(const Filter& filter) override;
 
-    Status update_rows(const Column& src, const uint32_t* indexes) override;
+    void update_rows(const Column& src, const uint32_t* indexes) override;
 
     uint32_t serialize(size_t idx, uint8_t* pos) override;
     uint32_t serialize_default(uint8_t* pos) override;
@@ -138,7 +147,7 @@ public:
 
     ColumnPtr clone_shared() const override;
 
-    size_t filter_range(const Column::Filter& filter, size_t from, size_t to) override;
+    size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
@@ -168,9 +177,9 @@ public:
 
     size_t container_memory_usage() const override { return _pool.capacity() * type_size(); }
 
-    size_t element_memory_usage() const override { return byte_size(); }
+    size_t reference_memory_usage() const override { return byte_size(); }
 
-    size_t element_memory_usage(size_t from, size_t size) const override { return byte_size(from, size); }
+    size_t reference_memory_usage(size_t from, size_t size) const override { return byte_size(from, size); }
 
     void swap_column(Column& rhs) override {
         auto& r = down_cast<ObjectColumn&>(rhs);
@@ -200,13 +209,13 @@ public:
 
     const Buffer<T>& get_pool() const { return _pool; }
 
-    std::string debug_item(uint32_t idx) const override;
+    std::string debug_item(size_t idx) const override;
 
     std::string debug_string() const override {
         std::stringstream ss;
         ss << "[";
-        int size = this->size();
-        for (int i = 0; i < size - 1; ++i) {
+        size_t size = this->size();
+        for (size_t i = 0; i < size - 1; ++i) {
             ss << debug_item(i) << ", ";
         }
         if (size > 0) {

@@ -2,12 +2,12 @@
 
 ## Description
 
-Shows the refresh tasks of the single-table sync refresh materialized views.
+Shows the building status of synchronous materialized views.
 
 ## Syntax
 
 ```SQL
-SHOW ALTER MATERIALIZED VIEW [FROM db_name];
+SHOW ALTER MATERIALIZED VIEW [ { FROM | IN } db_name]
 ```
 
 Parameters in brackets [] is optional.
@@ -37,7 +37,7 @@ Parameters in brackets [] is optional.
 
 ## Examples
 
-Example 1: Show the refresh tasks of the sync refresh materialized views
+Example 1: building status of synchronous materialized views
 
 ```Plain
 MySQL > SHOW ALTER MATERIALIZED VIEW\G

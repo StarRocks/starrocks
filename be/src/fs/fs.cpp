@@ -16,9 +16,10 @@
 
 #include <fmt/format.h>
 
-#include "fs/fs_hdfs.h"
 #include "fs/fs_posix.h"
 #include "fs/fs_s3.h"
+#include "fs/fs_util.h"
+#include "fs/hdfs/fs_hdfs.h"
 #include "runtime/file_result_writer.h"
 #ifdef USE_STAROS
 #include "fs/fs_starlet.h"
@@ -63,32 +64,17 @@ inline std::shared_ptr<FileSystem> get_tls_fs_starlet() {
 }
 #endif
 
-inline bool starts_with(std::string_view s, std::string_view prefix) {
-    return (s.size() >= prefix.size()) && (memcmp(s.data(), prefix.data(), prefix.size()) == 0);
-}
-
-inline bool is_s3_uri(std::string_view uri) {
-    return starts_with(uri, "oss://") || starts_with(uri, "s3n://") || starts_with(uri, "s3a://") ||
-           starts_with(uri, "s3://") || starts_with(uri, "cos://") || starts_with(uri, "cosn://") ||
-           starts_with(uri, "obs://") || starts_with(uri, "ks3://") || starts_with(uri, "gs://");
-}
-
-/*
-inline bool is_hdfs_uri(std::string_view uri) {
-    return starts_with(uri, "hdfs://") || starts_with(uri, "viewfs://");
-}
- */
-
-inline bool is_posix_uri(std::string_view uri) {
-    return (memchr(uri.data(), ':', uri.size()) == nullptr) || starts_with(uri, "posix://");
-}
-
 StatusOr<std::unique_ptr<FileSystem>> FileSystem::CreateUniqueFromString(std::string_view uri, FSOptions options) {
-    if (is_posix_uri(uri)) {
+    if (fs::is_posix_uri(uri)) {
         return new_fs_posix();
     }
-    if (is_s3_uri(uri)) {
+    if (fs::is_s3_uri(uri)) {
         return new_fs_s3(options);
+    }
+    if (fs::is_azure_uri(uri) || fs::is_gcs_uri(uri)) {
+        // TODO(SmithCruise):
+        // Now Azure storage and Google Cloud Storage both are using LibHdfs, we can use cpp sdk instead in the future.
+        return new_fs_hdfs(options);
     }
 #ifdef USE_STAROS
     if (is_starlet_uri(uri)) {
@@ -101,10 +87,10 @@ StatusOr<std::unique_ptr<FileSystem>> FileSystem::CreateUniqueFromString(std::st
 }
 
 StatusOr<std::shared_ptr<FileSystem>> FileSystem::CreateSharedFromString(std::string_view uri) {
-    if (is_posix_uri(uri)) {
+    if (fs::is_posix_uri(uri)) {
         return get_tls_fs_posix();
     }
-    if (is_s3_uri(uri)) {
+    if (fs::is_s3_uri(uri)) {
         return get_tls_fs_s3();
     }
 #ifdef USE_STAROS
@@ -130,6 +116,41 @@ const THdfsProperties* FSOptions::hdfs_properties() const {
         return &download->hdfs_properties;
     }
     return nullptr;
+}
+
+static std::deque<FileWriteStat> file_write_history;
+static std::unordered_map<uint64_t, FileWriteStat> file_writes;
+static std::mutex file_writes_mutex;
+
+void FileSystem::get_file_write_history(std::vector<FileWriteStat>* stats) {
+    std::lock_guard<std::mutex> l(file_writes_mutex);
+    stats->assign(file_write_history.begin(), file_write_history.end());
+    for (auto& it : file_writes) {
+        stats->push_back(it.second);
+    }
+}
+
+void FileSystem::on_file_write_open(WritableFile* file) {
+    std::lock_guard<std::mutex> l(file_writes_mutex);
+    FileWriteStat stat;
+    stat.path = file->filename();
+    stat.open_time = time(nullptr);
+    file_writes[reinterpret_cast<uint64_t>(file)] = stat;
+}
+
+void FileSystem::on_file_write_close(WritableFile* file) {
+    std::lock_guard<std::mutex> l(file_writes_mutex);
+    auto it = file_writes.find(reinterpret_cast<uint64_t>(file));
+    if (it == file_writes.end()) {
+        return;
+    }
+    it->second.close_time = time(nullptr);
+    it->second.size = file->size();
+    file_write_history.push_back(it->second);
+    file_writes.erase(it);
+    while (file_write_history.size() > config::file_write_history_size) {
+        file_write_history.pop_front();
+    }
 }
 
 } // namespace starrocks

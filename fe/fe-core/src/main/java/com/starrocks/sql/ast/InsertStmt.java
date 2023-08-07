@@ -21,7 +21,9 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -44,8 +46,6 @@ import java.util.Map;
  * User can check the load info by show load stmt.
  */
 public class InsertStmt extends DmlStmt {
-    public static final String SHUFFLE_HINT = "SHUFFLE";
-    public static final String NOSHUFFLE_HINT = "NOSHUFFLE";
     public static final String STREAMING = "STREAMING";
 
     private final TableName tblName;
@@ -73,9 +73,23 @@ public class InsertStmt extends DmlStmt {
     // it is not allowed to write data to the materialized view.
     // If this is set to true it means a system refresh operation, which is allowed to write to materialized view.
     private boolean isSystem = false;
+    // Since insert overwrite internally reuses the insert statement,
+    // this variable can be used to distinguish whether a partition is specified.
+    private boolean partitionNotSpecifiedInOverwrite = false;
+
+    /**
+     * `true` means that it's created by CTAS statement
+     */
+    private boolean forCTAS = false;
 
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
                       QueryStatement queryStatement, boolean isOverwrite) {
+        this(tblName, targetPartitionNames, label, cols, queryStatement, isOverwrite, NodePosition.ZERO);
+    }
+
+    public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
+                      QueryStatement queryStatement, boolean isOverwrite, NodePosition pos) {
+        super(pos);
         this.tblName = tblName;
         this.targetPartitionNames = targetPartitionNames;
         this.label = label;
@@ -86,10 +100,13 @@ public class InsertStmt extends DmlStmt {
 
     // Ctor for CreateTableAsSelectStmt
     public InsertStmt(TableName name, QueryStatement queryStatement) {
+        // CTAS claus hasn't explicit insert stmt, we use the pos of queryStmt to express the location of insertStmt
+        super(queryStatement.getPos());
         this.tblName = name;
         this.targetPartitionNames = null;
         this.targetColumnNames = null;
         this.queryStatement = queryStatement;
+        this.forCTAS = true;
     }
 
     public Table getTargetTable() {
@@ -155,6 +172,10 @@ public class InsertStmt extends DmlStmt {
         return targetPartitionNames;
     }
 
+    public boolean isSpecifyPartitionNames() {
+        return targetPartitionNames != null && !targetPartitionNames.isStaticKeyPartitionInsert();
+    }
+
     public List<String> getTargetColumnNames() {
         return targetColumnNames;
     }
@@ -175,6 +196,22 @@ public class InsertStmt extends DmlStmt {
         this.targetColumns = targetColumns;
     }
 
+    public boolean isSpecifyKeyPartition() {
+        return targetTable != null && targetTable instanceof IcebergTable && isStaticKeyPartitionInsert();
+    }
+
+    public boolean isStaticKeyPartitionInsert() {
+        return targetPartitionNames != null && targetPartitionNames.isStaticKeyPartitionInsert();
+    }
+
+    public boolean isPartitionNotSpecifiedInOverwrite() {
+        return partitionNotSpecifiedInOverwrite;
+    }
+
+    public void setPartitionNotSpecifiedInOverwrite(boolean partitionNotSpecifiedInOverwrite) {
+        this.partitionNotSpecifiedInOverwrite = partitionNotSpecifiedInOverwrite;
+    }
+
     @Override
     public RedirectStatus getRedirectStatus() {
         if (isExplain()) {
@@ -182,6 +219,10 @@ public class InsertStmt extends DmlStmt {
         } else {
             return RedirectStatus.FORWARD_WITH_SYNC;
         }
+    }
+
+    public boolean isForCTAS() {
+        return forCTAS;
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

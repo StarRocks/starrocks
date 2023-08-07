@@ -15,9 +15,12 @@
 #include "exec/pipeline/query_context.h"
 
 #include <memory>
+#include <vector>
 
 #include "agent/master_info.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/pipeline_fwd.h"
+#include "exec/spill/query_spill_manager.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/client_cache.h"
 #include "runtime/current_thread.h"
@@ -118,12 +121,20 @@ int64_t QueryContext::compute_query_mem_limit(int64_t parent_mem_limit, int64_t 
     return parent_mem_limit == -1 ? mem_limit : std::min(parent_mem_limit, mem_limit);
 }
 
-void QueryContext::init_mem_tracker(int64_t bytes_limit, MemTracker* parent) {
+void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit,
+                                    workgroup::WorkGroup* wg) {
     std::call_once(_init_mem_tracker_once, [=]() {
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
-        auto* mem_tracker_counter = ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES);
-        mem_tracker_counter->set(bytes_limit);
-        _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, bytes_limit, _profile->name(), parent);
+        auto* mem_tracker_counter =
+                ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL);
+        mem_tracker_counter->set(query_mem_limit);
+        if (wg != nullptr && big_query_mem_limit > 0 && big_query_mem_limit < query_mem_limit) {
+            std::string label = "Group=" + wg->name() + ", " + _profile->name();
+            _mem_tracker = std::make_shared<MemTracker>(MemTracker::RESOURCE_GROUP_BIG_QUERY, big_query_mem_limit,
+                                                        std::move(label), parent);
+        } else {
+            _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, query_mem_limit, _profile->name(), parent);
+        }
     });
 }
 
@@ -135,13 +146,23 @@ Status QueryContext::init_query_once(workgroup::WorkGroup* wg) {
             auto maybe_token = wg->acquire_running_query_token();
             if (maybe_token.ok()) {
                 _wg_running_query_token_ptr = std::move(maybe_token.value());
+                _wg_running_query_token_atomic_ptr = _wg_running_query_token_ptr.get();
             } else {
                 st = maybe_token.status();
             }
+
+            _spill_manager = std::make_unique<spill::QuerySpillManager>(_query_id);
         });
     }
 
     return st;
+}
+
+void QueryContext::release_workgroup_token_once() {
+    auto* old = _wg_running_query_token_atomic_ptr.load();
+    if (old != nullptr && _wg_running_query_token_atomic_ptr.compare_exchange_strong(old, nullptr)) {
+        _wg_running_query_token_ptr.reset();
+    }
 }
 
 void QueryContext::set_query_trace(std::shared_ptr<starrocks::debug::QueryTrace> query_trace) {
@@ -158,9 +179,19 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
     if (_is_result_sink) {
         return query_statistic;
     }
-    query_statistic->add_scan_stats(_delta_scan_rows_num.exchange(0), _delta_scan_bytes.exchange(0));
+
     query_statistic->add_cpu_costs(_delta_cpu_cost_ns.exchange(0));
     query_statistic->add_mem_costs(mem_cost_bytes());
+    {
+        std::lock_guard l(_scan_stats_lock);
+        for (const auto& [table_id, scan_stats] : _scan_stats) {
+            QueryStatisticsItemPB stats_item;
+            stats_item.set_table_id(table_id);
+            stats_item.set_scan_rows(scan_stats->delta_scan_rows_num.exchange(0));
+            stats_item.set_scan_bytes(scan_stats->delta_scan_bytes.exchange(0));
+            query_statistic->add_stats_item(stats_item);
+        }
+    }
     _sub_plan_query_statistics_recvr->aggregate(query_statistic.get());
     return query_statistic;
 }
@@ -168,12 +199,39 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
 std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
     DCHECK(_is_result_sink) << "must be the result sink";
     auto res = std::make_shared<QueryStatistics>();
-    res->add_scan_stats(_total_scan_rows_num, _total_scan_bytes);
-    res->add_cpu_costs(_total_cpu_cost_ns);
+    res->add_cpu_costs(cpu_cost());
     res->add_mem_costs(mem_cost_bytes());
 
+    {
+        std::lock_guard l(_scan_stats_lock);
+        for (const auto& [table_id, scan_stats] : _scan_stats) {
+            QueryStatisticsItemPB stats_item;
+            stats_item.set_table_id(table_id);
+            stats_item.set_scan_rows(scan_stats->total_scan_rows_num);
+            stats_item.set_scan_bytes(scan_stats->total_scan_bytes);
+            res->add_stats_item(stats_item);
+        }
+    }
     _sub_plan_query_statistics_recvr->aggregate(res.get());
     return res;
+}
+
+void QueryContext::update_scan_stats(int64_t table_id, int64_t scan_rows_num, int64_t scan_bytes) {
+    ScanStats* stats = nullptr;
+    {
+        std::lock_guard l(_scan_stats_lock);
+        auto iter = _scan_stats.find(table_id);
+        if (iter == _scan_stats.end()) {
+            _scan_stats.insert({table_id, std::make_shared<ScanStats>()});
+            iter = _scan_stats.find(table_id);
+        }
+        stats = iter->second.get();
+    }
+
+    stats->total_scan_rows_num += scan_rows_num;
+    stats->delta_scan_rows_num += scan_rows_num;
+    stats->total_scan_bytes += scan_bytes;
+    stats->delta_scan_bytes += scan_bytes;
 }
 
 QueryContextManager::QueryContextManager(size_t log2_num_slots)
@@ -198,11 +256,12 @@ Status QueryContextManager::init() {
         return Status::InternalError("Fail to create clean_thread of QueryContextManager");
     }
 }
-void QueryContextManager::_clean_slot_unlocked(size_t i) {
+void QueryContextManager::_clean_slot_unlocked(size_t i, std::vector<QueryContextPtr>& del) {
     auto& sc_map = _second_chance_maps[i];
     auto sc_it = sc_map.begin();
     while (sc_it != sc_map.end()) {
         if (sc_it->second->has_no_active_instances() && sc_it->second->is_delivery_expired()) {
+            del.emplace_back(std::move(sc_it->second));
             sc_it = sc_map.erase(sc_it);
         } else {
             ++sc_it;
@@ -212,8 +271,9 @@ void QueryContextManager::_clean_slot_unlocked(size_t i) {
 void QueryContextManager::_clean_query_contexts() {
     for (auto i = 0; i < _num_slots; ++i) {
         auto& mutex = _mutexes[i];
+        std::vector<QueryContextPtr> del_list;
         std::unique_lock write_lock(mutex);
-        _clean_slot_unlocked(i);
+        _clean_slot_unlocked(i, del_list);
     }
 }
 
@@ -323,8 +383,13 @@ bool QueryContextManager::remove(const TUniqueId& query_id) {
     auto& context_map = _context_maps[i];
     auto& sc_map = _second_chance_maps[i];
 
+    // retain the query_ctx reference to avoid call destructors while holding a lock
+    // we should define them before hold the write lock
+    QueryContextPtr query_ctx;
+    std::vector<QueryContextPtr> del_list;
+
     std::unique_lock<std::shared_mutex> write_lock(mutex);
-    _clean_slot_unlocked(i);
+    _clean_slot_unlocked(i, del_list);
     // return directly if query_ctx is absent
     auto it = context_map.find(query_id);
     if (it == context_map.end()) {
@@ -333,6 +398,7 @@ bool QueryContextManager::remove(const TUniqueId& query_id) {
 
     // the query context is really dead, so just cleanup
     if (it->second->is_dead()) {
+        query_ctx = std::move(it->second);
         context_map.erase(it);
         return true;
     } else if (it->second->has_no_active_instances()) {
@@ -405,7 +471,7 @@ void QueryContextManager::report_fragments_with_same_host(
                     params.__set_backend_id(backend_id.value());
                 }
 
-                report_exec_status_params_vector.push_back(params);
+                report_exec_status_params_vector.emplace_back(std::move(params));
                 cur_batch_report_indexes.push_back(i);
                 reported[i] = true;
             }
@@ -424,6 +490,7 @@ void QueryContextManager::collect_query_statistics(const PCollectQueryStatistics
             int64_t cpu_cost = query_ctx->cpu_cost();
             int64_t scan_rows = query_ctx->cur_scan_rows_num();
             int64_t scan_bytes = query_ctx->get_scan_bytes();
+            int64_t mem_usage_bytes = query_ctx->current_mem_usage_bytes();
             auto query_statistics = response->add_query_statistics();
             auto query_id = query_statistics->mutable_query_id();
             query_id->set_hi(p_query_id.hi());
@@ -431,6 +498,8 @@ void QueryContextManager::collect_query_statistics(const PCollectQueryStatistics
             query_statistics->set_cpu_cost_ns(cpu_cost);
             query_statistics->set_scan_rows(scan_rows);
             query_statistics->set_scan_bytes(scan_bytes);
+            query_statistics->set_mem_usage_bytes(mem_usage_bytes);
+            query_statistics->set_spill_bytes(query_ctx->get_spill_bytes());
         }
     }
 }
@@ -539,6 +608,8 @@ void QueryContextManager::report_fragments(
                     LOG(WARNING) << "Retrying ReportExecStatus: " << e.what();
                     rpc_status = fe_connection.reopen();
                     if (!rpc_status.ok()) {
+                        LOG(WARNING) << "ReportExecStatus() to " << fe_addr << " failed after reopening connection:\n"
+                                     << rpc_status.get_error_msg();
                         continue;
                     }
                     fe_connection->batchReportExecStatus(res, report_batch);

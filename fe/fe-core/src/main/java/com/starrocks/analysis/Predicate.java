@@ -35,12 +35,18 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.parser.NodePosition;
 
 public abstract class Predicate extends Expr {
     protected boolean isEqJoinConjunct;
 
-    public Predicate() {
+    protected Predicate() {
         super();
+        this.isEqJoinConjunct = false;
+    }
+
+    protected Predicate(NodePosition pos) {
+        super(pos);
         this.isEqJoinConjunct = false;
     }
 

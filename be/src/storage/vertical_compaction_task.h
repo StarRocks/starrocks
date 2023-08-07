@@ -27,7 +27,7 @@ namespace starrocks {
 class RowsetWriter;
 class TabletReader;
 class RowSourceMaskBuffer;
-class RowSourceMask;
+struct RowSourceMask;
 
 // need a factory of compaction task
 class VerticalCompactionTask : public CompactionTask {
@@ -45,7 +45,7 @@ private:
                                  std::vector<RowSourceMask>* source_masks, Statistics* statistics);
 
     StatusOr<size_t> _compact_data(bool is_key, int32_t chunk_size, const std::vector<uint32_t>& column_group,
-                                   const VectorizedSchema& schema, TabletReader* reader, RowsetWriter* output_rs_writer,
+                                   const Schema& schema, TabletReader* reader, RowsetWriter* output_rs_writer,
                                    RowSourceMaskBuffer* mask_buffer, std::vector<RowSourceMask>* source_masks);
 
     StatusOr<int32_t> _calculate_chunk_size_for_column_group(const std::vector<uint32_t>& column_group);

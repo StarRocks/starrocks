@@ -43,12 +43,14 @@
 #include "runtime/routine_load/kafka_consumer_pipe.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "util/defer_op.h"
+#include "util/stopwatch.hpp"
 #include "util/uid_util.h"
 
 namespace starrocks {
 
 Status RoutineLoadTaskExecutor::get_kafka_partition_meta(const PKafkaMetaProxyRequest& request,
-                                                         std::vector<int32_t>* partition_ids, int timeout_ms) {
+                                                         std::vector<int32_t>* partition_ids, int timeout_ms,
+                                                         std::string* group_id) {
     DCHECK(request.has_kafka_info());
 
     // This context is meaningless, just for unifing the interface
@@ -73,6 +75,12 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_meta(const PKafkaMetaProxyRe
 
     std::shared_ptr<DataConsumer> consumer;
     RETURN_IF_ERROR(_data_consumer_pool.get_consumer(&ctx, &consumer));
+    auto it = ctx.kafka_info->properties.find("group.id");
+    if (it == ctx.kafka_info->properties.end()) {
+        *group_id = "unknown";
+    } else {
+        *group_id = it->second;
+    }
 
     Status st = std::static_pointer_cast<KafkaDataConsumer>(consumer)->get_partition_meta(partition_ids, timeout_ms);
     if (st.ok()) {
@@ -83,7 +91,8 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_meta(const PKafkaMetaProxyRe
 
 Status RoutineLoadTaskExecutor::get_kafka_partition_offset(const PKafkaOffsetProxyRequest& request,
                                                            std::vector<int64_t>* beginning_offsets,
-                                                           std::vector<int64_t>* latest_offsets, int timeout_ms) {
+                                                           std::vector<int64_t>* latest_offsets, int timeout_ms,
+                                                           std::string* group_id) {
     DCHECK(request.has_kafka_info());
 
     // This context is meaningless, just for unifing the interface
@@ -115,7 +124,14 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_offset(const PKafkaOffsetPro
 
     std::shared_ptr<DataConsumer> consumer;
     RETURN_IF_ERROR(_data_consumer_pool.get_consumer(&ctx, &consumer));
-
+    auto it = ctx.kafka_info->properties.find("group.id");
+    if (it == ctx.kafka_info->properties.end()) {
+        *group_id = "unknown";
+    } else {
+        *group_id = it->second;
+    }
+    MonotonicStopWatch watch;
+    watch.start();
     Status st = std::static_pointer_cast<KafkaDataConsumer>(consumer)->get_partition_offset(
             &partition_ids, beginning_offsets, latest_offsets, timeout_ms);
     if (st.ok()) {
@@ -219,12 +235,6 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
         return Status::OK();
     }
 
-    if (_task_map.size() >= config::routine_load_thread_pool_size) {
-        LOG(INFO) << "too many tasks in thread pool. reject task: " << UniqueId(task.id) << ", job id: " << task.job_id
-                  << ", queue size: " << _thread_pool.get_queue_size() << ", current tasks num: " << _task_map.size();
-        return Status::TooManyTasks(UniqueId(task.id).to_string());
-    }
-
     // create the context
     auto* ctx = new StreamLoadContext(_exec_env);
     ctx->load_type = TLoadType::ROUTINE_LOAD;
@@ -261,7 +271,11 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
     // the routine load task'txn has alreay began in FE.
     // so it need to rollback if encounter error.
     ctx->need_rollback = true;
-    ctx->max_filter_ratio = 1.0;
+    if (task.__isset.max_filter_ratio) {
+        ctx->max_filter_ratio = task.max_filter_ratio;
+    } else {
+        ctx->max_filter_ratio = 1.0;
+    }
 
     // set source related params
     switch (task.type) {
@@ -283,15 +297,20 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
     _task_map[ctx->id] = ctx;
 
     // offer the task to thread pool
-    if (!_thread_pool.offer([this, ctx, capture0 = &_data_consumer_pool, capture1 = [this](StreamLoadContext* ctx) {
-            std::unique_lock<std::mutex> l(_lock);
-            _task_map.erase(ctx->id);
-            LOG(INFO) << "finished routine load task " << ctx->brief() << ", status: " << ctx->status.get_error_msg()
-                      << ", current tasks num: " << _task_map.size();
-            if (ctx->unref()) {
-                delete ctx;
-            }
-        }] { exec_task(ctx, capture0, capture1); })) {
+    if (!_thread_pool
+                 ->submit_func([this, ctx, capture0 = &_data_consumer_pool,
+                                capture1 =
+                                        [this](StreamLoadContext* ctx) {
+                                            std::unique_lock<std::mutex> l(_lock);
+                                            _task_map.erase(ctx->id);
+                                            LOG(INFO) << "finished routine load task " << ctx->brief()
+                                                      << ", status: " << ctx->status.get_error_msg()
+                                                      << ", current tasks num: " << _task_map.size();
+                                            if (ctx->unref()) {
+                                                delete ctx;
+                                            }
+                                        }] { exec_task(ctx, capture0, capture1); })
+                 .ok()) {
         // failed to submit task, clear and return
         LOG(WARNING) << "failed to submit routine load task: " << ctx->brief();
         _task_map.erase(ctx->id);

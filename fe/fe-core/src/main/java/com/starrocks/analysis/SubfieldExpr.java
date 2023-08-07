@@ -12,50 +12,62 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.analysis;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.StructType;
+import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
+import java.util.List;
+
 public class SubfieldExpr extends Expr {
 
-    // We use fieldName to extract subfield column from children[0],
+    // We use fieldNames to extract subfield column from children[0],
     // children[0] must be an StructType.
-    private final String fieldName;
+    private List<String> fieldNames;
 
     // Only used in parser, in parser, we can't determine column's type
-    public SubfieldExpr(Expr child, String fieldName) {
-        this(child, null, fieldName);
+    public SubfieldExpr(Expr child, List<String> fieldNames) {
+        this(child, null, fieldNames);
+    }
+
+    public SubfieldExpr(Expr child, List<String> fieldNames, NodePosition pos) {
+        this(child, null, fieldNames, pos);
     }
 
     // In this constructor, we can determine column's type
     // child must be an StructType
-    public SubfieldExpr(Expr child, Type type, String fieldName) {
+    public SubfieldExpr(Expr child, Type type, List<String> fieldNames) {
+        this(child, type, fieldNames, NodePosition.ZERO);
+    }
+
+    public SubfieldExpr(Expr child, Type type, List<String> fieldNames, NodePosition pos) {
+        super(pos);
         if (type != null) {
             Preconditions.checkArgument(child.getType().isStructType());
         }
         children.add(child);
         this.type = type;
-        this.fieldName = fieldName.toLowerCase();
+        this.fieldNames = ImmutableList.copyOf(fieldNames);
     }
 
     public SubfieldExpr(SubfieldExpr other) {
         super(other);
-        fieldName = other.fieldName;
+        fieldNames = other.fieldNames;
     }
 
-    public String getFieldName() {
-        return fieldName;
+    public void setFieldNames(List<String> fieldNames) {
+        this.fieldNames = ImmutableList.copyOf(fieldNames);
     }
 
-    public int getFieldPos(String fieldName) {
-        return ((StructType) (children.get(0).getType())).getFieldPos(fieldName);
+    public List<String> getFieldNames() {
+        return fieldNames;
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
@@ -69,17 +81,22 @@ public class SubfieldExpr extends Expr {
 
     @Override
     protected String toSqlImpl() {
-        return getChild(0).toSqlImpl() + "." + fieldName;
+        return getChild(0).toSqlImpl() + "." + Joiner.on('.').join(fieldNames);
     }
 
     @Override
     protected void toThrift(TExprNode msg) {
         msg.setNode_type(TExprNodeType.SUBFIELD_EXPR);
-        msg.setUsed_subfield_name(fieldName);
+        msg.setUsed_subfield_names(fieldNames);
     }
 
     @Override
     public Expr clone() {
         return new SubfieldExpr(this);
+    }
+
+    @Override
+    public boolean isSelfMonotonic() {
+        return children.get(0).isSelfMonotonic();
     }
 }

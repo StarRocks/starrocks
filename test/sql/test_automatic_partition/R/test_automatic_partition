@@ -1,0 +1,629 @@
+-- name: test_min_partition
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+select * from ss;
+-- result:
+-- !result
+show partitions from ss;
+-- result:
+-- !result
+-- name: test_automatic_partition_table_non_pipeline
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+set enable_pipeline=false;
+-- result:
+-- !result
+insert into ss values('2023-02-14', 2),('2033-03-01',2);
+-- result:
+-- !result
+select count(*) from ss;
+-- result:
+2
+-- !result
+show partitions from ss;
+-- result:
+[REGEX].*p202302.*
+.*p203303.*
+-- !result
+insert into ss select date(add_months(event_day, 1)),pv from ss;
+-- result:
+-- !result
+select count(*) from ss;
+-- result:
+4
+-- !result
+show partitions from ss;
+-- result:
+[REGEX].*p202302.*
+.*p202303.*
+.*p203303.*
+.*p203304.*
+-- !result
+insert into ss select date(add_months(event_day, 6)),pv from ss;
+-- result:
+-- !result
+select count(*) from ss;
+-- result:
+8
+-- !result
+show partitions from ss;
+-- result:
+[REGEX].*p202302.*
+.*p202303.*
+.*p202308.*
+.*p202309.*
+.*p203303.*
+.*p203304.*
+.*p203309.*
+.*p203310.*
+-- !result
+insert into ss select date(add_months(event_day, 12)),pv from ss;
+-- result:
+-- !result
+select count(*) from ss;
+-- result:
+16
+-- !result
+show partitions from ss;
+-- result:
+[REGEX].*p202302.*
+.*p202303.*
+.*p202308.*
+.*p202309.*
+.*p202402.*
+.*p202403.*
+.*p202408.*
+.*p202409.*
+.*p203303.*
+.*p203304.*
+.*p203309.*
+.*p203310.*
+.*p203403.*
+.*p203404.*
+.*p203409.*
+.*p203410.*
+-- !result
+insert into ss select * from ss;
+-- result:
+-- !result
+select count(*) from ss;
+-- result:
+32
+-- !result
+show partitions from ss;
+-- result:
+[REGEX].*p202302.*
+.*p202303.*
+.*p202308.*
+.*p202309.*
+.*p202402.*
+.*p202403.*
+.*p202408.*
+.*p202409.*
+.*p203303.*
+.*p203304.*
+.*p203309.*
+.*p203310.*
+.*p203403.*
+.*p203404.*
+.*p203409.*
+.*p203410.*
+-- !result
+-- name: test_automatic_partition_in_new_node
+CREATE TABLE dt_month( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into dt_month values('2023-02-14 12:31:07', 2);
+-- result:
+-- !result
+insert into dt_month values('2023-03-14 12:31:07', 2);
+-- result:
+-- !result
+show partitions from dt_month;
+-- result:
+[REGEX].*p202302.*
+.*p202303.*
+-- !result
+select * from dt_month;
+-- result:
+2023-02-14 12:31:07	2
+2023-03-14 12:31:07	2
+-- !result
+-- name: test_partition_column_as_second
+create table p(c1 int null, c2 date null)engine=olap duplicate key(c1,c2) partition by date_trunc('day', c2) distributed by hash(c1) buckets 2 properties("replication_num"="1");
+-- result:
+-- !result
+insert into p values(1,'2021-01-01');
+-- result:
+-- !result
+show partitions from p;
+-- result:
+[REGEX].*p20210101.*
+-- !result
+select * from p;
+-- result:
+1	2021-01-01
+-- !result
+-- name: test_auto_incremental_id
+CREATE TABLE t ( id DATE NOT NULL, job1 BIGINT NOT NULL AUTO_INCREMENT) Primary KEY (id) PARTITION BY date_trunc('day', id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into t values('2021-01-01', 1);
+-- result:
+-- !result
+select count(*) from t;
+-- result:
+1
+-- !result
+show partitions from t;
+-- result:
+[REGEX].*p20210101.*
+-- !result
+insert into t values('2021-01-03', default);
+-- result:
+-- !result
+select count(*) from t;
+-- result:
+2
+-- !result
+show partitions from t;
+-- result:
+[REGEX].*p20210101.*
+.*p20210103.*
+-- !result
+insert into t values('2021-01-05', default);
+-- result:
+-- !result
+select count(*) from t;
+-- result:
+3
+-- !result
+show partitions from t;
+-- result:
+[REGEX].*p20210101.*
+.*p20210103.*
+.*p20210105.*
+-- !result
+-- name: test_date_trunc_date
+CREATE TABLE dt_month( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into dt_month values('2023-02-14', 2);
+-- result:
+-- !result
+show partitions from dt_month;
+-- result:
+[REGEX].*p202302.*
+-- !result
+insert into dt_month values('2023-03-14', 2);
+-- result:
+-- !result
+CREATE TABLE dt_day( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('day', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into dt_day values('2023-02-14', 2);
+-- result:
+-- !result
+show partitions from dt_day;
+-- result:
+[REGEX].*p20230214.*
+-- !result
+insert into dt_day values('2023-03-14', 2);
+-- result:
+-- !result
+CREATE TABLE dt_year( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('year', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into dt_year values('2023-02-14', 2);
+-- result:
+-- !result
+show partitions from dt_year;
+-- result:
+[REGEX].*p2023.*
+-- !result
+insert into dt_year values('2024-03-14', 2);
+-- result:
+-- !result
+CREATE TABLE dt_week( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('week', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+E: (1064, "Getting syntax error from line 1, column 87 to line 1, column 115. Detail message: Unsupported expr 'date_trunc('week', event_day)' in PARTITION BY clause.")
+-- !result
+CREATE TABLE dt_quarter( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('quarter', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+E: (1064, "Getting syntax error from line 1, column 90 to line 1, column 121. Detail message: Unsupported expr 'date_trunc('quarter', event_day)' in PARTITION BY clause.")
+-- !result
+-- name: test_shadow_partition @sequential
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG("enable_display_shadow_partitions"="true");
+-- result:
+-- !result
+show partitions from ss;
+-- result:
+[REGEX].*shadow_automatic_partition.*
+-- !result
+ADMIN SET FRONTEND CONFIG("enable_display_shadow_partitions"="false");
+-- result:
+-- !result
+show partitions from ss;
+-- result:
+[REGEX]^((?!shadow_automatic_partition).)*$
+-- !result
+insert into ss values('2002-01-01', 2);
+-- result:
+-- !result
+show partitions from ss;
+-- result:
+[REGEX].*p200201.*
+-- !result
+insert into ss values('0001-02-01', 2);
+-- result:
+-- !result
+select * from ss;
+-- result:
+2002-01-01	2
+0001-02-01	2
+-- !result
+alter table ss drop partition p200201;
+-- result:
+-- !result
+select * from ss;
+-- result:
+0001-02-01	2
+-- !result
+-- name: test_date_trunc_datetime
+CREATE TABLE dt_month( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into dt_month values('2023-02-14 12:31:07', 2);
+-- result:
+-- !result
+show partitions from dt_month;
+-- result:
+[REGEX].*p202302.*
+-- !result
+insert into dt_month values('2023-03-14 12:31:07', 2);
+-- result:
+-- !result
+CREATE TABLE dt_day( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('day', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into dt_day values('2023-02-14 12:31:07', 2);
+-- result:
+-- !result
+show partitions from dt_day;
+-- result:
+[REGEX].*p20230214.*
+-- !result
+insert into dt_day values('2023-03-14 12:31:07', 2);
+-- result:
+-- !result
+CREATE TABLE dt_year( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('year', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into dt_year values('2023-02-14 12:31:07', 2);
+-- result:
+-- !result
+show partitions from dt_year;
+-- result:
+[REGEX].*p2023.*
+-- !result
+insert into dt_year values('2024-03-14 12:31:07', 2);
+-- result:
+-- !result
+CREATE TABLE dt_hour( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('hour', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+show partitions from dt_hour;
+-- result:
+-- !result
+CREATE TABLE dt_minute( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('minute', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+E: (1064, "Getting syntax error from line 1, column 93 to line 1, column 123. Detail message: Unsupported expr 'date_trunc('minute', event_day)' in PARTITION BY clause.")
+-- !result
+CREATE TABLE dt_second( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('second', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+E: (1064, "Getting syntax error from line 1, column 93 to line 1, column 123. Detail message: Unsupported expr 'date_trunc('second', event_day)' in PARTITION BY clause.")
+-- !result
+CREATE TABLE dt_week( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('week', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+E: (1064, "Getting syntax error from line 1, column 87 to line 1, column 115. Detail message: Unsupported expr 'date_trunc('week', event_day)' in PARTITION BY clause.")
+-- !result
+CREATE TABLE dt_quarter( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('quarter', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+E: (1064, "Getting syntax error from line 1, column 90 to line 1, column 121. Detail message: Unsupported expr 'date_trunc('quarter', event_day)' in PARTITION BY clause.")
+-- !result
+-- name: test_single_replica
+CREATE TABLE site_access ( event_day DATETIME NOT NULL, site_id INT DEFAULT '10', city_code VARCHAR(100), user_name VARCHAR(32) DEFAULT '', pv BIGINT DEFAULT '0') DUPLICATE KEY(event_day, site_id, city_code, user_name) PARTITION BY date_trunc('day', event_day) DISTRIBUTED BY HASH(event_day, site_id) PROPERTIES( "replication_num" = "1");
+-- result:
+-- !result
+insert into site_access values('2015-06-02 00:00:00', 1, 1, 'a', 1);
+-- result:
+-- !result
+show partitions from site_access;
+-- result:
+[REGEX].*p20150602.*
+-- !result
+select * from site_access;
+-- result:
+2015-06-02 00:00:00	1	1	a	1
+-- !result
+insert into site_access values('2015-06-02 00:10:00', 1, 1, 'a', 1);
+-- result:
+-- !result
+select * from site_access;
+-- result:
+2015-06-02 00:10:00	1	1	a	1
+2015-06-02 00:00:00	1	1	a	1
+-- !result
+insert into site_access values('2015-06-04 00:10:00', 1, 1, 'a', 1);
+-- result:
+-- !result
+select * from site_access;
+-- result:
+2015-06-02 00:10:00	1	1	a	1
+2015-06-04 00:10:00	1	1	a	1
+2015-06-02 00:00:00	1	1	a	1
+-- !result
+show partitions from site_access;
+-- result:
+[REGEX].*p20150602.*
+.*p20150604.*
+-- !result
+-- name: test_automatic_partition_table_pipeline
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into ss values('2023-02-14', 2),('2033-03-01',2);
+-- result:
+-- !result
+select count(*) from ss;
+-- result:
+2
+-- !result
+show partitions from ss;
+-- result:
+[REGEX].*p202302.*
+.*p203303.*
+-- !result
+insert into ss select date(add_months(event_day, 1)),pv from ss;
+-- result:
+-- !result
+select count(*) from ss;
+-- result:
+4
+-- !result
+show partitions from ss;
+-- result:
+[REGEX].*p202302.*
+.*p202303.*
+.*p203303.*
+.*p203304.*
+-- !result
+insert into ss select date(add_months(event_day, 6)),pv from ss;
+-- result:
+-- !result
+select count(*) from ss;
+-- result:
+8
+-- !result
+show partitions from ss;
+-- result:
+[REGEX].*p202302.*
+.*p202303.*
+.*p202308.*
+.*p202309.*
+.*p203303.*
+.*p203304.*
+.*p203309.*
+.*p203310.*
+-- !result
+insert into ss select date(add_months(event_day, 12)),pv from ss;
+-- result:
+-- !result
+select count(*) from ss;
+-- result:
+16
+-- !result
+show partitions from ss;
+-- result:
+[REGEX].*p202302.*
+.*p202303.*
+.*p202308.*
+.*p202309.*
+.*p202402.*
+.*p202403.*
+.*p202408.*
+.*p202409.*
+.*p203303.*
+.*p203304.*
+.*p203309.*
+.*p203310.*
+.*p203403.*
+.*p203404.*
+.*p203409.*
+.*p203410.*
+-- !result
+insert into ss select * from ss;
+-- result:
+-- !result
+select count(*) from ss;
+-- result:
+32
+-- !result
+show partitions from ss;
+-- result:
+[REGEX].*p202302.*
+.*p202303.*
+.*p202308.*
+.*p202309.*
+.*p202402.*
+.*p202403.*
+.*p202408.*
+.*p202409.*
+.*p203303.*
+.*p203304.*
+.*p203309.*
+.*p203310.*
+.*p203403.*
+.*p203404.*
+.*p203409.*
+.*p203410.*
+-- !result
+-- name: test_multi_fragment_open_new_node_channel
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into ss values('2023-02-14', 2),('2033-03-01',2);
+-- result:
+-- !result
+insert into ss select date(add_months(event_day, 1)),pv from ss;
+-- result:
+-- !result
+insert into ss select date(add_months(event_day, 1)),pv from ss;
+-- result:
+-- !result
+insert into ss select date(add_months(event_day, 1)),pv from ss;
+-- result:
+-- !result
+insert into ss select date(add_months(event_day, 1)),pv from ss;
+-- result:
+-- !result
+insert into ss select date(add_months(event_day, 1)),pv from ss;
+-- result:
+-- !result
+select count(*) from ss;
+-- result:
+64
+-- !result
+show partitions from ss;
+-- result:
+[REGEX].*p202302.*
+.*p202303.*
+.*p202304.*
+.*p202305.*
+.*p202306.*
+.*p202307.*
+.*p203303.*
+.*p203304.*
+.*p203305.*
+.*p203306.*
+.*p203307.*
+.*p203308.*
+-- !result
+CREATE TABLE dt_month( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into dt_month select * from ss;
+-- result:
+-- !result
+select count(*) from dt_month;
+-- result:
+64
+-- !result
+show partitions from dt_month;
+-- result:
+[REGEX].*p202302.*
+.*p202303.*
+.*p202304.*
+.*p202305.*
+.*p202306.*
+.*p202307.*
+.*p203303.*
+.*p203304.*
+.*p203305.*
+.*p203306.*
+.*p203307.*
+.*p203308.*
+-- !result
+-- name: test_automatic_partition_time_slice
+CREATE TABLE ss_month( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY time_slice(event_day, interval 4 month) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into ss_month values('2023-02-14 12:31:07', 2);
+-- result:
+-- !result
+show partitions from ss_month;
+-- result:
+[REGEX].*p202301.*
+-- !result
+insert into ss_month values('2023-04-14 12:31:07', 2);
+-- result:
+-- !result
+show partitions from ss_month;
+-- result:
+[REGEX].*p202301.*
+-- !result
+insert into ss_month values('2023-07-14 12:31:07', 2);
+-- result:
+-- !result
+show partitions from ss_month;
+-- result:
+[REGEX].*p202301.*
+.*p202305.*
+-- !result
+CREATE TABLE ss_day( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY time_slice(event_day, interval 4 day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into ss_day values('2023-02-14 12:31:07', 2);
+-- result:
+-- !result
+show partitions from ss_day;
+-- result:
+[REGEX].*p20230214.*
+-- !result
+insert into ss_day values('2023-02-16 12:31:07', 2);
+-- result:
+-- !result
+show partitions from ss_day;
+-- result:
+[REGEX].*p20230214.*
+-- !result
+insert into ss_day values('2023-02-19 12:31:07', 2);
+-- result:
+-- !result
+show partitions from ss_day;
+-- result:
+[REGEX].*p20230214.*
+.*p20230218.*
+-- !result
+CREATE TABLE ss_year( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY time_slice(event_day, interval 2 year) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into ss_year values('2023-02-14 12:31:07', 2);
+-- result:
+-- !result
+show partitions from ss_year;
+-- result:
+[REGEX].*p2023.*
+-- !result
+insert into ss_year values('2024-02-16 12:31:07', 2);
+-- result:
+-- !result
+show partitions from ss_year;
+-- result:
+[REGEX].*p2023.*
+-- !result
+insert into ss_year values('2026-02-19 12:31:07', 2);
+-- result:
+-- !result
+show partitions from ss_year;
+-- result:
+[REGEX].*p2023.*
+.*p2025.*
+-- !result
+
+-- name: test_without_property
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1;
+-- result:
+-- !result
+insert into ss values('2021-01-01', 1);
+-- result:
+-- !result
+select * from ss;
+-- result:
+2021-01-01	1
+-- !result

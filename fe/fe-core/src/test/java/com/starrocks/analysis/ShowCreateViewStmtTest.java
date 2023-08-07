@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.analysis;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -24,13 +23,13 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
-import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.statistic.StatsConstants;
-import com.starrocks.system.BackendCoreStat;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -50,7 +49,7 @@ public class ShowCreateViewStmtTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
-        FeConstants.default_scheduler_interval_millisecond = 100;
+        Config.alter_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
         UtFrameUtils.createMinStarRocksCluster();
@@ -91,8 +90,24 @@ public class ShowCreateViewStmtTest {
                         "DISTRIBUTED BY HASH(`c1`, `c2`) BUCKETS 2\n" +
                         "PROPERTIES(\n" +
                         "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\"\n" +
+                        ");")
+                .withTable("CREATE TABLE `comment_test` (\n" +
+                        "  `a` varchar(125) NULL COMMENT \"\\\\'abc'\",\n" +
+                        "  `b` varchar(125) NULL COMMENT 'abc \"ef\" abc',\n" +
+                        "  `c` varchar(123) NULL COMMENT \"abc \\\"ef\\\" abc\",\n" +
+                        "  `d` varchar(123) NULL COMMENT \"\\\\abc\",\n" +
+                        "  `e` varchar(123) NULL COMMENT '\\\\\\\\\"'\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(`a`)\n" +
+                        "COMMENT \"abc \\\"ef\\\" 'abc' \\\\abc\"\n" +
+                        "DISTRIBUTED BY HASH(`a`) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
                         "\"in_memory\" = \"false\",\n" +
-                        "\"storage_format\" = \"default\"\n" +
+                        "\"enable_persistent_index\" = \"false\",\n" +
+                        "\"replicated_storage\" = \"true\",\n" +
+                        "\"compression\" = \"LZ4\"\n" +
                         ");");
     }
 
@@ -120,8 +135,8 @@ public class ShowCreateViewStmtTest {
         List<String> res = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(createViewStmt.getDbName(), views.get(0), res,
                 null, null, false, false);
-        Assert.assertEquals("CREATE VIEW `test_view` (k1 COMMENT \"dt\", k2, v1) COMMENT \"view comment\" " +
-                "AS SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`, `test`.`tbl1`.`v1`\n" +
+        Assert.assertEquals("CREATE VIEW `test_view` (`k1` COMMENT \"dt\", `k2`, `v1`)\n" +
+                "COMMENT \"view comment\" AS SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`, `test`.`tbl1`.`v1`\n" +
                 "FROM `test`.`tbl1`;", res.get(0));
     }
 
@@ -170,13 +185,24 @@ public class ShowCreateViewStmtTest {
                 "  |  output exprs:\n" +
                 "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR\n" +
                 "  |  child exprs:\n" +
-                "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR\n" +
-                "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR\n" +
+                "  |      [32: c1, VARCHAR | [33: cast, VARCHAR | [34: cast, VARCHAR | [35: cast, VARCHAR\n" +
+                "  |      [37: c1, VARCHAR | [38: c2, VARCHAR | [42: cast, VARCHAR | [40: c4, VARCHAR\n" +
                 "  |  pass-through-operands: all";
-        Assert.assertTrue(plan.contains(snippet));
+        Assert.assertTrue(plan, plan.contains(snippet));
 
         String dropViewSql = "drop view if exists v2";
         DropTableStmt dropViewStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropViewSql, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropViewStmt);
+    }
+
+    @Test
+    public void testDdlComment() {
+        List<Table> tables = GlobalStateMgr.getCurrentState().getDb("test").getTables();
+        Table commentTest = tables.stream().filter(table -> table.getName().equals("comment_test")).findFirst().get();
+        List<String> res = Lists.newArrayList();
+        GlobalStateMgr.getDdlStmt("test", commentTest, res,
+                null, null, false, false);
+        StatementBase stmt = SqlParser.parse(res.get(0), connectContext.getSessionVariable()).get(0);
+        Assert.assertTrue(stmt instanceof CreateTableStmt);
     }
 }

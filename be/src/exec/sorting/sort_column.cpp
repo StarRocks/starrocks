@@ -26,6 +26,7 @@
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
+#include "column/struct_column.h"
 #include "exec/sorting/sort_helper.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
@@ -36,8 +37,8 @@ namespace starrocks {
 // Sort a column by permtuation
 class ColumnSorter final : public ColumnVisitorAdapter<ColumnSorter> {
 public:
-    explicit ColumnSorter(const bool& cancel, const SortDesc& sort_desc, SmallPermutation& permutation, Tie& tie,
-                          std::pair<int, int> range, bool build_tie)
+    explicit ColumnSorter(const std::atomic<bool>& cancel, const SortDesc& sort_desc, SmallPermutation& permutation,
+                          Tie& tie, std::pair<int, int> range, bool build_tie)
             : ColumnVisitorAdapter(this),
               _cancel(cancel),
               _sort_desc(sort_desc),
@@ -89,8 +90,12 @@ public:
     }
 
     Status do_visit(const StructColumn& column) {
-        // TODO(SmithCruise)
-        return Status::NotSupported("Not support");
+        auto cmp = [&](const SmallPermuteItem& lhs, const SmallPermuteItem& rhs) {
+            return column.compare_at(lhs.index_in_chunk, rhs.index_in_chunk, column, _sort_desc.nan_direction());
+        };
+
+        return sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
+                                   _build_tie);
     }
 
     template <typename T>
@@ -101,7 +106,7 @@ public:
             return lhs.inline_value.compare(rhs.inline_value);
         };
 
-        auto inlined = create_inline_permutation<Slice>(_permutation, column.get_data());
+        auto inlined = create_inline_permutation<Slice>(_permutation, column.get_proxy_data());
         RETURN_IF_ERROR(
                 sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp, _range, _build_tie));
         restore_inline_permutation(inlined, _permutation);
@@ -143,7 +148,7 @@ public:
     }
 
 private:
-    const bool& _cancel;
+    const std::atomic<bool>& _cancel;
     const SortDesc& _sort_desc;
     SmallPermutation& _permutation;
     Tie& _tie;
@@ -208,7 +213,7 @@ public:
 
         if (_need_inline_value()) {
             using ItemType = CompactChunkItem<Slice>;
-            using Container = std::vector<Slice>;
+            using Container = typename BinaryColumnBase<T>::BinaryDataProxyContainer;
 
             auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
                 return lhs.inline_value.compare(rhs.inline_value);
@@ -217,7 +222,7 @@ public:
             std::vector<const Container*> containers;
             for (const auto& col : _vertical_columns) {
                 const auto real = down_cast<const ColumnType*>(col.get());
-                containers.push_back(&real->get_data());
+                containers.push_back(&real->get_proxy_data());
             }
 
             auto inlined = _create_inlined_permutation<Slice>(containers);
@@ -228,8 +233,8 @@ public:
             auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
                 auto left_column = down_cast<const ColumnType*>(_vertical_columns[lhs.chunk_index].get());
                 auto right_column = down_cast<const ColumnType*>(_vertical_columns[rhs.chunk_index].get());
-                auto left_value = left_column->get_data()[lhs.index_in_chunk];
-                auto right_value = right_column->get_data()[rhs.index_in_chunk];
+                auto left_value = left_column->get_slice(lhs.index_in_chunk);
+                auto right_value = right_column->get_slice(rhs.index_in_chunk);
                 return SorterComparator<Slice>::compare(left_value, right_value);
             };
 
@@ -392,13 +397,13 @@ private:
     size_t _pruned_limit; // The pruned limit during partial sorting
 };
 
-Status sort_and_tie_column(const bool cancel, const ColumnPtr& column, const SortDesc& sort_desc,
+Status sort_and_tie_column(const std::atomic<bool>& cancel, const ColumnPtr& column, const SortDesc& sort_desc,
                            SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie) {
     ColumnSorter column_sorter(cancel, sort_desc, permutation, tie, range, build_tie);
     return column->accept(&column_sorter);
 }
 
-Status sort_and_tie_column(const bool cancel, ColumnPtr& column, const SortDesc& sort_desc,
+Status sort_and_tie_column(const std::atomic<bool>& cancel, ColumnPtr& column, const SortDesc& sort_desc,
                            SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie) {
     if (column->is_nullable() && !column->is_constant()) {
         ColumnHelper::as_column<NullableColumn>(column)->fill_null_with_default();
@@ -407,7 +412,7 @@ Status sort_and_tie_column(const bool cancel, ColumnPtr& column, const SortDesc&
     return column->accept(&column_sorter);
 }
 
-Status sort_and_tie_columns(const bool cancel, const Columns& columns, const SortDescs& sort_desc,
+Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,
                             Permutation* permutation) {
     if (columns.size() < 1) {
         return Status::OK();
@@ -429,7 +434,7 @@ Status sort_and_tie_columns(const bool cancel, const Columns& columns, const Sor
     return Status::OK();
 }
 
-Status stable_sort_and_tie_columns(const bool cancel, const Columns& columns, const SortDescs& sort_desc,
+Status stable_sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,
                                    SmallPermutation* small_perm) {
     if (columns.size() < 1) {
         return Status::OK();
@@ -451,7 +456,7 @@ Status stable_sort_and_tie_columns(const bool cancel, const Columns& columns, co
         int range_first = ti.range_first, range_last = ti.range_last;
         if (range_last - range_first > 1) {
             ::pdqsort(
-                    cancel, small_perm->begin() + range_first, small_perm->begin() + range_last,
+                    small_perm->begin() + range_first, small_perm->begin() + range_last,
                     [](SmallPermuteItem lhs, SmallPermuteItem rhs) { return lhs.index_in_chunk < rhs.index_in_chunk; });
         }
     }

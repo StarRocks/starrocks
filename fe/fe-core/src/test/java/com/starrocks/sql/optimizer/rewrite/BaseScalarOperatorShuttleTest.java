@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
@@ -125,16 +126,20 @@ class BaseScalarOperatorShuttleTest {
     void visitCaseWhenOperator_1() {
         ColumnRefOperator columnRefOperator = new ColumnRefOperator(1, Type.INT, "", true);
         BinaryPredicateOperator whenOperator1 =
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, columnRefOperator,
+                new BinaryPredicateOperator(BinaryType.EQ, columnRefOperator,
                         ConstantOperator.createInt(1));
         ConstantOperator constantOperator1 = ConstantOperator.createChar("1");
         BinaryPredicateOperator whenOperator2 =
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, columnRefOperator,
+                new BinaryPredicateOperator(BinaryType.EQ, columnRefOperator,
                         ConstantOperator.createInt(2));
         ConstantOperator constantOperator2 = ConstantOperator.createChar("2");
 
         CaseWhenOperator operator =
                 new CaseWhenOperator(Type.VARCHAR, null, ConstantOperator.createChar("others", Type.VARCHAR),
+                        ImmutableList.of(whenOperator1, constantOperator1, whenOperator2, constantOperator2));
+
+        CaseWhenOperator otherOperator =
+                new CaseWhenOperator(Type.VARCHAR, null, null,
                         ImmutableList.of(whenOperator1, constantOperator1, whenOperator2, constantOperator2));
 
         BaseScalarOperatorShuttle testShuttle = new BaseScalarOperatorShuttle() {
@@ -145,6 +150,8 @@ class BaseScalarOperatorShuttleTest {
         };
         ScalarOperator newOperator = testShuttle.visitCaseWhenOperator(operator, null);
         assertNotEquals(operator, newOperator);
+        newOperator = testShuttle.visitCaseWhenOperator(otherOperator, null);
+        assertNotEquals(otherOperator, newOperator);
 
     }
 }

@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
@@ -99,12 +100,12 @@ public class ExportStmtAnalyzer {
 
             if (brokerDesc.hasBroker()) {
                 if (!mgr.getBrokerMgr().containsBroker(brokerDesc.getName())) {
-                    throw new SemanticException("broker " + brokerDesc.getName() + " does not exist");
+                    throw new SemanticException("broker " + brokerDesc.getName() + " does not exist", brokerDesc.getPos());
                 }
 
                 FsBroker broker = mgr.getBrokerMgr().getAnyBroker(brokerDesc.getName());
                 if (broker == null) {
-                    throw new SemanticException("failed to get alive broker");
+                    throw new SemanticException("failed to get alive broker", brokerDesc.getPos());
                 }
             }
             // check properties
@@ -251,7 +252,7 @@ public class ExportStmtAnalyzer {
             // check predicate type
             if (whereExpr instanceof BinaryPredicate) {
                 BinaryPredicate binaryPredicate = (BinaryPredicate) whereExpr;
-                if (binaryPredicate.getOp() != BinaryPredicate.Operator.EQ) {
+                if (binaryPredicate.getOp() != BinaryType.EQ) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, exception.getMessage());
                 }
             } else {

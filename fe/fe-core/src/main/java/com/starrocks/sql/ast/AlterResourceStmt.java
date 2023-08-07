@@ -15,6 +15,8 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 import java.util.Map;
 
 public class AlterResourceStmt extends DdlStmt {
@@ -22,6 +24,11 @@ public class AlterResourceStmt extends DdlStmt {
     private final Map<String, String> properties;
 
     public AlterResourceStmt(String resourceName, Map<String, String> properties) {
+        this(resourceName, properties, NodePosition.ZERO);
+    }
+
+    public AlterResourceStmt(String resourceName, Map<String, String> properties, NodePosition pos) {
+        super(pos);
         this.resourceName = resourceName;
         this.properties = properties;
     }

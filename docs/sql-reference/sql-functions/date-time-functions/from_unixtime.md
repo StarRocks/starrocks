@@ -7,12 +7,12 @@ Converts a UNIX timestamp into the required time format. The default format is `
 Currently, `string_format` supports the following formats:
 
 ```plain text
-%Y：Year  e.g.：2014，1900
-%m：Month   e.g.：12，09
-%d：Day  e.g.：11，01
-%H：Hour  e.g.：23，01，12
-%i：Minute  e.g.：05，11
-%s：Second  e.g.：59，01
+%Y: Year  e.g.: 2014, 1900
+%m: Month   e.g.: 12, 09
+%d: Day  e.g.: 11, 01
+%H: Hour  e.g.: 23, 01, 12
+%i: Minute  e.g.: 05, 11
+%s: Second  e.g.: 59, 01
 ```
 
 Other formats are invalid and NULL will be returned.
@@ -20,12 +20,12 @@ Other formats are invalid and NULL will be returned.
 ## Syntax
 
 ```Haskell
-VARCHAR from_unixtime(INT unix_timestamp[, VARCHAR string_format])
+VARCHAR from_unixtime(BIGINT unix_timestamp[, VARCHAR string_format])
 ```
 
 ## Parameters
 
-- `unix_timestamp`: the UNIX timestamp you want to convert. It must be of the INT type. If the specified timestamp is less than 0 or greater than 2147483647, NULL will be returned. That is, the range for timestamp is `1970-01-01 00:00:00` to `2038-01-19 11:14:07`.
+- `unix_timestamp`: the UNIX timestamp you want to convert. It must be of the BIGINT type. If the specified timestamp is less than 0 or larger than 253402243199, NULL will be returned. That is, the range for timestamp is `1970-01-01 00:00:00` to `9999-12-30 11:59:59`(varies because of timezone).
 
 - `string_format`: the required time format.
 

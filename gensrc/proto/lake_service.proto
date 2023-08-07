@@ -18,6 +18,7 @@ package starrocks.lake;
 option java_package = "com.starrocks.proto";
 
 import "types.proto";
+import "status.proto";
 
 option cc_generic_services = true;
 
@@ -51,6 +52,7 @@ message DeleteTabletRequest {
 
 message DeleteTabletResponse {
     repeated int64 failed_tablets = 1;
+    optional StatusPB status = 2;
 }
 
 message CompactRequest {
@@ -61,11 +63,12 @@ message CompactRequest {
 
 message CompactResponse {
     repeated int64 failed_tablets = 1;
-    optional int64 execution_time = 2; // ms
-    optional int64 num_input_bytes = 3;
-    optional int64 num_input_rows = 4;
-    optional int64 num_output_bytes = 5;
-    optional int64 num_output_rows = 6;
+    // optional int64 execution_time = 2; // ms
+    // optional int64 num_input_bytes = 3;
+    // optional int64 num_input_rows = 4;
+    // optional int64 num_output_bytes = 5;
+    // optional int64 num_output_rows = 6;
+    optional StatusPB status = 7;
 }
 
 message DropTableRequest {
@@ -172,6 +175,50 @@ message RestoreSnapshotsResponse {
     optional int32 pad = 1;
 }
 
+message AbortCompactionRequest {
+    optional int64 txn_id = 1;
+}
+
+message AbortCompactionResponse {
+    optional StatusPB status = 1;
+}
+
+message VacuumRequest {
+    repeated int64 tablet_ids = 1;
+    // Tablet metadata files with version numbers greater than or equals to min_retain_version
+    // will NOT be vacuumed. For tablet metadata files with version numbers less than
+    // min_retain_version, decide whether they should be deleted by comparing the create time
+    // against the grace_timestamp.
+    optional int64 min_retain_version = 2;
+    // the timestamp after which created tablet metadata files will not be vacuumed.
+    // In addition to retaining all versions after grace_timestamp, retain the last version before
+    // grace_timestamp.
+    optional int64 grace_timestamp = 3;
+    // Delete txn log files with txn IDs less than min_active_txn_id
+    optional int64 min_active_txn_id = 4;
+}
+
+message VacuumResponse {
+    optional StatusPB status = 1;
+    // The number of files vacuumed, value undefined if status is not ok.
+    optional int64 vacuumed_files = 2;
+    // The total size of files vacuumed, value undefined if status is not ok.
+    optional int64 vacuumed_file_size = 3;
+}
+
+message VacuumFullRequest {
+    repeated int64 tablet_ids = 1;
+    optional int64 min_check_version = 2;
+    optional int64 max_check_version = 3;
+    optional int64 min_active_txn_id = 4;
+}
+
+message VacuumFullResponse {
+    optional StatusPB status = 1;
+    optional int64 vacuumed_files = 2;
+    optional int64 vacuumed_file_size = 3;
+}
+
 service LakeService {
     rpc publish_version(PublishVersionRequest) returns (PublishVersionResponse);
     rpc publish_log_version(PublishLogVersionRequest) returns (PublishLogVersionResponse);
@@ -185,5 +232,8 @@ service LakeService {
     rpc unlock_tablet_metadata(UnlockTabletMetadataRequest) returns (UnlockTabletMetadataResponse);
     rpc upload_snapshots(UploadSnapshotsRequest) returns (UploadSnapshotsResponse);
     rpc restore_snapshots(RestoreSnapshotsRequest) returns (RestoreSnapshotsResponse);
+    rpc abort_compaction(AbortCompactionRequest) returns (AbortCompactionResponse);
+    rpc vacuum(VacuumRequest) returns (VacuumResponse);
+    rpc vacuum_full(VacuumFullRequest) returns (VacuumFullResponse);
 }
 

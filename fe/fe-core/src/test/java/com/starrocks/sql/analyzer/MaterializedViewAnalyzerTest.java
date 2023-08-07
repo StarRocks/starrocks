@@ -19,6 +19,10 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultSet;
+import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -28,16 +32,13 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class MaterializedViewAnalyzerTest {
+    static StarRocksAssert starRocksAssert;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
-    }
-
-    @Test
-    public void testRefreshMaterializedView() throws Exception {
         Config.enable_experimental_mv = true;
-        StarRocksAssert starRocksAssert = AnalyzeTestUtil.getStarRocksAssert();
+        starRocksAssert = AnalyzeTestUtil.getStarRocksAssert();
         starRocksAssert.useDatabase("test")
                 .withTable("CREATE TABLE test.tbl1\n" +
                         "(\n" +
@@ -52,12 +53,15 @@ public class MaterializedViewAnalyzerTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("create materialized view mv\n" +
+                .withMaterializedView("create materialized view mv\n" +
                         "PARTITION BY k1\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
                         "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;");
+    }
 
+    @Test
+    public void testRefreshMaterializedView() throws Exception {
         analyzeSuccess("refresh materialized view mv");
         Database testDb = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
         Table table = testDb.getTable("mv");
@@ -66,5 +70,59 @@ public class MaterializedViewAnalyzerTest {
         MaterializedView mv = (MaterializedView) table;
         mv.setActive(false);
         analyzeFail("refresh materialized view mv");
+    }
+
+    @Test
+    public void testMaterializedView() throws Exception {
+        starRocksAssert.useDatabase("test")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `mv1` (a comment \"a1\", b comment \"b2\", c)\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "DISTRIBUTED BY HASH(a) BUCKETS 12\n" +
+                        "REFRESH ASYNC\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"replicated_storage\" = \"true\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT k1, k2, v1 from test.tbl1");
+        ShowExecutor showExecutor = new ShowExecutor(starRocksAssert.getCtx(),
+                (ShowStmt) analyzeSuccess("show full columns from mv1"));
+        ShowResultSet showResultSet = showExecutor.execute();
+        Assert.assertEquals("[[a, date, , YES, YES, \\N, , , a1]," +
+                        " [b, int, , YES, YES, \\N, , , b2]," +
+                        " [c, int, , YES, YES, \\N, , , ]]",
+                showResultSet.getResultRows().toString());
+    }
+
+    @Test
+    public void testNondeterministicFunction() {
+        analyzeFail("create materialized view mv partition by k1 distributed by hash(k2) buckets 3 refresh async " +
+                        "as select  k1, k2, rand() from tbl1 group by k1, k2",
+                "Materialized view query statement select item rand() not supported nondeterministic function.");
+
+        analyzeFail("create materialized view mv partition by k1 distributed by hash(k2) buckets 3 refresh async " +
+                        "as select k1, k2 from tbl1 group by k1, k2 union select k1, rand() from tbl1",
+                "Materialized view query statement select item rand() not supported nondeterministic function.");
+
+        analyzeFail("create materialized view mv partition by k1 distributed by hash(k2) buckets 3 refresh async " +
+                        "as select  k1, k2 from tbl1 where rand() > 0.5",
+                "Materialized view query statement select item rand() not supported nondeterministic function.");
+    }
+
+    @Test
+    public void testCreateMvWithNotExistResourceGroup() {
+        String sql = "create materialized view mv\n" +
+                "PARTITION BY k1\n" +
+                "distributed by hash(k2) buckets 3\n" +
+                "refresh async\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"resource_group\" = \"not_exist_rg\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;";
+        Assert.assertThrows("resource_group not_exist_rg does not exist.",
+                DdlException.class, () -> starRocksAssert.useDatabase("test").withMaterializedView(sql));
     }
 }

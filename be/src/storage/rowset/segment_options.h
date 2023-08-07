@@ -17,9 +17,11 @@
 #include <unordered_map>
 #include <vector>
 
+#include "column/column_access_path.h"
 #include "column/datum.h"
 #include "fs/fs.h"
 #include "runtime/global_dict/types.h"
+#include "storage/del_vector.h"
 #include "storage/disjunctive_predicates.h"
 #include "storage/olap_runtime_range_pruner.h"
 #include "storage/seek_range.h"
@@ -29,14 +31,12 @@ class Condition;
 struct OlapReaderStatistics;
 class RuntimeProfile;
 class TabletSchema;
-class KVStore;
-namespace lake {
-class UpdateManager;
-} // namespace lake
+class DeltaColumnGroupLoader;
 } // namespace starrocks
 
 namespace starrocks {
 
+class ColumnAccessPath;
 class ColumnPredicate;
 struct RowidRangeOption;
 using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
@@ -57,15 +57,13 @@ public:
     DisjunctivePredicates delete_predicates;
 
     // used for updatable tablet to get delvec
+    std::shared_ptr<DelvecLoader> delvec_loader;
     bool is_primary_keys = false;
     uint64_t tablet_id = 0;
     uint32_t rowset_id = 0;
     int64_t version = 0;
-    KVStore* meta = nullptr;
-
-    // used for lake table
-    bool is_lake_table = false;
-    lake::UpdateManager* update_mgr = nullptr;
+    // used for primary key tablet to get delta column group
+    std::shared_ptr<DeltaColumnGroupLoader> dcg_loader;
 
     // REQUIRED (null is not allowed)
     OlapReaderStatistics* stats = nullptr;
@@ -73,6 +71,7 @@ public:
     RuntimeProfile* profile = nullptr;
 
     bool use_page_cache = false;
+    bool fill_data_cache = true;
 
     ReaderType reader_type = READER_QUERY;
     int chunk_size = DEFAULT_CHUNK_SIZE;
@@ -82,12 +81,16 @@ public:
 
     bool has_delete_pred = false;
 
-    RowidRangeOptionPtr rowid_range_option = nullptr;
+    SparseRangePtr rowid_range_option = nullptr;
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
 
     OlapRuntimeScanRangePruner runtime_range_pruner;
 
     const std::atomic<bool>* is_cancelled = nullptr;
+
+    std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
+
+    RowsetId rowsetid;
 
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;

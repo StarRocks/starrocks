@@ -91,11 +91,13 @@ public class ExportPendingTask extends PriorityLeaderTask {
             return;
         }
 
-        // make snapshots
-        Status snapshotStatus = makeSnapshots();
-        if (!snapshotStatus.ok()) {
-            job.cancelInternal(ExportFailMsg.CancelType.RUN_FAIL, snapshotStatus.getErrorMsg());
-            return;
+        if (!job.exportOlapTable()) {
+            // make snapshots
+            Status snapshotStatus = makeSnapshots();
+            if (!snapshotStatus.ok()) {
+                job.cancelInternal(ExportFailMsg.CancelType.RUN_FAIL, snapshotStatus.getErrorMsg());
+                return;
+            }
         }
 
         if (job.updateState(ExportJob.JobState.EXPORTING)) {

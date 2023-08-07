@@ -20,6 +20,7 @@
 #include "exec/pipeline/scan/olap_schema_scan_context.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "runtime/runtime_state.h"
+#include "storage/chunk_helper.h"
 
 namespace starrocks {
 class SchemaScannerParam;
@@ -29,7 +30,7 @@ namespace pipeline {
 
 class OlapSchemaChunkSource final : public ChunkSource {
 public:
-    OlapSchemaChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+    OlapSchemaChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
                           const OlapSchemaScanContextPtr& ctx);
 
     ~OlapSchemaChunkSource() override;
@@ -54,6 +55,8 @@ private:
     // So a mapping relationship between the slot list of schema_scanner and the tuple slot list is needed
     // (it can be understood as the relationship between input slots and output slots of schema_scan)
     std::vector<int> _index_map;
+
+    ChunkAccumulator _accumulator;
 };
 } // namespace pipeline
 } // namespace starrocks

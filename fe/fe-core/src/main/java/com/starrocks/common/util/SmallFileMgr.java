@@ -39,12 +39,17 @@ import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Table;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.DropFileStmt;
@@ -80,13 +85,21 @@ public class SmallFileMgr implements Writable {
     public static final Logger LOG = LogManager.getLogger(SmallFileMgr.class);
 
     public static class SmallFile implements Writable {
+        @SerializedName("db")
         public long dbId;
+        @SerializedName("ct")
         public String catalog;
+        @SerializedName("nm")
         public String name;
+        @SerializedName("id")
         public long id;
+        @SerializedName("ce")
         public String content;
+        @SerializedName("sz")
         public long size;
+        @SerializedName("m5")
         public String md5;
+        @SerializedName("ic")
         public boolean isContent;
 
         private SmallFile() {
@@ -528,30 +541,49 @@ public class SmallFileMgr implements Writable {
         int size = in.readInt();
         for (int i = 0; i < size; i++) {
             SmallFile smallFile = SmallFile.read(in);
-            idToFiles.put(smallFile.id, smallFile);
-            SmallFiles smallFiles = files.get(smallFile.dbId, smallFile.catalog);
-            if (smallFiles == null) {
-                smallFiles = new SmallFiles();
-                files.put(smallFile.dbId, smallFile.catalog, smallFiles);
-            }
-            try {
-                smallFiles.addFile(smallFile.name, smallFile);
-            } catch (DdlException e) {
-                LOG.warn(e);
-            }
+            putToFiles(smallFile);
         }
     }
 
     public long loadSmallFiles(DataInputStream in, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_52) {
-            readFields(in);
-        }
+        readFields(in);
         LOG.info("finished replay smallFiles from image");
         return checksum;
+    }
+
+    public void loadSmallFilesV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockEOFException, SRMetaBlockException {
+        int size = reader.readInt();
+        while (size-- > 0) {
+            SmallFile smallFile = reader.readJson(SmallFile.class);
+            putToFiles(smallFile);
+        }
+    }
+
+    private void putToFiles(SmallFile smallFile) {
+        idToFiles.put(smallFile.id, smallFile);
+        SmallFiles smallFiles = files.get(smallFile.dbId, smallFile.catalog);
+        if (smallFiles == null) {
+            smallFiles = new SmallFiles();
+            files.put(smallFile.dbId, smallFile.catalog, smallFiles);
+        }
+        try {
+            smallFiles.addFile(smallFile.name, smallFile);
+        } catch (DdlException e) {
+            LOG.warn("add file: {} failed", smallFile.name, e);
+        }
     }
 
     public long saveSmallFiles(DataOutputStream out, long checksum) throws IOException {
         write(out);
         return checksum;
+    }
+
+    public void saveSmallFilesV2(DataOutputStream out) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(out, SRMetaBlockID.SMALL_FILE_MGR, 1 + idToFiles.size());
+        writer.writeJson(idToFiles.size());
+        for (SmallFile file : idToFiles.values()) {
+            writer.writeJson(file);
+        }
+        writer.close();
     }
 }

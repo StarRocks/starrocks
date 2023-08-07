@@ -23,7 +23,6 @@ import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -39,13 +38,13 @@ public class QueryQueueManager {
     private static final Logger LOG = LogManager.getLogger(QueryQueueManager.class);
 
     private static class PendingQueryInfo {
-        private final Coordinator coordinator;
+        private final DefaultCoordinator coordinator;
         private final ConnectContext connectCtx;
         private final ReentrantLock lock;
         private final Condition condition;
         private boolean isCancelled = false;
 
-        private PendingQueryInfo(ConnectContext connectCtx, ReentrantLock lock, Coordinator coordinator) {
+        private PendingQueryInfo(ConnectContext connectCtx, ReentrantLock lock, DefaultCoordinator coordinator) {
             Preconditions.checkState(connectCtx != null);
             this.coordinator = coordinator;
             this.connectCtx = connectCtx;
@@ -102,23 +101,23 @@ public class QueryQueueManager {
 
     public void updateResourceUsage(long backendId, int numRunningQueries, long memLimitBytes, long memUsedBytes,
                                     int cpuUsedPermille) {
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
-        if (backend == null) {
-            LOG.warn("backend doesn't exist. id: {}", backendId);
+        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(backendId);
+        if (node == null) {
+            LOG.warn("backend or computed node doesn't exist. id: {}", backendId);
             return;
         }
 
         try {
             lock.lock();
 
-            backend.updateResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
+            node.updateResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
             maybeNotifyAfterLock();
         } finally {
             lock.unlock();
         }
     }
 
-    public void maybeWait(ConnectContext connectCtx, Coordinator coord) throws UserException, InterruptedException {
+    public void maybeWait(ConnectContext connectCtx, DefaultCoordinator coord) throws UserException, InterruptedException {
         if (!needCheckQueue(coord)) {
             return;
         }
@@ -196,7 +195,7 @@ public class QueryQueueManager {
         }
     }
 
-    public boolean enableCheckQueue(Coordinator coord) {
+    public boolean enableCheckQueue(DefaultCoordinator coord) {
         if (coord.isLoadType()) {
             return GlobalVariable.isEnableQueryQueueLoad();
         }
@@ -214,7 +213,7 @@ public class QueryQueueManager {
         return false;
     }
 
-    public boolean needCheckQueue(Coordinator coord) {
+    public boolean needCheckQueue(DefaultCoordinator coord) {
         // The queries only using schema meta will never been queued, because a MySQL client will
         // query schema meta after the connection is established.
         List<ScanNode> scanNodes = coord.getScanNodes();
@@ -223,7 +222,7 @@ public class QueryQueueManager {
     }
 
     public boolean canRunMore() {
-        return GlobalStateMgr.getCurrentSystemInfo().getBackends().stream()
+        return GlobalStateMgr.getCurrentSystemInfo().backendAndComputeNodeStream()
                 .noneMatch(ComputeNode::isResourceOverloaded);
     }
 

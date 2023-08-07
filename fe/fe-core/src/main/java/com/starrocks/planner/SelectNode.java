@@ -89,4 +89,9 @@ public class SelectNode extends PlanNode {
     public boolean canUsePipeLine() {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
     }
+
+    @Override
+    public boolean canUseRuntimeAdaptiveDop() {
+        return getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
+    }
 }

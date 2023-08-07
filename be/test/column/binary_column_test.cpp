@@ -20,6 +20,7 @@
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
 #include "testutil/parallel_test.h"
 
 namespace starrocks {
@@ -139,7 +140,7 @@ PARALLEL_TEST(BinaryColumnTest, test_filter) {
         column->append(std::to_string(i));
     }
 
-    Column::Filter filter;
+    Filter filter;
     for (int k = 0; k < 100; ++k) {
         filter.push_back(k % 2);
     }
@@ -559,7 +560,7 @@ PARALLEL_TEST(BinaryColumnTest, test_update_rows) {
     auto c2 = BinaryColumn::create();
     c2->append_datum("pq");
     c2->append_datum("rstu");
-    ASSERT_TRUE(c1->update_rows(*c2.get(), replace_idxes.data()).ok());
+    c1->update_rows(*c2.get(), replace_idxes.data());
 
     auto slices = c1->get_data();
     EXPECT_EQ(5, c1->size());
@@ -572,7 +573,7 @@ PARALLEL_TEST(BinaryColumnTest, test_update_rows) {
     auto c3 = BinaryColumn::create();
     c3->append_datum("ab");
     c3->append_datum("cdef");
-    ASSERT_TRUE(c1->update_rows(*c3.get(), replace_idxes.data()).ok());
+    c1->update_rows(*c3.get(), replace_idxes.data());
 
     slices = c1->get_data();
     EXPECT_EQ(5, c1->size());
@@ -586,7 +587,7 @@ PARALLEL_TEST(BinaryColumnTest, test_update_rows) {
     std::vector<uint32_t> new_replace_idxes = {0, 1};
     c4->append_datum("ab");
     c4->append_datum("cdef");
-    ASSERT_TRUE(c1->update_rows(*c4.get(), new_replace_idxes.data()).ok());
+    c1->update_rows(*c4.get(), new_replace_idxes.data());
 
     slices = c1->get_data();
     EXPECT_EQ(5, c1->size());
@@ -652,6 +653,16 @@ PARALLEL_TEST(BinaryColumnTest, test_replicate) {
     ASSERT_EQ("abc", slices[2]);
     ASSERT_EQ("def", slices[3]);
     ASSERT_EQ("def", slices[4]);
+}
+
+PARALLEL_TEST(BinaryColumnTest, test_reference_memory_usage) {
+    auto column = BinaryColumn::create();
+    column->append("");
+    column->append("1");
+    column->append("23");
+    column->append("456");
+
+    ASSERT_EQ(0, column->Column::reference_memory_usage());
 }
 
 } // namespace starrocks

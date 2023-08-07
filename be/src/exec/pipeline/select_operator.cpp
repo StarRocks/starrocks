@@ -90,6 +90,13 @@ Status SelectOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     return Status::OK();
 }
 
+Status SelectOperator::reset_state(starrocks::RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) {
+    _curr_chunk.reset();
+    _pre_output_chunk.reset();
+    _is_finished = false;
+    return Status::OK();
+}
+
 Status SelectOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
     RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));

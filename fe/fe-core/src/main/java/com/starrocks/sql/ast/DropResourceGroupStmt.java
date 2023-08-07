@@ -14,12 +14,19 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 // Drop ResourceGroup specified by name
 // DROP RESOURCE GROUP <name>
 public class DropResourceGroupStmt extends DdlStmt {
     private final String name;
 
     public DropResourceGroupStmt(String name) {
+        this(name, NodePosition.ZERO);
+    }
+
+    public DropResourceGroupStmt(String name, NodePosition pos) {
+        super(pos);
         this.name = name;
     }
 

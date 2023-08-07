@@ -53,7 +53,7 @@ class ThreadPool;
 // Each method corresponds to one RPC from FE Master, see BackendService.
 class AgentServer {
 public:
-    explicit AgentServer(ExecEnv* exec_env);
+    explicit AgentServer(ExecEnv* exec_env, bool is_compute_node);
 
     ~AgentServer();
 
@@ -68,6 +68,8 @@ public:
     void release_snapshot(TAgentResult& agent_result, const std::string& snapshot_path);
 
     void publish_cluster_state(TAgentResult& agent_result, const TAgentPublishRequest& request);
+
+    void update_max_thread_by_type(int type, int new_val);
 
     // |type| should be one of `TTaskType::type`, didn't define type as  `TTaskType::type` because
     // I don't want to include the header file `gen_cpp/Types_types.h` here.

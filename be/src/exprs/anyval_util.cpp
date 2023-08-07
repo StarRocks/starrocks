@@ -105,10 +105,33 @@ FunctionContext::TypeDesc AnyValUtil::column_type_to_type_desc(const TypeDescrip
         out.type = TYPE_NULL;
         break;
     case TYPE_ARRAY:
-    case TYPE_MAP:
-    case TYPE_STRUCT:
+    case TYPE_MAP: {
         out.type = type.type;
+        for (const auto& child : type.children) {
+            if (child.is_unknown_type()) {
+                // TODO(SmithCruise)
+                // For Map type, if map's key or value is pruned, that column's type will be set to unknown for
+                // partial materialize.
+                // We should not use TYPE_UNKNOWN in the future, use another type, it may misleading other people.
+                FunctionContext::TypeDesc child_out;
+                child_out.type = TYPE_UNKNOWN;
+                out.children.emplace_back(child_out);
+            } else {
+                out.children.emplace_back(column_type_to_type_desc(child));
+            }
+        }
         break;
+    }
+    case TYPE_STRUCT: {
+        out.type = type.type;
+        for (const auto& name : type.field_names) {
+            out.field_names.emplace_back(name);
+        }
+        for (const auto& child : type.children) {
+            out.children.emplace_back(column_type_to_type_desc(child));
+        }
+        break;
+    }
     case TYPE_DECIMAL32:
         out.type = TYPE_DECIMAL32;
         out.precision = type.precision;
@@ -129,6 +152,7 @@ FunctionContext::TypeDesc AnyValUtil::column_type_to_type_desc(const TypeDescrip
         break;
     case TYPE_FUNCTION:
         out.type = TYPE_FUNCTION;
+        break;
     case TYPE_VARBINARY:
         out.type = TYPE_VARBINARY;
         out.len = type.len;

@@ -257,6 +257,12 @@ public class RoutineLoadJobTest {
     }
 
     @Test
+    public void testPartialUpdateMode(@Mocked GlobalStateMgr globalStateMgr) {
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+        Assert.assertEquals(routineLoadJob.getPartialUpdateMode(), "row");
+    }
+
+    @Test
     public void testUpdateTotalMoreThanBatch() {
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
@@ -280,18 +286,24 @@ public class RoutineLoadJobTest {
         String desiredConcurrentNumber = "3";
         String maxBatchInterval = "60";
         String maxErrorNumber = "10000";
+        String maxFilterRatio = "0.3";
         String maxBatchRows = "200000";
         String strictMode = "true";
         String timeZone = "UTC";
         String jsonPaths = "[\\\"$.category\\\",\\\"$.author\\\",\\\"$.price\\\",\\\"$.timestamp\\\"]";
         String stripOuterArray = "true";
         String jsonRoot = "$.RECORDS";
+        String taskTimeout = "20";
+        String taskConsumeTime = "3";
         String originStmt = "alter routine load for db.job1 " +
                 "properties (" +
                 "   \"desired_concurrent_number\" = \"" + desiredConcurrentNumber + "\"," +
                 "   \"max_batch_interval\" = \"" + maxBatchInterval + "\"," +
                 "   \"max_error_number\" = \"" + maxErrorNumber + "\"," +
+                "   \"max_filter_ratio\" = \"" + maxFilterRatio + "\"," +
                 "   \"max_batch_rows\" = \"" + maxBatchRows + "\"," +
+                "   \"task_consume_second\" = \"" + taskConsumeTime + "\"," +
+                "   \"task_timeout_second\" = \"" + taskTimeout + "\"," +
                 "   \"strict_mode\" = \"" + strictMode + "\"," +
                 "   \"timezone\" = \"" + timeZone + "\"," +
                 "   \"jsonpaths\" = \"" + jsonPaths + "\"," +
@@ -299,6 +311,10 @@ public class RoutineLoadJobTest {
                 "   \"json_root\" = \"" + jsonRoot + "\"" +
                 ")";
         AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(originStmt, connectContext);
+        for (String key : stmt.getAnalyzedJobProperties().keySet()) {
+            System.out.println("Key: " + key);
+            System.out.println("Value: " + stmt.getAnalyzedJobProperties().get(key));
+        }
         routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
                 stmt.getDataSourceProperties(), new OriginStatement(originStmt, 0), true);
         Assert.assertEquals(Integer.parseInt(desiredConcurrentNumber),
@@ -307,6 +323,12 @@ public class RoutineLoadJobTest {
                 (long) Deencapsulation.getField(routineLoadJob, "taskSchedIntervalS"));
         Assert.assertEquals(Long.parseLong(maxErrorNumber),
                 (long) Deencapsulation.getField(routineLoadJob, "maxErrorNum"));
+        Assert.assertEquals(Double.parseDouble(maxFilterRatio),
+                (double) Deencapsulation.getField(routineLoadJob, "maxFilterRatio"), 0.01);
+        Assert.assertEquals(Long.parseLong(taskTimeout),
+                (long) Deencapsulation.getField(routineLoadJob, "taskTimeoutSecond"));
+        Assert.assertEquals(Long.parseLong(taskConsumeTime),
+                (long) Deencapsulation.getField(routineLoadJob, "taskConsumeSecond"));
         Assert.assertEquals(Long.parseLong(maxBatchRows),
                 (long) Deencapsulation.getField(routineLoadJob, "maxBatchRows"));
         Assert.assertEquals(Boolean.parseBoolean(strictMode), routineLoadJob.isStrictMode());

@@ -1,0 +1,82 @@
+-- name: test_create_default_random_distribution_table
+create table t(k int, v int);
+insert into t values(1,1);
+select * from t;
+-- name: test_create_random_distribution_table
+create table t(k int, v int);
+create table t1(k int, v int) duplicate key(k);
+create table t2(k int, v int) duplicate key(k) distributed by random;
+create table t3(k int, v int) duplicate key(k) distributed by random buckets 10;
+show create table t3;
+create table t4(k int, v int) distributed by random;
+create table t5(k int, v int) distributed by random buckets 10;
+show create table t5;
+-- name: test_partition_random_distribution
+create table t(k int, v int) partition by range(k) (partition p1 values less than ("0"));
+create table t1(k int, v int) partition by range(k) (partition p1 values less than ("0")) distributed by random;
+create table t2(k int, v int) partition by range(k) (partition p1 values less than ("0")) distributed by random buckets 10;
+show create table t2;
+insert into t2 values(-1,-1);
+select * from t2;
+-- name: test_add_partition
+create table t(k int, v int) partition by range(k) (partition p1 values less than ("0")) distributed by random buckets 10;
+show create table t;
+alter table t add partition p2 values less than ("20");
+show create table t;
+alter table t add partition p3 values less than ("30") distributed by random buckets 20;
+show create table t;
+alter table t add partition p4 values less than ("40") distributed by random;
+show create table t;
+alter table t add partition p5 values less than ("50") distributed by hash(k) buckets 10;
+insert into t values(-1,-1),(5,5),(15,15),(35,35);
+select * from t;
+-- name: test_non_dup_random
+create table t1(k int, v int) duplicate key(k);
+create table t2(k int, v int) primary key(k);
+create table t2(k int, v int) primary key(k) distributed by random buckets 20;
+create table t3(k int, v int) unique key(k);
+create table t3(k int, v int) unique key(k) distributed by random buckets 20;
+create table t4(k int, v int sum) aggregate key(k);
+create table t4(k int, v int sum) aggregate key(k) distributed by random buckets 20;
+drop table t4;
+-- name: test_bucket_shuffle
+create table t(k int);
+insert into t values(1),(1);
+create table t2(k int, v int) distributed by hash(k);
+insert into t2 values(1,1),(1,2),(1,3);
+select * from t join t2 on t.k = t2.k;
+-- name: test_automatic_partition_random_distribute
+create table t(k date, v int) partition by date_trunc('day', k) properties('replication_num'='3');
+insert into t values('2023-02-14', 2),('2033-03-01',2);
+select * from t;
+show create table t;
+-- name: test_sync_mv
+create table t(k int, v int);
+create materialized view tv as select k, sum(v) from t group by k;
+insert into t values(1,1),(1,2);
+select sum(v) from t;
+-- name: test_async_mv
+create table t(k int, v int);
+create materialized view tva REFRESH ASYNC as select k, sum(v) from t group by k;
+show create materialized view tva;
+create materialized view tvb distributed by random as select k, sum(v) from t group by k;
+show create materialized view tvb;
+create materialized view tvs as select k, sum(v) from t group by k;
+show create materialized view tvs;
+show alter table rollup;
+
+-- name: test_select_async_mv
+create table t(k int, v int);
+insert into t values(1,1);
+create materialized view tva REFRESH ASYNC as select k, sum(v) from t group by k;
+select sleep(2);
+ explain select sum(v) from t;
+
+-- name: test_ctas
+create table t(k int, v int);
+create table c as select * from t;
+show create table c;
+create table c1 distributed by random as select * from t;
+show create table c1;
+create table c2 distributed by random buckets 10 as select * from t;
+show create table c2;

@@ -37,7 +37,9 @@ public class Constants {
     // TaskSource is used to distinguish special Processors for processing tasks from different sources.
     public enum TaskSource {
         CTAS,
-        MV
+        MV,
+        INSERT,
+        PIPE,
     }
 
     // PENDING -> RUNNING -> FAILED

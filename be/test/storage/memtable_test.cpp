@@ -20,6 +20,7 @@
 #include <memory>
 #include <random>
 
+#include "column/datum_tuple.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/split.h"
 #include "runtime/descriptor_helper.h"
@@ -39,7 +40,8 @@ namespace starrocks {
 
 using namespace std;
 
-static shared_ptr<TabletSchema> create_tablet_schema(const string& desc, int nkey, KeysType key_type) {
+static shared_ptr<TabletSchema> create_tablet_schema(const string& desc, int nkey, KeysType key_type,
+                                                     std::vector<ColumnId> sort_key_idxes = {}) {
     TabletSchemaPB tspb;
     std::vector<std::string> cs = strings::Split(desc, ",", strings::SkipWhitespace());
     uint32_t cid = 0;
@@ -68,18 +70,21 @@ static shared_ptr<TabletSchema> create_tablet_schema(const string& desc, int nke
     tspb.set_keys_type(key_type);
     tspb.set_next_column_unique_id(cid);
     tspb.set_num_short_key_columns(nkey);
+    for (const auto sort_key_idx : sort_key_idxes) {
+        tspb.add_sort_key_idxes(sort_key_idx);
+    }
     return std::make_shared<TabletSchema>(tspb);
 }
 
-static unique_ptr<VectorizedSchema> create_schema(const string& desc, int nkey) {
-    unique_ptr<VectorizedSchema> ret;
-    VectorizedFields fields;
+static unique_ptr<Schema> create_schema(const string& desc, int nkey) {
+    unique_ptr<Schema> ret;
+    Fields fields;
     std::vector<std::string> cs = strings::Split(desc, ",", strings::SkipWhitespace());
     for (int i = 0; i < cs.size(); i++) {
         auto& c = cs[i];
         std::vector<std::string> fs = strings::Split(c, " ", strings::SkipWhitespace());
         if (fs.size() < 2) {
-            CHECK(false) << "create_tablet_schema bad schema desc";
+            CHECK(false) << "create_schema bad schema desc";
         }
         ColumnId cid = i;
         string name = fs[0];
@@ -107,12 +112,13 @@ static unique_ptr<VectorizedSchema> create_schema(const string& desc, int nkey) 
         if (fs.size() == 3 && fs[2] == "null") {
             nullable = true;
         }
-        auto fd = new VectorizedField(cid, name, type, nullable);
+        auto fd = new Field(cid, name, type, nullable);
         fd->set_is_key(i < nkey);
         fd->set_aggregate_method(i < nkey ? STORAGE_AGGREGATE_NONE : STORAGE_AGGREGATE_REPLACE);
+        fd->set_uid(cid);
         fields.emplace_back(fd);
     }
-    ret = std::make_unique<VectorizedSchema>(std::move(fields));
+    ret = std::make_unique<Schema>(std::move(fields));
     return ret;
 }
 
@@ -196,12 +202,12 @@ static shared_ptr<Chunk> gen_chunk(const std::vector<SlotDescriptor*>& slots, si
 
 class MemTableTest : public ::testing::Test {
 public:
-    void MySetUp(const string& schema_desc, const string& slot_desc, int nkey, KeysType ktype, const string& root) {
+    void MySetUp(const shared_ptr<TabletSchema> schema, const string& slot_desc, const string& root) {
         _root_path = root;
         fs::remove_all(_root_path);
         fs::create_directories(_root_path);
         _mem_tracker = std::make_unique<MemTracker>(-1, "root");
-        _schema = create_tablet_schema(schema_desc, nkey, ktype);
+        _schema = schema;
         _slots = create_tuple_desc_slots(&_runtime_state, slot_desc, _obj_pool);
         RowsetWriterContext writer_context;
         RowsetId rowset_id;
@@ -235,13 +241,14 @@ public:
     const std::vector<SlotDescriptor*>* _slots = nullptr;
     unique_ptr<RowsetWriter> _writer;
     unique_ptr<MemTable> _mem_table;
-    VectorizedSchema _vectorized_schema;
+    Schema _vectorized_schema;
     unique_ptr<MemTableRowsetWriterSink> _mem_table_sink;
 };
 
 TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
     const string path = "./ut_dir/MemTableTest_testDupKeysInsertFlushRead";
-    MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::DUP_KEYS, path);
+    MySetUp(create_tablet_schema("pk int,name varchar,pv int", 1, KeysType::DUP_KEYS), "pk int,name varchar,pv int",
+            path);
     const size_t n = 3000;
     auto pchunk = gen_chunk(*_slots, n);
     vector<uint32_t> indexes;
@@ -254,7 +261,7 @@ TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
     ASSERT_TRUE(_mem_table->finalize().ok());
     ASSERT_OK(_mem_table->flush());
     RowsetSharedPtr rowset = *_writer->build();
-    unique_ptr<VectorizedSchema> read_schema = create_schema("pk int", 1);
+    unique_ptr<Schema> read_schema = create_schema("pk int", 1);
     OlapReaderStatistics stats;
     RowsetReadOptions rs_opts;
     rs_opts.sorted = false;
@@ -284,7 +291,8 @@ TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
 
 TEST_F(MemTableTest, testUniqKeysInsertFlushRead) {
     const string path = "./ut_dir/MemTableTest_testUniqKeysInsertFlushRead";
-    MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::UNIQUE_KEYS, path);
+    MySetUp(create_tablet_schema("pk int,name varchar,pv int", 1, KeysType::UNIQUE_KEYS), "pk int,name varchar,pv int",
+            path);
     const size_t n = 1000;
     auto pchunk = gen_chunk(*_slots, n);
     vector<uint32_t> indexes;
@@ -301,7 +309,7 @@ TEST_F(MemTableTest, testUniqKeysInsertFlushRead) {
     ASSERT_TRUE(_mem_table->finalize().ok());
     ASSERT_OK(_mem_table->flush());
     RowsetSharedPtr rowset = *_writer->build();
-    unique_ptr<VectorizedSchema> read_schema = create_schema("pk int", 1);
+    unique_ptr<Schema> read_schema = create_schema("pk int", 1);
     OlapReaderStatistics stats;
     RowsetReadOptions rs_opts;
     rs_opts.sorted = false;
@@ -330,7 +338,7 @@ TEST_F(MemTableTest, testUniqKeysInsertFlushRead) {
 
 TEST_F(MemTableTest, testPrimaryKeysWithDeletes) {
     const string path = "./ut_dir/MemTableTest_testPrimaryKeysWithDeletes";
-    MySetUp("pk bigint,v1 int", "pk bigint,v1 int,__op tinyint", 1, KeysType::PRIMARY_KEYS, path);
+    MySetUp(create_tablet_schema("pk bigint,v1 int", 1, KeysType::PRIMARY_KEYS), "pk bigint,v1 int,__op tinyint", path);
     const size_t n = 1000;
     shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*_slots, n);
     for (int i = 0; i < n; i++) {
@@ -358,9 +366,75 @@ TEST_F(MemTableTest, testPrimaryKeysWithDeletes) {
     EXPECT_EQ(1, rowset->rowset_meta()->get_num_delete_files());
 }
 
+TEST_F(MemTableTest, testPrimaryKeysNullableSortKey) {
+    const string path = "./ut_dir/MemTableTest_testPrimaryKeysNullableSortKey";
+    auto tablet_schema = create_tablet_schema("pk bigint,v1 int, v2 tinyint null", 1, KeysType::PRIMARY_KEYS, {2});
+    MySetUp(tablet_schema, "pk bigint,v1 int, v2 tinyint null", path);
+    const size_t n = 10;
+    shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*_slots, n);
+    for (int i = 0; i < n; i++) {
+        chunk->get_column_by_index(0)->append_datum(Datum(static_cast<int64_t>(i)));
+        chunk->get_column_by_index(1)->append_datum(Datum(static_cast<int32_t>(n - 1 - i)));
+        if (i % 2) {
+            chunk->get_column_by_index(2)->append_datum(Datum(static_cast<int8_t>(i)));
+        } else {
+            chunk->get_column_by_index(2)->append_nulls(1);
+        }
+    }
+    vector<uint32_t> indexes;
+    indexes.reserve(n);
+    for (int i = 0; i < n; i++) {
+        indexes.emplace_back(i);
+    }
+    for (int i = 0; i < n; i++) {
+        indexes.emplace_back(i);
+    }
+    std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
+    _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(_mem_table->finalize().ok());
+    ASSERT_OK(_mem_table->flush());
+    RowsetSharedPtr rowset = *_writer->build();
+
+    shared_ptr<Chunk> expected_chunk = ChunkHelper::new_chunk(*_slots, n);
+    for (int i = 0; i < n / 2; i++) {
+        expected_chunk->get_column_by_index(0)->append_datum(Datum(static_cast<int64_t>(2 * i)));
+        expected_chunk->get_column_by_index(1)->append_datum(Datum(static_cast<int32_t>(n - 1 - 2 * i)));
+        expected_chunk->get_column_by_index(2)->append_nulls(1);
+    }
+
+    for (int i = 0; i < n / 2; i++) {
+        expected_chunk->get_column_by_index(0)->append_datum(Datum(static_cast<int64_t>(2 * i + 1)));
+        expected_chunk->get_column_by_index(1)->append_datum(Datum(static_cast<int32_t>(n - 2 - 2 * i)));
+        expected_chunk->get_column_by_index(2)->append_datum(Datum(static_cast<int8_t>(2 * i + 1)));
+    }
+
+    Schema read_schema = ChunkHelper::convert_schema(*tablet_schema);
+    OlapReaderStatistics stats;
+    RowsetReadOptions rs_opts;
+    rs_opts.sorted = false;
+    rs_opts.use_page_cache = false;
+    rs_opts.stats = &stats;
+    auto itr = rowset->new_iterator(read_schema, rs_opts);
+    std::shared_ptr<Chunk> read_chunk = ChunkHelper::new_chunk(read_schema, 4096);
+    size_t pkey_read = 0;
+    while (true) {
+        Status st = (*itr)->get_next(read_chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        for (auto i = 0; i < read_chunk->num_rows(); ++i) {
+            EXPECT_EQ(expected_chunk->get(pkey_read + i).compare((*itr)->schema(), read_chunk->get(i)), 0);
+        }
+        pkey_read += read_chunk->num_rows();
+        read_chunk->reset();
+    }
+    ASSERT_EQ(n, pkey_read);
+}
+
 TEST_F(MemTableTest, testPrimaryKeysSizeLimitSinglePK) {
     const string path = "./ut_dir/MemTableTest_testPrimaryKeysSizeLimitSinglePK";
-    MySetUp("pk varchar,v1 int", "pk varchar,v1 int,__op tinyint", 1, KeysType::PRIMARY_KEYS, path);
+    MySetUp(create_tablet_schema("pk varchar,v1 int", 1, KeysType::PRIMARY_KEYS), "pk varchar,v1 int,__op tinyint",
+            path);
     const size_t n = 1000;
     shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*_slots, n);
     string tmpstr(128, 's');
@@ -389,8 +463,8 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitSinglePK) {
 
 TEST_F(MemTableTest, testPrimaryKeysSizeLimitCompositePK) {
     const string path = "./ut_dir/MemTableTest_testPrimaryKeysSizeLimitCompositePK";
-    MySetUp("pk int, pk varchar, pk smallint, pk boolean,v1 int",
-            "pk int, pk varchar, pk smallint, pk boolean ,v1 int,__op tinyint", 4, KeysType::PRIMARY_KEYS, path);
+    MySetUp(create_tablet_schema("pk int, pk varchar, pk smallint, pk boolean,v1 int", 4, KeysType::PRIMARY_KEYS),
+            "pk int, pk varchar, pk smallint, pk boolean ,v1 int,__op tinyint", path);
     const size_t n = 1000;
     shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*_slots, n);
     string tmpstr(121, 's');

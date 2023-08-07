@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "column/chunk.h"
+#include "column/column_access_path.h"
 #include "common/status.h"
 #include "exec/olap_utils.h"
 #include "exprs/expr.h"
@@ -39,9 +40,11 @@ struct TabletScannerParams {
     const std::vector<ExprContext*>* conjunct_ctxs = nullptr;
 
     const std::vector<std::string>* unused_output_columns = nullptr;
+    const std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
 
     bool skip_aggregation = false;
     bool need_agg_finalize = true;
+    bool update_num_scan_range = false;
 };
 
 class TabletScanner {
@@ -64,7 +67,7 @@ public:
     int64_t num_rows_read() const { return _num_rows_read; }
 
     // REQUIRES: `init(RuntimeState*, const TabletScannerParams&)` has been called.
-    const VectorizedSchema& chunk_schema() const { return _prj_iter->output_schema(); }
+    const Schema& chunk_schema() const { return _prj_iter->output_schema(); }
 
     void set_keep_priority(bool v) { _keep_priority = v; }
     bool keep_priority() const { return _keep_priority; }
@@ -95,6 +98,7 @@ private:
     bool _skip_aggregation = false;
     bool _need_agg_finalize = false;
     bool _has_update_counter = false;
+    bool _update_num_scan_range = false;
 
     TabletReaderParams _params;
     std::shared_ptr<TabletReader> _reader;

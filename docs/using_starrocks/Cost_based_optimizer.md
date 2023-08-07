@@ -40,7 +40,7 @@ StarRocks uses equi-height histograms, which are constructed on several buckets.
 
 **Histograms are applicable to columns with highly skewed data and frequent queries.If your table data is uniformly distributed, you do not need to create histograms. Histograms can be created only on columns of numeric, DATE, DATETIME, or string types.**
 
-Currently, StarRocks supports only manual collection of histograms. Histograms are stored in the `_statistics_.histogram_statistics` table.
+Currently, StarRocks supports only manual collection of histograms. Histograms are stored in the `histogram_statistics` table of the `_statistics_` database.
 
 ## Collection types and methods
 
@@ -50,8 +50,8 @@ StarRocks supports full and sampled collection, both can be performed automatica
 
 | **Collection type** | **Collection method** | **Description**                                              | **Advantage and disadvantage**                               |
 | ------------------- | --------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| Full collection     | Automatic/manual      | Scans the full table to gather statistics.Statistics are collected partition. If a partition has no data change, data will not be collected from this partition, reducing resource consumption.Full statistics are stored in the `_statistics_.column_statistics` table. | Advantage: The statistics are accurate, which helps the CBO make accurate estimation.Disadvantage: It consumes system resources and is slow. |
-| Sampled collection  | Automatic/manual      | Evenly extracts `N` rows of data from each partition of a table.Statistics are collected by table. Basic statistics of each column are stored as one record. Cardinality information (ndv) of a column is estimated based on the sampled data, which is not accurate.Sampled statistics are stored in the `_statistics_.table_statistic_v1` table. | Advantage: It consumes less system resources and is fast.Disadvantage: The statistics are not complete, which may affect the accuracy of cost estimation. |
+| Full collection     | Automatic/manual      | Scans the full table to gather statistics.Statistics are collected partition. If a partition has no data change, data will not be collected from this partition, reducing resource consumption.Full statistics are stored in the `_statistics_.column_statistics` table. | Advantage: The statistics are accurate, which helps the CBO make accurate estimation.Disadvantage: It consumes system resources and is slow. From 2.5 onwards, StarRocks allows you to specify an automatic collection period, which reduces resource consumption. |
+| Sampled collection  | Automatic/manual      | Evenly extracts `N` rows of data from each partition of a table.Statistics are collected by table. Basic statistics of each column are stored as one record. Cardinality information (ndv) of a column is estimated based on the sampled data, which is not accurate. Sampled statistics are stored in the `_statistics_.table_statistic_v1` table. | Advantage: It consumes less system resources and is fast.Disadvantage: The statistics are not complete, which may affect the accuracy of cost estimation. |
 
 ## Collect statistics
 
@@ -60,6 +60,8 @@ StarRocks offers flexible statistics collection methods. You can choose automati
 ### Automatic full collection
 
 For basic statistics, StarRocks automatically collects full statistics of a table by default, without requiring manual operations. For tables on which no statistics have been collected, StarRocks automatically collects statistics within the scheduling period. For tables on which statistics have been collected, StarRocks updates the total number of rows and modified rows in the tables, and persists this information regularly for judging whether to trigger automatic collection.
+
+From 2.5 onwards, StarRocks allows you to specify a collection period for automatic full collection, which prevents cluster performance jitter caused by automatic full collection. This period is specified by FE parameters `statistic_auto_analyze_start_time` and `statistic_auto_analyze_end_time`.
 
 Conditions that trigger automatic collection:
 
@@ -71,6 +73,8 @@ Conditions that trigger automatic collection:
 
 - Partition data has been modified. Partitions whose data is not modified will not be collected again.
 
+- The collection time falls within the range of the configured collection period. (The default collection period is all day.)
+
 Automatic full collection is enabled by default and run by the system using the default settings.
 
 The following table describes the default settings. If you need to modify them, run the **ADMIN SET CONFIG** command.
@@ -81,13 +85,16 @@ The following table describes the default settings. If you need to modify them, 
 | enable_collect_full_statistic         | BOOLEAN  | TRUE              | Whether to enable automatic full collection. This switch is turned on by default. |
 | statistic_collect_interval_sec        | LONG     | 300               | The interval for checking data updates during automatic collection. Unit: seconds. |
 | statistic_auto_collect_ratio          | FLOAT    | 0.8               | The threshold for determining  whether the statistics for automatic collection are healthy. If statistics health is below this threshold, automatic collection is triggered. |
-| statistics_max_full_collect_data_size | INT      | 100               | The size of the largest partition for automatic collection to collect data. Unit: GB.If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
+| statistic_max_full_collect_data_size | LONG      | 107374182400      | The size of the largest partition for automatic collection to collect data. Unit: Byte. If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
+| statistic_collect_max_row_count_per_query | INT  | 5000000000        | The maximum number of rows to query for a single analyze task. An analyze task will be split into multiple queries if this value is exceeded. |
+| statistic_auto_analyze_start_time | STRING      | 00:00:00   | The start time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
+| statistic_auto_analyze_end_time | STRING      | 23:59:59  | The end time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
 
 You can rely on automatic jobs for a majority of statistics collection, but if you have specific statistics requirements, you can manually create a task by executing the ANALYZE TABLE statement or customize an automatic task by executing the CREATE ANALYZE  statement.
 
 ### Manual collection
 
-You can use ANALYZE TABLE to create a manual collection task. By default, manual collection is a synchronous operation. You can also set it to an asynchronous operation. In asynchronous mode, the result for running ANALYZE TABLE is returned immediately after you run this command. However, the collection task will be running in the background and you do not have to wait for the result. Asynchronous collection is suitable for tables with large data volume, whereas synchronous collection is suitable for tables with small data volume. **Manual collection tasks are run only once after creation. You do not need to delete manual collection tasks.** You can check the status of the task by running SHOW ANALYZE STATUS.
+You can use ANALYZE TABLE to create a manual collection task. By default, manual collection is a synchronous operation. You can also set it to an asynchronous operation. In asynchronous mode, after you run ANALYZE TABLE, the system immediately returns whether this statement is successful. However, the collection task will be running in the background and you do not have to wait for the result. You can check the status of the task by running SHOW ANALYZE STATUS. Asynchronous collection is suitable for tables with large data volume, whereas synchronous collection is suitable for tables with small data volume. **Manual collection tasks are run only once after creation. You do not need to delete manual collection tasks.**
 
 #### Manually collect basic statistics
 
@@ -104,11 +111,11 @@ Parameter description:
   - SAMPLE: indicates sampled collection.
   - If no collection type is specified, full collection is used by default.
 
-- `col_name`: columns from which to collect statistics. Separate multiple columns with commas (;). If this parameter is not specified, the entire table is collected.
+- `col_name`: columns from which to collect statistics. Separate multiple columns with commas (`,`). If this parameter is not specified, the entire table is collected.
 
-- [WITH SYNC | ASYNC MODE]: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you not specify this parameter.
+- [WITH SYNC | ASYNC MODE]: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you do not specify this parameter.
 
-- `PROPERTIES`: custom parameters. If `PROPERTIES` is not specified, the default settings in the `fe.conf` file are used.
+- `PROPERTIES`: custom parameters. If `PROPERTIES` is not specified, the default settings in the `fe.conf` file are used. The properties that are actually used can be viewed via the `Properties` column in the output of SHOW ANALYZE STATUS.
 
 | **PROPERTIES**                | **Type** | **Default value** | **Description**                                              |
 | ----------------------------- | -------- | ----------------- | ------------------------------------------------------------ |
@@ -152,7 +159,7 @@ PROPERTIES (property [,property]);
 
 Parameter description:
 
-- `col_name`: columns from which to collect statistics. Separate multiple columns with commas (;). If this parameter is not specified, the entire table is collected. This parameter is required for histograms.
+- `col_name`: columns from which to collect statistics. Separate multiple columns with commas (`,`). If this parameter is not specified, the entire table is collected. This parameter is required for histograms.
 
 - [WITH SYNC | ASYNC MODE]: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you not specify this parameter.
 
@@ -164,7 +171,7 @@ Parameter description:
 | ------------------------------ | -------- | ----------------- | ------------------------------------------------------------ |
 | statistic_sample_collect_rows  | INT      | 200000            | The minimum number of rows to collect. If the parameter value exceeds the actual number of rows in your table, full collection is performed. |
 | histogram_buckets_size         | LONG     | 64                | The default bucket number for a histogram.                   |
-| histogram_mcv_size             | INT      | 100               | The number of most common values (MVC) for a histogram.      |
+| histogram_mcv_size             | INT      | 100               | The number of most common values (MCV) for a histogram.      |
 | histogram_sample_ratio         | FLOAT    | 0.1               | The sampling ratio for a histogram.                          |
 | histogram_max_sample_row_count | LONG     | 10000000          | The maximum number of rows to collect for a histogram.       |
 
@@ -214,7 +221,7 @@ Parameter description:
   - SAMPLE: indicates sampled collection.
   - If no collection type is specified, full collection is used by default.
 
-- `col_name`: columns from which to collect statistics. Separate multiple columns with commas (;). If this parameter is not specified, the entire table is collected.
+- `col_name`: columns from which to collect statistics. Separate multiple columns with commas (`,`). If this parameter is not specified, the entire table is collected.
 
 - `PROPERTIES`: custom parameters. If `PROPERTIES` is not specified, the default settings in `fe.conf` are used.
 
@@ -223,6 +230,7 @@ Parameter description:
 | statistic_auto_collect_ratio          | FLOAT    | 0.8               | The threshold for determining  whether the statistics for automatic collection are healthy. If the statistics health is below this threshold, automatic collection is triggered. |
 | statistics_max_full_collect_data_size | INT      | 100               | The size of the largest partition for automatic collection to collect data. Unit: GB.If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
 | statistic_sample_collect_rows         | INT      | 200000            | The minimum number of rows to collect.If the parameter value exceeds the actual number of rows in your table, full collection is performed. |
+| statistic_exclude_pattern             | String   | null              | The name of the database or table that needs to be excluded in the job. You can specify the database and table that do not collect statistics in the job. Note that this is a regular expression pattern, and the match content is `database.table`. |
 
 Examples
 
@@ -240,6 +248,11 @@ CREATE ANALYZE FULL DATABASE db_name;
 
 -- Automatically collect full stats of specified columns in a table.
 CREATE ANALYZE TABLE tbl_name(c1, c2, c3); 
+
+-- Automatically collect stats of all databases, excluding specified database 'db_name'.
+CREATE ANALYZE ALL PROPERTIES (
+   "statistic_exclude_pattern" = "db_name\."
+);
 ```
 
 Automatic sampled collection
@@ -248,11 +261,17 @@ Automatic sampled collection
 -- Automatically collect stats of all tables in a database with default settings.
 CREATE ANALYZE SAMPLE DATABASE db_name;
 
+-- Automatically collect stats of all tables in a database, excluding specified table 'db_name.tbl_name'.
+CREATE ANALYZE SAMPLE DATABASE db_name PROPERTIES (
+   "statistic_exclude_pattern" = "db_name\.tbl_name"
+);
+
 -- Automatically collect stats of specified columns in a table, with statistics health and the number of rows to collect specified.
-CREATE ANALYZE SAMPLE TABLE tbl_name(c1, c2, c3) PROPERTIES(
+CREATE ANALYZE SAMPLE TABLE tbl_name(c1, c2, c3) PROPERTIES (
    "statistic_auto_collect_ratio" = "0.5",
    "statistic_sample_collect_rows" = "1000000"
 );
+
 ```
 
 #### View custom collection tasks
@@ -396,12 +415,15 @@ The task ID for a manual collection task can be obtained from SHOW ANALYZE STATU
 | enable_statistic_collect             | BOOLEAN  | TRUE              | Whether to collect statistics. This parameter is turned on by default. |
 | enable_collect_full_statistic        | BOOLEAN  | TRUE              | Whether to enable automatic full statistics collection. This parameter is turned on by default. |
 | statistic_auto_collect_ratio         | FLOAT    | 0.8               | The threshold for determining  whether the statistics for automatic collection are healthy. If statistics health is below this threshold, automatic collection is triggered. |
-| statistic_max_full_collect_data_size | LONG     | 100               | The size of the largest partition for automatic collection to collect data. Unit: GB.If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
+| statistic_max_full_collect_data_size | LONG     | 107374182400      | The size of the largest partition for automatic collection to collect data. Unit: Byte. If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
+| statistic_collect_max_row_count_per_query | INT | 5000000000        | The maximum number of rows to query for a single analyze task. An analyze task will be split into multiple queries if this value is exceeded. |
 | statistic_collect_interval_sec       | LONG     | 300               | The interval for checking data updates during automatic collection. Unit: seconds. |
+| statistic_auto_analyze_start_time | STRING      | 00:00:00   | The start time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
+| statistic_auto_analyze_end_time | STRING      | 23:59:59   | The end time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
 | statistic_sample_collect_rows        | LONG     | 200000            | The minimum number of rows to collect for sampled collection. If the parameter value exceeds the actual number of rows in your table, full collection is performed. |
 | statistic_collect_concurrency        | INT      | 3                 | The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collections tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled. |
 | histogram_buckets_size               | LONG     | 64                | The default bucket number for a histogram.                   |
-| histogram_mcv_size                   | LONG     | 100               | The number of most common values (MVC) for a histogram.      |
+| histogram_mcv_size                   | LONG     | 100               | The number of most common values (MCV) for a histogram.      |
 | histogram_sample_ratio               | FLOAT    | 0.1               | The sampling ratio for a histogram.                          |
 | histogram_max_sample_row_count       | LONG     | 10000000          | The maximum number of rows to collect for a histogram.       |
 | statistic_manager_sleep_time_sec     | LONG     | 60                | The interval at which metadata is scheduled. Unit: seconds. The system performs the following operations based on this interval:Create tables for storing statistics.Delete statistics that have been deleted.Delete expired statistics. |

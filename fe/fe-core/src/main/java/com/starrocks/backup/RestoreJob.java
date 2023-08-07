@@ -52,6 +52,7 @@ import com.starrocks.backup.BackupJobInfo.BackupTableInfo;
 import com.starrocks.backup.BackupJobInfo.BackupTabletInfo;
 import com.starrocks.backup.RestoreFileMapping.IdChain;
 import com.starrocks.backup.Status.ErrCode;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
@@ -64,7 +65,7 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
@@ -79,6 +80,8 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.fs.HdfsUtil;
+import com.starrocks.metric.MetricRepo;
+import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -430,6 +433,8 @@ public class RestoreJob extends AbstractJob {
      * 6. make snapshot for all replicas for incremental download later.
      */
     private void checkAndPrepareMeta() {
+        MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB.increase(1L);
+        WarehouseMetricMgr.increaseUnfinishedRestoreJobs(getCurrentWarehouse(), 1L);
         Database db = globalStateMgr.getDb(dbId);
         if (db == null) {
             status = new Status(ErrCode.NOT_FOUND, "database " + dbId + " does not exist");
@@ -454,7 +459,7 @@ public class RestoreJob extends AbstractJob {
                     continue;
                 }
 
-                if (!tbl.isOlapOrLakeTable()) {
+                if (!tbl.isOlapOrCloudNativeTable()) {
                     status = new Status(ErrCode.COMMON_ERROR, "Only support retore OLAP table: " + tbl.getName());
                     return;
                 }
@@ -486,8 +491,14 @@ public class RestoreJob extends AbstractJob {
                 Preconditions.checkNotNull(remoteTbl);
                 Table localTbl = db.getTable(jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
                 if (localTbl != null) {
+                    if (localTbl instanceof OlapTable && localTbl.hasAutoIncrementColumn()) {
+                        // it must be !isReplay == true
+                        ((OlapTable) localTbl).sendDropAutoIncrementMapTask();
+                    }
+
+                    tblInfo.checkAndRecoverAutoIncrementId(localTbl);
                     // table already exist, check schema
-                    if (!localTbl.isOlapOrLakeTable()) {
+                    if (!localTbl.isOlapOrCloudNativeTable()) {
                         status = new Status(ErrCode.COMMON_ERROR,
                                 "Only support retore olap table: " + localTbl.getName());
                         return;
@@ -502,12 +513,52 @@ public class RestoreJob extends AbstractJob {
                         return;
                     }
                     LOG.debug("get intersect part names: {}, job: {}", intersectPartNames, this);
-                    if (localOlapTbl.getSignature(BackupHandler.SIGNATURE_VERSION, intersectPartNames)
-                            != remoteOlapTbl.getSignature(BackupHandler.SIGNATURE_VERSION, intersectPartNames)) {
+                    if (localOlapTbl.getSignature(BackupHandler.SIGNATURE_VERSION, intersectPartNames, true)
+                            != remoteOlapTbl.getSignature(BackupHandler.SIGNATURE_VERSION, intersectPartNames, true) ||
+                                localOlapTbl.getBaseSchema().size() != remoteOlapTbl.getBaseSchema().size()) {
+                        List<Pair<Integer, String>> localCheckSumList = localOlapTbl.getSignatureSequence(
+                                BackupHandler.SIGNATURE_VERSION, intersectPartNames);
+                        List<Pair<Integer, String>> remoteCheckSumList = remoteOlapTbl.getSignatureSequence(
+                                BackupHandler.SIGNATURE_VERSION, intersectPartNames);
+                        
+                        String errMsg = "";
+                        if (localCheckSumList.size() == remoteCheckSumList.size()) {
+                            for (int i = 0; i < localCheckSumList.size(); ++i) {
+                                int localCheckSum = ((Integer) localCheckSumList.get(i).first).intValue();
+                                int remoteCheckSum = ((Integer) remoteCheckSumList.get(i).first).intValue();
+                                if (localCheckSum != remoteCheckSum) {
+                                    errMsg = ((String) localCheckSumList.get(i).second);
+                                    break;
+                                }
+                            }
+                        }
+
                         status = new Status(ErrCode.COMMON_ERROR,
                                 "Table " + jobInfo.getAliasByOriginNameIfSet(tblInfo.name)
-                                        + " already exist but with different schema");
+                                        + " already exist but with different schema, errMsg: "
+                                        + errMsg);
                         return;
+                    }
+
+                    if (localOlapTbl.getKeysType() != remoteOlapTbl.getKeysType()) {
+                        status = new Status(ErrCode.COMMON_ERROR,
+                                "Table " + jobInfo.getAliasByOriginNameIfSet(tblInfo.name)
+                                        + " already exist but with different key type");
+                        return;
+                    }
+
+                    for (int i = 0; i < localOlapTbl.getBaseSchema().size(); ++i) {
+                        Column localColumn = localOlapTbl.getBaseSchema().get(i);
+                        Column remoteColumn = remoteOlapTbl.getBaseSchema().get(i);
+
+                        if (!localColumn.equals(remoteColumn)) {
+                            status = new Status(ErrCode.COMMON_ERROR,
+                                    "Table " + jobInfo.getAliasByOriginNameIfSet(tblInfo.name)
+                                            + " already exist but with different schema, column: " + localColumn.getName()
+                                            + " in existed table is different from the column in backup snapshot, column: "
+                                            + remoteColumn.getName());
+                            return;
+                        }
                     }
 
                     // Table with same name and has same schema. Check partition
@@ -516,7 +567,7 @@ public class RestoreJob extends AbstractJob {
                         if (localPartition != null) {
                             // Partition already exist.
                             PartitionInfo localPartInfo = localOlapTbl.getPartitionInfo();
-                            if (localPartInfo.getType() == PartitionType.RANGE) {
+                            if (localPartInfo.isRangePartition()) {
                                 // If this is a range partition, check range
                                 RangePartitionInfo localRangePartInfo = (RangePartitionInfo) localPartInfo;
                                 RangePartitionInfo remoteRangePartInfo
@@ -546,7 +597,7 @@ public class RestoreJob extends AbstractJob {
                         } else {
                             // partitions does not exist
                             PartitionInfo localPartitionInfo = localOlapTbl.getPartitionInfo();
-                            if (localPartitionInfo.getType() == PartitionType.RANGE) {
+                            if (localPartitionInfo.isRangePartition()) {
                                 // Check if the partition range can be added to the table
                                 RangePartitionInfo localRangePartitionInfo = (RangePartitionInfo) localPartitionInfo;
                                 RangePartitionInfo remoteRangePartitionInfo
@@ -596,6 +647,8 @@ public class RestoreJob extends AbstractJob {
                         status = st;
                         return;
                     }
+
+                    tblInfo.checkAndRecoverAutoIncrementId((Table) remoteOlapTbl);
 
                     // DO NOT set remote table's new name here, cause we will still need the origin name later
                     // remoteOlapTbl.setName(jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
@@ -718,7 +771,7 @@ public class RestoreJob extends AbstractJob {
 
             // add restored tables
             for (Table tbl : restoredTbls) {
-                if (!db.createTable(tbl)) {
+                if (!db.registerTableUnlocked(tbl)) {
                     status = new Status(ErrCode.COMMON_ERROR, "Table " + tbl.getName()
                             + " already exist in db: " + db.getOriginName());
                     return;
@@ -797,6 +850,7 @@ public class RestoreJob extends AbstractJob {
     protected void createReplicas(OlapTable localTbl, Partition restorePart) {
         Set<String> bfColumns = localTbl.getCopiedBfColumns();
         double bfFpp = localTbl.getBfFpp();
+        // TODO(meegoo): support sub partition
         for (MaterializedIndex restoredIdx : restorePart.getMaterializedIndices(IndexExtState.VISIBLE)) {
             MaterializedIndexMeta indexMeta = localTbl.getIndexMetaByIndexId(restoredIdx.getId());
             TabletMeta tabletMeta = new TabletMeta(dbId, localTbl.getId(), restorePart.getId(),
@@ -832,7 +886,7 @@ public class RestoreJob extends AbstractJob {
         Partition remotePart = remoteTbl.getPartition(partName);
         Preconditions.checkNotNull(remotePart);
         PartitionInfo localPartitionInfo = localTbl.getPartitionInfo();
-        Preconditions.checkState(localPartitionInfo.getType() == PartitionType.RANGE);
+        Preconditions.checkState(localPartitionInfo.isRangePartition());
 
         // generate new partition id
         long newPartId = globalStateMgr.getNextId();
@@ -913,7 +967,7 @@ public class RestoreJob extends AbstractJob {
 
             // restored tables
             for (Table restoreTbl : restoredTbls) {
-                db.createTable(restoreTbl);
+                db.registerTableUnlocked(restoreTbl);
                 // modify tablet inverted index
                 for (Partition restorePart : restoreTbl.getPartitions()) {
                     modifyInvertedIndex((OlapTable) restoreTbl, restorePart);
@@ -1067,8 +1121,10 @@ public class RestoreJob extends AbstractJob {
     protected void prepareDownloadTasks(List<SnapshotInfo> beSnapshotInfos, Database db, long beId, List<FsBroker> brokerAddrs,
                                         THdfsProperties hdfsProperties) {
         int totalNum = beSnapshotInfos.size();
-        // each backend allot at most 3 tasks
-        int batchNum = Math.min(totalNum, 3);
+        int batchNum = totalNum;
+        if (Config.max_download_task_per_be > 0) {
+            batchNum = Math.min(totalNum, Config.max_download_task_per_be);
+        }
         // each task contains several upload subtasks
         int taskNumPerBatch = Math.max(totalNum / batchNum, 1);
         LOG.debug("backend {} has {} batch, total {} tasks, {}",
@@ -1157,7 +1213,6 @@ public class RestoreJob extends AbstractJob {
             unfinishedSignatureToId.put(signature, beId);
         }
     }
-
     protected void sendDownloadTasks() {
         for (AgentTask task : batchTask.getAllTasks()) {
             AgentTaskQueue.addTask(task);
@@ -1207,6 +1262,8 @@ public class RestoreJob extends AbstractJob {
             if (!st.ok()) {
                 status = st;
             }
+            MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB.increase(-1L);
+            WarehouseMetricMgr.increaseUnfinishedRestoreJobs(getCurrentWarehouse(), -1L);
             return;
         }
         LOG.info("waiting {} tablets to commit. {}", unfinishedSignatureToId.size(), this);
@@ -1233,7 +1290,7 @@ public class RestoreJob extends AbstractJob {
                 Map<Long, Long> map = restoredVersionInfo.rowMap().get(tblId);
                 for (Map.Entry<Long, Long> entry : map.entrySet()) {
                     long partId = entry.getKey();
-                    Partition part = olapTbl.getPartition(partId);
+                    PhysicalPartition part = olapTbl.getPhysicalPartition(partId);
                     if (part == null) {
                         continue;
                     }
@@ -1279,8 +1336,8 @@ public class RestoreJob extends AbstractJob {
                     if (tbl.getType() != TableType.OLAP) {
                         continue;
                     }
-                    DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(db.getId(), (OlapTable) tbl);
-                    DynamicPartitionUtil.registerOrRemovePartitionTTLTable(db.getId(), (OlapTable) tbl);
+
+                    DynamicPartitionUtil.registerOrRemovePartitionScheduleInfo(db.getId(), (OlapTable) tbl);
                 }
             } finally {
                 db.readUnlock();
@@ -1291,7 +1348,7 @@ public class RestoreJob extends AbstractJob {
         return Status.OK;
     }
 
-    protected void updateTablets(MaterializedIndex idx, Partition part) {
+    protected void updateTablets(MaterializedIndex idx, PhysicalPartition part) {
         for (Tablet tablet : idx.getTablets()) {
             for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                 if (!replica.checkVersionCatchUp(part.getVisibleVersion(), false)) {
@@ -1371,6 +1428,8 @@ public class RestoreJob extends AbstractJob {
 
         status = new Status(ErrCode.COMMON_ERROR, "user cancelled, current state: " + state.name());
         cancelInternal(false);
+        MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB.increase(-1L);
+        WarehouseMetricMgr.increaseUnfinishedRestoreJobs(getCurrentWarehouse(), -1L);
         return Status.OK;
     }
 
@@ -1466,7 +1525,7 @@ public class RestoreJob extends AbstractJob {
                 continue;
             }
 
-            if (!tbl.isOlapOrLakeTable()) {
+            if (!tbl.isOlapOrCloudNativeTable()) {
                 continue;
             }
 

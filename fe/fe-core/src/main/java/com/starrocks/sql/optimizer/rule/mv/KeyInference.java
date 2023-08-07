@@ -139,8 +139,8 @@ public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertyS
         // 3. Right unique keys if left join columns are unique on join conjuncts
         JoinHelper joinHelper =
                 JoinHelper.of(join, optExpression.getChildOutputColumns(0), optExpression.getChildOutputColumns(1));
-        List<Integer> lhsJoinColumns = joinHelper.getLeftOnColumns();
-        List<Integer> rhsJoinColumns = joinHelper.getRightOnColumns();
+        List<Integer> lhsJoinColumns = joinHelper.getLeftOnColumnIds();
+        List<Integer> rhsJoinColumns = joinHelper.getRightOnColumnIds();
         ColumnRefSet outputColumns = optExpression.getOutputColumns();
         KeyPropertySet resKeySet = new KeyPropertySet();
 
@@ -240,7 +240,7 @@ public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertyS
         }
 
         public String format(Map<Integer, String> colMap) {
-            String colNames = columns.getStream().mapToObj(colMap::get).collect(Collectors.joining(","));
+            String colNames = columns.getStream().map(colMap::get).collect(Collectors.joining(","));
             return "Key{" +
                     "unique=" + unique +
                     ", columns=" + colNames +

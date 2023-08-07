@@ -14,7 +14,7 @@ PERCENTILE_CONT (expr, percentile)
 
 - `expr`: the expression by which to order the values. It must be of numeric data types, DATE, or DATETIME. For example, if you want to find the median score of physics, specify the column that contains the physics scores.
 
-- `percentile`: level of quantile. It is a constant floating-point number from 0 to 1. For example, if you want to find the median value, set this parameter to `0.5`.
+- `percentile`: the percentile of the value you want to find. It is a constant floating-point number from 0 to 1. For example, if you want to find the median value, set this parameter to `0.5`.
 
 ## Return value
 

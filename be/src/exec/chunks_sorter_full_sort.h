@@ -14,13 +14,24 @@
 
 #pragma once
 
+#include "column/vectorized_fwd.h"
 #include "exec/chunks_sorter.h"
 #include "exec/sorting/merge.h"
 #include "gtest/gtest_prod.h"
 
 namespace starrocks {
 class ExprContext;
+struct ChunksSorterFullSortProfiler {
+    ChunksSorterFullSortProfiler(RuntimeProfile* runtime_profile, MemTracker* parent_mem_tracker)
+            : profile(runtime_profile) {
+        input_required_memory = ADD_COUNTER(profile, "InputRequiredMemory", TUnit::BYTES);
+        num_sorted_runs = ADD_COUNTER(profile, "NumSortedRuns", TUnit::UNIT);
+    }
 
+    RuntimeProfile* profile{};
+    RuntimeProfile::Counter* input_required_memory = nullptr;
+    RuntimeProfile::Counter* num_sorted_runs = nullptr;
+};
 class ChunksSorterFullSort : public ChunksSorter {
 public:
     /**
@@ -32,18 +43,21 @@ public:
      */
     ChunksSorterFullSort(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
                          const std::vector<bool>* is_asc_order, const std::vector<bool>* is_null_first,
-                         const std::string& sort_keys);
+                         const std::string& sort_keys, int64_t max_buffered_rows, int64_t max_buffered_bytes,
+                         const std::vector<SlotId>& early_materialized_slots);
     ~ChunksSorterFullSort() override;
 
     // Append a Chunk for sort.
     Status update(RuntimeState* state, const ChunkPtr& chunk) override;
-    Status done(RuntimeState* state) override;
+    Status do_done(RuntimeState* state) override;
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 
-    SortedRuns get_sorted_runs() override;
     size_t get_output_rows() const override;
 
     int64_t mem_usage() const override;
+
+    void setup_runtime(RuntimeState* state, starrocks::RuntimeProfile* profile,
+                       MemTracker* parent_mem_tracker) override;
 
 private:
     // Three stages of sorting procedure:
@@ -53,16 +67,43 @@ private:
     Status _merge_unsorted(RuntimeState* state, const ChunkPtr& chunk);
     Status _partial_sort(RuntimeState* state, bool done);
     Status _merge_sorted(RuntimeState* state);
+    void _split_late_and_early_chunks();
+    static constexpr SlotId ORDINAL_COLUMN_SLOT_ID = -2;
+    void _assign_ordinals();
+    template <typename T>
+    void _assign_ordinals_tmpl();
+    ChunkPtr _late_materialize(const ChunkPtr& chunk);
+    template <typename T>
+    ChunkPtr _late_materialize_tmpl(const ChunkPtr& chunk);
 
-    size_t _total_rows = 0;               // Total rows of sorting data
-    Permutation _sort_permutation;        // Temp permutation for sorting
-    ChunkPtr _unsorted_chunk;             // Unsorted chunk, accumulate it to a larger chunk
-    std::vector<ChunkPtr> _sorted_chunks; // Partial sorted, but not merged
-    SortedRuns _merged_runs;              // After merge
+protected:
+    size_t _total_rows = 0;        // Total rows of sorting data
+    Permutation _sort_permutation; // Temp permutation for sorting
+    size_t _staging_unsorted_rows = 0;
+    size_t _staging_unsorted_bytes = 0;
+    std::vector<ChunkPtr> _staging_unsorted_chunks;
+    ChunkPtr _unsorted_chunk;                   // Unsorted chunk, accumulate it to a larger chunk
+    std::vector<ChunkUniquePtr> _sorted_chunks; // Partial sorted, but not merged
+    SortedRuns _merged_runs;                    // After merge
+    RuntimeProfile* _runtime_profile = nullptr;
+    MemTracker* _parent_mem_tracker = nullptr;
+    std::unique_ptr<ObjectPool> _object_pool = nullptr;
+    ChunksSorterFullSortProfiler* _profiler = nullptr;
 
     // TODO: further tunning the buffer parameter
-    static constexpr size_t kMaxBufferedChunkSize = 1024000;   // Max buffer 1024000 rows
-    static constexpr size_t kMaxBufferedChunkBytes = 16 << 20; // Max buffer 16MB bytes
+    const size_t max_buffered_rows;  // Max buffer 1024000 rows
+    const size_t max_buffered_bytes; // Max buffer 16MB bytes
+
+    // only when order-by columns(_sort_exprs) are all ColumnRefs and the cost of eager-materialization of
+    // other columns is large than ordinal column, then we materialize order-by columns and ordinal columns eagerly,
+    // and other columns are lazy-materialized.
+    std::unordered_set<SlotId> _early_materialized_slots;
+    int _max_num_rows = 0;
+    int _offset_in_chunk_bits = 0;
+    int _chunk_idx_bits = 0;
+    std::vector<SlotId> _column_id_to_slot_id;
+    std::vector<ChunkUniquePtr> _early_materialized_chunks;
+    std::vector<ChunkUniquePtr> _late_materialized_chunks;
 };
 
 } // namespace starrocks

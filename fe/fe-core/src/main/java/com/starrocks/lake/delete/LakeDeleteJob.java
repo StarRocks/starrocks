@@ -32,8 +32,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.Utils;
-import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.DeleteJob;
+import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.MultiDeleteInfo;
 import com.starrocks.proto.BinaryPredicatePB;
 import com.starrocks.proto.DeleteDataRequest;
@@ -46,7 +46,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DeleteStmt;
-import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TabletCommitInfo;
 import org.apache.logging.log4j.LogManager;
@@ -75,7 +75,7 @@ public class LakeDeleteJob extends DeleteJob {
     @java.lang.SuppressWarnings("squid:S2142")  // allow catch InterruptedException
     public void run(DeleteStmt stmt, Database db, Table table, List<Partition> partitions)
             throws DdlException, QueryStateException {
-        Preconditions.checkState(table.isLakeTable());
+        Preconditions.checkState(table.isCloudNativeTable());
 
         db.readLock();
         try {
@@ -85,7 +85,7 @@ public class LakeDeleteJob extends DeleteJob {
             // if transaction has been begun, need to abort it
             if (GlobalStateMgr.getCurrentGlobalTransactionMgr()
                     .getTransactionState(db.getId(), getTransactionId()) != null) {
-                cancel(DeleteHandler.CancelType.UNKNOWN, t.getMessage());
+                cancel(DeleteMgr.CancelType.UNKNOWN, t.getMessage());
             }
             throw new DdlException(t.getMessage(), t);
         } finally {
@@ -102,9 +102,10 @@ public class LakeDeleteJob extends DeleteJob {
                     beToTablets.size());
             SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
             for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
-                Backend backend = systemInfoService.getBackend(entry.getKey());
+                // TODO: need to refactor after be split into cn + dn
+                ComputeNode backend = systemInfoService.getBackendOrComputeNode(entry.getKey());
                 if (backend == null) {
-                    throw new DdlException("Backend " + entry.getKey() + " has been dropped");
+                    throw new DdlException("Backend or computeNode" + entry.getKey() + " has been dropped");
                 }
                 DeleteDataRequest request = new DeleteDataRequest();
                 request.tabletIds = entry.getValue();
@@ -125,7 +126,7 @@ public class LakeDeleteJob extends DeleteJob {
                 }
             }
         } catch (Throwable e) {
-            cancel(DeleteHandler.CancelType.UNKNOWN, e.getMessage());
+            cancel(DeleteMgr.CancelType.UNKNOWN, e.getMessage());
             throw new DdlException(e.getMessage());
         }
 
@@ -177,7 +178,7 @@ public class LakeDeleteJob extends DeleteJob {
 
     @Override
     public void clear() {
-        GlobalStateMgr.getCurrentState().getDeleteHandler().removeKillJob(getId());
+        GlobalStateMgr.getCurrentState().getDeleteMgr().removeKillJob(getId());
     }
 
     @Override

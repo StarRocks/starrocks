@@ -104,11 +104,17 @@ public:
     bool is_nullable() const { return _check_flag(kIsNullableShift); }
     void set_is_nullable(bool value) { _set_flag(kIsNullableShift, value); }
 
+    bool is_auto_increment() const { return _check_flag(kHasAutoIncrementShift); }
+    void set_is_auto_increment(bool value) { _set_flag(kHasAutoIncrementShift, value); }
+
     bool is_bf_column() const { return _check_flag(kIsBfColumnShift); }
     void set_is_bf_column(bool value) { _set_flag(kIsBfColumnShift, value); }
 
     bool has_bitmap_index() const { return _check_flag(kHasBitmapIndexShift); }
     void set_has_bitmap_index(bool value) { _set_flag(kHasBitmapIndexShift, value); }
+
+    bool is_sort_key() const { return _check_flag(kIsSortKey); }
+    void set_is_sort_key(bool value) { _set_flag(kIsSortKey, value); }
 
     ColumnLength length() const { return _length; }
     void set_length(ColumnLength length) { _length = length; }
@@ -134,7 +140,11 @@ public:
     void set_index_length(ColumnIndexLength index_length) { _index_length = index_length; }
 
     bool has_default_value() const { return _extra_fields && _extra_fields->has_default_value; }
-    std::string default_value() const { return _extra_fields ? _extra_fields->default_value : ""; }
+
+    const std::string& default_value() const {
+        return _extra_fields ? _extra_fields->default_value : kEmptyDefaultValue;
+    }
+
     void set_default_value(std::string value) {
         ExtraFields* ext = _get_or_alloc_extra_fields();
         ext->has_default_value = true;
@@ -154,9 +164,6 @@ public:
 
     std::string debug_string() const;
 
-    bool is_format_v1_column() const;
-    bool is_format_v2_column() const;
-
     int64_t mem_usage() const {
         int64_t mem_usage = sizeof(TabletColumn) + _col_name.size() + default_value().capacity();
         for (int i = 0; i < subcolumn_count(); i++) {
@@ -166,12 +173,15 @@ public:
     }
 
 private:
+    inline static const std::string kEmptyDefaultValue;
     constexpr static uint8_t kIsKeyShift = 0;
     constexpr static uint8_t kIsNullableShift = 1;
     constexpr static uint8_t kIsBfColumnShift = 2;
     constexpr static uint8_t kHasBitmapIndexShift = 3;
     constexpr static uint8_t kHasPrecisionShift = 4;
     constexpr static uint8_t kHasScaleShift = 5;
+    constexpr static uint8_t kHasAutoIncrementShift = 6;
+    constexpr static uint8_t kIsSortKey = 7;
 
     ExtraFields* _get_or_alloc_extra_fields() {
         if (_extra_fields == nullptr) {
@@ -222,6 +232,8 @@ public:
     static std::shared_ptr<TabletSchema> create(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map);
     static std::shared_ptr<TabletSchema> create(const TabletSchema& tablet_schema,
                                                 const std::vector<int32_t>& column_indexes);
+    static std::shared_ptr<TabletSchema> create_with_uid(const TabletSchema& tablet_schema,
+                                                         const std::vector<uint32_t>& unique_column_ids);
 
     // Must be consistent with MaterializedIndexMeta.INVALID_SCHEMA_ID defined in
     // file ./fe/fe-core/src/main/java/com/starrocks/catalog/MaterializedIndexMeta.java
@@ -238,7 +250,6 @@ public:
 
     // Caller should always check the returned value with `invalid_id()`.
     SchemaId id() const { return _id; }
-    size_t row_size() const;
     size_t estimate_row_size(size_t variable_len) const;
     size_t field_index(std::string_view field_name) const;
     const TabletColumn& column(size_t ordinal) const;
@@ -254,15 +265,6 @@ public:
     double bf_fpp() const { return _bf_fpp; }
     CompressionTypePB compression_type() const { return _compression_type; }
 
-    // The in-memory property is no longer supported, but leave this API for compatibility.
-    // Newly-added code should not rely on this method, it may be removed at any time.
-    static bool is_in_memory() { return false; }
-
-    bool contains_format_v1_column() const;
-    bool contains_format_v2_column() const;
-
-    std::unique_ptr<TabletSchema> convert_to_format(DataFormatVersion format) const;
-
     std::string debug_string() const;
 
     int64_t mem_usage() const {
@@ -275,7 +277,7 @@ public:
 
     bool shared() const { return _schema_map != nullptr; }
 
-    VectorizedSchema* schema() const;
+    Schema* schema() const;
 
 private:
     friend class SegmentReaderWriterTest;
@@ -307,7 +309,7 @@ private:
 
     bool _has_bf_fpp = false;
 
-    mutable std::unique_ptr<starrocks::VectorizedSchema> _schema;
+    mutable std::unique_ptr<starrocks::Schema> _schema;
     mutable std::once_flag _init_schema_once_flag;
 };
 

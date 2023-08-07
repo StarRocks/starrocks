@@ -8,22 +8,28 @@ Creates an external catalog. You can use external catalogs to query data in exte
 - [Iceberg catalog](../../../data_source/catalog/iceberg_catalog.md): used for querying data from Apache Iceberg.
 - [Hudi catalog](../../../data_source/catalog/hudi_catalog.md): used for querying data from Apache Hudi.
 - [Delta Lake catalog](../../../data_source/catalog/deltalake_catalog.md): used to query data from Delta Lake.
+- [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md): used to query data from JDBC-compatible data sources.
 
-This statement requires no privileges for execution. Before you create external catalogs, configure your StarRocks cluster to meet the requirements of the data storage system (such as Amazon S3), metadata service (such as Hive metastore), and authenticating service (such as Kerberos) of external data sources. For more information, see the "Before you begin" section in each external catalog topic.
+> **NOTE**
+>
+> - In v3.0 and later, this statement requires SYSTEM-level CREATE EXTERNAL CATALOG privilege.
+> - Before you create external catalogs, configure your StarRocks cluster to meet the requirements of the data storage system (such as Amazon S3), metadata service (such as Hive metastore), and authenticating service (such as Kerberos) of external data sources. For more information, see the "Before you begin" section in each [external catalog topic](../../../data_source/catalog/catalog_overview.md).
 
 ## Syntax
 
 ```SQL
 CREATE EXTERNAL CATALOG <catalog_name>
-PROPERTIES ("key"="value", ...);
+[COMMENT <comment>]
+PROPERTIES ("key"="value", ...)
 ```
 
 ## Parameters
 
 | **Parameter** | **Required** | **Description**                                              |
 | ------------- | ------------ | ------------------------------------------------------------ |
-| catalog_name  | Yes          | The name of the external catalog. The naming conventions are as follows:<ul><li>The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.</li><li>The name cannot exceed 64 characters in length.</li></ul> |
-| PROPERTIES    | Yes          | The properties of an external catalog. Configure properties based on the types of external catalogs. For more information, see Hive catalog, Iceberg catalog, Hudi catalog, and Delta Lake catalog. |
+| catalog_name  | Yes          | The name of the external catalog. The naming conventions are as follows:<ul><li>The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.</li><li>The name is case-sensitive and cannot exceed 1023 characters in length.</li></ul> |
+| comment       | No           | The description of the external catalog. |
+| PROPERTIES    | Yes          | The properties of an external catalog. Configure properties based on the types of external catalogs. For more information, see [Hive catalog](../../../data_source/catalog/hive_catalog.md), [Iceberg catalog](../../../data_source/catalog/iceberg_catalog.md), [Hudi catalog](../../../data_source/catalog/hudi_catalog.md), [Delta Lake catalog](../../../data_source/catalog/deltalake_catalog.md), and [JDBC Catalog](../../../data_source/catalog/jdbc_catalog.md). |
 
 ## Examples
 
@@ -123,4 +129,5 @@ PROPERTIES(
 ## References
 
 - To view all catalogs in your StarRocks cluster, see [SHOW CATALOGS](../data-manipulation/SHOW%20CATALOGS.md).
+- To view the creation statement of an external catalog, see [SHOW CREATE CATALOG](../data-manipulation/SHOW%20CREATE%20CATALOG.md).
 - To delete an external catalog from your StarRocks cluster, see [DROP CATALOG](../data-definition/DROP%20CATALOG.md).

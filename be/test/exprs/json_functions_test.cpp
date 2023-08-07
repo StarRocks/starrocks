@@ -22,6 +22,8 @@
 #include <string>
 
 #include "butil/time.h"
+#include "column/map_column.h"
+#include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -721,6 +723,15 @@ TEST_F(JsonFunctionsTest, extract_from_object_test) {
 
     EXPECT_STATUS(Status::DataQualityError(""),
                   test_extract_from_object(R"({"data1 " : 1, "data2":})", "$.data", &output));
+
+    EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"data": null})", "$.data", &output));
+    EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"data": null})", "$.data.key", &output));
+
+    EXPECT_OK(test_extract_from_object(R"({"data": {}})", "$.data", &output));
+    EXPECT_STREQ(output.data(), "{}");
+    EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"data": {}})", "$.data.key", &output));
+
+    EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"data": 1})", "$.data.key", &output));
 }
 
 class JsonLengthTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string, int>> {};
@@ -965,5 +976,100 @@ INSTANTIATE_TEST_SUITE_P(GetJsonXXXTest, GetJsonXXXTestFixture,
 
                                  // clang-format: on
                                  ));
+
+TEST_F(JsonFunctionsTest, struct_to_json) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    // Struct{id: xxx, name: yyy}
+    std::vector<std::string> names{"id", "name"};
+    std::vector<LogicalType> types{TYPE_INT, TYPE_VARCHAR};
+
+    // Build struct column
+    Columns fields{NullableColumn::create(Int64Column::create(), NullColumn::create()),
+                   NullableColumn::create(BinaryColumn::create(), NullColumn::create())};
+    auto struct_column = StructColumn::create(fields, names);
+    struct_column->append_datum(DatumStruct{int64_t(1), Slice("park")});
+    struct_column->append_datum(DatumStruct{int64_t(2), Slice("menlo")});
+
+    // Cast to JSON
+    Columns input_columns{struct_column};
+    auto maybe_res = JsonFunctions::to_json(ctx.get(), input_columns);
+    ASSERT_TRUE(maybe_res.ok());
+    ColumnPtr ptr = maybe_res.value();
+
+    ASSERT_EQ(2, ptr->size());
+    Datum json1 = ptr->get(0);
+    ASSERT_FALSE(json1.is_null());
+    ASSERT_EQ(R"({"id": 1, "name": "park"})", json1.get_json()->to_string_uncheck());
+
+    Datum json2 = ptr->get(1);
+    ASSERT_FALSE(json2.is_null());
+    ASSERT_EQ(R"({"id": 2, "name": "menlo"})", json2.get_json()->to_string_uncheck());
+}
+
+TEST_F(JsonFunctionsTest, map_to_json) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    // Build MAP<int, string> column
+    {
+        auto key_column = NullableColumn::create(Int64Column::create(), NullColumn::create());
+        auto val_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+        auto struct_column = MapColumn::create(key_column, val_column, UInt32Column::create());
+
+        DatumMap map1;
+        map1[int64_t(1)] = Slice("menlo");
+        map1[int64_t(2)] = Slice("park");
+        struct_column->append_datum(map1);
+        DatumMap map2;
+        map2[int64_t(3)] = Slice("palo");
+        map2[int64_t(4)] = Slice("alto");
+        struct_column->append_datum(map2);
+
+        // Call to_json
+        Columns input_columns{struct_column};
+        auto maybe_res = JsonFunctions::to_json(ctx.get(), input_columns);
+        ASSERT_TRUE(maybe_res.ok());
+        ColumnPtr ptr = maybe_res.value();
+
+        ASSERT_EQ(2, ptr->size());
+        Datum json1 = ptr->get(0);
+        ASSERT_FALSE(json1.is_null());
+        ASSERT_EQ(R"({"1": "menlo", "2": "park"})", json1.get_json()->to_string_uncheck());
+
+        Datum json2 = ptr->get(1);
+        ASSERT_FALSE(json2.is_null());
+        ASSERT_EQ(R"({"3": "palo", "4": "alto"})", json2.get_json()->to_string_uncheck());
+    }
+
+    // Build MAP<string, int> column
+    {
+        auto key_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+        auto val_column = NullableColumn::create(Int64Column::create(), NullColumn::create());
+        auto struct_column = MapColumn::create(key_column, val_column, UInt32Column::create());
+
+        DatumMap map1;
+        map1[Slice("menlo")] = int64_t(1);
+        map1[Slice("park")] = int64_t(2);
+        struct_column->append_datum(map1);
+        DatumMap map2;
+        map2[Slice("palo")] = int64_t(3);
+        map2[Slice("")] = int64_t(4);
+        struct_column->append_datum(map2);
+
+        // Call to_json
+        Columns input_columns{struct_column};
+        auto maybe_res = JsonFunctions::to_json(ctx.get(), input_columns);
+        ASSERT_TRUE(maybe_res.ok());
+        ColumnPtr ptr = maybe_res.value();
+
+        ASSERT_EQ(2, ptr->size());
+        Datum json1 = ptr->get(0);
+        ASSERT_FALSE(json1.is_null());
+        ASSERT_EQ(R"({"menlo": 1, "park": 2})", json1.get_json()->to_string_uncheck());
+
+        Datum json2 = ptr->get(1);
+        ASSERT_FALSE(json2.is_null());
+        ASSERT_EQ(R"({"palo": 3})", json2.get_json()->to_string_uncheck());
+    }
+}
 
 } // namespace starrocks

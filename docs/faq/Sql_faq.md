@@ -6,15 +6,15 @@ This topic provides answers to some frequently asked questions about SQL.
 
 To solve this problem, increase the value of the `memory_limitation_per_thread_for_schema_change` parameter in the **be.conf** file. This parameter refers to the maximum storage that can be allocated for a single task to change the scheme. The default value of the maximum storage is 2 GB.
 
-## Does StarRocks have limitations on query result caching?
+## Does StarRocks support caching query results?
 
-StarRocks does not support result caching. StarRocks enables the page cache to cache the query result for repetitive use. This allows subsequent query execution to get results directly from the cache. You can set the `storage_page_cache_limit` parameter in the **be.conf** file to specify the size of the page cache. The default size of the page cache is 20 GB.
+StarRocks does not directly cache final query results. From v2.5 onwards, StarRocks uses the Query Cache feature to save the intermediate results of first-stage aggregation in the cache. New queries that are semantically equivalent to previous queries can reuse the cached computation results to accelerate computations. Query cache uses BE memory. For more information, see [Query cache](../using_starrocks/query_cache.md).
 
 ## When a `Null` is included in the calculation, the calculation results of functions are false except for the ISNULL() function
 
 In standard SQL, every calculation that includes an operand with a `NULL` value returns a `NULL`.
 
-## Why is the query result incorrect after I enclose quotation marks around a value of the BIGINT data type for an equivalence query？
+## Why is the query result incorrect after I enclose quotation marks around a value of the BIGINT data type for an equivalence query?
 
 ### Problem description
 
@@ -77,7 +77,7 @@ When you compare the STRING data type and the INTEGER data type, the fields of t
 
 StarRocks does not support the DECODE function of the Oracle database. StarRocks is compatible with MySQL, so you can use the CASE WHEN statement.
 
-## Can the latest data be queried immediately after data is loaded into the primary key model of StarRocks?
+## Can the latest data be queried immediately after data is loaded into the Primary Key table of StarRocks?
 
 Yes. StarRocks merges data in a way that references Google Mesa. In StarRocks, a BE triggers the data merge and it has two kinds of compaction to merge data. If the data merge is not completed, it is finished during your query. Therefore, you can read the latest data after data loading.
 
@@ -114,7 +114,7 @@ StarRocks is a distributed database, of which data stored in the underlying tabl
 
 ## Why is there a large gap in column efficiency between SELECT * and SELECT?
 
-To solve this problem, check the profile and see MERGE details：
+To solve this problem, check the profile and see MERGE details:
 
 - Check whether the aggregation on the storage layer takes up too much time.
 

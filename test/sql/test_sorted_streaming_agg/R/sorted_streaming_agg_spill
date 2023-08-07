@@ -1,0 +1,92 @@
+-- name: test_sorted_streaming_agg_spill
+set enable_spill=true;
+-- result:
+-- !result
+set spill_mode="force";
+-- result:
+-- !result
+CREATE TABLE `test_basic` (
+  `id_int` int(11) NOT NULL COMMENT "",
+  `id_tinyint` tinyint(4) NOT NULL COMMENT "",
+  `id_smallint` smallint(6) NOT NULL COMMENT "",
+  `id_bigint` bigint(20) NOT NULL COMMENT "",
+  `id_largeint` largeint(40) NOT NULL COMMENT "",
+  `id_float` float NOT NULL COMMENT "",
+  `id_double` double NOT NULL COMMENT "",
+  `id_char` char(10) NOT NULL COMMENT "",
+  `id_string` varchar(100) NOT NULL COMMENT "",
+  `id_date` date NOT NULL COMMENT "",
+  `id_datetime` datetime NOT NULL COMMENT "",
+  `id_decimal` decimal128(27, 9) NOT NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`id_int`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id_int`) BUCKETS 2
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into test_basic (id_int, id_tinyint, id_smallint, id_bigint, id_largeint, 
+        id_float, id_double, id_char, id_string, id_date, id_datetime, id_decimal) values
+        (1, 10, 100, 1000, 10000, 100000.1, 1000000.1, 'test_char', test_varchar', '2020-07-24', '2020-07-24', 123.78),
+        (2, 20, 200, 2000, 20000, 200000.1, 2000000.1, 'test_char2', 'testvarchar2', '2020-07-23', '1020-07-24', 123.56),
+        (3, 30, 300, 3000, 30000, 300000.1, 3000000.1, 'test_char3', 'testvarchar3', '2020-07-22', '3020-07-24', 123.34),
+        (4, 40, 400, 4000, 40000, 400000.1, 4000000.1, 'test_char4', 'testvarchar4', '2020-07-21', '1999-07-24', 123.12),
+        (5, 50, 100, 5000, 10000, 100000.1, 1000000.1, 'test_char', test_varchar', '2020-07-24', '2020-07-24', 1234.11),
+        (6, 60, 200, 6000, 20000, 200000.1, 2000000.1, 'test_char2', 'testvarchar2', '2020-07-23', '1020-07-24', 1234.12),
+        (7, 70, 300, 7000, 30000, 300000.1, 3000000.1, 'test_char3', 'testvarchar3', '2020-07-22', '3020-07-24', 2345.13),
+        (8, 80, 400, 8000, 40000, 400000.1, 4000000.1, 'test_char4', 'testvarchar4', '2020-07-21', '1999-07-24', 2367.34)
+select sum(id_int) from test_basic group by id_int order by id_int;
+-- result:
+E: (1064, "Getting syntax error at line 3, column 80. Detail message: Unexpected input '', '', the most similar input is {',', ')'}.")
+-- !result
+select sum(id_int) from test_basic group by id_int order by id_int;
+-- result:
+-- !result
+CREATE TABLE `t_array` (
+    `c_1_0` int NULL COMMENT "",
+    `c_1_1` array <int> NULL COMMENT ""
+) ENGINE = OLAP 
+DUPLICATE KEY(`c_1_0`) COMMENT "OLAP" 
+DISTRIBUTED BY HASH(`c_1_0`) BUCKETS 1 PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t_array values (null, null), (1, [1]), (1, [1]), (1, [1,2,3]), (1, null), (null, [1]);
+-- result:
+-- !result
+insert into t_array values (null, null), (1, [1]), (1, [2]), (2, [1,2,3]), (1, null), (null, [1]);
+-- result:
+-- !result
+insert into t_array values (null, null), (1, [1, null]), (1, [2, null]), (1, [1, null]);
+-- result:
+-- !result
+select count(*), c_1_0 from t_array group by c_1_0 order by c_1_0;
+-- result:
+5	None
+10	1
+1	2
+-- !result
+select count(*), c_1_1 from t_array group by c_1_1 order by c_1_1;
+-- result:
+5	None
+5	[1]
+2	[1,null]
+2	[1,2,3]
+1	[2]
+1	[2,null]
+-- !result
+select count(*), c_1_0, c_1_1 from t_array group by c_1_0, c_1_1 order by c_1_0, c_1_1;
+-- result:
+3	None	None
+2	None	[1]
+2	1	None
+3	1	[1]
+2	1	[1,null]
+1	1	[1,2,3]
+1	1	[2]
+1	1	[2,null]
+1	2	[1,2,3]
+-- !result

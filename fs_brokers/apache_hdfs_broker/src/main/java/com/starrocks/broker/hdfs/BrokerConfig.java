@@ -35,6 +35,15 @@ public class BrokerConfig extends ConfigBase {
     public static int broker_ipc_port = 8000;
 
     /**
+     * As is shown https://github.com/StarRocks/starrocks/pull/16648, broker may stuck in OSS close in some cases,
+     * this will lead to all following open/write request to broker stuck.
+     * To avoid this problem, we can set disable_broker_client_expiration_checking=true in apache_hdfs_broker.conf,
+     * and restart broker.
+     */
+    @ConfField
+    public static boolean disable_broker_client_expiration_checking = false;
+
+    /**
      * If the kerberos HDFS client is alive beyond this time,
      * client checker will destroy it to avoid kerberos token expire.
      * Set this value a little smaller than the actual token expire seconds,

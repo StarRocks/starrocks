@@ -15,11 +15,18 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 public class RecoverDbStmt extends DdlStmt {
     private String catalog;
     private String dbName;
 
     public RecoverDbStmt(String dbName) {
+        this(dbName, NodePosition.ZERO);
+    }
+
+    public RecoverDbStmt(String dbName, NodePosition pos) {
+        super(pos);
         this.dbName = dbName;
     }
 

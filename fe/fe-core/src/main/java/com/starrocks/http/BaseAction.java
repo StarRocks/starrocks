@@ -36,15 +36,21 @@ package com.starrocks.http;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
-import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.AuthorizationMgr;
+import com.starrocks.privilege.PrivilegeBuiltinConstants;
+import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.UserIdentity;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelProgressiveFuture;
 import io.netty.channel.ChannelProgressiveFutureListener;
 import io.netty.channel.DefaultFileRegion;
@@ -80,6 +86,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public abstract class BaseAction implements IAction {
     private static final Logger LOG = LogManager.getLogger(BaseAction.class);
@@ -101,7 +108,7 @@ public abstract class BaseAction implements IAction {
             execute(request, response);
         } catch (Exception e) {
             LOG.warn("fail to process url: {}", request.getRequest().uri(), e);
-            if (e instanceof UnauthorizedException) {
+            if (e instanceof AccessDeniedException) {
                 response.updateHeader(HttpHeaderNames.WWW_AUTHENTICATE.toString(), "Basic realm=\"\"");
                 writeResponse(request, response, HttpResponseStatus.UNAUTHORIZED);
             } else {
@@ -240,7 +247,7 @@ public abstract class BaseAction implements IAction {
         }
     }
 
-    // Set 'CONTENT_TYPE' header if it havn't been set.
+    // Set 'CONTENT_TYPE' header if it hasn't been set.
     protected void checkDefaultContentTypeHeader(BaseResponse response, Object responseOj) {
         if (!Strings.isNullOrEmpty(response.getContentType())) {
             response.updateHeader(HttpHeaderNames.CONTENT_TYPE.toString(), response.getContentType());
@@ -259,6 +266,10 @@ public abstract class BaseAction implements IAction {
         for (Cookie cookie : response.getCookies()) {
             responseObj.headers().add(HttpHeaderNames.SET_COOKIE.toString(), ServerCookieEncoder.LAX.encode(cookie));
         }
+    }
+
+    protected void handleChannelInactive(ChannelHandlerContext ctx) {
+        LOG.error("connection closed unexpectedly");
     }
 
     public static class ActionAuthorizationInfo {
@@ -283,49 +294,58 @@ public abstract class BaseAction implements IAction {
         }
     }
 
-    protected void checkGlobalAuth(UserIdentity currentUser, PrivPredicate predicate) throws UnauthorizedException {
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(currentUser, predicate)) {
-            throw new UnauthorizedException("Access denied; you need (at least one of) the "
-                    + predicate.getPrivs().toString() + " privilege(s) for this operation");
+    // For new RBAC privilege framework
+    protected void checkActionOnSystem(UserIdentity currentUser, PrivilegeType... systemActions) {
+        for (PrivilegeType systemAction : systemActions) {
+            Authorizer.checkSystemAction(currentUser, null, systemAction);
         }
     }
 
-    protected void checkDbAuth(UserIdentity currentUser, String db, PrivPredicate predicate)
-            throws UnauthorizedException {
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(currentUser, db, predicate)) {
-            throw new UnauthorizedException("Access denied; you need (at least one of) the "
-                    + predicate.getPrivs().toString() + " privilege(s) for this operation");
+    // We check whether user owns db_admin and user_admin role in new RBAC privilege framework for
+    // operation which checks `PrivPredicate.ADMIN` in global table in old Auth framework.
+    protected void checkUserOwnsAdminRole(UserIdentity currentUser) throws AccessDeniedException {
+        try {
+            Set<Long> userOwnedRoles = AuthorizationMgr.getOwnedRolesByUser(currentUser);
+            if (!(currentUser.equals(UserIdentity.ROOT) ||
+                    userOwnedRoles.contains(PrivilegeBuiltinConstants.ROOT_ROLE_ID) ||
+                    (userOwnedRoles.contains(PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID) &&
+                            userOwnedRoles.contains(PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID)))) {
+                throw new AccessDeniedException(
+                        "Access denied; you need own root role or own db_admin and user_admin roles for this " +
+                                "operation");
+            }
+        } catch (PrivilegeException e) {
+            AccessDeniedException newException = new AccessDeniedException(
+                    "Access denied; you need own db_admin and user_admin roles for this operation");
+            newException.initCause(e);
         }
     }
 
-    protected void checkTblAuth(UserIdentity currentUser, String db, String tbl, PrivPredicate predicate)
-            throws UnauthorizedException {
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, db, tbl, predicate)) {
-            throw new UnauthorizedException("Access denied; you need (at least one of) the "
-                    + predicate.getPrivs().toString() + " privilege(s) for this operation");
-        }
+    protected void checkTableAction(ConnectContext context, String db, String tbl, PrivilegeType privType) {
+        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), db, tbl, privType);
     }
 
     // return currentUserIdentity from StarRocks auth
     public static UserIdentity checkPassword(ActionAuthorizationInfo authInfo)
-            throws UnauthorizedException {
-        List<UserIdentity> currentUser = Lists.newArrayList();
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkPlainPassword(authInfo.fullUserName,
-                authInfo.remoteIp, authInfo.password, currentUser)) {
-            throw new UnauthorizedException("Access denied for "
+            throws AccessDeniedException {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        UserIdentity currentUser =
+                globalStateMgr.getAuthenticationMgr().checkPlainPassword(
+                        authInfo.fullUserName, authInfo.remoteIp, authInfo.password);
+        if (currentUser == null) {
+            throw new AccessDeniedException("Access denied for "
                     + authInfo.fullUserName + "@" + authInfo.remoteIp);
         }
-        Preconditions.checkState(currentUser.size() == 1);
-        return currentUser.get(0);
+        return currentUser;
     }
 
     public ActionAuthorizationInfo getAuthorizationInfo(BaseRequest request)
-            throws UnauthorizedException {
+            throws AccessDeniedException {
         ActionAuthorizationInfo authInfo = new ActionAuthorizationInfo();
         if (!parseAuthInfo(request, authInfo)) {
             LOG.info("parse auth info failed, Authorization header {}, url {}",
                     request.getAuthorizationHeader(), request.getRequest().uri());
-            throw new UnauthorizedException("Need auth information.");
+            throw new AccessDeniedException("Need auth information.");
         }
         LOG.debug("get auth info: {}", authInfo);
         return authInfo;

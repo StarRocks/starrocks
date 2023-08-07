@@ -20,11 +20,20 @@ import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.sql.ast.StatementBase;
+import org.apache.commons.lang3.StringUtils;
 
 public abstract class BaseTaskRunProcessor implements TaskRunProcessor {
     @Override
     public void processTaskRun(TaskRunContext context) throws Exception {
         throw new NotImplementedException("Method processTaskRun need to implement");
+    }
+
+    @Override
+    public void postTaskRun(TaskRunContext context) throws Exception {
+        if (StringUtils.isNotEmpty(context.getPostRun())) {
+            ConnectContext ctx = context.getCtx();
+            ctx.executeSql(context.getPostRun());
+        }
     }
 
     protected void auditAfterExec(TaskRunContext context, StatementBase parsedStmt, PQueryStatistics statistics) {

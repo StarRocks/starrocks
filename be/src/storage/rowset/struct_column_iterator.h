@@ -17,7 +17,10 @@
 #include "storage/rowset/column_reader.h"
 
 namespace starrocks {
+class ColumnAccessPath;
 
-StatusOr<std::unique_ptr<ColumnIterator>> create_struct_iter(std::unique_ptr<ColumnIterator> null_iter,
-                                                             std::vector<std::unique_ptr<ColumnIterator>> field_iters);
-}
+StatusOr<std::unique_ptr<ColumnIterator>> create_struct_iter(ColumnReader* reader,
+                                                             std::unique_ptr<ColumnIterator> null_iter,
+                                                             std::vector<std::unique_ptr<ColumnIterator>> field_iters,
+                                                             const ColumnAccessPath* path);
+} // namespace starrocks

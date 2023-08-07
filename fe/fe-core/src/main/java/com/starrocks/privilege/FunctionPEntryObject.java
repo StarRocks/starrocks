@@ -19,7 +19,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.server.GlobalStateMgr;
-import org.apache.commons.lang3.StringUtils;
+import com.starrocks.sql.common.MetaNotFoundException;
 
 import java.util.List;
 
@@ -27,57 +27,32 @@ public class FunctionPEntryObject implements PEntryObject {
 
     @SerializedName(value = "d")
     protected long databaseId;
-    @SerializedName(value = "f")
-    protected String functionSig;
-    protected static final long ALL_DATABASE_ID = -2; // -2 represent all databases
-    protected static final String ALL_FUNCTIONS_SIG = "AS"; // AS represent all functions
 
-    public static final String FUNC_NOT_FOUND = "funcNotFound";
+    @SerializedName(value = "functionId")
+    protected Long functionId;
 
-    public static FunctionPEntryObject generate(GlobalStateMgr mgr, List<String> tokens) throws PrivilegeException {
-        if (tokens.size() != 2) {
-            throw new PrivilegeException("invalid object tokens, should have two: " + tokens);
-        }
-        if (tokens.get(1).equals(FUNC_NOT_FOUND)) {
-            throw new PrivilegeException("func not found");
-        }
-        Database database = mgr.getDb(tokens.get(0));
-        if (database == null) {
-            throw new PrivilegeException("cannot find db: " + tokens.get(0));
-        }
-        String funcSig = tokens.get(1);
-        return new FunctionPEntryObject(database.getId(), funcSig);
+    public long getDatabaseId() {
+        return databaseId;
     }
 
-    public static FunctionPEntryObject generate(
-            GlobalStateMgr mgr, List<String> allTypes, String restrictType, String restrictName)
-            throws PrivilegeException {
-        if (allTypes.size() == 1) {
-            if (StringUtils.isEmpty(restrictType)
-                    || !restrictType.equals(PrivilegeType.DATABASE.toString())
-                    || StringUtils.isEmpty(restrictName)) {
-                throw new PrivilegeException("ALL FUNCTIONS must be restricted with database!");
-            }
-
-            Database database = mgr.getDb(restrictName);
-            if (database == null) {
-                throw new PrivilegeException("cannot find db: " + restrictName);
-            }
-            return new FunctionPEntryObject(database.getId(), ALL_FUNCTIONS_SIG);
-        } else if (allTypes.size() == 2) {
-            if (!allTypes.get(1).equals(PrivilegeType.DATABASE.getPlural())) {
-                throw new PrivilegeException(
-                        "ALL FUNCTIONS must be restricted with ALL DATABASES instead of ALL " + allTypes.get(1));
-            }
-            return new FunctionPEntryObject(ALL_DATABASE_ID, ALL_FUNCTIONS_SIG);
-        } else {
-            throw new PrivilegeException("invalid ALL statement for functions!");
-        }
+    public Long getFunctionId() {
+        return functionId;
     }
 
-    protected FunctionPEntryObject(long databaseId, String functionSig) {
+    protected FunctionPEntryObject(long databaseId, Long functionId) {
         this.databaseId = databaseId;
-        this.functionSig = functionSig;
+        this.functionId = functionId;
+    }
+
+    public static FunctionPEntryObject generate(GlobalStateMgr mgr, Long databaseId, Long functionId) throws PrivilegeException {
+        FunctionPEntryObject functionPEntryObject = new FunctionPEntryObject(databaseId, functionId);
+        if (functionId != PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID) {
+            if (!functionPEntryObject.validate(mgr)) {
+                throw new PrivObjNotFoundException("cannot find function: " + functionId);
+            }
+        }
+
+        return functionPEntryObject;
     }
 
     @Override
@@ -86,35 +61,41 @@ public class FunctionPEntryObject implements PEntryObject {
             return false;
         }
         FunctionPEntryObject other = (FunctionPEntryObject) obj;
-        if (other.databaseId == ALL_DATABASE_ID) {
+        if (other.databaseId == PrivilegeBuiltinConstants.ALL_DATABASE_ID) {
             return true;
         }
-        if (other.functionSig.equals(ALL_FUNCTIONS_SIG)) {
+
+        if (other.functionId.equals(PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID)) {
             return databaseId == other.databaseId;
         }
-        return other.databaseId == this.databaseId &&
-                other.functionSig.equals(this.functionSig);
+        return other.databaseId == this.databaseId && other.functionId.equals(this.functionId);
     }
 
     @Override
     public boolean isFuzzyMatching() {
-        return databaseId == ALL_DATABASE_ID || functionSig.equals(ALL_FUNCTIONS_SIG);
+        return databaseId == PrivilegeBuiltinConstants.ALL_DATABASE_ID
+                || functionId.equals(PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID);
     }
 
     @Override
     public boolean validate(GlobalStateMgr globalStateMgr) {
-        Database db = globalStateMgr.getDbIncludeRecycleBin(this.databaseId);
-        if (db == null) {
-            return false;
+        List<Function> allFunctions;
+        if (databaseId == PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID) {
+            allFunctions = globalStateMgr.getGlobalFunctionMgr().getFunctions();
+        } else {
+            Database db = globalStateMgr.getDbIncludeRecycleBin(this.databaseId);
+            if (db == null) {
+                return false;
+            }
+            allFunctions = db.getFunctions();
         }
-        Function targetFunc = null;
-        for (Function f : db.getFunctions()) {
-            if (f.signatureString().equals(this.functionSig)) {
-                targetFunc = f;
-                break;
+
+        for (Function f : allFunctions) {
+            if (f.getFunctionId() == this.functionId) {
+                return true;
             }
         }
-        return targetFunc != null;
+        return false;
     }
 
     @Override
@@ -128,19 +109,19 @@ public class FunctionPEntryObject implements PEntryObject {
         } else if (this.databaseId < o.databaseId) {
             return -1;
         } else {
-            if (functionSig.equals(ALL_FUNCTIONS_SIG)) {
+            if (functionId.equals(PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID)) {
                 return -1;
-            } else if (o.functionSig.equals(ALL_FUNCTIONS_SIG)) {
+            } else if (o.functionId.equals(PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID)) {
                 return 1;
             } else {
-                return functionSig.compareTo(o.functionSig);
+                return functionId.compareTo(PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID);
             }
         }
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(functionSig, databaseId);
+        return Objects.hashCode(databaseId, functionId);
     }
 
     @Override
@@ -152,12 +133,51 @@ public class FunctionPEntryObject implements PEntryObject {
             return false;
         }
         FunctionPEntryObject that = (FunctionPEntryObject) obj;
-        return Objects.equal(functionSig, that.functionSig) &&
-                Objects.equal(databaseId, that.databaseId);
+        return Objects.equal(databaseId, that.databaseId) && Objects.equal(functionId, that.functionId);
     }
 
     @Override
     public PEntryObject clone() {
-        return new FunctionPEntryObject(databaseId, functionSig);
+        return new FunctionPEntryObject(databaseId, functionId);
+    }
+
+    @Override
+    public String toString() {
+        if (databaseId == PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID) {
+            if (functionId == PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID) {
+                return "ALL GLOBAL FUNCTIONS";
+            } else {
+                for (Function f : GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().getFunctions()) {
+                    if (f.getFunctionId() == functionId) {
+                        return f.getSignature();
+                    }
+                }
+                throw new MetaNotFoundException("Can't find database : " + databaseId);
+            }
+        } else {
+            if (databaseId == PrivilegeBuiltinConstants.ALL_DATABASE_ID) {
+                return "ALL FUNCTIONS IN ALL DATABASES";
+            } else {
+                Database database = GlobalStateMgr.getCurrentState().getDb(databaseId);
+                if (database == null) {
+                    throw new MetaNotFoundException("Can't find database : " + databaseId);
+                }
+
+                StringBuilder sb = new StringBuilder();
+                if (functionId.equals(PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID)) {
+                    sb.append("ALL FUNCTIONS ");
+                    sb.append("IN DATABASE ");
+                    sb.append(database.getFullName());
+                } else {
+                    for (Function f : database.getFunctions()) {
+                        if (f.getFunctionId() == functionId) {
+                            return f.getSignature() + " in DATABASE " + database.getFullName();
+                        }
+                    }
+                    throw new MetaNotFoundException("Can't find database : " + databaseId);
+                }
+                return sb.toString();
+            }
+        }
     }
 }

@@ -120,7 +120,7 @@ public:
     ThreadPoolBuilder& set_idle_timeout(const MonoDelta& idle_timeout);
 
     // Instantiate a new ThreadPool with the existing builder arguments.
-    Status build(std::unique_ptr<ThreadPool>* pool) const;
+    [[nodiscard]] Status build(std::unique_ptr<ThreadPool>* pool) const;
 
 private:
     friend class ThreadPool;
@@ -182,26 +182,26 @@ public:
     // Wait for the running tasks to complete and then shutdown the threads.
     // All the other pending tasks in the queue will be removed.
     // NOTE: That the user may implement an external abort logic for the
-    //       runnables, that must be called before Shutdown(), if the system
+    //       runnable, that must be called before Shutdown(), if the system
     //       should know about the non-execution of these tasks, or the runnable
-    //       require an explicit "abort" notification to exit from the run loop.
+    //       required an explicit "abort" notification to exit from the run loop.
     void shutdown();
 
     // Submits a Runnable class.
-    Status submit(std::shared_ptr<Runnable> r, Priority pri = LOW_PRIORITY);
+    [[nodiscard]] Status submit(std::shared_ptr<Runnable> r, Priority pri = LOW_PRIORITY);
 
     // Submits a function bound using std::bind(&FuncName, args...).
-    Status submit_func(std::function<void()> f, Priority pri = LOW_PRIORITY);
+    [[nodiscard]] Status submit_func(std::function<void()> f, Priority pri = LOW_PRIORITY);
 
     // Waits until all the tasks are completed.
     void wait();
 
     // Waits for the pool to reach the idle state, or until 'delta' time elapses.
     // Returns true if the pool reached the idle state, false otherwise.
-    bool wait_for(const MonoDelta& delta);
+    [[nodiscard]] bool wait_for(const MonoDelta& delta);
 
     // dynamic update max threads num
-    Status update_max_threads(int max_threads);
+    [[nodiscard]] Status update_max_threads(int max_threads);
 
     // Allocates a new token for use in token-based task submission. All tokens
     // must be destroyed before their ThreadPool is destroyed.
@@ -232,6 +232,11 @@ public:
     MonoTime last_active_timestamp() const {
         std::lock_guard l(_lock);
         return _last_active_timestamp;
+    }
+
+    int active_threads() const {
+        std::lock_guard l(_lock);
+        return _active_threads;
     }
 
 private:
@@ -376,10 +381,10 @@ public:
     ~ThreadPoolToken();
 
     // Submits a Runnable class with specified priority.
-    Status submit(std::shared_ptr<Runnable> r, ThreadPool::Priority pri = ThreadPool::LOW_PRIORITY);
+    [[nodiscard]] Status submit(std::shared_ptr<Runnable> r, ThreadPool::Priority pri = ThreadPool::LOW_PRIORITY);
 
     // Submits a function bound using std::bind(&FuncName, args...)  with specified priority.
-    Status submit_func(std::function<void()> f, ThreadPool::Priority pri = ThreadPool::LOW_PRIORITY);
+    [[nodiscard]] Status submit_func(std::function<void()> f, ThreadPool::Priority pri = ThreadPool::LOW_PRIORITY);
 
     // Marks the token as unusable for future submissions. Any queued tasks not
     // yet running are destroyed. If tasks are in flight, Shutdown() will wait
@@ -393,7 +398,7 @@ public:
     // time elapses.
     //
     // Returns true if all submissions are complete, false otherwise.
-    bool wait_for(const MonoDelta& delta);
+    [[nodiscard]] bool wait_for(const MonoDelta& delta);
 
 private:
     // All possible token states. Legal state transitions:

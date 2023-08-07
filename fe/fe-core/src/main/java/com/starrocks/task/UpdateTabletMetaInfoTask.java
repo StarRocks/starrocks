@@ -35,6 +35,7 @@
 package com.starrocks.task;
 
 import com.google.common.collect.Lists;
+import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
@@ -62,11 +63,17 @@ public class UpdateTabletMetaInfoTask extends AgentTask {
     private Set<Pair<Long, Integer>> tableIdWithSchemaHash;
     private boolean isInMemory;
     private boolean enablePersistentIndex;
+
+    private BinlogConfig binlogConfig;
+
     private TTabletMetaType metaType;
 
     // <tablet id, tablet schema hash, tablet in memory> or
     // <tablet id, tablet schema hash, tablet enable persistent index>
     private List<Triple<Long, Integer, Boolean>> tabletToMeta;
+
+    // <tablet id, tablet schema hash, BinlogConfig>
+    private List<Triple<Long, Integer, BinlogConfig>> tabletToBinlogCofig;
 
     public UpdateTabletMetaInfoTask(long backendId, Set<Pair<Long, Integer>> tableIdWithSchemaHash,
                                     TTabletMetaType metaType) {
@@ -91,12 +98,30 @@ public class UpdateTabletMetaInfoTask extends AgentTask {
     }
 
     public UpdateTabletMetaInfoTask(long backendId,
+                                    Set<Pair<Long, Integer>> tableIdWithSchemaHash,
+                                    BinlogConfig binlogConfig,
+                                    MarkedCountDownLatch<Long, Set<Pair<Long, Integer>>> latch,
+                                    TTabletMetaType metaType) {
+        this(backendId, tableIdWithSchemaHash, metaType);
+        this.binlogConfig = binlogConfig;
+        this.latch = latch;
+    }
+
+    public UpdateTabletMetaInfoTask(long backendId,
                                     List<Triple<Long, Integer, Boolean>> tabletToMeta,
                                     TTabletMetaType metaType) {
         super(null, backendId, TTaskType.UPDATE_TABLET_META_INFO,
                 -1L, -1L, -1L, -1L, -1L, tabletToMeta.hashCode());
         this.metaType = metaType;
         this.tabletToMeta = tabletToMeta;
+    }
+
+    public UpdateTabletMetaInfoTask(long backendId,
+                                    List<Triple<Long, Integer, BinlogConfig>> tabletToBinlogCofig) {
+        super(null, backendId, TTaskType.UPDATE_TABLET_META_INFO,
+                -1L, -1L, -1L, -1L, -1L, tabletToBinlogCofig.hashCode());
+        this.metaType = TTabletMetaType.BINLOG_CONFIG;
+        this.tabletToBinlogCofig = tabletToBinlogCofig;
     }
 
     public void countDownLatch(long backendId, Set<Pair<Long, Integer>> tablets) {
@@ -195,6 +220,30 @@ public class UpdateTabletMetaInfoTask extends AgentTask {
                 }
                 break;
             }
+            case BINLOG_CONFIG: {
+                if (latch != null) {
+                    // for schema change
+                    for (Pair<Long, Integer> pair : tableIdWithSchemaHash) {
+                        TTabletMetaInfo metaInfo = new TTabletMetaInfo();
+                        metaInfo.setTablet_id(pair.first);
+                        metaInfo.setSchema_hash(pair.second);
+                        metaInfo.setBinlog_config(binlogConfig.toTBinlogConfig());
+                        metaInfo.setMeta_type(metaType);
+                        metaInfos.add(metaInfo);
+                    }
+                } else {
+                    // for ReportHandler
+                    for (Triple<Long, Integer, BinlogConfig> triple : tabletToBinlogCofig) {
+                        TTabletMetaInfo metaInfo = new TTabletMetaInfo();
+                        metaInfo.setTablet_id(triple.getLeft());
+                        metaInfo.setSchema_hash(triple.getMiddle());
+                        metaInfo.setBinlog_config(triple.getRight().toTBinlogConfig());
+                        metaInfo.setMeta_type(metaType);
+                        metaInfos.add(metaInfo);
+                    }
+                }
+            }
+
         }
         updateTabletMetaInfoReq.setTabletMetaInfos(metaInfos);
         return updateTabletMetaInfoReq;

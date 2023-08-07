@@ -132,7 +132,6 @@ std::shared_ptr<TPlanNode> FileScanNodeTest::_create_tplan_node() {
     tnode->__set_node_type(TPlanNodeType::FILE_SCAN_NODE);
     tnode->__set_row_tuples(tuple_ids);
     tnode->__set_nullable_tuples(nullable_tuples);
-    tnode->__set_use_vectorized(true);
     tnode->__set_limit(-1);
 
     TConnectorScanNode connector_scan_node;
@@ -193,8 +192,7 @@ TEST_F(FileScanNodeTest, CSVBasic) {
     ASSERT_FALSE(eos);
     ASSERT_EQ(chunk->num_rows(), 3);
 
-    status = file_scan_node->close(_runtime_state.get());
-    ASSERT_TRUE(status.ok());
+    file_scan_node->close(_runtime_state.get());
 }
 
 } // namespace starrocks

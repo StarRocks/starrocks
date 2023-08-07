@@ -41,11 +41,9 @@ import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.Before;
 import org.junit.Rule;
@@ -86,15 +84,10 @@ public class DatabaseTransactionMgrTest {
         fakeTransactionIDGenerator = new FakeTransactionIDGenerator();
         masterGlobalStateMgr = GlobalStateMgrTestUtil.createTestState();
         slaveGlobalStateMgr = GlobalStateMgrTestUtil.createTestState();
-        MetaContext metaContext = new MetaContext();
-        metaContext.setMetaVersion(FeMetaVersion.VERSION_83);
-        metaContext.setThreadLocalInfo();
 
         masterTransMgr = masterGlobalStateMgr.getGlobalTransactionMgr();
-        masterTransMgr.setEditLog(masterGlobalStateMgr.getEditLog());
 
         slaveTransMgr = slaveGlobalStateMgr.getGlobalTransactionMgr();
-        slaveTransMgr.setEditLog(slaveGlobalStateMgr.getEditLog());
 
         lableToTxnId = addTransactionToTransactionMgr();
     }

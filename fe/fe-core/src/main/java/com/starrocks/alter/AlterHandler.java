@@ -39,10 +39,9 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
 import com.starrocks.qe.ShowResultSet;
@@ -62,10 +61,8 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.locks.ReentrantLock;
 
-public abstract class AlterHandler extends LeaderDaemon {
+public abstract class AlterHandler extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(AlterHandler.class);
-
-    // queue of alter job v2
     protected ConcurrentMap<Long, AlterJobV2> alterJobsV2 = Maps.newConcurrentMap();
 
     /**
@@ -88,7 +85,7 @@ public abstract class AlterHandler extends LeaderDaemon {
     }
 
     public AlterHandler(String name) {
-        super(name, FeConstants.default_scheduler_interval_millisecond);
+        super(name, Config.alter_scheduler_interval_millisecond);
         executor = ThreadPoolManager
                 .newDaemonCacheThreadPool(Config.alter_max_worker_threads, Config.alter_max_worker_queue_size,
                         name + "_pool", true);

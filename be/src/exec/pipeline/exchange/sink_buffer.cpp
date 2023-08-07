@@ -28,8 +28,9 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
                        bool is_dest_merge)
         : _fragment_ctx(fragment_ctx),
           _mem_tracker(fragment_ctx->runtime_state()->instance_mem_tracker()),
-          _brpc_timeout_ms(std::min(3600, fragment_ctx->runtime_state()->query_options().query_timeout) * 1000),
-          _is_dest_merge(is_dest_merge) {
+          _brpc_timeout_ms(fragment_ctx->runtime_state()->query_options().query_timeout * 1000),
+          _is_dest_merge(is_dest_merge),
+          _rpc_http_min_size(fragment_ctx->runtime_state()->get_rpc_http_min_size()) {
     for (const auto& dest : destinations) {
         const auto& instance_id = dest.fragment_instance_id;
         // instance_id.lo == -1 indicates that the destination is pseudo for bucket shuffle join.
@@ -132,11 +133,6 @@ bool SinkBuffer::is_finished() const {
 }
 
 void SinkBuffer::update_profile(RuntimeProfile* profile) {
-    bool flag = false;
-    if (!_is_profile_updated.compare_exchange_strong(flag, true)) {
-        return;
-    }
-
     auto* rpc_count = ADD_COUNTER(profile, "RpcCount", TUnit::UNIT);
     auto* rpc_avg_timer = ADD_TIMER(profile, "RpcAvgTime");
     auto* network_timer = ADD_TIMER(profile, "NetworkTime");
@@ -152,7 +148,7 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     // WaitTime consists two parts
     // 1. buffer full time
     // 2. pending finish time
-    COUNTER_UPDATE(wait_timer, _full_time);
+    COUNTER_SET(wait_timer, _full_time);
     COUNTER_UPDATE(wait_timer, MonotonicNanos() - _pending_timestamp);
 
     auto* bytes_sent_counter = ADD_COUNTER(profile, "BytesSent", TUnit::BYTES);
@@ -208,10 +204,11 @@ void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
 }
 
 void SinkBuffer::_update_network_time(const TUniqueId& instance_id, const int64_t send_timestamp,
-                                      const int64_t receive_timestamp) {
-    _last_receive_time = MonotonicNanos();
+                                      const int64_t receiver_post_process_time) {
+    const int64_t get_response_timestamp = MonotonicNanos();
+    _last_receive_time = get_response_timestamp;
     int32_t concurrency = _num_in_flight_rpcs[instance_id.lo];
-    int64_t time_usage = receive_timestamp - send_timestamp;
+    int64_t time_usage = get_response_timestamp - send_timestamp - receiver_post_process_time;
     _network_times[instance_id.lo].update(time_usage, concurrency);
     _rpc_cumulative_time += time_usage;
     _rpc_count++;
@@ -230,6 +227,30 @@ void SinkBuffer::_process_send_window(const TUniqueId& instance_id, const int64_
     while ((it = seqs.find(max_continuous_acked_seq + 1)) != seqs.end()) {
         seqs.erase(it);
         ++max_continuous_acked_seq;
+    }
+}
+
+void SinkBuffer::_try_to_merge_query_statistics(TransmitChunkInfo& request) {
+    if (!request.params->has_query_statistics()) {
+        return;
+    }
+    auto& query_statistics = request.params->query_statistics();
+    bool need_merge = false;
+    if (query_statistics.scan_rows() > 0 || query_statistics.scan_bytes() > 0 || query_statistics.cpu_cost_ns() > 0) {
+        need_merge = true;
+    }
+    if (!need_merge && query_statistics.stats_items_size() > 0) {
+        for (int i = 0; i < query_statistics.stats_items_size(); i++) {
+            const auto& stats_item = query_statistics.stats_items(i);
+            if (stats_item.scan_rows() > 0 || stats_item.scan_bytes()) {
+                need_merge = true;
+                break;
+            }
+        }
+    }
+    if (need_merge) {
+        _eos_query_stats->merge_pb(query_statistics);
+        request.params->clear_query_statistics();
     }
 }
 
@@ -297,6 +318,8 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             // eos is the last packet to send to finish the input stream of the corresponding of
             // ExchangeSourceOperator and eos is sent exactly-once.
             if (_num_sinkers[instance_id.lo] > 1) {
+                // to reduce uncessary rpc requests, we merge all query statistics in eos requests into one and send it through the last eos request
+                _try_to_merge_query_statistics(request);
                 if (request.params->chunks_size() == 0) {
                     continue;
                 } else {
@@ -310,6 +333,10 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                     need_wait = true;
                     return Status::OK();
                 }
+                // this is the last eos query, set query stats
+                _eos_query_stats->merge_pb(request.params->query_statistics());
+                request.params->clear_query_statistics();
+                _eos_query_stats->to_pb(request.params->mutable_query_statistics());
             }
         }
 
@@ -322,7 +349,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         }
 
         auto* closure = new DisposableClosure<PTransmitChunkResult, ClosureContext>(
-                {instance_id, request.params->sequence(), GetCurrentTimeNanos()});
+                {instance_id, request.params->sequence(), MonotonicNanos()});
         if (_first_send_time == -1) {
             _first_send_time = MonotonicNanos();
         }
@@ -353,8 +380,8 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                                             status.message());
             } else {
                 _try_to_send_rpc(ctx.instance_id, [&]() {
+                    _update_network_time(ctx.instance_id, ctx.send_timestamp, result.receiver_post_process_time());
                     _process_send_window(ctx.instance_id, ctx.sequence);
-                    _update_network_time(ctx.instance_id, ctx.send_timestamp, result.receive_timestamp());
                 });
             }
             --_total_in_flight_rpc;
@@ -366,24 +393,60 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         // Attachment will be released by process_mem_tracker in closure->Run() in bthread, when receiving the response,
         // so decrease the memory usage of attachment from instance_mem_tracker immediately before sending the request.
         _mem_tracker->release(request.attachment_physical_bytes);
-        ExecEnv::GetInstance()->process_mem_tracker()->consume(request.attachment_physical_bytes);
+        GlobalEnv::GetInstance()->process_mem_tracker()->consume(request.attachment_physical_bytes);
 
         closure->cntl.Reset();
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
-        closure->cntl.request_attachment().append(request.attachment);
 
+        Status st;
         if (bthread_self()) {
-            request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
+            st = _send_rpc(closure, request);
         } else {
             // When the driver worker thread sends request and creates the protobuf request,
             // also use process_mem_tracker to record the memory of the protobuf request.
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
-            request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
+            // must in the same scope following the above
+            st = _send_rpc(closure, request);
         }
-
-        return Status::OK();
+        return st;
     }
-
     return Status::OK();
 }
+
+Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureContext>* closure,
+                             const TransmitChunkInfo& request) {
+    auto expected_iobuf_size = request.attachment.size() + request.params->ByteSizeLong() + sizeof(size_t) * 2;
+    if (UNLIKELY(expected_iobuf_size > _rpc_http_min_size)) {
+        butil::IOBuf iobuf;
+        butil::IOBufAsZeroCopyOutputStream wrapper(&iobuf);
+        request.params->SerializeToZeroCopyStream(&wrapper);
+        // append params to iobuf
+        size_t params_size = iobuf.size();
+        closure->cntl.request_attachment().append(&params_size, sizeof(params_size));
+        closure->cntl.request_attachment().append(iobuf);
+        // append attachment
+        size_t attachment_size = request.attachment.size();
+        closure->cntl.request_attachment().append(&attachment_size, sizeof(attachment_size));
+        closure->cntl.request_attachment().append(request.attachment);
+        VLOG_ROW << "issue a http rpc, attachment's size = " << attachment_size
+                 << " , total size = " << closure->cntl.request_attachment().size();
+
+        if (UNLIKELY(expected_iobuf_size != closure->cntl.request_attachment().size())) {
+            LOG(WARNING) << "http rpc expected iobuf size " << expected_iobuf_size << " != "
+                         << " real iobuf size " << closure->cntl.request_attachment().size();
+        }
+        closure->cntl.http_request().set_content_type("application/proto");
+        // create http_stub as needed
+        auto res = BrpcStubCache::create_http_stub(request.brpc_addr);
+        if (!res.ok()) {
+            return res.status();
+        }
+        res.value()->transmit_chunk_via_http(&closure->cntl, nullptr, &closure->result, closure);
+    } else {
+        closure->cntl.request_attachment().append(request.attachment);
+        request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
+    }
+    return Status::OK();
+}
+
 } // namespace starrocks::pipeline

@@ -208,9 +208,10 @@ public class TypeTest {
         String json = GsonUtils.GSON.toJson(mapType);
         Type deType = GsonUtils.GSON.fromJson(json, Type.class);
         Assert.assertTrue(deType.isMapType());
-        Assert.assertEquals("MAP<INT,STRUCT<c1 int(11), cc1 varchar(1048576)>>", deType.toString());
-        // test initialed selectedField by ctor in deserializer.
-        deType.setSelectedField(0, false);
+        Assert.assertEquals("MAP<INT,struct<c1 int(11), cc1 varchar(1048576)>>", deType.toString());
+        // Make sure select fields are false when initialized
+        Assert.assertFalse(deType.selectedFields[0]);
+        Assert.assertFalse(deType.selectedFields[1]);
     }
 
     @Test
@@ -227,7 +228,7 @@ public class TypeTest {
         String json = GsonUtils.GSON.toJson(root);
         Type deType = GsonUtils.GSON.fromJson(json, Type.class);
         Assert.assertTrue(deType.isStructType());
-        Assert.assertEquals("STRUCT<struct_test int(11) COMMENT 'comment test', c1 STRUCT<c1 int(11), cc1 varchar(1048576)>>",
+        Assert.assertEquals("struct<struct_test int(11) COMMENT 'comment test', c1 struct<c1 int(11), cc1 varchar(1048576)>>",
                 deType.toString());
         // test initialed fieldMap by ctor in deserializer.
         Assert.assertEquals(1, ((StructType) deType).getFieldPos("c1"));

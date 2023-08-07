@@ -96,6 +96,7 @@ public class AnalyzeSnapshotTest {
         GlobalStateMgr.getCurrentState().getBackupHandler().getRepoMgr().addAndInitRepoIfNotExist(repo, false);
 
         analyzeSuccess("SHOW SNAPSHOT ON `repo` WHERE SNAPSHOT = \"backup1\" AND TIMESTAMP = \"2018-05-05-15-34-26\";");
+        analyzeSuccess("SHOW SNAPSHOT ON `repo` WHERE SNAPSHOT IN (\"backup1\")");
         analyzeFail("SHOW SNAPSHOT ON `repo` WHERE SNAPSHOT = \"backup1\" OR TIMESTAMP = \"2018-05-05-15-34-26\";");
         analyzeFail("SHOW SNAPSHOT ON `repo` WHERE SNAPSHOT = \"\" AND TIMESTAMP = \"\";");
         analyzeFail("SHOW SNAPSHOT ON `repo` WHERE 1 = 1 ;");

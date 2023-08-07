@@ -39,6 +39,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.ShowRepositoriesStmt;
 import mockit.Delegate;
@@ -82,6 +83,8 @@ public class RepositoryTest {
         files.add("1.hdr");
         files.add("1.idx");
         info = new SnapshotInfo(1, 2, 3, 4, 5, 6, 7, "/path/to/tablet/snapshot/", files);
+
+        MetricRepo.init();
 
         new MockUp<FrontendOptions>() {
             @Mock
@@ -149,18 +152,18 @@ public class RepositoryTest {
         long creastTs = ts.getTime();
 
         // "location/__starrocks_repository_repo_name/__ss_my_sp1/__info_2018-01-01-08-00-00"
-        String expected = location + "/" + Repository.PREFIX_REPO + name + "/" + Repository.PREFIX_SNAPSHOT_DIR
+        String expected = location + "/" + repo.prefixRepo + name + "/" + Repository.PREFIX_SNAPSHOT_DIR
                 + label + "/" + Repository.PREFIX_JOB_INFO + createTime2;
         Assert.assertEquals(expected, repo.assembleJobInfoFilePath(label, creastTs));
 
         // meta info
-        expected = location + "/" + Repository.PREFIX_REPO + name + "/" + Repository.PREFIX_SNAPSHOT_DIR
+        expected = location + "/" + repo.prefixRepo + name + "/" + Repository.PREFIX_SNAPSHOT_DIR
                 + label + "/" + Repository.FILE_META_INFO;
         Assert.assertEquals(expected, repo.assembleMetaInfoFilePath(label));
 
         // snapshot path
         // /location/__starrocks_repository_repo_name/__ss_my_ss1/__ss_content/__db_10001/__tbl_10020/__part_10031/__idx_10032/__10023/__3481721
-        expected = location + "/" + Repository.PREFIX_REPO + name + "/" + Repository.PREFIX_SNAPSHOT_DIR
+        expected = location + "/" + repo.prefixRepo + name + "/" + Repository.PREFIX_SNAPSHOT_DIR
                 + label + "/" + "__ss_content/__db_1/__tbl_2/__part_3/__idx_4/__5/__7";
         Assert.assertEquals(expected, repo.assembleRemoteSnapshotPath(label, info));
     }
@@ -311,7 +314,7 @@ public class RepositoryTest {
         String snapshotName = "";
         String timestamp = "";
         try {
-            List<List<String>> infos = repo.getSnapshotInfos(snapshotName, timestamp);
+            List<List<String>> infos = repo.getSnapshotInfos(snapshotName, timestamp, null);
             Assert.assertEquals(2, infos.size());
 
         } catch (AnalysisException e) {

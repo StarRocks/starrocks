@@ -197,15 +197,23 @@ Status MysqlScanner::query(const std::string& table, const std::vector<std::stri
         }
     }
 
-    if (limit != -1) {
-        _sql_str += " limit " + std::to_string(limit) + " ";
-    }
-
     if (!temporal_clause.empty()) {
         _sql_str += " " + temporal_clause;
     }
 
+    if (limit != -1) {
+        _sql_str += " limit " + std::to_string(limit) + " ";
+    }
+
     return query(_sql_str);
+}
+
+Slice MysqlScanner::escape(const std::string& value) {
+    _escape_buffer.resize(value.size() * 2 + 1 + 2);
+    _escape_buffer[0] = '\'';
+    auto sz = mysql_real_escape_string(_my_conn, _escape_buffer.data() + 1, value.data(), value.size());
+    _escape_buffer[sz + 1] = '\'';
+    return {_escape_buffer.data(), sz + 2};
 }
 
 Status MysqlScanner::get_next_row(char*** buf, unsigned long** lengths, bool* eos) {

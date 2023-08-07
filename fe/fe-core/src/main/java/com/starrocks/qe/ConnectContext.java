@@ -34,13 +34,14 @@
 
 package com.starrocks.qe;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.http.HttpConnectContext;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
@@ -48,15 +49,21 @@ import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.ssl.SSLChannel;
 import com.starrocks.mysql.ssl.SSLChannelImpClassLoader;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
+import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
-import com.starrocks.sql.ast.SetVar;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
 import org.apache.logging.log4j.LogManager;
@@ -66,6 +73,7 @@ import java.io.IOException;
 import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -105,6 +113,7 @@ public class ConnectContext {
 
     // mysql net
     protected MysqlChannel mysqlChannel;
+
     // state
     protected QueryState state;
     protected long returnRows;
@@ -122,6 +131,8 @@ public class ConnectContext {
     protected volatile String currentCatalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
     // Db
     protected String currentDb = "";
+    // warehouse
+    protected String currentWarehouse;
 
     // username@host of current login user
     protected String qualifiedUser;
@@ -130,13 +141,13 @@ public class ConnectContext {
     // In other word, currentUserIdentity is the entry that matched in StarRocks auth table.
     // This account determines user's access privileges.
     protected UserIdentity currentUserIdentity;
-    protected Set<Long> currentRoleIds = null;
+    protected Set<Long> currentRoleIds = new HashSet<>();
     // Serializer used to pack MySQL packet.
     protected MysqlSerializer serializer;
     // Variables belong to this session.
     protected SessionVariable sessionVariable;
     // all the modified session variables, will forward to leader
-    protected Map<String, SetVar> modifiedSessionVariables = new HashMap<>();
+    protected Map<String, SystemVariable> modifiedSessionVariables = new HashMap<>();
     // user define variable in this session
     protected HashMap<String, UserVariable> userVariables;
     // Scheduler this connection belongs to
@@ -172,7 +183,9 @@ public class ConnectContext {
     // used to set mysql result package
     protected boolean isLastStmt;
     // set true when user dump query through HTTP
-    protected boolean isQueryDump = false;
+    protected boolean isHTTPQueryDump = false;
+
+    protected boolean isStatisticsConnection = false;
 
     protected DumpInfo dumpInfo;
 
@@ -180,12 +193,17 @@ public class ConnectContext {
     protected Set<Long> currentSqlDbIds = Sets.newHashSet();
 
     protected PlannerProfile plannerProfile;
+    protected StatementBase.ExplainLevel explainLevel;
 
     protected TWorkGroup resourceGroup;
 
     protected volatile boolean isPending = false;
 
     protected SSLContext sslContext;
+
+    private ConnectContext parent;
+
+    private boolean relationAliasCaseInsensitive = false;
 
     public StmtExecutor getExecutor() {
         return executor;
@@ -222,7 +240,6 @@ public class ConnectContext {
         userVariables = new HashMap<>();
         command = MysqlCommand.COM_SLEEP;
         queryDetail = null;
-        dumpInfo = new QueryDumpInfo(sessionVariable);
         plannerProfile = new PlannerProfile();
 
         mysqlChannel = new MysqlChannel(channel);
@@ -231,6 +248,10 @@ public class ConnectContext {
         }
 
         this.sslContext = sslContext;
+
+        if (shouldDumpQuery()) {
+            this.dumpInfo = new QueryDumpInfo(this);
+        }
     }
 
     public long getStmtId() {
@@ -289,11 +310,6 @@ public class ConnectContext {
         this.qualifiedUser = qualifiedUser;
     }
 
-    // for USER() function
-    public UserIdentity getUserIdentity() {
-        return new UserIdentity(qualifiedUser, remoteIP);
-    }
-
     public UserIdentity getCurrentUserIdentity() {
         return currentUserIdentity;
     }
@@ -306,27 +322,40 @@ public class ConnectContext {
         return currentRoleIds;
     }
 
+    public void setCurrentRoleIds(UserIdentity user) {
+        try {
+            Set<Long> defaultRoleIds;
+            if (GlobalVariable.isActivateAllRolesOnLogin()) {
+                defaultRoleIds = GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdsByUser(user);
+            } else {
+                defaultRoleIds = GlobalStateMgr.getCurrentState().getAuthorizationMgr().getDefaultRoleIdsByUser(user);
+            }
+            this.currentRoleIds = defaultRoleIds;
+        } catch (PrivilegeException e) {
+            LOG.warn("Set current role fail : {}", e.getMessage());
+        }
+    }
+
     public void setCurrentRoleIds(Set<Long> roleIds) {
         this.currentRoleIds = roleIds;
     }
 
-    public void modifySessionVariable(SetVar setVar, boolean onlySetSessionVar) throws DdlException {
-        VariableMgr.setVar(sessionVariable, setVar, onlySetSessionVar);
+    public void modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {
+        VariableMgr.setSystemVariable(sessionVariable, setVar, onlySetSessionVar);
         if (!setVar.getType().equals(SetType.GLOBAL) && VariableMgr.shouldForwardToLeader(setVar.getVariable())) {
             modifiedSessionVariables.put(setVar.getVariable(), setVar);
         }
     }
 
-    public void modifyUserVariable(SetVar setVar) {
-        UserVariable userDefineVariable = (UserVariable) setVar;
-        if (userVariables.size() > 1024 && !userVariables.containsKey(setVar.getVariable())) {
+    public void modifyUserVariable(UserVariable userVariable) {
+        if (userVariables.size() > 1024 && !userVariables.containsKey(userVariable.getVariable())) {
             throw new SemanticException("User variable exceeds the maximum limit of 1024");
         }
-        userVariables.put(setVar.getVariable(), userDefineVariable);
+        userVariables.put(userVariable.getVariable(), userVariable);
     }
 
     public SetStmt getModifiedSessionVariables() {
-        List<SetVar> sessionVariables = new ArrayList<>();
+        List<SetListItem> sessionVariables = new ArrayList<>();
         if (!modifiedSessionVariables.isEmpty()) {
             sessionVariables.addAll(modifiedSessionVariables.values());
         }
@@ -436,7 +465,7 @@ public class ConnectContext {
     }
 
     public void setErrorCodeOnce(String errorCode) {
-        if (this.errorCode == null || this.errorCode.isEmpty()) {
+        if (Strings.isNullOrEmpty(this.errorCode)) {
             this.errorCode = errorCode;
         }
     }
@@ -476,7 +505,7 @@ public class ConnectContext {
     }
 
     public boolean isKilled() {
-        return isKilled;
+        return (parent != null && parent.isKilled()) || isKilled;
     }
 
     // Set kill flag to true;
@@ -524,12 +553,16 @@ public class ConnectContext {
         this.isLastStmt = isLastStmt;
     }
 
-    public void setIsQueryDump(boolean isQueryDump) {
-        this.isQueryDump = isQueryDump;
+    public void setIsHTTPQueryDump(boolean isHTTPQueryDump) {
+        this.isHTTPQueryDump = isHTTPQueryDump;
     }
 
-    public boolean isQueryDump() {
-        return this.isQueryDump;
+    public boolean isHTTPQueryDump() {
+        return isHTTPQueryDump;
+    }
+
+    public boolean shouldDumpQuery() {
+        return this.isHTTPQueryDump || sessionVariable.getEnableQueryDump();
     }
 
     public DumpInfo getDumpInfo() {
@@ -552,6 +585,14 @@ public class ConnectContext {
         return plannerProfile;
     }
 
+    public StatementBase.ExplainLevel getExplainLevel() {
+        return explainLevel;
+    }
+
+    public void setExplainLevel(StatementBase.ExplainLevel explainLevel) {
+        this.explainLevel = explainLevel;
+    }
+
     public TWorkGroup getResourceGroup() {
         return resourceGroup;
     }
@@ -566,6 +607,41 @@ public class ConnectContext {
 
     public void setCurrentCatalog(String currentCatalog) {
         this.currentCatalog = currentCatalog;
+    }
+
+    public String getCurrentWarehouse() {
+        if (currentWarehouse != null) {
+            return currentWarehouse;
+        }
+        return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+    }
+
+    public void setCurrentWarehouse(String currentWarehouse) {
+        this.currentWarehouse = currentWarehouse;
+    }
+
+    public void setParentConnectContext(ConnectContext parent) {
+        this.parent = parent;
+    }
+
+    public boolean isStatisticsConnection() {
+        return isStatisticsConnection;
+    }
+
+    public void setStatisticsConnection(boolean statisticsConnection) {
+        isStatisticsConnection = statisticsConnection;
+    }
+
+    public ConnectContext getParent() {
+        return parent;
+    }
+
+    public void setRelationAliasCaseInSensitive(boolean relationAliasCaseInsensitive) {
+        this.relationAliasCaseInsensitive = relationAliasCaseInsensitive;
+    }
+
+    public boolean isRelationAliasCaseInsensitive() {
+        return relationAliasCaseInsensitive;
     }
 
     // kill operation with no protect.
@@ -691,6 +767,16 @@ public class ConnectContext {
         }
     }
 
+    public StmtExecutor executeSql(String sql) throws Exception {
+        StatementBase sqlStmt = SqlParser.parse(sql, getSessionVariable()).get(0);
+        sqlStmt.setOrigStmt(new OriginStatement(sql, 0));
+        StmtExecutor executor = new StmtExecutor(this, sqlStmt);
+        setExecutor(executor);
+        setThreadLocalInfo();
+        executor.execute();
+        return executor;
+    }
+
     public class ThreadInfo {
         public boolean isRunning() {
             return state.isRunning();
@@ -700,7 +786,13 @@ public class ConnectContext {
             List<String> row = Lists.newArrayList();
             row.add("" + connectionId);
             row.add(ClusterNamespace.getNameFromFullName(qualifiedUser));
-            row.add(getMysqlChannel().getRemoteHostPortString());
+            // Ip + port
+            if (ConnectContext.this instanceof HttpConnectContext) {
+                String remoteAddress = ((HttpConnectContext) (ConnectContext.this)).getRemoteAddres();
+                row.add(remoteAddress);
+            } else {
+                row.add(getMysqlChannel().getRemoteHostPortString());
+            }
             row.add(ClusterNamespace.getNameFromFullName(currentDb));
             // Command
             row.add(command.toString());
@@ -723,6 +815,7 @@ public class ConnectContext {
             }
             row.add(stmt);
             row.add(Boolean.toString(isPending));
+            row.add(currentWarehouse);
             return row;
         }
     }

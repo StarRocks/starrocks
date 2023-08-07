@@ -52,6 +52,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
 
@@ -73,6 +74,12 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     private KeysType keysType;
     @SerializedName(value = "defineStmt")
     private OriginStatement defineStmt;
+    @SerializedName(value = "dbId")
+    private long dbId;
+    @SerializedName(value = "viewDefineSql")
+    private String viewDefineSql;
+    @SerializedName(value = "isColocateMVIndex")
+    private boolean isColocateMVIndex = false;
 
     public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
                                  short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
@@ -100,6 +107,10 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
 
     public long getIndexId() {
         return indexId;
+    }
+
+    public void setIndexIdForRestore(long indexId) {
+        this.indexId = indexId;
     }
 
     public KeysType getKeysType() {
@@ -134,12 +145,41 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         return schemaVersion;
     }
 
+    public List<Column> getNonAggregatedColumns() {
+        return schema.stream().filter(column -> !column.isAggregated())
+                .collect(Collectors.toList());
+    }
+
     public String getOriginStmt() {
         if (defineStmt == null) {
             return null;
         } else {
             return defineStmt.originStmt;
         }
+    }
+
+    public long getDbId() {
+        return dbId;
+    }
+
+    public void setDbId(long dbId) {
+        this.dbId = dbId;
+    }
+
+    public String getViewDefineSql() {
+        return viewDefineSql;
+    }
+
+    public void setViewDefineSql(String viewDefineSql) {
+        this.viewDefineSql = viewDefineSql;
+    }
+
+    public boolean isColocateMVIndex() {
+        return isColocateMVIndex;
+    }
+
+    public void setColocateMVIndex(boolean colocateMVIndex) {
+        isColocateMVIndex = colocateMVIndex;
     }
 
     // The column names of the materialized view are all lowercase, but the column names may be uppercase
@@ -153,15 +193,6 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
                 }
             }
         }
-    }
-
-    public Column getColumnByName(String columnName) {
-        for (Column column : schema) {
-            if (column.getName().equalsIgnoreCase(columnName)) {
-                return column;
-            }
-        }
-        return null;
     }
 
     @Override

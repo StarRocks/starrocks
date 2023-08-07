@@ -16,7 +16,7 @@ Download the following files to your central control node:
 > You can access `http://cdn-thirdparty.starrocks.com` to get the corresponding installation index files and installers.
 
 ```shell
-wget https://github.com/wangtianyi2004/starrocks-controller/raw/main/sr-ctl
+wget https://github.com/wangtianyi2004/starrocks-controller/raw/main/stargo-pkg.tar.gz
 wget https://github.com/wangtianyi2004/starrocks-controller/blob/main/sr-c1.yaml
 wget https://github.com/wangtianyi2004/starrocks-controller/blob/main/repo.yaml
 ```
@@ -102,7 +102,7 @@ be_servers:
   - host: 192.168.XX.XX
     ssh_port: 22
     be_port: 9060
-    webserver_port: 8040
+    be_http_port: 8040
     heartbeat_service_port: 9050
     brpc_port: 8060
     deploy_dir : StarRocks/be
@@ -114,7 +114,7 @@ be_servers:
   - host: 192.168.XX.XX
     ssh_port: 22
     be_port: 9060
-    webserver_port: 8040
+    be_http_port: 8040
     heartbeat_service_port: 9050
     brpc_port: 8060
     deploy_dir : StarRocks/be
@@ -126,7 +126,7 @@ be_servers:
   - host: 192.168.XX.XX
     ssh_port: 22
     be_port: 9060
-    webserver_port: 8040
+    be_http_port: 8040
     heartbeat_service_port: 9050
     brpc_port: 8060
     deploy_dir : StarRocks/be
@@ -510,7 +510,7 @@ be_servers:
   - host: 192.168.xx.xx # The IP address of the new BE node.
     ssh_port: 22
     be_port: 9060
-    webserver_port: 8040
+    be_http_port: 8040
     heartbeat_service_port: 9050
     brpc_port: 8060
     deploy_dir : StarRocks/be

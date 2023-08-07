@@ -50,12 +50,25 @@ struct SchemaScannerParam {
     // and no longer call get_db_names() and get_table_names().
     bool without_db_table{false};
 
+    const std::string* label = nullptr;
+    int64_t job_id = -1;
+
+    int64_t table_id{-1};
+    int64_t partition_id{-1};
+    int64_t tablet_id{-1};
+    int64_t txn_id{-1};
+    const std::string* type{nullptr};
+    const std::string* state{nullptr};
+    int64_t log_start_ts{-1};
+    int64_t log_end_ts{-1};
+    const std::string* log_level{nullptr};
+    const std::string* log_pattern{nullptr};
+    int64_t log_limit{-1};
+
     RuntimeProfile::Counter* _rpc_timer = nullptr;
     RuntimeProfile::Counter* _fill_chunk_timer = nullptr;
 
-    SchemaScannerParam()
-
-            = default;
+    SchemaScannerParam() = default;
 };
 
 // virtual scanner for all schema table
@@ -74,6 +87,7 @@ public:
     virtual Status init(SchemaScannerParam* param, ObjectPool* pool);
     // Start to work
     virtual Status start(RuntimeState* state);
+    // Must only return one row at most each time
     virtual Status get_next(ChunkPtr* chunk, bool* eos);
     // factory function
     static std::unique_ptr<SchemaScanner> create(TSchemaTableType::type type);
@@ -95,6 +109,7 @@ protected:
     std::vector<SlotDescriptor*> _slot_descs;
 
     static StarRocksServer* _s_starrocks_server;
+    RuntimeState* _runtime_state = nullptr;
 };
 
 } // namespace starrocks

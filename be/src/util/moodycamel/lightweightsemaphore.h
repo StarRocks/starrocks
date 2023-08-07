@@ -88,7 +88,7 @@ public:
 		return WaitForSingleObject(m_hSema, 0) == 0;
 	}
 	
-	bool timed_wait(std::uint64_t usecs)
+	bool timed_wait(uint64_t usecs)
 	{
 		return WaitForSingleObject(m_hSema, (unsigned long)(usecs / 1000)) == 0;
 	}
@@ -135,7 +135,7 @@ public:
 		return timed_wait(0);
 	}
 	
-	bool timed_wait(std::uint64_t timeout_usecs)
+	bool timed_wait(uint64_t timeout_usecs)
 	{
 		mach_timespec_t ts;
 		ts.tv_sec = static_cast<unsigned int>(timeout_usecs / 1000000);
@@ -204,7 +204,7 @@ public:
 		return rc == 0;
 	}
 
-	bool timed_wait(std::uint64_t usecs)
+	bool timed_wait(uint64_t usecs)
 	{
 		struct timespec ts;
 		const int usecs_in_1_sec = 1000000;
@@ -259,7 +259,7 @@ private:
 	details::Semaphore m_sema;
 	int m_maxSpins;
 
-	bool waitWithPartialSpinning(std::int64_t timeout_usecs = -1)
+	bool waitWithPartialSpinning(int64_t timeout_usecs = -1)
 	{
 		ssize_t oldCount;
 		int spin = m_maxSpins;
@@ -278,7 +278,7 @@ private:
 			if (m_sema.wait())
 				return true;
 		}
-		if (timeout_usecs > 0 && m_sema.timed_wait((std::uint64_t)timeout_usecs))
+		if (timeout_usecs > 0 && m_sema.timed_wait((uint64_t)timeout_usecs))
 			return true;
 		// At this point, we've timed out waiting for the semaphore, but the
 		// count is still decremented indicating we may still be waiting on
@@ -295,7 +295,7 @@ private:
 		}
 	}
 
-	ssize_t waitManyWithPartialSpinning(ssize_t max, std::int64_t timeout_usecs = -1)
+	ssize_t waitManyWithPartialSpinning(ssize_t max, int64_t timeout_usecs = -1)
 	{
 		assert(max > 0);
 		ssize_t oldCount;
@@ -314,7 +314,7 @@ private:
 		oldCount = m_count.fetch_sub(1, std::memory_order_acquire);
 		if (oldCount <= 0)
 		{
-			if ((timeout_usecs == 0) || (timeout_usecs < 0 && !m_sema.wait()) || (timeout_usecs > 0 && !m_sema.timed_wait((std::uint64_t)timeout_usecs)))
+			if ((timeout_usecs == 0) || (timeout_usecs < 0 && !m_sema.wait()) || (timeout_usecs > 0 && !m_sema.timed_wait((uint64_t)timeout_usecs)))
 			{
 				while (true)
 				{
@@ -354,7 +354,7 @@ public:
 		return tryWait() || waitWithPartialSpinning();
 	}
 
-	bool wait(std::int64_t timeout_usecs)
+	bool wait(int64_t timeout_usecs)
 	{
 		return tryWait() || waitWithPartialSpinning(timeout_usecs);
 	}
@@ -374,7 +374,7 @@ public:
 	}
 
 	// Acquires at least one, and (greedily) at most max
-	ssize_t waitMany(ssize_t max, std::int64_t timeout_usecs)
+	ssize_t waitMany(ssize_t max, int64_t timeout_usecs)
 	{
 		assert(max >= 0);
 		ssize_t result = tryWaitMany(max);

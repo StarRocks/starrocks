@@ -22,8 +22,8 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
-#include "runtime/primitive_type.h"
-#include "runtime/primitive_type_infra.h"
+#include "types/logical_type.h"
+#include "types/logical_type_infra.h"
 #include "udf/java/java_function_fwd.h"
 
 namespace starrocks {
@@ -78,6 +78,7 @@ AggregateFunctionPtr AggregateFactory::MakePercentileApproxAggregateFunction() {
 AggregateFunctionPtr AggregateFactory::MakePercentileUnionAggregateFunction() {
     return std::make_shared<PercentileUnionAggregateFunction>();
 }
+
 AggregateFunctionPtr AggregateFactory::MakeDenseRankWindowFunction() {
     return std::make_shared<DenseRankWindowFunction>();
 }
@@ -88,6 +89,14 @@ AggregateFunctionPtr AggregateFactory::MakeRankWindowFunction() {
 
 AggregateFunctionPtr AggregateFactory::MakeRowNumberWindowFunction() {
     return std::make_shared<RowNumberWindowFunction>();
+}
+
+AggregateFunctionPtr AggregateFactory::MakeCumeDistWindowFunction() {
+    return std::make_shared<CumeDistWindowFunction>();
+}
+
+AggregateFunctionPtr AggregateFactory::MakePercentRankWindowFunction() {
+    return std::make_shared<PercentRankWindowFunction>();
 }
 
 AggregateFunctionPtr AggregateFactory::MakeNtileWindowFunction() {
@@ -106,8 +115,8 @@ static const AggregateFunction* get_function(const std::string& name, LogicalTyp
         }
     }
 
-    auto is_decimal_type = [](LogicalType pt) {
-        return pt == TYPE_DECIMAL32 || pt == TYPE_DECIMAL64 || pt == TYPE_DECIMAL128;
+    auto is_decimal_type = [](LogicalType lt) {
+        return lt == TYPE_DECIMAL32 || lt == TYPE_DECIMAL64 || lt == TYPE_DECIMAL128;
     };
     if (func_version > 2 && is_decimal_type(arg_type)) {
         if (name == "sum") {
@@ -119,9 +128,19 @@ static const AggregateFunction* get_function(const std::string& name, LogicalTyp
         }
     }
 
+    if (func_version > 5) {
+        if (name == "array_agg") {
+            func_name = "array_agg2";
+        }
+    }
+
     if (binary_type == TFunctionBinaryType::BUILTIN) {
-        return AggregateFuncResolver::instance()->get_aggregate_info(func_name, arg_type, return_type,
-                                                                     is_window_function, is_null);
+        auto func = AggregateFuncResolver::instance()->get_aggregate_info(func_name, arg_type, return_type,
+                                                                          is_window_function, is_null);
+        if (func != nullptr) {
+            return func;
+        }
+        return AggregateFuncResolver::instance()->get_general_info(func_name, is_window_function, is_null);
     } else if (binary_type == TFunctionBinaryType::SRJAR) {
         return getJavaUDAFFunction(is_null);
     }

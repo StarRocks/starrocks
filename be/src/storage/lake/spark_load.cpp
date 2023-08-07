@@ -49,13 +49,13 @@ Status SparkLoadHandler::_load_convert(Tablet& cur_tablet) {
     VLOG(3) << "start to convert delta file.";
 
     // 1. init writer
-    ASSIGN_OR_RETURN(auto writer, cur_tablet.new_writer());
+    ASSIGN_OR_RETURN(auto writer, cur_tablet.new_writer(kHorizontal, _request.transaction_id));
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
     ASSIGN_OR_RETURN(auto tablet_schema, cur_tablet.get_schema());
-    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
-    auto chunk = ChunkHelper::new_chunk(schema, 0);
+    Schema schema = ChunkHelper::convert_schema(*tablet_schema);
+    ChunkPtr chunk = ChunkHelper::new_chunk(schema, 0);
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 
     // 2. Init PushBrokerReader to read broker file if exist,

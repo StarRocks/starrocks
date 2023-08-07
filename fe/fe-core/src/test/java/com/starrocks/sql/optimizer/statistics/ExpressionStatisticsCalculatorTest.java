@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -530,11 +531,11 @@ public class ExpressionStatisticsCalculatorTest {
     public void testCaseWhenOperator() {
         ColumnRefOperator columnRefOperator = new ColumnRefOperator(1, Type.INT, "", true);
         BinaryPredicateOperator whenOperator1 =
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, columnRefOperator,
+                new BinaryPredicateOperator(BinaryType.EQ, columnRefOperator,
                         ConstantOperator.createInt(1));
         ConstantOperator constantOperator1 = ConstantOperator.createChar("1");
         BinaryPredicateOperator whenOperator2 =
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, columnRefOperator,
+                new BinaryPredicateOperator(BinaryType.EQ, columnRefOperator,
                         ConstantOperator.createInt(2));
         ConstantOperator constantOperator2 = ConstantOperator.createChar("2");
 

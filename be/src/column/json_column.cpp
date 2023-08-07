@@ -50,7 +50,7 @@ void JsonColumn::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx
     }
 }
 
-std::string JsonColumn::debug_item(uint32_t idx) const {
+std::string JsonColumn::debug_item(size_t idx) const {
     return get_object(idx)->to_string_uncheck();
 }
 
@@ -68,6 +68,28 @@ MutableColumnPtr JsonColumn::clone_empty() const {
 
 ColumnPtr JsonColumn::clone_shared() const {
     return BaseClass::clone_shared();
+}
+
+const uint8_t* JsonColumn::deserialize_and_append(const uint8_t* data) {
+    JsonValue value((JsonValue::VSlice(data)));
+    size_t size = value.serialize_size();
+    append(std::move(value));
+    return data + size;
+}
+
+uint32_t JsonColumn::serialize_size(size_t idx) const {
+    return static_cast<uint32_t>(get_object(idx)->serialize_size());
+}
+
+uint32_t JsonColumn::serialize(size_t idx, uint8_t* pos) {
+    return static_cast<uint32_t>(get_object(idx)->serialize(pos));
+}
+
+void JsonColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
+                                 uint32_t max_one_row_size) {
+    for (size_t i = 0; i < chunk_size; ++i) {
+        slice_sizes[i] += serialize(i, dst + i * max_one_row_size + slice_sizes[i]);
+    }
 }
 
 } // namespace starrocks

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.implementation;
 
 import com.google.common.collect.Lists;
@@ -35,17 +34,10 @@ public class OlapScanImplementationRule extends ImplementationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalOlapScanOperator scan = (LogicalOlapScanOperator) input.getOp();
-        PhysicalOlapScanOperator physicalOlapScan = new PhysicalOlapScanOperator(
-                scan.getTable(),
-                scan.getColRefToColumnMetaMap(),
-                scan.getDistributionSpec(),
-                scan.getLimit(),
-                scan.getPredicate(),
-                scan.getSelectedIndexId(),
-                scan.getSelectedPartitionId(),
-                scan.getSelectedTabletId(),
-                scan.getProjection());
+        PhysicalOlapScanOperator physicalOlapScan = new PhysicalOlapScanOperator(scan);
 
+        physicalOlapScan.setSalt(scan.getSalt());
+        physicalOlapScan.setColumnAccessPaths(scan.getColumnAccessPaths());
         OptExpression result = new OptExpression(physicalOlapScan);
         return Lists.newArrayList(result);
     }

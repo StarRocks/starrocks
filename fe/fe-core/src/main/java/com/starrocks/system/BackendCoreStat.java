@@ -86,4 +86,17 @@ public class BackendCoreStat {
         int avgNumOfCores = BackendCoreStat.getAvgNumOfHardwareCoresOfBe();
         return Math.max(1, avgNumOfCores / 2);
     }
+
+    public static int getSinkDefaultDOP() {
+        // load includes query engine execution and storage engine execution
+        // so we can't let query engine use up resources
+        // At the same time, the improvement of performance and concurrency is not linear
+        // but the memory usage increases linearly, so we control the slope of concurrent growth
+        int avgCoreNum = BackendCoreStat.getAvgNumOfHardwareCoresOfBe();
+        if (avgCoreNum <= 24) {
+            return Math.max(1, avgCoreNum / 3);
+        } else {
+            return Math.max(8, avgCoreNum / 4);
+        }
+    }
 }

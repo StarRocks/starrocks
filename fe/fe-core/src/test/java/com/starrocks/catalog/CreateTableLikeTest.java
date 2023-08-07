@@ -35,7 +35,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -184,7 +184,7 @@ public class CreateTableLikeTest {
                 "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"dynamic_partition.enable\" = \"true\",\n" +
+                "\"dynamic_partition.enable\" = \"false\",\n" +
                 "\"dynamic_partition.start\" = \"-3\",\n" +
                 "\"dynamic_partition.end\" = \"3\",\n" +
                 "\"dynamic_partition.time_unit\" = \"day\",\n" +
@@ -233,6 +233,50 @@ public class CreateTableLikeTest {
         String existedTblName8 = "testMysqlTbl";
         checkCreateMysqlTableLike(createNonOlapTableSql, createTableLikeSql8, newDbName8, existedDbName8, newTblName8,
                 existedTblName8);
+        // 9. create automatic table
+        String automaticTableSql = "CREATE TABLE test.`duplicate_table_with_null` (\n" +
+                "  `k1` date NULL COMMENT \"\",\n" +
+                "  `k2` datetime NULL COMMENT \"\",\n" +
+                "  `k3` char(20) NULL COMMENT \"\",\n" +
+                "  `k4` varchar(20) NULL COMMENT \"\",\n" +
+                "  `k5` boolean NULL COMMENT \"\",\n" +
+                "  `k6` tinyint(4) NULL COMMENT \"\",\n" +
+                "  `k7` smallint(6) NULL COMMENT \"\",\n" +
+                "  `k8` int(11) NULL COMMENT \"\",\n" +
+                "  `k9` bigint(20) NULL COMMENT \"\",\n" +
+                "  `k10` largeint(40) NULL COMMENT \"\",\n" +
+                "  `k11` float NULL COMMENT \"\",\n" +
+                "  `k12` double NULL COMMENT \"\",\n" +
+                "  `k13` decimal128(27, 9) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY date_trunc('day', k1)\n" +
+                "DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 2 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ");";
+        String createTableLikeSql9 = "create table test.table_like_02 like test.duplicate_table_with_null;";
+        String newDbName9 = "test";
+        String existedDbName9 = "test";
+        String newTblName9 = "duplicate_table_with_null";
+        String existedTblName9 = "table_like_02";
+        checkCreateOlapTableLike(automaticTableSql, createTableLikeSql9, newDbName9, existedDbName9, newTblName9,
+                existedTblName9);
+
+        // 10. create table like with properties
+        String sql = "create table test.table_like_10 " +
+                "distributed by random buckets 7 " +
+                "properties('replication_num'='1') " +
+                "like test.duplicate_table_with_null";
+        createTableLike(sql);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb(newDbName).getTable("table_like_10");
+        Assert.assertEquals(new RandomDistributionInfo(7), table.getDefaultDistributionInfo());
+        Assert.assertEquals("1", table.getProperties().get("replication_num"));
     }
 
     @Test
@@ -243,7 +287,7 @@ public class CreateTableLikeTest {
         String createTableLikeSql = "create table test.testAbTbl1 like test.testAbTbl1";
         String newDbName = "test";
         String newTblName = "testAbTbl1";
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Table 'testAbTbl1' already exists",
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Table 'testAbTbl1' already exists",
                 () -> checkCreateOlapTableLike(createTableSql, createTableLikeSql, newDbName, newDbName, newTblName,
                         newTblName));
         // 2. create table with not existed DB
@@ -254,7 +298,7 @@ public class CreateTableLikeTest {
         String existedDbName2 = "test";
         String newTblName2 = "testAbTbl2_like";
         String existedTblName2 = "testAbTbl1";
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Unknown database 'fake_test'",
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Unknown database 'fake_test'",
                 () -> checkCreateOlapTableLike(createTableSql2, createTableLikeSql2, newDbName2, existedDbName2,
                         newTblName2, existedTblName2));
     }

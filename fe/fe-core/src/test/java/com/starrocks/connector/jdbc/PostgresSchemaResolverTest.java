@@ -86,7 +86,7 @@ public class PostgresSchemaResolverTest {
             }
         };
         try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties);
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
             List<String> result = jdbcMetadata.listDbNames();
             List<String> expectResult = Lists.newArrayList("postgres", "template1", "test");
             Assert.assertEquals(expectResult, result);
@@ -109,7 +109,7 @@ public class PostgresSchemaResolverTest {
             }
         };
         try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties);
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
             Database db = jdbcMetadata.getDb("test");
             Assert.assertEquals("test", db.getOriginName());
         } catch (Exception e) {
@@ -136,7 +136,7 @@ public class PostgresSchemaResolverTest {
             }
         };
         try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties);
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
             List<String> result = jdbcMetadata.listTableNames("test");
             List<String> expectResult = Lists.newArrayList("tbl1", "tbl2", "tbl3");
             Assert.assertEquals(expectResult, result);
@@ -163,7 +163,7 @@ public class PostgresSchemaResolverTest {
             }
         };
         try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties);
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
             Table table = jdbcMetadata.getTable("test", "tbl1");
             Assert.assertTrue(table instanceof JDBCTable);
         } catch (Exception e) {

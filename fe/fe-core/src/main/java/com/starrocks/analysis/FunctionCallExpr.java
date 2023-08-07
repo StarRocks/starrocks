@@ -45,6 +45,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TAggregateExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -100,28 +101,44 @@ public class FunctionCallExpr extends Expr {
 
     // only used restore from readFields.
     private FunctionCallExpr() {
-        super();
+        super(NodePosition.ZERO);
     }
 
     public FunctionCallExpr(String functionName, List<Expr> params) {
-        this(new FunctionName(functionName), new FunctionParams(false, params));
+        this(new FunctionName(functionName), new FunctionParams(false, params), NodePosition.ZERO);
+    }
+
+    public FunctionCallExpr(String functionName, List<Expr> params, NodePosition pos) {
+        this(new FunctionName(functionName), new FunctionParams(false, params), pos);
     }
 
     public FunctionCallExpr(FunctionName fnName, List<Expr> params) {
-        this(fnName, new FunctionParams(false, params));
+        this(fnName, new FunctionParams(false, params), NodePosition.ZERO);
+    }
+
+    public FunctionCallExpr(FunctionName fnName, List<Expr> params, NodePosition pos) {
+        this(fnName, new FunctionParams(false, params), pos);
     }
 
     public FunctionCallExpr(String fnName, FunctionParams params) {
-        this(new FunctionName(fnName), params);
+        this(new FunctionName(fnName), params, NodePosition.ZERO);
+    }
+
+    public FunctionCallExpr(String fnName, FunctionParams params, NodePosition pos) {
+        this(new FunctionName(fnName), params, pos);
     }
 
     public FunctionCallExpr(FunctionName fnName, FunctionParams params) {
-        this(fnName, params, false);
+        this(fnName, params, false, NodePosition.ZERO);
+    }
+
+    public FunctionCallExpr(FunctionName fnName, FunctionParams params, NodePosition pos) {
+        this(fnName, params, false, pos);
     }
 
     private FunctionCallExpr(
-            FunctionName fnName, FunctionParams params, boolean isMergeAggFn) {
-        super();
+            FunctionName fnName, FunctionParams params, boolean isMergeAggFn, NodePosition pos) {
+        super(pos);
         this.fnName = fnName;
         fnParams = params;
         this.isMergeAggFn = isMergeAggFn;
@@ -158,7 +175,7 @@ public class FunctionCallExpr extends Expr {
             Preconditions.checkState(children.isEmpty());
             fnParams = FunctionParams.createStarParam();
         } else {
-            fnParams = new FunctionParams(other.fnParams.isDistinct(), children);
+            fnParams = new FunctionParams(other.fnParams.isDistinct(), children, other.fnParams.getOrderByElements());
         }
         this.isMergeAggFn = other.isMergeAggFn;
         this.mergeAggFnHasNullableChild = other.mergeAggFnHasNullableChild;
@@ -206,9 +223,11 @@ public class FunctionCallExpr extends Expr {
         return /*opcode == o.opcode && aggOp == o.aggOp &&*/ fnName.equals(o.fnName)
                 && fnParams.isDistinct() == o.fnParams.isDistinct()
                 && fnParams.isStar() == o.fnParams.isStar()
-                && nondeterministicId.equals(o.nondeterministicId);
+                && nondeterministicId.equals(o.nondeterministicId)
+                && Objects.equals(fnParams.getOrderByElements(), o.fnParams.getOrderByElements());
     }
 
+    // TODO: process order by
     @Override
     public String toSqlImpl() {
         StringBuilder sb = new StringBuilder();
@@ -221,7 +240,14 @@ public class FunctionCallExpr extends Expr {
         if (fnParams.isDistinct()) {
             sb.append("DISTINCT ");
         }
-        sb.append(Joiner.on(", ").join(childrenToSql())).append(")");
+        if (fnParams.getOrderByElements() == null) {
+            sb.append(Joiner.on(", ").join(childrenToSql())).append(")");
+        } else {
+            sb.append(Joiner.on(", ").join(firstNChildrenToSql(
+                    children.size() - fnParams.getOrderByElements().size())));
+            sb.append(fnParams.getOrderByStringToSql());
+            sb.append(')');
+        }
         return sb.toString();
     }
 
@@ -238,7 +264,14 @@ public class FunctionCallExpr extends Expr {
         if (fnParams.isDistinct()) {
             sb.append("distinct ");
         }
-        sb.append(Joiner.on(", ").join(childrenToExplain())).append(");");
+        if (fnParams.getOrderByElements() == null) {
+            sb.append(Joiner.on(", ").join(firstNChildrenToExplain(children.size()))).append(");");
+        } else {
+            sb.append(Joiner.on(", ").join(firstNChildrenToExplain(
+                    children.size() - fnParams.getOrderByElements().size())));
+            sb.append(fnParams.getOrderByStringToExplain());
+            sb.append(')');
+        }
         if (fn != null) {
             sb.append(" args: ");
             for (int i = 0; i < fn.getArgs().length; ++i) {
@@ -256,10 +289,21 @@ public class FunctionCallExpr extends Expr {
         return sb.toString();
     }
 
-    public List<String> childrenToExplain() {
+    // explain the first N children
+    public List<String> firstNChildrenToExplain(int n) {
+        Preconditions.checkState(n <= children.size());
         List<String> result = Lists.newArrayList();
-        for (Expr child : children) {
-            result.add(child.explain());
+        for (int i = 0; i < n; i++) {
+            result.add(children.get(i).explain());
+        }
+        return result;
+    }
+
+    public List<String> firstNChildrenToSql(int n) {
+        Preconditions.checkState(n <= children.size());
+        List<String> result = Lists.newArrayList();
+        for (int i = 0; i < n; i++) {
+            result.add(children.get(i).toSql());
         }
         return result;
     }
@@ -267,8 +311,9 @@ public class FunctionCallExpr extends Expr {
     @Override
     public String debugString() {
         return MoreObjects.toStringHelper(this)/*.add("op", aggOp)*/.add("name", fnName).add("isStar",
-                fnParams.isStar()).add("isDistinct", fnParams.isDistinct()).addValue(
-                super.debugString()).toString();
+                        fnParams.isStar()).add("isDistinct", fnParams.isDistinct()).
+                add(" hasOrderBy ", fnParams.getOrderByElements() != null).addValue(
+                        super.debugString()).toString();
     }
 
     public FunctionParams getParams() {
@@ -356,18 +401,6 @@ public class FunctionCallExpr extends Expr {
             return children.stream().anyMatch(e -> e.isNullable() || e.getType().isDecimalV3());
         }
         return true;
-    }
-
-    public static FunctionCallExpr createMergeAggCall(
-            FunctionCallExpr agg, List<Expr> params) {
-        Preconditions.checkState(agg.isAnalyzed);
-        Preconditions.checkState(agg.isAggregateFunction());
-        FunctionCallExpr result = new FunctionCallExpr(
-                agg.fnName, new FunctionParams(false, params), true);
-        // Inherit the function object from 'agg'.
-        result.fn = agg.fn;
-        result.type = agg.type;
-        return result;
     }
 
     @Override
@@ -476,4 +509,5 @@ public class FunctionCallExpr extends Expr {
             return this;
         }
     }
+
 }

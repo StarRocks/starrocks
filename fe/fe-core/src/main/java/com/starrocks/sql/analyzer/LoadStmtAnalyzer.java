@@ -17,13 +17,15 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.LabelName;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeNameFormat;
 import com.starrocks.load.EtlJobType;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
@@ -108,23 +110,39 @@ public class LoadStmtAnalyzer {
                 if (resourceDesc != null) {
                     resourceDesc.analyze();
                     etlJobType = resourceDesc.getEtlJobType();
-                    // check resource usage privilege
-                    if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!GlobalStateMgr.getCurrentState().getAuth().checkResourcePriv(ConnectContext.get(),
-                                                                                          resourceDesc.getName(),
-                                                                                          PrivPredicate.USAGE)) {
-                            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                                                                "USAGE denied to user '" + ConnectContext.get().getQualifiedUser()
-                                                                + "'@'" + ConnectContext.get().getRemoteIP()
-                                                                + "' for resource '" + resourceDesc.getName() + "'");
-                        }
-                    }
                 } else if (brokerDesc != null) {
                     etlJobType = EtlJobType.BROKER;
                 } else {
                     // if cluster is null, use default hadoop cluster
                     // if cluster is not null, use this hadoop cluster
                     etlJobType = EtlJobType.HADOOP;
+                }
+
+                String database = ConnectContext.get().getDatabase();
+                if (etlJobType == EtlJobType.SPARK && database != null) {
+                    for (DataDescription dataDescription : dataDescriptions) {
+                        String tableName = dataDescription.getTableName();
+                        Database db = GlobalStateMgr.getCurrentState().getDb(database);
+                        if (db == null) {
+                            continue;
+                        }
+                        db.readLock();
+                        try {
+                            Table table = db.getTable(tableName);
+                            if (table == null) {
+                                continue;
+                            }
+                            if (table.isOlapOrCloudNativeTable()) {
+                                OlapTable olapTable = (OlapTable) table;
+                                if (olapTable.getPartitionInfo().getType() == PartitionType.EXPR_RANGE) {
+                                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                                            "Currently spark load does not support automatic partition tables");
+                                }
+                            }
+                        } finally {
+                            db.readUnlock();
+                        }
+                    }
                 }
 
                 statement.setEtlJobType(etlJobType);

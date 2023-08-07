@@ -56,6 +56,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
         PrimitiveType primitiveType;
         switch (dataType) {
             case Types.BOOLEAN:
+            case Types.BIT:
                 primitiveType = PrimitiveType.BOOLEAN;
                 break;
             case Types.TINYINT:
@@ -71,6 +72,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
                 primitiveType = PrimitiveType.BIGINT;
                 break;
             case Types.FLOAT:
+            case Types.REAL: // real => short float
                 primitiveType = PrimitiveType.FLOAT;
                 break;
             case Types.DOUBLE:
@@ -82,6 +84,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
             case Types.CHAR:
                 return ScalarType.createCharType(columnSize);
             case Types.VARCHAR:
+            case Types.LONGVARCHAR: //text type in mysql
                 return ScalarType.createVarcharType(columnSize);
             case Types.DATE:
                 primitiveType = PrimitiveType.DATE;

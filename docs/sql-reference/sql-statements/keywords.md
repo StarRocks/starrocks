@@ -31,11 +31,9 @@ Following are the reserved keywords supported by StarRocks.
 - ALTER
 - ANALYZE
 - AND
-- ANTI
 - ARRAY
 - AS
 - ASC
-- AUTHENTICATION
 
 ### B
 
@@ -47,12 +45,13 @@ Following are the reserved keywords supported by StarRocks.
 
 ### C
 
-- CANCEL
 - CASE
 - CHAR
+- CHARACTER
 - CHECK
 - COLLATE
 - COLUMN
+- COMPACTION (v3.1 and later)
 - CONVERT
 - CREATE
 - CROSS
@@ -61,6 +60,7 @@ Following are the reserved keywords supported by StarRocks.
 - CURRENT_TIME
 - CURRENT_TIMESTAMP
 - CURRENT_USER
+- CURRENT_ROLE (v3.0 and later)
 
 ### D
 
@@ -77,10 +77,10 @@ Following are the reserved keywords supported by StarRocks.
 - DESC
 - DESCRIBE
 - DISTINCT
-- DISTRIBUTED
 - DOUBLE
 - DROP
 - DUAL
+- DEFERRED (v3.0 and later)
 
 ### E
 
@@ -88,7 +88,6 @@ Following are the reserved keywords supported by StarRocks.
 - EXCEPT
 - EXISTS
 - EXPLAIN
-- EXPORT
 
 ### F
 
@@ -129,6 +128,7 @@ Following are the reserved keywords supported by StarRocks.
 - INTERSECT
 - INTO
 - IS
+- IMMEDIATE (v3.0 and later)
 
 ### J
 
@@ -164,7 +164,6 @@ Following are the reserved keywords supported by StarRocks.
 ### N
 
 - NTILE
-- NODES
 - NOT
 - NULL
 
@@ -209,18 +208,17 @@ Following are the reserved keywords supported by StarRocks.
 - SCHEMA
 - SCHEMAS
 - SELECT
-- SEMI
 - SET
 - SET_VAR
 - SHOW
 - SMALLINT
 - SYSTEM
-- SWAP
 
 ### T
 
 - TABLE
 - TERMINATED
+- TEXT (v3.1 and later)
 - THEN
 - TINYINT
 - TO

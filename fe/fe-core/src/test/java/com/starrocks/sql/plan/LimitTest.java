@@ -58,7 +58,6 @@ public class LimitTest extends PlanTestBase {
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
                 "     avgRowSize=1.0\n" +
-                "     numNodes=0\n" +
                 "     limit: 1"));
     }
 
@@ -374,7 +373,6 @@ public class LimitTest extends PlanTestBase {
                 + "     tabletList=\n"
                 + "     cardinality=1\n"
                 + "     avgRowSize=3.0\n"
-                + "     numNodes=0\n"
                 + "     limit: 10"));
     }
 
@@ -384,6 +382,7 @@ public class LimitTest extends PlanTestBase {
         String plan;
         sql = "select * from t0 full outer join t1 on t0.v1 = t1.v4 limit 10";
         plan = getFragmentPlan(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("  4:HASH JOIN\n"
                 + "  |  join op: FULL OUTER JOIN (PARTITIONED)\n"
                 + "  |  colocate: false, reason: \n"
@@ -391,10 +390,8 @@ public class LimitTest extends PlanTestBase {
                 + "  |  limit: 10\n"
                 + "  |  \n"
                 + "  |----3:EXCHANGE\n"
-                + "  |       limit: 10\n"
                 + "  |    \n"
-                + "  1:EXCHANGE\n"
-                + "     limit: 10\n"));
+                + "  1:EXCHANGE\n"));
 
         sql = "select * from t0, t1 limit 10";
         plan = getFragmentPlan(sql);
@@ -496,7 +493,6 @@ public class LimitTest extends PlanTestBase {
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
                 "     avgRowSize=1.0\n" +
-                "     numNodes=0\n" +
                 "     limit: 1"));
 
         sql = "select v1 from (select * from t0 limit 10) x0 left outer join[shuffle] t1 on x0.v1 = t1.v4 limit 100";
@@ -606,8 +602,7 @@ public class LimitTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=3.0\n" +
-                "     numNodes=0\n"));
+                "     avgRowSize=3.0\n"));
     }
 
     @Test
@@ -786,5 +781,12 @@ public class LimitTest extends PlanTestBase {
         assertNotContains(planFragment, "tabletRatio=1/3");
         assertContains(planFragment, "tabletRatio=3/3");
         FeConstants.runningUnitTest = flag;
+    }
+
+    @Test
+    public void testConstantOrderByLimit() throws Exception {
+        String sql = "select * from t0 order by 'abc' limit 100, 100 ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "limit: 100");
     }
 }

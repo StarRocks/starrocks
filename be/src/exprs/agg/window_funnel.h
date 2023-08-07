@@ -51,7 +51,7 @@ struct ComparePairFirst final {
 enum FunnelMode : int { DEDUPLICATION = 1, FIXED = 2, DEDUPLICATION_FIXED = 3, INCREASE = 4 };
 
 namespace InteralTypeOfFunnel {
-template <LogicalType primitive_type>
+template <LogicalType logical_type>
 struct TypeTraits {};
 
 template <>
@@ -78,12 +78,12 @@ struct TypeTraits<TYPE_DATETIME> {
 
 inline const constexpr int reserve_list_size = 4;
 
-template <LogicalType PT>
+template <LogicalType LT>
 struct WindowFunnelState {
     // Use to identify timestamp(datetime/date)
-    using TimeType = typename InteralTypeOfFunnel::TypeTraits<PT>::Type;
-    using TimeTypeColumn = typename RunTimeTypeTraits<PT>::ColumnType;
-    using TimestampType = typename InteralTypeOfFunnel::TypeTraits<PT>::ValueType;
+    using TimeType = typename InteralTypeOfFunnel::TypeTraits<LT>::Type;
+    using TimeTypeColumn = typename RunTimeTypeTraits<LT>::ColumnType;
+    using TimestampType = typename InteralTypeOfFunnel::TypeTraits<LT>::ValueType;
 
     // first args is timestamp, second is event position.
     using TimestampEvent = std::pair<TimestampType, uint8_t>;
@@ -92,14 +92,35 @@ struct WindowFunnelState {
         TimestampType last_timestamp = -1;
     };
     using TimestampVector = std::vector<TimestampTypePair>;
-    int64_t window_size;
+
+    // `window_size` is guaranteed to be non-negative by the analyzer in FE,
+    // so use -1 to indicate `window_size` hasn't been initialized.
+    static constexpr int64_t ABSENT_WINDOW_SIZE = -1;
+
+    int64_t window_size = ABSENT_WINDOW_SIZE;
     mutable int32_t mode = 0;
     uint8_t events_size;
     bool sorted = true;
     char buffer[reserve_list_size * sizeof(TimestampEvent)];
     stack_memory_resource mr;
     mutable std::pmr::vector<TimestampEvent> events_list;
+
     WindowFunnelState() : mr(buffer, sizeof(buffer)), events_list(&mr) { events_list.reserve(reserve_list_size); }
+
+    void init_once(FunctionContext* ctx) {
+        if (window_size != ABSENT_WINDOW_SIZE) {
+            return;
+        }
+
+        // `agg_expr_ctxs` is different between update and merge mode of the AggregationOperator.
+        // - update mode: [InitLiteral(BIGINT), SlotRef(DATE/DATETIME), IntLiteral(INT), SlotRef(Array<BOOLEAN>)]
+        // - merge mode: [SlotRef(ARRAY<BIGINT>), InitLiteral(BIGINT), IntLiteral(INT)]
+        // Therefore, the index of `window_size` is 0 or 1.
+        size_t window_size_col_index = ctx->get_constant_column(0) != nullptr ? 0 : 1;
+        window_size = ColumnHelper::get_const_value<TYPE_BIGINT>(ctx->get_constant_column(window_size_col_index));
+
+        mode = ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(2));
+    }
 
     void sort() const { std::stable_sort(std::begin(events_list), std::end(events_list)); }
 
@@ -124,8 +145,6 @@ struct WindowFunnelState {
         }
 
         std::vector<TimestampEvent> other_list;
-        window_size = ColumnHelper::get_const_value<TYPE_BIGINT>(ctx->get_constant_column(1));
-        mode = ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(2));
 
         events_size = (uint8_t)array[0];
         bool other_sorted = (uint8_t)array[1];
@@ -407,29 +426,28 @@ struct WindowFunnelState {
     static inline int8_t MODE_FLAGS[] = {1 << 0, 1 << 1};
 };
 
-template <LogicalType PT>
+template <LogicalType LT>
 class WindowFunnelAggregateFunction final
-        : public AggregateFunctionBatchHelper<WindowFunnelState<PT>, WindowFunnelAggregateFunction<PT>> {
-    using TimeTypeColumn = typename WindowFunnelState<PT>::TimeTypeColumn;
-    using TimeType = typename WindowFunnelState<PT>::TimeType;
-    using TimestampType = typename WindowFunnelState<PT>::TimestampType;
+        : public AggregateFunctionBatchHelper<WindowFunnelState<LT>, WindowFunnelAggregateFunction<LT>> {
+    using TimeTypeColumn = typename WindowFunnelState<LT>::TimeTypeColumn;
+    using TimeType = typename WindowFunnelState<LT>::TimeType;
+    using TimestampType = typename WindowFunnelState<LT>::TimestampType;
 
 public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         DCHECK(columns[2]->is_constant());
 
-        this->data(state).window_size = down_cast<const Int64Column*>(columns[0])->get_data()[0];
-        this->data(state).mode = ColumnHelper::get_const_value<TYPE_INT>(columns[2]);
+        this->data(state).init_once(ctx);
 
         // get timestamp
         TimeType tv;
         if (!columns[1]->is_constant()) {
             const auto timestamp_column = down_cast<const TimeTypeColumn*>(columns[1]);
-            DCHECK(PT == TYPE_DATETIME || PT == TYPE_DATE || PT == TYPE_INT || PT == TYPE_BIGINT);
+            DCHECK(LT == TYPE_DATETIME || LT == TYPE_DATE || LT == TYPE_INT || LT == TYPE_BIGINT);
             tv = timestamp_column->get_data()[row_num];
         } else {
-            tv = ColumnHelper::get_const_value<PT>(columns[1]);
+            tv = ColumnHelper::get_const_value<LT>(columns[1]);
         }
 
         // get event
@@ -450,9 +468,9 @@ public:
                 auto ele_offset = offset + i;
                 if (!null_vector[ele_offset] && data_column->get_data()[ele_offset]) {
                     event_level = i + 1;
-                    if constexpr (PT == TYPE_DATETIME) {
+                    if constexpr (LT == TYPE_DATETIME) {
                         this->data(state).update(tv.to_unix_second(), event_level);
-                    } else if constexpr (PT == TYPE_DATE) {
+                    } else if constexpr (LT == TYPE_DATE) {
                         this->data(state).update(tv.julian(), event_level);
                     } else {
                         this->data(state).update(tv, event_level);
@@ -465,9 +483,9 @@ public:
                 auto ele_offset = offset + i;
                 if (data_column.get_data()[ele_offset]) {
                     event_level = i + 1;
-                    if constexpr (PT == TYPE_DATETIME) {
+                    if constexpr (LT == TYPE_DATETIME) {
                         this->data(state).update(tv.to_unix_second(), event_level);
-                    } else if constexpr (PT == TYPE_DATE) {
+                    } else if constexpr (LT == TYPE_DATE) {
                         this->data(state).update(tv.julian(), event_level);
                     } else {
                         this->data(state).update(tv, event_level);
@@ -481,6 +499,9 @@ public:
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_array());
         DCHECK(!column->is_nullable());
+
+        this->data(state).init_once(ctx);
+
         const auto* input_column = down_cast<const ArrayColumn*>(column);
         const auto& offsets = input_column->offsets().get_data();
         const auto& elements = input_column->elements();
@@ -516,9 +537,9 @@ public:
         const auto* bool_array_column = down_cast<const ArrayColumn*>(src[3].get());
         for (int i = 0; i < chunk_size; i++) {
             TimestampType tv;
-            if constexpr (PT == TYPE_DATETIME) {
+            if constexpr (LT == TYPE_DATETIME) {
                 tv = timestamp_column->get_data()[i].to_unix_second();
-            } else if constexpr (PT == TYPE_DATE) {
+            } else if constexpr (LT == TYPE_DATE) {
                 tv = timestamp_column->get_data()[i].julian();
             } else {
                 tv = timestamp_column->get_data()[i];
@@ -541,7 +562,7 @@ public:
             buffer[1] = (int64_t)sorted;
             buffer[2] = (int64_t)tv;
             buffer[3] = (int64_t)event_level;
-            WindowFunnelState<PT>::serialize(buffer, 4, dst_column);
+            WindowFunnelState<LT>::serialize(buffer, 4, dst_column);
         }
     }
 

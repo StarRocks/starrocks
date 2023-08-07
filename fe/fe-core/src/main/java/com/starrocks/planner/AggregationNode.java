@@ -66,10 +66,14 @@ import org.apache.commons.collections.CollectionUtils;
 
 import java.nio.ByteBuffer;
 import java.util.List;
-import java.util.Optional;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+
+import static com.starrocks.qe.SessionVariableConstants.FORCE_PREAGGREGATION;
+import static com.starrocks.qe.SessionVariableConstants.FORCE_STREAMING;
+import static com.starrocks.qe.SessionVariableConstants.LIMITED;
 
 public class AggregationNode extends PlanNode {
     private final AggregateInfo aggInfo;
@@ -86,6 +90,14 @@ public class AggregationNode extends PlanNode {
     private boolean useSortAgg = false;
     
     private boolean withLocalShuffle = false;
+
+    // identicallyDistributed meanings the PlanNode above OlapScanNode are cases as follows:
+    // 1. bucket shuffle join,
+    // 2. colocate join,
+    // 3. one-phase agg,
+    // 4. 1st phaes of three-phase-agg(2nd phase of four-phase agg eliminated).
+    // OlapScanNode and these PlanNodes have the same data partition policy.
+    private boolean identicallyDistributed = false;
 
     /**
      * Create an agg node that is not an intermediate node.
@@ -111,12 +123,16 @@ public class AggregationNode extends PlanNode {
      * Sets this node as a preaggregation. Only valid to call this if it is not marked
      * as a preaggregation
      */
-    public void setIsPreagg(boolean canUseStreamingPreAgg) {
-        useStreamingPreagg = canUseStreamingPreAgg && aggInfo.getGroupingExprs().size() > 0;
+    public void setIsPreagg(boolean useStreamingPreAgg) {
+        useStreamingPreagg = useStreamingPreAgg;
     }
 
     public AggregateInfo getAggInfo() {
         return aggInfo;
+    }
+
+    public boolean isNeedsFinalize() {
+        return needsFinalize;
     }
 
     /**
@@ -166,6 +182,14 @@ public class AggregationNode extends PlanNode {
         }
         sb.append(")");
         setPlanNodeName(sb.toString());
+    }
+
+    public void setIdenticallyDistributed(boolean identicallyDistributed) {
+        this.identicallyDistributed = identicallyDistributed;
+    }
+
+    public boolean isIdenticallyDistributed() {
+        return identicallyDistributed;
     }
 
     @Override
@@ -221,13 +245,16 @@ public class AggregationNode extends PlanNode {
         }
 
         msg.agg_node.setHas_outer_join_child(hasNullableGenerateChild);
-        if (streamingPreaggregationMode.equalsIgnoreCase("force_streaming")) {
+        if (streamingPreaggregationMode.equalsIgnoreCase(FORCE_STREAMING)) {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.FORCE_STREAMING);
-        } else if (streamingPreaggregationMode.equalsIgnoreCase("force_preaggregation")) {
+        } else if (streamingPreaggregationMode.equalsIgnoreCase(FORCE_PREAGGREGATION)) {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.FORCE_PREAGGREGATION);
+        } else if (streamingPreaggregationMode.equalsIgnoreCase(LIMITED)) {
+            msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.LIMITED_MEM);
         } else {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.AUTO);
         }
+
         msg.agg_node.setAgg_func_set_version(FeConstants.AGG_FUNC_VERSION);
         msg.agg_node.setInterpolate_passthrough(
                 useStreamingPreagg && ConnectContext.get().getSessionVariable().isInterpolatePassthrough());
@@ -326,6 +353,11 @@ public class AggregationNode extends PlanNode {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
     }
 
+    @Override
+    public boolean canUseRuntimeAdaptiveDop() {
+        return getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
+    }
+
     private void disableCacheIfHighCardinalityGroupBy(FragmentNormalizer normalizer) {
         if (ConnectContext.get() == null || getCardinality() == -1) {
             return;
@@ -353,6 +385,14 @@ public class AggregationNode extends PlanNode {
         if (!stringColumnStatistics.isEmpty()) {
             normalizer.setUncacheable(true);
         }
+    }
+
+    @Override
+    public boolean extractConjunctsToNormalize(FragmentNormalizer normalizer) {
+        List<Expr> conjuncts = normalizer.getConjunctsByPlanNodeId(this);
+        normalizer.filterOutPartColRangePredicates(getId(), conjuncts,
+                FragmentNormalizer.getSlotIdSet(aggInfo.getGroupingExprs()));
+        return false;
     }
 
     @Override

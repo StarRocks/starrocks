@@ -95,7 +95,7 @@ The available metrics are:
 |starrocks_fe_query_resource_group_latency|second|average|the query latency percentile for each resource group|
 |starrocks_fe_query_resource_group_err|pcs|cumulative|The number of incorrect queries for each resource group|
 |starrocks_be_resource_group_cpu_limit_ratio|percentage|Instantaneous|Instantaneous value of resource group cpu quota ratio|
-|starrocks_be_resource_group_cpu_use_ratio|percentage|Instantaneous|Instantaneous value of resource group cpu usage ratio|
+|starrocks_be_resource_group_cpu_use_ratio|percentage|average|The ratio of CPU time used by the resource group to the CPU time of all resource groups|
 |starrocks_be_resource_group_mem_limit_bytes|Byte|Instantaneous|Instantaneous value of resource group memory quota|
 |starrocks_be_resource_group_mem_allocated_bytes|Byte|Instantaneous|Instantaneous value of resource group memory usage|
 
@@ -294,7 +294,7 @@ nohup ./bin/grafana-server \
 
 Log in to Grafana through the address configured in the previous step <http://grafana_host:8000> with the default username/password (i.e. admin/admin).
 
-**1.** Data source configuration
+**1.** Add a data source.
 
 Configuration path: `Configuration-->Data sources-->Add data source-->Prometheus`
 
@@ -309,13 +309,23 @@ The rest of the options are default.
 
 Click Save & Test at the bottom, if it shows `Data source is working`, it means the data source is available.
 
-**2.** Add Dashboard
+**2.** Add a dashboard.
 
-[Dashboard Template Download](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Overview.json)
-[Template after StarRocks-1.19.0 Download](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Overview-19.json)
+Download a dashboard.
+
+> **NOTE**
+>
+> Metric names in StarRocks v1.19.0 and v2.4.0 are changed. You must download a dashboard template based on your StarRocks version:
+>
+> * [Dashboard template for versions earlier than v1.19.0](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Overview.json)
+> * [Dashboard template for v1.19.0 to v2.4.0 (exclusive)](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Overview-19.json)
+> * [Dashboard template for v2.4.0 and later](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Overview-24.json)
+
 Dashboard templates will be updated from time to time.
-After confirming the data source is available, click on the `+` sign to add a new Dashboard, here we use the StarRocks Dashboard template downloaded above. Go to Import -> Upload Json File`to import the downloaded json file.
-After importing, you can name the Dashboard. The default name is StarRocks Overview. Then select`starrocks_monitor`as the data source.
+
+After confirming the data source is available, click on the `+` sign to add a new Dashboard, here we use the StarRocks Dashboard template downloaded above. Go to Import -> Upload Json File to load the downloaded json file.
+
+After loading, you can name the Dashboard. The default name is StarRocks Overview. Then select`starrocks_monitor`as the data source.
 Click`Import` to complete the import. Then you should see the Dashboard.
 
 #### Dashboard Description

@@ -53,6 +53,7 @@ public:
     void park_driver(const DriverRawPtr driver);
     // activate parked driver from poller
     size_t activate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func);
+    size_t calculate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) const;
 
     // only used for collect metrics
     size_t blocked_driver_queue_len() const {

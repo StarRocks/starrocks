@@ -22,11 +22,11 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/primitive_type_infra.h"
 #include "storage/chunk_helper.h"
 #include "storage/memtable_sink.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/tablet_schema.h"
+#include "types/logical_type_infra.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
 
@@ -34,16 +34,14 @@ namespace starrocks {
 
 // TODO(cbl): move to common space latter
 static const string LOAD_OP_COLUMN = "__op";
-static const size_t kPrimaryKeyLimitSize = 128;
 
-VectorizedSchema MemTable::convert_schema(const TabletSchema* tablet_schema,
-                                          const std::vector<SlotDescriptor*>* slot_descs) {
-    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
+Schema MemTable::convert_schema(const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs) {
+    Schema schema = ChunkHelper::convert_schema(*tablet_schema);
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && slot_descs != nullptr &&
         slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
         // load slots have __op field, so add to _vectorized_schema
-        auto op_column = std::make_shared<starrocks::VectorizedField>((ColumnId)-1, LOAD_OP_COLUMN,
-                                                                      LogicalType::TYPE_TINYINT, false);
+        auto op_column =
+                std::make_shared<starrocks::Field>((ColumnId)-1, LOAD_OP_COLUMN, LogicalType::TYPE_TINYINT, false);
         op_column->set_aggregate_method(STORAGE_AGGREGATE_REPLACE);
         schema.append(op_column);
     }
@@ -59,7 +57,7 @@ void MemTable::_init_aggregator_if_needed() {
     }
 }
 
-MemTable::MemTable(int64_t tablet_id, const VectorizedSchema* schema, const std::vector<SlotDescriptor*>* slot_descs,
+MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<SlotDescriptor*>* slot_descs,
                    MemTableSink* sink, std::string merge_condition, MemTracker* mem_tracker)
         : _tablet_id(tablet_id),
           _vectorized_schema(schema),
@@ -69,13 +67,14 @@ MemTable::MemTable(int64_t tablet_id, const VectorizedSchema* schema, const std:
           _aggregator(nullptr),
           _merge_condition(std::move(merge_condition)),
           _mem_tracker(mem_tracker) {
-    if (_keys_type == KeysType::PRIMARY_KEYS && _slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
+    if (_keys_type == KeysType::PRIMARY_KEYS && _slot_descs != nullptr &&
+        _slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
         _has_op_slot = true;
     }
     _init_aggregator_if_needed();
 }
 
-MemTable::MemTable(int64_t tablet_id, const VectorizedSchema* schema, const std::vector<SlotDescriptor*>* slot_descs,
+MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<SlotDescriptor*>* slot_descs,
                    MemTableSink* sink, MemTracker* mem_tracker)
         : _tablet_id(tablet_id),
           _vectorized_schema(schema),
@@ -91,7 +90,7 @@ MemTable::MemTable(int64_t tablet_id, const VectorizedSchema* schema, const std:
     _init_aggregator_if_needed();
 }
 
-MemTable::MemTable(int64_t tablet_id, const VectorizedSchema* schema, MemTableSink* sink, int64_t max_buffer_size,
+MemTable::MemTable(int64_t tablet_id, const Schema* schema, MemTableSink* sink, int64_t max_buffer_size,
                    MemTracker* mem_tracker)
         : _tablet_id(tablet_id),
           _vectorized_schema(schema),
@@ -228,7 +227,7 @@ Status MemTable::finalize() {
             _result_chunk = _aggregator->aggregate_result();
             if (_keys_type == PRIMARY_KEYS &&
                 PrimaryKeyEncoder::encode_exceed_limit(*_vectorized_schema, *_result_chunk.get(), 0,
-                                                       _result_chunk->num_rows(), kPrimaryKeyLimitSize)) {
+                                                       _result_chunk->num_rows(), config::primary_key_limit_size)) {
                 _aggregator.reset();
                 _aggregator_memory_usage = 0;
                 _aggregator_bytes_usage = 0;
@@ -287,7 +286,7 @@ Status MemTable::flush(SegmentPB* seg_info) {
     }
     StarRocksMetrics::instance()->memtable_flush_total.increment(1);
     StarRocksMetrics::instance()->memtable_flush_duration_us.increment(duration_ns / 1000);
-    VLOG(1) << "memtable flush: " << duration_ns / 1000 << "us";
+    VLOG(1) << "memtable of tablet " << _tablet_id << " flush: " << duration_ns / 1000 << "us";
     return Status::OK();
 }
 

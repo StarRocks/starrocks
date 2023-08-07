@@ -1,5 +1,21 @@
 # StarRocks version 2.2
 
+Release date: April 6, 2023
+
+## Improvements
+
+- Optimized the bitmap_contains() function to reduce its memory consumption and improve its performance in some scenarios. [#20616](https://github.com/StarRocks/starrocks/issues/20616)
+- Optimized the Compaction framework to reduce its CPU resource consumption. [#11746](https://github.com/StarRocks/starrocks/issues/11746)
+
+## Bug Fixes
+
+The following bugs are fixed:
+
+- If the requested URL in a Stream Load job is not correct, the responsible FE hangs and is unable to handle the HTTP request. [#18468](https://github.com/StarRocks/starrocks/issues/18468)
+- When the responsible FE collects statistics, it may consume an abnormally large amount of memory, which causes OOM. [#16331](https://github.com/StarRocks/starrocks/issues/16331)
+- BEs crash if memory release is not properly handled in some queries. [#11395](https://github.com/StarRocks/starrocks/issues/11395)
+- After the command TRUNCATE TABLE is executed, a NullPointerException may occur and the responsible FE fails to restart. [#16773](https://github.com/StarRocks/starrocks/issues/16773)
+
 ## 2.2.10
 
 Release date: December 2, 2022
@@ -14,7 +30,7 @@ Release date: December 2, 2022
 
 - Optimized the FE start script. Java version is now checked during FE start. [#14094](https://github.com/StarRocks/starrocks/pull/14094)
 
-- Supports deleting large volumes of data from primary key tables. [#4772](https://github.com/StarRocks/starrocks/issues/4772)
+- Supports deleting large volumes of data from Primary Key tables. [#4772](https://github.com/StarRocks/starrocks/issues/4772)
 
 ### Bug Fixes
 
@@ -66,7 +82,7 @@ Release date: October 17, 2022
 
 The following bugs are fixed:
 
-- BEs may crash if an expression encounters an error in the initial stage. [#11395](https://github.com/StarRocks/starrocks/pull/11395)
+- BEs may crash if an expression encounters an error in the initialization stage. [#11395](https://github.com/StarRocks/starrocks/pull/11395)
 
 - BEs may crash if invalid JSON data is loaded. [#10804](https://github.com/StarRocks/starrocks/issues/10804)
 
@@ -206,7 +222,7 @@ Release date: June 2, 2022
 
 - Added the CPU and memory usage information of the machines on which BEs are deployed for each query to the FE audit log. [#6208](https://github.com/StarRocks/starrocks/pull/6208) [#6209](https://github.com/StarRocks/starrocks/pull/6209)
 
-- Supported JSON data types in the tables that use the Primary Key model and tables that use the Unique Key model. [#6544](https://github.com/StarRocks/starrocks/pull/6544)
+- Supported JSON data types in the Primary Key tables and Unique Key tables. [#6544](https://github.com/StarRocks/starrocks/pull/6544)
 
 - Reduced FEs load by reducing lock granularity and deduplicating BE report requests. Optimized the report performance when a large number of BEs are deployed, and solved the issue of Routine Load tasks getting stuck in a large cluster. [#6293](https://github.com/StarRocks/starrocks/pull/6293)
 
@@ -230,7 +246,7 @@ Release date: May 22, 2022
 
 - [Preview] A Java-based user-defined function (UDF) framework is implemented. This framework supports UDFs that are compiled in compliance with the syntax of Java to extend the capabilities of StarRocks.
 
-- [Preview] The primary key model supports updates only to specific columns when data is loaded to the primary key model in real-time data update scenarios such as order updates and multi-stream joins.
+- [Preview] The Primary Key table supports updates only to specific columns when data is loaded to the Primary Key table in real-time data update scenarios such as order updates and multi-stream joins.
 
 - [Preview] JSON data types and JSON functions are supported.
 
@@ -257,7 +273,7 @@ Release date: May 22, 2022
 
 ### Bug Fixes
 
-- Deadlocks occur if data is loaded or changes are committed into tables that are based on the primary key model. [#4998](https://github.com/StarRocks/starrocks/pull/4998)
+- Deadlocks occur if data is loaded or changes are committed into tables that are based on the primary Key table. [#4998](https://github.com/StarRocks/starrocks/pull/4998)
 
 - Frontends (FEs), including FEs that run Oracle Berkeley DB Java Edition (BDB JE), are unstable. [#4428](https://github.com/StarRocks/starrocks/pull/4428), [#4666](https://github.com/StarRocks/starrocks/pull/4666), [#2](https://github.com/StarRocks/bdb-je/pull/2)
 

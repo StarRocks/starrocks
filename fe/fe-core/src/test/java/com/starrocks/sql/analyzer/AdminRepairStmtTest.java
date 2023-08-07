@@ -68,7 +68,7 @@ public class AdminRepairStmtTest {
     public void testAdminCheckTablets() {
         AdminCheckTabletsStmt stmt = (AdminCheckTabletsStmt) analyzeSuccess("ADMIN CHECK TABLET (10000, 10001) " +
                 "PROPERTIES(\"type\" = \"consistency\");");
-        Assert.assertFalse(stmt.getProperties().containsKey("type"));
+        Assert.assertTrue(stmt.getProperty().containsKey("type"));
         Assert.assertEquals("consistency", stmt.getType().name().toLowerCase());
         Assert.assertEquals(Long.valueOf(10001L), stmt.getTabletIds().get(1));
         Assert.assertEquals(RedirectStatus.FORWARD_NO_SYNC, stmt.getRedirectStatus());

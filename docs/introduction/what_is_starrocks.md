@@ -34,7 +34,7 @@ The MPP framework and vectorized execution engine enable users to choose between
 
 ### Real-time analytics
 
-StarRocks uses the Primary Key model to implement real-time updates. Data changes in a TP database can be synchronized to StarRocks in a matter of seconds to build a real-time warehouse.
+StarRocks uses the Primary Key table to implement real-time updates. Data changes in a TP database can be synchronized to StarRocks in a matter of seconds to build a real-time warehouse.
 
 Scenarios:
 
@@ -70,4 +70,4 @@ StarRocks provides a unified data analytics experience.
 
 - One system can power various analytical scenarios, reducing system complexity and lowering TCO.
 
-- StarRocks unifies data lakes and data warehouses. Data in a lakehouse can be managed all in StarRocks. Latency-sensitive queries that require high concurrency can run on StarRocks. Data in data lakes can be accessed by using connectors and external tables provided by StarRocks.
+- StarRocks unifies data lakes and data warehouses. Data in a lakehouse can be managed all in StarRocks. Latency-sensitive queries that require high concurrency can run on StarRocks. Data in data lakes can be accessed by using external catalogs or external tables provided by StarRocks.

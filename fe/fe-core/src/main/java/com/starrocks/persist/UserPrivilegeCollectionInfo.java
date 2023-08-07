@@ -16,17 +16,17 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.privilege.UserPrivilegeCollection;
+import com.starrocks.privilege.UserPrivilegeCollectionV2;
+import com.starrocks.sql.ast.UserIdentity;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-public class UserPrivilegeCollectionInfo implements Writable  {
+public class UserPrivilegeCollectionInfo implements Writable {
 
     @SerializedName(value = "i")
     public short pluginId;
@@ -36,11 +36,11 @@ public class UserPrivilegeCollectionInfo implements Writable  {
     private UserIdentity userIdentity;
 
     @SerializedName(value = "p")
-    private UserPrivilegeCollection privilegeCollection;
+    private UserPrivilegeCollectionV2 privilegeCollection;
 
     public UserPrivilegeCollectionInfo(
             UserIdentity userIdentity,
-            UserPrivilegeCollection userPrivilegeCollection,
+            UserPrivilegeCollectionV2 userPrivilegeCollection,
             short pluginId,
             short pluginVersion) {
         this.userIdentity = userIdentity;
@@ -53,7 +53,7 @@ public class UserPrivilegeCollectionInfo implements Writable  {
         return userIdentity;
     }
 
-    public UserPrivilegeCollection getPrivilegeCollection() {
+    public UserPrivilegeCollectionV2 getPrivilegeCollection() {
         return privilegeCollection;
     }
 

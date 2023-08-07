@@ -43,8 +43,8 @@
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/descriptors.h"
-#include "runtime/primitive_type.h"
 #include "types/date_value.h"
+#include "types/logical_type.h"
 #include "util/timezone_utils.h"
 
 namespace starrocks {
@@ -152,7 +152,7 @@ public:
     EsPredicate(ExprContext* context, const TupleDescriptor* tuple_desc, std::string timezone, ObjectPool* pool);
     ~EsPredicate();
     const std::vector<ExtPredicate*>& get_predicate_list();
-    Status build_disjuncts_list(bool use_vectorized = true);
+    Status build_disjuncts_list();
     // public for tests
     EsPredicate(const std::vector<ExtPredicate*>& all_predicates) { _disjuncts = all_predicates; };
 

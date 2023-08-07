@@ -150,15 +150,13 @@ Status DictDecodeNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
     return Status::OK();
 }
 
-Status DictDecodeNode::close(RuntimeState* state) {
+void DictDecodeNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
-    RETURN_IF_ERROR(ExecNode::close(state));
+    ExecNode::close(state);
     Expr::close(_expr_ctxs, state);
     _dict_optimize_parser.close(state);
-
-    return Status::OK();
 }
 
 pipeline::OpFactories DictDecodeNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {

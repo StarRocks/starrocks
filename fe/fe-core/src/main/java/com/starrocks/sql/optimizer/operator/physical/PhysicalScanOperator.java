@@ -17,18 +17,24 @@ package com.starrocks.sql.optimizer.operator.physical;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public abstract class PhysicalScanOperator extends PhysicalOperator {
     protected final Table table;
@@ -38,6 +44,9 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
      * The ColumnRefMap contains Scan output columns and predicate used columns
      */
     protected final ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
+    protected ImmutableList<ColumnAccessPath> columnAccessPaths;
+    protected boolean canUseAnyColumn;
+    protected boolean canUseMinMaxCountOpt;
 
     public PhysicalScanOperator(OperatorType type, Table table,
                                 Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -50,6 +59,7 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         this.limit = limit;
         this.predicate = predicate;
         this.projection = projection;
+        this.columnAccessPaths = ImmutableList.of();
 
         if (this.projection != null) {
             ColumnRefSet usedColumns = new ColumnRefSet();
@@ -72,6 +82,13 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         }
     }
 
+    public PhysicalScanOperator(OperatorType type, LogicalScanOperator scanOperator) {
+        this(type, scanOperator.getTable(), scanOperator.getColRefToColumnMetaMap(), scanOperator.getLimit(),
+                scanOperator.getPredicate(), scanOperator.getProjection());
+        this.canUseAnyColumn = scanOperator.getCanUseAnyColumn();
+        this.canUseMinMaxCountOpt = scanOperator.getCanUseMinMaxCountOpt();
+    }
+
     public List<ColumnRefOperator> getOutputColumns() {
         return outputColumns;
     }
@@ -88,6 +105,22 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         return colRefToColumnMetaMap;
     }
 
+    public boolean getCanUseAnyColumn() {
+        return canUseAnyColumn;
+    }
+
+    public void setCanUseAnyColumn(boolean canUseAnyColumn) {
+        this.canUseAnyColumn = canUseAnyColumn;
+    }
+
+    public boolean getCanUseMinMaxCountOpt() {
+        return canUseMinMaxCountOpt;
+    }
+
+    public void setCanUseMinMaxCountOpt(boolean canUseMinMaxCountOpt) {
+        this.canUseMinMaxCountOpt = canUseMinMaxCountOpt;
+    }
+
     public Table getTable() {
         return table;
     }
@@ -100,6 +133,14 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         throw new AnalysisException("Operation setScanOperatorPredicates(...) is not supported by this ScanOperator.");
     }
 
+    public void setColumnAccessPaths(List<ColumnAccessPath> columnAccessPaths) {
+        this.columnAccessPaths = ImmutableList.copyOf(columnAccessPaths);
+    }
+
+    public List<ColumnAccessPath> getColumnAccessPaths() {
+        return columnAccessPaths;
+    }
+
     @Override
     public ColumnRefSet getUsedColumns() {
         ColumnRefSet set = super.getUsedColumns();
@@ -108,16 +149,21 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
     }
 
     @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        return new RowOutputInfo(colRefToColumnMetaMap.keySet().stream()
+                .collect(Collectors.toMap(Function.identity(), Function.identity())));
+    }
+
+    @Override
     public boolean equals(Object o) {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
+
         if (!super.equals(o)) {
             return false;
         }
+
         PhysicalScanOperator that = (PhysicalScanOperator) o;
         return Objects.equals(table.getId(), that.table.getId()) &&
                 Objects.equals(colRefToColumnMetaMap, that.getColRefToColumnMetaMap());

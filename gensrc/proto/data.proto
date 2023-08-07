@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-syntax="proto2";
+syntax = "proto2";
 
 package starrocks;
 option java_package = "com.starrocks.proto";
@@ -45,6 +45,7 @@ message PQueryStatistics {
     optional int64 returned_rows = 3;
     optional int64 cpu_cost_ns = 4;
     optional int64 mem_cost_bytes = 5;
+    optional int64 spill_bytes = 6;
     repeated QueryStatisticsItemPB stats_items = 10;
 }
 
@@ -75,15 +76,15 @@ message ChunkPB {
     optional CompressionTypePB compress_type = 2;
     // Helper to allocate memory to decompress compressed data.
     optional int64 uncompressed_size = 3;
-    repeated int32 slot_id_map = 4 ; // slot id to column id map
-    repeated bool is_nulls = 5; // column is nullable
-    repeated bool is_consts = 6; // column is const
+    repeated int32 slot_id_map = 4;  // slot id to column id map
+    repeated bool is_nulls = 5;      // column is nullable
+    repeated bool is_consts = 6;     // column is const
     repeated int32 tuple_id_map = 7; // tuple id to column id map
-    optional int64 data_size = 8; // used to record size using brpc attachment
+    optional int64 data_size = 8;    // used to record size using brpc attachment
     // For some object column types like bitmap/hll/percentile.
     // we may estimate larger serialized_size but actually don't use that much space.
-    optional int64 serialized_size  = 9; // how many bytes are really written into data.
-    repeated int32 encode_level = 10; // the encode level for data columns, during upgrade, this must be 0.
+    optional int64 serialized_size = 9; // how many bytes are really written into data.
+    repeated int32 encode_level = 10;   // the encode level for data columns, during upgrade, this must be 0.
     repeated ChunkExtraColumnsMetaPB extra_data_metas = 11; // chunk's extra data meta.
 };
 
@@ -91,7 +92,7 @@ message SegmentPB {
     optional int64 segment_id = 1;
     optional bytes data = 2;
     optional int64 data_size = 3;
-    optional int64 index_size= 4;
+    optional int64 index_size = 4;
     optional int64 num_rows = 5;
     optional int64 row_size = 6;
     optional string path = 7;
@@ -102,4 +103,11 @@ message SegmentPB {
     optional string delete_path = 11;
     optional int64 partial_footer_position = 12;
     optional int64 partial_footer_size = 13;
+
+    // for column mode partial update
+    optional int64 update_id = 14;
+    optional int64 update_data_size = 15;
+    optional int64 update_num_rows = 16;
+    optional string update_path = 17;
+    optional int64 update_row_size = 18;
 };

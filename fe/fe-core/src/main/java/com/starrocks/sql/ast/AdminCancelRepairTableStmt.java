@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableRef;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -27,6 +28,11 @@ public class AdminCancelRepairTableStmt extends DdlStmt {
     private final List<String> partitions = Lists.newArrayList();
 
     public AdminCancelRepairTableStmt(TableRef tblRef) {
+        this(tblRef, NodePosition.ZERO);
+    }
+
+    public AdminCancelRepairTableStmt(TableRef tblRef, NodePosition pos) {
+        super(pos);
         this.tblRef = tblRef;
     }
 

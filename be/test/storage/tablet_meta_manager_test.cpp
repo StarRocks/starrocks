@@ -68,8 +68,11 @@ TEST_F(TabletMetaManagerTest, test_save_load_tablet_meta) {
 
     auto meta = std::make_shared<TabletMeta>();
     meta->init_from_pb(&meta_pb);
+    // generate necessary field
+    TabletMetaPB new_meta_pb;
+    meta->to_meta_pb(&new_meta_pb);
 
-    ASSERT_TRUE(TabletMetaManager::save(_data_dir.get(), meta).ok());
+    ASSERT_TRUE(TabletMetaManager::save(_data_dir.get(), new_meta_pb).ok());
     auto load_meta = std::make_shared<TabletMeta>();
     ASSERT_TRUE(
             TabletMetaManager::get_tablet_meta(_data_dir.get(), meta->tablet_id(), meta->schema_hash(), load_meta.get())
@@ -386,6 +389,60 @@ protected:
 
     inline static std::unique_ptr<DataDir> _s_data_dir;
 };
+
+TEST_F(TabletMetaManagerTest, delta_column_group_operations) {
+    // insert 20 delta_column_group with 20 version
+    auto meta = _data_dir->get_meta();
+    const int64_t tablet_id = 1001;
+    for (int segid = 1; segid <= 20; segid++) {
+        DeltaColumnGroupList dcgs;
+        for (int v = 1; v <= 20; v++) {
+            auto dcg = std::make_shared<DeltaColumnGroup>();
+            dcg->init(v, {{1, 10, 100}}, {"1110.cols"});
+            dcgs.push_back(std::move(dcg));
+        }
+        WriteBatch wb;
+        CHECK(TabletMetaManager::put_delta_column_group(_data_dir.get(), &wb, tablet_id, segid, dcgs).ok());
+        CHECK(meta->write_batch(&wb).ok());
+    }
+    // get delta column group
+    for (int i = 1; i <= 10; i++) {
+        DeltaColumnGroupList dcgs;
+        int segid = (rand() % 20) + 1;
+        CHECK(TabletMetaManager::get_delta_column_group(meta, tablet_id, segid, i, &dcgs).ok());
+        ASSERT_EQ(dcgs.size(), i);
+        ASSERT_EQ(dcgs[0]->column_files("111").front(), "111/1110.cols");
+        ASSERT_EQ(dcgs[0]->get_column_idx(10).first, 0);
+        ASSERT_EQ(dcgs[0]->get_column_idx(10).second, 1);
+        ASSERT_EQ(dcgs[0]->get_column_idx(11).first, -1);
+        ASSERT_EQ(dcgs[0]->get_column_idx(11).second, -1);
+        ASSERT_EQ(dcgs[0]->version(), i);
+    }
+    // scan delta column group
+    for (int i = 1; i <= 5; i++) {
+        DeltaColumnGroupList dcgs;
+        int len = (rand() % 5) + 1;
+        int segid = (rand() % 20) + 1;
+        CHECK(TabletMetaManager::scan_delta_column_group(meta, tablet_id, segid, i, i + len, &dcgs).ok());
+        ASSERT_EQ(dcgs.size(), len);
+        ASSERT_EQ(dcgs[0]->column_files("111").front(), "111/1110.cols");
+        ASSERT_EQ(dcgs[0]->get_column_idx(10).first, 0);
+        ASSERT_EQ(dcgs[0]->get_column_idx(10).second, 1);
+        ASSERT_EQ(dcgs[0]->get_column_idx(11).first, -1);
+        ASSERT_EQ(dcgs[0]->get_column_idx(11).second, -1);
+        ASSERT_EQ(dcgs[0]->version(), i + len);
+    }
+    // delete delta column group
+    for (int segid = 1; segid < 10; segid++) {
+        CHECK(TabletMetaManager::delete_delta_column_group(meta, tablet_id, 1, 20).ok());
+    }
+    // check empty
+    for (int segid = 1; segid <= 20; segid++) {
+        DeltaColumnGroupList dcgs;
+        CHECK(TabletMetaManager::scan_delta_column_group(meta, tablet_id, segid, 1, 20, &dcgs).ok());
+        ASSERT_EQ(dcgs.size(), 0);
+    }
+}
 
 /*
 // NOLINTNEXTLINE

@@ -128,6 +128,8 @@ public class StreamLoadScanNode extends LoadScanNode {
     }
 
     private ParamCreateContext paramCreateContext;
+    private boolean nullExprInAutoIncrement;
+
 
     // used to construct for streaming loading
     public StreamLoadScanNode(TUniqueId loadId, PlanNodeId id, TupleDescriptor tupleDesc, Table dstTable, StreamLoadInfo streamLoadInfo) {
@@ -139,6 +141,7 @@ public class StreamLoadScanNode extends LoadScanNode {
         this.numInstances = 1;
         this.nextBe = 0;
         this.needAssignBE = false;
+        this.nullExprInAutoIncrement = true;
     }
 
     public StreamLoadScanNode(
@@ -156,6 +159,7 @@ public class StreamLoadScanNode extends LoadScanNode {
         this.needAssignBE = false;
         this.txnId = txnId;
         this.curChannelId = 0;
+        this.nullExprInAutoIncrement = true;
     }
 
     public void setUseVectorizedLoad(boolean useVectorizedLoad) {
@@ -164,6 +168,10 @@ public class StreamLoadScanNode extends LoadScanNode {
 
     public void setNeedAssignBE(boolean needAssignBE) {
         this.needAssignBE = needAssignBE;
+    }
+
+    public boolean nullExprInAutoIncrement() {
+        return nullExprInAutoIncrement;
     }
 
     @Override
@@ -214,6 +222,9 @@ public class StreamLoadScanNode extends LoadScanNode {
         params.setEnclose(streamLoadInfo.getEnclose());
         params.setEscape(streamLoadInfo.getEscape());
         params.setStrict_mode(streamLoadInfo.isStrictMode());
+        if (streamLoadInfo.getConfluentSchemaRegistryUrl() != null) {
+            params.setConfluent_schema_registry_url(streamLoadInfo.getConfluentSchemaRegistryUrl());
+        }
         initColumns();
         initWhereExpr(streamLoadInfo.getWhereExpr(), analyzer);
     }
@@ -279,8 +290,11 @@ public class StreamLoadScanNode extends LoadScanNode {
                                     + column.getDefaultExpr().getExpr());
                         }
                     } else if (defaultValueType == Column.DefaultValueType.NULL) {
-                        if (column.isAllowNull()) {
+                        if (column.isAllowNull() || column.isAutoIncrement()) {
                             expr = NullLiteral.create(column.getType());
+                            if (column.isAutoIncrement()) {
+                                nullExprInAutoIncrement = false;
+                            }
                         } else {
                             throw new AnalysisException("column has no source field, column=" + column.getName());
                         }
@@ -345,6 +359,11 @@ public class StreamLoadScanNode extends LoadScanNode {
                     rangeDesc.setJson_root(streamLoadInfo.getJsonRoot());
                 }
                 rangeDesc.setStrip_outer_array(streamLoadInfo.isStripOuterArray());
+            }
+            if (rangeDesc.format_type == TFileFormatType.FORMAT_AVRO) {
+                if (!streamLoadInfo.getJsonPaths().isEmpty()) {
+                    rangeDesc.setJsonpaths(streamLoadInfo.getJsonPaths());
+                }
             }
             rangeDesc.setSplittable(false);
             switch (streamLoadInfo.getFileType()) {

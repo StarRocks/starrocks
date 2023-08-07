@@ -20,6 +20,7 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -37,22 +38,35 @@ public class PartitionKeyDesc implements ParseNode {
     private List<PartitionValue> upperValues;
     private final PartitionRangeType partitionType;
 
+    private final NodePosition pos;
+
     public static PartitionKeyDesc createMaxKeyDesc() {
         return MAX_VALUE;
     }
 
     private PartitionKeyDesc() {
+        this.pos = NodePosition.ZERO;
         partitionType = PartitionRangeType.LESS_THAN; // LESS_THAN is default type.
     }
 
     // values less than
     public PartitionKeyDesc(List<PartitionValue> upperValues) {
+        this(upperValues, NodePosition.ZERO);
+    }
+
+    public PartitionKeyDesc(List<PartitionValue> upperValues, NodePosition pos) {
+        this.pos = pos;
         this.upperValues = upperValues;
         partitionType = PartitionRangeType.LESS_THAN;
     }
 
     // fixed range
     public PartitionKeyDesc(List<PartitionValue> lowerValues, List<PartitionValue> upperValues) {
+        this(lowerValues, upperValues, NodePosition.ZERO);
+    }
+
+    public PartitionKeyDesc(List<PartitionValue> lowerValues, List<PartitionValue> upperValues, NodePosition pos) {
+        this.pos = pos;
         this.lowerValues = lowerValues;
         this.upperValues = upperValues;
         partitionType = PartitionRangeType.FIXED;
@@ -91,17 +105,17 @@ public class PartitionKeyDesc implements ParseNode {
 
         // currently, we do not support MAXVALUE in multi partition range values. eg: ("100", "200", MAXVALUE);
         // maybe support later.
-        if (lowerValues != null && lowerValues.size() > 1) {
+        if (lowerValues != null) {
             for (PartitionValue lowerVal : lowerValues) {
-                if (lowerVal.isMax()) {
+                if (lowerVal.isMax() && partColNum > 1) {
                     throw new AnalysisException("Not support MAXVALUE in multi partition range values.");
                 }
             }
         }
 
-        if (upperValues != null && upperValues.size() > 1) {
+        if (upperValues != null) {
             for (PartitionValue upperVal : upperValues) {
-                if (upperVal.isMax()) {
+                if (upperVal.isMax() && partColNum > 1) {
                     throw new AnalysisException("Not support MAXVALUE in multi partition range values.");
                 }
             }
@@ -121,6 +135,11 @@ public class PartitionKeyDesc implements ParseNode {
             }
         })).append(")");
         return sb.toString();
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 
     // returns:

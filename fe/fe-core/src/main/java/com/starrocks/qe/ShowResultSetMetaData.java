@@ -23,6 +23,7 @@ package com.starrocks.qe;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 
@@ -80,5 +81,10 @@ public class ShowResultSetMetaData {
             columns.add(col);
             return this;
         }
+        public Builder column(String name, ScalarType type) {
+            columns.add(new Column(name, type, false, null, true, null, ""));
+            return this;
+        }
+
     }
 }

@@ -14,19 +14,18 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.LocalTablet;
-import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
-import com.starrocks.connector.iceberg.cost.IcebergTableStatisticCalculator;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -37,18 +36,20 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import org.apache.commons.collections.CollectionUtils;
-import org.apache.iceberg.expressions.Expression;
-import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.roaringbitmap.RoaringBitmap;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -56,12 +57,21 @@ import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.Spliterator;
+import java.util.Spliterators;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
+
+import static java.util.function.Function.identity;
 
 public class Utils {
     private static final Logger LOG = LogManager.getLogger(Utils.class);
@@ -154,6 +164,25 @@ public class Utils {
 
     public static void extractOlapScanOperator(GroupExpression groupExpression, List<LogicalOlapScanOperator> list) {
         extractOperator(groupExpression, list, p -> OperatorType.LOGICAL_OLAP_SCAN.equals(p.getOpType()));
+    }
+
+    public static List<PhysicalOlapScanOperator> extractPhysicalOlapScanOperator(OptExpression root) {
+        List<PhysicalOlapScanOperator> list = Lists.newArrayList();
+        extractOperator(root, list, op -> OperatorType.PHYSICAL_OLAP_SCAN.equals(op.getOpType()));
+        return list;
+    }
+
+    private static <E extends Operator> void extractOperator(OptExpression root, List<E> list,
+                                                             Predicate<Operator> lambda) {
+        if (lambda.test(root.getOp())) {
+            list.add((E) root.getOp());
+            return;
+        }
+
+        List<OptExpression> inputs = root.getInputs();
+        for (OptExpression input : inputs) {
+            extractOperator(input, list, lambda);
+        }
     }
 
     private static <E extends Operator> void extractOperator(GroupExpression root, List<E> list,
@@ -280,59 +309,58 @@ public class Utils {
         return link.remove();
     }
 
-    public static boolean isInnerOrCrossJoin(Operator operator) {
-        if (operator instanceof LogicalJoinOperator) {
-            LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
-            return joinOperator.isInnerOrCrossJoin();
-        }
-        return false;
-    }
-
-    public static int countInnerJoinNodeSize(OptExpression root) {
+    public static int countJoinNodeSize(OptExpression root, Set<JoinOperator> joinTypes) {
         int count = 0;
         Operator operator = root.getOp();
         for (OptExpression child : root.getInputs()) {
-            if (isInnerOrCrossJoin(operator) && ((LogicalJoinOperator) operator).getJoinHint().isEmpty()) {
-                count += countInnerJoinNodeSize(child);
+            if (isSuitableJoin(operator, joinTypes)) {
+                count += countJoinNodeSize(child, joinTypes);
             } else {
-                count = Math.max(count, countInnerJoinNodeSize(child));
+                count = Math.max(count, countJoinNodeSize(child, joinTypes));
             }
         }
 
-        if (isInnerOrCrossJoin(operator) && ((LogicalJoinOperator) operator).getJoinHint().isEmpty()) {
+        if (isSuitableJoin(operator, joinTypes)) {
             count += 1;
         }
         return count;
     }
 
-    public static boolean capableSemiReorder(OptExpression root, boolean hasSemi, int joinNum, int maxJoin) {
-        Operator operator = root.getOp();
-
+    private static boolean isSuitableJoin(Operator operator, Set<JoinOperator> joinTypes) {
         if (operator instanceof LogicalJoinOperator) {
-            if (((LogicalJoinOperator) operator).getJoinType().isSemiAntiJoin()) {
-                hasSemi = true;
-            } else {
-                joinNum = joinNum + 1;
-            }
-
-            if (joinNum > maxJoin && hasSemi) {
-                return false;
-            }
+            LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
+            return joinTypes.contains(joinOperator.getJoinType()) && joinOperator.getJoinHint().isEmpty();
         }
+        return false;
+    }
 
+    public static boolean capableOuterReorder(OptExpression root, int threshold) {
+        boolean[] hasOuterOrSemi = {false};
+        int totalJoinNodes = countJoinNode(root, hasOuterOrSemi);
+        return totalJoinNodes < threshold && hasOuterOrSemi[0];
+    }
+
+    private static int countJoinNode(OptExpression root, boolean[] hasOuterOrSemi) {
+        int count = 0;
+        Operator operator = root.getOp();
         for (OptExpression child : root.getInputs()) {
-            if (operator instanceof LogicalJoinOperator) {
-                if (!capableSemiReorder(child, hasSemi, joinNum, maxJoin)) {
-                    return false;
-                }
+            if (operator instanceof LogicalJoinOperator && ((LogicalJoinOperator) operator).getJoinHint().isEmpty()) {
+                count += countJoinNode(child, hasOuterOrSemi);
             } else {
-                if (!capableSemiReorder(child, false, 0, maxJoin)) {
-                    return false;
-                }
+                count = Math.max(count, countJoinNode(child, hasOuterOrSemi));
             }
         }
 
-        return true;
+        if (operator instanceof LogicalJoinOperator && ((LogicalJoinOperator) operator).getJoinHint().isEmpty()) {
+            count += 1;
+            if (!hasOuterOrSemi[0]) {
+                LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
+                if (joinOperator.getJoinType().isOuterJoin() || joinOperator.getJoinType().isSemiAntiJoin()) {
+                    hasOuterOrSemi[0] = true;
+                }
+            }
+        }
+        return count;
     }
 
     public static boolean hasUnknownColumnsStats(OptExpression root) {
@@ -368,21 +396,9 @@ public class Utils {
                 }
                 return true;
             } else if (operator instanceof LogicalIcebergScanOperator) {
-                IcebergTable table = (IcebergTable) scanOperator.getTable();
-                try {
-                    List<ScalarOperator> predicates = Utils.extractConjuncts(operator.getPredicate());
-                    Types.StructType schema = table.getIcebergTable().schema().asStruct();
-                    ScalarOperatorToIcebergExpr.IcebergContext icebergContext =
-                            new ScalarOperatorToIcebergExpr.IcebergContext(schema);
-                    Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(predicates, icebergContext);
-                    List<ColumnStatistic> columnStatisticList = IcebergTableStatisticCalculator.getColumnStatistics(
-                            icebergPredicate, table.getIcebergTable(),
-                            scanOperator.getColRefToColumnMetaMap());
-                    return columnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
-                } catch (Exception e) {
-                    LOG.warn("Iceberg table {} get column failed. error : {}", table.getName(), e);
-                    return true;
-                }
+                // TODO(stephen): support `analyze table` to collect iceberg table ndv
+                // iceberg metadata doesn't have ndv, we default to unknown for all iceberg table column statistics.
+                return true;
             } else {
                 // For other scan operators, we do not know the column statistics.
                 return true;
@@ -425,36 +441,6 @@ public class Utils {
             }
         }
         return smallestColumnRef;
-    }
-
-    public static boolean canDoReplicatedJoin(OlapTable table, long selectedIndexId,
-                                              Collection<Long> selectedPartitionId,
-                                              Collection<Long> selectedTabletId) {
-        ConnectContext ctx = ConnectContext.get();
-        int backendSize = ctx.getTotalBackendNumber();
-        int aliveBackendSize = ctx.getAliveBackendNumber();
-        int schemaHash = table.getSchemaHashByIndexId(selectedIndexId);
-        for (Long partitionId : selectedPartitionId) {
-            Partition partition = table.getPartition(partitionId);
-            if (table.isLakeTable()) {
-                // TODO(wyb): necessary to support?
-                return false;
-            }
-            if (table.getPartitionInfo().getReplicationNum(partitionId) < backendSize) {
-                return false;
-            }
-            long visibleVersion = partition.getVisibleVersion();
-            MaterializedIndex materializedIndex = partition.getIndex(selectedIndexId);
-            // TODO(kks): improve this for loop
-            for (Long id : selectedTabletId) {
-                LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(id);
-                if (tablet != null && tablet.getQueryableReplicasSize(visibleVersion, schemaHash)
-                        != aliveBackendSize) {
-                    return false;
-                }
-            }
-        }
-        return true;
     }
 
     public static boolean isEqualBinaryPredicate(ScalarOperator predicate) {
@@ -557,5 +543,90 @@ public class Utils {
         }
 
         root.getChildren().forEach(child -> collect(child, clazz, output));
+    }
+
+    /**
+     * Compute the maximal power-of-two number which is less than or equal to the given number.
+     */
+    public static int computeMaxLEPower2(int num) {
+        num |= (num >>> 1);
+        num |= (num >>> 2);
+        num |= (num >>> 4);
+        num |= (num >>> 8);
+        num |= (num >>> 16);
+        return num - (num >>> 1);
+    }
+
+    /**
+     * Compute the maximal power-of-two number which is less than or equal to the given number.
+     */
+    public static int computeMinGEPower2(int num) {
+        num -= 1;
+        num |= (num >>> 1);
+        num |= (num >>> 2);
+        num |= (num >>> 4);
+        num |= (num >>> 8);
+        num |= (num >>> 16);
+        return num < 0 ? 1 : num + 1;
+    }
+
+    public static boolean canEliminateNull(Set<ColumnRefOperator> nullOutputColumnOps, ScalarOperator expression) {
+        Map<ColumnRefOperator, ScalarOperator> m = nullOutputColumnOps.stream()
+                .map(op -> new ColumnRefOperator(op.getId(), op.getType(), op.getName(), true))
+                .collect(Collectors.toMap(identity(), col -> ConstantOperator.createNull(col.getType())));
+
+        for (ScalarOperator e : Utils.extractConjuncts(expression)) {
+            ScalarOperator nullEval = new ReplaceColumnRefRewriter(m).rewrite(e);
+
+            ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
+            // Call the ScalarOperatorRewriter function to perform constant folding
+            nullEval = scalarRewriter.rewrite(nullEval, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+            if (nullEval.isConstantRef() && ((ConstantOperator) nullEval).isNull()) {
+                return true;
+            } else if (nullEval.equals(ConstantOperator.createBoolean(false))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // RoaringBitmap can be considered as a Set<Integer> contains only unsigned integers,
+    // so getIntStream() resembles to Set<Integer>::stream()
+    public static Stream<Integer> getIntStream(RoaringBitmap bitmap) {
+        Spliterator<Integer> iter = Spliterators.spliteratorUnknownSize(bitmap.iterator(), Spliterator.ORDERED);
+        return StreamSupport.stream(iter, false);
+    }
+
+    public static Set<Pair<ColumnRefOperator, ColumnRefOperator>> getJoinEqualColRefPairs(OptExpression joinOp) {
+        Pair<List<BinaryPredicateOperator>, List<ScalarOperator>> onPredicates =
+                JoinHelper.separateEqualPredicatesFromOthers(joinOp);
+        List<BinaryPredicateOperator> eqOnPredicates = onPredicates.first;
+        List<ScalarOperator> otherOnPredicates = onPredicates.second;
+
+        if (!otherOnPredicates.isEmpty() || eqOnPredicates.isEmpty()) {
+            return Collections.emptySet();
+        }
+        Set<Pair<ColumnRefOperator, ColumnRefOperator>> eqColumnRefPairs = Sets.newHashSet();
+        for (BinaryPredicateOperator eqPredicate : eqOnPredicates) {
+            ColumnRefOperator leftCol = eqPredicate.getChild(0).cast();
+            ColumnRefOperator rightCol = eqPredicate.getChild(1).cast();
+            eqColumnRefPairs.add(Pair.create(leftCol, rightCol));
+        }
+        return eqColumnRefPairs;
+    }
+
+    public static Map<ColumnRefOperator, ColumnRefOperator> makeEqColumRefMapFromSameTables(
+            LogicalScanOperator lhsScanOp, LogicalScanOperator rhsScanOp) {
+        Preconditions.checkArgument(lhsScanOp.getTable().getId() == rhsScanOp.getTable().getId());
+        Set<Column> lhsColumns = lhsScanOp.getColumnMetaToColRefMap().keySet();
+        Set<Column> rhsColumns = rhsScanOp.getColumnMetaToColRefMap().keySet();
+        Preconditions.checkArgument(lhsColumns.equals(rhsColumns));
+        Map<ColumnRefOperator, ColumnRefOperator> eqColumnRefs = Maps.newHashMap();
+        for (Column column : lhsColumns) {
+            ColumnRefOperator lhsColRef = lhsScanOp.getColumnMetaToColRefMap().get(column);
+            ColumnRefOperator rhsColRef = rhsScanOp.getColumnMetaToColRefMap().get(column);
+            eqColumnRefs.put(Objects.requireNonNull(lhsColRef), Objects.requireNonNull(rhsColRef));
+        }
+        return eqColumnRefs;
     }
 }

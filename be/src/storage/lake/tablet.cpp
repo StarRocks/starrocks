@@ -14,9 +14,11 @@
 
 #include "storage/lake/tablet.h"
 
-#include "column/vectorized_schema.h"
+#include "column/schema.h"
 #include "fs/fs.h"
+#include "gen_cpp/lake_types.pb.h"
 #include "runtime/exec_env.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/general_tablet_writer.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/pk_tablet_writer.h"
@@ -41,6 +43,26 @@ StatusOr<TabletMetadataPtr> Tablet::get_metadata(int64_t version) {
 
 Status Tablet::delete_metadata(int64_t version) {
     return _mgr->delete_tablet_metadata(_id, version);
+}
+
+bool Tablet::get_enable_persistent_index(int64_t version) {
+    auto tablet_metadata = _mgr->get_tablet_metadata(_id, version);
+    if (!tablet_metadata.ok()) {
+        LOG(WARNING) << "Fail to get tablet metadata. tablet_id: " << _id << ", version: " << version
+                     << ", error: " << tablet_metadata.status();
+        return false;
+    }
+    return (*tablet_metadata)->enable_persistent_index();
+}
+
+StatusOr<PersistentIndexTypePB> Tablet::get_persistent_index_type(int64_t version) {
+    auto tablet_metadata = _mgr->get_tablet_metadata(_id, version);
+    if (!tablet_metadata.ok()) {
+        LOG(WARNING) << "Fail to get tablet metadata. tablet_id: " << _id << ", version: " << version
+                     << ", error: " << tablet_metadata.status();
+        return Status::InternalError("get tablet metadata failed");
+    }
+    return (*tablet_metadata)->persistent_index_type();
 }
 
 Status Tablet::put_txn_log(const TxnLog& log) {
@@ -75,26 +97,36 @@ Status Tablet::delete_tablet_metadata_lock(int64_t version, int64_t expire_time)
     return _mgr->delete_tablet_metadata_lock(_id, version, expire_time);
 }
 
-StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer(RowsetTxnMetaPB* rowset_txn_meta,
-                                                           std::shared_ptr<const TabletSchema>& tschema) {
-    return std::make_unique<PkTabletWriter>(*this, rowset_txn_meta, tschema);
+StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer(WriterType type, int64_t txn_id,
+                                                           uint32_t max_rows_per_segment) {
+    ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
+    if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
+        if (type == kHorizontal) {
+            return std::make_unique<HorizontalPkTabletWriter>(*this, tablet_schema, txn_id);
+        } else {
+            DCHECK(type == kVertical);
+            return std::make_unique<VerticalPkTabletWriter>(*this, tablet_schema, txn_id, max_rows_per_segment);
+        }
+    } else {
+        if (type == kHorizontal) {
+            return std::make_unique<HorizontalGeneralTabletWriter>(*this, tablet_schema, txn_id);
+        } else {
+            DCHECK(type == kVertical);
+            return std::make_unique<VerticalGeneralTabletWriter>(*this, tablet_schema, txn_id, max_rows_per_segment);
+        }
+    }
 }
 
-StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer() {
-    return std::make_unique<GeneralTabletWriter>(*this);
-}
-
-StatusOr<std::shared_ptr<TabletReader>> Tablet::new_reader(int64_t version, VectorizedSchema schema) {
+StatusOr<std::shared_ptr<TabletReader>> Tablet::new_reader(int64_t version, Schema schema) {
     return std::make_shared<TabletReader>(*this, version, std::move(schema));
 }
 
 StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
-    return _mgr->get_tablet_schema(_id);
+    return _mgr->get_tablet_schema(_id, &_version_hint);
 }
 
 StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(int64_t version) {
     ASSIGN_OR_RETURN(auto tablet_metadata, get_metadata(version));
-    ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
     std::vector<RowsetPtr> rowsets;
     rowsets.reserve(tablet_metadata->rowsets_size());
     for (int i = 0, size = tablet_metadata->rowsets_size(); i < size; ++i) {
@@ -105,11 +137,11 @@ StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(int64_t version) {
     return rowsets;
 }
 
-StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(TabletMetadata* metadata) {
+StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(const TabletMetadata& metadata) {
     std::vector<RowsetPtr> rowsets;
-    rowsets.reserve(metadata->rowsets_size());
-    for (int i = 0, size = metadata->rowsets_size(); i < size; ++i) {
-        const auto& rowset_metadata = metadata->rowsets(i);
+    rowsets.reserve(metadata.rowsets_size());
+    for (int i = 0, size = metadata.rowsets_size(); i < size; ++i) {
+        const auto& rowset_metadata = metadata.rowsets(i);
         auto rowset = std::make_shared<Rowset>(this, std::make_shared<const RowsetMetadata>(rowset_metadata), i);
         rowsets.emplace_back(std::move(rowset));
     }
@@ -125,7 +157,8 @@ StatusOr<SegmentPtr> Tablet::load_segment(std::string_view segment_name, int seg
     }
     ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(location));
-    ASSIGN_OR_RETURN(segment, Segment::open(fs, location, seg_id, std::move(tablet_schema), footer_size_hint));
+    ASSIGN_OR_RETURN(segment, Segment::open(fs, location, seg_id, std::move(tablet_schema), footer_size_hint, nullptr,
+                                            !fill_cache));
     if (fill_cache) {
         _mgr->cache_segment(location, segment);
     }
@@ -154,6 +187,10 @@ std::string Tablet::segment_location(std::string_view segment_name) const {
 
 std::string Tablet::del_location(std::string_view del_name) const {
     return _mgr->del_location(_id, del_name);
+}
+
+std::string Tablet::delvec_location(std::string_view delvec_name) const {
+    return _mgr->delvec_location(_id, delvec_name);
 }
 
 std::string Tablet::root_location() const {

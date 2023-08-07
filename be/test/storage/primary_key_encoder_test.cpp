@@ -20,7 +20,7 @@
 
 #include "column/chunk.h"
 #include "column/datum.h"
-#include "column/vectorized_schema.h"
+#include "column/schema.h"
 #include "gutil/stringprintf.h"
 #include "storage/chunk_helper.h"
 
@@ -28,18 +28,19 @@ using namespace std;
 
 namespace starrocks {
 
-static unique_ptr<VectorizedSchema> create_key_schema(const vector<LogicalType>& types) {
-    VectorizedFields fields;
+static unique_ptr<Schema> create_key_schema(const vector<LogicalType>& types) {
+    Fields fields;
     std::vector<ColumnId> sort_key_idxes(types.size());
     for (int i = 0; i < types.size(); i++) {
         string name = StringPrintf("col%d", i);
-        auto fd = new VectorizedField(i, name, types[i], false);
+        auto fd = new Field(i, name, types[i], false);
         fd->set_is_key(true);
         fd->set_aggregate_method(STORAGE_AGGREGATE_NONE);
+        fd->set_uid(i);
         fields.emplace_back(fd);
         sort_key_idxes[i] = i;
     }
-    return std::make_unique<VectorizedSchema>(std::move(fields), PRIMARY_KEYS, sort_key_idxes);
+    return std::make_unique<Schema>(std::move(fields), PRIMARY_KEYS, sort_key_idxes);
 }
 
 TEST(PrimaryKeyEncoderTest, testEncodeInt32) {
@@ -166,6 +167,35 @@ TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
         tmp.set_uint8(1);
         pchunk->columns()[3]->append_datum(tmp);
         EXPECT_TRUE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 128));
+    }
+}
+
+TEST(PrimaryKeyEncoderTest, testEncodeVarcharLimit) {
+    auto sc = create_key_schema({TYPE_VARCHAR});
+    const int n = 2;
+    {
+        auto pchunk = ChunkHelper::new_chunk(*sc, n);
+        Datum tmp;
+        string tmpstr("slice00000");
+        tmp.set_slice(tmpstr);
+        pchunk->columns()[0]->append_datum(tmp);
+        tmpstr = "slice000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+                 "0000"
+                 "00000000000000000000000000000000000";
+        tmp.set_slice(tmpstr);
+        pchunk->columns()[0]->append_datum(tmp);
+        EXPECT_TRUE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 128));
+    }
+    {
+        auto pchunk = ChunkHelper::new_chunk(*sc, n);
+        Datum tmp;
+        string tmpstr("slice00000");
+        tmp.set_slice(tmpstr);
+        pchunk->columns()[0]->append_datum(tmp);
+        tmpstr = "slice00000000000000000000000000000000000";
+        tmp.set_slice(tmpstr);
+        pchunk->columns()[0]->append_datum(tmp);
+        EXPECT_FALSE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 128));
     }
 }
 

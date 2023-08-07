@@ -49,7 +49,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.EditLog;
@@ -151,10 +150,6 @@ public class RestoreJobTest {
                 globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = db;
-
-                GlobalStateMgr.getCurrentStateJournalVersion();
-                minTimes = 0;
-                result = FeConstants.meta_version;
 
                 globalStateMgr.getNextId();
                 minTimes = 0;
@@ -395,10 +390,10 @@ public class RestoreJobTest {
         OlapTable tbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL_NAME);
         List<String> partNames = Lists.newArrayList(tbl.getPartitionNames());
         System.out.println(partNames);
-        System.out.println("tbl signature: " + tbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames));
+        System.out.println("tbl signature: " + tbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true));
         tbl.setName("newName");
         partNames = Lists.newArrayList(tbl.getPartitionNames());
-        System.out.println("tbl signature: " + tbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames));
+        System.out.println("tbl signature: " + tbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true));
     }
 
 }

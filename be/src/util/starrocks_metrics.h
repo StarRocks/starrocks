@@ -69,13 +69,22 @@ private:
 
 class StarRocksMetrics {
 public:
+    // query execution
+    METRIC_DEFINE_INT_GAUGE(pipe_scan_executor_queuing, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(pipe_driver_overloaded, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(pipe_driver_schedule_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(pipe_driver_execution_time, MetricUnit::NANOSECONDS);
+    METRIC_DEFINE_INT_GAUGE(pipe_driver_queue_len, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(pipe_poller_block_queue_len, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(query_scan_bytes_per_second, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_COUNTER(query_scan_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_COUNTER(query_scan_rows, MetricUnit::ROWS);
+
     // counters
     METRIC_DEFINE_INT_COUNTER(fragment_requests_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(fragment_request_duration_us, MetricUnit::MICROSECONDS);
     METRIC_DEFINE_INT_COUNTER(http_requests_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(http_request_send_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_COUNTER(query_scan_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_COUNTER(query_scan_rows, MetricUnit::ROWS);
     METRIC_DEFINE_INT_COUNTER(push_requests_success_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(push_requests_fail_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(push_request_duration_us, MetricUnit::MICROSECONDS);
@@ -174,6 +183,12 @@ public:
     METRIC_DEFINE_UINT_GAUGE(update_del_vector_bytes_total, MetricUnit::BYTES);
     METRIC_DEFINE_UINT_COUNTER(update_del_vector_deletes_total, MetricUnit::NOUNIT);
     METRIC_DEFINE_UINT_COUNTER(update_del_vector_deletes_new, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_COUNTER(column_partial_update_apply_total, MetricUnit::REQUESTS);
+    METRIC_DEFINE_INT_COUNTER(column_partial_update_apply_duration_us, MetricUnit::MICROSECONDS);
+    METRIC_DEFINE_INT_COUNTER(delta_column_group_get_total, MetricUnit::REQUESTS);
+    METRIC_DEFINE_INT_COUNTER(delta_column_group_get_hit_cache, MetricUnit::REQUESTS);
+    METRIC_DEFINE_INT_COUNTER(delta_column_group_get_non_pk_total, MetricUnit::REQUESTS);
+    METRIC_DEFINE_INT_COUNTER(delta_column_group_get_non_pk_hit_cache, MetricUnit::REQUESTS);
 
     // Gauges
     METRIC_DEFINE_INT_GAUGE(memory_pool_bytes_total, MetricUnit::BYTES);
@@ -196,16 +211,9 @@ public:
     // The following metrics will be calculated
     // by metric calculator
     METRIC_DEFINE_INT_GAUGE(push_request_write_bytes_per_second, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(query_scan_bytes_per_second, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(max_disk_io_util_percent, MetricUnit::PERCENT);
     METRIC_DEFINE_INT_GAUGE(max_network_send_bytes_rate, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(max_network_receive_bytes_rate, MetricUnit::BYTES);
-
-#ifndef USE_JEMALLOC
-    METRIC_DEFINE_TCMALLOC_GAUGE(tcmalloc_total_bytes_reserved, "generic.heap_size");
-    METRIC_DEFINE_TCMALLOC_GAUGE(tcmalloc_pageheap_unmapped_bytes, "tcmalloc.pageheap_unmapped_bytes");
-    METRIC_DEFINE_TCMALLOC_GAUGE(tcmalloc_bytes_in_use, "generic.current_allocated_bytes");
-#endif
 
     // Metrics related with BlockManager
     METRIC_DEFINE_INT_COUNTER(readable_blocks_total, MetricUnit::BLOCKS);
@@ -234,6 +242,16 @@ public:
     METRIC_DEFINE_UINT_GAUGE(stream_load_pipe_count, MetricUnit::NOUNIT);
     METRIC_DEFINE_UINT_GAUGE(brpc_endpoint_stub_count, MetricUnit::NOUNIT);
     METRIC_DEFINE_UINT_GAUGE(tablet_writer_count, MetricUnit::NOUNIT);
+
+    // queue task count of thread pool
+    METRIC_DEFINE_UINT_GAUGE(publish_version_queue_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_UINT_GAUGE(async_delta_writer_queue_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_UINT_GAUGE(memtable_flush_queue_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_UINT_GAUGE(segment_replicate_queue_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_UINT_GAUGE(segment_flush_queue_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_UINT_GAUGE(update_apply_queue_count, MetricUnit::NOUNIT);
+
+    METRIC_DEFINE_UINT_GAUGE(load_rpc_threadpool_size, MetricUnit::NOUNIT);
 
     static StarRocksMetrics* instance() {
         static StarRocksMetrics instance;

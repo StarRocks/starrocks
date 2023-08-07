@@ -15,20 +15,17 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 import java.util.Optional;
 
-public class AlterLoadAnalyzer {
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
-    private static final Logger LOG = LogManager.getLogger(AlterLoadAnalyzer.class);
+public class AlterLoadAnalyzer {
 
     private static final String NAME_TYPE = "ROUTINE LOAD NAME";
 
@@ -50,21 +47,19 @@ public class AlterLoadAnalyzer {
         Optional<String> optional = jobProperties.keySet().stream().filter(
                 entity -> !CONFIGURABLE_PROPERTIES_SET.contains(entity)).findFirst();
         if (optional.isPresent()) {
-            throw new SemanticException(optional.get() + " is invalid property");
+            throw new SemanticException(PARSER_ERROR_MSG.unsupportedProps(optional.get()));
         }
 
         if (jobProperties.containsKey(LoadStmt.PRIORITY)) {
             final String priorityProperty = jobProperties.get(LoadStmt.PRIORITY);
-            if (priorityProperty != null) {
-                if (LoadPriority.priorityByName(priorityProperty) == null) {
-                    throw new SemanticException(LoadStmt.PRIORITY + " should in HIGHEST/HIGH/NORMAL/LOW/LOWEST");
-                }
+            if (LoadPriority.priorityByName(priorityProperty) == null) {
+                throw new SemanticException(PARSER_ERROR_MSG.invalidPropertyValue("priority", priorityProperty));
             }
             statement.getAnalyzedJobProperties().put(LoadStmt.PRIORITY, priorityProperty);
         }
 
         if (statement.getAnalyzedJobProperties().isEmpty()) {
-            throw new SemanticException("No properties are specified");
+            throw new SemanticException(PARSER_ERROR_MSG.missingProps("priority"));
         }
     }
 }

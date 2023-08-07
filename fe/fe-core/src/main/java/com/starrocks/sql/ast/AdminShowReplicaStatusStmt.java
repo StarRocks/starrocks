@@ -17,7 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BinaryPredicate.Operator;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableRef;
@@ -26,6 +26,7 @@ import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -41,10 +42,15 @@ public class AdminShowReplicaStatusStmt extends ShowStmt {
     private final Expr where;
     private List<String> partitions = Lists.newArrayList();
 
-    private Operator op;
+    private BinaryType op;
     private ReplicaStatus statusFilter;
 
     public AdminShowReplicaStatusStmt(TableRef tblRef, Expr where) {
+        this(tblRef, where, NodePosition.ZERO);
+    }
+
+    public AdminShowReplicaStatusStmt(TableRef tblRef, Expr where, NodePosition pos) {
+        super(pos);
         this.tblRef = tblRef;
         this.where = where;
     }
@@ -73,11 +79,11 @@ public class AdminShowReplicaStatusStmt extends ShowStmt {
         this.partitions = partitions;
     }
 
-    public Operator getOp() {
+    public BinaryType getOp() {
         return op;
     }
 
-    public void setOp(Operator op) {
+    public void setOp(BinaryType op) {
         this.op = op;
     }
 

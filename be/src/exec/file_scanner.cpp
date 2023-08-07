@@ -19,9 +19,10 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/hash_set.h"
+#include "column/vectorized_fwd.h"
+#include "exec/csv_scanner.h"
 #include "fs/fs.h"
 #include "fs/fs_broker.h"
-#include "fs/fs_hdfs.h"
 #include "gutil/strings/substitute.h"
 #include "io/compressed_input_stream.h"
 #include "runtime/descriptors.h"
@@ -33,19 +34,23 @@
 namespace starrocks {
 
 FileScanner::FileScanner(starrocks::RuntimeState* state, starrocks::RuntimeProfile* profile,
-                         const starrocks::TBrokerScanRangeParams& params, starrocks::ScannerCounter* counter)
+                         const starrocks::TBrokerScanRangeParams& params, starrocks::ScannerCounter* counter,
+                         bool schema_only)
         : _state(state),
           _profile(profile),
           _params(params),
           _counter(counter),
           _row_desc(nullptr),
           _strict_mode(false),
-          _error_counter(0) {}
+          _error_counter(0),
+          _schema_only(schema_only) {}
 
 FileScanner::~FileScanner() = default;
 
 void FileScanner::close() {
-    Expr::close(_dest_expr_ctx, _state);
+    if (!_schema_only) {
+        Expr::close(_dest_expr_ctx, _state);
+    }
 }
 
 Status FileScanner::init_expr_ctx() {
@@ -120,7 +125,9 @@ Status FileScanner::init_expr_ctx() {
 }
 
 Status FileScanner::open() {
-    RETURN_IF_ERROR(init_expr_ctx());
+    if (!_schema_only) {
+        RETURN_IF_ERROR(init_expr_ctx());
+    }
 
     if (_params.__isset.strict_mode) {
         _strict_mode = _params.strict_mode;
@@ -128,6 +135,13 @@ Status FileScanner::open() {
 
     if (_strict_mode && !_params.__isset.dest_sid_to_src_sid_without_trans) {
         return Status::InternalError("Slot map of dest to src must be set in strict mode");
+    }
+
+    if (_params.__isset.properties) {
+        auto iter = _params.properties.find("case_sensitive");
+        if (iter != _params.properties.end()) {
+            std::istringstream(iter->second) >> std::boolalpha >> _case_sensitive;
+        }
     }
     return Status::OK();
 }
@@ -159,7 +173,7 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
 
     int ctx_index = 0;
     int before_rows = cast->num_rows();
-    Column::Filter filter(cast->num_rows(), 1);
+    Filter filter(cast->num_rows(), 1);
 
     // CREATE ROUTINE LOAD routine_load_job_1
     // on table COLUMNS (k1,k2,k3=k1)
@@ -204,6 +218,15 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
                     filter[i] = 0;
                     _error_counter++;
 
+                    if (_state->enable_log_rejected_record()) {
+                        std::stringstream error_msg;
+                        error_msg << "Value '" << src_col->debug_item(i) << "' is out of range. "
+                                  << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
+                        // TODO(meegoo): support other file format
+                        _state->append_rejected_record_to_file(src->rebuild_csv_row(i, ","), error_msg.str(),
+                                                               src->source_filename());
+                    }
+
                     // avoid print too many debug log
                     if (_error_counter > 50) {
                         continue;
@@ -241,6 +264,8 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
         compression = CompressionTypePB::DEFLATE;
     } else if (range_desc.format_type == TFileFormatType::FORMAT_CSV_ZSTD) {
         compression = CompressionTypePB::ZSTD;
+    } else if (range_desc.format_type == TFileFormatType::FORMAT_AVRO) {
+        compression = CompressionTypePB::NO_COMPRESSION;
     } else {
         return Status::NotSupported("Unsupported compression algorithm: " + std::to_string(range_desc.format_type));
     }
@@ -273,7 +298,9 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
             src_file = std::shared_ptr<SequentialFile>(std::move(file));
             break;
         } else {
-            BrokerFileSystem fs_broker(address, params.properties);
+            int64_t timeout_ms = _state->query_options().query_timeout * 1000 / 4;
+            timeout_ms = std::max(timeout_ms, static_cast<int64_t>(DEFAULT_TIMEOUT_MS));
+            BrokerFileSystem fs_broker(address, params.properties, timeout_ms);
             ASSIGN_OR_RETURN(auto broker_file, fs_broker.new_sequential_file(range_desc.path));
             src_file = std::shared_ptr<SequentialFile>(std::move(broker_file));
             break;
@@ -309,7 +336,9 @@ Status FileScanner::create_random_access_file(const TBrokerRangeDesc& range_desc
             src_file = std::shared_ptr<RandomAccessFile>(std::move(file));
             break;
         } else {
-            BrokerFileSystem fs_broker(address, params.properties);
+            int64_t timeout_ms = _state->query_options().query_timeout * 1000 / 4;
+            timeout_ms = std::max(timeout_ms, static_cast<int64_t>(DEFAULT_TIMEOUT_MS));
+            BrokerFileSystem fs_broker(address, params.properties, timeout_ms);
             ASSIGN_OR_RETURN(auto broker_file, fs_broker.new_random_access_file(range_desc.path));
             src_file = std::shared_ptr<RandomAccessFile>(std::move(broker_file));
             break;

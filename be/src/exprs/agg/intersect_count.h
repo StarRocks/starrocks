@@ -27,8 +27,8 @@
 #include "util/bitmap_intersect.h"
 
 namespace starrocks {
-template <LogicalType PT, typename = guard::Guard>
-inline constexpr LogicalType IntersectCountResultPT = TYPE_BIGINT;
+template <LogicalType LT, typename = guard::Guard>
+inline constexpr LogicalType IntersectCountResultLT = TYPE_BIGINT;
 
 template <typename T>
 struct BitmapIntersectAggregateState {
@@ -36,9 +36,9 @@ struct BitmapIntersectAggregateState {
     bool initial = false;
 };
 
-template <LogicalType PT>
+template <LogicalType LT>
 struct BitmapIntersectInternalKey {
-    using InternalKeyType = RunTimeCppType<PT>;
+    using InternalKeyType = RunTimeCppType<LT>;
 };
 
 template <>
@@ -51,17 +51,17 @@ struct BitmapIntersectInternalKey<TYPE_CHAR> {
     using InternalKeyType = std::string;
 };
 
-template <LogicalType PT>
-using BitmapRuntimeCppType = typename BitmapIntersectInternalKey<PT>::InternalKeyType;
+template <LogicalType LT>
+using BitmapRuntimeCppType = typename BitmapIntersectInternalKey<LT>::InternalKeyType;
 
-template <LogicalType PT, typename T = BitmapRuntimeCppType<PT>, LogicalType ResultPT = IntersectCountResultPT<PT>,
-          typename TResult = RunTimeCppType<ResultPT>>
+template <LogicalType LT, typename T = BitmapRuntimeCppType<LT>, LogicalType ResultLT = IntersectCountResultLT<LT>,
+          typename TResult = RunTimeCppType<ResultLT>>
 class IntersectCountAggregateFunction
-        : public AggregateFunctionBatchHelper<BitmapIntersectAggregateState<BitmapRuntimeCppType<PT>>,
-                                              IntersectCountAggregateFunction<PT, T, ResultPT, TResult>> {
+        : public AggregateFunctionBatchHelper<BitmapIntersectAggregateState<BitmapRuntimeCppType<LT>>,
+                                              IntersectCountAggregateFunction<LT, T, ResultLT, TResult>> {
 public:
-    using InputColumnType = RunTimeColumnType<PT>;
-    using ResultColumnType = RunTimeColumnType<ResultPT>;
+    using InputColumnType = RunTimeColumnType<LT>;
+    using ResultColumnType = RunTimeColumnType<ResultLT>;
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {}
 
@@ -73,8 +73,8 @@ public:
         if (!this->data(state).initial) {
             for (int i = 2; i < ctx->get_num_constant_columns(); ++i) {
                 auto arg_column = ctx->get_constant_column(i);
-                auto arg_value = ColumnHelper::get_const_value<PT>(arg_column);
-                if constexpr (PT != TYPE_VARCHAR && PT != TYPE_CHAR) {
+                auto arg_value = ColumnHelper::get_const_value<LT>(arg_column);
+                if constexpr (LT != TYPE_VARCHAR && LT != TYPE_CHAR) {
                     intersect.add_key(arg_value);
                 } else {
                     std::string key(arg_value.data, arg_value.size);
@@ -87,12 +87,12 @@ public:
         const auto* bitmap_column = down_cast<const BitmapColumn*>(columns[0]);
 
         // based on NullableAggregateFunctionVariadic.
-        const InputColumnType* key_column = down_cast<const InputColumnType*>(columns[1]);
+        const auto* key_column = down_cast<const InputColumnType*>(columns[1]);
 
         auto bimtap_value = bitmap_column->get_pool()[row_num];
         auto key_value = key_column->get_data()[row_num];
 
-        if constexpr (PT != TYPE_VARCHAR && PT != TYPE_CHAR) {
+        if constexpr (LT != TYPE_VARCHAR && LT != TYPE_CHAR) {
             intersect.update(key_value, bimtap_value);
         } else {
             std::string key(key_value.data, key_value.size);
@@ -127,10 +127,10 @@ public:
         DCHECK(src[0]->is_object());
 
         // initial keys in BitmapIntersect.
-        BitmapIntersect<BitmapRuntimeCppType<PT>> intersect;
+        BitmapIntersect<BitmapRuntimeCppType<LT>> intersect;
         for (int i = 2; i < src.size(); ++i) {
-            auto arg_value = ColumnHelper::get_const_value<PT>(src[i]);
-            if constexpr (PT != TYPE_VARCHAR && PT != TYPE_CHAR) {
+            auto arg_value = ColumnHelper::get_const_value<LT>(src[i]);
+            if constexpr (LT != TYPE_VARCHAR && LT != TYPE_CHAR) {
                 intersect.add_key(arg_value);
             } else {
                 std::string key(arg_value.data, arg_value.size);
@@ -139,19 +139,19 @@ public:
         }
 
         const auto* bitmap_column = down_cast<const BitmapColumn*>(src[0].get());
-        const InputColumnType* key_column = down_cast<const InputColumnType*>(src[1].get());
+        const auto* key_column = down_cast<const InputColumnType*>(src[1].get());
 
         // compute bytes for serialization for this chunk.
         int new_size = 0;
-        std::vector<BitmapIntersect<BitmapRuntimeCppType<PT>>> intersect_chunks;
+        std::vector<BitmapIntersect<BitmapRuntimeCppType<LT>>> intersect_chunks;
         intersect_chunks.reserve(chunk_size);
         for (int i = 0; i < chunk_size; ++i) {
-            BitmapIntersect<BitmapRuntimeCppType<PT>> intersect_per_row(intersect);
+            BitmapIntersect<BitmapRuntimeCppType<LT>> intersect_per_row(intersect);
 
             auto bimtap_value = bitmap_column->get_pool()[i];
             auto key_value = key_column->get_data()[i];
 
-            if constexpr (PT != TYPE_VARCHAR && PT != TYPE_CHAR) {
+            if constexpr (LT != TYPE_VARCHAR && LT != TYPE_CHAR) {
                 intersect_per_row.update(key_value, bimtap_value);
             } else {
                 std::string key(key_value.data, key_value.size);

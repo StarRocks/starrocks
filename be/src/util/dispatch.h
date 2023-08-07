@@ -14,7 +14,7 @@
 
 #pragma once
 #include "column/column.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 template <template <bool, bool, LogicalType Type, typename... Args> typename Function, LogicalType Type,

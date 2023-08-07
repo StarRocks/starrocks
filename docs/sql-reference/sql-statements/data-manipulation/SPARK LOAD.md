@@ -6,7 +6,12 @@ Spark load preprocesses the imported data through external spark resources, impr
 
 Spark load is an asynchronous import method. Users need to create Spark type import tasks through MySQL protocol and view the import results through`SHOW LOAD`.
 
-Syntax：
+> **NOTICE**
+>
+> - You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
+> - When Spark Load is used to load data into a StarRocks table, the bucketing column of the StarRocks table cannot be of DATE, DATETIME, or DECIMAL type.
+
+Syntax
 
 ```sql
 LOAD LABEL load_label
@@ -15,7 +20,7 @@ data_desc1[, data_desc2, ...]
 )
 WITH RESOURCE resource_name
 [resource_properties]
-[opt_properties];
+[opt_properties]
 ```
 
 1.load_label
@@ -57,7 +62,7 @@ INTO TABLE tbl_name
 [WHERE predicate]
 ```
 
-Note：
+Note
 
 ```plain text
 file_path:
@@ -68,7 +73,7 @@ hive_external_tbl:
 
 hive external table name.
 It is required that the columns in the imported starrocks table must exist in the hive external table.
-Each import task only supports importing from one hive external table.
+Each load task only supports loading from one Hive external table.
 Cannot be used with file_ path mode at the same time.
 
 PARTITION:
@@ -76,22 +81,22 @@ PARTITION:
 If this parameter is specified, only the specified partition will be imported, and the data outside the imported partition will be filtered out.
 If not specified, all partitions of table will be imported by default.
 
-NEGATIVE：
+NEGATIVE:
 
-If this parameter is specified, it is equivalent to importing a batch of "negative" data. Used to offset the same batch of previously imported data.
+If this parameter is specified, it is equivalent to loading a batch of "negative" data. Used to offset the same batch of previously imported data.
 This parameter is only applicable when the value column exists and the aggregation type of the value column is SUM only.
 
-column_separator：
+column_separator:
 
 Specifies the column separator in the import file. Default is \ t
 If it is an invisible character, you need to prefix it with \ \ x and use hexadecimal to represent the separator.
 For example, the separator of hive file \ x01 is specified as "\ \ x01"
 
-file_type：
+file_type:
 
-Used to specify the type of imported file. Currently, only csv is supported.
+Used to specify the type of imported file. Currently, supported file types are csv, orc, and parquet.
 
-column_list：
+column_list:
 
 Used to specify the correspondence between the columns in the import file and the columns in the table.
 When you need to skip a column in the import file, specify the column as a column name that does not exist in the table.
@@ -101,8 +106,8 @@ Syntax:
 
 SET:
 
-If specify this parameter, you can convert a column of the source file according to the function, and then import the converted results into table. Syntax is column_name = expression。
-Only Spark SQL build_in functions are supported. Please refer to https://spark.apache.org/docs/2.4.6/api/sql/index.html 。
+If specify this parameter, you can convert a column of the source file according to the function, and then import the converted results into table. Syntax is column_name = expression.
+Only Spark SQL build_in functions are supported. Please refer to https://spark.apache.org/docs/2.4.6/api/sql/index.html.
 Give a few examples to help understand.
 Example 1: there are three columns "c1, c2, c3" in the table, and the first two columns in the source file correspond to (c1, c2), and the sum of the last two columns corresponds to C3; then columns (c1, c2, tmp_c3, tmp_c4) set (c3 = tmp_c3 + tmp_c4) needs to be specified;
 Example 2: there are three columns "year, month and day" in the table, and there is only one time column in the source file in the format of "2018-06-01 01:02:03".
@@ -131,17 +136,17 @@ Syntax:
 [PROPERTIES ("key"="value", ...)]
 ```
 
-You can specify the following parameters：
-timeout：         specifies the timeout of the import operation. The default timeout is 4 hours. In seconds.
-max_filter_ratio：the maximum allowable data proportion that can be filtered (for reasons such as non-standard data). The default is zero tolerance.
-strict mode：     whether to strictly restrict the data. The default is false.
+You can specify the following parameters:
+timeout:         specifies the timeout of the import operation. The default timeout is 4 hours. In seconds.
+max_filter_ratio:the maximum allowable data proportion that can be filtered (for reasons such as non-standard data). The default is zero tolerance.
+strict mode:     whether to strictly restrict the data. The default is false.
 timezone:         specifies the time zone of some functions affected by the time zone, such as strftime / alignment_timestamp/from_unixtime, etc. Please refer to the [time zone] document for details. If not specified, the "Asia / Shanghai" time zone is used.
 
 6.Import data format example
 
-int（TINYINT/SMALLINT/INT/BIGINT/LARGEINT）：1, 1000, 1234
-float（FLOAT/DOUBLE/DECIMAL）：1.1, 0.23, .356
-date（DATE/DATETIME）：2017-10-03, 2017-06-13 12:34:03。
+int (TINYINT/SMALLINT/INT/BIGINT/LARGEINT): 1, 1000, 1234
+float (FLOAT/DOUBLE/DECIMAL): 1.1, 0.23, .356
+date (DATE/DATETIME) :2017-10-03, 2017-06-13 12:34:03.
 (Note: for other date formats, you can use strftime or time_format function to convert in the Import command) string class (CHAR/VARCHAR): "I am a student", "a"
 
 NULL value: \ N
@@ -195,13 +200,13 @@ NULL value: \ N
     
     Adele,1,1
     
-    Each column in the data file corresponds to each column specified in the import statement：
+    Each column in the data file corresponds to each column specified in the import statement:
     k1,tmp_k2,tmp_k3
     
     The conversion is as follows:
     
     1. k1: no conversion
-    2. k2：is the sum of tmp_ k2 and tmp_k3
+    2. k2:is the sum of tmp_ k2 and tmp_k3
     
     LOAD LABEL example_db.label6
     (

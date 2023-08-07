@@ -16,17 +16,23 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.alter.AlterOpType;
+import com.starrocks.sql.parser.NodePosition;
 
 public class TruncatePartitionClause extends AlterTableClause {
 
     private PartitionNames partitionNames;
 
     public TruncatePartitionClause(AlterOpType opType) {
-        super(opType);
+        super(opType, NodePosition.ZERO);
     }
 
     public TruncatePartitionClause(PartitionNames partitionNames) {
-        super(AlterOpType.TRUNCATE_PARTITION);
+        this(partitionNames, NodePosition.ZERO);
+    }
+
+
+    public TruncatePartitionClause(PartitionNames partitionNames, NodePosition pos) {
+        super(AlterOpType.TRUNCATE_PARTITION, pos);
         this.partitionNames = partitionNames;
     }
 

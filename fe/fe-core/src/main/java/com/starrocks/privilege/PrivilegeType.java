@@ -14,276 +14,115 @@
 
 package com.starrocks.privilege;
 
-import java.util.HashMap;
+import com.google.common.collect.ImmutableSet;
+
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
-public enum PrivilegeType {
-    TABLE(1, TableAction.actionMap(), "TABLES"),
-    DATABASE(2, DbAction.actionMap(), "DATABASES"),
-    SYSTEM(3, SystemAction.actionMap(), null),
-    USER(4, UserAction.actionMap(), "USERS"),
-    RESOURCE(5, ResourceAction.actionMap(), "RESOURCES"),
-    VIEW(6, ViewAction.actionMap(), "VIEWS"),
-    CATALOG(7, CatalogAction.actionMap(), "CATALOGS"),
-    MATERIALIZED_VIEW(8, MaterializedViewAction.actionMap(), "MATERIALIZED_VIEWS"),
-    FUNCTION(9, FunctionAction.actionMap(), "FUNCTIONS"),
-    RESOURCE_GROUP(10, ResourceGroupAction.actionMap(), "RESOURCE_GROUPS"),
-    GLOBAL_FUNCTION(11, GlobalFunctionAction.actionMap(), "GLOBAL_FUNCTIONS");
-
+public class PrivilegeType {
     private final int id;
-    private final Map<String, Action> actionMap;
+    private final String name;
 
-    // used in ALL statement, e.g. grant select on all tables in all databases
-    private final String plural;
-
-    PrivilegeType(int id, Map<String, Action> actionMap, String plural) {
+    private PrivilegeType(int id, String name) {
         this.id = id;
-        this.actionMap = actionMap;
-        this.plural = plural;
-    }
-
-    public Map<String, Action> getActionMap() {
-        return actionMap;
-    }
-
-    public String getPlural() {
-        return plural;
+        this.name = name;
     }
 
     public int getId() {
         return id;
     }
 
-    /**
-     * Below defines all validate actions of a certain type
-     */
-    public enum TableAction {
-        DELETE(1),
-        DROP(2),
-        INSERT(3),
-        SELECT(4),
-        ALTER(5),
-        EXPORT(6),
-        UPDATE(7);
-
-        private final int id;
-
-        TableAction(int id) {
-            this.id = id;
-        }
-
-        public static Map<String, Action> actionMap() {
-            Map<String, Action> ret = new HashMap<>();
-            for (TableAction action : TableAction.values()) {
-                ret.put(action.toString(), new Action((short) action.id, action.toString()));
-            }
-            return ret;
+    public String name() {
+        if (VALID_PRIVILEGE_TYPE.contains(this)) {
+            return name;
+        } else {
+            return "UNKNOWN";
         }
     }
 
-    public enum DbAction {
-        CREATE_TABLE(1),
-        DROP(2),
-        ALTER(3),
-        CREATE_VIEW(4),
-        CREATE_FUNCTION(5),
-        CREATE_MATERIALIZED_VIEW(6);
+    public static final PrivilegeType GRANT = new PrivilegeType(1, "GRANT");
+    public static final PrivilegeType NODE = new PrivilegeType(2, "NODE");
+    public static final PrivilegeType OPERATE = new PrivilegeType(3, "OPERATE");
+    public static final PrivilegeType DELETE = new PrivilegeType(4, "DELETE");
+    public static final PrivilegeType DROP = new PrivilegeType(5, "DROP");
+    public static final PrivilegeType INSERT = new PrivilegeType(6, "INSERT");
+    public static final PrivilegeType SELECT = new PrivilegeType(7, "SELECT");
+    public static final PrivilegeType ALTER = new PrivilegeType(8, "ALTER");
+    public static final PrivilegeType EXPORT = new PrivilegeType(9, "EXPORT");
+    public static final PrivilegeType UPDATE = new PrivilegeType(10, "UPDATE");
+    public static final PrivilegeType USAGE = new PrivilegeType(11, "USAGE");
+    public static final PrivilegeType PLUGIN = new PrivilegeType(12, "PLUGIN");
+    public static final PrivilegeType FILE = new PrivilegeType(13, "FILE");
+    public static final PrivilegeType BLACKLIST = new PrivilegeType(14, "BLACKLIST");
+    public static final PrivilegeType REPOSITORY = new PrivilegeType(15, "REPOSITORY");
+    public static final PrivilegeType REFRESH = new PrivilegeType(16, "REFRESH");
+    public static final PrivilegeType IMPERSONATE = new PrivilegeType(17, "IMPERSONATE");
+    public static final PrivilegeType CREATE_DATABASE = new PrivilegeType(18, "CREATE DATABASE");
+    public static final PrivilegeType CREATE_TABLE = new PrivilegeType(19, "CREATE TABLE");
+    public static final PrivilegeType CREATE_VIEW = new PrivilegeType(20, "CREATE VIEW");
+    public static final PrivilegeType CREATE_FUNCTION = new PrivilegeType(21, "CREATE FUNCTION");
+    public static final PrivilegeType CREATE_GLOBAL_FUNCTION = new PrivilegeType(22, "CREATE GLOBAL FUNCTION");
+    public static final PrivilegeType CREATE_MATERIALIZED_VIEW = new PrivilegeType(23, "CREATE MATERIALIZED VIEW");
+    public static final PrivilegeType CREATE_RESOURCE = new PrivilegeType(24, "CREATE RESOURCE");
+    public static final PrivilegeType CREATE_RESOURCE_GROUP = new PrivilegeType(25, "CREATE RESOURCE GROUP");
+    public static final PrivilegeType CREATE_EXTERNAL_CATALOG = new PrivilegeType(26, "CREATE EXTERNAL CATALOG");
+    public static final PrivilegeType CREATE_STORAGE_VOLUME = new PrivilegeType(27, "CREATE STORAGE VOLUME");
 
-        private final int id;
+    public static final Set<PrivilegeType> VALID_PRIVILEGE_TYPE = new ImmutableSet.Builder<PrivilegeType>().add(
+            GRANT,
+            NODE,
+            OPERATE,
+            DELETE,
+            DROP,
+            INSERT,
+            SELECT,
+            ALTER,
+            EXPORT,
+            UPDATE,
+            USAGE,
+            PLUGIN,
+            FILE,
+            BLACKLIST,
+            REPOSITORY,
+            REFRESH,
+            IMPERSONATE,
+            CREATE_DATABASE,
+            CREATE_TABLE,
+            CREATE_VIEW,
+            CREATE_FUNCTION,
+            CREATE_GLOBAL_FUNCTION,
+            CREATE_MATERIALIZED_VIEW,
+            CREATE_RESOURCE,
+            CREATE_RESOURCE_GROUP,
+            CREATE_EXTERNAL_CATALOG,
+            CREATE_STORAGE_VOLUME
+    ).build();
 
-        DbAction(int id) {
-            this.id = id;
-        }
+    public static final Map<String, PrivilegeType> NAME_TO_PRIVILEGE = VALID_PRIVILEGE_TYPE.stream().collect(Collectors.toMap(
+            PrivilegeType::name, Function.identity()));
 
-        public static Map<String, Action> actionMap() {
-            Map<String, Action> ret = new HashMap<>();
-            for (DbAction action : DbAction.values()) {
-                ret.put(action.toString(), new Action((short) action.id, action.toString()));
-            }
-            return ret;
-        }
+    @Override
+    public String toString() {
+        return name;
     }
 
-    public enum SystemAction {
-        GRANT(1),
-        NODE(2),
-        CREATE_RESOURCE(3),
-        PLUGIN(4),
-        FILE(5),
-        BLACKLIST(6),
-        OPERATE(7),
-        CREATE_EXTERNAL_CATALOG(8),
-        REPOSITORY(9),
-        CREATE_RESOURCE_GROUP(10),
-        CREATE_GLOBAL_FUNCTION(11);
-        // AND MORE...
-
-        private final int id;
-
-        SystemAction(int id) {
-            this.id = id;
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
         }
-
-        public static Map<String, Action> actionMap() {
-            Map<String, Action> ret = new HashMap<>();
-            for (SystemAction action : SystemAction.values()) {
-                ret.put(action.toString(), new Action((short) action.id, action.toString()));
-            }
-            return ret;
+        if (o == null || getClass() != o.getClass()) {
+            return false;
         }
+        PrivilegeType that = (PrivilegeType) o;
+        return id == that.id;
     }
 
-    public enum UserAction {
-        IMPERSONATE(1);
-
-        private final int id;
-
-        UserAction(int id) {
-            this.id = id;
-        }
-
-        public static Map<String, Action> actionMap() {
-            Map<String, Action> ret = new HashMap<>();
-            for (UserAction action : UserAction.values()) {
-                ret.put(action.toString(), new Action((short) action.id, action.toString()));
-            }
-            return ret;
-        }
-    }
-
-    public enum ResourceAction {
-        USAGE(1),
-        ALTER(2),
-        DROP(3);
-
-        private final int id;
-
-        ResourceAction(int id) {
-            this.id = id;
-        }
-
-        public static Map<String, Action> actionMap() {
-            Map<String, Action> ret = new HashMap<>();
-            for (ResourceAction action : ResourceAction.values()) {
-                ret.put(action.toString(), new Action((short) action.id, action.toString()));
-            }
-            return ret;
-        }
-    }
-
-    public enum ResourceGroupAction {
-        ALTER(1),
-        DROP(2);
-
-        private final int id;
-
-        ResourceGroupAction(int id) {
-            this.id = id;
-        }
-
-        public static Map<String, Action> actionMap() {
-            Map<String, Action> ret = new HashMap<>();
-            for (ResourceGroupAction action : ResourceGroupAction.values()) {
-                ret.put(action.toString(), new Action((short) action.id, action.toString()));
-            }
-            return ret;
-        }
-    }
-
-    public enum CatalogAction {
-        USAGE(1),
-        CREATE_DATABASE(2),
-        DROP(3),
-        ALTER(4);
-        private final int id;
-
-        CatalogAction(int id) {
-            this.id = id;
-        }
-
-        public static Map<String, Action> actionMap() {
-            Map<String, Action> ret = new HashMap<>();
-            for (CatalogAction action : CatalogAction.values()) {
-                ret.put(action.toString(), new Action((short) action.id, action.toString()));
-            }
-            return ret;
-        }
-    }
-
-    public enum ViewAction {
-        SELECT(1),
-        ALTER(2),
-        DROP(3);
-
-        private final int id;
-
-        ViewAction(int id) {
-            this.id = id;
-        }
-
-        public static Map<String, Action> actionMap() {
-            Map<String, Action> ret = new HashMap<>();
-            for (ViewAction action : ViewAction.values()) {
-                ret.put(action.toString(), new Action((short) action.id, action.toString()));
-            }
-            return ret;
-        }
-    }
-
-    public enum MaterializedViewAction {
-        ALTER(1),
-        REFRESH(2),
-        DROP(3),
-        SELECT(4);
-
-        private final int id;
-
-        MaterializedViewAction(int id) {
-            this.id = id;
-        }
-
-        public static Map<String, Action> actionMap() {
-            Map<String, Action> ret = new HashMap<>();
-            for (MaterializedViewAction action : MaterializedViewAction.values()) {
-                ret.put(action.toString(), new Action((short) action.id, action.toString()));
-            }
-            return ret;
-        }
-    }
-
-    public enum FunctionAction {
-        USAGE(1),
-        DROP(2);
-        private final int id;
-
-        FunctionAction(int id) {
-            this.id = id;
-        }
-
-        public static Map<String, Action> actionMap() {
-            Map<String, Action> ret = new HashMap<>();
-            for (FunctionAction action : FunctionAction.values()) {
-                ret.put(action.toString(), new Action((short) action.id, action.toString()));
-            }
-            return ret;
-        }
-    }
-
-    public enum GlobalFunctionAction {
-        USAGE(1),
-        DROP(2);
-        private final int id;
-
-        GlobalFunctionAction(int id) {
-            this.id = id;
-        }
-
-        public static Map<String, Action> actionMap() {
-            Map<String, Action> ret = new HashMap<>();
-            for (GlobalFunctionAction action : GlobalFunctionAction.values()) {
-                ret.put(action.toString(), new Action((short) action.id, action.toString()));
-            }
-            return ret;
-        }
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
     }
 }

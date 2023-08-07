@@ -89,19 +89,9 @@ ssize_t SegmentFileWriter::WriteV(const iovec* iov, int iovcnt) {
     }
 }
 
-RowsetWriter::RowsetWriter(const RowsetWriterContext& context)
-        : _context(context), _num_rows_written(0), _total_row_size(0), _total_data_size(0), _total_index_size(0) {}
+RowsetWriter::RowsetWriter(const RowsetWriterContext& context) : _context(context) {}
 
 Status RowsetWriter::init() {
-    DCHECK(!(_context.tablet_schema->contains_format_v1_column() &&
-             _context.tablet_schema->contains_format_v2_column()));
-    // StarRocks has newly designed storage formats for DATA/DATETIME/DECIMAL for better performance.
-    // When loading data into a tablet created by Apache Doris, the real data format will
-    // be different from the tablet schema, so here we create a new schema matched with the
-    // real data format to init `SegmentWriter`.
-    if (_context.tablet_schema->contains_format_v1_column()) {
-        _rowset_schema = _context.tablet_schema->convert_to_format(kDataFormatV2);
-    }
     _rowset_meta_pb = std::make_unique<RowsetMetaPB>();
     _rowset_meta_pb->set_deprecated_rowset_id(0);
     _rowset_meta_pb->set_rowset_id(_context.rowset_id.to_string());
@@ -128,7 +118,8 @@ Status RowsetWriter::init() {
     _writer_options.referenced_column_ids = _context.referenced_column_ids;
 
     if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
-        (_context.partial_update_tablet_schema || !_context.merge_condition.empty())) {
+        (_context.partial_update_tablet_schema || !_context.merge_condition.empty() ||
+         _context.miss_auto_increment_column)) {
         _rowset_txn_meta_pb = std::make_unique<RowsetTxnMetaPB>();
     }
 
@@ -153,7 +144,13 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
     _rowset_meta_pb->set_rowset_seg_id(0);
     // updatable tablet require extra processing
     if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
+        DCHECK(_delfile_idxes.size() == _num_delfile);
+        if (!_delfile_idxes.empty()) {
+            _rowset_meta_pb->mutable_delfile_idxes()->Add(_delfile_idxes.begin(), _delfile_idxes.end());
+        }
         _rowset_meta_pb->set_num_delete_files(_num_delfile);
+        _rowset_meta_pb->set_num_update_files(_num_uptfile);
+        _rowset_meta_pb->set_total_update_row_size(_total_update_row_size);
         if (_num_segment <= 1) {
             _rowset_meta_pb->set_segments_overlap_pb(NONOVERLAPPING);
         }
@@ -172,9 +169,35 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
             if (!_context.merge_condition.empty()) {
                 _rowset_txn_meta_pb->set_merge_condition(_context.merge_condition);
             }
+            if (_context.miss_auto_increment_column) {
+                for (auto i = 0; i < _context.tablet_schema->num_columns(); ++i) {
+                    auto col = _context.tablet_schema->column(i);
+                    if (col.is_auto_increment()) {
+                        /*
+                            The auto increment id set here is inconsistent with the id in
+                            full tablet schema. The id here is indicate the offset id of
+                            auto increment column in partial segment file.
+                        */
+                        _rowset_txn_meta_pb->set_auto_increment_partial_update_column_id(i);
+                        break;
+                    }
+                }
+            }
+            // set partial update mode
+            _rowset_txn_meta_pb->set_partial_update_mode(_context.partial_update_mode);
             *_rowset_meta_pb->mutable_txn_meta() = *_rowset_txn_meta_pb;
         } else if (!_context.merge_condition.empty()) {
             _rowset_txn_meta_pb->set_merge_condition(_context.merge_condition);
+            *_rowset_meta_pb->mutable_txn_meta() = *_rowset_txn_meta_pb;
+        } else if (_context.miss_auto_increment_column) {
+            for (auto i = 0; i < _context.tablet_schema->num_columns(); ++i) {
+                auto col = _context.tablet_schema->column(i);
+                if (col.is_auto_increment()) {
+                    // same above
+                    _rowset_txn_meta_pb->set_auto_increment_partial_update_column_id(i);
+                    break;
+                }
+            }
             *_rowset_meta_pb->mutable_txn_meta() = *_rowset_txn_meta_pb;
         }
     } else {
@@ -195,103 +218,165 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
     return rowset;
 }
 
+Status RowsetWriter::_flush_segment(const SegmentPB& segment_pb, butil::IOBuf& data) {
+    // 1. create segment file
+    auto path = Rowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, segment_pb.segment_id());
+    // use MUST_CREATE make sure atomic
+    ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
+
+    // 2. flush segment file
+    auto writer = std::make_unique<SegmentFileWriter>(wfile.get());
+
+    butil::IOBuf segment_data;
+    int64_t remaining_bytes = data.cutn(&segment_data, segment_pb.data_size());
+    if (remaining_bytes != segment_pb.data_size()) {
+        return Status::InternalError(fmt::format("segment {} file size {} not equal attachment size {}", path,
+                                                 remaining_bytes, segment_pb.data_size()));
+    }
+    while (remaining_bytes > 0) {
+        auto written_bytes = segment_data.cut_into_writer(writer.get(), remaining_bytes);
+        if (written_bytes < 0) {
+            return io::io_error(wfile->filename(), errno);
+        }
+        remaining_bytes -= written_bytes;
+    }
+    if (remaining_bytes != 0) {
+        return Status::InternalError(fmt::format("segment {} write size {} not equal expected size {}",
+                                                 wfile->filename(), segment_pb.data_size() - remaining_bytes,
+                                                 segment_pb.data_size()));
+    }
+    if (config::sync_tablet_meta) {
+        RETURN_IF_ERROR(wfile->sync());
+    }
+    RETURN_IF_ERROR(wfile->close());
+
+    if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.partial_update_tablet_schema) {
+        auto* partial_rowset_footer = _rowset_txn_meta_pb->add_partial_rowset_footers();
+        partial_rowset_footer->set_position(segment_pb.partial_footer_position());
+        partial_rowset_footer->set_size(segment_pb.partial_footer_size());
+    }
+
+    // 3. update statistic
+    {
+        std::lock_guard<std::mutex> l(_lock);
+        _total_data_size += segment_pb.data_size();
+        _total_index_size += segment_pb.index_size();
+        _num_rows_written += segment_pb.num_rows();
+        _total_row_size += segment_pb.row_size();
+        _num_segment++;
+    }
+
+    VLOG(2) << "Flush segment to " << path << " size " << segment_pb.data_size();
+
+    return Status::OK();
+}
+
+Status RowsetWriter::_flush_delete_file(const SegmentPB& segment_pb, butil::IOBuf& data) {
+    // 1. create delete file
+    auto path = Rowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id, segment_pb.delete_id());
+    // use MUST_CREATE make sure atomic
+    ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
+
+    // 2. flush delete file
+    auto writer = std::make_unique<SegmentFileWriter>(wfile.get());
+
+    butil::IOBuf delete_data;
+    int64_t remaining_bytes = data.cutn(&delete_data, segment_pb.delete_data_size());
+    if (remaining_bytes != segment_pb.delete_data_size()) {
+        return Status::InternalError(fmt::format("segment {} delete size {} not equal attachment size {}", path,
+                                                 remaining_bytes, segment_pb.delete_data_size()));
+    }
+    while (remaining_bytes > 0) {
+        auto written_bytes = delete_data.cut_into_writer(writer.get(), remaining_bytes);
+        if (written_bytes < 0) {
+            return io::io_error(wfile->filename(), errno);
+        }
+        remaining_bytes -= written_bytes;
+    }
+    if (remaining_bytes != 0) {
+        return Status::InternalError(fmt::format("segment delete file {} write size {} not equal expected size {}",
+                                                 wfile->filename(), segment_pb.delete_data_size() - remaining_bytes,
+                                                 segment_pb.delete_data_size()));
+    }
+
+    if (config::sync_tablet_meta) {
+        RETURN_IF_ERROR(wfile->sync());
+    }
+    RETURN_IF_ERROR(wfile->close());
+
+    // _delfile_idxes keep the idx for every delete file, so we need to add the idx to _delfile_idxes if we create a
+    // new delete file
+    _delfile_idxes.emplace_back(_num_segment + _num_delfile);
+    _num_delfile++;
+    _num_rows_del += segment_pb.delete_num_rows();
+
+    VLOG(2) << "Flush delete file to " << path << " size " << segment_pb.delete_data_size();
+
+    return Status::OK();
+}
+
+Status RowsetWriter::_flush_update_file(const SegmentPB& segment_pb, butil::IOBuf& data) {
+    // 1. create segment file
+    auto path = Rowset::segment_upt_file_path(_context.rowset_path_prefix, _context.rowset_id, segment_pb.update_id());
+    // use MUST_CREATE make sure atomic
+    ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
+
+    // 2. flush segment file
+    auto writer = std::make_unique<SegmentFileWriter>(wfile.get());
+
+    butil::IOBuf segment_data;
+    int64_t remaining_bytes = data.cutn(&segment_data, segment_pb.update_data_size());
+    if (remaining_bytes != segment_pb.update_data_size()) {
+        return Status::InternalError(fmt::format("update segment {} file size {} not equal attachment size {}", path,
+                                                 remaining_bytes, segment_pb.update_data_size()));
+    }
+    while (remaining_bytes > 0) {
+        auto written_bytes = segment_data.cut_into_writer(writer.get(), remaining_bytes);
+        if (written_bytes < 0) {
+            return io::io_error(wfile->filename(), errno);
+        }
+        remaining_bytes -= written_bytes;
+    }
+    if (remaining_bytes != 0) {
+        return Status::InternalError(fmt::format("update segment {} write size {} not equal expected size {}",
+                                                 wfile->filename(), segment_pb.update_data_size() - remaining_bytes,
+                                                 segment_pb.update_data_size()));
+    }
+    if (config::sync_tablet_meta) {
+        RETURN_IF_ERROR(wfile->sync());
+    }
+    RETURN_IF_ERROR(wfile->close());
+
+    // 3. update statistic
+    {
+        std::lock_guard<std::mutex> l(_lock);
+        _num_uptfile++;
+        _num_rows_upt += segment_pb.update_num_rows();
+        _total_update_row_size += segment_pb.update_row_size();
+    }
+
+    VLOG(2) << "Flush update segment to " << path << " size " << segment_pb.update_data_size();
+
+    return Status::OK();
+}
+
 Status RowsetWriter::flush_segment(const SegmentPB& segment_pb, butil::IOBuf& data) {
-    if (data.size() != segment_pb.data_size() + segment_pb.delete_data_size()) {
-        return Status::InternalError(fmt::format("segment size {} + delete file size {} not equal attachment size {}",
-                                                 segment_pb.data_size(), segment_pb.delete_data_size(), data.size()));
+    if (data.size() != segment_pb.data_size() + segment_pb.delete_data_size() + segment_pb.update_data_size()) {
+        return Status::InternalError(fmt::format(
+                "segment size {} + delete file size {} + update file size {} not equal attachment size {}",
+                segment_pb.data_size(), segment_pb.delete_data_size(), segment_pb.update_data_size(), data.size()));
     }
 
     if (segment_pb.has_path()) {
-        // 1. create segment file
-        auto path = Rowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, segment_pb.segment_id());
-        // use MUST_CREATE make sure atomic
-        ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
-
-        // 2. flush segment file
-        auto writer = std::make_unique<SegmentFileWriter>(wfile.get());
-
-        butil::IOBuf segment_data;
-        int64_t remaining_bytes = data.cutn(&segment_data, segment_pb.data_size());
-        if (remaining_bytes != segment_pb.data_size()) {
-            return Status::InternalError(fmt::format("segment {} file size {} not equal attachment size {}",
-                                                     segment_pb.DebugString(), remaining_bytes,
-                                                     segment_pb.data_size()));
-        }
-        while (remaining_bytes > 0) {
-            auto written_bytes = segment_data.cut_into_writer(writer.get(), remaining_bytes);
-            if (written_bytes < 0) {
-                return io::io_error(wfile->filename(), errno);
-            }
-            remaining_bytes -= written_bytes;
-        }
-        if (remaining_bytes != 0) {
-            return Status::InternalError(fmt::format("segment {} write size {} not equal expected size {}",
-                                                     wfile->filename(), segment_pb.data_size() - remaining_bytes,
-                                                     segment_pb.data_size()));
-        }
-        if (config::sync_tablet_meta) {
-            RETURN_IF_ERROR(wfile->sync());
-        }
-        RETURN_IF_ERROR(wfile->close());
-
-        if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.partial_update_tablet_schema) {
-            auto* partial_rowset_footer = _rowset_txn_meta_pb->add_partial_rowset_footers();
-            partial_rowset_footer->set_position(segment_pb.partial_footer_position());
-            partial_rowset_footer->set_size(segment_pb.partial_footer_size());
-        }
-
-        // 3. update statistic
-        {
-            std::lock_guard<std::mutex> l(_lock);
-            _total_data_size += segment_pb.data_size();
-            _total_index_size += segment_pb.index_size();
-            _num_rows_written += segment_pb.num_rows();
-            _total_row_size += segment_pb.row_size();
-            _num_segment++;
-        }
-
-        VLOG(2) << "Flush segment to " << path << " size " << segment_pb.data_size();
+        RETURN_IF_ERROR(_flush_segment(segment_pb, data));
     }
 
     if (segment_pb.has_delete_path()) {
-        // 1. create delete file
-        auto path =
-                Rowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id, segment_pb.delete_id());
-        // use MUST_CREATE make sure atomic
-        ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
+        RETURN_IF_ERROR(_flush_delete_file(segment_pb, data));
+    }
 
-        // 2. flush delete file
-        auto writer = std::make_unique<SegmentFileWriter>(wfile.get());
-
-        butil::IOBuf delete_data;
-        int64_t remaining_bytes = data.cutn(&delete_data, segment_pb.delete_data_size());
-        if (remaining_bytes != segment_pb.delete_data_size()) {
-            return Status::InternalError(fmt::format("segment {} delete size {} not equal attachment size {}",
-                                                     segment_pb.DebugString(), remaining_bytes,
-                                                     segment_pb.delete_data_size()));
-        }
-        while (remaining_bytes > 0) {
-            auto written_bytes = delete_data.cut_into_writer(writer.get(), remaining_bytes);
-            if (written_bytes < 0) {
-                return io::io_error(wfile->filename(), errno);
-            }
-            remaining_bytes -= written_bytes;
-        }
-        if (remaining_bytes != 0) {
-            return Status::InternalError(fmt::format("segment delete file {} write size {} not equal expected size {}",
-                                                     wfile->filename(), segment_pb.delete_data_size() - remaining_bytes,
-                                                     segment_pb.delete_data_size()));
-        }
-
-        if (config::sync_tablet_meta) {
-            RETURN_IF_ERROR(wfile->sync());
-        }
-        RETURN_IF_ERROR(wfile->close());
-
-        _num_delfile++;
-        _num_rows_del += segment_pb.delete_num_rows();
-
-        VLOG(2) << "Flush delete file to " << path << " size " << segment_pb.delete_data_size();
+    if (segment_pb.has_update_path()) {
+        RETURN_IF_ERROR(_flush_update_file(segment_pb, data));
     }
 
     return Status::OK();
@@ -327,26 +412,6 @@ HorizontalRowsetWriter::~HorizontalRowsetWriter() {
                 LOG_IF(WARNING, !(st.ok() || st.is_not_found()))
                         << "Fail to delete file=" << path << ", " << st.to_string();
             }
-            //// only deleting segment files may not delete all delete files or temporary files
-            //// during final merge, should iterate directory and delete all files with rowset_id prefix
-            //std::vector<std::string> files;
-            //Status st = _context.env->get_children(_context.rowset_path_prefix, &files);
-            //if (!st.ok()) {
-            //    LOG(WARNING) << "list dir failed: " << _context.rowset_path_prefix << " "
-            //                 << st.to_string();
-            //}
-            //string prefix = _context.rowset_id.to_string();
-            //for (auto& f : files) {
-            //    if (strncmp(f.c_str(), prefix.c_str(), prefix.size()) == 0) {
-            //        string path = _context.rowset_path_prefix + "/" + f;
-            //        // Even if an error is encountered, these files that have not been cleaned up
-            //        // will be cleaned up by the GC background. So here we only print the error
-            //        // message when we encounter an error.
-            //        Status st = _context.env->delete_file(path);
-            //        LOG_IF(WARNING, !st.ok())
-            //                << "Fail to delete file=" << path << ", " << st.to_string();
-            //    }
-            //}
         } else {
             for (int i = 0; i < _num_segment; ++i) {
                 auto path = Rowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, i);
@@ -373,7 +438,7 @@ StatusOr<std::unique_ptr<SegmentWriter>> HorizontalRowsetWriter::_create_segment
         path = Rowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_segment);
     }
     ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
-    const auto* schema = _rowset_schema != nullptr ? _rowset_schema.get() : _context.tablet_schema;
+    const auto* schema = _context.tablet_schema;
     auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), _num_segment, schema, _writer_options);
     RETURN_IF_ERROR(segment_writer->init());
     ++_num_segment;
@@ -395,11 +460,26 @@ Status HorizontalRowsetWriter::add_chunk(const Chunk& chunk) {
     return Status::OK();
 }
 
-std::string HorizontalRowsetWriter::_dump_mixed_segment_delfile_not_supported() {
+std::string HorizontalRowsetWriter::_flush_state_to_string() {
+    switch (_flush_chunk_state) {
+    case FlushChunkState::UNKNOWN:
+        return "UNKNOWN";
+    case FlushChunkState::UPSERT:
+        return "UPSERT";
+    case FlushChunkState::DELETE:
+        return "DELETE";
+    case FlushChunkState::MIXED:
+        return "MIXED";
+    default:
+        return "ERROR FLUSH STATE";
+    }
+}
+
+std::string HorizontalRowsetWriter::_error_msg() {
     std::string msg = strings::Substitute(
-            "multi-segment rowset do not support mixing upsert and delete tablet:$0 txn:$1 #seg:$2 #delfile:$3 "
-            "#upsert:$4 #del:$5",
-            _context.tablet_id, _context.txn_id, _num_segment, _num_delfile, _num_rows_written, _num_rows_del);
+            "UNKNOWN flush chunk state:$0, tablet:$1 txn:$2 #seg:$3 #delfile:$4 #uptfile:$5 #upsert:$6 #del:$7",
+            _flush_state_to_string(), _context.tablet_id, _context.txn_id, _num_segment, _num_delfile, _num_uptfile,
+            _num_rows_written, _num_rows_del);
     LOG(WARNING) << msg;
     return msg;
 }
@@ -413,8 +493,13 @@ Status HorizontalRowsetWriter::flush_chunk(const Chunk& chunk, SegmentPB* seg_in
         break;
     case FlushChunkState::UPSERT:
         break;
+    case FlushChunkState::DELETE:
+        _flush_chunk_state = FlushChunkState::MIXED;
+        break;
+    case FlushChunkState::MIXED:
+        break;
     default:
-        return Status::Cancelled(_dump_mixed_segment_delfile_not_supported());
+        return Status::Cancelled(_error_msg());
     }
     return _flush_chunk(chunk, seg_info);
 }
@@ -458,6 +543,9 @@ Status HorizontalRowsetWriter::flush_chunk_with_deletes(const Chunk& upserts, co
             seg_info->set_delete_data_size(content.size());
             seg_info->set_delete_path(wfile->filename());
         }
+        // _delfile_idxes keep the idx for every delete file, so we need to add the idx to _delfile_idxes if we create a
+        // new delete file
+        _delfile_idxes.emplace_back(_num_segment + _num_delfile);
         _num_delfile++;
         _num_rows_del += deletes.size();
         return Status::OK();
@@ -477,8 +565,12 @@ Status HorizontalRowsetWriter::flush_chunk_with_deletes(const Chunk& upserts, co
             break;
         case FlushChunkState::DELETE:
             break;
+        case FlushChunkState::UPSERT:
+            _flush_chunk_state = FlushChunkState::MIXED;
+        case FlushChunkState::MIXED:
+            break;
         default:
-            return Status::Cancelled(_dump_mixed_segment_delfile_not_supported());
+            return Status::Cancelled(_error_msg());
         }
         RETURN_IF_ERROR(flush_del_file(deletes, seg_info));
         return Status::OK();
@@ -489,17 +581,20 @@ Status HorizontalRowsetWriter::flush_chunk_with_deletes(const Chunk& upserts, co
             _flush_chunk_state = FlushChunkState::MIXED;
             break;
         default:
-            return Status::Cancelled(_dump_mixed_segment_delfile_not_supported());
+            break;
         }
+        RETURN_IF_ERROR(_flush_chunk(upserts, seg_info));
         RETURN_IF_ERROR(flush_del_file(deletes, seg_info));
-        return _flush_chunk(upserts, seg_info);
+        return Status::OK();
     } else {
         return Status::OK();
     }
 }
 
 Status HorizontalRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
-    RETURN_IF_ERROR(rowset->link_files_to(_context.rowset_path_prefix, _context.rowset_id));
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_context.tablet_id);
+    RETURN_IF_ERROR(rowset->link_files_to(tablet == nullptr ? nullptr : tablet->data_dir()->get_meta(),
+                                          _context.rowset_path_prefix, _context.rowset_id));
     _num_rows_written += rowset->num_rows();
     _total_row_size += static_cast<int64_t>(rowset->total_row_size());
     _total_data_size += static_cast<int64_t>(rowset->rowset_meta()->data_disk_size());
@@ -588,7 +683,7 @@ Status HorizontalRowsetWriter::_final_merge() {
                     _context.tablet_schema->num_columns(), _context.tablet_schema->sort_key_idxes(),
                     config::vertical_compaction_max_columns_per_group, &column_groups);
         }
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*_context.tablet_schema, column_groups[0]);
+        auto schema = ChunkHelper::convert_schema(*_context.tablet_schema, column_groups[0]);
         if (!_context.merge_condition.empty()) {
             for (int i = _context.tablet_schema->num_key_columns(); i < _context.tablet_schema->num_columns(); ++i) {
                 if (_context.tablet_schema->schema()->field(i)->name() == _context.merge_condition) {
@@ -699,7 +794,7 @@ Status HorizontalRowsetWriter::_final_merge() {
 
             seg_iterators.clear();
 
-            auto schema = ChunkHelper::convert_schema_to_format_v2(*_context.tablet_schema, column_groups[i]);
+            auto schema = ChunkHelper::convert_schema(*_context.tablet_schema, column_groups[i]);
 
             for (const auto& segment : segments) {
                 auto res = segment->new_iterator(schema, seg_options);
@@ -770,7 +865,7 @@ Status HorizontalRowsetWriter::_final_merge() {
                   << " chunk=" << total_chunk << " bytes=" << PrettyPrinter::print(total_data_size(), TUnit::UNIT)
                   << ") duration: " << timer.elapsed_time() / 1000000 << "ms";
     } else {
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*_context.tablet_schema);
+        auto schema = ChunkHelper::convert_schema(*_context.tablet_schema);
 
         for (const auto& segment : segments) {
             auto res = segment->new_iterator(schema, seg_options);
@@ -1057,7 +1152,7 @@ StatusOr<std::unique_ptr<SegmentWriter>> VerticalRowsetWriter::_create_segment_w
     std::lock_guard<std::mutex> l(_lock);
     ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(Rowset::segment_file_path(_context.rowset_path_prefix,
                                                                                   _context.rowset_id, _num_segment)));
-    const auto* schema = _rowset_schema != nullptr ? _rowset_schema.get() : _context.tablet_schema;
+    const auto* schema = _context.tablet_schema;
     auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), _num_segment, schema, _writer_options);
     RETURN_IF_ERROR(segment_writer->init(column_indexes, is_key));
     ++_num_segment;

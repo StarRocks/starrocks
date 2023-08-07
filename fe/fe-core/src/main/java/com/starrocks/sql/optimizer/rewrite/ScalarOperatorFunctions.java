@@ -35,18 +35,38 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonNull;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 import com.google.re2j.Pattern;
 import com.starrocks.analysis.DecimalLiteral;
+import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.hive.Partition;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import org.apache.commons.collections4.MapUtils;
+import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -63,7 +83,10 @@ import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
 import java.time.format.ResolverStyle;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.IsoFields;
 import java.time.temporal.TemporalAdjusters;
+import java.time.temporal.TemporalUnit;
+import java.util.Map;
 import java.util.Set;
 
 import static com.starrocks.catalog.PrimitiveType.BIGINT;
@@ -94,10 +117,30 @@ public class ScalarOperatorFunctions {
     private static final BigInteger INT_128_OPENER = BigInteger.ONE.shiftLeft(CONSTANT_128 + 1);
     private static final BigInteger[] INT_128_MASK1_ARR1 = new BigInteger[CONSTANT_128];
 
+    private static final int YEAR_MIN = 0;
+    private static final int YEAR_MAX = 9999;
+    private static final int DAY_OF_YEAR_MIN = 1;
+    private static final int DAY_OF_YEAR_MAX = 366;
+
+    private static final LocalDateTime TIME_SLICE_START = LocalDateTime.of(1, 1, 1, 0, 0);
+
+    private static final Map<String, TemporalUnit> TIME_SLICE_UNIT_MAPPING;
+
     static {
         for (int shiftBy = 0; shiftBy < CONSTANT_128; ++shiftBy) {
             INT_128_MASK1_ARR1[shiftBy] = INT_128_OPENER.subtract(BigInteger.ONE).shiftRight(shiftBy + 1);
         }
+
+        TIME_SLICE_UNIT_MAPPING = ImmutableMap.<String, TemporalUnit>builder()
+                .put("second", ChronoUnit.SECONDS)
+                .put("minute", ChronoUnit.MINUTES)
+                .put("hour", ChronoUnit.HOURS)
+                .put("day", ChronoUnit.DAYS)
+                .put("month", ChronoUnit.MONTHS)
+                .put("year", ChronoUnit.YEARS)
+                .put("week", ChronoUnit.WEEKS)
+                .put("quarter", IsoFields.QUARTER_YEARS)
+                .build();
     }
 
     /**
@@ -120,7 +163,10 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetime(date.getDatetime().plusYears(year.getInt()));
     }
 
-    @ConstantFunction(name = "months_add", argTypes = {DATETIME, INT}, returnType = DATETIME)
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "months_add", argTypes = {DATETIME, INT}, returnType = DATETIME),
+            @ConstantFunction(name = "add_months", argTypes = {DATETIME, INT}, returnType = DATETIME)
+    })
     public static ConstantOperator monthsAdd(ConstantOperator date, ConstantOperator month) {
         return ConstantOperator.createDatetime(date.getDatetime().plusMonths(month.getInt()));
     }
@@ -191,33 +237,46 @@ public class ScalarOperatorFunctions {
         }
         // unix style
         if (!SUPPORT_JAVA_STYLE_DATETIME_FORMATTER.contains(format.trim())) {
-            DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar());
-            return ConstantOperator.createVarchar(builder.toFormatter().format(date.getDatetime()));
+            DateTimeFormatter builder = DateUtils.unixDatetimeFormatter(fmtLiteral.getVarchar());
+            return ConstantOperator.createVarchar(builder.format(date.getDatetime()));
         } else {
             String result = date.getDatetime().format(DateTimeFormatter.ofPattern(fmtLiteral.getVarchar()));
             return ConstantOperator.createVarchar(result);
         }
     }
 
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "to_iso8601", argTypes = {DATETIME}, returnType = VARCHAR),
+            @ConstantFunction(name = "to_iso8601", argTypes = {DATE}, returnType = VARCHAR)
+    })
+    public static ConstantOperator toISO8601(ConstantOperator date) {
+        if (date.getType().isDatetime()) {
+            DateTimeFormatter fmt = DateUtils.unixDatetimeFormatter("%Y-%m-%dT%H:%i:%s.%f", true);
+            String result = date.getDatetime().format(fmt);
+            return ConstantOperator.createVarchar(result);
+        }
+        String result = date.getDate().format(DateUtils.DATE_FORMATTER_UNIX);
+        return ConstantOperator.createVarchar(result);
+    }
+
     @ConstantFunction(name = "str_to_date", argTypes = {VARCHAR, VARCHAR}, returnType = DATETIME)
     public static ConstantOperator dateParse(ConstantOperator date, ConstantOperator fmtLiteral) {
-        DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar(), false);
+        DateTimeFormatter builder = DateUtils.unixDatetimeFormatter(fmtLiteral.getVarchar(), false);
         String dateStr = StringUtils.strip(date.getVarchar(), "\r\n\t ");
         if (HAS_TIME_PART.matcher(fmtLiteral.getVarchar()).matches()) {
             LocalDateTime ldt;
             try {
-                ldt = LocalDateTime.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
+                ldt = LocalDateTime.from(builder.withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
             } catch (DateTimeParseException e) {
                 // If parsing fails, it can be re-parsed from the position of the successful prefix string.
                 // This way datetime string can use incomplete format
                 // eg. str_to_date('2022-10-18 00:00:00','%Y-%m-%d %H:%s');
-                ldt = LocalDateTime.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT)
+                ldt = LocalDateTime.from(builder.withResolverStyle(ResolverStyle.STRICT)
                         .parse(dateStr.substring(0, e.getErrorIndex())));
             }
             return ConstantOperator.createDatetime(ldt, Type.DATETIME);
         } else {
-            LocalDate ld = LocalDate.from(
-                    builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
+            LocalDate ld = LocalDate.from(builder.withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
             return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATETIME);
         }
     }
@@ -299,51 +358,97 @@ public class ScalarOperatorFunctions {
         return arg;
     }
 
-    @ConstantFunction(name = "unix_timestamp", argTypes = {}, returnType = INT)
+    @ConstantFunction(name = "unix_timestamp", argTypes = {}, returnType = BIGINT)
     public static ConstantOperator unixTimestampNow() {
         return unixTimestamp(now());
     }
 
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "unix_timestamp", argTypes = {DATETIME}, returnType = INT),
-            @ConstantFunction(name = "unix_timestamp", argTypes = {DATE}, returnType = INT)
+            @ConstantFunction(name = "unix_timestamp", argTypes = {DATETIME}, returnType = BIGINT),
+            @ConstantFunction(name = "unix_timestamp", argTypes = {DATE}, returnType = BIGINT)
     })
     public static ConstantOperator unixTimestamp(ConstantOperator arg) {
         LocalDateTime dt = arg.getDatetime();
         ZonedDateTime zdt = ZonedDateTime.of(dt, TimeUtils.getTimeZone().toZoneId());
-        if (zdt.toEpochSecond() > Integer.MAX_VALUE || zdt.toEpochSecond() < 0) {
-            return ConstantOperator.createInt(0);
+        long value = zdt.toEpochSecond();
+        if (value < 0 || value > TimeUtils.MAX_UNIX_TIMESTAMP) {
+            value = 0;
         }
-        return ConstantOperator.createInt((int) zdt.toEpochSecond());
+        return ConstantOperator.createBigint(value);
     }
 
-    @ConstantFunction(name = "from_unixtime", argTypes = {INT}, returnType = VARCHAR)
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "from_unixtime", argTypes = {INT}, returnType = VARCHAR),
+            @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT}, returnType = VARCHAR)
+    })
     public static ConstantOperator fromUnixTime(ConstantOperator unixTime) throws AnalysisException {
-        // if unixTime < 0, we should return null, throw a exception and let BE process
-        if (unixTime.getInt() < 0) {
-            throw new AnalysisException("unixtime should larger than zero");
+        long value = 0;
+        if (unixTime.getType().isInt()) {
+            value = unixTime.getInt();
+        } else {
+            value = unixTime.getBigint();
+        }
+        if (value < 0 || value > TimeUtils.MAX_UNIX_TIMESTAMP) {
+            throw new AnalysisException(
+                    "unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
         }
         ConstantOperator dl = ConstantOperator.createDatetime(
-                LocalDateTime.ofInstant(Instant.ofEpochSecond(unixTime.getInt()), TimeUtils.getTimeZone().toZoneId()));
+                LocalDateTime.ofInstant(Instant.ofEpochSecond(value), TimeUtils.getTimeZone().toZoneId()));
         return ConstantOperator.createVarchar(dl.toString());
     }
 
-    @ConstantFunction(name = "from_unixtime", argTypes = {INT, VARCHAR}, returnType = VARCHAR)
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "from_unixtime", argTypes = {INT, VARCHAR}, returnType = VARCHAR),
+            @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT, VARCHAR}, returnType = VARCHAR)
+    })
     public static ConstantOperator fromUnixTime(ConstantOperator unixTime, ConstantOperator fmtLiteral)
             throws AnalysisException {
-        // if unixTime < 0, we should return null, throw a exception and let BE process
-        if (unixTime.getInt() < 0) {
-            throw new AnalysisException("unixtime should larger than zero");
+        long value = 0;
+        if (unixTime.getType().isInt()) {
+            value = unixTime.getInt();
+        } else {
+            value = unixTime.getBigint();
+        }
+        if (value < 0 || value > TimeUtils.MAX_UNIX_TIMESTAMP) {
+            throw new AnalysisException(
+                    "unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
         }
         ConstantOperator dl = ConstantOperator.createDatetime(
-                LocalDateTime.ofInstant(Instant.ofEpochSecond(unixTime.getInt()), TimeUtils.getTimeZone().toZoneId()));
+                LocalDateTime.ofInstant(Instant.ofEpochSecond(value), TimeUtils.getTimeZone().toZoneId()));
         return dateFormat(dl, fmtLiteral);
     }
 
-    @ConstantFunction(name = "now", argTypes = {}, returnType = DATETIME)
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "now", argTypes = {}, returnType = DATETIME),
+            @ConstantFunction(name = "current_timestamp", argTypes = {}, returnType = DATETIME),
+            @ConstantFunction(name = "localtime", argTypes = {}, returnType = DATETIME),
+            @ConstantFunction(name = "localtimestamp", argTypes = {}, returnType = DATETIME)
+    })
     public static ConstantOperator now() {
         ConnectContext connectContext = ConnectContext.get();
-        LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime() / 1000 * 1000)
+        LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime())
+                .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
+        return ConstantOperator.createDatetime(startTime);
+    }
+
+    @ConstantFunction(name = "now", argTypes = {INT}, returnType = DATETIME)
+    public static ConstantOperator now(ConstantOperator fsp) throws AnalysisException {
+        int fspVal = fsp.getInt();
+        if (fspVal == 0) {
+            return now();
+        }
+        // Although there is a check here, it will not take effect and will be forwarded to BE.
+        if (fspVal < 0) {
+            throw new AnalysisException("precision must be greater than 0.");
+        }
+        if (fspVal > 6) {
+            throw new AnalysisException("Too-big precision " + fspVal + "specified for 'now'. Maximum is 6.");
+        }
+        // Here only the syntax is implemented for the metabase to use.
+        // If you want to achieve a precise type, you need to change the BE code
+        // and consider the transitivity of the FE expression.
+        ConnectContext connectContext = ConnectContext.get();
+        LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime())
                 .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         return ConstantOperator.createDatetime(startTime);
     }
@@ -362,9 +467,145 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "utc_timestamp", argTypes = {}, returnType = DATETIME)
     public static ConstantOperator utcTimestamp() {
         // for consistency with mysql, ignore milliseconds
-        LocalDateTime utcStartTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime() / 1000 * 1000)
+        LocalDateTime utcStartTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
                 .atZone(ZoneOffset.UTC).toLocalDateTime();
         return ConstantOperator.createDatetime(utcStartTime);
+    }
+
+    @ConstantFunction(name = "next_day", argTypes = {DATETIME, VARCHAR}, returnType = DATE)
+    public static ConstantOperator nextDay(ConstantOperator date, ConstantOperator dow) {
+        int dateDowValue = date.getDate().getDayOfWeek().getValue();
+        switch (dow.getVarchar()) {
+            case "Sunday":
+            case "Sun":
+            case "Su":
+                return ConstantOperator.createDate(date.getDate().plusDays((13L - dateDowValue) % 7 + 1L));
+            case "Monday":
+            case "Mon":
+            case "Mo":
+                return ConstantOperator.createDate(date.getDate().plusDays((7L - dateDowValue) % 7 + 1L));
+            case "Tuesday":
+            case "Tue":
+            case "Tu":
+                return ConstantOperator.createDate(date.getDate().plusDays((8L - dateDowValue) % 7 + 1L));
+            case "Wednesday":
+            case "Wed":
+            case "We":
+                return ConstantOperator.createDate(date.getDate().plusDays((9L - dateDowValue) % 7 + 1L));
+            case "Thursday":
+            case "Thu":
+            case "Th":
+                return ConstantOperator.createDate(date.getDate().plusDays((10L - dateDowValue) % 7 + 1L));
+            case "Friday":
+            case "Fri":
+            case "Fr":
+                return ConstantOperator.createDate(date.getDate().plusDays((11L - dateDowValue) % 7 + 1L));
+            case "Saturday":
+            case "Sat":
+            case "Sa":
+                return ConstantOperator.createDate(date.getDate().plusDays((12L - dateDowValue) % 7 + 1L));
+            default:
+                throw new IllegalArgumentException(dow + " not supported in next_day dow_string");
+        }
+    }
+
+    @ConstantFunction(name = "previous_day", argTypes = {DATETIME, VARCHAR}, returnType = DATE)
+    public static ConstantOperator previousDay(ConstantOperator date, ConstantOperator dow) {
+        int dateDowValue = date.getDate().getDayOfWeek().getValue();
+        switch (dow.getVarchar()) {
+            case "Sunday":
+            case "Sun":
+            case "Su":
+                return ConstantOperator.createDate(date.getDate().minusDays((dateDowValue - 1L) % 7 + 1L));
+            case "Monday":
+            case "Mon":
+            case "Mo":
+                return ConstantOperator.createDate(date.getDate().minusDays((dateDowValue + 5L) % 7 + 1L));
+            case "Tuesday":
+            case "Tue":
+            case "Tu":
+                return ConstantOperator.createDate(date.getDate().minusDays((dateDowValue + 4L) % 7 + 1L));
+            case "Wednesday":
+            case "Wed":
+            case "We":
+                return ConstantOperator.createDate(date.getDate().minusDays((dateDowValue + 3L) % 7 + 1L));
+            case "Thursday":
+            case "Thu":
+            case "Th":
+                return ConstantOperator.createDate(date.getDate().minusDays((dateDowValue + 2L) % 7 + 1L));
+            case "Friday":
+            case "Fri":
+            case "Fr":
+                return ConstantOperator.createDate(date.getDate().minusDays((dateDowValue + 1L) % 7 + 1L));
+            case "Saturday":
+            case "Sat":
+            case "Sa":
+                return ConstantOperator.createDate(date.getDate().minusDays(dateDowValue % 7 + 1L));
+            default:
+                throw new IllegalArgumentException(dow + " not supported in previous_day dow_string");
+        }
+    }
+
+    @ConstantFunction(name = "makedate", argTypes = {INT, INT}, returnType = DATETIME)
+    public static ConstantOperator makeDate(ConstantOperator year, ConstantOperator dayOfYear) {
+        if (year.isNull() || dayOfYear.isNull()) {
+            return ConstantOperator.createNull(Type.DATE);
+        }
+
+        int yearInt = year.getInt();
+        if (yearInt < YEAR_MIN || yearInt > YEAR_MAX) {
+            return ConstantOperator.createNull(Type.DATE);
+        }
+
+        int dayOfYearInt = dayOfYear.getInt();
+        if (dayOfYearInt < DAY_OF_YEAR_MIN || dayOfYearInt > DAY_OF_YEAR_MAX) {
+            return ConstantOperator.createNull(Type.DATE);
+        }
+
+        LocalDate ld = LocalDate.of(yearInt, 1, 1)
+                .plusDays(dayOfYearInt - 1);
+
+        if (ld.getYear() != year.getInt()) {
+            return ConstantOperator.createNull(Type.DATE);
+        }
+
+        return ConstantOperator.createDate(ld.atTime(0, 0, 0));
+    }
+
+    @ConstantFunction(name = "time_slice", argTypes = {DATETIME, INT, VARCHAR}, returnType = DATETIME)
+    public static ConstantOperator timeSlice(ConstantOperator datetime, ConstantOperator interval,
+                                             ConstantOperator unit) throws AnalysisException {
+        return timeSlice(datetime, interval, unit, ConstantOperator.createVarchar("floor"));
+    }
+
+    @ConstantFunction(name = "time_slice", argTypes = {DATETIME, INT, VARCHAR, VARCHAR}, returnType = DATETIME)
+    public static ConstantOperator timeSlice(ConstantOperator datetime, ConstantOperator interval,
+                                             ConstantOperator unit, ConstantOperator boundary)
+            throws AnalysisException {
+        TemporalUnit timeUnit = TIME_SLICE_UNIT_MAPPING.get(unit.getVarchar());
+        if (timeUnit == null) {
+            throw new IllegalArgumentException(unit + " not supported in time_slice unit param");
+        }
+        boolean isEnd;
+        switch (boundary.getVarchar()) {
+            case "floor":
+                isEnd = false;
+                break;
+            case "ceil":
+                isEnd = true;
+                break;
+            default:
+                throw new IllegalArgumentException(boundary + " not supported in time_slice boundary param");
+        }
+        long duration = TIME_SLICE_START.until(datetime.getDatetime(), timeUnit);
+        if (duration < 0) {
+            throw new AnalysisException("time used with time_slice can't before 0001-01-01 00:00:00");
+        }
+        long epoch = duration - (duration % interval.getInt());
+        if (isEnd) {
+            epoch += interval.getInt();
+        }
+        return ConstantOperator.createDatetime(TIME_SLICE_START.plus(epoch, timeUnit));
     }
 
     /**
@@ -774,6 +1015,30 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createVarchar(Config.mysql_server_version);
     }
 
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "substring", argTypes = {VARCHAR, INT}, returnType = VARCHAR),
+            @ConstantFunction(name = "substring", argTypes = {VARCHAR, INT, INT}, returnType = VARCHAR),
+            @ConstantFunction(name = "substr", argTypes = {VARCHAR, INT}, returnType = VARCHAR),
+            @ConstantFunction(name = "substr", argTypes = {VARCHAR, INT, INT}, returnType = VARCHAR)
+    })
+    public static ConstantOperator substring(ConstantOperator value, ConstantOperator... index) {
+        Preconditions.checkArgument(index.length == 1 || index.length == 2);
+
+        String string = value.getVarchar();
+        /// If index out of bounds, the substring method will throw exception, we need avoid it,
+        /// otherwise, the Constant Evaluation will fail.
+        /// Besides, the implementation of `substring` function in starrocks includes beginIndex and length,
+        /// and the index is start from 1 and can negative, so we need carefully handle it.
+        int beginIndex = index[0].getInt() >= 0 ? index[0].getInt() - 1 : string.length() + index[0].getInt();
+        int endIndex =
+                (index.length == 2) ? Math.min(beginIndex + index[1].getInt(), string.length()) : string.length();
+
+        if (beginIndex < 0 || beginIndex > endIndex) {
+            return ConstantOperator.createVarchar("");
+        }
+        return ConstantOperator.createVarchar(string.substring(beginIndex, endIndex));
+    }
+
     private static ConstantOperator createDecimalConstant(BigDecimal result) {
         Type type;
         if (!Config.enable_decimal_v3) {
@@ -800,4 +1065,109 @@ public class ScalarOperatorFunctions {
         BigInteger opened = l.subtract(INT_128_OPENER);
         return opened.shiftRight(shiftBy).and(INT_128_MASK1_ARR1[shiftBy]);
     }
+
+    // =================================== meta functions ==================================== //
+
+    private static Table inspectExternalTable(TableName tableName) {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName)
+                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
+        ConnectContext connectContext = ConnectContext.get();
+        Authorizer.checkAnyActionOnTable(
+                connectContext.getCurrentUserIdentity(),
+                connectContext.getCurrentRoleIds(),
+                tableName);
+        return table;
+    }
+
+    private static Pair<Database, Table> inspectTable(TableName tableName) {
+        Database db = GlobalStateMgr.getCurrentState().mayGetDb(tableName.getDb())
+                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, tableName.getDb()));
+        Table table = db.tryGetTable(tableName.getTbl())
+                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
+        ConnectContext connectContext = ConnectContext.get();
+        Authorizer.checkAnyActionOnTable(
+                connectContext.getCurrentUserIdentity(),
+                connectContext.getCurrentRoleIds(),
+                tableName);
+        return Pair.of(db, table);
+    }
+
+    /**
+     * Return verbose metadata of a materialized-view
+     */
+    @ConstantFunction(name = "inspect_mv_meta", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspect_mv_meta(ConstantOperator mvName) {
+        TableName tableName = TableName.fromString(mvName.getVarchar());
+        Pair<Database, Table> dbTable = inspectTable(tableName);
+        Table table = dbTable.getRight();
+        if (!table.isMaterializedView()) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    tableName + " is not materialized view");
+        }
+        try {
+            dbTable.getLeft().readLock();
+
+            MaterializedView mv = (MaterializedView) table;
+            String meta = mv.inspectMeta();
+            return ConstantOperator.createVarchar(meta);
+        } finally {
+            dbTable.getLeft().readUnlock();
+        }
+    }
+
+    /**
+     * Return related materialized-views of a table, in JSON array format
+     */
+    @ConstantFunction(name = "inspect_related_mv", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspect_related_mv(ConstantOperator name) {
+        TableName tableName = TableName.fromString(name.getVarchar());
+        Pair<Database, Table> dbTable = inspectTable(tableName);
+        Table table = dbTable.getRight();
+
+        try {
+            dbTable.getLeft().readLock();
+
+            Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
+            JsonArray array = new JsonArray();
+            for (MvId mv : SetUtils.emptyIfNull(relatedMvs)) {
+                String mvName = GlobalStateMgr.getCurrentState().mayGetTable(mv.getDbId(), mv.getId())
+                        .map(Table::getName)
+                        .orElse(null);
+                JsonObject obj = new JsonObject();
+                obj.add("id", new JsonPrimitive(mv.getId()));
+                obj.add("name", mvName != null ? new JsonPrimitive(mvName) : JsonNull.INSTANCE);
+
+                array.add(obj);
+            }
+
+            String json = array.toString();
+            return ConstantOperator.createVarchar(json);
+        } finally {
+            dbTable.getLeft().readUnlock();
+        }
+    }
+
+    /**
+     * Return Hive partition info
+     */
+    @ConstantFunction(name = "inspect_hive_part_info",
+            argTypes = {VARCHAR},
+            returnType = VARCHAR,
+            isMetaFunction = true)
+    public static ConstantOperator inspect_hive_part_info(ConstantOperator name) {
+        TableName tableName = TableName.fromString(name.getVarchar());
+        Table table = inspectExternalTable(tableName);
+
+        Map<String, PartitionInfo> info = PartitionUtil.getPartitionNameWithPartitionInfo(table);
+        JsonObject obj = new JsonObject();
+        for (Map.Entry<String, PartitionInfo> entry : MapUtils.emptyIfNull(info).entrySet()) {
+            if (entry.getValue() instanceof Partition) {
+                Partition part = (Partition) entry.getValue();
+                obj.add(entry.getKey(), part.toJson());
+            }
+        }
+        String json = obj.toString();
+        return ConstantOperator.createVarchar(json);
+    }
+
 }

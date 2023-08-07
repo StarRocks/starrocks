@@ -38,6 +38,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.analysis.ArithmeticExpr.Operator;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
@@ -70,6 +71,11 @@ public class TimestampArithmeticExpr extends Expr {
 
     // C'tor for function-call like arithmetic, e.g., 'date_add(a, interval b year)'.
     public TimestampArithmeticExpr(String funcName, Expr e1, Expr e2, String timeUnitIdent) {
+        this(funcName, e1, e2, timeUnitIdent, NodePosition.ZERO);
+    }
+
+    public TimestampArithmeticExpr(String funcName, Expr e1, Expr e2, String timeUnitIdent, NodePosition pos) {
+        super(pos);
         this.funcName = funcName.toLowerCase();
         this.timeUnitIdent = timeUnitIdent;
         this.intervalFirst = false;
@@ -82,6 +88,12 @@ public class TimestampArithmeticExpr extends Expr {
     // to the time value (even in the interval-first case).
     public TimestampArithmeticExpr(ArithmeticExpr.Operator op, Expr e1, Expr e2,
                                    String timeUnitIdent, boolean intervalFirst) {
+        this(op, e1, e2, timeUnitIdent, intervalFirst, NodePosition.ZERO);
+    }
+
+    public TimestampArithmeticExpr(ArithmeticExpr.Operator op, Expr e1, Expr e2,
+                                   String timeUnitIdent, boolean intervalFirst, NodePosition pos) {
+        super(pos);
         Preconditions.checkState(op == Operator.ADD || op == Operator.SUBTRACT);
         this.funcName = null;
         this.op = op;

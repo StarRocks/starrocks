@@ -47,7 +47,7 @@ public class LdapSecurity {
             ctx = new InitialDirContext(env);
             return true;
         } catch (Exception e) {
-            LOG.warn("check ldap password failed, dn = {}, password = {}", dn, password, e);
+            LOG.warn("check ldap password failed, dn = {}", dn, e);
         } finally {
             if (ctx != null) {
                 try {
@@ -125,7 +125,7 @@ public class LdapSecurity {
         return false;
     }
 
-    //trim prefix and suffix of target from src
+    // trim prefix and suffix of target from src
     private static String trim(String src, String target) {
         if (src != null && target != null) {
             if (src.startsWith(target)) {

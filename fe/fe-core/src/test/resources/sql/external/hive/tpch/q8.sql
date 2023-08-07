@@ -118,11 +118,11 @@ OutPut Exchange Id: 34
 |  75 <-> 1 - [74: cast, DECIMAL64(18,2), true]
 |  76 <-> cast([75: subtract, DECIMAL64(18,2), true] as DECIMAL128(18,2))
 |  77 <-> [73: cast, DECIMAL128(15,2), true] * [76: cast, DECIMAL128(18,2), true]
-|  cardinality: 4000253
+|  cardinality: 242843
 |  column statistics:
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * expr-->[810.9, 104949.5, 0.0, 16.0, 3736520.0] ESTIMATE
-|  * case-->[-Infinity, Infinity, 0.0, 16.0, 3736521.0] ESTIMATE
+|  * expr-->[810.9, 104949.5, 0.0, 16.0, 242842.78223700623] ESTIMATE
+|  * case-->[-Infinity, Infinity, 0.0, 16.0, 242843.78223700623] ESTIMATE
 |
 31:HASH JOIN
 |  join op: INNER JOIN (PARTITIONED)
@@ -130,17 +130,17 @@ OutPut Exchange Id: 34
 |  build runtime filters:
 |  - filter_id = 6, build_expr = (17: l_orderkey), remote = true
 |  output columns: 22, 23, 37, 55
-|  cardinality: 4000253
+|  cardinality: 242843
 |  column statistics:
-|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 4000252.679999999] ESTIMATE
-|  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 3736520.0] ESTIMATE
+|  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 242842.78223700623] ESTIMATE
 |  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
-|  * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 4000252.679999999] ESTIMATE
 |  * o_orderdate-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2412.0] ESTIMATE
+|  * n_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * r_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * expr-->[810.9, 104949.5, 0.0, 16.0, 3736520.0] ESTIMATE
-|  * case-->[-Infinity, Infinity, 0.0, 16.0, 3736521.0] ESTIMATE
+|  * expr-->[810.9, 104949.5, 0.0, 16.0, 242842.78223700623] ESTIMATE
+|  * case-->[-Infinity, Infinity, 0.0, 16.0, 242843.78223700623] ESTIMATE
 |
 |----30:EXCHANGE
 |       distribution type: SHUFFLE
@@ -232,7 +232,6 @@ OutPut Exchange Id: 27
 TABLE: supplier
 partitions=1/1
 avgRowSize=8.0
-numNodes=0
 cardinality: 1000000
 probe runtime filters:
 - filter_id = 4, probe_expr = (13: s_nationkey)
@@ -251,7 +250,6 @@ TABLE: nation
 NON-PARTITION PREDICATES: 54: n_nationkey IS NOT NULL
 partitions=1/1
 avgRowSize=29.0
-numNodes=0
 cardinality: 25
 column statistics:
 * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
@@ -300,7 +298,6 @@ TABLE: lineitem
 NON-PARTITION PREDICATES: 18: l_partkey IS NOT NULL, 19: l_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=36.0
-numNodes=0
 cardinality: 600037902
 probe runtime filters:
 - filter_id = 3, probe_expr = (18: l_partkey)
@@ -331,7 +328,6 @@ NON-PARTITION PREDICATES: 5: p_type = 'ECONOMY ANODIZED STEEL'
 MIN/MAX PREDICATES: 71: p_type <= 'ECONOMY ANODIZED STEEL', 72: p_type >= 'ECONOMY ANODIZED STEEL'
 partitions=1/1
 avgRowSize=33.0
-numNodes=0
 cardinality: 133333
 column statistics:
 * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 133333.33333333334] ESTIMATE
@@ -375,7 +371,6 @@ NON-PARTITION PREDICATES: 37: o_orderdate >= '1995-01-01', 37: o_orderdate <= '1
 MIN/MAX PREDICATES: 69: o_orderdate >= '1995-01-01', 70: o_orderdate <= '1996-12-31'
 partitions=1/1
 avgRowSize=20.0
-numNodes=0
 cardinality: 45530146
 probe runtime filters:
 - filter_id = 2, probe_expr = (34: o_custkey)
@@ -419,7 +414,6 @@ TABLE: customer
 NON-PARTITION PREDICATES: 42: c_custkey IS NOT NULL
 partitions=1/1
 avgRowSize=12.0
-numNodes=0
 cardinality: 15000000
 probe runtime filters:
 - filter_id = 1, probe_expr = (45: c_nationkey)
@@ -461,7 +455,6 @@ TABLE: nation
 NON-PARTITION PREDICATES: 50: n_nationkey IS NOT NULL
 partitions=1/1
 avgRowSize=8.0
-numNodes=0
 cardinality: 25
 probe runtime filters:
 - filter_id = 0, probe_expr = (52: n_regionkey)
@@ -488,7 +481,6 @@ NON-PARTITION PREDICATES: 59: r_name = 'MIDDLE EAST'
 MIN/MAX PREDICATES: 67: r_name <= 'MIDDLE EAST', 68: r_name >= 'MIDDLE EAST'
 partitions=1/1
 avgRowSize=10.8
-numNodes=0
 cardinality: 1
 column statistics:
 * r_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE

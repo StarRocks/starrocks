@@ -50,13 +50,14 @@ public:
     static constexpr const char* KEY_PASS_WORD = "password";
     static constexpr const char* KEY_HOST_PORT = "host_port";
     static constexpr const char* KEY_INDEX = "index";
-    static constexpr const char* KEY_TYPE = "type";
+    static constexpr const char* KEY_TYPE = "es.type";
     static constexpr const char* KEY_SHARD = "shard_id";
     static constexpr const char* KEY_QUERY = "query";
     static constexpr const char* KEY_BATCH_SIZE = "batch_size";
     static constexpr const char* KEY_TERMINATE_AFTER = "limit";
     static constexpr const char* KEY_DOC_VALUES_MODE = "doc_values_mode";
     static constexpr const char* KEY_ES_NET_SSL = "es.net.ssl";
+    static constexpr const char* KEY_TIME_ZONE = "time_zone";
     ESScanReader(const std::string& target, const std::map<std::string, std::string>& props, bool doc_value_mode);
     ~ESScanReader();
 

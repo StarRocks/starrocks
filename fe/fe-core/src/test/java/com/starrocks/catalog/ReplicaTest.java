@@ -35,9 +35,7 @@
 package com.starrocks.catalog;
 
 import com.starrocks.catalog.Replica.ReplicaState;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.server.GlobalStateMgr;
-import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
@@ -100,13 +98,6 @@ public class ReplicaTest {
 
     @Test
     public void testSerialization() throws Exception {
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentStateJournalVersion();
-                result = FeMetaVersion.VERSION_45;
-            }
-        };
-
         // 1. Write objects to file
         File file = new File("./olapReplicaTest");
         file.createNewFile();

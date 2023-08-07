@@ -36,7 +36,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.BinaryPredicate.Operator;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.catalog.Table.TableType;
@@ -62,7 +62,7 @@ public class MetadataViewer {
     }
 
     private static List<List<String>> getTabletStatus(String dbName, String tblName, List<String> partitions,
-                                                      ReplicaStatus statusFilter, Operator op) throws DdlException {
+                                                      ReplicaStatus statusFilter, BinaryType op) throws DdlException {
         List<List<String>> result = Lists.newArrayList();
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
@@ -96,69 +96,72 @@ public class MetadataViewer {
 
             for (String partName : partitions) {
                 Partition partition = olapTable.getPartition(partName);
-                long visibleVersion = partition.getVisibleVersion();
                 short replicationNum = olapTable.getPartitionInfo().getReplicationNum(partition.getId());
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
 
-                for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                    int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
-                    for (Tablet tablet : index.getTablets()) {
-                        long tabletId = tablet.getId();
-                        int count = replicationNum;
-                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                            --count;
-                            List<String> row = Lists.newArrayList();
+                    long visibleVersion = physicalPartition.getVisibleVersion();
 
-                            ReplicaStatus status = ReplicaStatus.OK;
-                            Backend be = infoService.getBackend(replica.getBackendId());
-                            if (be == null || !be.isAvailable() || replica.isBad()) {
-                                status = ReplicaStatus.DEAD;
-                            } else if (replica.getVersion() < visibleVersion
-                                    || replica.getLastFailedVersion() > 0) {
-                                status = ReplicaStatus.VERSION_ERROR;
+                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                        int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
+                        for (Tablet tablet : index.getTablets()) {
+                            long tabletId = tablet.getId();
+                            int count = replicationNum;
+                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                                --count;
+                                List<String> row = Lists.newArrayList();
 
-                            } else if (replica.getSchemaHash() != -1 && replica.getSchemaHash() != schemaHash) {
-                                status = ReplicaStatus.SCHEMA_ERROR;
+                                ReplicaStatus status = ReplicaStatus.OK;
+                                Backend be = infoService.getBackend(replica.getBackendId());
+                                if (be == null || !be.isAvailable() || replica.isBad()) {
+                                    status = ReplicaStatus.DEAD;
+                                } else if (replica.getVersion() < visibleVersion
+                                        || replica.getLastFailedVersion() > 0) {
+                                    status = ReplicaStatus.VERSION_ERROR;
+
+                                } else if (replica.getSchemaHash() != -1 && replica.getSchemaHash() != schemaHash) {
+                                    status = ReplicaStatus.SCHEMA_ERROR;
+                                }
+
+                                if (filterReplica(status, statusFilter, op)) {
+                                    continue;
+                                }
+
+                                row.add(String.valueOf(tabletId));
+                                row.add(String.valueOf(replica.getId()));
+                                row.add(String.valueOf(replica.getBackendId()));
+                                row.add(String.valueOf(replica.getVersion()));
+                                row.add(String.valueOf(replica.getLastFailedVersion()));
+                                row.add(String.valueOf(replica.getLastSuccessVersion()));
+                                row.add(String.valueOf(visibleVersion));
+                                row.add(String.valueOf(Replica.DEPRECATED_PROP_SCHEMA_HASH));
+                                row.add(String.valueOf(replica.getVersionCount()));
+                                row.add(String.valueOf(replica.isBad()));
+                                row.add(String.valueOf(replica.isSetBadForce()));
+                                row.add(replica.getState().name());
+                                row.add(status.name());
+                                result.add(row);
                             }
 
-                            if (filterReplica(status, statusFilter, op)) {
+                            if (filterReplica(ReplicaStatus.MISSING, statusFilter, op)) {
                                 continue;
                             }
 
-                            row.add(String.valueOf(tabletId));
-                            row.add(String.valueOf(replica.getId()));
-                            row.add(String.valueOf(replica.getBackendId()));
-                            row.add(String.valueOf(replica.getVersion()));
-                            row.add(String.valueOf(replica.getLastFailedVersion()));
-                            row.add(String.valueOf(replica.getLastSuccessVersion()));
-                            row.add(String.valueOf(visibleVersion));
-                            row.add(String.valueOf(Replica.DEPRECATED_PROP_SCHEMA_HASH));
-                            row.add(String.valueOf(replica.getVersionCount()));
-                            row.add(String.valueOf(replica.isBad()));
-                            row.add(String.valueOf(replica.isSetBadForce()));
-                            row.add(replica.getState().name());
-                            row.add(status.name());
-                            result.add(row);
-                        }
-
-                        if (filterReplica(ReplicaStatus.MISSING, statusFilter, op)) {
-                            continue;
-                        }
-
-                        // get missing replicas
-                        for (int i = 0; i < count; ++i) {
-                            List<String> row = Lists.newArrayList();
-                            row.add(String.valueOf(tabletId));
-                            row.add("-1");
-                            row.add("-1");
-                            row.add("-1");
-                            row.add("-1");
-                            row.add("-1");
-                            row.add("-1");
-                            row.add("-1");
-                            row.add(FeConstants.null_string);
-                            row.add(FeConstants.null_string);
-                            row.add(ReplicaStatus.MISSING.name());
-                            result.add(row);
+                            // get missing replicas
+                            for (int i = 0; i < count; ++i) {
+                                List<String> row = Lists.newArrayList();
+                                row.add(String.valueOf(tabletId));
+                                row.add("-1");
+                                row.add("-1");
+                                row.add("-1");
+                                row.add("-1");
+                                row.add("-1");
+                                row.add("-1");
+                                row.add("-1");
+                                row.add(FeConstants.NULL_STRING);
+                                row.add(FeConstants.NULL_STRING);
+                                row.add(ReplicaStatus.MISSING.name());
+                                result.add(row);
+                            }
                         }
                     }
                 }
@@ -170,11 +173,11 @@ public class MetadataViewer {
         return result;
     }
 
-    private static boolean filterReplica(ReplicaStatus status, ReplicaStatus statusFilter, Operator op) {
+    private static boolean filterReplica(ReplicaStatus status, ReplicaStatus statusFilter, BinaryType op) {
         if (statusFilter == null) {
             return false;
         }
-        if (op == Operator.EQ) {
+        if (op == BinaryType.EQ) {
             return status != statusFilter;
         } else {
             return status == statusFilter;
@@ -203,8 +206,8 @@ public class MetadataViewer {
         db.readLock();
         try {
             Table tbl = db.getTable(tblName);
-            if (tbl == null || tbl.getType() != TableType.OLAP) {
-                throw new DdlException("Table does not exist or is not OLAP table: " + tblName);
+            if (tbl == null || !tbl.isNativeTableOrMaterializedView()) {
+                throw new DdlException("Table does not exist or is not native table: " + tblName);
             }
 
             OlapTable olapTable = (OlapTable) tbl;
@@ -236,14 +239,16 @@ public class MetadataViewer {
             int totalReplicaNum = 0;
             for (long partId : partitionIds) {
                 Partition partition = olapTable.getPartition(partId);
-                for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                    for (Tablet tablet : index.getTablets()) {
-                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                            if (!countMap.containsKey(replica.getBackendId())) {
-                                continue;
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                        for (Tablet tablet : index.getTablets()) {
+                            for (long beId : tablet.getBackendIds()) {
+                                if (!countMap.containsKey(beId)) {
+                                    continue;
+                                }
+                                countMap.put(beId, countMap.get(beId) + 1);
+                                totalReplicaNum++;
                             }
-                            countMap.put(replica.getBackendId(), countMap.get(replica.getBackendId()) + 1);
-                            totalReplicaNum++;
                         }
                     }
                 }

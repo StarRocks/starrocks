@@ -6,13 +6,22 @@ To continuously load messages of a stream into StarRocks, you can store the mess
 
 A Routine Load job supports exactly-once delivery semantics to guarantee the data loaded into StarRocks is neither lost nor duplicated.
 
+Routine Load supports data transformation at data loading and supports data changes made by UPSERT and DELETE operations during data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md) and [Change data through loading](../loading/Load_to_Primary_Key_tables.md).
+
+> **NOTICE**
+>
+> You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
+
 ## Supported data formats
 
-Routine Load now supports consuming CSV and JSON format data from a Kafka cluster.
+Routine Load now supports consuming CSV, JSON, and Avro (supported since v3.0.1) formatted data from a Kafka cluster.
 
 > **NOTE**
 >
-> As for data in CSV format, StarRocks supports UTF-8 encoded strings within 50 bytes as column separators. Commonly used column separators include comma (,), tab and pipe (|).
+> For CSV data, take note of the following points:
+>
+> - You can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
+> - Null values are denoted by using `\N`. For example, a data file consists of three columns, and a record from that data file holds data in the first and third columns but no data in the second column. In this situation, you need to use `\N` in the second column to denote a null value. This means the record must be compiled as `a,\N,b` instead of `a,,b`. `a,,b` denotes that the second column of the record holds an empty string.
 
 ## Basic concepts
 
@@ -21,15 +30,17 @@ Routine Load now supports consuming CSV and JSON format data from a Kafka cluste
 ### Terminology
 
 - **Load job**
-   A Routine Load job is a long-running job. As long as its status is RUNNING, a load job continuously generates one or multiple concurrent load tasks to consume the messages in a topic of a Kafka cluster, and load the data into StarRocks.
+
+   A Routine Load job is a long-running job. As long as its status is RUNNING, a load job continuously generates one or multiple concurrent load tasks which consume the messages in a topic of a Kafka cluster and load the data into StarRocks.
 
 - **Load task**
+
   A load job is split into multiple load tasks by certain rules. A load task is the basic unit of data loading. As an individual event, a load task implements the load mechanism based on [Stream Load](../loading/StreamLoad.md). Multiple load tasks concurrently consume the messages from different partitions of a topic, and load the data into StarRocks.
 
 ### Workflow
 
 1. **Create a Routine Load job.**
-   To load data from Kafka, you need to create a Routine Load job by running the [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md) statement. The FE parses the statement, and creates the job according to the properties you have specified.
+   To load data from Kafka, you need to create a Routine Load job by running the [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md) statement. The FE parses the statement, and creates the job according to the properties you have specified.
 
 2. **The FE splits the job into multiple load tasks.**
 
@@ -45,20 +56,20 @@ Routine Load now supports consuming CSV and JSON format data from a Kafka cluste
 
 3. **Multiple load tasks run concurrently to consume the messages from multiple Kafka topic partitions, and load the data into StarRocks**
 
-   1. **The FE schedules and submits load tasks**: the FE schedules the load tasks in the queue on a timely basis, and assigns them to selected Coordinator BE nodes. The interval between load tasks is defined by the configuration item `max_batch_interval`. The FE distributes the load tasks evenly to all BE nodes. See [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md#example) for more information about `max_batch_interval`.
+   1. **The FE schedules and submits load tasks**: the FE schedules the load tasks in the queue on a timely basis, and assigns them to selected Coordinator BE nodes. The interval between load tasks is defined by the configuration item `max_batch_interval`. The FE distributes the load tasks evenly to all BE nodes. See [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md#example) for more information about `max_batch_interval`.
 
    2. The Coordinator BE starts the load task, consumes messages in partitions, parses and filters the data. A load task lasts until the pre-defined amount of messages are consumed or the pre-defined time limit is reached. The message batch size and time limit are defined in the FE configurations `max_routine_load_batch_size` and `routine_load_task_consume_second`. For detailed information, see [Configuration](../administration/Configuration.md). The Coordinator BE then distributes the messages to the Executor BEs. The Executor BEs write the messages to disks.
 
          > **NOTE**
          >
-         > StarRocks supports access to Kafka with authentication via SSL or SASL, or without authentication.
+         > StarRocks supports access to Kafka via a security authentication mechanism SASL_SSL, SASL or SSL, or without authentication. This topic takes connection to Kafka without authentication as an example. If you need to connect to Kafka via a security authentication mechanism, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
 
 4. **The FE generates new load tasks to load data continuously.**
    After the Executor BEs has written the data to disks, the Coordinator BE reports the result of the load task to the FE. Based on the result, the FE then generates new load tasks to load the data continuously. Or the FE retries the failed tasks to make sure the data loaded into StarRocks is neither lost nor duplicated.
 
 ## Create a Routine Load job
 
-The following two examples describe how to consume CSV-format and JSON-format data in Kafka, and load the data into StarRocks by creating a Routine Load job. For detailed instruction and reference, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
+The following three examples describe how to consume CSV-format, JSON-format and Avro-format data in Kafka, and load the data into StarRocks by creating a Routine Load job. For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
 
 ### Load CSV-format data
 
@@ -90,9 +101,13 @@ CREATE TABLE example_db.example_tbl1 (
     `price`double NULL COMMENT "Price"
 ) 
 ENGINE=OLAP 
-PRIMARY KEY (order_id,pay_dt) 
-DISTRIBUTED BY HASH(`order_id`) BUCKETS 5; 
+DUPLICATE KEY (order_id,pay_dt) 
+DISTRIBUTED BY HASH(`order_id`); 
 ```
+
+> **NOTICE**
+>
+> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 #### Submit a Routine Load job
 
@@ -108,9 +123,9 @@ PROPERTIES
 )
 FROM KAFKA
 (
-    "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
+    "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
     "kafka_topic" = "ordertest1",
-    "kafka_partitions" ="0,1,2,3,4",
+    "kafka_partitions" = "0,1,2,3,4",
     "property.kafka_default_offsets" = "OFFSET_BEGINNING"
 );
 ```
@@ -127,11 +142,11 @@ After submitting the load job, you can execute the [SHOW ROUTINE LOAD](../sql-re
 
 - **Kafka topic partition and offset**
 
-  You can specify the properties `kafka_partitions` and `kafka_offsets` to specify the partitions and offsets to consume the messages. For example, if you want the load job to consume messages from the Kafka partitions `"0,1,2,3,4"` of the topic `ordertest1` all with the initial offsets, you can specify the properties as follows:
+  You can specify the properties `kafka_partitions` and `kafka_offsets` to specify the partitions and offsets to consume the messages. For example, if you want the load job to consume messages from the Kafka partitions `"0,1,2,3,4"` of the topic `ordertest1` all with the initial offsets, you can specify the properties as follows: If you want the load job to consume messages from the Kafka partitions `"0,1,2,3,4"`and you need to specify a separate starting offset for each partition, you can configure as follows:
 
     ```SQL
     "kafka_partitions" ="0,1,2,3,4",
-    "kafka_offsets" = "OFFSET_BEGINNING,OFFSET_BEGINNING,OFFSET_BEGINNING,OFFSET_END,OFFSET_END"
+    "kafka_offsets" = "OFFSET_BEGINNING, OFFSET_END, 1000, 2000, 3000"
     ```
 
   You can also set the default offsets of all partitions with the property `property.kafka_default_offsets`.
@@ -141,7 +156,7 @@ After submitting the load job, you can execute the [SHOW ROUTINE LOAD](../sql-re
     "property.kafka_default_offsets" = "OFFSET_BEGINNING"
     ```
 
-  For detailed information, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
+  For detailed information, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
 
 - **Data mapping and transformation**
 
@@ -173,7 +188,7 @@ After submitting the load job, you can execute the [SHOW ROUTINE LOAD](../sql-re
 
   In the example, the number of BE nodes that are alive is `5`, the number of the pre-specified Kafka topic partitions is `5`, and the value of `max_routine_load_task_concurrent_num` is `5`. To increase the actual load task concurrency, you can increase the `desired_concurrent_number` from the default value `3` to `5`.
 
-  For more about the properties, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md). For detailed instructions on accelerating the loading, see [Routine Load FAQ](../faq/loading/Routine_load_faq).
+  For more about the properties, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md). For detailed instructions on accelerating the loading, see [Routine Load FAQ](../faq/loading/Routine_load_faq).
 
 ### Load JSON-format data
 
@@ -206,8 +221,12 @@ CREATE TABLE `example_tbl2` (
 ) 
 ENGINE=OLAP
 AGGREGATE KEY(`commodity_id`,`customer_name`,`country`,`pay_time`,`pay_dt`) 
-DISTRIBUTED BY HASH(`commodity_id`) BUCKETS 5; 
+DISTRIBUTED BY HASH(`commodity_id`); 
 ```
+
+> **NOTICE**
+>
+> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 #### Submit a Routine Load job
 
@@ -218,9 +237,9 @@ CREATE ROUTINE LOAD example_db.example_tbl2_ordertest2 ON example_tbl2
 COLUMNS(commodity_id, customer_name, country, pay_time, price, pay_dt=from_unixtime(pay_time, '%Y%m%d'))
 PROPERTIES
 (
-    "desired_concurrent_number"="5",
-    "format" ="json",
-    "jsonpaths" ="[\"$.commodity_id\",\"$.customer_name\",\"$.country\",\"$.pay_time\",\"$.price\"]"
+    "desired_concurrent_number" = "5",
+    "format" = "json",
+    "jsonpaths" = "[\"$.commodity_id\",\"$.customer_name\",\"$.country\",\"$.pay_time\",\"$.price\"]"
  )
 FROM KAFKA
 (
@@ -235,7 +254,7 @@ After submitting the load job, you can execute the [SHOW ROUTINE LOAD](../sql-re
 
 - **Data format**
 
-  You need to specify `"format"="json"` in the clause `PROPERTIES` to define that the data format is JSON.
+  You need to specify `"format" = "json"` in the clause `PROPERTIES` to define that the data format is JSON.
 
 - **Data mapping and transformation**
 
@@ -263,13 +282,141 @@ After submitting the load job, you can execute the [SHOW ROUTINE LOAD](../sql-re
     >
     > You do not need to specify the `COLUMNS` parameter if the names and number of the keys in the JSON object completely match those of fields in the StarRocks table.
 
+### Load Avro-format data
+
+Since v3.0.1, StarRocks supports loading Avro data by using Routine Load.
+
+#### Prepare a dataset
+
+##### Avro schema
+
+1. Create the following  Avro schema file `avro_schema.avsc`:
+
+      ```JSON
+      {
+          "type": "record",
+          "name": "sensor_log",
+          "fields" : [
+              {"name": "id", "type": "long"},
+              {"name": "name", "type": "string"},
+              {"name": "checked", "type" : "boolean"},
+              {"name": "data", "type": "double"},
+              {"name": "sensor_type", "type": {"type": "enum", "name": "sensor_type_enum", "symbols" : ["TEMPERATURE", "HUMIDITY", "AIR-PRESSURE"]}}  
+          ]
+      }
+      ```
+
+2. Register the Avro schema in the [Schema Registry](https://docs.confluent.io/cloud/current/get-started/schema-registry.html#create-a-schema).
+
+##### Avro data
+
+Prepare the Avro data and send it to the Kafka topic `topic_0`.
+
+#### Create a table
+
+According to the fields of Avro data, create a table `sensor_log` in the target database `example_db` in the StarRocks cluster. The column names of the table must match the field names in the Avro data. For the data type mapping between the table columns and the Avro data fields, see [Data types mapping](#Data types mapping).
+
+```SQL
+CREATE TABLE example_db.sensor_log ( 
+    `id` bigint NOT NULL COMMENT "sensor id",
+    `name` varchar(26) NOT NULL COMMENT "sensor name", 
+    `checked` boolean NOT NULL COMMENT "checked", 
+    `data` double NULL COMMENT "sensor data", 
+    `sensor_type` varchar(26) NOT NULL COMMENT "sensor type"
+) 
+ENGINE=OLAP 
+DUPLICATE KEY (id) 
+DISTRIBUTED BY HASH(`id`); 
+```
+
+> **NOTICE**
+>
+> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+
+#### Submit a Routine Load job
+
+Execute the following statement to submit a Routine Load job named `sensor_log_load_job` to consume the Avro messages in the Kafka topic `topic_0` and load the data into the table `sensor_log` in the database `sensor`. The load job consumes the messages from the initial offset in the specified partitions of the topic.
+
+```SQL
+CREATE ROUTINE LOAD example_db.sensor_log_load_job ON sensor_log  
+PROPERTIES  
+(  
+    "format" = "avro"  
+)  
+FROM KAFKA  
+(  
+    "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>,...",
+    "confluent.schema.registry.url" = "http://172.xx.xxx.xxx:8081",  
+    "kafka_topic" = "topic_0",  
+    "kafka_partitions" = "0,1,2,3,4,5",  
+    "property.kafka_default_offsets" = "OFFSET_BEGINNING"  
+);
+```
+
+- Data Format
+
+  You need to specify `"format = "avro"` in the clause `PROPERTIES` to define that the data format is Avro.
+
+- Schema Registry
+
+  You need to configure `confluent.schema.registry.url` to specify the URL of the Schema Registry where the Avro schema is registered. StarRocks retrieves the Avro schema by using this URL. The format is as follows:
+
+  ```Plaintext
+  confluent.schema.registry.url = http[s]://[<schema-registry-api-key>:<schema-registry-api-secret>@]<hostname|ip address>[:<port>]
+  ```
+
+- Data mapping and transformation
+
+  To specify the mapping and transformation relationship between the Avro-format data and the StarRocks table, you need to specify the paramter `COLUMNS` and property `jsonpaths`. The order of fields specified in the `COLUMNS` parameter must match that of the fields in the property `jsonpaths`, and the names of fields must match these of the StarRocks table. The property `jsonpaths` is used to extract the required fields from the Avro data. These fields are then named by the property `COLUMNS`.
+
+  For more information about data transformation, see [Transform data at loading](https://docs.starrocks.io/en-us/latest/loading/Etl_in_loading).
+
+  > NOTE
+  >
+  > You do not need to specify the `COLUMNS` parameter if the names and number of the fields in the Avro record completely match those of columns in the StarRocks table.
+
+After submitting the load job, you can execute the [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20ROUTINE%20LOAD.md) statement to check the status of the load job.
+
+#### Data types mapping
+
+The data type mapping between the Avro data fields you want to load and the StarRocks table columns is as follows:
+
+##### Primitive types
+
+| Avro    | StarRocks |
+| ------- | --------- |
+| nul     | NULL      |
+| boolean | BOOLEAN   |
+| int     | INT       |
+| long    | BIGINT    |
+| float   | FLOAT     |
+| double  | DOUBLE    |
+| bytes   | STRING    |
+| string  | STRING    |
+
+##### Complex types
+
+| Avro           | StarRocks                                                    |
+| -------------- | ------------------------------------------------------------ |
+| record         | Load the entire RECORD or its subfields into StarRocks as JSON. |
+| enums          | STRING                                                       |
+| arrays         | ARRAY                                                        |
+| maps           | JSON                                                         |
+| union(T, null) | NULLABLE(T)                                                  |
+| fixed          | STRING                                                       |
+
+#### Limits
+
+- Currently, StarRocks does not support schema evolution.
+- Each Kafka message must only contain a single Avro data record.
+
 ## Check a load job and task
 
 ### Check a load job
 
 Execute the [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20ROUTINE%20LOAD.md) statement to check the status of the load job `example_tbl2_ordertest2`. StarRocks returns the execution state `State`, the statistical information (including the total rows consumed and the total rows loaded) `Statistics`,  and the progress of the load job `progress`.
 
-If the state of the load job is automatically changed to **PAUSED**, it is possibly because the number of error rows has exceeded the threshold. For detailed instructions on setting this threshold, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md). You can check the files `ReasonOfStateChanged` and `ErrorLogUrls` to identify and troubleshoot the problem. Having fixed the problem, you can then execute the [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME%20ROUTINE%20LOAD.md) statement to resume the **PAUSED** load job.
+If the state of the load job is automatically changed to **PAUSED**, it is possibly because the number of error rows has exceeded the threshold. For detailed instructions on setting this threshold, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md). You can check the files `ReasonOfStateChanged` and `ErrorLogUrls` to identify and troubleshoot the problem. Having fixed the problem, you can then execute the [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME%20ROUTINE%20LOAD.md) statement to resume the **PAUSED** load job.
 
 If the state of the load job is **CANCELLED**, it is possibly because the load job encounters an exception (such as the table has been dropped). You can check the files `ReasonOfStateChanged` and `ErrorLogUrls` to identify and troubleshoot the problem. However, you cannot resume a **CANCELLED** load job.
 

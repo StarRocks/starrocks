@@ -18,6 +18,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -44,6 +45,11 @@ public class ShowDataStmt extends ShowStmt {
     private final List<List<String>> totalRows;
 
     public ShowDataStmt(String dbName, String tableName) {
+        this(dbName, tableName, NodePosition.ZERO);
+    }
+
+    public ShowDataStmt(String dbName, String tableName, NodePosition pos) {
+        super(pos);
         this.dbName = dbName;
         this.tableName = tableName;
 

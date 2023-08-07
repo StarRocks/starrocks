@@ -46,6 +46,5 @@ rollup: lineitem
 tabletRatio=20/20
 cardinality=8142251
 avgRowSize=36.0
-numNodes=0
 [end]
 

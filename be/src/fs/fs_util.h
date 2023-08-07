@@ -144,4 +144,31 @@ inline Status canonicalize(const std::string& path, std::string* real_path) {
     return fs->canonicalize(path, real_path);
 }
 
+inline bool starts_with(std::string_view s, std::string_view prefix) {
+    return (s.size() >= prefix.size()) && (memcmp(s.data(), prefix.data(), prefix.size()) == 0);
+}
+
+inline bool is_s3_uri(std::string_view uri) {
+    return starts_with(uri, "oss://") || starts_with(uri, "s3n://") || starts_with(uri, "s3a://") ||
+           starts_with(uri, "s3://") || starts_with(uri, "cos://") || starts_with(uri, "cosn://") ||
+           starts_with(uri, "obs://") || starts_with(uri, "ks3://") || starts_with(uri, "tos://");
+}
+
+inline bool is_azure_uri(std::string_view uri) {
+    return starts_with(uri, "wasb://") || starts_with(uri, "wasbs://") || starts_with(uri, "adl://") ||
+           starts_with(uri, "abfs://") || starts_with(uri, "abfss://");
+}
+
+inline bool is_gcs_uri(std::string_view uri) {
+    return starts_with(uri, "gs://");
+}
+
+inline bool is_hdfs_uri(std::string_view uri) {
+    return starts_with(uri, "hdfs://");
+}
+
+inline bool is_posix_uri(std::string_view uri) {
+    return (memchr(uri.data(), ':', uri.size()) == nullptr) || starts_with(uri, "posix://");
+}
+
 } // namespace starrocks::fs

@@ -17,6 +17,7 @@
 
 package com.starrocks.persist;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 
 import java.io.DataInput;
@@ -24,8 +25,11 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 public class RecoverInfo implements Writable {
+    @SerializedName("db")
     private long dbId;
+    @SerializedName("tb")
     private long tableId;
+    @SerializedName("pi")
     private long partitionId;
 
     public RecoverInfo() {

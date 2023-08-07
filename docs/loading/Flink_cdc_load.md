@@ -4,6 +4,10 @@ StarRocks supports real-time data synchronization from MySQL within seconds, del
 
 This tutorial helps you learn how you can bring real-time analytics to your business and users. It demonstrates how to synchronize data from MySQL to StarRocks in real time by using the following tools: StarRocks Migration Tools (SMT), Flink, Flink CDC Connector, and flink-starrocks-connector.
 
+> **NOTICE**
+>
+> You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
+
 ## How it works
 
 The following figure illustrates the entire synchronization process.
@@ -64,7 +68,7 @@ To synchronize data from MySQL, you need to install the following tools: SMT, Fl
 
    ```Bash
       # Download Flink.
-      wget https://dlcdn.apache.org/flink/flink-1.14.5/flink-1.14.5-bin-scala_2.11.tgz
+      wget https://archive.apache.org/dist/flink/flink-1.14.5/flink-1.14.5-bin-scala_2.11.tgz
       # Decompress Flink.  
       tar -xzf flink-1.14.5-bin-scala_2.11.tgz
       # Go to the Flink directory.
@@ -113,10 +117,10 @@ To synchronize data from MySQL, you need to install the following tools: SMT, Fl
 5. Download and decompress the [SMT package](https://www.starrocks.io/download/community) and place it in the `flink-1.14.5` directory. StarRocks provides SMT packages for Linux x86 and macos ARM64. You can choose one based on your operating system and CPU.
 
     ```Bash
-    ## for Linux x86
-    wget https://cdn-thirdparty.starrocks.com/smt.tar.gz
-    ## for macOS ARM64
-    wget https://cdn-thirdparty.starrocks.com/smt_darwin_arm64.tar.gz
+    # for Linux x86
+    wget https://releases.starrocks.io/resources/smt.tar.gz
+    # for macOS ARM64
+    wget https://releases.starrocks.io/resources/smt_darwin_arm64.tar.gz
     ```
 
 ### Enable MySQL binary log
@@ -237,11 +241,11 @@ To synchronize data from MySQL in real time, the system needs to read data from 
     flink-create.all.sql  starrocks-create.1.sql
     ```
 
-3. Run the following command to connect to StarRocks and execute the `starrocks-create.all.sql` file to create a database and table in StarRocks. We recommend that you use the default table creation statement in the SQL file to create a table of the [Primary Key model](../table_design/Data_model.md#primary-key-model).
+3. Run the following command to connect to StarRocks and execute the `starrocks-create.all.sql` file to create a database and table in StarRocks. We recommend that you use the default table creation statement in the SQL file to create a table of the [Primary Key table](../table_design/table_types/primary_key_table.md).
 
     > **Note**
     >
-    > You can also modify the table creation statement based on your business needs and create a table that does not use the Primary Key model. However, the DELETE operation in the source MySQL database cannot be synchronized to the non-primary key table. Exercise caution when you create such a table.
+    > You can also modify the table creation statement based on your business needs and create a table that does not use the Primary Key table. However, the DELETE operation in the source MySQL database cannot be synchronized to the non-primary key table. Exercise caution when you create such a table.
 
     ```Bash
     mysql -h <fe_host> -P <fe_query_port> -u user2 -pxxxxxx < starrocks-create.all.sql
@@ -258,11 +262,15 @@ To synchronize data from MySQL in real time, the system needs to read data from 
     `sales_cnt` BIGINT NOT NULL COMMENT ""
     ) ENGINE=olap
     PRIMARY KEY(`product_id`)
-    DISTRIBUTED BY HASH(`product_id`) BUCKETS 1
+    DISTRIBUTED BY HASH(`product_id`)
     PROPERTIES (
     "replication_num" = "3"
     );
     ```
+
+    > **NOTICE**
+    >
+    > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 ## Synchronize data
 

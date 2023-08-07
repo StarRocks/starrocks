@@ -37,6 +37,7 @@
 #include <pthread.h>
 #include <rapidjson/document.h>
 
+#include <atomic>
 #include <condition_variable>
 #include <ctime>
 #include <list>
@@ -77,6 +78,45 @@ class CompactionManager;
 class SegmentFlushExecutor;
 class SegmentReplicateExecutor;
 
+struct DeltaColumnGroupKey {
+    int64_t tablet_id;
+    RowsetId rowsetid;
+    uint32_t segment_id;
+
+    DeltaColumnGroupKey() = default;
+    DeltaColumnGroupKey(int64_t tid, RowsetId rid, uint32_t sid) : tablet_id(tid), rowsetid(rid), segment_id(sid) {}
+    ~DeltaColumnGroupKey() = default;
+
+    bool operator==(const DeltaColumnGroupKey& rhs) const {
+        return tablet_id == rhs.tablet_id && segment_id == rhs.segment_id && rowsetid == rhs.rowsetid;
+    }
+
+    bool operator<(const DeltaColumnGroupKey& rhs) const {
+        if (tablet_id < rhs.tablet_id) {
+            return true;
+        } else if (tablet_id > rhs.tablet_id) {
+            return false;
+        } else if (rowsetid < rhs.rowsetid) {
+            return true;
+        } else if (rowsetid != rhs.rowsetid) {
+            return false;
+        } else {
+            return segment_id < rhs.segment_id;
+        }
+    }
+};
+
+struct AutoIncrementMeta {
+    int64_t min;
+    int64_t max;
+    std::mutex mutex;
+
+    AutoIncrementMeta() {
+        min = 0;
+        max = 0;
+    }
+};
+
 // StorageEngine singleton to manage all Table pointers.
 // Providing add/drop/get operations.
 // StorageEngine instance doesn't own the Table resources, just hold the pointer,
@@ -85,6 +125,9 @@ class StorageEngine {
 public:
     StorageEngine(const EngineOptions& options);
     virtual ~StorageEngine();
+
+    StorageEngine(const StorageEngine&) = delete;
+    const StorageEngine& operator=(const StorageEngine&) = delete;
 
     static Status open(const EngineOptions& options, StorageEngine** engine_ptr);
 
@@ -104,11 +147,16 @@ public:
 
     Status get_all_data_dir_info(std::vector<DataDirInfo>* data_dir_infos, bool need_update);
 
-    // get root path for creating tablet. The returned vector of root path should be random,
-    // for avoiding that all the tablet would be deployed one disk.
+    std::vector<string> get_store_paths();
+    // Get root path vector for creating tablet. The returned vector is sorted by the disk usage in asc order,
+    // then the front portion of the vector excluding paths which have high disk usage is shuffled to avoid
+    // the newly created tablet is distributed on only on specific path.
     std::vector<DataDir*> get_stores_for_create_tablet(TStorageMedium::type storage_medium);
     DataDir* get_store(const std::string& path);
     DataDir* get_store(int64_t path_hash);
+
+    bool is_lake_persistent_index_dir_inited();
+    DataDir* get_persistent_index_store();
 
     uint32_t available_storage_medium_type_count() { return _available_storage_medium_type_count; }
 
@@ -189,8 +237,6 @@ public:
 
     void release_rowset_id(const RowsetId& rowset_id) { return _rowset_id_generator->release_id(rowset_id); }
 
-    void set_heartbeat_flags(HeartbeatFlags* heartbeat_flags) { _heartbeat_flags = heartbeat_flags; }
-
     // start all backgroud threads. This should be call after env is ready.
     virtual Status start_bg_threads();
 
@@ -205,9 +251,30 @@ public:
     std::vector<std::pair<int64_t, std::vector<std::pair<uint32_t, std::string>>>>
     get_executed_repair_compaction_tasks();
 
+    void submit_manual_compaction_task(int64_t tablet_id, int64_t rowset_size_threshold);
+    std::string get_manual_compaction_status();
+
     void do_manual_compact(bool force_compact);
 
     void increase_update_compaction_thread(const int num_threads_per_disk);
+
+    Status get_next_increment_id_interval(int64_t tableid, size_t num_row, std::vector<int64_t>& ids);
+
+    void remove_increment_map_by_table_id(int64_t table_id);
+
+    bool get_need_write_cluster_id() { return _need_write_cluster_id; }
+
+    size_t delta_column_group_list_memory_usage(const DeltaColumnGroupList& dcgs);
+
+    void search_delta_column_groups_by_version(const DeltaColumnGroupList& all_dcgs, int64_t version,
+                                               DeltaColumnGroupList* dcgs);
+
+    Status get_delta_column_group(KVStore* meta, int64_t tablet_id, RowsetId rowsetid, uint32_t segment_id,
+                                  int64_t version, DeltaColumnGroupList* dcgs);
+
+    void clear_cached_delta_column_group(const std::vector<DeltaColumnGroupKey>& dcg_keys);
+
+    void clear_rowset_delta_column_group_cache(const Rowset& rowset);
 
 protected:
     static StorageEngine* _s_instance;
@@ -219,7 +286,7 @@ protected:
 private:
     // Instance should be inited from `static open()`
     // MUST NOT be called in other circumstances.
-    Status _open();
+    Status _open(const EngineOptions& options);
 
     Status _init_store_map();
 
@@ -238,9 +305,14 @@ private:
 
     Status _do_sweep(const std::string& scan_root, const time_t& local_tm_now, const int32_t expire);
 
+    Status _get_remote_next_increment_id_interval(const TAllocateAutoIncrementIdParam& request,
+                                                  TAllocateAutoIncrementIdResult* result);
+
     // All these xxx_callback() functions are for Background threads
     // update cache expire thread
     void* _update_cache_expire_thread_callback(void* arg);
+    // update cache evict thread
+    void* _update_cache_evict_thread_callback(void* arg);
 
     // unused rowset monitor thread
     void* _unused_rowset_monitor_thread_callback(void* arg);
@@ -253,6 +325,10 @@ private:
     void* _update_compaction_thread_callback(void* arg, DataDir* data_dir);
     // repair compaction function
     void* _repair_compaction_thread_callback(void* arg);
+    // manual compaction function
+    void* _manual_compaction_thread_callback(void* arg);
+
+    bool _check_and_run_manual_compaction_task();
 
     // garbage sweep thread process function. clear snapshot and trash folder
     void* _garbage_sweeper_thread_callback(void* arg);
@@ -282,33 +358,13 @@ private:
     size_t _compaction_check_one_round();
 
 private:
-    struct CompactionCandidate {
-        CompactionCandidate(uint32_t nicumulative_compaction_, int64_t tablet_id_, uint32_t index_)
-                : nice(nicumulative_compaction_), tablet_id(tablet_id_), disk_index(index_) {}
-        uint32_t nice;
-        int64_t tablet_id;
-        uint32_t disk_index = -1;
-    };
-
-    // In descending order
-    struct CompactionCandidateComparator {
-        bool operator()(const CompactionCandidate& a, const CompactionCandidate& b) { return a.nice > b.nice; }
-    };
-
-    struct CompactionDiskStat {
-        CompactionDiskStat(std::string path, uint32_t index, bool used)
-                : storage_path(std::move(path)), disk_index(index), is_used(used) {}
-        const std::string storage_path;
-        const uint32_t disk_index;
-        uint32_t task_running{0};
-        uint32_t task_remaining{0};
-        bool is_used;
-    };
-
     EngineOptions _options;
     std::mutex _store_lock;
     std::map<std::string, DataDir*> _store_map;
+    DataDir* _persistent_index_data_dir = nullptr;
     uint32_t _available_storage_medium_type_count;
+
+    std::atomic<bool> _lake_persistent_index_dir_inited{false};
 
     bool _is_all_cluster_id_exist;
 
@@ -319,6 +375,7 @@ private:
     std::atomic<bool> _bg_worker_stopped{false};
     // thread to expire update cache;
     std::thread _update_cache_expire_thread;
+    std::thread _update_cache_evict_thread;
     std::thread _unused_rowset_monitor_thread;
     // thread to monitor snapshot expiry
     std::thread _garbage_sweeper_thread;
@@ -335,6 +392,7 @@ private:
     std::mutex _repair_compaction_tasks_lock;
     std::vector<std::pair<int64_t, std::vector<uint32_t>>> _repair_compaction_tasks;
     std::vector<std::pair<int64_t, std::vector<std::pair<uint32_t, std::string>>>> _executed_repair_compaction_tasks;
+    std::vector<std::thread> _manual_compaction_threads;
     // threads to clean all file descriptor not actively in use
     std::thread _fd_cache_clean_thread;
     std::thread _adjust_cache_thread;
@@ -357,8 +415,6 @@ private:
     bool _need_report_tablet = false;
     bool _need_report_disk_stat = false;
 
-    std::mutex _engine_task_mutex;
-
     std::unique_ptr<TabletManager> _tablet_manager;
     std::unique_ptr<TxnManager> _txn_manager;
 
@@ -376,22 +432,17 @@ private:
 
     std::unique_ptr<CompactionManager> _compaction_manager;
 
-    HeartbeatFlags* _heartbeat_flags = nullptr;
+    std::unordered_map<int64_t, std::shared_ptr<AutoIncrementMeta>> _auto_increment_meta_map;
 
-    StorageEngine(const StorageEngine&) = delete;
-    const StorageEngine& operator=(const StorageEngine&) = delete;
-};
+    std::mutex _auto_increment_mutex;
 
-// DummyStorageEngine is used for ComputeNode, it only stores cluster id.
-class DummyStorageEngine : public StorageEngine {
-    std::string _conf_path;
-    std::unique_ptr<ClusterIdMgr> cluster_id_mgr;
+    bool _need_write_cluster_id = true;
 
-public:
-    DummyStorageEngine(const EngineOptions& options);
-    static Status open(const EngineOptions& options, StorageEngine** engine_ptr);
-    Status set_cluster_id(int32_t cluster_id) override;
-    Status start_bg_threads() override { return Status::OK(); };
+    // Delta Column Group cache, dcg is short for `Delta Column Group`
+    // This cache just used for non-Primary Key table
+    std::mutex _delta_column_group_cache_lock;
+    std::map<DeltaColumnGroupKey, DeltaColumnGroupList> _delta_column_group_cache;
+    std::unique_ptr<MemTracker> _delta_column_group_cache_mem_tracker;
 };
 
 /// Load min_garbage_sweep_interval and max_garbage_sweep_interval from config,

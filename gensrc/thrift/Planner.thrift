@@ -43,15 +43,18 @@ include "PlanNodes.thrift"
 include "Partitions.thrift"
 
 struct TCacheParam {
-1: optional i32 id;
-2: optional binary digest;
-3: optional map<i32,i32> slot_remapping;
-4: optional map<i64,string> region_map;
-5: optional bool force_populate;
-6: optional i64 entry_max_bytes;
-7: optional i64 entry_max_rows;
-8: optional bool can_use_multiversion;
-10:optional Types.TKeysType keys_type;
+   1: optional i32 id;
+   2: optional binary digest;
+   3: optional map<i32,i32> slot_remapping;
+   4: optional map<i64,string> region_map;
+   5: optional bool force_populate;
+   6: optional i64 entry_max_bytes;
+   7: optional i64 entry_max_rows;
+   8: optional bool can_use_multiversion;
+   10:optional Types.TKeysType keys_type;
+   // cached_plan_node_ids is the sets of PlanNodeIds of the PlanNodes from OlapScanNode to cache point
+   // AggregationNode along left-deepmost path of the PlanFragment.
+   11: optional set<i32> cached_plan_node_ids;
 }
 
 // TPlanFragment encapsulates info needed to execute a particular

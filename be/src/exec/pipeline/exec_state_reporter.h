@@ -29,13 +29,22 @@
 namespace starrocks::pipeline {
 class ExecStateReporter {
 public:
+    ExecStateReporter();
+
     static TReportExecStatusParams create_report_exec_status_params(QueryContext* query_ctx,
-                                                                    FragmentContext* fragment_ctx, const Status& status,
+                                                                    FragmentContext* fragment_ctx,
+                                                                    RuntimeProfile* profile, const Status& status,
                                                                     bool done);
     static Status report_exec_status(const TReportExecStatusParams& params, ExecEnv* exec_env,
                                      const TNetworkAddress& fe_addr);
-    ExecStateReporter();
+
     void submit(std::function<void()>&& report_task);
+
+    // STREAM MV
+    static TMVMaintenanceTasks create_report_epoch_params(const QueryContext* query_ctx,
+                                                          const std::vector<FragmentContext*>& fragment_ctxs);
+
+    static Status report_epoch(const TMVMaintenanceTasks& params, ExecEnv* exec_env, const TNetworkAddress& fe_addr);
 
 private:
     std::unique_ptr<ThreadPool> _thread_pool;

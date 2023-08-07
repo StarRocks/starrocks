@@ -25,7 +25,8 @@ public:
      * @paramType columns: [TYPE_VARCHAR]
      * @return TYPE_OBJECT
      */
-    DEFINE_VECTORIZED_FN(to_bitmap);
+    template <LogicalType LT>
+    static StatusOr<ColumnPtr> to_bitmap(FunctionContext* context, const starrocks::Columns& columns);
 
     /**
      * @param: 
@@ -160,6 +161,20 @@ public:
      * @return TYPE_OBJECT
      */
     DEFINE_VECTORIZED_FN(bitmap_to_base64);
+
+    /**
+     * @param:
+     * @paramType columns: [TYPE_OBJECT, TYPE_BIGINT, TYPE_BIGINT]
+     * @return TYPE_OBJECT
+     */
+    DEFINE_VECTORIZED_FN(bitmap_subset_in_range);
+
+    /**
+     * @param:
+     * @paramType columns: [TYPE_OBJECT, TYPE_BIGINT, TYPE_BIGINT]
+     * @return TYPE_OBJECT
+     */
+    DEFINE_VECTORIZED_FN(bitmap_subset_limit);
 };
 
 } // namespace starrocks

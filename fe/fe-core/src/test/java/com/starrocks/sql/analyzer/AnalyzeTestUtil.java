@@ -44,8 +44,7 @@ public class AnalyzeTestUtil {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `t1` (\n" +
@@ -57,8 +56,7 @@ public class AnalyzeTestUtil {
                 "DISTRIBUTED BY HASH(`v4`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `t2` (\n" +
@@ -70,8 +68,7 @@ public class AnalyzeTestUtil {
                 "DISTRIBUTED BY HASH(`v7`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `tall` (\n" +
@@ -91,8 +88,7 @@ public class AnalyzeTestUtil {
                 "DISTRIBUTED BY HASH(`ta`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `test_object` (\n" +
@@ -120,14 +116,14 @@ public class AnalyzeTestUtil {
                 "  `v1` bigint NULL COMMENT \"\",\n" +
                 "  `v2` bigint NULL COMMENT \"\",\n" +
                 "  `v3` ARRAY<bigint(20)>  NULL,\n" +
-                "  `v4` ARRAY<largeint>  NULL\n" +
+                "  `v4` ARRAY<largeint>  NULL,\n" +
+                "  `v5` ARRAY<json>  NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`v1`, `v2`)\n" +
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `tnotnull` (\n" +
@@ -139,8 +135,7 @@ public class AnalyzeTestUtil {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `tjson` (\n" +
@@ -151,8 +146,7 @@ public class AnalyzeTestUtil {
                 "DISTRIBUTED BY HASH(`v_int`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `tprimary` (\n" +
@@ -165,8 +159,7 @@ public class AnalyzeTestUtil {
                 "DISTRIBUTED BY HASH(`pk`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `tprimary2` (\n" +
@@ -179,8 +172,25 @@ public class AnalyzeTestUtil {
                 "DISTRIBUTED BY HASH(`pk`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `ttypes` (\n" +
+                "  `v1` bigint NULL COMMENT \"\",\n" +
+                "  `vm` map<bigint(20), char(20)>  NULL,\n" +
+                "  `vm1` map<bigint(20), char(20)>  NULL,\n" +
+                "  `va` array<bigint(20)>  NULL,\n" +
+                "  `va1` array<bigint(20)>  NULL,\n" +
+                "  `vs` struct<a bigint(20), b char(20)>  NULL,\n" +
+                "  `vs1` struct<a bigint(20), b char(20)>  NULL,\n" +
+                "  `vj` json  NULL,\n" +
+                "  `vj1` json  NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable(
@@ -213,8 +223,7 @@ public class AnalyzeTestUtil {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
         starRocksAssert.withTable("CREATE TABLE db1.`t1` (\n" +
                 "  `v4` bigint NULL COMMENT \"\",\n" +
@@ -225,8 +234,7 @@ public class AnalyzeTestUtil {
                 "DISTRIBUTED BY HASH(`v4`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
         starRocksAssert.withTable("CREATE TABLE db2.`t0` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
@@ -237,8 +245,7 @@ public class AnalyzeTestUtil {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         // varbinary table
@@ -251,8 +258,19 @@ public class AnalyzeTestUtil {
                 "DISTRIBUTED BY HASH(`v_int`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `tmc` (\n" +
+                "  `id`  bigint NULL COMMENT \"\",\n" +
+                "  `name`  bigint NULL COMMENT \"\",\n" +
+                "  `mc` bigint NULL AS (id + name) COMMENT \"\" \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
     }
 
@@ -268,10 +286,13 @@ public class AnalyzeTestUtil {
         return starRocksAssert;
     }
 
+    public static StatementBase parseSql(String originStmt) {
+        return com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable()).get(0);
+    }
+
     public static StatementBase analyzeSuccess(String originStmt) {
         try {
-            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt,
-                    connectContext.getSessionVariable()).get(0);
+            StatementBase statementBase = parseSql(originStmt);
             Analyzer.analyze(statementBase, connectContext);
 
             if (statementBase instanceof QueryStatement) {
@@ -313,12 +334,10 @@ public class AnalyzeTestUtil {
             Analyzer.analyze(statementBase, connectContext);
             Assert.fail("Miss semantic error exception");
         } catch (ParsingException | SemanticException | UnsupportedException e) {
-            e.printStackTrace();
             if (!exceptMessage.equals("")) {
-                Assert.assertTrue(e.getMessage().contains(exceptMessage));
+                Assert.assertTrue(e.getMessage(), e.getMessage().contains(exceptMessage));
             }
         } catch (Exception e) {
-            e.printStackTrace();
             Assert.fail("analyze exception");
         }
     }

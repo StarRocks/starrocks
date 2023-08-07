@@ -12,27 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.UserIdentity;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.mysql.MysqlPassword;
-import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.parser.NodePosition;
 
-public class SetPassVar extends SetVar {
+public class SetPassVar extends SetListItem {
     private UserIdentity userIdent;
     private final String passwdParam;
     private byte[] passwdBytes;
 
     // The password in parameter is a hashed password.
     public SetPassVar(UserIdentity userIdent, String passwd) {
+        this(userIdent, passwd, NodePosition.ZERO);
+    }
+
+    public SetPassVar(UserIdentity userIdent, String passwd, NodePosition pos) {
+        super(pos);
         this.userIdent = userIdent;
         this.passwdParam = passwd;
     }
@@ -41,53 +36,19 @@ public class SetPassVar extends SetVar {
         return userIdent;
     }
 
+    public void setUserIdent(UserIdentity userIdent) {
+        this.userIdent = userIdent;
+    }
+
+    public String getPasswdParam() {
+        return passwdParam;
+    }
+
     public byte[] getPassword() {
         return passwdBytes;
     }
 
-    @Override
-    public void analyze() {
-        boolean isSelf = false;
-        ConnectContext ctx = ConnectContext.get();
-        if (userIdent == null) {
-            // set userIdent as what current_user() returns
-            userIdent = ctx.getCurrentUserIdentity();
-            isSelf = true;
-        } else {
-            try {
-                userIdent.analyze();
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage());
-            }
-
-            if (userIdent.equals(ctx.getCurrentUserIdentity())) {
-                isSelf = true;
-            }
-        }
-
-        try {
-            passwdBytes = MysqlPassword.checkPassword(passwdParam);
-        } catch (AnalysisException e) {
-            throw new SemanticException(e.getMessage());
-        }
-
-        // check privs.
-        // 1. this is user itself
-        if (isSelf) {
-            return;
-        }
-
-        // 2. No user can set password for root expect for root user itself
-        if (userIdent.getQualifiedUser().equals(Auth.ROOT_USER)
-                && !ctx.getQualifiedUser().equals(Auth.ROOT_USER)) {
-            throw new SemanticException("Can not set password for root user, except root itself");
-        }
-
-        // 3. user has grant privs
-        if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-            }
-        }
+    public void setPasswdBytes(byte[] passwdBytes) {
+        this.passwdBytes = passwdBytes;
     }
 }

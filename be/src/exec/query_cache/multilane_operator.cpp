@@ -275,15 +275,24 @@ StatusOr<ChunkPtr> MultilaneOperator::pull_chunk(RuntimeState* state) {
 Status MultilaneOperator::reset_lane(RuntimeState* state, LaneOwnerType lane_owner,
                                      const std::vector<ChunkPtr>& chunks) {
     auto lane_id = _lane_arbiter->must_acquire_lane(lane_owner);
-    _owner_to_lanes.erase(lane_owner);
     _owner_to_lanes[lane_owner] = lane_id;
     auto& lane = _lanes[lane_id];
-    DCHECK(!lane.processor->is_finished() || (lane.last_chunk_received && lane.eof_sent));
     lane.lane_id = lane_id;
+    _owner_to_lanes.erase(lane.lane_owner);
     lane.lane_owner = lane_owner;
     lane.last_chunk_received = false;
     lane.eof_sent = false;
     return lane.processor->reset_state(state, chunks);
+}
+
+pipeline::OperatorPtr MultilaneOperator::get_internal_op(size_t i) {
+    DCHECK(i >= 0 && i < _lanes.size());
+    return _lanes[i].processor;
+}
+void MultilaneOperator::set_precondition_ready(RuntimeState* state) {
+    for (auto& lane : _lanes) {
+        lane.processor->set_precondition_ready(state);
+    }
 }
 
 MultilaneOperatorFactory::MultilaneOperatorFactory(int32_t id, const OperatorFactoryPtr& factory, size_t num_lanes)
@@ -306,7 +315,8 @@ pipeline::OperatorPtr MultilaneOperatorFactory::create(int32_t degree_of_paralle
     pipeline::Operators processors;
     processors.reserve(_num_lanes);
     for (auto i = 0; i < _num_lanes; ++i) {
-        processors.push_back(_factory->create(degree_of_parallelism * _num_lanes, driver_sequence * _num_lanes + i));
+        processors.push_back(
+                _factory->create(degree_of_parallelism * _num_lanes, i * degree_of_parallelism + driver_sequence));
     }
     auto op = std::make_shared<MultilaneOperator>(this, driver_sequence, _num_lanes, std::move(processors),
                                                   _can_passthrough);

@@ -56,9 +56,11 @@ service PBackendService {
     rpc collect_query_statistics(starrocks.PCollectQueryStatisticsRequest) returns (starrocks.PCollectQueryStatisticsResult);
     rpc get_info(starrocks.PProxyRequest) returns (starrocks.PProxyResult);
     rpc get_pulsar_info(starrocks.PPulsarProxyRequest) returns (starrocks.PPulsarProxyResult);
+    rpc get_file_schema(starrocks.PGetFileSchemaRequest) returns (starrocks.PGetFileSchemaResult);
 
     // Transmit vectorized data between backends
     rpc transmit_chunk(starrocks.PTransmitChunkParams) returns (starrocks.PTransmitChunkResult);
+    rpc transmit_chunk_via_http(starrocks.PHttpRequest) returns (starrocks.PTransmitChunkResult);
     rpc tablet_writer_add_chunk(starrocks.PTabletWriterAddChunkRequest) returns (starrocks.PTabletWriterAddBatchResult);
     rpc tablet_writer_add_chunks(starrocks.PTabletWriterAddChunksRequest) returns (starrocks.PTabletWriterAddBatchResult);
     rpc tablet_writer_add_segment(starrocks.PTabletWriterAddSegmentRequest) returns (starrocks.PTabletWriterAddSegmentResult);
@@ -66,4 +68,15 @@ service PBackendService {
 
     // NOTE(murphy) check if it's really necessary
     rpc submit_mv_maintenance_task(starrocks.PMVMaintenanceTaskRequest) returns (starrocks.PMVMaintenanceTaskResult);
+
+    // local tablet reader
+    rpc local_tablet_reader_open(starrocks.PTabletReaderOpenRequest) returns (starrocks.PTabletReaderOpenResult);
+    rpc local_tablet_reader_close(starrocks.PTabletReaderCloseRequest) returns (starrocks.PTabletReaderCloseResult);
+    rpc local_tablet_reader_multi_get(starrocks.PTabletReaderMultiGetRequest) returns (starrocks.PTabletReaderMultiGetResult);
+    rpc local_tablet_reader_scan_open(starrocks.PTabletReaderScanOpenRequest) returns (starrocks.PTabletReaderScanOpenResult);
+    rpc local_tablet_reader_scan_get_next(starrocks.PTabletReaderScanGetNextRequest) returns (starrocks.PTabletReaderScanGetNextResult);
+
+    rpc execute_command(starrocks.ExecuteCommandRequestPB) returns (starrocks.ExecuteCommandResultPB);
+    rpc update_fail_point_status(starrocks.PUpdateFailPointStatusRequest) returns (starrocks.PUpdateFailPointStatusResponse);
+    rpc list_fail_point(starrocks.PListFailPointRequest) returns (starrocks.PListFailPointResponse);
 };

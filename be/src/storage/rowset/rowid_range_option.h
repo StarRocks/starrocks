@@ -27,15 +27,18 @@ class Segment;
 // It represents a specific rowid range on the segment with `segment_id` of the rowset with `rowset_id`.
 struct RowidRangeOption {
 public:
-    RowidRangeOption(const RowsetId& rowset_id, uint64_t segment_id, SparseRange rowid_range);
+    RowidRangeOption() = default;
+
+    void add(const Rowset* rowset, const Segment* segment, SparseRangePtr rowid_range);
 
     bool match_rowset(const Rowset* rowset) const;
-    bool match_segment(const Segment* segment) const;
+    SparseRangePtr get_segment_rowid_range(const Rowset* rowset, const Segment* segment);
 
 public:
-    const RowsetId rowset_id;
-    const uint64_t segment_id;
-    const SparseRange rowid_range;
+    using SetgmentRowidRangeMap = std::unordered_map<uint64_t, SparseRangePtr>;
+    using RowsetRowidRangeMap = std::map<RowsetId, SetgmentRowidRangeMap>;
+
+    RowsetRowidRangeMap rowid_range_per_segment_per_rowset;
 };
 
 } // namespace starrocks

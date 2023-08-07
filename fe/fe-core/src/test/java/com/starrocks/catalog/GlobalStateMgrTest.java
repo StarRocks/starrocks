@@ -41,156 +41,69 @@ import com.sleepycat.je.rep.ReplicaStateException;
 import com.sleepycat.je.rep.UnknownMasterException;
 import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.bdbje.BDBEnvironment;
-import com.starrocks.load.Load;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.system.Frontend;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.BufferedInputStream;
 import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.lang.reflect.Field;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class GlobalStateMgrTest {
 
-    @Mocked
-    InetAddress addr1;
-
     @Before
     public void setUp() {
-        MetaContext metaContext = new MetaContext();
-        new Expectations(metaContext) {
-            {
-                MetaContext.get();
-                minTimes = 0;
-                result = metaContext;
-            }
-        };
+        UtFrameUtils.PseudoImage.setUpImageVersion();
     }
 
-    public void mkdir(String dirString) {
-        File dir = new File(dirString);
-        if (!dir.exists()) {
-            dir.mkdir();
-        } else {
-            File[] files = dir.listFiles();
-            for (File file : files) {
-                if (file.isFile()) {
-                    file.delete();
-                }
-            }
-        }
+    @After
+    public void tearDown() {
+        MetaContext.remove();
     }
 
-    public void addFiles(int image, int edit, String metaDir) {
-        File imageFile = new File(metaDir + "image." + image);
-        try {
-            imageFile.createNewFile();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        for (int i = 1; i <= edit; i++) {
-            File editFile = new File(metaDir + "edits." + i);
-            try {
-                editFile.createNewFile();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-
-        File current = new File(metaDir + "edits");
-        try {
-            current.createNewFile();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        File version = new File(metaDir + "VERSION");
-        try {
-            version.createNewFile();
-            String line1 = "#Mon Feb 02 13:59:54 CST 2015\n";
-            String line2 = "clusterId=966271669";
-            FileWriter fw = new FileWriter(version);
-            fw.write(line1);
-            fw.write(line2);
-            fw.flush();
-            fw.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    public void deleteDir(String metaDir) {
-        File dir = new File(metaDir);
-        if (dir.exists()) {
-            File[] files = dir.listFiles();
-            for (File file : files) {
-                if (file.isFile()) {
-                    file.delete();
-                }
-            }
-
-            dir.delete();
-        }
-    }
 
     @Test
     public void testSaveLoadHeader() throws Exception {
-        String dir = "testLoadHeader";
-        mkdir(dir);
-        File file = new File(dir, "image");
-        file.createNewFile();
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
+        UtFrameUtils.PseudoImage image1 = new UtFrameUtils.PseudoImage();
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        MetaContext.get().setMetaVersion(FeConstants.meta_version);
-        Field field = globalStateMgr.getClass().getDeclaredField("load");
-        field.setAccessible(true);
-        field.set(globalStateMgr, new Load());
+        long checksum1 = globalStateMgr.saveVersion(image1.getDataOutputStream(), 0);
+        checksum1 = globalStateMgr.saveHeader(image1.getDataOutputStream(), new Random().nextLong(), checksum1);
 
-        long checksum1 = globalStateMgr.saveHeader(dos, new Random().nextLong(), 0);
-        globalStateMgr.clear();
-        globalStateMgr = null;
-        dos.close();
-
-        DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(file)));
-        globalStateMgr = GlobalStateMgr.getCurrentState();
-        long checksum2 = globalStateMgr.loadHeader(dis, 0);
+        DataInputStream dis = image1.getDataInputStream();
+        long checksum2 = globalStateMgr.loadVersion(dis, 0);
+        checksum2 = globalStateMgr.loadHeaderV1(dis, checksum2);
         Assert.assertEquals(checksum1, checksum2);
-        dis.close();
 
-        deleteDir(dir);
+        // test json-format header
+        UtFrameUtils.PseudoImage image2 = new UtFrameUtils.PseudoImage();
+        globalStateMgr.saveHeaderV2(image2.getDataOutputStream());
+        MetaContext.get().setStarRocksMetaVersion(StarRocksFEMetaVersion.VERSION_4);
+        globalStateMgr.loadHeaderV2(image2.getDataInputStream());
     }
 
     private GlobalStateMgr mockGlobalStateMgr() throws Exception {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
 
-        NodeMgr nodeMgr = new NodeMgr(false, globalStateMgr);
+        NodeMgr nodeMgr = new NodeMgr();
 
         Field field1 = nodeMgr.getClass().getDeclaredField("frontends");
         field1.setAccessible(true);
@@ -213,32 +126,6 @@ public class GlobalStateMgrTest {
         field4.set(globalStateMgr, nodeMgr);
 
         return globalStateMgr;
-    }
-
-    private void mockNet() {
-        new MockUp<InetAddress>() {
-            @Mock
-            public InetAddress getByName(String host) throws UnknownHostException {
-                return addr1;
-            }
-        };
-    }
-
-    @Test
-    public void testGetFeByHost() throws Exception {
-        mockNet();
-        new Expectations() {
-            {
-                addr1.getHostAddress();
-                result = "127.0.0.1";
-            }
-        };
-
-        GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
-        Frontend testFeIp = globalStateMgr.getFeByHost("127.0.0.1");
-        Assert.assertNotNull(testFeIp);
-        Frontend testFeHost = globalStateMgr.getFeByHost("sandbox");
-        Assert.assertNotNull(testFeHost);
     }
 
     @Test

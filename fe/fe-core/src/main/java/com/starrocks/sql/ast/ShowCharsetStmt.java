@@ -19,6 +19,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 /**
  * Show charset statement
@@ -44,13 +45,11 @@ public class ShowCharsetStmt extends ShowStmt {
     private Expr where;
 
     public ShowCharsetStmt() {
+        super(NodePosition.ZERO);
     }
 
-    public ShowCharsetStmt(String pattern) {
-        this.pattern = pattern;
-    }
-
-    public ShowCharsetStmt(String pattern, Expr where) {
+    public ShowCharsetStmt(String pattern, Expr where, NodePosition pos) {
+        super(pos);
         this.pattern = pattern;
         this.where = where;
     }

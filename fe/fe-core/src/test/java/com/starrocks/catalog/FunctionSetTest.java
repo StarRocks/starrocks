@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
 import org.junit.Assert;
 import org.junit.Before;
@@ -26,6 +27,7 @@ public class FunctionSetTest {
     private static final Type VARCHAR_ARRAY = new ArrayType(Type.VARCHAR);
     private static final Type TINYINT_ARRAY = new ArrayType(Type.TINYINT);
     private static final Type INT_ARRAY = new ArrayType(Type.INT);
+    private static final Type DOUBLE_ARRAY = new ArrayType(Type.DOUBLE);
     private static final Type INT_ARRAY_ARRAY = new ArrayType(INT_ARRAY);
     private static final Type TINYINT_ARRAY_ARRAY = new ArrayType(TINYINT_ARRAY);
 
@@ -85,7 +87,10 @@ public class FunctionSetTest {
         argTypes = new Type[] {INT_ARRAY, Type.DOUBLE};
         desc = new Function(new FunctionName("array_append"), argTypes, Type.INVALID, false);
         fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
-        Assert.assertNull(fn);
+        Assert.assertNotNull(fn);
+        Assert.assertEquals(DOUBLE_ARRAY, fn.getReturnType());
+        Assert.assertEquals(DOUBLE_ARRAY, fn.getArgs()[0]);
+        Assert.assertEquals(Type.DOUBLE, fn.getArgs()[1]);
 
         // array_append(NULL, INT)
         argTypes = new Type[] {Type.NULL, Type.INT};
@@ -109,15 +114,18 @@ public class FunctionSetTest {
         argTypes = new Type[] {TINYINT_ARRAY, Type.VARCHAR};
         desc = new Function(new FunctionName("array_append"), argTypes, Type.INVALID, false);
         fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
-        Assert.assertNull(fn);
+        Assert.assertNotNull(fn);
+        Assert.assertEquals(VARCHAR_ARRAY, fn.getReturnType());
+        Assert.assertEquals(VARCHAR_ARRAY, fn.getArgs()[0]);
+        Assert.assertEquals(Type.VARCHAR, fn.getArgs()[1]);
 
         // array_append(NULL, NULL)
         argTypes = new Type[] {Type.NULL, Type.NULL};
         desc = new Function(new FunctionName("array_append"), argTypes, Type.INVALID, false);
         fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
         Assert.assertNotNull(fn);
-        Assert.assertEquals(new ArrayType(Type.NULL), fn.getReturnType());
-        Assert.assertEquals(new ArrayType(Type.NULL), fn.getArgs()[0]);
+        Assert.assertEquals(new ArrayType(Type.BOOLEAN), fn.getReturnType());
+        Assert.assertEquals(new ArrayType(Type.BOOLEAN), fn.getArgs()[0]);
 
         // array_append(ARRAY<ARRAY<INT>>, ARRAY<INT>)
         argTypes = new Type[] {INT_ARRAY_ARRAY, INT_ARRAY};
@@ -174,7 +182,10 @@ public class FunctionSetTest {
         argTypes = new Type[] {TINYINT_ARRAY_ARRAY, VARCHAR_ARRAY};
         desc = new Function(new FunctionName("array_append"), argTypes, Type.INVALID, false);
         fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
-        Assert.assertNull(fn);
+        Assert.assertNotNull(fn);
+        Assert.assertEquals(new ArrayType(VARCHAR_ARRAY), fn.getReturnType());
+        Assert.assertEquals(new ArrayType(VARCHAR_ARRAY), fn.getArgs()[0]);
+        Assert.assertEquals(VARCHAR_ARRAY, fn.getArgs()[1]);
 
         // array_append(ARRAY<VARCHAR>, VARCHAR)
         argTypes = new Type[] {VARCHAR_ARRAY, Type.VARCHAR};
@@ -240,6 +251,55 @@ public class FunctionSetTest {
         fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
         Assert.assertNotNull(fn);
         Assert.assertEquals(Type.INT, fn.getReturnType());
-        Assert.assertEquals(new ArrayType(Type.NULL), fn.getArgs()[0]);
+        Assert.assertEquals(new ArrayType(Type.BOOLEAN), fn.getArgs()[0]);
+
+        // array_generate(SmallInt,Int,BigInt)
+        argTypes = new Type[] {Type.SMALLINT, Type.INT, Type.BIGINT};
+        desc = new Function(new FunctionName("array_generate"), argTypes, Type.INVALID, false);
+        fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
+        Assert.assertNotNull(fn);
+        Assert.assertEquals(Type.ARRAY_BIGINT, fn.getReturnType());
+        Assert.assertEquals(Type.BIGINT, fn.getArgs()[0]);
+
+    }
+
+    @Test
+    public void testPolymorphicTVF() {
+        // First two columns of the result are polymorphic (derived from argument type), but the last argument is of a
+        // "concrete" type BIGINT, which is retained in the resolved function.
+        TableFunction polymorphicTVF =
+                new TableFunction(new FunctionName("three_column_tvf"), Lists.newArrayList("a", "b", "c"),
+                        Lists.newArrayList(Type.ANY_ARRAY),
+                        Lists.newArrayList(Type.ANY_ELEMENT, Type.ANY_ELEMENT, Type.BIGINT));
+
+        functionSet.addBuiltin(polymorphicTVF);
+
+        Type[] argTypes = new Type[] {VARCHAR_ARRAY};
+        Function desc = new Function(new FunctionName("three_column_tvf"), argTypes, Type.INVALID, false);
+        Function fn = functionSet.getFunction(desc, Function.CompareMode.IS_IDENTICAL);
+        Assert.assertNotNull(fn);
+        Assert.assertTrue(fn instanceof TableFunction);
+        TableFunction tableFunction = (TableFunction) fn;
+        Assert.assertEquals(3, tableFunction.getTableFnReturnTypes().size());
+        Assert.assertEquals(Type.VARCHAR, tableFunction.getTableFnReturnTypes().get(0));
+        Assert.assertEquals(Type.VARCHAR, tableFunction.getTableFnReturnTypes().get(1));
+        Assert.assertEquals(Type.BIGINT, tableFunction.getTableFnReturnTypes().get(2));
+
+        // Same but for two column TVF.
+        TableFunction twoColumnTVF =
+                new TableFunction(new FunctionName("two_column_tvf"), Lists.newArrayList("a", "b"),
+                        Lists.newArrayList(Type.ANY_ARRAY),
+                        Lists.newArrayList(Type.BIGINT, Type.ANY_ELEMENT));
+        functionSet.addBuiltin(twoColumnTVF);
+
+        argTypes = new Type[] {VARCHAR_ARRAY};
+        desc = new Function(new FunctionName("two_column_tvf"), argTypes, Type.INVALID, false);
+        fn = functionSet.getFunction(desc, Function.CompareMode.IS_IDENTICAL);
+        Assert.assertNotNull(fn);
+        Assert.assertTrue(fn instanceof TableFunction);
+        tableFunction = (TableFunction) fn;
+        Assert.assertEquals(2, tableFunction.getTableFnReturnTypes().size());
+        Assert.assertEquals(Type.BIGINT, tableFunction.getTableFnReturnTypes().get(0));
+        Assert.assertEquals(Type.VARCHAR, tableFunction.getTableFnReturnTypes().get(1));
     }
 }

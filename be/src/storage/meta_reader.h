@@ -87,10 +87,14 @@ protected:
     CollectContext _collect_context;
     bool _is_init;
     bool _has_more;
+    // this variable is introduced to solve compatibility issues,
+    // see more details in the description of https://github.com/StarRocks/starrocks/pull/17619
+    bool _has_count_agg = false;
 
     MetaReaderParams _params;
 
-    virtual Status _fill_result_chunk(Chunk* chunk) = 0;
+    virtual Status _fill_result_chunk(Chunk* chunk);
+    void _fill_empty_result(Chunk* chunk);
     Status _read(Chunk* chunk, size_t n);
 };
 
@@ -115,6 +119,7 @@ private:
     Status _collect_dict(ColumnId cid, Column* column, LogicalType type);
     Status _collect_max(ColumnId cid, Column* column, LogicalType type);
     Status _collect_min(ColumnId cid, Column* column, LogicalType type);
+    Status _collect_count(Column* column, LogicalType type);
     template <bool is_max>
     Status __collect_max_or_min(ColumnId cid, Column* column, LogicalType type);
     SegmentSharedPtr _segment;

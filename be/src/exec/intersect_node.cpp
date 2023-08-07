@@ -219,9 +219,9 @@ Status IntersectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) 
     return Status::OK();
 }
 
-Status IntersectNode::close(RuntimeState* state) {
+void IntersectNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
 
     for (auto& exprs : _child_expr_lists) {
@@ -236,7 +236,7 @@ Status IntersectNode::close(RuntimeState* state) {
         _hash_set.reset();
     }
 
-    return ExecNode::close(state);
+    ExecNode::close(state);
 }
 
 pipeline::OpFactories IntersectNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
@@ -278,7 +278,8 @@ pipeline::OpFactories IntersectNode::decompose_to_pipeline(pipeline::PipelineBui
             context->next_operator_id(), id(), intersect_partition_ctx_factory, _children.size() - 1);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(intersect_output_source.get(), context, rc_rf_probe_collector);
-    intersect_output_source->set_degree_of_parallelism(context->degree_of_parallelism());
+    context->inherit_upstream_source_properties(intersect_output_source.get(),
+                                                context->source_operator(ops_with_intersect_build_sink));
     operators_with_intersect_output_source.emplace_back(std::move(intersect_output_source));
     if (limit() != -1) {
         operators_with_intersect_output_source.emplace_back(

@@ -2,122 +2,152 @@
 
 ## Description
 
-This statement is used to export the data in a specified table to a specified location.
+Exports the data of a table to a specified location.
 
-This is an asynchronous operation, which returns if the task is submitted successfully. After execution, you can use the SHOW EXPORT command to check progress.
+This is an asynchronous operation. The export result is returned after you submit the export task. You can use [SHOW EXPORT](../../../sql-reference/sql-statements/data-manipulation/SHOW%20EXPORT.md) to view the progress of the export task.
 
-Syntax:
+> **NOTICE**
+>
+> You can export data out of StarRocks tables only as a user who has the EXPORT privilege on those StarRocks tables. If you do not have the EXPORT privilege, follow the instructions provided in [GRANT](../account-management/GRANT.md) to grant the EXPORT privilege to the user that you use to connect to your StarRocks cluster.
 
-```sql
-EXPORT TABLE table_name
-[PARTITION (p1[,p2])]
-TO export_path
+## Syntax
+
+```SQL
+EXPORT TABLE <table_name>
+[PARTITION (<partition_name>[, ...])]
+[(<column_name>[, ...])]
+TO <export_path>
 [opt_properties]
-WITH BROKER;
+WITH BROKER
+[broker_properties]
 ```
 
-1. `table_name`
+## Parameters
 
-    The name of the table to be exported. Currently, this system only supports the export of tables with engine as OLAP and mysql.
+- `table_name`
 
-2. `partition`
+  The name of the table. StarRocks supports exporting the data of tables whose `engine` is `olap` or `mysql`.
 
-    You can export certain specified partitions of the specified table.
+- `partition_name`
 
-3. `export_path`
+  The partitions from which you want to export data. By default, if you do not specify this parameter, StarRocks exports the data from all partitions of the table.
 
-    The export path.
+- `column_name`
 
-    If you need to export a directory, it must end with a slash. Otherwise, the part after the last slash will be identified as the prefix to the exported file.
+  The columns from which you want to export data. The sequence of columns that you specify by using this parameter can differ from the schema of the table. By default, if you do not specify this parameter, StarRocks exports the data from all columns of the table.
 
-4. `opt_properties`
+- `export_path`
 
-     It is used to specify some special parameters.
+  The location to which you want to export the data of the table. If the location contains a path, make sure that the path ends with a slash (/). Otherwise, the part following the last slash (/) in the path will be used as the prefix to the name of the exported file. By default, `data_` is used as the file name prefix if no file name prefix is specified.
 
-     Syntax:
+- `opt_properties`
 
-    ```sql
-    [PROPERTIES ("key"="value", ...)]
-    ```
+  Optional properties that you can configure for the export task.
 
-     The following parameters can be specified:
+  Syntax:
 
-    ```plain text
-    column_separator: Specify the exported column separator, defaulting to t. 
-    line_delimiter: Specify the exported line separator, defaulting to\n. 
-    exec_mem_limit: Export the upper limit of memory usage for a single BE node, defaulting to 2GB in bytes.
-    timeout：The time-out for importing jobs, defaulting to 1 day in seconds.
-    include_query_id: Whether the exported file name contains query id, defaulting to true.
-    ```
+  ```SQL
+  [PROPERTIES ("<key>"="<value>", ...)]
+  ```
 
-5. `WITH BROKER`
+  | **Property**     | **Description**                                              |
+  | ---------------- | ------------------------------------------------------------ |
+  | column_separator | The column separator that you want to use in the exported file. Default value: `\t`. |
+  | line_delimiter   | The row separator that you want to use in the exported file. Default value: `\n`. |
+  | load_mem_limit   | The maximum memory that is allowed for the export task on each individual BE. Unit: bytes. The default maximum memory is 2 GB. |
+  | timeout          | The amount of time after which the export task times out. Unit: second. Default value: `86400`, meaning 1 day. |
+  | include_query_id | Specifies whether the name of the exported file contains `query_id`. Valid values: `true` and `false`. The value `true` specifies that the file name contains `query_id`, and the value `false` specifies that the file name does not contain `query_id`. |
 
-    In StarRocks v2.4 and earlier, input `WITH BROKER "<broker_name>"` to specify the broker group you want to use. From StarRocks v2.5 onwards, you no longer need to specify a broker group, but you still need to retain the `WITH BROKER` keyword.
+- `WITH BROKER`
+
+  In v2.4 and earlier, input `WITH BROKER "<broker_name>"` to specify the broker you want to use. From v2.5 onwards, you no longer need to specify a broker, but you still need to retain the `WITH BROKER` keyword. For more information, see [Export data using EXPORT > Background information](../../../unloading/Export.md#background-information).
+
+- `broker_properties`
+
+  The information that is used to authenticate the source data. The authentication information varies depending on the data source. For more information, see [BROKER LOAD](../../../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
 
 ## Examples
 
-1. Export all data from the testTbl table to HDFS
+### Export all data of a table to HDFS
 
-    ```sql
-    EXPORT TABLE testTbl TO "hdfs://hdfs_host:port/a/b/c/" WITH BROKER ("username"="xxx", "password"="yyy");
-    ```
+The following example exports all data of the `testTbl` table to the `hdfs://<hdfs_host>:<hdfs_port>/a/b/c/` path of an HDFS cluster:
 
-2. Export partitions p1 and p2 from the testTbl table to HDFS
+```SQL
+EXPORT TABLE testTbl 
+TO "hdfs://<hdfs_host>:<hdfs_port>/a/b/c/" 
+WITH BROKER
+(
+        "username"="xxx",
+        "password"="yyy"
+);
+```
 
-    ```sql
-    EXPORT TABLE testTbl PARTITION (p1,p2) TO "hdfs://hdfs_host:port/a/b/c/" WITH BROKER ("username"="xxx", "password"="yyy");
-    ```
+### Export the data of specified partitions of a table to HDFS
 
-3. Export all data in the testTbl table to hdfs, using "," as column separator
+The following example exports the data of two partitions, `p1` and `p2`, of the `testTbl` table to the `hdfs://<hdfs_host>:<hdfs_port>/a/b/c/` path of an HDFS cluster:
 
-    ```sql
-    EXPORT TABLE testTbl TO "hdfs://hdfs_host:port/a/b/c/" PROPERTIES ("column_separator"=",") WITH BROKER ("username"="xxx", "password"="yyy");
-    ```
+```SQL
+EXPORT TABLE testTbl
+PARTITION (p1,p2) 
+TO "hdfs://<hdfs_host>:<hdfs_port>/a/b/c/" 
+WITH BROKER
+(
+        "username"="xxx",
+        "password"="yyy"
+);
+```
 
-4. Export all data in the testTbl table to hdfs, using Hive custom separator "\x01" as column separator
+### Export all data of a table to HDFS with column separator specified
 
-    ```sql
-    EXPORT TABLE testTbl TO "hdfs://hdfs_host:port/a/b/c/" PROPERTIES ("column_separator"="\\x01") WITH BROKER;
-    ```
+The following example exports all data of the `testTbl` table to the `hdfs://<hdfs_host>:<hdfs_port>/a/b/c/` path of an HDFS cluster and specifies that commas (`,`) is used as the column separator:
 
-5. Export all data in the testTbl table to hdfs, specifying the exported file prefix as testTbl_
+```SQL
+EXPORT TABLE testTbl 
+TO "hdfs://<hdfs_host>:<hdfs_port>/a/b/c/" 
+PROPERTIES
+(
+    "column_separator"=","
+) 
+WITH BROKER
+(
+    "username"="xxx",
+    "password"="yyy"
+);
+```
 
-    ```sql
-    EXPORT TABLE testTbl TO "hdfs://hdfs_host:port/a/b/c/testTbl_" WITH BROKE;
-    ```
+The following example exports all data of the `testTbl` table to the `hdfs://<hdfs_host>:<hdfs_port>/a/b/c/` path of an HDFS cluster and specifies that `\x01` (the default column separator supported by Hive) is used as the column separator:
 
-6. Export all data in the testTbl table to OSS
+```SQL
+EXPORT TABLE testTbl 
+TO "hdfs://<hdfs_host>:<hdfs_port>/a/b/c/" 
+PROPERTIES
+(
+    "column_separator"="\\x01"
+) 
+WITH BROKER;
+```
 
-    ```sql
-    EXPORT TABLE testTbl TO "oss://oss-package/export/"
-    WITH BROKER
-    (
-    "fs.oss.accessKeyId" = "xxx",
-    "fs.oss.accessKeySecret" = "yyy",
-    "fs.oss.endpoint" = "oss-cn-zhangjiakou-internal.aliyuncs.com"
-    );
-    ```
+### Export all data of a table to HDFS with file name prefix specified
 
-7. Export all data in the testTbl table to COS
+The following example exports all data of the `testTbl` table to the `hdfs://<hdfs_host>:<hdfs_port>/a/b/c/` path of an HDFS cluster and specifies that `testTbl_` is used as the prefix to the name of the exported file:
 
-    ```sql
-    EXPORT TABLE testTbl TO "cosn://cos-package/export/"
-    WITH BROKER
-    (
-    "fs.cosn.userinfo.secretId" = "xxx",
-    "fs.cosn.userinfo.secretKey" = "yyy",
-    "fs.cosn.bucket.endpoint_suffix" = "cos.ap-beijing.myqcloud.com"
-    );
-    ```
+```SQL
+EXPORT TABLE testTbl 
+TO "hdfs://<hdfs_host>:<hdfs_port>/a/b/c/testTbl_" 
+WITH BROKER;
+```
 
-8. Export all data in the testTbl table to S3
+### Export data to AWS S3
 
-    ```sql
-    EXPORT TABLE testTbl TO "s3a://s3-package/export/"
-    WITH BROKER
-    (
-    "fs.s3a.access.key" = "xxx",
-    "fs.s3a.secret.key" = "yyy",
-    "fs.s3a.endpoint" = "s3-ap-northeast-1.amazonaws.com"
-    );
-    ```
+The following example exports all data of the `testTbl` table to the `s3-package/export/` path of an AWS S3 bucket:
+
+```SQL
+EXPORT TABLE testTbl 
+TO "s3a://s3-package/export/"
+WITH BROKER
+(
+    "aws.s3.access_key" = "xxx",
+    "aws.s3.secret_key" = "yyy",
+    "aws.s3.region" = "zzz"
+);
+```

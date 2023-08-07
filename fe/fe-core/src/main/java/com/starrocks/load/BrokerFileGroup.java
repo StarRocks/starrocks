@@ -51,13 +51,13 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.CsvFormat;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.PartitionNames;
@@ -67,6 +67,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -85,6 +86,7 @@ public class BrokerFileGroup implements Writable {
     // fileFormat may be null, which means format will be decided by file's suffix
     private String fileFormat;
     private boolean isNegative;
+    private boolean specifyPartition = false;
     private List<Long> partitionIds; // can be null, means no partition specified
     private List<String> filePaths;
 
@@ -102,9 +104,18 @@ public class BrokerFileGroup implements Writable {
     // load from table
     private long srcTableId = -1;
     private boolean isLoadFromTable = false;
+    
+    // for csv
+    private CsvFormat csvFormat;
+
+    public static final String ESCAPE = "escape";
+    public static final String ENCLOSE = "enclose";
+    public static final String TRIMSPACE = "trim_space";
+    public static final String SKIPHEADER = "skip_header";
 
     // for unit test and edit log persistence
     private BrokerFileGroup() {
+        this.csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
     }
 
     // Used for broker table, no need to parse
@@ -115,6 +126,24 @@ public class BrokerFileGroup implements Writable {
         this.isNegative = false;
         this.filePaths = table.getPaths();
         this.fileFormat = table.getFileFormat();
+        this.csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
+    }
+
+    public BrokerFileGroup(TableFunctionTable table) throws AnalysisException {
+        this.tableId = table.getId();
+        this.isNegative = false;
+
+        this.filePaths = new ArrayList<>();
+        this.filePaths.add(table.getPath());
+
+        this.fileFormat = table.getFormat();
+        this.columnSeparator = "\t";
+        this.rowDelimiter = "\n";
+        this.csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
+        this.fileFieldNames = new ArrayList<>();
+
+        this.columnExprList = table.getColumnExprList();
+        this.columnsFromPath = new ArrayList<>();
     }
 
     public BrokerFileGroup(DataDescription dataDescription) {
@@ -123,6 +152,14 @@ public class BrokerFileGroup implements Writable {
         this.columnExprList = dataDescription.getParsedColumnExprList();
         this.columnToHadoopFunction = dataDescription.getColumnToHadoopFunction();
         this.whereExpr = dataDescription.getWhereExpr();
+        this.csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
+    }
+
+    public void parseFormatProperties(DataDescription dataDescription) {
+        CsvFormat csvFormat = dataDescription.getCsvFormat();
+        if (csvFormat != null) {
+            this.csvFormat = csvFormat;
+        }
     }
 
     // NOTE: DBLock will be held
@@ -143,6 +180,7 @@ public class BrokerFileGroup implements Writable {
         // partitionId
         PartitionNames partitionNames = dataDescription.getPartitionNames();
         if (partitionNames != null) {
+            specifyPartition = true;
             partitionIds = Lists.newArrayList();
             for (String pName : partitionNames.getPartitionNames()) {
                 Partition partition = olapTable.getPartition(pName, partitionNames.isTemp());
@@ -188,6 +226,8 @@ public class BrokerFileGroup implements Writable {
             }
         }
         isNegative = dataDescription.isNegative();
+
+        parseFormatProperties(dataDescription);
 
         // FilePath
         filePaths = dataDescription.getFilePaths();
@@ -246,6 +286,10 @@ public class BrokerFileGroup implements Writable {
         }
     }
 
+    public boolean isSpecifyPartition() {
+        return specifyPartition;
+    }
+
     public long getTableId() {
         return tableId;
     }
@@ -300,6 +344,22 @@ public class BrokerFileGroup implements Writable {
 
     public boolean isLoadFromTable() {
         return isLoadFromTable;
+    }
+
+    public long getSkipHeader() {
+        return csvFormat.getSkipheader();
+    }
+
+    public byte getEnclose() {
+        return csvFormat.getEnclose();
+    }
+
+    public byte getEscape() {
+        return csvFormat.getEscape();
+    }
+
+    public boolean isTrimspace() {
+        return csvFormat.isTrimspace();
     }
 
     @Override
@@ -451,16 +511,12 @@ public class BrokerFileGroup implements Writable {
             }
         }
         // file format
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_50) {
-            if (in.readBoolean()) {
-                fileFormat = Text.readString(in);
-            }
+        if (in.readBoolean()) {
+            fileFormat = Text.readString(in);
         }
         // src table
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_87) {
-            srcTableId = in.readLong();
-            isLoadFromTable = in.readBoolean();
-        }
+        srcTableId = in.readLong();
+        isLoadFromTable = in.readBoolean();
 
         // There are no columnExprList in the previous load job which is created before function is supported.
         // The columnExprList could not be analyzed without origin stmt in the previous load job.

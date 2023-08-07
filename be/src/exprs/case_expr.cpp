@@ -24,8 +24,8 @@
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "gutil/casts.h"
-#include "runtime/primitive_type_infra.h"
 #include "simd/mulselector.h"
+#include "types/logical_type_infra.h"
 #include "util/percentile_value.h"
 
 namespace starrocks {
@@ -44,6 +44,8 @@ namespace starrocks {
  *  ELSE 'other' END
  *
  *  ELSE is not necessary.
+ *  TODO: rewrite the first format to the second due to some advantages: reduce code footprint, compute case-expr
+ *  equivalence in vectorization, benefit SIMD-optimization from no-case evaluation.
  */
 
 template <LogicalType WhenType, LogicalType ResultType>
@@ -117,12 +119,6 @@ private:
         Columns then_columns;
         then_columns.reserve(loop_end);
 
-        std::vector<ColumnViewer<WhenType>> when_viewers;
-        when_viewers.reserve(loop_end);
-
-        std::vector<ColumnViewer<ResultType>> then_viewers;
-        then_viewers.reserve(loop_end);
-
         for (int i = 1; i < loop_end; i += 2) {
             ASSIGN_OR_RETURN(ColumnPtr when_column, _children[i]->evaluate_checked(context, chunk));
 
@@ -133,62 +129,111 @@ private:
 
             ASSIGN_OR_RETURN(ColumnPtr then_column, _children[i + 1]->evaluate_checked(context, chunk));
 
-            when_viewers.emplace_back(when_column);
-            then_viewers.emplace_back(then_column);
-
             when_columns.emplace_back(when_column);
             then_columns.emplace_back(then_column);
         }
 
-        if (when_viewers.empty()) {
+        if (when_columns.empty()) {
             return else_column->clone();
         }
-        when_columns.emplace_back(case_column);
         then_columns.emplace_back(else_column);
-
-        ColumnViewer<WhenType> case_viewer(case_column);
-        then_viewers.emplace_back(else_column);
-
         size_t size = when_columns[0]->size();
-        ColumnBuilder<ResultType> builder(size, this->type().precision, this->type().scale);
-
-        bool columns_has_null = false;
-        for (ColumnPtr& column : when_columns) {
-            columns_has_null |= column->has_null();
-        }
-
-        size_t view_size = when_viewers.size();
-        if (!columns_has_null) {
-            for (int row = 0; row < size; ++row) {
-                int i = 0;
-                while ((i < view_size) && (when_viewers[i].value(row) != case_viewer.value(row))) {
-                    i += 1;
-                }
-                if (!then_viewers[i].is_null(row)) {
-                    builder.append(then_viewers[i].value(row));
-                } else {
-                    builder.append_null();
+        if constexpr (lt_is_collection<ResultType> || lt_is_collection<WhenType>) {
+            // construct result column
+            bool res_nullable = false;
+            for (const auto& col : then_columns) {
+                if (col->is_nullable() || col->only_null()) {
+                    res_nullable = true;
                 }
             }
+            ColumnPtr res = ColumnHelper::create_column(this->type(), res_nullable);
+
+            for (auto& then_column : then_columns) {
+                then_column = ColumnHelper::unpack_and_duplicate_const_column(size, then_column);
+            }
+            for (auto& when_column : when_columns) {
+                when_column = ColumnHelper::unpack_and_duplicate_const_column(size, when_column);
+            }
+            case_column = ColumnHelper::unpack_and_duplicate_const_column(size, case_column);
+
+            // then_columns.size >= when_columns.size as else_column maybe exist.
+            auto when_num = when_columns.size();
+            NullColumnPtr case_nulls = nullptr;
+            if (case_column->is_nullable()) {
+                case_nulls = down_cast<NullableColumn*>(case_column.get())->null_column();
+            }
+            auto case_data = ColumnHelper::get_data_column(case_column.get());
+
+            for (auto row = 0; row < size; ++row) {
+                int i = 0;
+                while ((i < when_num) && ((case_nulls != nullptr && case_nulls->get_data()[row]) ||
+                                          !when_columns[i]->equals(row, *case_data, row))) {
+                    ++i;
+                }
+                if (then_columns[i]->is_null(row)) {
+                    res->append_nulls(1);
+                } else {
+                    res->append(*then_columns[i], row, 1);
+                }
+            }
+
+            return res;
         } else {
-            for (int row = 0; row < size; ++row) {
-                int i = view_size;
-                if (!case_viewer.is_null(row)) {
-                    i = 0;
-                    while ((i < view_size) &&
-                           (when_viewers[i].is_null(row) || when_viewers[i].value(row) != case_viewer.value(row))) {
+            std::vector<ColumnViewer<WhenType>> when_viewers;
+            when_viewers.reserve(loop_end);
+
+            std::vector<ColumnViewer<ResultType>> then_viewers;
+            then_viewers.reserve(loop_end);
+            for (auto& col : when_columns) {
+                when_viewers.emplace_back(col);
+            }
+            for (auto& col : then_columns) {
+                then_viewers.emplace_back(col);
+            }
+            when_columns.emplace_back(case_column);
+
+            bool when_columns_has_null = false;
+            for (ColumnPtr& column : when_columns) {
+                when_columns_has_null |= column->has_null();
+            }
+            ColumnViewer<WhenType> case_viewer(case_column);
+            then_viewers.emplace_back(else_column);
+
+            ColumnBuilder<ResultType> builder(size, this->type().precision, this->type().scale);
+
+            size_t view_size = when_viewers.size();
+            if (!when_columns_has_null) {
+                for (int row = 0; row < size; ++row) {
+                    int i = 0;
+                    while ((i < view_size) && (when_viewers[i].value(row) != case_viewer.value(row))) {
                         i += 1;
                     }
+                    if (!then_viewers[i].is_null(row)) {
+                        builder.append(then_viewers[i].value(row));
+                    } else {
+                        builder.append_null();
+                    }
                 }
-                if (!then_viewers[i].is_null(row)) {
-                    builder.append(then_viewers[i].value(row));
-                } else {
-                    builder.append_null();
+            } else {
+                for (int row = 0; row < size; ++row) {
+                    int i = view_size;
+                    if (!case_viewer.is_null(row)) {
+                        i = 0;
+                        while ((i < view_size) &&
+                               (when_viewers[i].is_null(row) || when_viewers[i].value(row) != case_viewer.value(row))) {
+                            i += 1;
+                        }
+                    }
+                    if (!then_viewers[i].is_null(row)) {
+                        builder.append(then_viewers[i].value(row));
+                    } else {
+                        builder.append_null();
+                    }
                 }
             }
-        }
 
-        return builder.build(ColumnHelper::is_all_const(when_columns) && ColumnHelper::is_all_const(then_columns));
+            return builder.build(ColumnHelper::is_all_const(when_columns) && ColumnHelper::is_all_const(then_columns));
+        }
     }
 
     // CASE 1:
@@ -196,7 +241,7 @@ private:
     //         WHEN sex = '2' THEN 'woman'
     //    ELSE 'other' END
     //
-    //  Special CASE-WHEN statment, and `WHEN` clause must be boolean.
+    //  Special CASE-WHEN statement, and `WHEN` clause must be boolean.
     //  If all `WHEN` is null/false, return `ELSE`
     //  If `WHEN` is not null and true, return `THEN`
     //
@@ -204,7 +249,7 @@ private:
     //    CASE WHEN sex = '1' THEN 'man'
     //         WHEN sex = '2' THEN 'woman'
     //
-    //  Special CASE-WHEN statment, and `WHEN` clause must be boolean.
+    //  Special CASE-WHEN statement, and `WHEN` clause must be boolean.
     //  If all `WHEN` is null/false, return NULL
     //  If `WHEN` is not null and true, return `THEN`
     StatusOr<ColumnPtr> evaluate_no_case(ExprContext* context, Chunk* chunk) {
@@ -226,9 +271,6 @@ private:
         std::vector<ColumnViewer<TYPE_BOOLEAN>> when_viewers;
         when_viewers.reserve(loop_end);
 
-        std::vector<ColumnViewer<ResultType>> then_viewers;
-        then_viewers.reserve(loop_end);
-
         for (int i = 0; i < loop_end; i += 2) {
             ASSIGN_OR_RETURN(ColumnPtr when_column, _children[i]->evaluate_checked(context, chunk));
 
@@ -248,110 +290,156 @@ private:
 
             when_columns.emplace_back(when_column);
             then_columns.emplace_back(then_column);
-
             when_viewers.emplace_back(when_column);
-            then_viewers.emplace_back(then_column);
         }
 
         if (when_viewers.empty()) {
             return else_column->clone();
         }
         then_columns.emplace_back(else_column);
-        then_viewers.emplace_back(else_column);
 
         size_t size = when_columns[0]->size();
-        ColumnBuilder<ResultType> builder(size, this->type().precision, this->type().scale);
 
         bool when_columns_has_null = false;
         for (ColumnPtr& column : when_columns) {
             when_columns_has_null |= column->has_null();
         }
 
-        // max case size in use SIMD CASE WHEN implements
-        constexpr int max_simd_case_when_size = 8;
-
-        // optimization for no-nullable Arithmetic Type
-        if constexpr (isArithmeticPT<ResultType>) {
-            bool then_columns_has_null = false;
-            for (const auto& column : then_columns) {
-                then_columns_has_null |= column->has_null();
-            }
-
-            bool check_could_use_multi_simd_selector =
-                    !when_columns_has_null && when_columns.size() <= max_simd_case_when_size && !then_columns_has_null;
-
-            if (check_could_use_multi_simd_selector) {
-                int then_column_size = then_columns.size();
-                int when_column_size = when_columns.size();
-                // TODO: avoid unpack const column
-                for (int i = 0; i < then_column_size; ++i) {
-                    then_columns[i] = ColumnHelper::unpack_and_duplicate_const_column(size, then_columns[i]);
-                }
-                for (int i = 0; i < when_column_size; ++i) {
-                    when_columns[i] = ColumnHelper::unpack_and_duplicate_const_column(size, when_columns[i]);
-                }
-                for (int i = 0; i < when_column_size; ++i) {
-                    ColumnHelper::merge_nullable_filter(when_columns[i].get());
-                }
-
-                using ResultContainer = typename RunTimeColumnType<ResultType>::Container;
-
-                ResultContainer* select_list[then_column_size];
-                for (int i = 0; i < then_column_size; ++i) {
-                    auto* data_column = ColumnHelper::get_data_column(then_columns[i].get());
-                    select_list[i] = &down_cast<RunTimeColumnType<ResultType>*>(data_column)->get_data();
-                }
-
-                uint8_t* select_vec[when_column_size];
-                for (int i = 0; i < when_column_size; ++i) {
-                    auto* data_column = ColumnHelper::get_data_column(when_columns[i].get());
-                    select_vec[i] = down_cast<BooleanColumn*>(data_column)->get_data().data();
-                }
-
-                auto res = RunTimeColumnType<ResultType>::create();
-
-                if constexpr (pt_is_decimal<ResultType>) {
-                    res->set_scale(this->type().scale);
-                    res->set_precision(this->type().precision);
-                }
-
-                auto& container = res->get_data();
-                container.resize(size);
-                SIMD_muti_selector<ResultType>::multi_select_if(select_vec, when_column_size, container, select_list,
-                                                                then_column_size);
-                return res;
-            }
-        }
-
-        size_t view_size = when_viewers.size();
-        if (!when_columns_has_null) {
-            for (int row = 0; row < size; ++row) {
-                int i = 0;
-                while (i < view_size && !(when_viewers[i].value(row))) {
-                    i += 1;
-                }
-                if (!then_viewers[i].is_null(row)) {
-                    builder.append(then_viewers[i].value(row));
-                } else {
-                    builder.append_null();
+        if constexpr (lt_is_collection<ResultType>) {
+            // construct nullable result column
+            bool res_nullable = false;
+            for (const auto& col : then_columns) {
+                if (col->is_nullable() || col->only_null()) {
+                    res_nullable = true;
                 }
             }
+            ColumnPtr res = ColumnHelper::create_column(this->type(), res_nullable);
+
+            for (auto& then_column : then_columns) {
+                then_column = ColumnHelper::unpack_and_duplicate_const_column(size, then_column);
+            }
+            // when_columns[i] is true or not
+            auto when_num = when_columns.size();
+            if (!when_columns_has_null) {
+                for (auto row = 0; row < size; ++row) {
+                    int i = 0;
+                    while (i < when_num && !(when_viewers[i].value(row))) {
+                        ++i;
+                    }
+                    if (then_columns[i]->is_null(i)) {
+                        res->append_nulls(1);
+                    } else {
+                        res->append(*then_columns[i], row, 1);
+                    }
+                }
+            } else {
+                for (auto row = 0; row < size; ++row) {
+                    int i = 0;
+                    while ((i < when_num) && (when_viewers[i].is_null(row) || !when_viewers[i].value(row))) {
+                        ++i;
+                    }
+                    if (then_columns[i]->is_null(i)) {
+                        res->append_nulls(1);
+                    } else {
+                        res->append(*then_columns[i], row, 1);
+                    }
+                }
+            }
+            return res;
         } else {
-            for (int row = 0; row < size; ++row) {
-                int i = 0;
-                while ((i < view_size) && (when_viewers[i].is_null(row) || !when_viewers[i].value(row))) {
-                    i += 1;
+            std::vector<ColumnViewer<ResultType>> then_viewers;
+            then_viewers.reserve(loop_end);
+            for (auto& col : then_columns) {
+                then_viewers.emplace_back(col);
+            }
+            ColumnBuilder<ResultType> builder(size, this->type().precision, this->type().scale);
+            // max case size in use SIMD CASE WHEN implements
+            constexpr int max_simd_case_when_size = 8;
+
+            // optimization for no-nullable Arithmetic Type
+            if constexpr (isArithmeticLT<ResultType>) {
+                bool then_columns_has_null = false;
+                for (const auto& column : then_columns) {
+                    then_columns_has_null |= column->has_null();
                 }
 
-                if (!then_viewers[i].is_null(row)) {
-                    builder.append(then_viewers[i].value(row));
-                } else {
-                    builder.append_null();
+                bool check_could_use_multi_simd_selector = !when_columns_has_null &&
+                                                           when_columns.size() <= max_simd_case_when_size &&
+                                                           !then_columns_has_null;
+
+                if (check_could_use_multi_simd_selector) {
+                    int then_column_size = then_columns.size();
+                    int when_column_size = when_columns.size();
+                    // TODO: avoid unpack const column
+                    for (int i = 0; i < then_column_size; ++i) {
+                        then_columns[i] = ColumnHelper::unpack_and_duplicate_const_column(size, then_columns[i]);
+                    }
+                    for (int i = 0; i < when_column_size; ++i) {
+                        when_columns[i] = ColumnHelper::unpack_and_duplicate_const_column(size, when_columns[i]);
+                    }
+                    for (int i = 0; i < when_column_size; ++i) {
+                        ColumnHelper::merge_nullable_filter(when_columns[i].get());
+                    }
+
+                    using ResultContainer = typename RunTimeColumnType<ResultType>::Container;
+
+                    ResultContainer* select_list[then_column_size];
+                    for (int i = 0; i < then_column_size; ++i) {
+                        auto* data_column = ColumnHelper::get_data_column(then_columns[i].get());
+                        select_list[i] = &down_cast<RunTimeColumnType<ResultType>*>(data_column)->get_data();
+                    }
+
+                    uint8_t* select_vec[when_column_size];
+                    for (int i = 0; i < when_column_size; ++i) {
+                        auto* data_column = ColumnHelper::get_data_column(when_columns[i].get());
+                        select_vec[i] = down_cast<BooleanColumn*>(data_column)->get_data().data();
+                    }
+
+                    auto res = RunTimeColumnType<ResultType>::create();
+
+                    if constexpr (lt_is_decimal<ResultType>) {
+                        res->set_scale(this->type().scale);
+                        res->set_precision(this->type().precision);
+                    }
+
+                    auto& container = res->get_data();
+                    container.resize(size);
+                    SIMD_muti_selector<ResultType>::multi_select_if(select_vec, when_column_size, container,
+                                                                    select_list, then_column_size);
+                    return res;
                 }
             }
-        }
 
-        return builder.build(ColumnHelper::is_all_const(when_columns) && ColumnHelper::is_all_const(then_columns));
+            size_t view_size = when_viewers.size();
+            if (!when_columns_has_null) {
+                for (int row = 0; row < size; ++row) {
+                    int i = 0;
+                    while (i < view_size && !(when_viewers[i].value(row))) {
+                        i += 1;
+                    }
+                    if (!then_viewers[i].is_null(row)) {
+                        builder.append(then_viewers[i].value(row));
+                    } else {
+                        builder.append_null();
+                    }
+                }
+            } else {
+                for (int row = 0; row < size; ++row) {
+                    int i = 0;
+                    while ((i < view_size) && (when_viewers[i].is_null(row) || !when_viewers[i].value(row))) {
+                        i += 1;
+                    }
+
+                    if (!then_viewers[i].is_null(row)) {
+                        builder.append(then_viewers[i].value(row));
+                    } else {
+                        builder.append_null();
+                    }
+                }
+            }
+
+            return builder.build(ColumnHelper::is_all_const(when_columns) && ColumnHelper::is_all_const(then_columns));
+        }
     }
 
 private:
@@ -384,6 +472,9 @@ private:
         CASE_WHEN_RESULT_TYPE(TYPE_DECIMAL64, RESULT_TYPE);                               \
         CASE_WHEN_RESULT_TYPE(TYPE_DECIMAL128, RESULT_TYPE);                              \
         CASE_WHEN_RESULT_TYPE(TYPE_JSON, RESULT_TYPE);                                    \
+        CASE_WHEN_RESULT_TYPE(TYPE_ARRAY, RESULT_TYPE);                                   \
+        CASE_WHEN_RESULT_TYPE(TYPE_MAP, RESULT_TYPE);                                     \
+        CASE_WHEN_RESULT_TYPE(TYPE_STRUCT, RESULT_TYPE);                                  \
     default: {                                                                            \
         LOG(WARNING) << "vectorized engine case expr no support when type: " << whenType; \
         return nullptr;                                                                   \
@@ -405,6 +496,26 @@ Expr* VectorizedCaseExprFactory::from_thrift(const starrocks::TExprNode& node) {
 
     switch (resultType) {
         APPLY_FOR_ALL_SCALAR_TYPE(CASE_RESULT_TYPE)
+        APPLY_FOR_COMPLEX_TYPE(CASE_RESULT_TYPE)
+        CASE_RESULT_TYPE(TYPE_OBJECT)
+        CASE_RESULT_TYPE(TYPE_HLL)
+        CASE_RESULT_TYPE(TYPE_PERCENTILE)
+    default: {
+        LOG(WARNING) << "vectorized engine case expr no support result type: " << resultType;
+        return nullptr;
+    }
+    }
+}
+
+Expr* VectorizedCaseExprFactory::from_thrift(const starrocks::TExprNode& node, LogicalType resultType,
+                                             LogicalType whenType) {
+    if (resultType == TYPE_NULL) {
+        resultType = TYPE_BOOLEAN;
+    }
+
+    switch (resultType) {
+        APPLY_FOR_ALL_SCALAR_TYPE(CASE_RESULT_TYPE)
+        APPLY_FOR_COMPLEX_TYPE(CASE_RESULT_TYPE)
         CASE_RESULT_TYPE(TYPE_OBJECT)
         CASE_RESULT_TYPE(TYPE_HLL)
         CASE_RESULT_TYPE(TYPE_PERCENTILE)

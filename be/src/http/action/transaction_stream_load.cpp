@@ -250,10 +250,10 @@ Status TransactionStreamLoadAction::_on_header(HttpRequest* http_req, StreamLoad
     if (!http_req->header(HttpHeaders::CONTENT_LENGTH).empty()) {
         ctx->body_bytes += std::stol(http_req->header(HttpHeaders::CONTENT_LENGTH));
         if (ctx->body_bytes > max_body_bytes) {
-            LOG(WARNING) << "body exceed max size." << ctx->brief();
-
             std::stringstream ss;
-            ss << "body exceed max size: " << max_body_bytes << ", limit: " << max_body_bytes;
+            ss << "body size " << ctx->body_bytes << " exceed limit: " << max_body_bytes << ", " << ctx->brief()
+               << ". You can increase the limit by setting streaming_load_max_mb in be.conf.";
+            LOG(WARNING) << ss.str();
             return Status::InternalError(ss.str());
         }
     } else {
@@ -442,6 +442,7 @@ Status TransactionStreamLoadAction::_exec_plan_fragment(HttpRequest* http_req, S
             [&request, ctx](FrontendServiceConnection& client) { client->streamLoadPut(ctx->put_result, request); }));
     ctx->stream_load_put_cost_nanos = MonotonicNanos() - stream_load_put_start_time;
     ctx->timeout_second = ctx->put_result.params.query_options.query_timeout;
+    ctx->request.__set_timeout(ctx->timeout_second);
 #else
     ctx->put_result = k_stream_load_put_result;
 #endif

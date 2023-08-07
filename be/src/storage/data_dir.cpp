@@ -113,6 +113,13 @@ Status DataDir::_init_data_dir() {
     return st;
 }
 
+Status DataDir::init_persistent_index_dir() {
+    std::string persistent_index_path = get_persistent_index_path();
+    auto st = _fs->create_dir_recursive(persistent_index_path);
+    LOG_IF(ERROR, !st.ok()) << "failed to create persistent directory " << persistent_index_path;
+    return st;
+}
+
 Status DataDir::_init_tmp_dir() {
     std::string tmp_path = _path + TMP_PREFIX;
     auto st = _fs->create_dir_recursive(tmp_path);
@@ -145,7 +152,7 @@ void DataDir::health_check() {
     if (_is_used) {
         Status res = _read_and_write_test_file();
         if (!res.ok()) {
-            LOG(WARNING) << "store read/write test file occur IO Error. path=" << _path;
+            LOG(WARNING) << "store read/write test file occur IO Error. path=" << _path << ", res=" << res.to_string();
             if (is_io_error(res)) {
                 _is_used = false;
             }
@@ -217,6 +224,12 @@ std::string DataDir::get_absolute_tablet_path(int64_t shard_id, int64_t tablet_i
     return strings::Substitute("$0/$1/$2", get_absolute_shard_path(shard_id), tablet_id, schema_hash);
 }
 
+Status DataDir::create_dir_if_path_not_exists(const std::string& path) {
+    auto st = _fs->create_dir_recursive(path);
+    LOG_IF(ERROR, !st.ok()) << "failed to create directory " << path;
+    return st;
+}
+
 void DataDir::find_tablet_in_trash(int64_t tablet_id, std::vector<std::string>* paths) {
     // path: /root_path/trash/time_label/tablet_id/schema_hash
     std::string trash_path = _path + TRASH_PREFIX;
@@ -283,7 +296,7 @@ Status DataDir::load() {
                                                                     std::string_view value) -> bool {
         Status st =
                 _tablet_manager->load_tablet_from_meta(this, tablet_id, schema_hash, value, false, false, false, false);
-        if (!st.ok() && !st.is_not_found()) {
+        if (!st.ok() && !st.is_not_found() && !st.is_already_exist()) {
             // load_tablet_from_meta() may return NotFound which means the tablet status is DELETED
             // This may happen when the tablet was just deleted before the BE restarted,
             // but it has not been cleared from rocksdb. At this time, restarting the BE
@@ -298,7 +311,22 @@ Status DataDir::load() {
         }
         return true;
     };
-    Status load_tablet_status = TabletMetaManager::walk(_kv_store, load_tablet_func);
+    Status load_tablet_status =
+            TabletMetaManager::walk_until_timeout(_kv_store, load_tablet_func, config::load_tablet_timeout_seconds);
+    if (load_tablet_status.is_time_out()) {
+        Status s = _kv_store->compact();
+        if (!s.ok()) {
+            LOG(ERROR) << "data dir " << _path << " compact meta befor load failed";
+            return s;
+        }
+        for (auto tablet_id : tablet_ids) {
+            _tablet_manager->drop_tablet(tablet_id, kKeepMetaAndFiles);
+        }
+        tablet_ids.clear();
+        failed_tablet_ids.clear();
+        load_tablet_status = TabletMetaManager::walk(_kv_store, load_tablet_func);
+    }
+
     if (failed_tablet_ids.size() != 0) {
         LOG(ERROR) << "load tablets from header failed"
                    << ", loaded tablet: " << tablet_ids.size() << ", error tablet: " << failed_tablet_ids.size()
@@ -354,7 +382,7 @@ Status DataDir::load() {
             }
         } else if (rowset_meta->rowset_state() == RowsetStatePB::VISIBLE &&
                    rowset_meta->tablet_uid() == tablet->tablet_uid()) {
-            Status publish_status = tablet->add_rowset(rowset, false);
+            Status publish_status = tablet->load_rowset(rowset);
             if (!publish_status.ok() && !publish_status.is_already_exist()) {
                 LOG(WARNING) << "Fail to add visible rowset=" << rowset->rowset_id()
                              << " to tablet=" << rowset_meta->tablet_id() << " txn id=" << rowset_meta->txn_id()
@@ -368,6 +396,24 @@ Status DataDir::load() {
                          << " current valid tablet uid=" << tablet->tablet_uid();
         }
     }
+
+    for (int64_t tablet_id : tablet_ids) {
+        TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_id, false);
+        if (tablet == nullptr) {
+            continue;
+        }
+        // ignore the failure, and this behaviour is the same as that when failed to load rowset above.
+        // For full data, FE will repair it by cloning data from other replicas. For binlog, there may
+        // be data loss, because there is no clone mechanism for binlog currently, and the application
+        // should deal with the case. For example, realtime MV can initialize with the newest full data
+        // to skip the lost binlog, and process the new binlog after that. The situation is similar with
+        // that the binlog is expired and deleted before the application processes it.
+        Status st = tablet->finish_load_rowsets();
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to finish loading rowsets, tablet id=" << tablet_id << ", status: " << st.to_string();
+        }
+    }
+
     return Status::OK();
 }
 
@@ -508,6 +554,12 @@ void DataDir::perform_path_scan() {
                         continue;
                     }
                     for (const auto& rowset_file : rowset_files) {
+                        StringPiece sp(rowset_file);
+                        if (sp.ends_with(".cols")) {
+                            // ".col" isn't gc here, because it links with delta column group,
+                            // So it will be removed when delta column group is removed from rocksdb
+                            continue;
+                        }
                         std::string rowset_file_path = tablet_schema_hash_path + "/" + rowset_file;
                         _all_check_paths.insert(rowset_file_path);
                     }
@@ -535,8 +587,8 @@ Status DataDir::update_capacity() {
 }
 
 bool DataDir::capacity_limit_reached(int64_t incoming_data_size) {
-    double used_pct = (_disk_capacity_bytes - _available_bytes + incoming_data_size) / (double)_disk_capacity_bytes;
-    int64_t left_bytes = _disk_capacity_bytes - _available_bytes - incoming_data_size;
+    double used_pct = disk_usage(incoming_data_size);
+    int64_t left_bytes = _available_bytes - incoming_data_size;
 
     if (used_pct >= config::storage_flood_stage_usage_percent / 100.0 &&
         left_bytes <= config::storage_flood_stage_left_capacity_bytes) {

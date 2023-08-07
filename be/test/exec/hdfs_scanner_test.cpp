@@ -18,10 +18,12 @@
 
 #include <memory>
 
+#include "block_cache/block_cache.h"
 #include "column/column_helper.h"
 #include "exec/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner_parquet.h"
 #include "exec/hdfs_scanner_text.h"
+#include "exec/jni_scanner.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
@@ -47,8 +49,10 @@ public:
 protected:
     void _create_runtime_state(const std::string& timezone);
     void _create_runtime_profile();
+    Status _init_block_cache(size_t mem_size, const std::string& engine);
     HdfsScannerParams* _create_param(const std::string& file, THdfsScanRange* range, const TupleDescriptor* tuple_desc);
-    void build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc);
+    void build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc,
+                                 bool diff_case_sensitive = false);
 
     THdfsScanRange* _create_scan_range(const std::string& file, uint64_t offset, uint64_t length);
     TupleDescriptor* _create_tuple_desc(SlotDesc* descs);
@@ -56,7 +60,8 @@ protected:
     ObjectPool _pool;
     RuntimeProfile* _runtime_profile = nullptr;
     RuntimeState* _runtime_state = nullptr;
-    std::shared_ptr<RowDescriptor> _row_desc = nullptr;
+    std::string _debug_row_output;
+    int _debug_rows_per_call = 1;
 };
 
 void HdfsScannerTest::_create_runtime_profile() {
@@ -73,6 +78,16 @@ void HdfsScannerTest::_create_runtime_state(const std::string& timezone) {
     }
     _runtime_state = _pool.add(new RuntimeState(fragment_id, query_options, query_globals, nullptr));
     _runtime_state->init_instance_mem_tracker();
+}
+
+Status HdfsScannerTest::_init_block_cache(size_t mem_size, const std::string& engine) {
+    BlockCache* cache = BlockCache::instance();
+    CacheOptions cache_options;
+    cache_options.mem_space_size = mem_size;
+    cache_options.block_size = starrocks::config::block_cache_block_size;
+    cache_options.enable_checksum = starrocks::config::block_cache_checksum_enable;
+    cache_options.engine = engine;
+    return cache->init(cache_options);
 }
 
 THdfsScanRange* HdfsScannerTest::_create_scan_range(const std::string& file, uint64_t offset, uint64_t length) {
@@ -92,6 +107,7 @@ THdfsScanRange* HdfsScannerTest::_create_scan_range(const std::string& file, uin
 HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfsScanRange* range,
                                                   const TupleDescriptor* tuple_desc) {
     auto* param = _pool.add(new HdfsScannerParams());
+    auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
     param->fs = FileSystem::Default();
     param->path = file;
     param->file_size = range->file_length;
@@ -117,13 +133,21 @@ HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfs
     param->materialize_index_in_chunk = materialize_index_in_chunk;
     param->materialize_slots = mat_slots;
     param->partition_slots = part_slots;
+    param->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
     return param;
 }
 
-void HdfsScannerTest::build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc) {
+void HdfsScannerTest::build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc,
+                                              bool diff_case_sensitive) {
     std::vector<std::string>* hive_column_names = _pool.add(new std::vector<std::string>());
     for (auto slot : tuple_desc->slots()) {
-        hive_column_names->emplace_back(slot->col_name());
+        std::string col_name = slot->col_name();
+        if (diff_case_sensitive && std::isupper(col_name[0])) {
+            std::transform(col_name.begin(), col_name.end(), col_name.begin(), ::tolower);
+        } else if (diff_case_sensitive && std::islower(col_name[0])) {
+            std::transform(col_name.begin(), col_name.end(), col_name.begin(), ::toupper);
+        }
+        hive_column_names->emplace_back(col_name);
     }
     params->hive_column_names = hive_column_names;
 }
@@ -144,18 +168,18 @@ TupleDescriptor* HdfsScannerTest::_create_tuple_desc(SlotDesc* descs) {
     std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
     DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
-    _row_desc = std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
-    auto* tuple_desc = _row_desc->tuple_descriptors()[0];
+    auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+    auto* tuple_desc = row_desc->tuple_descriptors()[0];
     return tuple_desc;
 }
 
 // ========================= PARQUET SCANNER ============================
 
 static SlotDesc default_parquet_descs[] = {
-        {"c1", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)},
-        {"c2", TypeDescriptor::from_primtive_type(LogicalType::TYPE_BIGINT)},
-        {"c3", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
-        {"col_varchar", TypeDescriptor::from_primtive_type(LogicalType::TYPE_DATETIME)},
+        {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+        {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+        {"c3", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+        {"col_varchar", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)},
         {""}};
 
 std::string default_parquet_file = "./be/test/exec/test_data/parquet_scanner/file_reader_test.parquet1";
@@ -198,7 +222,7 @@ TEST_F(HdfsScannerTest, TestParquetGetNext) {
     status = scanner->open(_runtime_state);
     ASSERT_TRUE(status.ok());
 
-    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
     status = scanner->get_next(_runtime_state, &chunk);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(chunk->num_rows(), 4);
@@ -230,7 +254,6 @@ static TExprNode create_int_literal_node(TPrimitiveType::type value_type, int64_
     TIntLiteral lit_value;
     lit_value.__set_value(value_literal);
     lit_node.__set_int_literal(lit_value);
-    lit_node.__set_use_vectorized(true);
     return lit_node;
 }
 
@@ -242,7 +265,6 @@ static TExprNode create_string_literal_node(TPrimitiveType::type value_type, con
     TStringLiteral lit_value;
     lit_value.__set_value(value_literal);
     lit_node.__set_string_literal(lit_value);
-    lit_node.__set_use_vectorized(true);
     return lit_node;
 }
 
@@ -254,7 +276,6 @@ static TExprNode create_datetime_literal_node(TPrimitiveType::type value_type, c
     TDateLiteral lit_value;
     lit_value.__set_value(value_literal);
     lit_node.__set_date_literal(lit_value);
-    lit_node.__set_use_vectorized(true);
     return lit_node;
 }
 
@@ -267,7 +288,6 @@ static void push_binary_pred_texpr_node(std::vector<TExprNode>& nodes, TExprOpco
     eq_node.__set_type(create_primitive_type_desc(TPrimitiveType::BOOLEAN));
     eq_node.__set_opcode(opcode);
     eq_node.__set_num_children(2);
-    eq_node.__set_use_vectorized(true);
 
     TExprNode slot_node;
     slot_node.__set_node_type(TExprNodeType::SLOT_REF);
@@ -277,7 +297,6 @@ static void push_binary_pred_texpr_node(std::vector<TExprNode>& nodes, TExprOpco
     slot_ref.__set_slot_id(slot_desc->id());
     slot_ref.__set_tuple_id(slot_desc->parent());
     slot_node.__set_slot_ref(slot_ref);
-    slot_node.__set_use_vectorized(true);
 
     nodes.emplace_back(eq_node);
     nodes.emplace_back(slot_node);
@@ -309,26 +328,32 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
     params->partition_values = part_values;
 }
 
-#define READ_SCANNER_RETURN_ROWS(scanner, records)                                     \
-    do {                                                                               \
-        auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);                           \
-        for (;;) {                                                                     \
-            chunk->reset();                                                            \
-            status = scanner->get_next(_runtime_state, &chunk);                        \
-            if (status.is_end_of_file()) {                                             \
-                break;                                                                 \
-            }                                                                          \
-            if (!status.ok()) {                                                        \
-                std::cout << "status not ok: " << status.get_error_msg() << std::endl; \
-                break;                                                                 \
-            }                                                                          \
-            chunk->check_or_die();                                                     \
-            if (chunk->num_rows() > 0) {                                               \
-                std::cout << "row#0: " << chunk->debug_row(0) << std::endl;            \
-                EXPECT_EQ(chunk->num_columns(), tuple_desc->slots().size());           \
-            }                                                                          \
-            records += chunk->num_rows();                                              \
-        }                                                                              \
+#define READ_SCANNER_RETURN_ROWS(scanner, records)                                        \
+    do {                                                                                  \
+        _debug_row_output = "";                                                           \
+        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);                          \
+        for (;;) {                                                                        \
+            chunk->reset();                                                               \
+            status = scanner->get_next(_runtime_state, &chunk);                           \
+            if (!status.ok() && !status.is_end_of_file()) {                               \
+                std::cout << "status not ok: " << status.get_error_msg() << std::endl;    \
+                break;                                                                    \
+            }                                                                             \
+            chunk->check_or_die();                                                        \
+            if (chunk->num_rows() > 0) {                                                  \
+                int rep = std::min(_debug_rows_per_call, (int)chunk->num_rows());         \
+                for (int i = 0; i < rep; i++) {                                           \
+                    std::cout << "row#" << i << ": " << chunk->debug_row(i) << std::endl; \
+                    _debug_row_output += chunk->debug_row(i);                             \
+                    _debug_row_output += '\n';                                            \
+                }                                                                         \
+                EXPECT_EQ(chunk->num_columns(), tuple_desc->slots().size());              \
+            }                                                                             \
+            records += chunk->num_rows();                                                 \
+            if (status.is_end_of_file()) {                                                \
+                break;                                                                    \
+            }                                                                             \
+        }                                                                                 \
     } while (0)
 
 #define READ_SCANNER_ROWS(scanner, exp)             \
@@ -340,37 +365,37 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
 
 // ====================================================================================================
 
-static SlotDesc mtypes_orc_descs[] = {{"id", TypeDescriptor::from_primtive_type(LogicalType::TYPE_BIGINT)},
-                                      {"col_float", TypeDescriptor::from_primtive_type(LogicalType::TYPE_FLOAT)},
-                                      {"col_double", TypeDescriptor::from_primtive_type(LogicalType::TYPE_DOUBLE)},
-                                      {"col_varchar", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col_char", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col_tinyint", TypeDescriptor::from_primtive_type(LogicalType::TYPE_TINYINT)},
-                                      {"col_smallint", TypeDescriptor::from_primtive_type(LogicalType::TYPE_SMALLINT)},
-                                      {"col_int", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)},
-                                      {"col_bigint", TypeDescriptor::from_primtive_type(LogicalType::TYPE_BIGINT)},
-                                      {"col_largeint", TypeDescriptor::from_primtive_type(LogicalType::TYPE_BIGINT)},
-                                      {"col0_i32p7s2", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col1_i32p7s2", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col0_i32p6s3", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col1_i32p6s3", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col0_i64p7s2", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col1_i64p7s2", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col0_i64p9s5", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col1_i64p9s5", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col0_i128p7s2", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col1_i128p7s2", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col0_i128p18s9", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col1_i128p18s9", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col0_i128p30s9", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
-                                      {"col1_i128p30s9", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
-                                      {"PART_x", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)},
-                                      {"PART_y", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)},
+static SlotDesc mtypes_orc_descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+                                      {"col_float", TypeDescriptor::from_logical_type(LogicalType::TYPE_FLOAT)},
+                                      {"col_double", TypeDescriptor::from_logical_type(LogicalType::TYPE_DOUBLE)},
+                                      {"col_varchar", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col_char", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col_tinyint", TypeDescriptor::from_logical_type(LogicalType::TYPE_TINYINT)},
+                                      {"col_smallint", TypeDescriptor::from_logical_type(LogicalType::TYPE_SMALLINT)},
+                                      {"col_int", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                                      {"col_bigint", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+                                      {"col_largeint", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+                                      {"col0_i32p7s2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col1_i32p7s2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col0_i32p6s3", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col1_i32p6s3", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col0_i64p7s2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col1_i64p7s2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col0_i64p9s5", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col1_i64p9s5", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col0_i128p7s2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col1_i128p7s2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col0_i128p18s9", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col1_i128p18s9", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col0_i128p30s9", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col1_i128p30s9", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                                      {"PART_x", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                                      {"PART_y", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
                                       {""}};
 std::string mtypes_orc_file = "./be/test/exec/test_data/orc_scanner/mtypes_100.orc.zlib";
 
-static SlotDesc mtypes_orc_min_max_descs[] = {{"id", TypeDescriptor::from_primtive_type(LogicalType::TYPE_BIGINT)},
-                                              {"PART_y", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)},
+static SlotDesc mtypes_orc_min_max_descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+                                              {"PART_y", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
                                               {""}};
 
 TEST_F(HdfsScannerTest, TestOrcGetNext) {
@@ -567,8 +592,8 @@ Total length: 48800
  */
 
 TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
-    SlotDesc string_key_value_orc_desc[] = {{"key", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
-                                            {"value", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
+    SlotDesc string_key_value_orc_desc[] = {{"key", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                                            {"value", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
                                             {""}};
     const std::string string_key_value_orc_file = "./be/test/exec/test_data/orc_scanner/string_key_value_10k.orc.zstd";
 
@@ -609,6 +634,92 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
     // since we use dict filter eval cache, we can do filter on orc cvb
     // so actually read rows is 1000.
     EXPECT_EQ(scanner->raw_rows_read(), 1000);
+    scanner->close(_runtime_state);
+}
+
+// ====================================================================================================
+
+/**
+ *
+File be/test/exec/test_data/orc_scanner/two-strips-dict-and-nodict.orc has 2 stripes
+Stripe Statistics:
+  Stripe 1:
+    Column 0: count: 100 hasNull: false
+    Column 1: count: 100 hasNull: false bytesOnDisk: 19 min: 0 max: 9 sum: 450
+    Column 2: count: 100 hasNull: false bytesOnDisk: 17 min: a max: a sum: 100
+  Stripe 2:
+    Column 0: count: 100 hasNull: false
+    Column 1: count: 100 hasNull: false bytesOnDisk: 20 min: 0 max: 9 sum: 451
+    Column 2: count: 100 hasNull: false bytesOnDisk: 1234 min: a max: ztrddxrhvzodrpeomoie sum: 1981
+
+File Statistics:
+  Column 0: count: 200 hasNull: false
+  Column 1: count: 200 hasNull: false bytesOnDisk: 39 min: 0 max: 9 sum: 901
+  Column 2: count: 200 hasNull: false bytesOnDisk: 1251 min: a max: ztrddxrhvzodrpeomoie sum: 2081
+
+Stripes:
+ Stripe1: offset: 3 data: 36 rows: 100 tail: 52 index: 63
+   Stream: column 0 section ROW_INDEX start: 3 length 11
+   Stream: column 1 section ROW_INDEX start: 14 length 25
+   Stream: column 2 section ROW_INDEX start: 39 length 27
+   Stream: column 1 section DATA start: 66 length 19
+   Stream: column 2 section DATA start: 85 length 7
+   Stream: column 2 section LENGTH start: 92 length 6
+   Stream: column 2 section DICTIONARY_DATA start: 98 length 4
+   Encoding column 0: DIRECT
+   Encoding column 1: DIRECT_V2
+   Encoding column 2: DICTIONARY_V2[1]
+ Stripe2: offset: 154 data: 1254 rows: 100 tail: 50 index: 83
+   Stream: column 0 section ROW_INDEX start: 154 length 11
+   Stream: column 1 section ROW_INDEX start: 165 length 25
+   Stream: column 2 section ROW_INDEX start: 190 length 47
+   Stream: column 1 section DATA start: 237 length 20
+   Stream: column 2 section DATA start: 257 length 1224
+   Stream: column 2 section LENGTH start: 1481 length 10
+   Encoding column 0: DIRECT
+   Encoding column 1: DIRECT_V2
+   Encoding column 2: DIRECT_V2
+*/
+
+TEST_F(HdfsScannerTest, TestOrcGetNextWithDiffEncodeDictFilter) {
+    SlotDesc two_diff_encode_orc_desc[] = {{"x", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                                           {"y", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                                           {""}};
+    const std::string two_diff_encode_orc_file = "./be/test/exec/test_data/orc_scanner/two-strips-dict-and-nodict.orc";
+
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+
+    auto* range = _create_scan_range(two_diff_encode_orc_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(two_diff_encode_orc_desc);
+    auto* param = _create_param(two_diff_encode_orc_file, range, tuple_desc);
+
+    // key = "a", y = 'a' rows is 101
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "a");
+        push_binary_pred_texpr_node(nodes, TExprOpcode::EQ, tuple_desc->slots()[1], TPrimitiveType::VARCHAR, lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        std::cout << "equal expr = " << ctx->root()->debug_string() << std::endl;
+        param->conjunct_ctxs_by_slot[1].push_back(ctx);
+    }
+
+    for (auto& it : param->conjunct_ctxs_by_slot) {
+        Expr::prepare(it.second, _runtime_state);
+        Expr::open(it.second, _runtime_state);
+    }
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+
+    // so stripe will not be filtered out by search argument
+    // and we can test dict-filtering strategy.
+    scanner->disable_use_orc_sargs();
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+    READ_SCANNER_ROWS(scanner, 101);
+    // since we use dict filter eval cache, we can do filter on orc cvb
+    // so actually read rows is 200.
+    EXPECT_EQ(scanner->raw_rows_read(), 200);
     scanner->close(_runtime_state);
 }
 
@@ -668,7 +779,7 @@ Stripes:
 */
 
 TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
-    SlotDesc datetime_orc_descs[] = {{"c0", TypeDescriptor::from_primtive_type(LogicalType::TYPE_DATETIME)}, {""}};
+    SlotDesc datetime_orc_descs[] = {{"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)}, {""}};
     const std::string datetime_orc_file = "./be/test/exec/test_data/orc_scanner/datetime_20k.orc.zlib";
 
     _create_runtime_state("GMT");
@@ -766,8 +877,8 @@ Padding ratio: 0%
  */
 
 TEST_F(HdfsScannerTest, TestOrcGetNextWithPaddingCharDictFilter) {
-    SlotDesc padding_char_varchar_desc[] = {{"c0", TypeDescriptor::from_primtive_type(LogicalType::TYPE_CHAR)},
-                                            {"c1", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
+    SlotDesc padding_char_varchar_desc[] = {{"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_CHAR)},
+                                            {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
                                             {""}};
     const std::string padding_char_varchar_orc_file =
             "./be/test/exec/test_data/orc_scanner/padding_char_varchar_10k.orc";
@@ -870,13 +981,13 @@ Stripes:
 */
 
 TEST_F(HdfsScannerTest, DecodeMinMaxDateTime) {
-    SlotDesc timezone_datetime_slot_descs[] = {{"c0", TypeDescriptor::from_primtive_type(LogicalType::TYPE_DATETIME)},
-                                               {"c1", TypeDescriptor::from_primtive_type(LogicalType::TYPE_DATE)},
+    SlotDesc timezone_datetime_slot_descs[] = {{"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)},
+                                               {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATE)},
                                                {""}};
 
-    const std::string timzone_datetime_shanghai_orc_file =
+    const std::string timezone_datetime_shanghai_orc_file =
             "./be/test/exec/test_data/orc_scanner/writer_tz_shanghai.orc";
-    const std::string timzone_datetime_utc_orc_file = "./be/test/exec/test_data/orc_scanner/writer_tz_utc.orc";
+    const std::string timezone_datetime_utc_orc_file = "./be/test/exec/test_data/orc_scanner/writer_tz_utc.orc";
 
     struct Case {
         std::string file;
@@ -885,12 +996,12 @@ TEST_F(HdfsScannerTest, DecodeMinMaxDateTime) {
         int exp;
     };
     std::vector<Case> cases = {
-            {timzone_datetime_shanghai_orc_file, "2022-04-09 07:13:00", "Asia/Shanghai", 1},
-            {timzone_datetime_shanghai_orc_file, "2022-04-09 07:13:00", "UTC", 0},
-            {timzone_datetime_shanghai_orc_file, "2022-04-08 23:13:00", "UTC", 1},
-            {timzone_datetime_utc_orc_file, "2022-04-09 07:13:00", "Asia/Shanghai", 0},
-            {timzone_datetime_utc_orc_file, "2022-04-09 15:13:00", "Asia/Shanghai", 1},
-            {timzone_datetime_utc_orc_file, "2022-04-09 07:13:00", "UTC", 1},
+            {timezone_datetime_shanghai_orc_file, "2022-04-09 07:13:00", "Asia/Shanghai", 1},
+            {timezone_datetime_shanghai_orc_file, "2022-04-09 07:13:00", "UTC", 0},
+            {timezone_datetime_shanghai_orc_file, "2022-04-08 23:13:00", "UTC", 1},
+            {timezone_datetime_utc_orc_file, "2022-04-09 07:13:00", "Asia/Shanghai", 0},
+            {timezone_datetime_utc_orc_file, "2022-04-09 15:13:00", "Asia/Shanghai", 1},
+            {timezone_datetime_utc_orc_file, "2022-04-09 07:13:00", "UTC", 1},
     };
 
     for (const Case& c : cases) {
@@ -995,15 +1106,15 @@ Stripes:
     Stream: column 16 section DATA start: 401 length 0
  */
 TEST_F(HdfsScannerTest, TestZeroSizeStream) {
-    SlotDesc slot_descs[] = {{"col_boolean", TypeDescriptor::from_primtive_type(LogicalType::TYPE_BOOLEAN)},
-                             {"col_int", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)},
-                             {"col_long", TypeDescriptor::from_primtive_type(LogicalType::TYPE_BIGINT)},
-                             {"col_float", TypeDescriptor::from_primtive_type(LogicalType::TYPE_FLOAT)},
-                             {"col_double", TypeDescriptor::from_primtive_type(LogicalType::TYPE_DOUBLE)},
-                             {"col_date", TypeDescriptor::from_primtive_type(LogicalType::TYPE_DATE)},
-                             {"col_timestamp", TypeDescriptor::from_primtive_type(LogicalType::TYPE_DATETIME)},
-                             {"col_string", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
-                             {"col_binary", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
+    SlotDesc slot_descs[] = {{"col_boolean", TypeDescriptor::from_logical_type(LogicalType::TYPE_BOOLEAN)},
+                             {"col_int", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                             {"col_long", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+                             {"col_float", TypeDescriptor::from_logical_type(LogicalType::TYPE_FLOAT)},
+                             {"col_double", TypeDescriptor::from_logical_type(LogicalType::TYPE_DOUBLE)},
+                             {"col_date", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATE)},
+                             {"col_timestamp", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)},
+                             {"col_string", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                             {"col_binary", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARBINARY)},
                              {""}};
 
     const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_zero_size_stream.orc";
@@ -1035,13 +1146,10 @@ TEST_F(HdfsScannerTest, TestZeroSizeStream) {
 TEST_F(HdfsScannerTest, TestOrcLazyLoad) {
     static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_struct_basic.orc";
 
-    SlotDesc c0{"c0", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)};
-    SlotDesc c1{"c1", TypeDescriptor::from_primtive_type(LogicalType::TYPE_STRUCT)};
-    c1.type.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR));
+    SlotDesc c0{"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)};
+    SlotDesc c1{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT)};
+    c1.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
     c1.type.field_names.emplace_back("Cc1");
-    c1.type.selected_fields.reserve(1);
-    c1.type.selected_fields.clear();
-    c1.type.selected_fields.push_back(true);
 
     SlotDesc slot_descs[] = {c0, c1, {""}};
 
@@ -1073,7 +1181,7 @@ TEST_F(HdfsScannerTest, TestOrcLazyLoad) {
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
 
-    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
     status = scanner->get_next(_runtime_state, &chunk);
     EXPECT_TRUE(status.ok());
 
@@ -1085,6 +1193,56 @@ TEST_F(HdfsScannerTest, TestOrcLazyLoad) {
     status = scanner->get_next(_runtime_state, &chunk);
     // Should be end of file in next read.
     EXPECT_TRUE(status.is_end_of_file());
+
+    scanner->close(_runtime_state);
+}
+
+TEST_F(HdfsScannerTest, TestOrcBooleanConjunct) {
+    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/boolean_slot_ref.orc";
+
+    SlotDesc c0{"sex", TypeDescriptor::from_logical_type(LogicalType::TYPE_BOOLEAN)};
+
+    SlotDesc slot_descs[] = {c0, {""}};
+
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+
+    auto* range = _create_scan_range(input_orc_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(slot_descs);
+    auto* param = _create_param(input_orc_file, range, tuple_desc);
+
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node;
+        lit_node.__set_node_type(TExprNodeType::SLOT_REF);
+        lit_node.__set_num_children(0);
+        lit_node.__set_type(create_primitive_type_desc(TPrimitiveType::BOOLEAN));
+        TSlotRef t_slot_ref = TSlotRef();
+        t_slot_ref.slot_id = 0;
+        t_slot_ref.tuple_id = 0;
+        lit_node.__set_slot_ref(t_slot_ref);
+        nodes.emplace_back(lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        param->conjunct_ctxs_by_slot[0].push_back(ctx);
+    }
+
+    for (auto& it : param->conjunct_ctxs_by_slot) {
+        Expr::prepare(it.second, _runtime_state);
+        Expr::open(it.second, _runtime_state);
+    }
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+
+    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    status = scanner->get_next(_runtime_state, &chunk);
+    EXPECT_TRUE(status.ok());
+
+    EXPECT_EQ(1, chunk->num_rows());
+
+    EXPECT_EQ("[1]", chunk->debug_row(0));
 
     scanner->close(_runtime_state);
 }
@@ -1118,9 +1276,9 @@ c3:            BINARY SNAPPY DO:2764882 FPO:2803392 SZ:43059/586643/13.62 VC:272
  */
 
 TEST_F(HdfsScannerTest, TestParquetCoalesceReadAcrossRowGroup) {
-    SlotDesc parquet_descs[] = {{"c1", TypeDescriptor::from_primtive_type(LogicalType::TYPE_BIGINT)},
-                                {"c2", TypeDescriptor::from_primtive_type(LogicalType::TYPE_BIGINT)},
-                                {"c3", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
+    SlotDesc parquet_descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+                                {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+                                {"c3", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
                                 {""}};
 
     const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/small_row_group_data.parquet";
@@ -1143,9 +1301,9 @@ TEST_F(HdfsScannerTest, TestParquetCoalesceReadAcrossRowGroup) {
 }
 
 TEST_F(HdfsScannerTest, TestParquetRuntimeFilter) {
-    SlotDesc parquet_descs[] = {{"c1", TypeDescriptor::from_primtive_type(LogicalType::TYPE_BIGINT)},
-                                {"c2", TypeDescriptor::from_primtive_type(LogicalType::TYPE_BIGINT)},
-                                {"c3", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
+    SlotDesc parquet_descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+                                {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+                                {"c3", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
                                 {""}};
 
     const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/small_row_group_data.parquet";
@@ -1236,11 +1394,11 @@ is_original:           REQUIRED INT32 R:0 D:0
 */
 
 TEST_F(HdfsScannerTest, TestParqueTypeMismatchDecodeMinMax) {
-    SlotDesc parquet_descs[] = {{"vin", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
-                                {"is_cloud", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
+    SlotDesc parquet_descs[] = {{"vin", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                                {"is_cloud", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
                                 {""}};
 
-    SlotDesc min_max_descs[] = {{"vin", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)}, {""}};
+    SlotDesc min_max_descs[] = {{"vin", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)}, {""}};
 
     const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/type_mismatch_decode_min_max.parquet";
 
@@ -1290,8 +1448,8 @@ UID99,ACTION99
 */
 
 TEST_F(HdfsScannerTest, TestCSVCompressed) {
-    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
-                            {"action", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
+    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                            {"action", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
                             {""}};
 
     const std::string uncompressed_file = "./be/test/exec/test_data/csv_scanner/compressed.csv";
@@ -1360,8 +1518,8 @@ UID1,ACTION1
 // there is no newline at EOF.
 
 TEST_F(HdfsScannerTest, TestCSVSmall) {
-    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
-                            {"action", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
+    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                            {"action", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
                             {""}};
 
     const std::string small_file = "./be/test/exec/test_data/csv_scanner/small.csv";
@@ -1405,6 +1563,298 @@ TEST_F(HdfsScannerTest, TestCSVSmall) {
     }
 }
 
+TEST_F(HdfsScannerTest, TestCSVCaseIgnore) {
+    SlotDesc csv_descs[] = {{"USER_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                            {"ACTION", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                            {""}};
+
+    const std::string small_file = "./be/test/exec/test_data/csv_scanner/small.csv";
+    Status status;
+
+    {
+        auto* range = _create_scan_range(small_file, 0, 0);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(small_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc, true);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        READ_SCANNER_ROWS(scanner, 2);
+        scanner->close(_runtime_state);
+    }
+}
+
+TEST_F(HdfsScannerTest, TestCSVWithoutEndDelemeter) {
+    SlotDesc csv_descs[] = {{"col1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                            {"col2", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                            {"col3", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                            {""}};
+
+    const std::string small_file = "./be/test/exec/test_data/csv_scanner/delimiter.csv";
+    Status status;
+
+    {
+        auto* range = _create_scan_range(small_file, 0, 0);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(small_file, range, tuple_desc);
+#if defined(WITH_STARCACHE)
+        status = _init_block_cache(50 * 1024 * 1024, "starcache"); // 50MB
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        param->use_block_cache = true;
+#elif defined(WITH_CACHELIB)
+        status = _init_block_cache(50 * 1024 * 1024, "cachelib"); // 50MB
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        param->use_block_cache = true;
+#endif
+        build_hive_column_names(param, tuple_desc, true);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        READ_SCANNER_ROWS(scanner, 3);
+        scanner->close(_runtime_state);
+    }
+}
+
+TEST_F(HdfsScannerTest, TestCSVWithWindowsEndDelemeter) {
+    SlotDesc csv_descs[] = {{"uuid", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)}, {""}};
+
+    const std::string windows_file = "./be/test/exec/test_data/csv_scanner/windows.csv";
+    Status status;
+
+    {
+        auto* range = _create_scan_range(windows_file, 0, 0);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(windows_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
+
+        status = scanner->get_next(_runtime_state, &chunk);
+        EXPECT_TRUE(status.ok());
+        EXPECT_EQ(3, chunk->num_rows());
+
+        EXPECT_EQ("['hello']", chunk->debug_row(0));
+        EXPECT_EQ("['world']", chunk->debug_row(1));
+        EXPECT_EQ("['starrocks']", chunk->debug_row(2));
+        scanner->close(_runtime_state);
+    }
+}
+
+TEST_F(HdfsScannerTest, TestCSVWithUTFBOM) {
+    SlotDesc csv_descs[] = {{"uuid", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)}, {""}};
+
+    const std::string bom_file = "./be/test/exec/test_data/csv_scanner/bom.csv";
+    Status status;
+
+    {
+        auto* range = _create_scan_range(bom_file, 0, 0);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(bom_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
+
+        status = scanner->get_next(_runtime_state, &chunk);
+        EXPECT_TRUE(status.ok());
+        EXPECT_EQ(3, chunk->num_rows());
+
+        EXPECT_EQ("['5c3ffda0d1d7']", chunk->debug_row(0));
+        EXPECT_EQ("['62ef51eae5d8']", chunk->debug_row(1));
+        scanner->close(_runtime_state);
+    }
+}
+
+TEST_F(HdfsScannerTest, TestCSVNewlyAddColumn) {
+    SlotDesc csv_descs[] = {{"name1", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                            {"age", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                            {"name2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                            {"newly", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                            {""}};
+
+    const std::string small_file = "./be/test/exec/test_data/csv_scanner/newly_add_column.csv";
+    Status status;
+
+    {
+        auto* range = _create_scan_range(small_file, 0, 0);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(small_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc, true);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        EXPECT_TRUE(status.ok());
+
+        status = scanner->open(_runtime_state);
+        EXPECT_TRUE(status.ok());
+
+        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
+
+        status = scanner->get_next(_runtime_state, &chunk);
+        EXPECT_TRUE(status.ok());
+        EXPECT_EQ(2, chunk->num_rows());
+
+        EXPECT_EQ("['hello', '5', 'smith', NULL]", chunk->debug_row(0));
+        EXPECT_EQ("['world', '6', 'cruise', NULL]", chunk->debug_row(1));
+
+        scanner->close(_runtime_state);
+    }
+}
+
+TEST_F(HdfsScannerTest, TestCSVDifferentOrderColumn) {
+    SlotDesc csv_descs[] = {{"name1", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                            {"age", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                            {"name2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                            {"newly", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                            {""}};
+
+    const std::string small_file = "./be/test/exec/test_data/csv_scanner/newly_add_column.csv";
+    Status status;
+
+    {
+        auto* range = _create_scan_range(small_file, 0, 0);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(small_file, range, tuple_desc);
+        std::vector<std::string> hive_column_names{"name2", "age", "name1", "newly"};
+        param->hive_column_names = &hive_column_names;
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        EXPECT_TRUE(status.ok());
+
+        status = scanner->open(_runtime_state);
+        EXPECT_TRUE(status.ok());
+
+        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
+
+        status = scanner->get_next(_runtime_state, &chunk);
+        EXPECT_TRUE(status.ok());
+        EXPECT_EQ(2, chunk->num_rows());
+
+        EXPECT_EQ("['smith', '5', 'hello', NULL]", chunk->debug_row(0));
+        EXPECT_EQ("['cruise', '6', 'world', NULL]", chunk->debug_row(1));
+
+        scanner->close(_runtime_state);
+    }
+}
+
+TEST_F(HdfsScannerTest, TestCSVWithStructMap) {
+    TypeDescriptor struct_col = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+    struct_col.field_names.emplace_back("subfield");
+    struct_col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    TypeDescriptor array_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_ARRAY);
+    array_struct.children.emplace_back(struct_col);
+
+    TypeDescriptor map_col = TypeDescriptor::from_logical_type(LogicalType::TYPE_MAP);
+    map_col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    map_col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    TypeDescriptor array_map = TypeDescriptor::from_logical_type(LogicalType::TYPE_ARRAY);
+    array_map.children.emplace_back(map_col);
+
+    SlotDesc csv_descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                            {"struct", array_struct},
+                            {"map", array_map},
+                            {""}};
+
+    const std::string small_file = "./be/test/exec/test_data/csv_scanner/array_struct_map.csv";
+    Status status;
+
+    {
+        auto* range = _create_scan_range(small_file, 0, 0);
+        range->text_file_desc.collection_delim = "|";
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(small_file, range, tuple_desc);
+        std::vector<std::string> hive_column_names{"id", "struct", "map"};
+        param->hive_column_names = &hive_column_names;
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        EXPECT_TRUE(status.ok());
+
+        status = scanner->open(_runtime_state);
+        EXPECT_TRUE(status.ok());
+
+        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
+
+        status = scanner->get_next(_runtime_state, &chunk);
+        EXPECT_TRUE(status.ok());
+        EXPECT_EQ(2, chunk->num_rows());
+
+        EXPECT_EQ("[1, [NULL,NULL], [NULL,NULL,NULL]]", chunk->debug_row(0));
+        EXPECT_EQ("[2, [NULL], [NULL,NULL]]", chunk->debug_row(1));
+
+        scanner->close(_runtime_state);
+    }
+}
+
+TEST_F(HdfsScannerTest, TestCSVWithBlankDelimiter) {
+    const std::string small_file = "./be/test/exec/test_data/csv_scanner/array_struct_map.csv";
+
+    SlotDesc csv_descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+
+    auto* tuple_desc = _create_tuple_desc(csv_descs);
+    auto* common_range = _create_scan_range(small_file, 0, 0);
+    auto* param = _create_param(small_file, common_range, tuple_desc);
+    std::vector<std::string> hive_column_names{"id"};
+    param->hive_column_names = &hive_column_names;
+
+    {
+        auto* range = _create_scan_range(small_file, 0, 0);
+        range->text_file_desc.field_delim = "";
+        param->scan_ranges[0] = range;
+        auto scanner = std::make_shared<HdfsTextScanner>();
+        auto status = scanner->init(_runtime_state, *param);
+        EXPECT_FALSE(status.ok());
+    }
+    {
+        auto* range = _create_scan_range(small_file, 0, 0);
+        range->text_file_desc.collection_delim = "";
+        param->scan_ranges[0] = range;
+        auto scanner = std::make_shared<HdfsTextScanner>();
+        auto status = scanner->init(_runtime_state, *param);
+        EXPECT_FALSE(status.ok());
+    }
+    {
+        auto* range = _create_scan_range(small_file, 0, 0);
+        range->text_file_desc.mapkey_delim = "";
+        param->scan_ranges[0] = range;
+        auto scanner = std::make_shared<HdfsTextScanner>();
+        auto status = scanner->init(_runtime_state, *param);
+        EXPECT_FALSE(status.ok());
+    }
+    {
+        auto* range = _create_scan_range(small_file, 0, 0);
+        range->text_file_desc.line_delim = "";
+        param->scan_ranges[0] = range;
+        auto scanner = std::make_shared<HdfsTextScanner>();
+        auto status = scanner->init(_runtime_state, *param);
+        EXPECT_FALSE(status.ok());
+    }
+}
+
 // =============================================================================
 
 /*
@@ -1431,8 +1881,8 @@ is_original:            INT64 SNAPPY DO:11263 FPO:11287 SZ:99/95/0.96 VC:100 ENC
 */
 
 TEST_F(HdfsScannerTest, TestParqueTypeMismatchInt96String) {
-    SlotDesc parquet_descs[] = {{"vin", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
-                                {"collection_time", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
+    SlotDesc parquet_descs[] = {{"vin", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                                {"collection_time", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
                                 {""}};
 
     const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/type_mismatch_int96_string.parquet";
@@ -1460,7 +1910,7 @@ abc
 // there is no newline at EOF.
 
 TEST_F(HdfsScannerTest, TestCSVSingleColumnNullAndEmpty) {
-    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)}, {""}};
+    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)}, {""}};
 
     const std::string small_file = "./be/test/exec/test_data/csv_scanner/single_column_null_and_empty.csv";
     Status status;
@@ -1501,8 +1951,8 @@ A:            BINARY SNAPPY DO:693 FPO:1139 SZ:581/749/1.29 VC:100 ENC:PLAIN,RLE
 */
 
 TEST_F(HdfsScannerTest, TestParquetUppercaseFiledPredicate) {
-    SlotDesc parquet_descs[] = {{"id", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)},
-                                {"a", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
+    SlotDesc parquet_descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                                {"a", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
                                 {""}};
 
     const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/upcase_field.parquet";
@@ -1593,10 +2043,10 @@ def array2_parquet():
 
 TEST_F(HdfsScannerTest, TestParquetArrayDecode) {
     TypeDescriptor array_type(TYPE_ARRAY);
-    array_type.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+    array_type.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
 
     SlotDesc parquet_descs[] = {
-            {"id", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)}, {"f00", array_type}, {""}};
+            {"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {"f00", array_type}, {""}};
 
     const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/array_decode.parquet";
 
@@ -1669,7 +2119,7 @@ def dict2_parquet():
 */
 
 TEST_F(HdfsScannerTest, TestParquetDictTwoPage) {
-    SlotDesc parquet_descs[] = {{"id", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)}, {""}};
+    SlotDesc parquet_descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)}, {""}};
 
     const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/dict_two_page.parquet";
 
@@ -1710,6 +2160,496 @@ TEST_F(HdfsScannerTest, TestParquetDictTwoPage) {
     EXPECT_TRUE(status.ok());
     READ_SCANNER_ROWS(scanner, 50);
     EXPECT_EQ(scanner->raw_rows_read(), 200);
+    scanner->close(_runtime_state);
+}
+
+// Test min-max logic when parquet file contains complex types
+TEST_F(HdfsScannerTest, TestMinMaxFilterWhenContainsComplexTypes) {
+    SlotDesc parquet_descs[] = {{"col82", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+
+    const std::string parquet_file = "./be/test/exec/test_data/parquet_data/min-max-complex-types.parquet";
+
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(parquet_descs);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
+
+    param->min_max_tuple_desc = tuple_desc;
+    const TupleDescriptor* min_max_tuple_desc = param->min_max_tuple_desc;
+
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_int_literal_node(TPrimitiveType::INT, 82);
+        push_binary_pred_texpr_node(nodes, TExprOpcode::GE, min_max_tuple_desc->slots()[0], TPrimitiveType::INT,
+                                    lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        param->min_max_conjunct_ctxs.push_back(ctx);
+        param->conjunct_ctxs.push_back(ctx);
+    }
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_int_literal_node(TPrimitiveType::INT, 82);
+        push_binary_pred_texpr_node(nodes, TExprOpcode::LE, min_max_tuple_desc->slots()[0], TPrimitiveType::INT,
+                                    lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        param->min_max_conjunct_ctxs.push_back(ctx);
+        param->conjunct_ctxs.push_back(ctx);
+    }
+
+    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
+    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+    READ_SCANNER_ROWS(scanner, 0);
+    EXPECT_EQ(scanner->raw_rows_read(), 0);
+    scanner->close(_runtime_state);
+}
+
+// =======================================================
+
+static bool can_run_jni_test() {
+    if (getenv("STARROCKS_SRC_HOME") == nullptr) {
+        // Right now it's very hard to construct jni ut, because we only build ut-binary but not java extensions.
+        // To make this test run, we have to define `STARROCKS_SRC_HOME` and `STARROCKS_HOME`(which has java-extensions)
+        // and we have to set following env vars
+        /*
+        STARROCKS_SRC_HOME=${STARROCKS_HOME} \
+        STARROCKS_HOME=${STARROCKS_HOME}/output/be \
+        HADOOP_CLASSPATH=${STARROCKS_HOME}/lib/hadoop/common/*:${STARROCKS_HOME}/lib/hadoop/common/lib/*:${STARROCKS_HOME}/lib/hadoop/hdfs/*:${STARROCKS_HOME}/lib/hadoop/hdfs/lib/* \
+        CLASSPATH=$STARROCKS_HOME/conf:$STARROCKS_HOME/lib/jni-packages/*:$HADOOP_CLASSPATH:$CLASSPATH \
+        LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH \
+        */
+        return false;
+    }
+    return true;
+}
+
+/*
+
+CREATE TABLE `test_hudi_mor2` (
+  `uuid` STRING,
+  `ts` int,
+  `a` int,
+  `b` string,
+  `c` array<array<int>>,
+  `d` map<string, array<int>>,
+  `e` struct<a:array<int>, b:map<string,int>, c:struct<a:array<int>, b:struct<a:int,b:string>>>)
+  USING hudi
+TBLPROPERTIES (
+  'primaryKey' = 'uuid',
+  'preCombineField' = 'ts',
+  'type' = 'mor');
+
+insert into test_hudi_mor2 values('AA0', 10, 0, "hello", array(array(10,20,30), array(40,50,60,70) ), map('key1', array(1,10), 'key2', array(2, 20), 'key3', null), struct(array(10, 20), map('key1', 10), struct(array(10, 20), struct(10, "world")))),
+ ('AA1', 10, 0, "hello", null, null , struct(null, map('key1', 10), struct(array(10, 20), struct(10, "world")))),
+ ('AA2', 10, 0, null, array(array(30, 40), array(10,20,30)), null , struct(null, map('key1', 10), struct(array(10, 20), null)));
+
+spark-sql> select a,b,c,d,e from test_hudi_mor2;
+a       b       c       d       e
+0       hello   NULL    NULL    {"a":null,"b":{"key1":10},"c":{"a":[10,20],"b":{"a":10,"b":"world"}}}
+0       NULL    [[30,40],[10,20,30]]    NULL    {"a":null,"b":{"key1":10},"c":{"a":[10,20],"b":null}}
+0       hello   [[10,20,30],[40,50,60,70]]      {"key1":[1,10],"key2":[2,20],"key3":null}       {"a":[10,20],"b":{"key1":10},"c":{"a":[10,20],"b":{"a":10,"b":"world"}}}
+
+*/
+TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct) {
+    if (!can_run_jni_test()) {
+        GTEST_SKIP();
+    }
+
+    TypeDescriptor C(LogicalType::TYPE_ARRAY);
+    TypeDescriptor C1(LogicalType::TYPE_ARRAY);
+    C1.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    C.children.push_back(C1); // array<array<int>>
+
+    TypeDescriptor D(LogicalType::TYPE_MAP);
+    D.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22));
+    D.children.push_back(C1); // map<string, array<int>>
+
+    TypeDescriptor E(LogicalType::TYPE_STRUCT);
+    {
+        E.children.push_back(C1); // a: array<int>
+        E.field_names.emplace_back("a");
+
+        TypeDescriptor B0(LogicalType::TYPE_MAP);
+        B0.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22));
+        B0.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        E.children.push_back(B0);
+        E.field_names.emplace_back("b");
+
+        TypeDescriptor C0(LogicalType::TYPE_STRUCT);
+        {
+            C0.children.push_back(C1);
+            C0.field_names.emplace_back("a");
+
+            TypeDescriptor B1(LogicalType::TYPE_STRUCT);
+            B1.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+            B1.field_names.emplace_back("a");
+            B1.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22));
+            B1.field_names.emplace_back("b");
+            C0.children.push_back(B1);
+            C0.field_names.emplace_back("b");
+        }
+
+        E.children.push_back(C0);
+        E.field_names.emplace_back("c");
+    }
+
+    SlotDesc parquet_descs[] = {{"a", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                                {"b", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                                {"c", C},
+                                {"d", D},
+                                {"e", E},
+                                {""}};
+    std::string starrocks_home = getenv("STARROCKS_SRC_HOME");
+    std::string basePath = starrocks_home + "/be/test/exec/test_data/jni_scanner/test_hudi_mor_ams";
+    std::string parquet_file = basePath + "/0df0196b-f46f-43f5-8cf0-06fad7143af3-0_0-27-35_20230110191854854.parquet";
+
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(parquet_descs);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
+
+    // be/test/exec/test_data/jni_scanner/test_hudi_mor_ams
+    std::map<std::string, std::string> params;
+
+    params.emplace("base_path", basePath);
+    params.emplace("data_file_path", parquet_file);
+    params.emplace("delta_file_paths", "");
+    params.emplace("hive_column_names",
+                   "_hoodie_commit_time,_hoodie_commit_seqno,_hoodie_record_key,_hoodie_partition_path,_hoodie_file_"
+                   "name,uuid,ts,a,b,c,d,e");
+    params.emplace("hive_column_types",
+                   "string#string#string#string#string#string#int#int#string#array<array<int>>#map<string,array<int>>#"
+                   "struct<a:array<int>,b:map<string,int>,c:struct<a:array<int>,b:struct<a:int,b:string>>>");
+    params.emplace("instant_time", "20230110185815638");
+    params.emplace("data_file_length", "438311");
+    params.emplace("input_format", "org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat");
+    params.emplace("serde", "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe");
+    params.emplace("required_fields", "a,b,c,d,e");
+
+    std::string scanner_factory_class = "com/starrocks/hudi/reader/HudiSliceScannerFactory";
+    JniScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, params));
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+    READ_SCANNER_ROWS(scanner, 3);
+    EXPECT_EQ(scanner->raw_rows_read(), 3);
+    scanner->close(_runtime_state);
+
+    EXPECT_EQ(_debug_row_output, "[0, 'hello', NULL, NULL, {a:NULL,b:{'key1':10},c:{a:[10,20],b:{a:10,b:'world'}}}]\n");
+}
+
+/*
+CREATE TABLE `test_hudi_mor` (
+  `uuid` STRING,
+  `ts` int,
+  `a` int,
+  `b` string,
+  `c` array<int>,
+  `d` map<string, int>,
+  `e` struct<a:int, b:string>)
+  USING hudi
+TBLPROPERTIES (
+  'primaryKey' = 'uuid',
+  'preCombineField' = 'ts',
+  'type' = 'mor');
+
+spark-sql> select a,b,c,d,e from test_hudi_mor;
+a       b       c       d       e
+1       hello   [10,20,30]      {"key1":1,"key2":2}     {"a":10,"b":"world"}
+
+*/
+TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct2) {
+    if (!can_run_jni_test()) {
+        GTEST_SKIP();
+    }
+
+    std::string starrocks_home = getenv("STARROCKS_SRC_HOME");
+    std::string basePath = starrocks_home + "/be/test/exec/test_data/jni_scanner/test_hudi_mor_ams2";
+    std::string parquet_file = basePath + "/64798197-be6a-4eca-9898-0c2ed75b9d65-0_0-54-41_20230105142938081.parquet";
+
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+
+    // be/test/exec/test_data/jni_scanner/test_hudi_mor_ams
+    std::map<std::string, std::string> params;
+
+    params.emplace("base_path", basePath);
+    params.emplace("data_file_path", parquet_file);
+    params.emplace("delta_file_paths",
+                   basePath + "/.64798197-be6a-4eca-9898-0c2ed75b9d65-0_20230105142938081.log.1_0-95-78");
+    params.emplace("hive_column_names",
+                   "_hoodie_commit_time,_hoodie_commit_seqno,_hoodie_record_key,_hoodie_partition_path,_hoodie_file_"
+                   "name,uuid,ts,a,b,c,d,e");
+    params.emplace("hive_column_types",
+                   "string#string#string#string#string#string#int#int#string#array<int>#map<string,int>#struct<a:int,b:"
+                   "string>");
+    params.emplace("instant_time", "20230105143305070");
+    params.emplace("data_file_length", "436081");
+    params.emplace("input_format", "org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat");
+    params.emplace("serde", "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe");
+    params.emplace("required_fields", "a,b,c,d,e");
+
+    std::string scanner_factory_class = "com/starrocks/hudi/reader/HudiSliceScannerFactory";
+
+    // select a,b,c,d,e
+    {
+        // c: array<int>
+        TypeDescriptor C(LogicalType::TYPE_ARRAY);
+        C.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+
+        // d: map<string, int>
+        TypeDescriptor D(LogicalType::TYPE_MAP);
+        D.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22));
+        D.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+
+        TypeDescriptor E(LogicalType::TYPE_STRUCT);
+        E.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        E.field_names.emplace_back("a");
+        E.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22));
+        E.field_names.emplace_back("b");
+
+        SlotDesc parquet_descs[] = {{"a", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                                    {"b", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                                    {"c", C},
+                                    {"d", D},
+                                    {"e", E},
+                                    {""}};
+
+        auto* tuple_desc = _create_tuple_desc(parquet_descs);
+        auto* param = _create_param(parquet_file, range, tuple_desc);
+
+        JniScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, params));
+
+        Status status = scanner->init(_runtime_state, *param);
+        EXPECT_TRUE(status.ok());
+        status = scanner->open(_runtime_state);
+        EXPECT_TRUE(status.ok());
+        READ_SCANNER_ROWS(scanner, 1);
+        EXPECT_EQ(scanner->raw_rows_read(), 1);
+        scanner->close(_runtime_state);
+
+        EXPECT_EQ(_debug_row_output, "[1, 'hello', [10,20,30], {'key1':1,'key2':2}, {a:10,b:'world'}]\n");
+    }
+
+    // select e but as <b:string, a:int>
+    {
+        TypeDescriptor E(LogicalType::TYPE_STRUCT);
+        E.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22));
+        E.field_names.emplace_back("b");
+        E.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        E.field_names.emplace_back("a");
+
+        SlotDesc parquet_descs[] = {{"e", E}, {""}};
+
+        auto* tuple_desc = _create_tuple_desc(parquet_descs);
+        auto* param = _create_param(parquet_file, range, tuple_desc);
+
+        params["required_fields"] = "e";
+        params["nested_fields"] = "e.b,e.a";
+        JniScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, params));
+
+        Status status = scanner->init(_runtime_state, *param);
+        EXPECT_TRUE(status.ok());
+        status = scanner->open(_runtime_state);
+        EXPECT_TRUE(status.ok());
+        READ_SCANNER_ROWS(scanner, 1);
+        EXPECT_EQ(scanner->raw_rows_read(), 1);
+        scanner->close(_runtime_state);
+
+        EXPECT_EQ(_debug_row_output, "[{b:'world',a:10}]\n");
+    }
+
+    // select e but as <B:string, a:int>
+    {
+        TypeDescriptor E(LogicalType::TYPE_STRUCT);
+        E.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22));
+        E.field_names.emplace_back("B");
+        E.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        E.field_names.emplace_back("a");
+
+        SlotDesc parquet_descs[] = {{"e", E}, {""}};
+
+        auto* tuple_desc = _create_tuple_desc(parquet_descs);
+        auto* param = _create_param(parquet_file, range, tuple_desc);
+
+        params["required_fields"] = "e";
+        params["nested_fields"] = "e.B,e.a";
+        JniScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, params));
+
+        Status status = scanner->init(_runtime_state, *param);
+        EXPECT_TRUE(status.ok());
+        status = scanner->open(_runtime_state);
+        EXPECT_TRUE(status.ok());
+        READ_SCANNER_ROWS(scanner, 1);
+        EXPECT_EQ(scanner->raw_rows_read(), 1);
+        scanner->close(_runtime_state);
+
+        EXPECT_EQ(_debug_row_output, "[{B:NULL,a:10}]\n");
+    }
+
+    // select e but as <a:int>
+    {
+        TypeDescriptor E(LogicalType::TYPE_STRUCT);
+        E.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        E.field_names.emplace_back("a");
+
+        SlotDesc parquet_descs[] = {{"e", E}, {""}};
+
+        auto* tuple_desc = _create_tuple_desc(parquet_descs);
+        auto* param = _create_param(parquet_file, range, tuple_desc);
+
+        params["required_fields"] = "e";
+        params["nested_fields"] = "e.a";
+        JniScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, params));
+
+        Status status = scanner->init(_runtime_state, *param);
+        EXPECT_TRUE(status.ok());
+        status = scanner->open(_runtime_state);
+        EXPECT_TRUE(status.ok());
+        READ_SCANNER_ROWS(scanner, 1);
+        EXPECT_EQ(scanner->raw_rows_read(), 1);
+        scanner->close(_runtime_state);
+
+        EXPECT_EQ(_debug_row_output, "[{a:10}]\n");
+    }
+
+    // select d but only key
+    {
+        // d: map<string, int>
+        TypeDescriptor D(LogicalType::TYPE_MAP);
+        D.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22));
+        D.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_UNKNOWN));
+
+        SlotDesc parquet_descs[] = {{"d", D}, {""}};
+
+        auto* tuple_desc = _create_tuple_desc(parquet_descs);
+        auto* param = _create_param(parquet_file, range, tuple_desc);
+
+        params["required_fields"] = "d";
+        params["nested_fields"] = "d.$0";
+        JniScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, params));
+
+        Status status = scanner->init(_runtime_state, *param);
+        EXPECT_TRUE(status.ok());
+        status = scanner->open(_runtime_state);
+        EXPECT_TRUE(status.ok());
+        READ_SCANNER_ROWS(scanner, 1);
+        EXPECT_EQ(scanner->raw_rows_read(), 1);
+        scanner->close(_runtime_state);
+
+        EXPECT_EQ(_debug_row_output, "[{'key1':NULL,'key2':NULL}]\n");
+    }
+}
+
+// =============================================================================
+/*
+spark-sql> select * from test_hudi_mor13;
+_hoodie_commit_time     _hoodie_commit_seqno    _hoodie_record_key      _hoodie_partition_path  _hoodie_file_name       a       b       ts      uuid
+20230216103800029       20230216103800029_0_0   aa1             14260209-008c-4170-bed3-5533d8783f0f-0_0-167-153_20230216103800029.parquet      300     3023-01-01 00:00:00     40      aa1
+20230216103800029       20230216103800029_0_1   aa0             14260209-008c-4170-bed3-5533d8783f0f-0_0-167-153_20230216103800029.parquet      200     2023-01-01 00:00:00     30      aa0
+20230216103800029       20230216103800029_0_2   aa2             14260209-008c-4170-bed3-5533d8783f0f-0_0-167-153_20230216103800029.parquet      400     1000-01-01 00:00:00     50      aa2
+20230216103800029       20230216103800029_0_3   aa              14260209-008c-4170-bed3-5533d8783f0f-0_0-167-153_20230216103800029.parquet      100     1900-01-01 00:00:00     20      aa
+*/
+
+/*
+_hoodie_commit_time = 20230216103800029
+_hoodie_commit_seqno = 20230216103800029_0_0
+_hoodie_record_key = aa1
+_hoodie_partition_path =
+_hoodie_file_name = 14260209-008c-4170-bed3-5533d8783f0f-0_0-167-153_20230216103800029.parquet
+a = 300
+b = 33229411200000000
+ts = 40
+uuid = aa1
+
+_hoodie_commit_time = 20230216103800029
+_hoodie_commit_seqno = 20230216103800029_0_1
+_hoodie_record_key = aa0
+_hoodie_partition_path =
+_hoodie_file_name = 14260209-008c-4170-bed3-5533d8783f0f-0_0-167-153_20230216103800029.parquet
+a = 200
+b = 1672502400000000
+ts = 30
+uuid = aa0
+
+_hoodie_commit_time = 20230216103800029
+_hoodie_commit_seqno = 20230216103800029_0_2
+_hoodie_record_key = aa2
+_hoodie_partition_path =
+_hoodie_file_name = 14260209-008c-4170-bed3-5533d8783f0f-0_0-167-153_20230216103800029.parquet
+a = 400
+b = -30610253143000000
+ts = 50
+uuid = aa2
+
+_hoodie_commit_time = 20230216103800029
+_hoodie_commit_seqno = 20230216103800029_0_3
+_hoodie_record_key = aa
+_hoodie_partition_path =
+_hoodie_file_name = 14260209-008c-4170-bed3-5533d8783f0f-0_0-167-153_20230216103800029.parquet
+a = 100
+b = -2209017943000000
+ts = 20
+uuid = aa
+*/
+
+TEST_F(HdfsScannerTest, TestParquetTimestampToDatetime) {
+    SlotDesc parquet_descs[] = {{"b", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)}, {""}};
+
+    const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/timestamp_to_datetime.parquet";
+
+    _create_runtime_state("Asia/Shanghai");
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(parquet_descs);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
+
+    _debug_rows_per_call = 10;
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+    READ_SCANNER_ROWS(scanner, 4);
+    EXPECT_EQ(scanner->raw_rows_read(), 4);
+    EXPECT_EQ(_debug_row_output,
+              "[3023-01-01 00:00:00]\n[2023-01-01 00:00:00]\n[1000-01-01 00:00:00]\n[1900-01-01 00:00:00]\n");
+    scanner->close(_runtime_state);
+}
+
+TEST_F(HdfsScannerTest, TestParquetIcebergCaseSensitive) {
+    SlotDesc parquet_descs[] = {{"Id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+
+    const std::string parquet_file =
+            "./be/test/formats/parquet/test_data/iceberg_schema_evolution/add_struct_subfield.parquet";
+
+    _create_runtime_state("Asia/Shanghai");
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(parquet_descs);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
+
+    TIcebergSchema schema = TIcebergSchema{};
+
+    TIcebergSchemaField field_id{};
+    field_id.__set_field_id(1);
+    field_id.__set_name("Id");
+
+    std::vector<TIcebergSchemaField> fields{field_id};
+    schema.__set_fields(fields);
+    param->iceberg_schema = &schema;
+
+    _debug_rows_per_call = 10;
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+    READ_SCANNER_ROWS(scanner, 1);
+    EXPECT_EQ(scanner->raw_rows_read(), 1);
+    EXPECT_EQ(_debug_row_output, "[1]\n");
     scanner->close(_runtime_state);
 }
 

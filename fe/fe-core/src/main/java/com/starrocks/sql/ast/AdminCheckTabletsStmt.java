@@ -16,16 +16,15 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
-import java.util.Map;
 
 // ADMIN CHECK TABLET (id1, id2, ...) PROPERTIES ("type" = "check_consistency");
 public class AdminCheckTabletsStmt extends DdlStmt {
 
     private final List<Long> tabletIds;
-    private final Map<String, String> properties;
+    private final Property property;
     private CheckType type;
 
     public void setType(CheckType type) {
@@ -33,20 +32,13 @@ public class AdminCheckTabletsStmt extends DdlStmt {
     }
 
     public enum CheckType {
-        CONSISTENCY; // check the consistency of replicas of tablet
-
-        public static CheckType getTypeFromString(String str) throws AnalysisException {
-            try {
-                return CheckType.valueOf(str.toUpperCase());
-            } catch (Exception e) {
-                throw new AnalysisException("Unknown check type: " + str);
-            }
-        }
+        CONSISTENCY // check the consistency of replicas of tablet
     }
 
-    public AdminCheckTabletsStmt(List<Long> tabletIds, Map<String, String> properties) {
+    public AdminCheckTabletsStmt(List<Long> tabletIds, Property property, NodePosition pos) {
+        super(pos);
         this.tabletIds = tabletIds;
-        this.properties = properties;
+        this.property = property;
     }
 
     public List<Long> getTabletIds() {
@@ -57,8 +49,8 @@ public class AdminCheckTabletsStmt extends DdlStmt {
         return type;
     }
 
-    public Map<String, String> getProperties() {
-        return properties;
+    public Property getProperty() {
+        return property;
     }
 
     @Override

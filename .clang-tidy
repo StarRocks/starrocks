@@ -2,11 +2,9 @@
 Checks: >
     -*,
     cppcoreguidelines-virtual-class-destructor,
-    modernize-avoid-bind,
     modernize-concat-nested-namespaces,
     modernize-deprecated-headers,
     modernize-deprecated-ios-base-aliases,
-    modernize-loop-convert,
     modernize-make-shared,
     modernize-make-unique,
     modernize-pass-by-value,
@@ -18,7 +16,6 @@ Checks: >
     modernize-return-braced-init-list,
     modernize-shrink-to-fit,
     modernize-unary-static-assert,
-    modernize-use-auto,
     modernize-use-bool-literals,
     modernize-use-default-member-init,
     modernize-use-emplace,
@@ -40,3 +37,5 @@ Checks: >
     performance-type-promotion-in-math-fn,
     performance-unnecessary-copy-initialization,
     performance-unnecessary-value-param,
+
+WarningsAsErrors: '*'

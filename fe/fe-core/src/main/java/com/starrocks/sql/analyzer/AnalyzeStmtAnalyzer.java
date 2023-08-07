@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -25,6 +26,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AnalyzeTypeDesc;
@@ -43,6 +45,8 @@ import java.math.RoundingMode;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 public class AnalyzeStmtAnalyzer {
     public static void analyze(StatementBase statement, ConnectContext session) {
@@ -51,7 +55,9 @@ public class AnalyzeStmtAnalyzer {
 
     private static final List<String> VALID_PROPERTIES = Lists.newArrayList(
             StatsConstants.STATISTIC_AUTO_COLLECT_RATIO,
+            StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL,
             StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS,
+            StatsConstants.STATISTIC_EXCLUDE_PATTERN,
 
             StatsConstants.HISTOGRAM_BUCKET_NUM,
             StatsConstants.HISTOGRAM_MCV_SIZE,
@@ -101,6 +107,14 @@ public class AnalyzeStmtAnalyzer {
 
             analyzeProperties(statement.getProperties());
             analyzeAnalyzeTypeDesc(session, statement, statement.getAnalyzeTypeDesc());
+
+            if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
+                if (statement.isSample()) {
+                    throw new SemanticException("External table %s don't support SAMPLE analyze",
+                            statement.getTableName().toString());
+                }
+                statement.setExternal(true);
+            }
             return null;
         }
 
@@ -109,8 +123,14 @@ public class AnalyzeStmtAnalyzer {
             if (null != statement.getTableName()) {
                 TableName tbl = statement.getTableName();
 
+                if ((Strings.isNullOrEmpty(tbl.getCatalog()) &&
+                        CatalogMgr.isExternalCatalog(session.getCurrentCatalog())) ||
+                        CatalogMgr.isExternalCatalog(tbl.getCatalog())) {
+                    throw new SemanticException("External Table don't support analyze job");
+                }
+
                 if (null != tbl.getDb() && null == tbl.getTbl()) {
-                    Database db = MetaUtils.getDatabase(session, statement.getTableName());
+                    Database db = MetaUtils.getDatabase(session, tbl);
 
                     if (StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
                         throw new SemanticException("Forbidden collect database: %s", statement.getTableName().getDb());
@@ -159,11 +179,26 @@ public class AnalyzeStmtAnalyzer {
                     throw new SemanticException("Property '%s' value must be numeric", key);
                 }
             }
+
+            if (properties.containsKey(StatsConstants.STATISTIC_EXCLUDE_PATTERN)) {
+                String pattern = properties.get(StatsConstants.STATISTIC_EXCLUDE_PATTERN);
+                // check regex
+                try {
+                    Pattern.compile(pattern);
+                } catch (PatternSyntaxException e) {
+                    throw new SemanticException("Property %s value is error, msg: %s",
+                            StatsConstants.STATISTIC_EXCLUDE_PATTERN, e.getMessage());
+                }
+            }
         }
 
         private void analyzeAnalyzeTypeDesc(ConnectContext session, AnalyzeStmt statement,
                                             AnalyzeTypeDesc analyzeTypeDesc) {
             if (analyzeTypeDesc instanceof AnalyzeHistogramDesc) {
+                if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
+                    throw new SemanticException("External table %s don't support histogram analyze",
+                            statement.getTableName().toString());
+                }
                 List<String> columns = statement.getColumnNames();
                 OlapTable analyzeTable = (OlapTable) MetaUtils.getTable(session, statement.getTableName());
 
@@ -214,6 +249,9 @@ public class AnalyzeStmtAnalyzer {
         @Override
         public Void visitDropStatsStatement(DropStatsStmt statement, ConnectContext session) {
             MetaUtils.normalizationTableName(session, statement.getTableName());
+            if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
+                statement.setExternal(true);
+            }
             return null;
         }
 

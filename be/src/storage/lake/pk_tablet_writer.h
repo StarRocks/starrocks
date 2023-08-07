@@ -18,9 +18,8 @@
 #include <vector>
 
 #include "gutil/macros.h"
-#include "storage/lake/tablet.h"
+#include "storage/lake/general_tablet_writer.h"
 #include "storage/lake/tablet_metadata.h"
-#include "storage/lake/tablet_writer.h"
 
 namespace starrocks {
 class SegmentWriter;
@@ -28,48 +27,49 @@ class SegmentWriter;
 
 namespace starrocks::lake {
 
-class PkTabletWriter : public TabletWriter {
+class HorizontalPkTabletWriter : public HorizontalGeneralTabletWriter {
 public:
-    explicit PkTabletWriter(Tablet tablet, RowsetTxnMetaPB* rowset_txn_meta,
-                            std::shared_ptr<const TabletSchema>& tschema);
+    explicit HorizontalPkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema, int64_t txn_id);
 
-    ~PkTabletWriter() override;
+    ~HorizontalPkTabletWriter() override;
 
-    DISALLOW_COPY(PkTabletWriter);
+    DISALLOW_COPY(HorizontalPkTabletWriter);
 
-    int64_t tablet_id() const override { return _tablet.id(); }
-
-    Status open() override;
-
-    Status write(const starrocks::Chunk& data) override;
+    Status write_columns(const Chunk& data, const std::vector<uint32_t>& column_indexes, bool is_key) override {
+        return Status::NotSupported("HorizontalPkTabletWriter write_columns not support");
+    }
 
     Status flush_del_file(const Column& deletes) override;
 
-    Status flush() override;
+    Status flush_columns() override {
+        return Status::NotSupported("HorizontalPkTabletWriter flush_columns not support");
+    }
 
-    Status finish() override;
+    RowsetTxnMetaPB* rowset_txn_meta() override { return _rowset_txn_meta.get(); }
 
-    void close() override;
-
-    std::vector<std::string> files() const override { return _files; }
-
-    int64_t data_size() const override { return _data_size; }
-
-    int64_t num_rows() const override { return _num_rows; }
+protected:
+    Status flush_segment_writer() override;
 
 private:
-    Status reset_segment_writer();
-    Status flush_segment_writer();
+    std::unique_ptr<RowsetTxnMetaPB> _rowset_txn_meta;
+};
 
-    Tablet _tablet;
-    std::shared_ptr<const TabletSchema> _schema;
-    std::unique_ptr<SegmentWriter> _seg_writer;
-    std::vector<std::string> _files;
-    int64_t _num_rows = 0;
-    int64_t _data_size = 0;
-    uint32_t _seg_id = 0;
-    bool _finished = false;
-    RowsetTxnMetaPB* _rowset_txn_meta = nullptr;
+class VerticalPkTabletWriter : public VerticalGeneralTabletWriter {
+public:
+    explicit VerticalPkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
+                                    uint32_t max_rows_per_segment);
+
+    ~VerticalPkTabletWriter() override;
+
+    DISALLOW_COPY(VerticalPkTabletWriter);
+
+    Status write(const starrocks::Chunk& data) override {
+        return Status::NotSupported("VerticalPkTabletWriter write not support");
+    }
+
+    Status flush_del_file(const Column& deletes) override {
+        return Status::NotSupported("VerticalPkTabletWriter flush_del_file not support");
+    }
 };
 
 } // namespace starrocks::lake

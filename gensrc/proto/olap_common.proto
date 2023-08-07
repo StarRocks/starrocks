@@ -33,7 +33,7 @@
 // under the License.
 // Define common messages shared by other proto files.
 
-syntax="proto2";
+syntax = "proto2";
 
 package starrocks;
 option java_package = "com.starrocks.proto";
@@ -47,10 +47,37 @@ message EditVersionPB {
     optional int64 minor = 2;
 }
 
+// used in partial update for primary key tablet
+message DeltaColumnGroupColumnIdsPB {
+    repeated uint32 column_ids = 1;
+}
+
+message OldDeltaColumnGroupPB {
+    repeated uint32 column_ids = 1;
+    optional string column_file = 2;
+}
+
+message DeltaColumnGroupPB {
+    repeated DeltaColumnGroupColumnIdsPB column_ids = 1;
+    repeated string column_files = 2;
+}
+
+message DeltaColumnGroupListPB {
+    repeated DeltaColumnGroupPB dcgs = 1;
+    repeated int64 versions = 2;
+}
+
+message DeltaColumnGroupSnapshotPB {
+    repeated int64 tablet_id = 1;
+    repeated string rowset_id = 2;
+    repeated uint32 segment_id = 3;
+    repeated DeltaColumnGroupListPB dcg_lists = 4;
+}
+
 // page position info for segment file and persistent index file
 message PagePointerPB {
     required uint64 offset = 1; // offset in segment file
-    required uint32 size = 2; // size of page in byte
+    required uint32 size = 2;   // size of page in byte
 }
 
 message PNetworkAddress {
@@ -58,4 +85,3 @@ message PNetworkAddress {
     optional int32 port = 2;
     optional int64 node_id = 3;
 }
-

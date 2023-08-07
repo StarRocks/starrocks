@@ -30,10 +30,11 @@ namespace starrocks {
 
 class DataDir;
 class ExecEnv;
+class MemTracker;
 class SegmentPB;
 class PTabletInfo;
 class FileSystem;
-class DeltaWriterOptions;
+struct DeltaWriterOptions;
 
 using DeltaWriterOptions = starrocks::DeltaWriterOptions;
 
@@ -69,6 +70,7 @@ private:
 
     ReusableClosure<PTabletWriterAddSegmentResult>* _closure = nullptr;
     doris::PBackendService_Stub* _stub = nullptr;
+    MemTracker* _mem_tracker = nullptr;
 
     bool _inited = false;
     Status _st = Status::OK();
@@ -109,6 +111,8 @@ public:
 
     const std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos() const { return &_failed_tablet_infos; }
 
+    const std::vector<int64_t> replica_node_ids() const { return _replica_node_ids; }
+
 private:
     friend class SegmentReplicateTask;
 
@@ -132,6 +136,7 @@ private:
     std::set<int64_t> _failed_node_id;
 
     int64_t _max_fail_replica_num;
+    std::vector<int64_t> _replica_node_ids;
 };
 
 class SegmentReplicateExecutor {
@@ -144,6 +149,8 @@ public:
     Status init(const std::vector<DataDir*>& data_dirs);
 
     Status update_max_threads(int max_threads);
+
+    ThreadPool* get_thread_pool() { return _replicate_pool.get(); }
 
     // NOTE: we use SERIAL mode here to ensure all segment from one tablet are synced in order.
     std::unique_ptr<ReplicateToken> create_replicate_token(

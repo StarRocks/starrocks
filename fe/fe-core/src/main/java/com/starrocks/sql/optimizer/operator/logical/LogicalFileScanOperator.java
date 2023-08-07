@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
@@ -46,16 +45,8 @@ public class LogicalFileScanOperator extends LogicalScanOperator {
         Preconditions.checkState(table instanceof FileTable);
     }
 
-    private LogicalFileScanOperator(LogicalFileScanOperator.Builder builder) {
-        super(OperatorType.LOGICAL_FILE_SCAN,
-                builder.table,
-                builder.colRefToColumnMetaMap,
-                builder.columnMetaToColRefMap,
-                builder.getLimit(),
-                builder.getPredicate(),
-                builder.getProjection());
-
-        this.predicates = builder.predicates;
+    private LogicalFileScanOperator() {
+        super(OperatorType.LOGICAL_FILE_SCAN);
     }
 
     @Override
@@ -83,18 +74,17 @@ public class LogicalFileScanOperator extends LogicalScanOperator {
 
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalFileScanOperator, LogicalFileScanOperator.Builder> {
-        private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
 
         @Override
-        public LogicalFileScanOperator build() {
-            return new LogicalFileScanOperator(this);
+        protected LogicalFileScanOperator newInstance() {
+            return new LogicalFileScanOperator();
         }
 
         @Override
         public LogicalFileScanOperator.Builder withOperator(LogicalFileScanOperator scanOperator) {
             super.withOperator(scanOperator);
 
-            this.predicates = scanOperator.predicates;
+            builder.predicates = scanOperator.predicates.clone();
             return this;
         }
     }

@@ -19,6 +19,8 @@
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
 #include "storage/compaction_manager.h"
+#include "storage/rowset/rowset.h"
+#include "storage/rowset/rowset_writer.h"
 #include "storage/storage_engine.h"
 #include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
@@ -178,6 +180,65 @@ void CompactionTask::_failure_callback(const Status& st) {
         _tablet->set_last_base_compaction_failure_time(UnixMillis());
     }
     LOG(WARNING) << "compaction task:" << _task_info.task_id << ", tablet:" << _task_info.tablet_id << " failed.";
+}
+
+Status CompactionTask::_shortcut_compact(Statistics* statistics) {
+    // if there is only one rowset has data, we can shortcut compact
+    // shortcut compact means hard link old rowset to new rowset directly
+    // no need to read and write data
+    std::vector<RowsetSharedPtr> data_rowsets;
+    for (const auto& rowset : _input_rowsets) {
+        if (rowset->num_rows() > 0) {
+            // if rowset has data, we should compact it
+            data_rowsets.emplace_back(rowset);
+        } else if (rowset->rowset_meta()->has_delete_predicate()) {
+            // if rowset has delete predicate, can not do shortcut compaction
+            data_rowsets.clear();
+            break;
+        }
+    }
+
+    if (data_rowsets.size() == 1 && !data_rowsets.back()->rowset_meta()->is_segments_overlapping() &&
+        _tablet->enable_shortcut_compaction()) {
+        TRACE("[Compaction] start shortcut comapction data");
+        int64_t max_rows_per_segment = CompactionUtils::get_segment_max_rows(
+                config::max_segment_file_size, _task_info.input_rows_num, _task_info.input_rowsets_size);
+
+        std::unique_ptr<RowsetWriter> output_rs_writer;
+        RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(_tablet.get(), max_rows_per_segment,
+                                                                        _task_info.algorithm, _task_info.output_version,
+                                                                        &output_rs_writer));
+        Status status = output_rs_writer->add_rowset(data_rowsets.back());
+        if (!status.ok()) {
+            LOG(WARNING) << "fail to compact rowset."
+                         << ", tablet=" << _tablet->full_name() << ", version=" << output_rs_writer->version();
+            return status;
+        }
+        StatusOr<RowsetSharedPtr> build_res = output_rs_writer->build();
+        if (!build_res.ok()) {
+            LOG(WARNING) << "rowset writer build failed. compaction task_id:" << _task_info.task_id
+                         << ", tablet:" << _task_info.tablet_id << " output_version=" << _task_info.output_version;
+            return build_res.status();
+        } else {
+            _output_rowset = build_res.value();
+        }
+        _task_info.output_num_rows = _output_rowset->num_rows();
+        _task_info.output_segments_num = _output_rowset->num_segments();
+        _task_info.output_rowset_size = _output_rowset->data_disk_size();
+        _task_info.is_shortcut_compaction = true;
+        TRACE_COUNTER_INCREMENT("output_rowset_data_size", _output_rowset->data_disk_size());
+        TRACE_COUNTER_INCREMENT("output_segments_num", _output_rowset->num_segments());
+        TRACE("[Compaction] output rowset built");
+
+        // collect statistics if necessary
+        if (statistics) {
+            statistics->output_rows = _output_rowset->num_rows();
+            statistics->merged_rows = 0;
+            statistics->filtered_rows = 0;
+        }
+    }
+
+    return Status::OK();
 }
 
 } // namespace starrocks

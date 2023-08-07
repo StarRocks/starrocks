@@ -2,9 +2,52 @@
 
 ## Description
 
-The SELECT statement consists of select, from, where, group by, having, order by, union, and so on.
+Queries data from one or more tables, views, or materialized views. The SELECT statement generally consists of the following clauses:
 
-StarRocks' query statement basically conforms to the SQL92 standard. Here is a brief description of the supported select usage.
+- [WITH](#with)
+- [WHERE and operators](#where-and-operators)
+- [GROUP BY](#group-by)
+- [HAVING](#having)
+- [UNION](#union)
+- [INTERSECT](#intersect)
+- [EXCEPT/MINUS](#exceptminus)
+- [ORDER BY](#order-by)
+- [LIMIT](#limit)
+- [OFFSET](#offset)
+- [Joins](#join)
+- [Subqueries](#subquery)
+- [DISTINCT](#distinct)
+- [Alias](#alias)
+
+SELECT can work as an independent statement or a clause nested in other statements. The output of the SELECT clause can be used as the input of other statements.
+
+StarRocks' query statement basically conforms to the SQL92 standard. Here is a brief description of the supported SELECT usage.
+
+> **NOTE**
+>
+> To query data from tables, views, or materialized views in a StarRocks internal table, you must have the SELECT privilege on these objects. To query data from tables, views, or materialized views in an external data source, you must have the USAGE privilege on the corresponding external catalog.
+
+### WITH
+
+A clause that can be added before a SELECT statement to define an alias for a complex expression that is referenced multiple times inside SELECT.
+
+Similar to CRATE VIEW, but the table and column names defined in the clause do not persist after the query ends and do not conflict with names in the actual table or VIEW.
+
+The benefits of using a WITH clause are:
+
+Convenient and easy to maintain, reducing duplication within queries.
+
+ It is easier to read and understand SQL code by abstracting the most complex parts of a query into separate blocks.
+
+Examples:
+
+```sql
+-- Define one subquery at the outer level, and another at the inner level as part of the
+-- initial stage of the UNION ALL query.
+
+with t1 as (select 1),t2 as (select 2)
+select * from t1 union all select * from t2;
+```
 
 ### Join
 
@@ -49,7 +92,7 @@ There is actually no special syntax to identify self-join. The conditions on bot
 
 We need to assign them different aliases.
 
-Example：
+Examples:
 
 ```sql
 SELECT lhs.id, rhs.parent, lhs.c1, rhs.c2 FROM tree_data lhs, tree_data rhs WHERE lhs.id = rhs.parent;
@@ -73,7 +116,7 @@ Inner join is the most well-known and commonly used join. Returns results from c
 
 If a column name of both tables is the same, we need to use the full name (in the form of table_name.column_name) or alias the column name.
 
-For example:
+Examples:
 
 The following three queries are equivalent.
 
@@ -117,7 +160,7 @@ Left semi join returns only the rows in the left table that match the data in th
 
 This row of the left table is returned at most once. Right semi join works similarly, except that the data returned is a right table.
 
-Example:
+Examples:
 
 ```sql
 SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT SEMI JOIN t2 ON t1.id = t2.id;
@@ -185,7 +228,7 @@ select * from big_table order by tiny_column, short_column desc;
 
 Sort order for NULL values: `NULLS FIRST` indicates that NULL values should be returned before non-NULL values. `NULLS LAST` indicates that NULL values should be returned after non-NULL values.
 
-Example:
+Examples:
 
 ```sql
 select  *  from  sales_record  order by  employee_id  nulls first;
@@ -195,7 +238,9 @@ select  *  from  sales_record  order by  employee_id  nulls first;
 
 The GROUP BY clause is often used with aggregate functions such as COUNT(), SUM(), AVG(), MIN(), and MAX().
 
-The column specified by GROUP BY will not participate in the aggregation operation. The GROUP BY clause can be added with the Having clause to filter the results produced by the aggregate function. Example:
+The column specified by GROUP BY will not participate in the aggregation operation. The GROUP BY clause can be added with the Having clause to filter the results produced by the aggregate function.
+
+Examples:
 
 ```sql
 select tiny_column, sum(short_column)
@@ -220,7 +265,7 @@ The HAVING clause does not filter row data in a table, but filters the results o
 
 Generally speaking, HAVING is used with aggregate functions (such as COUNT(), SUM(), AVG(), MIN(), MAX()) and GROUP BY clauses.
 
-Example：
+Examples:
 
 ```sql
 select tiny_column, sum(short_column) 
@@ -270,7 +315,7 @@ The size of the query result set needs to be limited because of the large amount
 
 Instructions for use: The value of the LIMIT clause must be a numeric literal constant.
 
-Example：
+Examples:
 
 ```plain text
 mysql> select tiny_column from small_table limit 1;
@@ -297,7 +342,7 @@ mysql> select tiny_column from small_table limit 10000;
 2 rows in set (0.01 sec)
 ```
 
-#### OFFSET
+### OFFSET
 
 The OFFSET clause causes the result set to skip the first few rows and return the following results directly.
 
@@ -305,7 +350,7 @@ The result set defaults to start at line 0, so offset 0 and no offset return the
 
 Generally speaking, OFFSET clauses need to be used with ORDER BY and LIMIT clauses to be valid.
 
-Example：
+Examples:
 
 ```plain text
 mysql> select varchar_column from big_table order by varchar_column limit 3;
@@ -365,74 +410,215 @@ Offset exceeds the maximum number of rows in the result set and is still a resul
 
 ### UNION
 
-UNION clauses are used to merge the result sets of multiple queries. 
+Combines the result of multiple queries.
 
-Syntax:
+**Syntax:**
 
 ```sql
 query_1 UNION [DISTINCT | ALL] query_2
 ```
 
-Instructions:
+- DISTINCT (default) returns only unique rows. UNION is equivalent to UNION DISTINCT.
+- ALL combines all rows, including duplicates. Since de-duplication is memory intensive, queries using UNION ALL are faster and less memory-consuming. For better performance, use UNION ALL.
 
-Using only the UNION keyword and UNION DISTINCT works the same way. Since de-duplication is memory intensive,
+> **NOTE**
+>
+> Each query statement must return the same number of columns and the columns must have compatible data types.
 
-As a result, queries using UNION ALL operations are faster and consume less memory. If the user wants to order by and limit the returned result set,
+**Examples:**
 
-You need to place the UNION operation in the subquery, then select from the subquery, and finally place the subquery and order by outside the subquery.
+Create tables `select1` and `select2`.
 
-Example：
+```SQL
+CREATE TABLE select1(
+    id          INT,
+    price       INT
+    )
+DISTRIBUTED BY HASH(id);
 
-```plain text
-mysql> (select tiny_column from small_table) union all (select tiny_column from small_table);
+INSERT INTO select1 VALUES
+    (1,2),
+    (1,2),
+    (2,3),
+    (5,6),
+    (5,6);
 
-+-------------+
-|tiny_column  |
-+-------------+
-|      1      |
-|      2      |
-|      1      |
-|      2      |
-+-------------+
+CREATE TABLE select2(
+    id          INT,
+    price       INT
+    )
+DISTRIBUTED BY HASH(id);
 
-4 rows in set (0.10 sec)
+INSERT INTO select2 VALUES
+    (2,3),
+    (3,4),
+    (5,6),
+    (7,8);
 ```
 
-```plain text
-mysql> (select tiny_column from small_table) union (select tiny_column from small_table);
+Example 1: Return all IDs in the two tables, including duplicates.
 
-+-------------+
-|tiny_column  |
-+-------------+
-|      2      |
-|      1      |
-+-------------+
+```Plaintext
+mysql> (select id from select1) union all (select id from select2) order by id;
 
-2 rows in set (0.11 sec)
++------+
+| id   |
++------+
+|    1 |
+|    1 |
+|    2 |
+|    2 |
+|    3 |
+|    5 |
+|    5 |
+|    5 |
+|    7 |
++------+
+11 rows in set (0.02 sec)
 ```
 
-```plain text
-mysql> select * from (select tiny_column from small_table union all
+Example 2: Return all the unique IDs in the two tables. The following two statements are equivalent.
 
-select tiny_column from small_table) as t1 
+```Plaintext
+mysql> (select id from select1) union (select id from select2) order by id;
 
-order by tiny_column limit 4;
++------+
+| id   |
++------+
+|    1 |
+|    2 |
+|    3 |
+|    5 |
+|    7 |
++------+
+6 rows in set (0.01 sec)
 
-+-------------+
-| tiny_column |
-+-------------+
-|       1     |
-|       1     |
-|       2     |
-|       2     |
-+-------------+
+mysql> (select id from select1) union distinct (select id from select2) order by id;
++------+
+| id   |
++------+
+|    1 |
+|    2 |
+|    3 |
+|    5 |
+|    7 |
++------+
+5 rows in set (0.02 sec)
+```
 
+Example 3: Return the first three IDs among all the unique IDs in the two tables. The following two statements are equivalent.
+
+```SQL
+mysql> (select id from select1) union distinct (select id from select2)
+order by id
+limit 3;
+++------+
+| id   |
++------+
+|    1 |
+|    2 |
+|    3 |
++------+
 4 rows in set (0.11 sec)
+
+mysql> select * from (select id from select1 union distinct select id from select2) as t1
+order by id
+limit 3;
++------+
+| id   |
++------+
+|    1 |
+|    2 |
+|    3 |
++------+
+3 rows in set (0.01 sec)
+```
+
+### **INTERSECT**
+
+Calculates the intersection of the results of multiple queries, that is, the results that appear in all the result sets. This clause returns only unique rows among the result sets. The ALL keyword is not supported.
+
+**Syntax:**
+
+```SQL
+query_1 INTERSECT [DISTINCT] query_2
+```
+
+> **NOTE**
+>
+> - INTERSECT is equivalent to INTERSECT DISTINCT.
+> - Each query statement must return the same number of columns and the columns must have compatible data types.
+
+**Examples:**
+
+The two tables in UNION  are used.
+
+Return distinct `(id, price)` combinations that are common to both tables. The following two statements are equivalent.
+
+```Plaintext
+mysql> (select id, price from select1) intersect (select id, price from select2)
+order by id;
+
++------+-------+
+| id   | price |
++------+-------+
+|    2 |     3 |
+|    5 |     6 |
++------+-------+
+
+mysql> (select id, price from select1) intersect distinct (select id, price from select2)
+order by id;
+
++------+-------+
+| id   | price |
++------+-------+
+|    2 |     3 |
+|    5 |     6 |
++------+-------+
+```
+
+### **EXCEPT/MINUS**
+
+Returns distinct results of the left-hand query that do not exist in the right-hand query. EXCEPT is equivalent to MINUS.
+
+**Syntax:**
+
+```SQL
+query_1 {EXCEPT | MINUS} [DISTINCT] query_2
+```
+
+> **NOTE**
+>
+> - EXCEPT is equivalent to EXCEPT DISTINCT. The ALL keyword is not supported.
+> - Each query statement must return the same number of columns and the columns must have compatible data types.
+
+**Examples:**
+
+The two tables in UNION  are used.
+
+Return distinct `(id, price)` combinations in `select1` that cannot be found in `select2`.
+
+```Plaintext
+mysql> (select id, price from select1) except (select id, price from select2)
+order by id;
++------+-------+
+| id   | price |
++------+-------+
+|    1 |     2 |
++------+-------+
+
+mysql> (select id, price from select1) minus (select id, price from select2)
+order by id;
++------+-------+
+| id   | price |
++------+-------+
+|    1 |     2 |
++------+-------+
 ```
 
 ### DISTINCT
 
-The DISTINCT operator deduplicates the result set. Example:
+The DISTINCT keyword deduplicates the result set. Example:
 
 ```SQL
 -- Returns the unique values from one column.
@@ -472,27 +658,32 @@ select count(distinct tiny_column, int_column), count(distinct varchar_column) f
 
 ### Subquery
 
-Subqueries are divided into irrelevant subqueries and related subqueries by relevance.
+Subqueries are categorized into two types in terms of relevance:
 
-#### Irrelevant subquery
+- A noncorrelated subquery obtains its results independently of its outer query.
+- A correlated subquery requires values from its outer query.
 
-Uncorrelated subqueries support [NOT] IN and EXISTS.
+#### Noncorrelated subquery
 
-Example：
+Noncorrelated subqueries support [NOT] IN and EXISTS.
+
+Example:
 
 ```sql
 SELECT x FROM t1 WHERE x [NOT] IN (SELECT y FROM t2);
-```
 
-```sql
+SELECT * FROM t1 WHERE (x,y) [NOT] IN (SELECT x,y FROM t2 LIMIT 2);
+
 SELECT x FROM t1 WHERE EXISTS (SELECT y FROM t2 WHERE y = 1);
 ```
 
-#### Related subquery
+From v3.0 onwards, you can specify multiple fields in the WHERE clause of `SELECT... FROM... WHERE... [NOT] IN`, for example, `WHERE (x,y)` in the second SELECT statement.
+
+#### Correlated subquery
 
 Related subqueries support [NOT] IN and [NOT] EXISTS.
 
-Example：
+Example:
 
 ```sql
 SELECT * FROM t1 WHERE x [NOT] IN (SELECT a FROM t2 WHERE t1.y = t2.b);
@@ -502,7 +693,7 @@ SELECT * FROM t1 WHERE [NOT] EXISTS (SELECT a FROM t2 WHERE t1.y = t2.b);
 
 Subqueries also support scalar quantum queries. It can be divided into irrelevant scalar quantum query, related scalar quantum query and scalar quantum query as parameters of the general function.
 
-Example:
+Examples:
 
 1. Uncorrelated scalar quantum query with predicate = sign. For example, output information about the person with the highest wage.
 
@@ -519,7 +710,7 @@ Example:
 3. Related scalar quantum queries. For example, output the highest salary information for each department.
 
     ```sql
-    SELECT name FROM table a WHERE salary = （SELECT MAX(salary) FROM table b WHERE b.Department= a.Department）;
+    SELECT name FROM table a WHERE salary = (SELECT MAX(salary) FROM table b WHERE b.Department= a.Department);
     ```
 
 4. Scalar quantum queries are used as parameters of ordinary functions.
@@ -528,29 +719,7 @@ Example:
     SELECT name FROM table WHERE salary = abs((SELECT MAX(salary) FROM table));
     ```
 
-### With clause
-
-A clause that can be added before a SELECT statement to define an alias for a complex expression that is referenced multiple times inside SELECT.
-
-Similar to CRATE VIEW, but the table and column names defined in the clause do not persist after the query ends and do not conflict with names in the actual table or VIEW.
-
-The benefits of using a WITH clause are:
-
-Convenient and easy to maintain, reducing duplication within queries.
-
- It is easier to read and understand SQL code by abstracting the most complex parts of a query into separate blocks.
-
-Example：
-
-```sql
--- Define one subquery at the outer level, and another at the inner level as part of the
--- initial stage of the UNION ALL query.
-
-with t1 as (select 1),t2 as (select 2)
-select * from t1 union all select * from t2;
-```
-
-### Where and Operator
+### Where and Operators
 
 SQL operators are a series of functions used for comparison and are widely used in where clauses of select statements.
 
@@ -558,7 +727,7 @@ SQL operators are a series of functions used for comparison and are widely used 
 
 Arithmetic operators usually appear in expressions that contain left, right, and most often left operands
 
-**+and-**：can be used as a unit or as a 2-ary operator. When used as a unit operator, such as +1, -2.5 or -col_ name, which means the value is multiplied by +1 or -1.
+**+and-**: can be used as a unit or as a 2-ary operator. When used as a unit operator, such as +1, -2.5 or -col_ name, which means the value is multiplied by +1 or -1.
 
 So the cell operator + returns an unchanged value, and the cell operator - changes the symbol bits of that value.
 
@@ -568,7 +737,7 @@ Because--is interpreted as a comment in the following statement (when a user can
 
 When + or - is a binary operator, such as 2+2, 3+1.5, or col1+col2, it means that the left value is added or subtracted from the right value. Both left and right values must be numeric types.
 
-**and/**：represent multiplication and division, respectively. The operands on both sides must be data types. When two numbers are multiplied.
+**and/**: represent multiplication and division, respectively. The operands on both sides must be data types. When two numbers are multiplied.
 
 Smaller operands may be promoted if needed (e.g., SMALLINT to INT or BIGINT), and the result of the expression will be promoted to the next larger type.
 
@@ -576,9 +745,9 @@ For example, TINYINT multiplied by INT will produce a BIGINT type of result. Whe
 
 If the user wants to convert the result of the expression to another type, it needs to be converted using the CAST function.
 
-**%**：Modulation operator. Returns the remainder of the left operand divided by the right operand. Both left and right operands must be integers.
+**%**: Modulation operator. Returns the remainder of the left operand divided by the right operand. Both left and right operands must be integers.
 
-**&，|and ^**：The bitwise operator returns the result of bitwise AND, bitwise OR, bitwise XOR operations on two operands. Both operands require an integer type.
+**&, |and ^**: The bitwise operator returns the result of bitwise AND, bitwise OR, bitwise XOR operations on two operands. Both operands require an integer type.
 
 If the types of the two operands of a bitwise operator are inconsistent, the operands of a smaller type are promoted to the operands of a larger type, and the corresponding bitwise operations are performed.
 
@@ -600,11 +769,11 @@ expression BETWEEN lower_bound AND upper_bound
 
 Data type: Usually an expression evaluates to a numeric type, which also supports other data types. If you must ensure that both the lower and upper bounds are comparable characters, you can use the cast() function.
 
- Instructions for use: If the operand is of type string, note that a long string starting with an upper bound will not match the upper bound, which is larger than the upper bound. For example, "between'A'and'M' will not match'MJ'.
+ Instructions for use: If the operand is of type string, note that a long string starting with an upper bound will not match the upper bound, which is larger than the upper bound. For example, "between'A'and'M' will not match 'MJ'.
 
- If you need to make sure the expression works correctly, you can use functions such as upper (), lower (), substr (), trim ().
+ If you need to make sure the expression works correctly, you can use functions such as upper(), lower(), substr(), trim().
 
-Example：
+Example:
 
 ```sql
 select c1 from t1 where month between 1 and 6;
@@ -616,13 +785,13 @@ The comparison operator is used to determine whether columns and columns are equ
 
 The `<>` and `!=` operators indicate that value `a` is not equal to value `b`.
 
-In Operator
+#### In Operator
 
 The In operator compares to the VALUE collection and returns TRUE if it can match any of the elements in the collection.
 
 Parameters and VALUE collections must be comparable. All expressions using the IN operator can be written as equivalent comparisons connected with OR, but the syntax of IN is simpler, more precise, and easier for StarRocks to optimize.
 
-Example:
+Examples:
 
 ```sql
 select * from small_table where tiny_column in (1,2);
@@ -632,7 +801,7 @@ select * from small_table where tiny_column in (1,2);
 
 This operator is used to compare to a string. ''matches a single character,'%' matches multiple characters. The parameter must match the complete string. Typically, placing'%'at the end of a string is more practical.
 
-Example：
+Examples:
 
 ```plain text
 mysql> select varchar_column from small_table where varchar_column like 'm%';
@@ -668,7 +837,7 @@ OR: 2-ary operator that returns TRUE if one of the parameters on the left and ri
 
 NOT: Unit operator, the result of inverting an expression. If the parameter is TRUE, the operator returns FALSE; If the parameter is FALSE, the operator returns TRUE.
 
-Example：
+Examples:
 
 ```plain text
 mysql> select true and true;
@@ -728,7 +897,7 @@ If you want to match the middle part, the front part of the regular expression c
 
 The'|'operator is an optional operator. Regular expressions on either side of'|' only need to satisfy one side condition. The'|'operator and regular expressions on both sides usually need to be enclosed in ().
 
-Example：
+Examples:
 
 ```plain text
 mysql> select varchar_column from small_table where varchar_column regexp '(mi|MI).*';
@@ -756,15 +925,15 @@ mysql> select varchar_column from small_table where varchar_column regexp 'm.*';
 
 ### Alias
 
-When you write the names of tables, columns, or expressions that contain columns in a query, you can assign them an alias at the same time.
+When you write the names of tables, columns, or expressions that contain columns in a query, you can assign them an alias. Aliases are usually shorter and better to remember than original names.
 
-Aliases can be used to access tables and columns when they are needed. Aliases are usually shorter and better remembered than their original names. When a new alias is needed,
+When an alias is needed, you can simply add an AS clause after the table, column, and expression names in the select list or from list. The AS keyword is optional. You can also specify aliases directly after the original name without using AS.
 
-Simply add an AS alias clause after the table, column, and expression names in the select list or from list.
+If an alias or other identifier has the same name as an internal [StarRocks keyword](../keywords.md), you need to enclose the name in a pair of backticks, for example, `rank`.
 
-AS keywords are optional and users can specify aliases directly after the original name. If an alias or other identifier has the same name as an internal keyword, you need to add a ``symbol to the name. Aliases are case sensitive.
+Aliases are case sensitive.
 
-Example：
+Examples:
 
 ```sql
 select tiny_column as name, int_column as sex from big_table;

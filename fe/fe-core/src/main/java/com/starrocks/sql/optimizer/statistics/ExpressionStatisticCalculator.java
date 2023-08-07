@@ -119,8 +119,11 @@ public class ExpressionStatisticCalculator {
                 return ColumnStatistic.unknown();
             }
 
-            // If cast destination type is number/string, it's unnecessary to cast, keep self is enough.
-            if (!cast.getType().isDateType()) {
+            if (cast.getType().isNumericType()) {
+                return ColumnStatistic.buildFrom(childStatistic).setAverageRowSize(cast.getType().getTypeSize())
+                        .build();
+            } else if (!cast.getType().isDateType()) {
+                // If cast destination type is number/string, it's unnecessary to cast, keep self is enough.
                 return childStatistic;
             }
 
@@ -154,7 +157,9 @@ public class ExpressionStatisticCalculator {
         public ColumnStatistic visitCall(CallOperator call, Void context) {
             List<ColumnStatistic> childrenColumnStatistics =
                     call.getChildren().stream().map(child -> child.accept(this, context)).collect(Collectors.toList());
-            Preconditions.checkState(childrenColumnStatistics.size() == call.getChildren().size());
+            Preconditions.checkState(childrenColumnStatistics.size() == call.getChildren().size(),
+                    "column statistics missing for expr: %s. column statistics: %s",
+                    call, childrenColumnStatistics);
             if (childrenColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown) ||
                     inputStatistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
                 return ColumnStatistic.unknown();
@@ -423,6 +428,12 @@ public class ExpressionStatisticCalculator {
                     minValue = Math.min(negativeMinValue, negativeMaxValue);
                     maxValue = Math.max(negativeMinValue, negativeMaxValue);
                     break;
+                case FunctionSet.MURMUR_HASH3_32:
+                    // murmur_hash3_32's range is uint32_t, so 0 ~ 4294967295
+                    minValue = 0;
+                    maxValue = 4294967295.0;
+                    distinctValue = rowCount;
+                    break;
                 case FunctionSet.POSITIVE:
                 case FunctionSet.FLOOR:
                 case FunctionSet.DFLOOR:
@@ -530,6 +541,7 @@ public class ExpressionStatisticCalculator {
                 case FunctionSet.PMOD:
                     minValue = -Math.max(Math.abs(right.getMinValue()), Math.abs(right.getMaxValue()));
                     maxValue = -minValue;
+                    distinctValues = callOperator.getType().isIntegerType() ? maxValue - minValue : distinctValues;
                     break;
                 case FunctionSet.IFNULL:
                     minValue = Math.min(left.getMinValue(), right.getMinValue());

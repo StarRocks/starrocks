@@ -25,14 +25,14 @@
 #include "exec/arrow_type_traits.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/primitive_type.h"
 #include "runtime/types.h"
+#include "types/logical_type.h"
 #include "util/meta_macro.h"
 
 namespace starrocks {
 class RuntimeState;
 class SlotDescriptor;
-
+struct ConvertFuncTree;
 } // namespace starrocks
 namespace starrocks {
 
@@ -51,39 +51,36 @@ size_t fill_null_column(const arrow::Array* array, size_t array_start_idx, size_
 
 // fill filter's range [column_start_idx, column_start_idx + num_elements) with
 // array's range [array_start, array_start_idx + num_elements).
-void fill_filter(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column::Filter* filter,
-                 size_t column_start_idx);
+void fill_filter(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Filter* filter,
+                 size_t column_start_idx, ArrowConvertContext* ctx);
 
 // ConvertFunc is used to fill column's range [column_start_idx, column_start_idx + num_elements)
 // with array's range [array_start_idx, array_start_idx + num_elements). A slot is null if
 // null_data[i - column_start_idx] == DATUM_NULL, null slots are skipped.
 // filter_data[i - column_start_idx] == DATUM_NULL, slot marked as 1 is filtered out
 typedef Status (*ConvertFunc)(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
-                              size_t column_start_idx, uint8_t* null_data, uint8_t* filter_data,
-                              ArrowConvertContext* ctx);
-
-// ListConvertFunc resembles to ConvertFunc, except that:
-// 1. depth_limit is used to prevent a ListArray has too many nested layers.
-// 2. type_desc is used to guide ArrayColumn to unfold its layers and we can utilize directly copying
-// or simd optimization to speed up construction of each layer.
-typedef Status (*ListConvertFunc)(const arrow::Array*, size_t array_start_idx, size_t num_elements, size_t depth_limit,
-                                  const TypeDescriptor* type_desc, Column* column, size_t column_start_idx,
-                                  uint8_t* null_data, ArrowConvertContext* ctx);
+                              size_t column_start_idx, uint8_t* null_data, Filter* chunk_filter,
+                              ArrowConvertContext* ctx, ConvertFuncTree* conv_func);
 
 // invoked when a arrow type fail to convert to StarRocks type.
 Status illegal_converting_error(const std::string& arrow_type_name, const std::string& type_name);
 
-// A triple [at, pt, is_nullable] can determine a optimized converter from converting at -> pt,
+// A triple [at, lt, is_nullable] can determine a optimized converter from converting at -> lt,
 // is_nullable means original data has null slots.
-ConvertFunc get_arrow_converter(ArrowTypeId at, LogicalType pt, bool is_nullable, bool is_strict);
+ConvertFunc get_arrow_converter(ArrowTypeId at, LogicalType lt, bool is_nullable, bool is_strict);
 
-// get list converter, it is used to convert a ListArray in arrow to ArrayColumn in StarRocks.
-ListConvertFunc get_arrow_list_converter();
-
-// if there is no converter for a triple [at, pt, is_nullable], then call get_strict_type to obtain
-// strict pt0, and converting is decomposed into two phases:
-// phase1: convert at->pt0 by converter determined by the triple [at, pt0, is_nullable]
-// phase2: convert pt0->pt by VectorCastExpr.
+// if there is no converter for a triple [at, lt, is_nullable], then call get_strict_type to obtain
+// strict lt0, and converting is decomposed into two phases:
+// phase1: convert at->lt0 by converter determined by the triple [at, lt0, is_nullable]
+// phase2: convert lt0->lt by VectorCastExpr.
 LogicalType get_strict_type(ArrowTypeId at);
+
+struct ConvertFuncTree {
+    ConvertFuncTree(ConvertFunc f) : func(f){};
+    ConvertFuncTree() : func(nullptr){};
+    ConvertFunc func = nullptr;
+    std::vector<std::string> field_names; // used in struct
+    std::vector<std::unique_ptr<ConvertFuncTree>> children;
+};
 
 } // namespace starrocks

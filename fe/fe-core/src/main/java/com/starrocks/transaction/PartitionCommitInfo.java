@@ -36,12 +36,10 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -74,6 +72,8 @@ public class PartitionCommitInfo implements Writable {
     private List<String> invalidDictCacheColumns = Lists.newArrayList();
     @SerializedName(value = "validColumns")
     private List<String> validDictCacheColumns = Lists.newArrayList();
+    @SerializedName(value = "DictCollectedVersion")
+    private List<Long> dictCollectedVersions = Lists.newArrayList();
 
     // compaction score quantiles of lake table
     @SerializedName(value = "compactionScore")
@@ -92,13 +92,15 @@ public class PartitionCommitInfo implements Writable {
 
     public PartitionCommitInfo(long partitionId, long version, long visibleTime,
                                List<String> invalidDictCacheColumns,
-                               List<String> validDictCacheColumns) {
+                               List<String> validDictCacheColumns,
+                               List<Long> dictCollectedVersions) {
         super();
         this.partitionId = partitionId;
         this.version = version;
         this.versionTime = visibleTime;
         this.invalidDictCacheColumns = invalidDictCacheColumns;
         this.validDictCacheColumns = validDictCacheColumns;
+        this.dictCollectedVersions = dictCollectedVersions;
     }
 
     @Override
@@ -108,15 +110,8 @@ public class PartitionCommitInfo implements Writable {
     }
 
     public static PartitionCommitInfo read(DataInput in) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_88) {
-            long partitionId = in.readLong();
-            long version = in.readLong();
-            in.readLong();
-            return new PartitionCommitInfo(partitionId, version, System.currentTimeMillis());
-        } else {
-            String json = Text.readString(in);
-            return GsonUtils.GSON.fromJson(json, PartitionCommitInfo.class);
-        }
+        String json = Text.readString(in);
+        return GsonUtils.GSON.fromJson(json, PartitionCommitInfo.class);
     }
 
     public void setVersionTime(long time) {
@@ -145,6 +140,10 @@ public class PartitionCommitInfo implements Writable {
 
     public List<String> getValidDictCacheColumns() {
         return validDictCacheColumns;
+    }
+
+    public List<Long> getDictCollectedVersions() {
+        return dictCollectedVersions;
     }
 
     public void setCompactionScore(Quantiles compactionScore) {

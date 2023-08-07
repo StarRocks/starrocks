@@ -11,16 +11,17 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-
 package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
 
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
+/**
+ * Deprecated class, can be removed in version 3.2
+ */
+@Deprecated
 public class RolePrivilegeCollection extends PrivilegeCollection {
     // the name of the role
     @SerializedName(value = "n")
@@ -32,12 +33,15 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
     private Set<Long> parentRoleIds;
     @SerializedName(value = "s")
     private Set<Long> subRoleIds;
+    @SerializedName(value = "c")
+    private String comment;
 
     public enum RoleFlags {
         MUTABLE(1),
         REMOVABLE(2);
 
         private long mask;
+
         RoleFlags(int m) {
             this.mask = 1L << m;
         }
@@ -49,46 +53,60 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
         this.mask = 0;
         this.parentRoleIds = new HashSet<>();
         this.subRoleIds = new HashSet<>();
+        this.comment = "";
     }
 
-    public RolePrivilegeCollection(String name, RoleFlags... flags) {
+    public RolePrivilegeCollection(String name, RolePrivilegeCollection.RoleFlags... flags) {
+        this(name, null, flags);
+    }
+
+    public RolePrivilegeCollection(String name, String comment, RolePrivilegeCollection.RoleFlags... flags) {
         this.name = name;
-        for (RoleFlags flag : flags) {
+        for (RolePrivilegeCollection.RoleFlags flag : flags) {
             this.mask |= flag.mask;
         }
         this.parentRoleIds = new HashSet<>();
         this.subRoleIds = new HashSet<>();
+        this.comment = comment;
     }
 
     private void assertMutable() throws PrivilegeException {
-        if (! checkFlag(RoleFlags.MUTABLE)) {
+        if (!checkFlag(RolePrivilegeCollection.RoleFlags.MUTABLE)) {
             throw new PrivilegeException("role " + name + " is not mutable!");
         }
     }
 
     public void disableMutable() {
-        this.mask &= ~RoleFlags.MUTABLE.mask;
+        this.mask &= ~RolePrivilegeCollection.RoleFlags.MUTABLE.mask;
     }
 
     public boolean isRemovable() {
-        return checkFlag(RoleFlags.REMOVABLE);
+        return checkFlag(RolePrivilegeCollection.RoleFlags.REMOVABLE);
+    }
+
+    public boolean isMutable() {
+        return checkFlag(RolePrivilegeCollection.RoleFlags.MUTABLE);
     }
 
     public String getName() {
         return name;
     }
-    private boolean checkFlag(RoleFlags flag) {
+
+    public String getComment() {
+        return comment;
+    }
+
+    public void setComment(String comment) {
+        this.comment = comment;
+    }
+
+    private boolean checkFlag(RolePrivilegeCollection.RoleFlags flag) {
         return (this.mask & flag.mask) != 0;
     }
 
     public void addParentRole(long parentRoleId) throws PrivilegeException {
         assertMutable();
         parentRoleIds.add(parentRoleId);
-    }
-
-    public void removeParentRole(long parentRoleId) throws PrivilegeException {
-        assertMutable();
-        parentRoleIds.remove(parentRoleId);
     }
 
     public Set<Long> getParentRoleIds() {
@@ -99,25 +117,7 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
         subRoleIds.add(subRoleId);
     }
 
-    public void removeSubRole(long subRoleId) {
-        subRoleIds.remove(subRoleId);
-    }
-
     public Set<Long> getSubRoleIds() {
         return subRoleIds;
-    }
-
-    @Override
-    public void grant(short type, ActionSet actionSet, List<PEntryObject> objects, boolean isGrant)
-            throws PrivilegeException {
-        assertMutable();
-        super.grant(type, actionSet, objects, isGrant);
-    }
-
-    @Override
-    public void revoke(short type, ActionSet actionSet, List<PEntryObject> objects, boolean isGrant)
-            throws PrivilegeException {
-        assertMutable();
-        super.revoke(type, actionSet, objects, isGrant);
     }
 }

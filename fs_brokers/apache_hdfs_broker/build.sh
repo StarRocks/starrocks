@@ -43,11 +43,8 @@ rm -rf ${BROKER_OUTPUT}
 install -d ${BROKER_OUTPUT}/bin ${BROKER_OUTPUT}/conf \
            ${BROKER_OUTPUT}lib/
 
-# download aliyun hadoop oss and tencent hadoop cos jar, this can not be found in maven repository, so we download it manually
-wget http://cdn-thirdparty.starrocks.com/broker_thirdparty_jars.tar.gz
-tar xzf broker_thirdparty_jars.tar.gz
-mv broker_thirdparty_jars/*.jar ${BROKER_OUTPUT}/lib/
-rm -r broker_thirdparty_jars broker_thirdparty_jars.tar.gz
+cp -r ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/*.jar ${BROKER_OUTPUT}/lib/
+cp -r ${STARROCKS_THIRDPARTY}/installed/jindosdk/*.jar ${BROKER_OUTPUT}/lib/
 
 cp -r -p ${BROKER_HOME}/bin/*.sh ${BROKER_OUTPUT}/bin/
 cp -r -p ${BROKER_HOME}/conf/*.conf ${BROKER_OUTPUT}/conf/
@@ -56,4 +53,7 @@ cp -r -p ${BROKER_HOME}/conf/log4j.properties ${BROKER_OUTPUT}/conf/
 cp -r -p ${BROKER_HOME}/target/lib/* ${BROKER_OUTPUT}/lib/
 cp -r -p ${BROKER_HOME}/target/apache_hdfs_broker.jar ${BROKER_OUTPUT}/lib/
 
-echo "Finished"
+echo ""
+echo "***************************************"
+echo "**Successfully build StarRocks Broker**"
+echo "***************************************"

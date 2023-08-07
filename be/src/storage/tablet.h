@@ -65,8 +65,9 @@ class Tablet;
 class TabletMeta;
 class TabletUpdates;
 class CompactionTask;
-class CompactionCandidate;
-class CompactionContext;
+struct CompactionCandidate;
+struct CompactionContext;
+struct TabletBasicInfo;
 
 using TabletSharedPtr = std::shared_ptr<Tablet>;
 
@@ -88,7 +89,8 @@ public:
 
     ~Tablet() override;
 
-    Status init();
+    [[nodiscard]] Status init();
+
     bool init_succeeded();
 
     bool is_used();
@@ -98,8 +100,8 @@ public:
 
     void save_meta();
     // Used in clone task, to update local meta when finishing a clone job
-    Status revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
-                              const std::vector<Version>& versions_to_delete);
+    [[nodiscard]] Status revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
+                                            const std::vector<Version>& versions_to_delete);
 
     const int64_t cumulative_layer_point() const;
     void set_cumulative_layer_point(int64_t new_point);
@@ -116,10 +118,19 @@ public:
     size_t num_rows_per_row_block() const;
     size_t next_unique_id() const;
     size_t field_index(const string& field_name) const;
+    std::string schema_debug_string() const;
+    std::string debug_string() const;
+    bool enable_shortcut_compaction() const;
+
+    // Load incremental rowsets to the tablet in DataDir#load.
+    [[nodiscard]] Status load_rowset(const RowsetSharedPtr& rowset);
+    // finish loading rowsets
+    [[nodiscard]] Status finish_load_rowsets();
 
     // operation in rowsets
-    Status add_rowset(const RowsetSharedPtr& rowset, bool need_persist = true);
-    void modify_rowsets(const vector<RowsetSharedPtr>& to_add, const vector<RowsetSharedPtr>& to_delete);
+    [[nodiscard]] Status add_rowset(const RowsetSharedPtr& rowset, bool need_persist = true);
+    void modify_rowsets(const vector<RowsetSharedPtr>& to_add, const vector<RowsetSharedPtr>& to_delete,
+                        std::vector<RowsetSharedPtr>* to_replace);
 
     // _rs_version_map and _inc_rs_version_map should be protected by _meta_lock
     // The caller must call hold _meta_lock when call this two function.
@@ -128,7 +139,7 @@ public:
 
     RowsetSharedPtr rowset_with_max_version() const;
 
-    Status add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version);
+    [[nodiscard]] Status add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version);
     void delete_expired_inc_rowsets();
 
     /// Delete stale rowset by timing. This delete policy uses now() munis
@@ -137,16 +148,17 @@ public:
     /// need to delete flag.
     void delete_expired_stale_rowset();
 
-    Status capture_consistent_versions(const Version& spec_version, vector<Version>* version_path) const;
-    Status check_version_integrity(const Version& version);
+    [[nodiscard]] Status capture_consistent_versions(const Version& spec_version, vector<Version>* version_path) const;
+    [[nodiscard]] Status check_version_integrity(const Version& version);
     void list_versions(std::vector<Version>* versions) const;
 
     // REQUIRE: `obtain_header_rdlock()`ed
-    Status capture_consistent_rowsets(const Version& spec_version, vector<RowsetSharedPtr>* rowsets) const;
+    [[nodiscard]] Status capture_consistent_rowsets(const Version& spec_version,
+                                                    vector<RowsetSharedPtr>* rowsets) const;
 
     const DelPredicateArray& delete_predicates() const { return _tablet_meta->delete_predicates(); }
-    bool version_for_delete_predicate(const Version& version);
-    bool has_delete_predicates(const Version& version);
+    [[nodiscard]] bool version_for_delete_predicate(const Version& version);
+    [[nodiscard]] bool has_delete_predicates(const Version& version);
 
     // meta lock
     void obtain_header_rdlock() { _meta_lock.lock_shared(); }
@@ -171,7 +183,7 @@ public:
 
     std::shared_mutex& get_migration_lock() { return _migration_lock; }
     // should use with migration lock.
-    bool is_migrating() const { return _is_migrating; }
+    [[nodiscard]] bool is_migrating() const { return _is_migrating; }
     // should use with migration lock.
     void set_is_migrating(bool is_migrating) { _is_migrating = is_migrating; }
 
@@ -210,7 +222,7 @@ public:
 
     bool check_rowset_id(const RowsetId& rowset_id);
 
-    Status set_partition_id(int64_t partition_id);
+    void set_partition_id(int64_t partition_id);
 
     TabletInfo get_tablet_info() const;
 
@@ -235,7 +247,7 @@ public:
 
     // updatable tablet specific operations
     TabletUpdates* updates() { return _updates.get(); }
-    Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset);
+    [[nodiscard]] Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time = 0);
 
     // if there is _compaction_task running
     // do not do compaction
@@ -258,13 +270,28 @@ public:
 
     bool enable_compaction();
 
-    bool get_enable_persistent_index() { return _tablet_meta->get_enable_persistent_index(); }
+    [[nodiscard]] bool get_enable_persistent_index() { return _tablet_meta->get_enable_persistent_index(); }
 
     void set_enable_persistent_index(bool enable_persistent_index) {
         return _tablet_meta->set_enable_persistent_index(enable_persistent_index);
     }
 
-    Status contains_version(const Version& version);
+    [[nodiscard]] Status support_binlog();
+
+    // This will modify the TabletMeta, and save_meta() will be called outside
+    // to persist it. See run_update_meta_info_task() in agent_task.cpp
+    void update_binlog_config(const BinlogConfig& binlog_config);
+
+    BinlogManager* binlog_manager() { return _binlog_manager == nullptr ? nullptr : _binlog_manager.get(); }
+
+    [[nodiscard]] Status contains_version(const Version& version);
+
+    void get_basic_info(TabletBasicInfo& info);
+
+    // verify all rowsets of current(max) version in this tablet
+    [[nodiscard]] Status verify();
+
+    void update_max_continuous_version() { _timestamped_version_tracker.update_max_continuous_version(); }
 
 protected:
     void on_shutdown() override;
@@ -284,7 +311,25 @@ private:
     Status _capture_consistent_rowsets_unlocked(const vector<Version>& version_path,
                                                 vector<RowsetSharedPtr>* rowsets) const;
 
-    bool _check_versions_completeness();
+    // The process to generate binlog when publishing a rowset. These methods are protected by _meta_lock
+    // _prepare_binlog_if_needed: persist the binlog file before saving the rowset meta in add_inc_rowset()
+    //              but the in-memory binlog meta in BinlogManager is not modified, so the binlog
+    //              is not visible
+    // _commit_binlog: if successful to save rowset meta in add_inc_rowset(), make the newly binlog
+    //              file visible. _commit_binlog is expected to be always successful because it just
+    //              modifies the in-memory binlog metas
+    // _abort_binlog: if failed to save rowset meta, clean up the binlog file generated in
+    //              prepare_binlog
+
+    // Prepare the binlog if needed. Return false if no need to prepare binlog, such as the binlog
+    // is disabled, otherwise will prepare the binlog. true will be returned if prepare successfully,
+    // other status if error happens during preparation.
+    StatusOr<bool> _prepare_binlog_if_needed(const RowsetSharedPtr& rowset, int64_t version);
+    void _commit_binlog(int64_t version);
+    void _abort_binlog(const RowsetSharedPtr& rowset, int64_t version);
+    // check whether there is useless binlog, and update the in-memory TabletMeta to the state after
+    // those binlog is deleted. Return true the meta has been changed, and needs to be persisted
+    bool _check_useless_binlog_and_update_meta(int64_t current_second);
 
     friend class TabletUpdates;
     static const int64_t kInvalidCumulativePoint = -1;
@@ -347,6 +392,8 @@ private:
     std::atomic<int64_t> _cumulative_point{0};
     std::atomic<int32_t> _newly_created_rowset_num{0};
     std::atomic<int64_t> _last_checkpoint_time{0};
+
+    std::unique_ptr<BinlogManager> _binlog_manager;
 };
 
 inline bool Tablet::init_succeeded() {
@@ -395,6 +442,11 @@ inline size_t Tablet::next_unique_id() const {
 
 inline size_t Tablet::field_index(const string& field_name) const {
     return _tablet_meta->tablet_schema().field_index(field_name);
+}
+
+inline bool Tablet::enable_shortcut_compaction() const {
+    std::shared_lock rdlock(_meta_lock);
+    return _tablet_meta->enable_shortcut_compaction();
 }
 
 } // namespace starrocks

@@ -36,13 +36,14 @@ package com.starrocks.task;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryPredicate.Operator;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.common.MarkedCountDownLatch;
+import com.starrocks.common.Status;
 import com.starrocks.thrift.TBrokerScanRange;
 import com.starrocks.thrift.TCondition;
 import com.starrocks.thrift.TDescriptorTable;
@@ -50,6 +51,7 @@ import com.starrocks.thrift.TPriority;
 import com.starrocks.thrift.TPushReq;
 import com.starrocks.thrift.TPushType;
 import com.starrocks.thrift.TResourceInfo;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
@@ -123,13 +125,13 @@ public class PushTask extends AgentTask {
     public PushTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
                     long replicaId, int schemaHash, int timeoutSecond, long loadJobId, TPushType pushType,
                     TPriority priority, long transactionId, long signature, TBrokerScanRange tBrokerScanRange,
-                    TDescriptorTable tDescriptorTable, boolean useVectorized, String timezone, TTabletType tabletType) {
+                    TDescriptorTable tDescriptorTable, String timezone, TTabletType tabletType) {
         this(null, backendId, dbId, tableId, partitionId, indexId,
                 tabletId, replicaId, schemaHash, -1, timeoutSecond, loadJobId, pushType, null,
                 priority, TTaskType.REALTIME_PUSH, transactionId, signature);
         this.tBrokerScanRange = tBrokerScanRange;
         this.tDescriptorTable = tDescriptorTable;
-        this.useVectorized = useVectorized;
+        this.useVectorized = true;
         this.timezone = timezone;
         this.tabletType = tabletType;
     }
@@ -156,7 +158,7 @@ public class PushTask extends AgentTask {
                         BinaryPredicate binaryPredicate = (BinaryPredicate) condition;
                         String columnName = ((SlotRef) binaryPredicate.getChild(0)).getColumnName();
                         String value = ((LiteralExpr) binaryPredicate.getChild(1)).getStringValue();
-                        Operator op = binaryPredicate.getOp();
+                        BinaryType op = binaryPredicate.getOp();
                         tCondition.setColumn_name(columnName);
                         tCondition.setCondition_op(op.toString());
                         conditionValues.add(value);
@@ -213,6 +215,15 @@ public class PushTask extends AgentTask {
     public void countDownLatch(long backendId, long tabletId) {
         if (this.latch != null) {
             if (latch.markedCountDown(backendId, tabletId)) {
+                LOG.info("pushTask current latch count: {}. backend: {}, tablet:{}",
+                        latch.getCount(), backendId, tabletId);
+            }
+        }
+    }
+
+    public void countDownLatch(long backendId, long tabletId, String errMsg) {
+        if (this.latch != null) {
+            if (latch.markedCountDown(backendId, tabletId, new Status(TStatusCode.INTERNAL_ERROR, errMsg))) {
                 LOG.info("pushTask current latch count: {}. backend: {}, tablet:{}",
                         latch.getCount(), backendId, tabletId);
             }

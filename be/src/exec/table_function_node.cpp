@@ -80,7 +80,6 @@ Status TableFunctionNode::init(const TPlanNode& tnode, RuntimeState* state) {
         return Status::InternalError("can't find table function " + table_function_name);
     }
     _input_chunk_seek_rows = 0;
-    _table_function_result_eos = false;
     _outer_column_remain_repeat_times = 0;
 
     return Status::OK();
@@ -116,7 +115,7 @@ Status TableFunctionNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* e
         return Status::OK();
     }
 
-    if (_input_chunk_ptr == nullptr || !_table_function_result_eos) {
+    if (_input_chunk_ptr == nullptr) {
         RETURN_IF_ERROR(get_next_input_chunk(state, eos));
         if (*eos) {
             return Status::OK();
@@ -165,7 +164,7 @@ Status TableFunctionNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* e
     }
 
     while (true) {
-        if (_input_chunk_ptr == nullptr || !_table_function_result_eos) {
+        if (_input_chunk_ptr == nullptr) {
             RETURN_IF_ERROR(get_next_input_chunk(state, eos));
             if (*eos) {
                 (*eos) = false;
@@ -221,14 +220,14 @@ Status TableFunctionNode::reset(RuntimeState* state) {
     return Status::OK();
 }
 
-Status TableFunctionNode::close(RuntimeState* state) {
+void TableFunctionNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
     if (_table_function != nullptr && _table_function_state != nullptr) {
         _table_function->close(state, _table_function_state);
     }
-    return ExecNode::close(state);
+    ExecNode::close(state);
 }
 
 Status TableFunctionNode::build_chunk(ChunkPtr* chunk, const std::vector<ColumnPtr>& output_columns) {
@@ -256,9 +255,14 @@ Status TableFunctionNode::build_chunk(ChunkPtr* chunk, const std::vector<ColumnP
 }
 
 Status TableFunctionNode::get_next_input_chunk(RuntimeState* state, bool* eos) {
-    if (_input_chunk_ptr != nullptr && !_table_function_result_eos) {
+    if (_input_chunk_ptr != nullptr) {
         SCOPED_TIMER(_table_function_exec_timer);
-        _table_function_result = _table_function->process(_table_function_state, &_table_function_result_eos);
+        _table_function_result = _table_function->process(_table_function_state);
+        if (_table_function_state->processed_rows() < _input_chunk_ptr->num_rows()) {
+            const TFunction& table_fn = _tnode.table_function_node.table_function.nodes[0].fn;
+            const std::string& fn_name = table_fn.name.function_name;
+            return Status::NotSupported(fmt::format("Only support function \"{}\" on pipeline engine", fn_name));
+        }
         return Status::OK();
     }
 
@@ -271,7 +275,6 @@ Status TableFunctionNode::get_next_input_chunk(RuntimeState* state, bool* eos) {
     }
 
     _input_chunk_seek_rows = 0;
-    _table_function_result_eos = false;
     Columns table_function_params;
     for (SlotId slotId : _param_slots) {
         table_function_params.emplace_back(_input_chunk_ptr->get_column_by_slot_id(slotId));
@@ -280,7 +283,12 @@ Status TableFunctionNode::get_next_input_chunk(RuntimeState* state, bool* eos) {
     _table_function_state->set_params(table_function_params);
     {
         SCOPED_TIMER(_table_function_exec_timer);
-        _table_function_result = _table_function->process(_table_function_state, &_table_function_result_eos);
+        _table_function_result = _table_function->process(_table_function_state);
+        if (_table_function_state->processed_rows() < _input_chunk_ptr->num_rows()) {
+            const TFunction& table_fn = _tnode.table_function_node.table_function.nodes[0].fn;
+            const std::string& fn_name = table_fn.name.function_name;
+            return Status::NotSupported(fmt::format("Only support function \"{}\" on pipeline engine", fn_name));
+        }
     }
     return Status::OK();
 }

@@ -17,11 +17,12 @@ package com.starrocks.sql.ast;
 
 
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.sql.parser.NodePosition;
 
 public class ManualRefreshSchemeDesc extends RefreshSchemeDesc {
 
-    public ManualRefreshSchemeDesc() {
-        super(MaterializedView.RefreshType.MANUAL);
+    public ManualRefreshSchemeDesc(MaterializedView.RefreshMoment moment, NodePosition pos) {
+        super(MaterializedView.RefreshType.MANUAL, pos, moment);
     }
 
 }

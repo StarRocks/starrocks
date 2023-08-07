@@ -35,19 +35,21 @@
 package com.starrocks.persist;
 
 import com.google.common.base.Objects;
-import com.starrocks.common.FeMetaVersion;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
-import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
 public class DropInfo implements Writable {
+    @SerializedName("db")
     private long dbId;
+    @SerializedName("tb")
     private long tableId;
-
+    @SerializedName("idx")
     private long indexId;
+    @SerializedName("fd")
     private boolean forceDrop = false;
 
     public DropInfo() {
@@ -92,9 +94,7 @@ public class DropInfo implements Writable {
     public void readFields(DataInput in) throws IOException {
         dbId = in.readLong();
         tableId = in.readLong();
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_89) {
-            forceDrop = in.readBoolean();
-        }
+        forceDrop = in.readBoolean();
         boolean hasIndexId = in.readBoolean();
         if (hasIndexId) {
             indexId = in.readLong();

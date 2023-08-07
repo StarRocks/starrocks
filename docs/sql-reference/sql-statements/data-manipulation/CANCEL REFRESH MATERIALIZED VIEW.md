@@ -2,12 +2,12 @@
 
 ## Description
 
-Cancels a refresh task for an ASYNC or a MANUAL refresh materialized view.
+Cancels a refresh task for an asynchronous materialized view.
 
 ## Syntax
 
 ```SQL
-CANCEL REFRESH MATERIALIZED VIEW [database_name.]materialized_view_name;
+CANCEL REFRESH MATERIALIZED VIEW [<database_name>.]<materialized_view_name>
 ```
 
 ## Parameters

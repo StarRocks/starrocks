@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableSet;
@@ -21,6 +20,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TQueryType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.net.util.SubnetUtils;
 
@@ -35,6 +35,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class ResourceGroupClassifier implements Writable {
+    public static final Pattern USER_PATTERN = Pattern.compile("^[a-zA-Z][a-zA-Z0-9_]{1,63}/?[.a-zA-Z0-9_-]{0,63}$");
     public static final Pattern USE_ROLE_PATTERN = Pattern.compile("^\\w+$");
     public static final ImmutableSet<String> SUPPORTED_QUERY_TYPES =
             ImmutableSet.of(QueryType.SELECT.name(), QueryType.INSERT.name());
@@ -121,9 +122,9 @@ public class ResourceGroupClassifier implements Writable {
         Text.writeString(out, json);
     }
 
-    public boolean isSatisfied(String user, String role, QueryType queryType, String sourceIp,
+    public boolean isSatisfied(String user, List<String> activeRoles, QueryType queryType, String sourceIp,
                                Set<Long> dbIds) {
-        if (!isVisible(user, role, sourceIp)) {
+        if (!isVisible(user, activeRoles, sourceIp)) {
             return false;
         }
         if (CollectionUtils.isNotEmpty(queryTypes) && !this.queryTypes.contains(queryType)) {
@@ -136,11 +137,11 @@ public class ResourceGroupClassifier implements Writable {
         return true;
     }
 
-    public boolean isVisible(String user, String role, String sourceIp) {
+    public boolean isVisible(String user, List<String> activeRoles, String sourceIp) {
         if (this.user != null && !this.user.equals(user)) {
             return false;
         }
-        if (this.role != null && !this.role.equals(role)) {
+        if (this.role != null && !activeRoles.contains(role)) {
             return false;
         }
         if (this.sourceIp != null && sourceIp != null) {
@@ -216,6 +217,12 @@ public class ResourceGroupClassifier implements Writable {
         SCHEMA_CHANGE,
         CLONE,
         MV,
-        SYSTEM_OTHER
+        SYSTEM_OTHER;
+
+        public static QueryType fromTQueryType(TQueryType type) {
+            return type == TQueryType.LOAD
+                    ? ResourceGroupClassifier.QueryType.INSERT
+                    : ResourceGroupClassifier.QueryType.SELECT;
+        }
     }
 }

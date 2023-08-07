@@ -238,17 +238,21 @@ public class MysqlPassword {
         return hashStage2;
     }
 
-    public static boolean checkPlainPass(byte[] scrambledPass, String plainPass) {
-        byte[] pass = makeScrambledPassword(plainPass);
-        if (pass.length != scrambledPass.length) {
+    public static boolean checkScrambledPlainPass(byte[] savedScrambledPass, byte[] scrambledPlainPass) {
+        if (scrambledPlainPass.length != savedScrambledPass.length) {
             return false;
         }
-        for (int i = 0; i < pass.length; ++i) {
-            if (pass[i] != scrambledPass[i]) {
+        for (int i = 0; i < scrambledPlainPass.length; ++i) {
+            if (scrambledPlainPass[i] != savedScrambledPass[i]) {
                 return false;
             }
         }
         return true;
+    }
+
+    public static boolean checkPlainPass(byte[] scrambledPass, String plainPass) {
+        byte[] pass = makeScrambledPassword(plainPass);
+        return checkScrambledPlainPass(scrambledPass, pass);
     }
 
     public static byte[] checkPassword(String passwdString) throws AnalysisException {

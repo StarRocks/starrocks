@@ -78,14 +78,14 @@ public class AnalyzeSetVariableTest {
 
         sql = "set @var = 1 + 2";
         SetStmt setStmt = (SetStmt) analyzeSuccess(sql);
-        UserVariable userVariable = (UserVariable) setStmt.getSetVars().get(0);
-        Assert.assertNotNull(userVariable.getResolvedExpression());
-        Assert.assertEquals("3", userVariable.getResolvedExpression().getStringValue());
+        UserVariable userVariable = (UserVariable) setStmt.getSetListItems().get(0);
+        Assert.assertNotNull(userVariable.getEvaluatedExpression());
+        Assert.assertEquals("3", userVariable.getEvaluatedExpression().getStringValue());
 
         sql = "set @var = abs(1.2)";
         setStmt = (SetStmt) analyzeSuccess(sql);
-        userVariable = (UserVariable) setStmt.getSetVars().get(0);
-        Assert.assertTrue(userVariable.getExpression() instanceof Subquery);
+        userVariable = (UserVariable) setStmt.getSetListItems().get(0);
+        Assert.assertTrue(userVariable.getUnevaluatedExpression() instanceof Subquery);
 
         sql = "set @var = (select 1)";
         analyzeSuccess(sql);
@@ -98,11 +98,11 @@ public class AnalyzeSetVariableTest {
 
         sql = "set @var = (select sum(v1) from test.t0 group by v2)";
         setStmt = (SetStmt) analyzeSuccess(sql);
-        Assert.assertTrue(setStmt.getSetVars().get(0).getExpression().getType().isIntegerType());
+        Assert.assertTrue(((UserVariable) setStmt.getSetListItems().get(0)).getUnevaluatedExpression().getType().isIntegerType());
 
         sql = "set @var1 = 1, @var2 = 2";
         setStmt = (SetStmt) analyzeSuccess(sql);
-        Assert.assertEquals(2, setStmt.getSetVars().size());
+        Assert.assertEquals(2, setStmt.getSetListItems().size());
 
         sql = "set @var = [1,2,3]";
         analyzeFail(sql, "Can't set variable with type ARRAY");
@@ -149,25 +149,29 @@ public class AnalyzeSetVariableTest {
         analyzeSuccess(sql);
         sql = "SET CHAR SET 'utf8mb4'";
         analyzeSuccess(sql);
+        sql = "show character set where charset = 'utf8mb4'";
+        analyzeSuccess(sql);
+        sql = "SET CHARACTER SET utf8";
+        analyzeSuccess(sql);
     }
 
     @Test
     public void testSetPassword() {
         String sql = "SET PASSWORD FOR 'testUser' = PASSWORD('testPass')";
         SetStmt setStmt = (SetStmt) analyzeSuccess(sql);
-        SetPassVar setPassVar = (SetPassVar) setStmt.getSetVars().get(0);
+        SetPassVar setPassVar = (SetPassVar) setStmt.getSetListItems().get(0);
         String password = new String(setPassVar.getPassword());
         Assert.assertEquals("*88EEBA7D913688E7278E2AD071FDB5E76D76D34B", password);
 
         sql = "SET PASSWORD = PASSWORD('testPass')";
         setStmt = (SetStmt) analyzeSuccess(sql);
-        setPassVar = (SetPassVar) setStmt.getSetVars().get(0);
+        setPassVar = (SetPassVar) setStmt.getSetListItems().get(0);
         password = new String(setPassVar.getPassword());
         Assert.assertEquals("*88EEBA7D913688E7278E2AD071FDB5E76D76D34B", password);
 
         sql = "SET PASSWORD = '*88EEBA7D913688E7278E2AD071FDB5E76D76D34B'";
         setStmt = (SetStmt) analyzeSuccess(sql);
-        setPassVar = (SetPassVar) setStmt.getSetVars().get(0);
+        setPassVar = (SetPassVar) setStmt.getSetListItems().get(0);
         password = new String(setPassVar.getPassword());
         Assert.assertEquals("*88EEBA7D913688E7278E2AD071FDB5E76D76D34B", password);
     }
@@ -226,6 +230,32 @@ public class AnalyzeSetVariableTest {
         analyzeFail(sql, "resource group not exists");
 
         sql = "SET resource_group_id = 0";
+        analyzeSuccess(sql);
+    }
+
+    @Test
+    public void testSetTran() {
+        String sql = "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE";
+        analyzeSuccess(sql);
+
+        sql = "SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE";
+        analyzeSuccess(sql);
+
+        sql = "SET GLOBAL TRANSACTION ISOLATION LEVEL SERIALIZABLE";
+        analyzeSuccess(sql);
+    }
+
+    @Test
+    public void testSetAdaptiveDopMaxBlockRowsPerDriverSeq() {
+        String sql;
+
+        sql = "SET runtime_adaptive_dop_max_block_rows_per_driver_seq = 0";
+        analyzeFail(sql);
+
+        sql = "SET runtime_adaptive_dop_max_block_rows_per_driver_seq = -1";
+        analyzeFail(sql);
+
+        sql = "SET runtime_adaptive_dop_max_block_rows_per_driver_seq = 1";
         analyzeSuccess(sql);
     }
 }

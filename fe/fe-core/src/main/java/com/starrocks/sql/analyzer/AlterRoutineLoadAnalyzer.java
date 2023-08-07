@@ -14,18 +14,16 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.LabelName;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AlterRoutineLoadAnalyzer {
 
@@ -43,12 +41,14 @@ public class AlterRoutineLoadAnalyzer {
         if (Strings.isNullOrEmpty(dbName)) {
             dbName = context.getDatabase();
             if (Strings.isNullOrEmpty(dbName)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+                throw new SemanticException(PARSER_ERROR_MSG.noDbSelected());
             }
         }
-        Preconditions.checkArgument(context.getDatabase().equalsIgnoreCase(dbName)
-                        || context.getDatabase().equalsIgnoreCase(""),
-                "session's dbname not equal lable's dbname", context.getDatabase(), dbName);
+
+        if (!(context.getDatabase().equalsIgnoreCase(dbName)
+                || context.getDatabase().equalsIgnoreCase(""))) {
+            throw new SemanticException(PARSER_ERROR_MSG.dbNameNotMatch(context.getDatabase(), dbName));
+        }
         LabelName labelName = new LabelName(dbName, statement.getLabel());
         statement.setLabelName(labelName);
         try {

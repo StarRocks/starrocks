@@ -114,48 +114,56 @@ public abstract class OptExpressionVisitor<R, C> {
     /**
      * Physical operator visitor
      */
-    public R visitPhysicalOlapScan(OptExpression optExpression, C context) {
+    public R visitPhysicalScan(OptExpression optExpression, C context) {
         return visit(optExpression, context);
+    }
+
+    public R visitPhysicalOlapScan(OptExpression optExpression, C context) {
+        return visitPhysicalScan(optExpression, context);
     }
 
     public R visitPhysicalHiveScan(OptExpression optExpression, C context) {
-        return visit(optExpression, context);
+        return visitPhysicalScan(optExpression, context);
     }
 
     public R visitPhysicalFileScan(OptExpression optExpression, C context) {
-        return visit(optExpression, context);
+        return visitPhysicalScan(optExpression, context);
     }
 
     public R visitPhysicalIcebergScan(OptExpression optExpression, C context) {
-        return visit(optExpression, context);
+        return visitPhysicalScan(optExpression, context);
     }
 
     public R visitPhysicalHudiScan(OptExpression optExpression, C context) {
-        return visit(optExpression, context);
+        return visitPhysicalScan(optExpression, context);
     }
 
     public R visitPhysicalDeltaLakeScan(OptExpression optExpression, C context) {
-        return visit(optExpression, context);
+        return visitPhysicalScan(optExpression, context);
+    }
+
+    public R visitPhysicalPaimonScan(OptExpression optExpression, C context) {
+        return visitPhysicalScan(optExpression, context);
     }
 
     public R visitPhysicalSchemaScan(OptExpression optExpression, C context) {
-        return visit(optExpression, context);
+        return visitPhysicalScan(optExpression, context);
     }
 
     public R visitPhysicalMysqlScan(OptExpression optExpression, C context) {
-        return visit(optExpression, context);
+        return visitPhysicalScan(optExpression, context);
     }
 
     public R visitPhysicalEsScan(OptExpression optExpression, C context) {
-        return visit(optExpression, context);
+        return visitPhysicalScan(optExpression, context);
     }
 
     public R visitPhysicalMetaScan(OptExpression optExpression, C context) {
-        return visit(optExpression, context);
+        return visitPhysicalScan(optExpression, context);
     }
 
     public R visitPhysicalJDBCScan(OptExpression optExpression, C context) {
-        return visit(optExpression, context);
+        return visitPhysicalScan(optExpression, context);
     }
 
     public R visitPhysicalProject(OptExpression optExpression, C context) {
@@ -187,7 +195,7 @@ public abstract class OptExpressionVisitor<R, C> {
     }
 
     public R visitPhysicalNestLoopJoin(OptExpression optExpression, C context) {
-        return visit(optExpression, context);
+        return visitPhysicalJoin(optExpression, context);
     }
 
     public R visitPhysicalAssertOneRow(OptExpression optExpression, C context) {
@@ -259,6 +267,10 @@ public abstract class OptExpressionVisitor<R, C> {
     }
 
     public R visitPhysicalStreamAgg(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalTableFunctionTableScan(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
 }

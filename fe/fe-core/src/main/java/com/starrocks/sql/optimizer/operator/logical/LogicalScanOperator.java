@@ -14,15 +14,18 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
@@ -37,19 +40,25 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public abstract class LogicalScanOperator extends LogicalOperator {
-    protected final Table table;
+    protected Table table;
 
     /**
      * colRefToColumnMetaMap is the map from column reference to StarRocks column in meta
      * The ColumnRefMap contains Scan output columns and predicate used columns
      */
-    protected final ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
-    protected final ImmutableMap<Column, ColumnRefOperator> columnMetaToColRefMap;
+    protected ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
+    protected ImmutableMap<Column, ColumnRefOperator> columnMetaToColRefMap;
     protected ImmutableMap<String, PartitionColumnFilter> columnFilters;
     protected Set<String> partitionColumns = Sets.newHashSet();
+    protected ImmutableList<ColumnAccessPath> columnAccessPaths;
+    protected boolean canUseAnyColumn;
+    protected boolean canUseMinMaxCountOpt;
 
     public LogicalScanOperator(
             OperatorType type,
@@ -63,7 +72,15 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         this.table = Objects.requireNonNull(table, "table is null");
         this.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
         this.columnMetaToColRefMap = ImmutableMap.copyOf(columnMetaToColRefMap);
+        this.columnAccessPaths = ImmutableList.of();
         buildColumnFilters(predicate);
+    }
+
+    protected LogicalScanOperator(OperatorType type) {
+        super(type);
+        this.colRefToColumnMetaMap = ImmutableMap.of();
+        this.columnMetaToColRefMap = ImmutableMap.of();
+        this.columnAccessPaths = ImmutableList.of();
     }
 
     public Table getTable() {
@@ -80,6 +97,41 @@ public abstract class LogicalScanOperator extends LogicalOperator {
 
     public Map<Column, ColumnRefOperator> getColumnMetaToColRefMap() {
         return columnMetaToColRefMap;
+    }
+
+    private Optional<Map<String, ColumnRefOperator>> cachedColumnNameToColRefMap = Optional.empty();
+
+    public Map<String, ColumnRefOperator> getColumnNameToColRefMap() {
+        if (cachedColumnNameToColRefMap.isPresent()) {
+            return cachedColumnNameToColRefMap.get();
+        }
+
+        Map<String, ColumnRefOperator> columnRefOperatorMap = columnMetaToColRefMap.entrySet().stream()
+                .collect(Collectors.toMap(e -> e.getKey().getName(), Map.Entry::getValue));
+        cachedColumnNameToColRefMap = Optional.of(columnRefOperatorMap);
+        return columnRefOperatorMap;
+    }
+
+    public void setCanUseAnyColumn(boolean canUseAnyColumn) {
+        this.canUseAnyColumn = canUseAnyColumn;
+    }
+
+    public boolean getCanUseAnyColumn() {
+        return canUseAnyColumn;
+    }
+
+    public void setCanUseMinMaxCountOpt(boolean canUseMinMaxCountOpt) {
+        this.canUseMinMaxCountOpt = canUseMinMaxCountOpt;
+    }
+
+    public boolean getCanUseMinMaxCountOpt() {
+        return canUseMinMaxCountOpt;
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        return new RowOutputInfo(colRefToColumnMetaMap.keySet().stream()
+                .collect(Collectors.toMap(Function.identity(), Function.identity())));
     }
 
     public void buildColumnFilters(ScalarOperator predicate) {
@@ -100,6 +152,10 @@ public abstract class LogicalScanOperator extends LogicalOperator {
 
     public Set<String> getPartitionColumns() {
         return partitionColumns;
+    }
+
+    public List<ColumnAccessPath> getColumnAccessPaths() {
+        return columnAccessPaths;
     }
 
     @Override
@@ -136,12 +192,11 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
+
         if (!super.equals(o)) {
             return false;
         }
+
         LogicalScanOperator that = (LogicalScanOperator) o;
         return Objects.equals(table.getId(), that.table.getId()) &&
                 Objects.equals(colRefToColumnMetaMap.keySet(), that.getColRefToColumnMetaMap().keySet());
@@ -154,34 +209,44 @@ public abstract class LogicalScanOperator extends LogicalOperator {
 
     public abstract static class Builder<O extends LogicalScanOperator, B extends LogicalScanOperator.Builder>
             extends Operator.Builder<O, B> {
-        protected Table table;
-        protected ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
-        protected ImmutableMap<Column, ColumnRefOperator> columnMetaToColRefMap;
-        protected ImmutableMap<String, PartitionColumnFilter> columnFilters;
-
         @Override
         public B withOperator(O scanOperator) {
             super.withOperator(scanOperator);
-
-            this.table = scanOperator.table;
-            this.colRefToColumnMetaMap = scanOperator.colRefToColumnMetaMap;
-            this.columnMetaToColRefMap = scanOperator.columnMetaToColRefMap;
-            this.columnFilters = scanOperator.columnFilters;
+            builder.table = scanOperator.table;
+            builder.colRefToColumnMetaMap = scanOperator.colRefToColumnMetaMap;
+            builder.columnMetaToColRefMap = scanOperator.columnMetaToColRefMap;
+            builder.columnFilters = scanOperator.columnFilters;
+            builder.columnAccessPaths = scanOperator.columnAccessPaths;
+            builder.canUseAnyColumn = scanOperator.canUseAnyColumn;
+            builder.canUseMinMaxCountOpt = scanOperator.canUseMinMaxCountOpt;
             return (B) this;
         }
 
-        public B setColRefToColumnMetaMap(ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap) {
-            this.colRefToColumnMetaMap = colRefToColumnMetaMap;
+        @Override
+        public O build() {
+            builder.columnFilters = ImmutableMap.copyOf(
+                    ColumnFilterConverter.convertColumnFilter(Utils.extractConjuncts(builder.predicate),
+                            builder.table));
+            return super.build();
+        }
+
+        public B setColRefToColumnMetaMap(Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+            builder.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
             return (B) this;
         }
 
-        public B setColumnMetaToColRefMap(ImmutableMap<Column, ColumnRefOperator> columnMetaToColRefMap) {
-            this.columnMetaToColRefMap = columnMetaToColRefMap;
+        public B setColumnMetaToColRefMap(Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
+            builder.columnMetaToColRefMap = ImmutableMap.copyOf(columnMetaToColRefMap);
+            return (B) this;
+        }
+
+        public B setColumnAccessPaths(List<ColumnAccessPath> columnAccessPaths) {
+            builder.columnAccessPaths = ImmutableList.copyOf(columnAccessPaths);
             return (B) this;
         }
 
         public B setTable(Table table) {
-            this.table = table;
+            builder.table = table;
             return (B) this;
         }
     }

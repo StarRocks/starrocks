@@ -48,7 +48,7 @@ The following bugs are fixed:
 - Some graphical user interface (GUI) tools automatically configure the `set_sql_limit` variable. As a result, the SQL statement ORDER BY LIMIT is ignored, and consequently an incorrect number of rows are returned for queries. [#5966](https://github.com/StarRocks/starrocks/issues/5966)
 - If a colocation group (CG) contains a large number of tables and data is frequently loaded into the tables, the CG may not be able to stay in the `stable` state. In this case, the JOIN statement does not support Colocate Join operations. StarRocks has been optimized to wait for a little longer during data loading. This way, the integrity of the tablet replicas to which data is loaded can be maximized.
 - If a few replicas fail to be loaded due to reasons such as heavy loads or high network latencies, cloning on these replicas is triggered. In this case, deadlocks may occur, which may cause a situation in which the loads on processes are low but a large number of requests time out. [#5646](https://github.com/StarRocks/starrocks/issues/5646) [#6290](https://github.com/StarRocks/starrocks/issues/6290)
-- After the schema of a table that uses the Primary Key model is changed, a "duplicate key xxx" error may occur when data is loaded into that table. [#5878](https://github.com/StarRocks/starrocks/issues/5878)
+- After the schema of a table that uses the Primary Key table is changed, a "duplicate key xxx" error may occur when data is loaded into that table. [#5878](https://github.com/StarRocks/starrocks/issues/5878)
 - If the DROP SCHEMA statement is executed on a database, the database is forcibly deleted and cannot be restored. [#6201](https://github.com/StarRocks/starrocks/issues/6201)
 
 ## 2.0.5
@@ -133,12 +133,12 @@ Release date: January 21, 2022
 - The query error that is caused by inconsistent global dictionaries of replicas is fixed. [#2700](https://github.com/StarRocks/starrocks/pull/2700) [#2765](https://github.com/StarRocks/starrocks/pull/2765)
 - The error that the parameter `exec_mem_limit` during data loading does not take effect is fixed. [#2693](https://github.com/StarRocks/starrocks/pull/2693)
   > The parameter `exec_mem_limit` specifies each BE node's memory limit during data loading.
-- The OOM error that occurs when data is imported to the Primary Key Model is fixed. [#2743](https://github.com/StarRocks/starrocks/pull/2743) [#2777](https://github.com/StarRocks/starrocks/pull/2777)
+- The OOM error that occurs when data is imported to the Primary Key table is fixed. [#2743](https://github.com/StarRocks/starrocks/pull/2743) [#2777](https://github.com/StarRocks/starrocks/pull/2777)
 - The error that the BE node stops responding when StarRocks uses external tables to query large MySQL tables is fixed. [#2881](https://github.com/StarRocks/starrocks/pull/2881)
 
 ### Behavior Change
 
-StarRocks can use external tables to access Hive and its AWS S3-based external tables. However, the jar file that is used to access S3 data is too large and the binary package of StarRocks does not contain this jar file. If you want to use this jar file, you can download it from [Hive_s3_lib](https://cdn-thirdparty.starrocks.com/hive_s3_jar.tar.gz).
+StarRocks can use external tables to access Hive and its AWS S3-based external tables. However, the jar file that is used to access S3 data is too large and the binary package of StarRocks does not contain this jar file. If you want to use this jar file, you can download it from [Hive_s3_lib](https://releases.starrocks.io/resources/hive_s3_jar.tar.gz).
 
 ## 2.0.0
 

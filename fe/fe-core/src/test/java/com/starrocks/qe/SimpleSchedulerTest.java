@@ -40,13 +40,17 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Reference;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRangeLocation;
-import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -62,30 +66,6 @@ public class SimpleSchedulerTest {
 
     @Before
     public void setUp() {
-        new Expectations() {
-            {
-                editLog.logAddBackend((Backend) any);
-                minTimes = 0;
-
-                editLog.logDropBackend((Backend) any);
-                minTimes = 0;
-
-                editLog.logBackendStateChange((Backend) any);
-                minTimes = 0;
-
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
-            }
-        };
-
-        new Expectations(globalStateMgr) {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
     }
 
     // Comment out these code temporatily.
@@ -106,8 +86,8 @@ public class SimpleSchedulerTest {
         twoLocations.add(locationB);
 
         // three Backends
-        ImmutableMap<Long, Backend> nullBackends = null;
-        ImmutableMap<Long, Backend> emptyBackends = ImmutableMap.of();
+        ImmutableMap<Long, ComputeNode> nullBackends = null;
+        ImmutableMap<Long, ComputeNode> emptyBackends = ImmutableMap.of();
 
         Backend backendA = new Backend(0, "addressA", 0);
         backendA.updateOnce(0, 0, 0);
@@ -116,11 +96,11 @@ public class SimpleSchedulerTest {
         Backend backendC = new Backend(2, "addressC", 0);
         backendC.updateOnce(0, 0, 0);
 
-        Map<Long, Backend> threeBackends = Maps.newHashMap();
+        Map<Long, ComputeNode> threeBackends = Maps.newHashMap();
         threeBackends.put((long) 0, backendA);
         threeBackends.put((long) 1, backendB);
         threeBackends.put((long) 2, backendC);
-        ImmutableMap<Long, Backend> immutableThreeBackends = ImmutableMap.copyOf(threeBackends);
+        ImmutableMap<Long, ComputeNode> immutableThreeBackends = ImmutableMap.copyOf(threeBackends);
 
         {   // null Backends
             address = SimpleScheduler.getHost(Long.valueOf(0), nullLocations,
@@ -148,15 +128,69 @@ public class SimpleSchedulerTest {
             // BackendId not exists and location not exists
             Assert.assertNull(SimpleScheduler.getHost(3, emptyLocations, immutableThreeBackends, ref));
         }
+    }
 
+    @Test
+    public void testGetHostWithBackendIdInSharedDataMode() {
+        // locations
+        List<TScanRangeLocation> locations = new ArrayList<TScanRangeLocation>();
+        TScanRangeLocation locationA = new TScanRangeLocation();
+        locationA.setBackend_id(0);
+        locations.add(locationA);
+
+        // backends
+        Backend backendA = new Backend(0, "addressA", 0);
+        backendA.updateOnce(0, 0, 0);
+        Backend backendB = new Backend(1, "addressB", 0);
+        backendB.updateOnce(0, 0, 0);
+        Backend backendC = new Backend(2, "addressC", 0);
+        backendC.updateOnce(0, 0, 0);
+
+        Map<Long, Backend> backends = Maps.newHashMap();
+        backends.put((long) 0, backendA);
+        backends.put((long) 1, backendB);
+        backends.put((long) 2, backendC);
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        ImmutableMap<Long, ComputeNode> immutableBackends = null;
+
+        {
+            // backendA in locations is alive
+            backendA.setAlive(true);
+            backendB.setAlive(true);
+            backendC.setAlive(true);
+            immutableBackends = ImmutableMap.copyOf(backends);
+
+            Assert.assertEquals(
+                    SimpleScheduler.getHost(0, locations, immutableBackends, ref).hostname,
+                    "addressA");
+        }
+
+        {
+            // backendA in locations is not alive
+            backendA.setAlive(false);
+            backendB.setAlive(false);
+            backendC.setAlive(true);
+            immutableBackends = ImmutableMap.copyOf(backends);
+
+            Assert.assertEquals(
+                    SimpleScheduler.getHost(0, locations, immutableBackends, ref).hostname,
+                    "addressC");
+        }
     }
 
     // Comment out these code temporatily.
     // @Test
     public void testGetHostWithNoParams() {
         Config.heartbeat_timeout_second = Integer.MAX_VALUE;
-        ImmutableMap<Long, Backend> nullBackends = null;
-        ImmutableMap<Long, Backend> emptyBackends = ImmutableMap.of();
+        ImmutableMap<Long, ComputeNode> nullBackends = null;
+        ImmutableMap<Long, ComputeNode> emptyBackends = ImmutableMap.of();
 
         Backend backendA = new Backend(0, "addressA", 0);
         backendA.updateOnce(0, 0, 0);
@@ -168,7 +202,7 @@ public class SimpleSchedulerTest {
         threeBackends.put((long) 0, backendA);
         threeBackends.put((long) 1, backendB);
         threeBackends.put((long) 2, backendC);
-        ImmutableMap<Long, Backend> immutableThreeBackends = ImmutableMap.copyOf(threeBackends);
+        ImmutableMap<Long, ComputeNode> immutableThreeBackends = ImmutableMap.copyOf(threeBackends);
 
         {   // abmormal
             Assert.assertNull(SimpleScheduler.getBackendHost(nullBackends, ref));
@@ -202,7 +236,7 @@ public class SimpleSchedulerTest {
         threeBackends.put((long) 100, backendA);
         threeBackends.put((long) 101, backendB);
         threeBackends.put((long) 102, backendC);
-        ImmutableMap<Long, Backend> immutableThreeBackends = ImmutableMap.copyOf(threeBackends);
+        ImmutableMap<Long, ComputeNode> immutableThreeBackends = ImmutableMap.copyOf(threeBackends);
 
         SimpleScheduler.addToBlacklist(Long.valueOf(100));
         SimpleScheduler.addToBlacklist(Long.valueOf(101));
@@ -213,5 +247,117 @@ public class SimpleSchedulerTest {
         // no backend can work
         address = SimpleScheduler.getBackendHost(immutableThreeBackends, ref);
         Assert.assertNull(address);
+    }
+
+    @Test
+    public void testEmptyBackendList() throws InterruptedException {
+        Reference<Long> idRef = new Reference<>();
+        TNetworkAddress address = SimpleScheduler.getBackendHost(null, idRef);
+        Assert.assertNull(address);
+
+        ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
+        address = SimpleScheduler.getBackendHost(builder.build(), idRef);
+        Assert.assertNull(address);
+    }
+
+    @Test
+    public void testEmptyComputeNodeList() {
+        Reference<Long> idRef = new Reference<>();
+        TNetworkAddress address = SimpleScheduler.getComputeNodeHost(null, idRef);
+        Assert.assertNull(address);
+
+        ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
+        address = SimpleScheduler.getComputeNodeHost(builder.build(), idRef);
+        Assert.assertNull(address);
+    }
+
+    @Test
+    public void testNoAliveBackend() {
+        ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
+        for (int i = 0; i < 6; i++) {
+            Backend backend = new Backend(i, "address" + i, 0);
+            backend.setAlive(false);
+            builder.put(backend.getId(), backend);
+        }
+        ImmutableMap<Long, ComputeNode> backends = builder.build();
+        Reference<Long> idRef = new Reference<>();
+        TNetworkAddress address = SimpleScheduler.getBackendHost(backends, idRef);
+        Assert.assertNull(address);
+    }
+
+    @Test
+    public void testNoAliveComputeNode() {
+        ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
+        for (int i = 0; i < 6; i++) {
+            ComputeNode node = new ComputeNode(i, "address" + i, 0);
+            node.setAlive(false);
+            builder.put(node.getId(), node);
+        }
+        ImmutableMap<Long, ComputeNode> nodes = builder.build();
+        Reference<Long> idRef = new Reference<>();
+        TNetworkAddress address = SimpleScheduler.getComputeNodeHost(nodes, idRef);
+        Assert.assertNull(address);
+    }
+
+    @Test
+    public void testChooseBackendConcurrently() throws InterruptedException {
+        ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
+        for (int i = 0; i < 6; i++) {
+            Backend backend = new Backend(i, "address" + i, 0);
+            backend.setAlive(i == 0);
+            builder.put(backend.getId(), backend);
+        }
+        ImmutableMap<Long, ComputeNode> backends = builder.build();
+        List<Thread> threads = new ArrayList<>();
+        for (int i = 0; i < 4; i++) {
+            Thread t = new Thread(() -> {
+                for (int i1 = 0; i1 < 50; i1++) {
+                    Reference<Long> idRef = new Reference<>();
+                    TNetworkAddress address = SimpleScheduler.getBackendHost(backends, idRef);
+                    Assert.assertNotNull(address);
+                    Assert.assertEquals("address0", address.hostname);
+                }
+            });
+            threads.add(t);
+        }
+
+        for (Thread t : threads) {
+            t.start();
+        }
+
+        for (Thread t : threads) {
+            t.join();
+        }
+    }
+
+    @Test
+    public void testChooseComputeNodeConcurrently() throws InterruptedException {
+        ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
+        for (int i = 0; i < 6; i++) {
+            ComputeNode backend = new ComputeNode(i, "address" + i, 0);
+            backend.setAlive(i == 0);
+            builder.put(backend.getId(), backend);
+        }
+        ImmutableMap<Long, ComputeNode> nodes = builder.build();
+        List<Thread> threads = new ArrayList<>();
+        for (int i = 0; i < 4; i++) {
+            Thread t = new Thread(() -> {
+                for (int i1 = 0; i1 < 50; i1++) {
+                    Reference<Long> idRef = new Reference<>();
+                    TNetworkAddress address = SimpleScheduler.getComputeNodeHost(nodes, idRef);
+                    Assert.assertNotNull(address);
+                    Assert.assertEquals("address0", address.hostname);
+                }
+            });
+            threads.add(t);
+        }
+
+        for (Thread t : threads) {
+            t.start();
+        }
+
+        for (Thread t : threads) {
+            t.join();
+        }
     }
 }

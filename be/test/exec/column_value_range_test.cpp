@@ -15,7 +15,7 @@
 #include "column/type_traits.h"
 #include "exec/olap_common.h"
 #include "gtest/gtest.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 TEST(NormalizeRangeTest, RangeTest) {

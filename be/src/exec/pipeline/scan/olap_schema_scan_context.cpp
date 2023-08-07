@@ -65,11 +65,53 @@ Status OlapSchemaScanContext::_prepare_params(RuntimeState* state) {
         _param->thread_id = _tnode.schema_scan_node.thread_id;
     }
 
+    if (_tnode.schema_scan_node.__isset.job_id) {
+        _param->job_id = _tnode.schema_scan_node.job_id;
+    }
+    if (_tnode.schema_scan_node.__isset.label) {
+        _param->label = _obj_pool.add(new std::string(_tnode.schema_scan_node.label));
+    }
+
     // only for no predicate and limit parameter is set
     if (_tnode.conjuncts.empty() && _tnode.limit > 0) {
         _param->without_db_table = true;
         _param->limit = _tnode.limit;
     }
+
+    if (_tnode.schema_scan_node.__isset.table_id) {
+        _param->table_id = _tnode.schema_scan_node.table_id;
+    }
+    if (_tnode.schema_scan_node.__isset.partition_id) {
+        _param->partition_id = _tnode.schema_scan_node.partition_id;
+    }
+    if (_tnode.schema_scan_node.__isset.tablet_id) {
+        _param->tablet_id = _tnode.schema_scan_node.tablet_id;
+    }
+    if (_tnode.schema_scan_node.__isset.txn_id) {
+        _param->txn_id = _tnode.schema_scan_node.txn_id;
+    }
+    if (_tnode.schema_scan_node.__isset.type) {
+        _param->type = _obj_pool.add(new std::string(_tnode.schema_scan_node.type));
+    }
+    if (_tnode.schema_scan_node.__isset.state) {
+        _param->state = _obj_pool.add(new std::string(_tnode.schema_scan_node.state));
+    }
+    if (_tnode.schema_scan_node.__isset.log_start_ts) {
+        _param->log_start_ts = _tnode.schema_scan_node.log_start_ts;
+    }
+    if (_tnode.schema_scan_node.__isset.log_end_ts) {
+        _param->log_end_ts = _tnode.schema_scan_node.log_end_ts;
+    }
+    if (_tnode.schema_scan_node.__isset.log_level) {
+        _param->log_level = _obj_pool.add(new std::string(_tnode.schema_scan_node.log_level));
+    }
+    if (_tnode.schema_scan_node.__isset.log_pattern) {
+        _param->log_pattern = _obj_pool.add(new std::string(_tnode.schema_scan_node.log_pattern));
+    }
+    if (_tnode.schema_scan_node.__isset.log_limit) {
+        _param->log_limit = _tnode.schema_scan_node.log_limit;
+    }
+
     return Status::OK();
 }
 

@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
 import java.util.List;
@@ -42,7 +43,6 @@ public class BinaryPredicateOperator extends PredicateOperator {
                     .put(BinaryType.LT, BinaryType.GE)
                     .put(BinaryType.GE, BinaryType.LT)
                     .put(BinaryType.GT, BinaryType.LE)
-                    .put(BinaryType.EQ_FOR_NULL, BinaryType.NE)
                     .build();
 
     private final BinaryType type;
@@ -75,58 +75,6 @@ public class BinaryPredicateOperator extends PredicateOperator {
         return visitor.visitBinaryPredicate(this, context);
     }
 
-    public enum BinaryType {
-        EQ("="),
-        NE("!="),
-        LE("<="),
-        GE(">="),
-        LT("<"),
-        GT(">"),
-        EQ_FOR_NULL("<=>");
-
-        private final String type;
-
-        BinaryType(String type) {
-            this.type = type;
-        }
-
-        @Override
-        public String toString() {
-            return type;
-        }
-
-        public boolean isEqual() {
-            return type.equals(EQ.type);
-        }
-
-        public boolean isNotEqual() {
-            return type.equals(NE.type);
-        }
-
-        public boolean isEquivalence() {
-            return this == EQ || this == EQ_FOR_NULL;
-        }
-
-        public boolean isUnequivalence() {
-            return this == NE;
-        }
-
-        public boolean isNotRangeComparison() {
-            return isEquivalence() || isUnequivalence();
-        }
-
-        public boolean isRange() {
-            return type.equals(LT.type)
-                    || type.equals(LE.type)
-                    || type.equals(GT.type)
-                    || type.equals(GE.type);
-        }
-
-        public boolean isRangeOrNe() {
-            return isRange() || type.equals(NE.type);
-        }
-    }
-
     public BinaryPredicateOperator commutative() {
         return new BinaryPredicateOperator(BINARY_COMMUTATIVE_MAP.get(this.getBinaryType()),
                 this.getChild(1),
@@ -134,7 +82,11 @@ public class BinaryPredicateOperator extends PredicateOperator {
     }
 
     public BinaryPredicateOperator negative() {
-        return new BinaryPredicateOperator(BINARY_NEGATIVE_MAP.get(this.getBinaryType()), this.getChildren());
+        if (BINARY_NEGATIVE_MAP.containsKey(this.getBinaryType())) {
+            return new BinaryPredicateOperator(BINARY_NEGATIVE_MAP.get(this.getBinaryType()), this.getChildren());
+        } else {
+            return null;
+        }
     }
 
     @Override

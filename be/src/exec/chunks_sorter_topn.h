@@ -68,16 +68,15 @@ public:
     // Append a Chunk for sort.
     Status update(RuntimeState* state, const ChunkPtr& chunk) override;
     // Finish seeding Chunk, and get sorted data with top OFFSET rows have been skipped.
-    Status done(RuntimeState* state) override;
+    Status do_done(RuntimeState* state) override;
     // get_next only works after done().
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 
-    SortedRuns get_sorted_runs() override;
     size_t get_output_rows() const override;
 
     int64_t mem_usage() const override { return _raw_chunks.mem_usage() + _merged_segment.mem_usage(); }
 
-    void setup_runtime(RuntimeProfile* profile) override;
+    void setup_runtime(RuntimeState* state, RuntimeProfile* profile, MemTracker* parent_mem_tracker) override;
 
     std::vector<JoinRuntimeFilter*>* runtime_filters(ObjectPool* pool) override;
 

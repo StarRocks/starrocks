@@ -36,7 +36,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeAlterTableStatementTest {
     private static ConnectContext connectContext;
-    private static AlterTableStatementAnalyzer.AlterTableClauseAnalyzerVisitor clauseAnalyzerVisitor;
+    private static AlterTableClauseVisitor clauseAnalyzerVisitor;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -45,7 +45,7 @@ public class AnalyzeAlterTableStatementTest {
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
         connectContext = AnalyzeTestUtil.getConnectContext();
-        clauseAnalyzerVisitor = new AlterTableStatementAnalyzer.AlterTableClauseAnalyzerVisitor();
+        clauseAnalyzerVisitor = new AlterTableClauseVisitor();
     }
 
     @Test
@@ -93,11 +93,9 @@ public class AnalyzeAlterTableStatementTest {
         analyzeFail("ALTER TABLE test.t0 SET (\"default.replication_num\" = \"2\", \"dynamic_partition.enable\" = \"true\");",
                 "Can only set one table property at a time");
         analyzeFail("ALTER TABLE test.t0 SET (\"abc\" = \"2\");",
-                "Unknown table property: [abc]");
+                "Unknown properties: {abc=2}");
         analyzeFail("ALTER TABLE test.t0 SET (\"send_clear_alter_tasks\" = \"FALSE\");",
                 "Property send_clear_alter_tasks should be set to true");
-        analyzeFail("ALTER TABLE test.t0 SET (\"storage_format\" = \"V1\");",
-                "Property storage_format should be v2");
         analyzeFail("ALTER TABLE test.t0 SET (\"tablet_type\" = \"V1\");",
                 "Alter tablet type not supported");
     }
@@ -118,7 +116,7 @@ public class AnalyzeAlterTableStatementTest {
                 "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                 "PROPERTIES('replication_num' = '1');");
         Config.enable_experimental_mv = true;
-        AnalyzeTestUtil.getStarRocksAssert().withNewMaterializedView("CREATE MATERIALIZED VIEW mv1_partition_by_column \n" +
+        AnalyzeTestUtil.getStarRocksAssert().withMaterializedView("CREATE MATERIALIZED VIEW mv1_partition_by_column \n" +
                 "PARTITION BY k1 \n" +
                 "distributed by hash(k2) \n" +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) \n" +
@@ -137,5 +135,16 @@ public class AnalyzeAlterTableStatementTest {
     public void testRollup() {
         analyzeSuccess("alter table t0 drop rollup test1");
         analyzeSuccess("alter table t0 drop rollup test1, test2");
+    }
+
+    @Test
+    public void testAlterTableComment() {
+        analyzeSuccess("alter table t0 comment = \"new comment\"");
+    }
+
+    @Test
+    public void testAlterWithTimeType() {
+        analyzeFail("alter table t0 add column testcol TIME");
+        analyzeFail("alter table t0 modify column v0 TIME");
     }
 }

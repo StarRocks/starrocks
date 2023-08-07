@@ -16,11 +16,13 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.sql.analyzer.ResourceGroupAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -44,6 +46,11 @@ public class AlterResourceGroupStmt extends DdlStmt {
     private ResourceGroup changedProperties = new ResourceGroup();
 
     public AlterResourceGroupStmt(String name, SubCommand cmd) {
+        this(name, cmd, NodePosition.ZERO);
+    }
+
+    public AlterResourceGroupStmt(String name, SubCommand cmd, NodePosition pos) {
+        super(pos);
         this.name = name;
         this.cmd = cmd;
     }
@@ -98,14 +105,33 @@ public class AlterResourceGroupStmt extends DdlStmt {
         return dropClassifiers.classifierIds;
     }
 
-    public static class SubCommand {
+    public static class SubCommand implements ParseNode {
 
+        protected final NodePosition pos;
+
+        public SubCommand() {
+            this(NodePosition.ZERO);
+        }
+
+        public SubCommand(NodePosition pos) {
+            this.pos = pos;
+        }
+
+        @Override
+        public NodePosition getPos() {
+            return pos;
+        }
     }
 
     public static class AddClassifiers extends SubCommand {
         private List<List<Predicate>> classifiers;
 
         public AddClassifiers(List<List<Predicate>> classifiers) {
+            this(classifiers, NodePosition.ZERO);
+        }
+
+        public AddClassifiers(List<List<Predicate>> classifiers, NodePosition pos) {
+            super(pos);
             this.classifiers = classifiers;
         }
     }
@@ -114,12 +140,23 @@ public class AlterResourceGroupStmt extends DdlStmt {
         private List<Long> classifierIds;
 
         public DropClassifiers(List<Long> classifierIds) {
+            this(classifierIds, NodePosition.ZERO);
+        }
+
+        public DropClassifiers(List<Long> classifierIds, NodePosition pos) {
+            super(pos);
             this.classifierIds = classifierIds;
         }
     }
 
     public static class DropAllClassifiers extends SubCommand {
+
         public DropAllClassifiers() {
+            this(NodePosition.ZERO);
+        }
+
+        public DropAllClassifiers(NodePosition pos) {
+            super(pos);
         }
     }
 
@@ -127,6 +164,11 @@ public class AlterResourceGroupStmt extends DdlStmt {
         private Map<String, String> properties;
 
         public AlterProperties(Map<String, String> properties) {
+            this(properties, NodePosition.ZERO);
+        }
+
+        public AlterProperties(Map<String, String> properties, NodePosition pos) {
+            super(pos);
             this.properties = properties;
         }
     }

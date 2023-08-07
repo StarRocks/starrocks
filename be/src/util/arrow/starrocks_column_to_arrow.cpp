@@ -24,13 +24,13 @@
 
 namespace starrocks {
 
-template <LogicalType PT, ArrowTypeId AT, bool is_nullable, typename = guard::Guard>
+template <LogicalType LT, ArrowTypeId AT, bool is_nullable, typename = guard::Guard>
 struct ColumnToArrowConverter;
 
-DEF_PRED_GUARD(ConvFloatAndIntegerGuard, is_conv_float_integer, LogicalType, PT, ArrowTypeId, AT)
-#define IS_CONV_FLOAT_INTEGER_CTOR(PT, AT) DEF_PRED_CASE_CTOR(is_conv_float_integer, PT, AT)
-#define IS_CONV_FLOAT_INTEGER(PT, ...) \
-    DEF_BINARY_RELATION_ENTRY_SEP_SEMICOLON(IS_CONV_FLOAT_INTEGER_CTOR, PT, ##__VA_ARGS__)
+DEF_PRED_GUARD(ConvFloatAndIntegerGuard, is_conv_float_integer, LogicalType, LT, ArrowTypeId, AT)
+#define IS_CONV_FLOAT_INTEGER_CTOR(LT, AT) DEF_PRED_CASE_CTOR(is_conv_float_integer, LT, AT)
+#define IS_CONV_FLOAT_INTEGER(LT, ...) \
+    DEF_BINARY_RELATION_ENTRY_SEP_SEMICOLON(IS_CONV_FLOAT_INTEGER_CTOR, LT, ##__VA_ARGS__)
 
 IS_CONV_FLOAT_INTEGER(TYPE_BOOLEAN, ArrowTypeId::BOOL)
 IS_CONV_FLOAT_INTEGER(TYPE_TINYINT, ArrowTypeId::INT8)
@@ -41,10 +41,10 @@ IS_CONV_FLOAT_INTEGER(TYPE_FLOAT, ArrowTypeId::FLOAT)
 IS_CONV_FLOAT_INTEGER(TYPE_DOUBLE, ArrowTypeId::DOUBLE)
 IS_CONV_FLOAT_INTEGER(TYPE_TIME, ArrowTypeId::DOUBLE)
 
-template <LogicalType PT, ArrowTypeId AT, bool is_nullable>
-struct ColumnToArrowConverter<PT, AT, is_nullable, ConvFloatAndIntegerGuard<PT, AT>> {
-    using StarRocksCppType = RunTimeCppType<PT>;
-    using StarRocksColumnType = RunTimeColumnType<PT>;
+template <LogicalType LT, ArrowTypeId AT, bool is_nullable>
+struct ColumnToArrowConverter<LT, AT, is_nullable, ConvFloatAndIntegerGuard<LT, AT>> {
+    using StarRocksCppType = RunTimeCppType<LT>;
+    using StarRocksColumnType = RunTimeColumnType<LT>;
     using ArrowType = ArrowTypeIdToType<AT>;
     using ArrowCppType = ArrowTypeIdToCppType<AT>;
     using ArrowBuilderType = typename arrow::TypeTraits<ArrowType>::BuilderType;
@@ -74,28 +74,28 @@ struct ColumnToArrowConverter<PT, AT, is_nullable, ConvFloatAndIntegerGuard<PT, 
     }
 };
 
-DEF_PRED_GUARD(ConvDecimalGuard, is_conv_decimal, LogicalType, PT, ArrowTypeId, AT)
-#define IS_CONV_DECIMAL_CTOR(PT, AT) DEF_PRED_CASE_CTOR(is_conv_decimal, PT, AT)
+DEF_PRED_GUARD(ConvDecimalGuard, is_conv_decimal, LogicalType, LT, ArrowTypeId, AT)
+#define IS_CONV_DECIMAL_CTOR(LT, AT) DEF_PRED_CASE_CTOR(is_conv_decimal, LT, AT)
 #define IS_CONV_DECIMAL_R(AT, ...) DEF_BINARY_RELATION_ENTRY_SEP_SEMICOLON_R(IS_CONV_DECIMAL_CTOR, AT, ##__VA_ARGS__)
 
 IS_CONV_DECIMAL_R(ArrowTypeId::DECIMAL, TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128)
 
-template <LogicalType PT, ArrowTypeId AT, bool is_nullable>
-struct ColumnToArrowConverter<PT, AT, is_nullable, ConvDecimalGuard<PT, AT>> {
-    using StarRocksCppType = RunTimeCppType<PT>;
-    using StarRocksColumnType = RunTimeColumnType<PT>;
+template <LogicalType LT, ArrowTypeId AT, bool is_nullable>
+struct ColumnToArrowConverter<LT, AT, is_nullable, ConvDecimalGuard<LT, AT>> {
+    using StarRocksCppType = RunTimeCppType<LT>;
+    using StarRocksColumnType = RunTimeColumnType<LT>;
     using ArrowType = ArrowTypeIdToType<AT>;
     using ArrowCppType = ArrowTypeIdToCppType<AT>;
     using ArrowBuilderType = typename arrow::TypeTraits<ArrowType>::BuilderType;
 
     static inline arrow::Decimal128 convert_datum(const StarRocksCppType& datum) {
         int128_t value;
-        if constexpr (pt_is_decimalv2<PT>) {
+        if constexpr (lt_is_decimalv2<LT>) {
             value = datum.value();
-        } else if constexpr (pt_is_decimal<PT>) {
+        } else if constexpr (lt_is_decimal<LT>) {
             value = datum;
         } else {
-            static_assert(pt_is_decimalv2<PT> || pt_is_decimal<PT>, "Illegal LogicalType");
+            static_assert(lt_is_decimalv2<LT> || lt_is_decimal<LT>, "Illegal LogicalType");
         }
         int64_t high = value >> 64;
         uint64_t low = value;
@@ -113,14 +113,14 @@ struct ColumnToArrowConverter<PT, AT, is_nullable, ConvDecimalGuard<PT, AT>> {
             const auto& data = data_column->get_data();
             const auto num_rows = null_column->size();
 
-            if constexpr (pt_is_decimalv2<PT>) {
+            if constexpr (lt_is_decimalv2<LT>) {
                 auto arrow_type = std::make_shared<ArrowType>(27, 9);
                 builder = std::make_unique<ArrowBuilderType>(std::move(arrow_type), pool);
-            } else if constexpr (pt_is_decimal<PT>) {
+            } else if constexpr (lt_is_decimal<LT>) {
                 auto arrow_type = std::make_shared<ArrowType>(data_column->precision(), data_column->scale());
                 builder = std::make_unique<ArrowBuilderType>(std::move(arrow_type), pool);
             } else {
-                static_assert(pt_is_decimalv2<PT> || pt_is_decimal<PT>, "Illegal LogicalType");
+                static_assert(lt_is_decimalv2<LT> || lt_is_decimal<LT>, "Illegal LogicalType");
             }
             for (auto i = 0; i < num_rows; ++i) {
                 if (nullable_column->is_null(i)) {
@@ -131,14 +131,14 @@ struct ColumnToArrowConverter<PT, AT, is_nullable, ConvDecimalGuard<PT, AT>> {
             }
         } else {
             const auto* data_column = down_cast<StarRocksColumnType*>(column.get());
-            if constexpr (pt_is_decimalv2<PT>) {
+            if constexpr (lt_is_decimalv2<LT>) {
                 auto arrow_type = std::make_shared<ArrowType>(27, 9);
                 builder = std::make_unique<ArrowBuilderType>(std::move(arrow_type), pool);
-            } else if constexpr (pt_is_decimal<PT>) {
+            } else if constexpr (lt_is_decimal<LT>) {
                 auto arrow_type = std::make_shared<ArrowType>(data_column->precision(), data_column->scale());
                 builder = std::make_unique<ArrowBuilderType>(std::move(arrow_type), pool);
             } else {
-                static_assert(pt_is_decimalv2<PT> || pt_is_decimal<PT>, "Illegal LogicalType");
+                static_assert(lt_is_decimalv2<LT> || lt_is_decimal<LT>, "Illegal LogicalType");
             }
             const auto& data = data_column->get_data();
             const auto num_rows = column->size();
@@ -150,37 +150,41 @@ struct ColumnToArrowConverter<PT, AT, is_nullable, ConvDecimalGuard<PT, AT>> {
     }
 };
 
-DEF_PRED_GUARD(ConvBinaryGuard, is_conv_binary, LogicalType, PT, ArrowTypeId, AT)
-#define IS_CONV_BINARY_CTOR(PT, AT) DEF_PRED_CASE_CTOR(is_conv_binary, PT, AT)
+DEF_PRED_GUARD(ConvBinaryGuard, is_conv_binary, LogicalType, LT, ArrowTypeId, AT)
+#define IS_CONV_BINARY_CTOR(LT, AT) DEF_PRED_CASE_CTOR(is_conv_binary, LT, AT)
 #define IS_CONV_BINARY_R(AT, ...) DEF_BINARY_RELATION_ENTRY_SEP_SEMICOLON_R(IS_CONV_BINARY_CTOR, AT, ##__VA_ARGS__)
 
-IS_CONV_BINARY_R(ArrowTypeId::STRING, TYPE_VARCHAR, TYPE_CHAR, TYPE_HLL, TYPE_DATE, TYPE_DATETIME, TYPE_LARGEINT)
+IS_CONV_BINARY_R(ArrowTypeId::STRING, TYPE_VARCHAR, TYPE_HLL, TYPE_CHAR, TYPE_DATE, TYPE_DATETIME, TYPE_LARGEINT)
 IS_CONV_BINARY_R(ArrowTypeId::STRING, TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128)
+//TODO(by satanson): one day, we must support TYPE_STRUCT/TYPE_MAP/TYPE_ARRAY
+IS_CONV_BINARY_R(ArrowTypeId::STRING, TYPE_JSON)
 
-template <LogicalType PT, ArrowTypeId AT, bool is_nullable>
-struct ColumnToArrowConverter<PT, AT, is_nullable, ConvBinaryGuard<PT, AT>> {
-    using StarRocksCppType = RunTimeCppType<PT>;
-    using StarRocksColumnType = RunTimeColumnType<PT>;
+template <LogicalType LT, ArrowTypeId AT, bool is_nullable>
+struct ColumnToArrowConverter<LT, AT, is_nullable, ConvBinaryGuard<LT, AT>> {
+    using StarRocksCppType = RunTimeCppType<LT>;
+    using StarRocksColumnType = RunTimeColumnType<LT>;
     using ArrowType = ArrowTypeIdToType<AT>;
     using ArrowCppType = ArrowTypeIdToCppType<AT>;
     using ArrowBuilderType = typename arrow::TypeTraits<ArrowType>::BuilderType;
 
     static inline std::string convert_datum(const StarRocksCppType& datum, [[maybe_unused]] int precision,
                                             [[maybe_unused]] int scale) {
-        if constexpr (pt_is_string<PT> || pt_is_decimalv2<PT> || pt_is_date_or_datetime<PT>) {
+        if constexpr (lt_is_string<LT> || lt_is_decimalv2<LT> || lt_is_date_or_datetime<LT>) {
             return datum.to_string();
-        } else if constexpr (pt_is_hll<PT>) {
+        } else if constexpr (lt_is_hll<LT>) {
             std::string s;
             raw::make_room(&s, datum->max_serialized_size());
             auto n = datum->serialize((uint8_t*)(&s.front()));
             s.resize(n);
             return s;
-        } else if constexpr (pt_is_largeint<PT>) {
+        } else if constexpr (lt_is_largeint<LT>) {
             return LargeIntValue::to_string(datum);
-        } else if constexpr (pt_is_decimal<PT>) {
+        } else if constexpr (lt_is_decimal<LT>) {
             return DecimalV3Cast::to_string<StarRocksCppType>(datum, precision, scale);
+        } else if constexpr (lt_is_json<LT>) {
+            return datum->to_string_uncheck();
         } else {
-            static_assert(is_conv_binary<PT, AT>, "Illegal LogicalType");
+            static_assert(is_conv_binary<LT, AT>, "Illegal LogicalType");
             return "";
         }
     }
@@ -196,7 +200,7 @@ struct ColumnToArrowConverter<PT, AT, is_nullable, ConvBinaryGuard<PT, AT>> {
             const auto& data = data_column->get_data();
             [[maybe_unused]] int precision = -1;
             [[maybe_unused]] int scale = -1;
-            if constexpr (pt_is_decimal<PT>) {
+            if constexpr (lt_is_decimal<LT>) {
                 precision = data_column->precision();
                 scale = data_column->scale();
             }
@@ -214,7 +218,7 @@ struct ColumnToArrowConverter<PT, AT, is_nullable, ConvBinaryGuard<PT, AT>> {
             const auto num_rows = column->size();
             [[maybe_unused]] int precision = -1;
             [[maybe_unused]] int scale = -1;
-            if constexpr (pt_is_decimal<PT>) {
+            if constexpr (lt_is_decimal<LT>) {
                 precision = data_column->precision();
                 scale = data_column->scale();
             }
@@ -226,15 +230,15 @@ struct ColumnToArrowConverter<PT, AT, is_nullable, ConvBinaryGuard<PT, AT>> {
     }
 };
 
-constexpr int32_t starrocks_to_arrow_convert_idx(LogicalType pt, ArrowTypeId at, bool is_nullable) {
-    return (at << 17) | (pt << 2) | (is_nullable ? 2 : 0);
+constexpr int32_t starrocks_to_arrow_convert_idx(LogicalType lt, ArrowTypeId at, bool is_nullable) {
+    return (at << 17) | (lt << 2) | (is_nullable ? 2 : 0);
 }
 
-#define STARROCKS_TO_ARROW_CONV_SINGLE_ENTRY_CTOR(pt, at, is_nullable) \
-    { starrocks_to_arrow_convert_idx(pt, at, is_nullable), &ColumnToArrowConverter<pt, at, is_nullable>::convert }
+#define STARROCKS_TO_ARROW_CONV_SINGLE_ENTRY_CTOR(lt, at, is_nullable) \
+    { starrocks_to_arrow_convert_idx(lt, at, is_nullable), &ColumnToArrowConverter<lt, at, is_nullable>::convert }
 
-#define STARROCKS_TO_ARROW_CONV_ENTRY_CTOR(pt, at) \
-    STARROCKS_TO_ARROW_CONV_SINGLE_ENTRY_CTOR(pt, at, false), STARROCKS_TO_ARROW_CONV_SINGLE_ENTRY_CTOR(pt, at, true)
+#define STARROCKS_TO_ARROW_CONV_ENTRY_CTOR(lt, at) \
+    STARROCKS_TO_ARROW_CONV_SINGLE_ENTRY_CTOR(lt, at, false), STARROCKS_TO_ARROW_CONV_SINGLE_ENTRY_CTOR(lt, at, true)
 
 #define STARROCKS_TO_ARROW_CONV_ENTRY_R(at, ...) \
     DEF_BINARY_RELATION_ENTRY_SEP_COMMA_R(STARROCKS_TO_ARROW_CONV_ENTRY_CTOR, at, ##__VA_ARGS__)
@@ -253,9 +257,10 @@ static const std::unordered_map<int32_t, StarRocksToArrowConvertFunc> global_sta
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::DECIMAL, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128),
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::STRING, TYPE_VARCHAR, TYPE_CHAR, TYPE_HLL),
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::STRING, TYPE_LARGEINT, TYPE_DATE, TYPE_DATETIME),
+        STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::STRING, TYPE_JSON),
 };
-static inline StarRocksToArrowConvertFunc resolve_convert_func(LogicalType pt, ArrowTypeId at, bool is_nullable) {
-    const auto func_id = starrocks_to_arrow_convert_idx(pt, at, is_nullable);
+static inline StarRocksToArrowConvertFunc resolve_convert_func(LogicalType lt, ArrowTypeId at, bool is_nullable) {
+    const auto func_id = starrocks_to_arrow_convert_idx(lt, at, is_nullable);
     const auto end = global_starrocks_to_arrow_conv_table.end();
     auto it = global_starrocks_to_arrow_conv_table.find(func_id);
     return it != end ? it->second : nullptr;
@@ -263,9 +268,9 @@ static inline StarRocksToArrowConvertFunc resolve_convert_func(LogicalType pt, A
 
 class ColumnToArrowArrayConverter : public arrow::TypeVisitor {
 public:
-    ColumnToArrowArrayConverter(const ColumnPtr& column, arrow::MemoryPool* pool, LogicalType pt,
+    ColumnToArrowArrayConverter(const ColumnPtr& column, arrow::MemoryPool* pool, LogicalType lt,
                                 std::shared_ptr<arrow::Array>& array)
-            : _column(column), _pool(pool), _pt(pt), _array(array) {}
+            : _column(column), _pool(pool), _pt(lt), _array(array) {}
 
     using arrow::TypeVisitor::Visit;
 

@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Stopwatch;
+import com.starrocks.sql.ast.StatementBase;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -27,9 +28,15 @@ public class OptimizerTraceInfo {
     private final Map<String, Integer> rulesAppliedTimes = new HashMap<>();
     private final Stopwatch stopwatch;
 
-    public OptimizerTraceInfo(UUID queryId) {
+    private boolean traceOptimizer;
+
+    public OptimizerTraceInfo(UUID queryId, StatementBase stmt) {
         this.queryId = queryId;
         this.stopwatch = Stopwatch.createStarted();
+        if (stmt != null && stmt.getExplainLevel() == StatementBase.ExplainLevel.OPTIMIZER) {
+            traceOptimizer = true;
+        }
+
     }
 
     public void recordAppliedRule(String rule) {
@@ -53,5 +60,9 @@ public class OptimizerTraceInfo {
         StringBuilder sb = new StringBuilder("OptimizerTraceInfo");
         sb.append("\nRules' applied times\n").append(rulesAppliedTimes);
         return sb.toString();
+    }
+
+    public boolean isTraceOptimizer() {
+        return traceOptimizer;
     }
 }

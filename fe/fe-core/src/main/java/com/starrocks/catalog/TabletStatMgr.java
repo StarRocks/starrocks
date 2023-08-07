@@ -40,8 +40,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.LeaderDaemon;
-import com.starrocks.lake.LakeTable;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.TabletStatRequest;
@@ -60,6 +59,7 @@ import com.starrocks.thrift.TTabletStatResult;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
@@ -68,15 +68,21 @@ import java.util.concurrent.Future;
  * TabletStatMgr is for collecting tablet(replica) statistics from backends.
  * Each FE will collect by itself.
  */
-public class TabletStatMgr extends LeaderDaemon {
+public class TabletStatMgr extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletStatMgr.class);
 
     // for lake table
-    private Map<Long, Long> partitionToUpdatedVersion;
+    private final Map<Long, Long> partitionToUpdatedVersion;
+
+    private LocalDateTime lastWorkTimestamp = LocalDateTime.MIN;
 
     public TabletStatMgr() {
         super("tablet stat mgr", Config.tablet_stat_update_interval_second * 1000L);
         partitionToUpdatedVersion = Maps.newHashMap();
+    }
+
+    public LocalDateTime getLastWorkTimestamp() {
+        return lastWorkTimestamp;
     }
 
     @Override
@@ -95,20 +101,22 @@ public class TabletStatMgr extends LeaderDaemon {
             db.writeLock();
             try {
                 for (Table table : db.getTables()) {
-                    if (!table.isNativeTable()) {
+                    if (!table.isNativeTableOrMaterializedView()) {
                         continue;
                     }
 
                     OlapTable olapTable = (OlapTable) table;
                     for (Partition partition : olapTable.getAllPartitions()) {
-                        long version = partition.getVisibleVersion();
-                        for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                            long indexRowCount = 0L;
-                            for (Tablet tablet : index.getTablets()) {
-                                indexRowCount += tablet.getRowCount(version);
-                            } // end for tablets
-                            index.setRowCount(indexRowCount);
-                        } // end for indices
+                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                            long version = physicalPartition.getVisibleVersion();
+                            for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                                long indexRowCount = 0L;
+                                for (Tablet tablet : index.getTablets()) {
+                                    indexRowCount += tablet.getRowCount(version);
+                                } // end for tablets
+                                index.setRowCount(indexRowCount);
+                            } // end for indices
+                        } // end for physical partitions
                     } // end for partitions
                     LOG.debug("finished to set row num for table: {} in database: {}",
                             table.getName(), db.getFullName());
@@ -119,6 +127,7 @@ public class TabletStatMgr extends LeaderDaemon {
         }
         LOG.info("finished to update index row num of all databases. cost: {} ms",
                 (System.currentTimeMillis() - start));
+        lastWorkTimestamp = LocalDateTime.now();
     }
 
     private void updateLocalTabletStat() {
@@ -183,26 +192,26 @@ public class TabletStatMgr extends LeaderDaemon {
                 continue;
             }
 
-            List<LakeTable> tables = Lists.newArrayList();
+            List<OlapTable> tables = Lists.newArrayList();
             db.readLock();
             try {
                 for (Table table : db.getTables()) {
-                    if (table.isLakeTable()) {
-                        tables.add((LakeTable) table);
+                    if (table.isCloudNativeTableOrMaterializedView()) {
+                        tables.add((OlapTable) table);
                     }
                 }
             } finally {
                 db.readUnlock();
             }
 
-            for (LakeTable table : tables) {
+            for (OlapTable table : tables) {
                 updateLakeTableTabletStat(db, table);
             }
         }
     }
 
     @java.lang.SuppressWarnings("squid:S2142")  // allow catch InterruptedException
-    private void updateLakeTableTabletStat(Database db, LakeTable table) {
+    private void updateLakeTableTabletStat(Database db, OlapTable table) {
         // prepare tablet infos
         Map<Long, List<TabletInfo>> beToTabletInfos = Maps.newHashMap();
         Map<Long, Long> partitionToVersion = Maps.newHashMap();
@@ -217,7 +226,7 @@ public class TabletStatMgr extends LeaderDaemon {
                 }
 
                 partitionToVersion.put(partitionId, version);
-                for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                     for (Tablet tablet : index.getTablets()) {
                         Long beId = Utils.chooseBackend((LakeTablet) tablet);
                         if (beId == null) {
@@ -286,7 +295,7 @@ public class TabletStatMgr extends LeaderDaemon {
                 }
 
                 boolean allTabletsUpdated = true;
-                for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                     for (Tablet tablet : index.getTablets()) {
                         TabletStat stat = idToStat.get(tablet.getId());
                         if (stat == null) {

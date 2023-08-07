@@ -174,6 +174,13 @@ Status ExchangeSinkOperator::Channel::init(RuntimeState* state) {
         return Status::OK();
     }
     _brpc_stub = state->exec_env()->brpc_stub_cache()->get_stub(_brpc_dest_addr);
+
+    if (_brpc_stub == nullptr) {
+        auto msg = fmt::format("The brpc stub of {}:{} is null.", _brpc_dest_addr.hostname, _brpc_dest_addr.port);
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
+
     _prepare_pass_through();
     _ignore_local_data = _enable_exchange_perf && is_local();
 
@@ -251,8 +258,8 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
         }
         butil::IOBuf attachment;
         int64_t attachment_physical_bytes = _parent->construct_brpc_attachment(_chunk_request, attachment);
-        TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(_chunk_request), attachment,
-                                  attachment_physical_bytes};
+        TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub,     std::move(_chunk_request), attachment,
+                                  attachment_physical_bytes,   _brpc_dest_addr};
         RETURN_IF_ERROR(_parent->_buffer->add_request(info));
         _current_request_bytes = 0;
         _chunk_request.reset();
@@ -278,8 +285,8 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state, PT
         delta_statistic->to_pb(chunk_request->mutable_query_statistics());
     }
 
-    TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(chunk_request), attachment,
-                              attachment_physical_bytes};
+    TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub,     std::move(chunk_request), attachment,
+                              attachment_physical_bytes,   _brpc_dest_addr};
     RETURN_IF_ERROR(_parent->_buffer->add_request(info));
 
     return Status::OK();
@@ -612,6 +619,12 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
     return Status::OK();
 }
 
+void ExchangeSinkOperator::update_metrics(RuntimeState* state) {
+    if (_driver_sequence == 0) {
+        _buffer->update_profile(_unique_metrics.get());
+    }
+}
+
 Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 
@@ -638,7 +651,9 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
 }
 
 void ExchangeSinkOperator::close(RuntimeState* state) {
-    _buffer->update_profile(_unique_metrics.get());
+    if (_driver_sequence == 0) {
+        _buffer->update_profile(_unique_metrics.get());
+    }
     Operator::close(state);
 }
 

@@ -52,16 +52,19 @@ public class DeletePlanner {
         QueryRelation query = deleteStatement.getQueryStatement().getQueryRelation();
         List<String> colNames = query.getColumnOutputNames();
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
+        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, session).transform(query);
 
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
         boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(deleteStatement.getTable());
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
+        boolean prevIsEnableLocalShuffleAgg = session.getSessionVariable().isEnableLocalShuffleAgg();
         try {
             if (forceDisablePipeline) {
                 session.getSessionVariable().setEnablePipelineEngine(false);
             }
+            // Non-query must use the strategy assign scan ranges per driver sequence, which local shuffle agg cannot use.
+            session.getSessionVariable().setEnableLocalShuffleAgg(false);
 
             Optimizer optimizer = new Optimizer();
             OptExpression optimizedPlan = optimizer.optimize(
@@ -100,23 +103,25 @@ public class DeletePlanner {
                 partitionIds.add(partition.getId());
             }
             DataSink dataSink = new OlapTableSink(table, olapTuple, partitionIds, table.writeQuorum(),
-                    table.enableReplicatedStorage());
+                    table.enableReplicatedStorage(), false, false);
             execPlan.getFragments().get(0).setSink(dataSink);
             if (canUsePipeline) {
                 PlanFragment sinkFragment = execPlan.getFragments().get(0);
                 if (ConnectContext.get().getSessionVariable().getEnableAdaptiveSinkDop()) {
-                    sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getDegreeOfParallelism());
+                    sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism());
                 } else {
                     sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
                 }
                 sinkFragment.setHasOlapTableSink();
                 sinkFragment.setForceSetTableSinkDop();
                 sinkFragment.setForceAssignScanRangesPerDriverSeq();
+                sinkFragment.disableRuntimeAdaptiveDop();
             } else {
                 execPlan.getFragments().get(0).setPipelineDop(1);
             }
             return execPlan;
         } finally {
+            session.getSessionVariable().setEnableLocalShuffleAgg(prevIsEnableLocalShuffleAgg);
             if (forceDisablePipeline) {
                 session.getSessionVariable().setEnablePipelineEngine(true);
             }

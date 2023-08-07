@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.statistics;
 
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
@@ -142,6 +141,8 @@ public class CacheDictManager implements IDictManager {
         for (int i = 0; i < dictSize; ++i) {
             dicts.put(tGlobalDict.strings.get(i), tGlobalDict.ids.get(i));
         }
+        LOG.info("collected dictionary table:{} column:{}, version:{} size:{}",
+                tableId, columnName, statisticData.meta_version, dictSize);
         return Optional.of(new ColumnDict(dicts.build(), statisticData.meta_version));
     }
 
@@ -213,14 +214,24 @@ public class CacheDictManager implements IDictManager {
 
     @Override
     public void removeGlobalDict(long tableId, String columnName) {
-        LOG.debug("remove dict for column {}", columnName);
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
+
+        // skip dictionary operator in checkpoint thread
+        if (GlobalStateMgr.isCheckpointThread()) {
+            return;
+        }
+
+        if (!dictStatistics.asMap().containsKey(columnIdentifier)) {
+            return;
+        }
+
+        LOG.info("remove dict for table:{} column:{}", tableId, columnName);
         dictStatistics.synchronous().invalidate(columnIdentifier);
     }
 
     @Override
     public void disableGlobalDict(long tableId) {
-        LOG.debug("remove dict for table {}", tableId);
+        LOG.debug("disable dict optimize for table {}", tableId);
         FORBIDDEN_DICT_TABLE_IDS.add(tableId);
     }
 
@@ -230,21 +241,34 @@ public class CacheDictManager implements IDictManager {
     }
 
     @Override
-    public void updateGlobalDict(long tableId, String columnName, long versionTime) {
+    public void updateGlobalDict(long tableId, String columnName, long collectVersion, long versionTime) {
+        // skip dictionary operator in checkpoint thread
+        if (GlobalStateMgr.isCheckpointThread()) {
+            return;
+        }
+
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
         if (!dictStatistics.asMap().containsKey(columnIdentifier)) {
             return;
         }
 
-        CompletableFuture<Optional<ColumnDict>> columnFuture = dictStatistics.get(columnIdentifier);
-        if (columnFuture.isDone()) {
+        CompletableFuture<Optional<ColumnDict>> future = dictStatistics.getIfPresent(columnIdentifier);
+
+        if (future != null && future.isDone()) {
             try {
-                Optional<ColumnDict> columnOptional = columnFuture.get();
+                Optional<ColumnDict> columnOptional = future.get();
                 if (columnOptional.isPresent()) {
                     ColumnDict columnDict = columnOptional.get();
-                    ColumnDict newColumnDict = new ColumnDict(columnDict.getDict(), versionTime);
-                    dictStatistics.put(columnIdentifier, CompletableFuture.completedFuture(Optional.of(newColumnDict)));
-                    LOG.debug("update dict for column {}, version {}", columnName, versionTime);
+                    long lastVersion = columnDict.getVersionTime();
+                    long dictCollectVersion = columnDict.getCollectedVersionTime();
+                    if (collectVersion != dictCollectVersion) {
+                        LOG.info("remove dict by unmatched version {}:{}", collectVersion, dictCollectVersion);
+                        removeGlobalDict(tableId, columnName);
+                        return;
+                    }
+                    columnDict.updateVersionTime(versionTime);
+                    LOG.info("update dict for table {} column {} from version {} to {}", tableId, columnName,
+                            lastVersion, versionTime);
                 }
             } catch (Exception e) {
                 LOG.warn(String.format("update dict cache for %d: %s failed", tableId, columnName), e);

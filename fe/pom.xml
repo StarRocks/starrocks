@@ -42,14 +42,15 @@ under the License.
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <jprotobuf.version>2.4.12</jprotobuf.version>
-        <log4j.version>2.17.1</log4j.version>
+        <log4j.version>2.19.0</log4j.version>
         <jackson.version>2.13.4</jackson.version>
-        <spark.version>2.4.6</spark.version>
+        <spark.version>3.4.0</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
         <parquet.version>1.10.1</parquet.version>
-        <hadoop.version>3.3.3</hadoop.version>
+        <hadoop.version>3.3.6</hadoop.version>
+        <gcs.connector.version>hadoop3-2.2.11</gcs.connector.version>
         <skip.plugin>false</skip.plugin>
-        <hudi.version>0.12.1</hudi.version>
+        <hudi.version>0.12.2</hudi.version>
         <hive-apache.version>3.1.2-13</hive-apache.version>
         <dlf-metastore-client.version>0.2.14</dlf-metastore-client.version>
         <sonar.organization>starrocks</sonar.organization>
@@ -228,7 +229,7 @@ under the License.
             <dependency>
                 <groupId>com.google.guava</groupId>
                 <artifactId>guava</artifactId>
-                <version>30.1.1-jre</version>
+                <version>32.0.1-jre</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.fasterxml.jackson.core/jackson-core -->
@@ -249,7 +250,7 @@ under the License.
             <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-databind</artifactId>
-                <version>${jackson.version}.1</version>
+                <version>${jackson.version}.2</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.fasterxml.jackson.dataformat/jackson-dataformat-yaml -->
@@ -266,13 +267,6 @@ under the License.
                 <version>${jackson.version}</version>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/org.codehaus.jackson/jackson-mapper-asl -->
-            <dependency>
-                <groupId>org.codehaus.jackson</groupId>
-                <artifactId>jackson-mapper-asl</artifactId>
-                <version>1.9.13-cloudera.2</version>
-            </dependency>
-
             <!-- https://mvnrepository.com/artifact/net.sourceforge.czt.dev/java-cup -->
             <dependency>
                 <groupId>net.sourceforge.czt.dev</groupId>
@@ -280,10 +274,11 @@ under the License.
                 <version>0.11-a-czt02-cdh</version>
             </dependency>
 
+            <!-- https://mvnrepository.com/artifact/com.starrocks/starrocks-bdb-je -->
             <dependency>
-                <groupId>com.sleepycat</groupId>
-                <artifactId>je</artifactId>
-                <version>7.3.7</version>
+                <groupId>com.starrocks</groupId>
+                <artifactId>starrocks-bdb-je</artifactId>
+                <version>18.3.13</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/de.jflex/jflex -->
@@ -294,10 +289,11 @@ under the License.
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.jmockit/jmockit -->
+            <!-- https://mvnrepository.com/artifact/com.github.hazendaz.jmockit/jmockit -->
             <dependency>
-                <groupId>org.jmockit</groupId>
+                <groupId>com.github.hazendaz.jmockit</groupId>
                 <artifactId>jmockit</artifactId>
-                <version>1.48</version>
+                <version>1.49.4</version>
                 <scope>test</scope>
             </dependency>
 
@@ -339,7 +335,7 @@ under the License.
             <dependency>
                 <groupId>org.json</groupId>
                 <artifactId>json</artifactId>
-                <version>20171018</version>
+                <version>20230227</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/junit/junit -->
@@ -378,6 +374,13 @@ under the License.
                 <version>${log4j.version}</version>
             </dependency>
 
+            <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-1.2-api -->
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-1.2-api</artifactId>
+                <version>${log4j.version}</version>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/io.netty/netty-all -->
             <dependency>
                 <groupId>io.netty</groupId>
@@ -403,7 +406,7 @@ under the License.
             <dependency>
                 <groupId>com.squareup.okio</groupId>
                 <artifactId>okio</artifactId>
-                <version>2.10.0</version>
+                <version>3.4.0</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/javax.validation/validation-api -->
@@ -411,13 +414,6 @@ under the License.
                 <groupId>javax.validation</groupId>
                 <artifactId>validation-api</artifactId>
                 <version>1.1.0.Final</version>
-            </dependency>
-
-            <!-- https://mvnrepository.com/artifact/log4j/log4j -->
-            <dependency>
-                <groupId>log4j</groupId>
-                <artifactId>log4j</artifactId>
-                <version>1.2.17-cloudera1</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.slf4j/slf4j-api -->
@@ -481,8 +477,12 @@ under the License.
                         <artifactId>slf4j-log4j12</artifactId>
                     </exclusion>
                     <exclusion>
-                        <artifactId>zookeeper</artifactId>
                         <groupId>org.apache.zookeeper</groupId>
+                        <artifactId>zookeeper</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.logging.log4j</groupId>
+                        <artifactId>log4j-slf4j2-impl</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
@@ -534,6 +534,10 @@ under the License.
                     <exclusion>
                         <artifactId>zookeeper</artifactId>
                         <groupId>org.apache.zookeeper</groupId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.slf4j</groupId>
+                        <artifactId>slf4j-reload4j</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
@@ -587,7 +591,7 @@ under the License.
             <dependency>
                 <groupId>com.github.ben-manes.caffeine</groupId>
                 <artifactId>caffeine</artifactId>
-                <version>2.8.5</version>
+                <version>2.9.3</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.opencsv/opencsv -->
@@ -602,6 +606,12 @@ under the License.
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-client</artifactId>
                 <version>${hadoop.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.slf4j</groupId>
+                        <artifactId>slf4j-reload4j</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aws -->
@@ -609,6 +619,28 @@ under the License.
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-aws</artifactId>
                 <version>${hadoop.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-azure-datalake -->
+            <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-azure-datalake</artifactId>
+                <version>${hadoop.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-azure -->
+            <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-azure</artifactId>
+                <version>${hadoop.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.google.cloud.bigdataoss/gcs-connector -->
+            <dependency>
+                <groupId>com.google.cloud.bigdataoss</groupId>
+                <artifactId>gcs-connector</artifactId>
+                <version>${gcs.connector.version}</version>
+                <classifier>shaded</classifier>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.fasterxml.uuid/java-uuid-generator -->
@@ -652,7 +684,6 @@ under the License.
                 <groupId>org.postgresql</groupId>
                 <artifactId>postgresql</artifactId>
                 <version>42.4.3</version>
-                <scope>test</scope>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.mockrunner/mockrunner-jdbc -->
@@ -668,6 +699,13 @@ under the License.
                 <groupId>org.apache.commons</groupId>
                 <artifactId>commons-dbcp2</artifactId>
                 <version>2.9.0</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.apache.groovy/groovy-groovysh -->
+            <dependency>
+                <groupId>org.apache.groovy</groupId>
+                <artifactId>groovy-groovysh</artifactId>
+                <version>4.0.9</version>
             </dependency>
 
         </dependencies>

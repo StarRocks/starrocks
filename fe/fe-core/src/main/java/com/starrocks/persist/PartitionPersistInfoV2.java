@@ -20,14 +20,14 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.lake.StorageCacheInfo;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-public class PartitionPersistInfoV2 implements Writable {
+public abstract class PartitionPersistInfoV2 implements Writable {
 
     @SerializedName("dbId")
     private Long dbId;
@@ -44,7 +44,7 @@ public class PartitionPersistInfoV2 implements Writable {
     @SerializedName("isTempPartition")
     private boolean isTempPartition;
     @SerializedName("storageCacheInfo")
-    private StorageCacheInfo storageCacheInfo;
+    private DataCacheInfo dataCacheInfo;
 
     public PartitionPersistInfoV2(Long dbId, Long tableId, Partition partition,
                                   DataProperty dataProperty, short replicationNum,
@@ -55,7 +55,7 @@ public class PartitionPersistInfoV2 implements Writable {
     public PartitionPersistInfoV2(Long dbId, Long tableId, Partition partition,
                                   DataProperty dataProperty, short replicationNum,
                                   boolean isInMemory, boolean isTempPartition,
-                                  StorageCacheInfo storageCacheInfo) {
+                                  DataCacheInfo dataCacheInfo) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.partition = partition;
@@ -63,7 +63,7 @@ public class PartitionPersistInfoV2 implements Writable {
         this.replicationNum = replicationNum;
         this.isInMemory = isInMemory;
         this.isTempPartition = isTempPartition;
-        this.storageCacheInfo = storageCacheInfo;
+        this.dataCacheInfo = dataCacheInfo;
     }
 
     public final boolean isListPartitionPersistInfo() {
@@ -121,8 +121,8 @@ public class PartitionPersistInfoV2 implements Writable {
         return this.isTempPartition;
     }
 
-    public StorageCacheInfo getStorageCacheInfo() {
-        return this.storageCacheInfo;
+    public DataCacheInfo getDataCacheInfo() {
+        return this.dataCacheInfo;
     }
 
 }

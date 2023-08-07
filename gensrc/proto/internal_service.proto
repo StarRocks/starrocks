@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-syntax="proto2";
+syntax = "proto2";
 
 package starrocks;
 option java_package = "com.starrocks.proto";
@@ -42,6 +42,7 @@ import "descriptors.proto";
 import "status.proto";
 import "types.proto";
 import "olap_common.proto";
+import "olap_file.proto";
 
 option cc_generic_services = true;
 
@@ -61,6 +62,9 @@ message PTransmitDataParams {
     // Different per packet.
     required int64 packet_seq = 7;
     optional PQueryStatistics query_statistics = 8;
+};
+
+message PHttpRequest {
 };
 
 // Transmit vectorized data chunks between Backends.
@@ -98,7 +102,8 @@ message PTransmitDataResult {
 
 message PTransmitChunkResult {
     optional StatusPB status = 1;
-    optional int64 receive_timestamp = 2;
+    optional int64 receive_timestamp = 2; // Deprecated
+    optional int64 receiver_post_process_time = 3;
 };
 
 message PTransmitRuntimeFilterForwardTarget {
@@ -111,7 +116,7 @@ message PTransmitRuntimeFilterParams {
     // if this runtime filter is partial
     // if it's partial, then it's supposed to be merged.
     // otherwise it's supported to be consumed.
-    
+
     optional bool is_partial = 1;
     optional PUniqueId query_id = 3;
     optional int32 filter_id = 4;
@@ -143,6 +148,7 @@ message PTabletInfo {
     repeated string invalid_dict_cache_columns = 3;
     repeated string valid_dict_cache_columns = 4;
     optional int64 node_id = 5;
+    repeated int64 valid_dict_collected_version = 6;
 }
 
 // Open a tablet writer.
@@ -164,6 +170,14 @@ message PTabletWriterOpenRequest {
     optional int64 timeout_ms = 24;
     optional WriteQuorumTypePB write_quorum = 25;
     optional string merge_condition = 26;
+    optional bool miss_auto_increment_column = 27;
+    optional bool abort_delete = 28; // Deprecated
+    // before data load, the all current partitions will be opened
+    // When the data load in progress, the partition created by automatic partition needs incremental open
+    optional bool is_incremental = 29 [default = false];
+    optional int32 sender_id = 30;
+    optional PartialUpdateMode partial_update_mode = 31;
+    optional int64 table_id = 32;
 };
 
 message PTabletWriterOpenResult {
@@ -200,12 +214,15 @@ message PTabletWriterAddChunkRequest {
     optional int64 packet_seq = 5;
     repeated int64 tablet_ids = 6;
     // Unset if and only if eos is true.
-    optional ChunkPB chunk  = 7;
+    optional ChunkPB chunk = 7;
     // only valid when eos is true
     // valid partition ids that would write in this writer
     repeated int64 partition_ids = 8;
     optional int64 txn_id = 9;
     optional int64 timeout_ms = 10;
+    // wait all sender close before rpc returning
+    // this is used for automatic partition creation
+    optional bool wait_all_sender_close = 11 [default = false];
 };
 
 message PTabletWriterAddChunksRequest {
@@ -222,6 +239,7 @@ message PTabletWriterAddBatchResult {
     optional int64 execution_time_us = 3;
     optional int64 wait_lock_time_us = 4;
     repeated PTabletInfo failed_tablet_vec = 5;
+    optional int64 wait_memtable_flush_time_us = 6;
 };
 
 message PTabletWriterAddSegmentRequest {
@@ -249,6 +267,7 @@ message PTabletWriterCancelRequest {
     optional int64 txn_id = 4;
     optional int64 tablet_id = 5;
     repeated int64 tablet_ids = 6;
+    optional string reason = 7;
 };
 
 message PTabletWriterCancelResult {
@@ -256,6 +275,63 @@ message PTabletWriterCancelResult {
 
 message PExecPlanFragmentRequest {
 };
+
+message PTabletReaderOpenRequest {
+    optional PUniqueId id = 1;
+    optional int64 tablet_id = 2;
+    optional int64 version = 3;
+}
+
+message PTabletReaderOpenResult {
+    optional StatusPB status = 1;
+}
+
+message PTabletReaderCloseRequest {
+    optional PUniqueId id = 1;
+}
+
+message PTabletReaderCloseResult {
+    optional StatusPB status = 1;
+}
+
+message PTabletReaderMultiGetRequest {
+    optional int64 tablet_id = 1;
+    optional int64 version = 2;
+    optional ChunkPB keys = 3;
+    repeated string values_columns = 4;
+}
+
+message PTabletReaderMultiGetResult {
+    optional StatusPB status = 1;
+    repeated bool found = 2;
+    optional ChunkPB values = 3;
+};
+
+message PTabletReaderScanOpenRequest {
+    optional PUniqueId id = 1;
+    optional int64 chunk_size = 2;
+    repeated string values_columns = 3;
+}
+
+message PTabletReaderScanOpenResult {
+    optional StatusPB status = 1;
+    optional int64 scanner_id = 2;
+    optional int64 chunk_id = 3;
+    optional ChunkPB chunk = 4;
+};
+
+message PTabletReaderScanGetNextRequest {
+    optional PUniqueId id = 1;
+    optional int64 scanner_id = 2;
+    optional int64 chunk_id = 3;
+}
+
+message PTabletReaderScanGetNextResult {
+    optional StatusPB status = 1;
+    optional int64 scanner_id = 2;
+    optional int64 chunk_id = 3;
+    optional ChunkPB chunk = 4;
+}
 
 message PExecPlanFragmentResult {
     required StatusPB status = 1;
@@ -301,6 +377,7 @@ message PFetchDataResult {
 
 message PTriggerProfileReportRequest {
     repeated PUniqueId instance_ids = 1;
+    optional PUniqueId query_id = 2;
 };
 
 message PTriggerProfileReportResult {
@@ -316,6 +393,8 @@ message PCollectQueryStatistics {
     optional int64 cpu_cost_ns = 2;
     optional int64 scan_bytes = 3;
     optional int64 scan_rows = 4;
+    optional int64 mem_usage_bytes = 5;
+    optional int64 spill_bytes = 6;
 }
 
 message PCollectQueryStatisticsResult {
@@ -422,12 +501,68 @@ message PPulsarProxyResult {
     optional PPulsarBacklogBatchProxyResult pulsar_backlog_batch_result = 102;
 };
 
+message PGetFileSchemaRequest {
+    // unused, just for preventing jprotobuf error "no field use annotation @com.baidu.bjf.remoting.protobuf.annotation.Protobuf ..."
+    optional int32 pad = 1;
+};
+
+message PGetFileSchemaResult {
+    required StatusPB status = 1;
+    repeated PSlotDescriptor schema = 2;
+};
+
 message PMVMaintenanceTaskRequest {
 };
 
 message PMVMaintenanceTaskResult {
     required StatusPB status = 1;
 };
+
+message ExecuteCommandRequestPB {
+    optional string command = 1;
+    optional string params = 2;
+};
+
+message ExecuteCommandResultPB {
+    optional StatusPB status = 1;
+    optional string result = 2;
+};
+
+enum FailPointTriggerModeType {
+    ENABLE = 1;
+    DISABLE = 2;
+    PROBABILITY_ENABLE = 3;
+    ENABLE_N_TIMES = 4;
+}
+
+message PFailPointTriggerMode {
+    optional FailPointTriggerModeType mode = 1;
+    optional double probability = 2;
+    optional int32 n_times = 3;
+}
+
+message PUpdateFailPointStatusRequest {
+    optional string fail_point_name = 1;
+    optional PFailPointTriggerMode trigger_mode = 2;
+}
+
+message PUpdateFailPointStatusResponse {
+    optional StatusPB status = 1;
+}
+
+message PFailPointInfo {
+    optional string name = 1;
+    optional PFailPointTriggerMode trigger_mode = 2;
+}
+
+message PListFailPointRequest {
+}
+
+message PListFailPointResponse {
+    optional StatusPB status = 1;
+    repeated PFailPointInfo fail_points = 2;
+}
+
 
 // NOTE(zc): If you want to add new method here,
 // you must add same method to 'doris_internal_service.proto'.
@@ -442,16 +577,29 @@ service PInternalService {
     rpc tablet_writer_cancel(PTabletWriterCancelRequest) returns (PTabletWriterCancelResult);
     rpc trigger_profile_report(PTriggerProfileReportRequest) returns (PTriggerProfileReportResult);
     rpc collect_query_statistics(PCollectQueryStatisticsRequest) returns (PCollectQueryStatisticsResult);
-    rpc get_info(PProxyRequest) returns (PProxyResult); 
-    rpc get_pulsar_info(PPulsarProxyRequest) returns (PPulsarProxyResult); 
+    rpc get_info(PProxyRequest) returns (PProxyResult);
+    rpc get_pulsar_info(PPulsarProxyRequest) returns (PPulsarProxyResult);
+    rpc get_file_schema(PGetFileSchemaRequest) returns (PGetFileSchemaResult);
 
     // Transmit vectorized data between backends.
     rpc transmit_chunk(PTransmitChunkParams) returns (PTransmitChunkResult);
+    rpc transmit_chunk_via_http(PHttpRequest) returns (PTransmitChunkResult);
     rpc tablet_writer_add_chunk(starrocks.PTabletWriterAddChunkRequest) returns (starrocks.PTabletWriterAddBatchResult);
     rpc tablet_writer_add_chunks(starrocks.PTabletWriterAddChunksRequest) returns (starrocks.PTabletWriterAddBatchResult);
     rpc tablet_writer_add_segment(starrocks.PTabletWriterAddSegmentRequest) returns (starrocks.PTabletWriterAddSegmentResult);
     rpc transmit_runtime_filter(PTransmitRuntimeFilterParams) returns (PTransmitRuntimeFilterResult);
 
     rpc submit_mv_maintenance_task(PMVMaintenanceTaskRequest) returns (PMVMaintenanceTaskResult);
-};
 
+    // local tablet reader
+    rpc local_tablet_reader_open(PTabletReaderOpenRequest) returns (PTabletReaderOpenResult);
+    rpc local_tablet_reader_close(PTabletReaderCloseRequest) returns (PTabletReaderCloseResult);
+    rpc local_tablet_reader_multi_get(PTabletReaderMultiGetRequest) returns (PTabletReaderMultiGetResult);
+    rpc local_tablet_reader_scan_open(PTabletReaderScanOpenRequest) returns (PTabletReaderScanOpenResult);
+    rpc local_tablet_reader_scan_get_next(PTabletReaderScanGetNextRequest) returns (PTabletReaderScanGetNextResult);
+
+    rpc execute_command(ExecuteCommandRequestPB) returns (ExecuteCommandResultPB);
+    
+    rpc update_fail_point_status(PUpdateFailPointStatusRequest) returns (PUpdateFailPointStatusResponse);
+    rpc list_fail_point(PListFailPointRequest) returns (PListFailPointResponse);
+};

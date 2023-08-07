@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.base.Preconditions;
@@ -35,7 +34,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 
 import java.util.List;
 
-import static com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator.BinaryType.EQ_FOR_NULL;
+import static com.starrocks.analysis.BinaryType.EQ_FOR_NULL;
 
 // Rewrite ScalarOperator as DictMappingOperator
 // if a ScalarOperator support dictionary optimization, we will rewrite it to DictMappingOperator
@@ -106,9 +105,8 @@ public class DictMappingRewriter {
                     hasApplied = hasApplied || context.hasAppliedOperator;
                     disableApplied = disableApplied || context.hasUnsupportedOperator;
                 }
-                Preconditions.checkState(hasApplied);
-                if (!disableApplied) {
-                    context.hasAppliedOperator = true;
+                if (!disableApplied || !hasApplied) {
+                    context.hasAppliedOperator = hasApplied;
                     return operator;
                 } else {
                     context.hasAppliedOperator = false;
@@ -164,7 +162,8 @@ public class DictMappingRewriter {
 
         @Override
         public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate, RewriterContext context) {
-            if (predicate.getBinaryType() == EQ_FOR_NULL) {
+            if (predicate.getBinaryType() == EQ_FOR_NULL || !predicate.getChild(1).isConstant() ||
+                    !predicate.getChild(0).isColumnRef()) {
                 context.hasAppliedOperator = false;
                 context.hasUnsupportedOperator = true;
                 return visit(predicate, context);

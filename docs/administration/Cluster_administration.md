@@ -47,7 +47,7 @@ Before you set up the BE, configure the  `storage_root_path` parameter and the c
 | **Port** **name**  | **Default** **port** **number** | **Description**                                              |
 | ---------------------- | ----------------------------------- | ------------------------------------------------------------ |
 | be_port                | 9060                                | The port that is used by the BE to communicate with an FE.   |
-| webserver_port         | 8040                                | The port that is used by the BE to communicate with an HTTP protocol. |
+| be_http_port           | 8040                                | The port that is used by the BE to communicate with an HTTP protocol. |
 | heartbeat_service_port | 9050                                | The port that is used by the BE to receive heartbeats from an FE. |
 | brpc                   | 8060                                | The port that is used for communication between the BEs in a cluster. |
 
@@ -58,7 +58,7 @@ Before you set up the BE, configure the  `storage_root_path` parameter and the c
 |Configuration|Description|Default|
 |---|---|---|
 |thrift_port|Thrift Server port of the Compute Node. The port is used to receive requests from FE.|9060|
-|webserver_port|HTTP Server port of the Compute Node.|8040|
+|be_http_port|HTTP Server port of the Compute Node.|8040|
 |heartbeat_service_port|Thrift server port of the Compute Node. The port is used to receive requests from FE.|9050|
 |brpc_port|RPC port between BE and the Compute Node.|8060|
 
@@ -103,6 +103,21 @@ cd StarRocks-x.x.x/be
 ## Upgrade StarRocks
 
 StarRocks can perform a rolling upgrade, which allows you to first upgrade the BEs, then the FEs, and finally the Brokers in a cluster. StarRocks ensures that the BEs are backward compatible with the FEs.
+
+> **CAUTION**
+>
+> - StarRocks ensures that BE is backward compatible with FE. Therefore, you need to **upgrade BE nodes first, and then upgrade FE nodes**. Upgrading them in a wrong order may lead to the incompatibility between FE and BE nodes, which will cause the BE node to stop.
+> - When upgrading your StarRocks cluster to a major version from a version earlier than v2.0, you must upgrade it **consecutively from one major version to another**. When upgrading your StarRocks cluster from a version that is later than v2.0, you can upgrade it across major versions. For safety purpose, we recommended upgrading consecutively from one major version to another, for example, 1.19->2.0->2.1->2.2->2.3->2.4. Currently, StarRocks v2.2 and v2.5 are the Long-term Support (LTS) versions. Their support duration lasts more than half a year.
+>
+> | StarRocks version | Upgrade from | Notice | LTS version |
+> | ---- | ------------ | -------- | -------------- |
+> | v1.19.x | N/A | | No |
+> | v2.0.x | Must be upgraded from v1.19.x | Disable clone before upgrading. | No|
+> | v2.1.x | Must be upgraded from v2.0.x | Modify <code>vector_chunk_size</code> and <code>batch_size</code> before grayscale upgrade. | No |
+> | v2.2.x | Can be upgraded from v2.1.x and v2.0.x | Set <code>ignore_unknown_log_id</code> to <code>true</code> before downgrading. | Yes |
+> | v2.3.x | Can be upgraded from v2.2.x, v2.1.x, and v2.0.x | We do not recommend downgrading across major versions. Set <code>ignore_unknown_log_id</code> to <code>true</code> before downgrading. | No |
+> | v2.4.x | Can be upgraded from v2.3.x, v2.2.x, v2.1.x, and v2.0.x | We do not recommend downgrading across major versions. Switch to IP address access before downgrading if you enabled [FQDN access](../administration/enable_fqdn.md). | No |
+> | v2.5.x | Can be upgraded from v2.4.x, v2.3.x, v2.2.x, v2.1.x, and v2.0.x | We do not recommend downgrading across major versions. | Yes |
 
 ### Before you begin
 
@@ -240,20 +255,22 @@ By using this method, the Compute Node waits until the currently running task fi
 
 5. Repeat the above procedures to upgrade other Broker nodes.
 
-## Roll back StarRocks
+## Downgrade StarRocks
 
-All StarRocks versions support rollbacks. You need to first roll back the FEs, then the BEs, and finally the Brokers in a cluster. If an exception occurs after you upgrade a cluster, you can perform the following steps to roll back the cluster to the previous version. This way, you can quickly recover the cluster.
+All StarRocks versions support downgrading. You need to first downgrade the FEs, then the BEs, and finally the Brokers in a cluster. If an exception occurs after you upgrade a cluster, you can perform the following steps to downgrade the cluster to the previous version. This way, you can quickly recover the cluster.
 
 ### Before you begin
 
-- Distribute the BE and FE binary files for old versions of BE and FE to the deployment directory of BE and FE.
+1. Distribute the BE and FE binary files for old versions of BE and FE to the deployment directory of BE and FE.
 
-  - For a minor version rollback (for example, from 2.0.y to 2.0.x), you only need to replace **starrocks_be** for the BEs and **starrocks-fe.jar** for the FEs.
-  - For a major version rollback (for example, from 2.x.x to 2.0.x), you need to replace the **bin** and **lib** folders of the BEs and replace the **bin**, **lib**, and **spark-dpp** for FEs.
+    - For a minor version downgrading (for example, from 2.0.y to 2.0.x), you only need to replace **starrocks_be** for the BEs and **starrocks-fe.jar** for the FEs.
+    - For a major version downgrading (for example, from 2.x.x to 2.0.x), you need to replace the **bin** and **lib** folders of the BEs and replace the **bin**, **lib**, and **spark-dpp** for FEs.
 
-### Roll back FE
+2. Before downgrading StarRocks v2.2 and later versions, you must add the item `ignore_unknown_log_id=true` to the FE configuration files **fe.conf** on all FE nodes. Otherwise, StarRocks may fail to restart. When CheckPoint is completed after StarRocks is restarted, you can then set `ignore_unknown_log_id` to `false`, and restart all FE nodes to allow the change to take effect.
 
-You must roll back all Follower FE nodes first and then the Leader FE node.
+### Downgrade FE
+
+You must downgrade all Follower FE nodes first and then the Leader FE node.
 
 1. Navigate to the FE working directory and stop the FE node.
 
@@ -284,9 +301,9 @@ You must roll back all Follower FE nodes first and then the Leader FE node.
     ps aux | grep StarRocksFE
     ```
 
-5. Repeat the above procedures to rollback other Follower FE nodes, and finally the Leader FE node.
+5. Repeat the above procedures to downgrade other Follower FE nodes, and finally the Leader FE node.
 
-### Roll back BE
+### Downgrade BE
 
 1. Navigate to the BE working directory and stop the BE node.
 
@@ -316,9 +333,9 @@ You must roll back all Follower FE nodes first and then the Leader FE node.
     ps aux | grep starrocks_be
     ```
 
-5. Repeat the above procedures to roll back other BE nodes.
+5. Repeat the above procedures to downgrade other BE nodes.
 
-#### Roll back Broker
+#### Downgrade Broker
 
 1. Navigate to the Broker working directory and stop the Broker node.
 
@@ -348,7 +365,7 @@ You must roll back all Follower FE nodes first and then the Leader FE node.
     ps aux | grep broker
     ```
 
-5. Repeat the above procedures to roll back other Broker nodes.
+5. Repeat the above procedures to downgrade other Broker nodes.
 
 ### Usage notes for grayscale upgrade from StarRocks 2.0 to StarRocks 2.1
 
@@ -382,4 +399,19 @@ mysql> show variables like '%batch_size%';
 -- set batch_size
 
 mysql> set global batch_size = 4096;
+```
+
+#### Troubleshooting
+
+Q: I have recently upgraded StarRocks v2.0 to v2.1 or later versions. When I load JSON-format BOOLEAN type data into an integer column using Stream Load, StarRocks returns NULL. How can I solve it?
+
+A: StarRocks v2.0 parses all columns as strings and then performs type conversion for loading. When you load BOOLEAN type data (`true` and `false`) in JSON format into an integer column, StarRocks v2.0 converts the data into `0` and `1` for loading. StarRocks v2.1 refactored its JSON Paerser, which directly extracts the JSON fields according to the target column type, resulting in this problem.
+
+You can solve this problem by adding the expression `tmp, target=if(tmp,1,0)` to the `columns` parameter of the [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md) command. The complete command is as follows:
+
+```shell
+curl --location-trusted -u <username>:<password> \
+-H "columns: <col_name_1>, <col_name_2>, <tmp>, <col_name_3>=if(<tmp>,1,0)" \
+-T demo.csv -XPUT \
+http://<fe_ip>:<fe_http_port>/api/<db_name>/<table_name>/_stream_load
 ```

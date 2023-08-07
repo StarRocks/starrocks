@@ -21,9 +21,9 @@
 
 namespace starrocks {
 
-UNION_VALUE_GUARD(LogicalType, FixedNonDecimalTypeGuard, pt_is_fixed_non_decimal, pt_is_boolean_struct,
-                  pt_is_integer_struct, pt_is_float_struct, pt_is_date_struct, pt_is_datetime_struct,
-                  pt_is_decimalv2_struct, pt_is_time_struct)
+UNION_VALUE_GUARD(LogicalType, FixedNonDecimalTypeGuard, lt_is_fixed_non_decimal, lt_is_boolean_struct,
+                  lt_is_integer_struct, lt_is_float_struct, lt_is_date_struct, lt_is_datetime_struct,
+                  lt_is_decimalv2_struct, lt_is_time_struct)
 
 template <bool check_overflow, LogicalType Type, LogicalType ResultType>
 struct DecimalDecimalCast {
@@ -36,7 +36,7 @@ struct DecimalDecimalCast {
         auto data_column = ColumnHelper::cast_to_raw<Type>(column);
         int from_scale = data_column->scale();
 
-        // source type and target type has the same primitive type and scale
+        // source type and target type has the same logical type and scale
         if (to_scale == from_scale && Type == ResultType) {
             auto result = column->clone_shared();
             ColumnHelper::cast_to_raw<Type>(result)->set_precision(to_precision);
@@ -113,7 +113,7 @@ struct DecimalNonDecimalCast {};
 
 // cast: bool,integer,float,datetime,date, time <-> decimal
 template <bool check_overflow, LogicalType DecimalType, LogicalType NonDecimalType>
-struct DecimalNonDecimalCast<check_overflow, DecimalType, NonDecimalType, DecimalPTGuard<DecimalType>,
+struct DecimalNonDecimalCast<check_overflow, DecimalType, NonDecimalType, DecimalLTGuard<DecimalType>,
                              FixedNonDecimalTypeGuard<NonDecimalType>> {
     using DecimalCppType = RunTimeCppType<DecimalType>;
     using DecimalColumnType = RunTimeColumnType<DecimalType>;
@@ -138,31 +138,31 @@ struct DecimalNonDecimalCast<check_overflow, DecimalType, NonDecimalType, Decima
 
         for (auto i = 0; i < num_rows; ++i) {
             bool overflow = false;
-            if constexpr (pt_is_boolean<NonDecimalType>) {
+            if constexpr (lt_is_boolean<NonDecimalType>) {
                 using SignedBooleanType = std::make_signed_t<NonDecimalCppType>;
                 overflow = DecimalV3Cast::from_integer<SignedBooleanType, DecimalCppType, check_overflow>(
                         (SignedBooleanType)(data[i]), scale_factor, &result_data[i]);
-            } else if constexpr (pt_is_integer<NonDecimalType>) {
+            } else if constexpr (lt_is_integer<NonDecimalType>) {
                 overflow = DecimalV3Cast::from_integer<NonDecimalCppType, DecimalCppType, check_overflow>(
                         data[i], scale_factor, &result_data[i]);
-            } else if constexpr (pt_is_float<NonDecimalType>) {
+            } else if constexpr (lt_is_float<NonDecimalType>) {
                 overflow = DecimalV3Cast::from_float<NonDecimalCppType, DecimalCppType>(data[i], scale_factor,
                                                                                         &result_data[i]);
-            } else if constexpr (pt_is_time<NonDecimalType>) {
+            } else if constexpr (lt_is_time<NonDecimalType>) {
                 double datum = timestamp::time_to_literal(data[i]);
                 overflow = DecimalV3Cast::from_float<NonDecimalCppType, DecimalCppType>(datum, scale_factor,
                                                                                         &result_data[i]);
-            } else if constexpr (pt_is_date<NonDecimalType>) {
+            } else if constexpr (lt_is_date<NonDecimalType>) {
                 static_assert(std::is_same_v<NonDecimalCppType, DateValue>, "DateValue type is required");
                 int32_t datum = ((DateValue&)data[i]).to_date_literal();
                 overflow = DecimalV3Cast::from_integer<int32_t, DecimalCppType, check_overflow>(datum, scale_factor,
                                                                                                 &result_data[i]);
-            } else if constexpr (pt_is_datetime<NonDecimalType>) {
+            } else if constexpr (lt_is_datetime<NonDecimalType>) {
                 static_assert(std::is_same_v<NonDecimalCppType, TimestampValue>, "TimestampValue type is required");
                 auto datum = (int64_t)(((TimestampValue&)data[i]).to_timestamp_literal());
                 overflow = DecimalV3Cast::from_integer<int64_t, DecimalCppType, check_overflow>(datum, scale_factor,
                                                                                                 &result_data[i]);
-            } else if constexpr (pt_is_decimalv2<NonDecimalType>) {
+            } else if constexpr (lt_is_decimalv2<NonDecimalType>) {
                 static_assert(std::is_same_v<NonDecimalCppType, DecimalV2Value>, "TimestampValue type is required");
                 auto datum = (int128_t)(((DecimalV2Value&)data[i]).value());
                 if (scale == DecimalV2Value::SCALE) {
@@ -179,7 +179,7 @@ struct DecimalNonDecimalCast<check_overflow, DecimalType, NonDecimalType, Decima
                                     datum, scale_down_factor, &result_data[i]);
                 }
             } else {
-                static_assert(pt_is_fixed_non_decimal<NonDecimalType>,
+                static_assert(lt_is_fixed_non_decimal<NonDecimalType>,
                               "Only number type is a legal argument type to template parameter");
             }
 
@@ -219,15 +219,15 @@ struct DecimalNonDecimalCast<check_overflow, DecimalType, NonDecimalType, Decima
         [[maybe_unused]] const auto scale_factor = get_scale_factor<DecimalCppType>(scale);
         for (int i = 0; i < num_rows; ++i) {
             bool overflow = false;
-            if constexpr (pt_is_boolean<NonDecimalType>) {
-                static constexpr DecimalCppType zero = DecimalCppType(0);
+            if constexpr (lt_is_boolean<NonDecimalType>) {
+                static constexpr auto zero = DecimalCppType(0);
                 result_data[i] = (data[i] != zero);
-            } else if constexpr (pt_is_integer<NonDecimalType>) {
+            } else if constexpr (lt_is_integer<NonDecimalType>) {
                 overflow = DecimalV3Cast::to_integer<DecimalCppType, NonDecimalCppType, check_overflow>(
                         data[i], scale_factor, &result_data[i]);
-            } else if constexpr (pt_is_float<NonDecimalType>) {
+            } else if constexpr (lt_is_float<NonDecimalType>) {
                 DecimalV3Cast::to_float<DecimalCppType, NonDecimalCppType>(data[i], scale_factor, &result_data[i]);
-            } else if constexpr (pt_is_time<NonDecimalType>) {
+            } else if constexpr (lt_is_time<NonDecimalType>) {
                 double datumf;
                 DecimalV3Cast::to_float<DecimalCppType, NonDecimalCppType>(data[i], scale_factor, &datumf);
                 uint64_t datum = datumf;
@@ -238,7 +238,7 @@ struct DecimalNonDecimalCast<check_overflow, DecimalType, NonDecimalType, Decima
                 if constexpr (check_overflow) {
                     overflow = overflow || (min > 59 || sec > 59);
                 }
-            } else if constexpr (pt_is_date<NonDecimalType>) {
+            } else if constexpr (lt_is_date<NonDecimalType>) {
                 static_assert(std::is_same_v<NonDecimalCppType, DateValue>, "DateValue type is required");
                 int64_t datum;
                 overflow = DecimalV3Cast::to_integer<DecimalCppType, int64_t, check_overflow>(data[i], scale_factor,
@@ -249,7 +249,7 @@ struct DecimalNonDecimalCast<check_overflow, DecimalType, NonDecimalType, Decima
                 } else {
                     date_value.from_date_literal(datum);
                 }
-            } else if constexpr (pt_is_datetime<NonDecimalType>) {
+            } else if constexpr (lt_is_datetime<NonDecimalType>) {
                 static_assert(std::is_same_v<NonDecimalCppType, TimestampValue>, "TimestampValue is required");
                 int64_t datum;
                 overflow = DecimalV3Cast::to_integer<DecimalCppType, int64_t, check_overflow>(data[i], scale_factor,
@@ -260,7 +260,7 @@ struct DecimalNonDecimalCast<check_overflow, DecimalType, NonDecimalType, Decima
                 } else {
                     timestamp_value.from_timestamp_literal((uint64_t)datum);
                 }
-            } else if constexpr (pt_is_decimalv2<NonDecimalType>) {
+            } else if constexpr (lt_is_decimalv2<NonDecimalType>) {
                 static_assert(std::is_same_v<NonDecimalCppType, DecimalV2Value>, "TimestampValue type is required");
                 int128_t datum;
                 if (scale == DecimalV2Value::SCALE) {
@@ -279,7 +279,7 @@ struct DecimalNonDecimalCast<check_overflow, DecimalType, NonDecimalType, Decima
                 auto& decimalV2_value = (DecimalV2Value&)result_data[i];
                 decimalV2_value.set_value(datum);
             } else {
-                static_assert(pt_is_number<NonDecimalType>,
+                static_assert(lt_is_number<NonDecimalType>,
                               "Only number type is a legal argument type to template parameter");
             }
 
@@ -301,8 +301,8 @@ struct DecimalNonDecimalCast<check_overflow, DecimalType, NonDecimalType, Decima
 
 // cast: char/varchar <-> decimal
 template <bool check_overflow, LogicalType DecimalType, LogicalType StringType>
-struct DecimalNonDecimalCast<check_overflow, DecimalType, StringType, DecimalPTGuard<DecimalType>,
-                             StringPTGuard<StringType>> {
+struct DecimalNonDecimalCast<check_overflow, DecimalType, StringType, DecimalLTGuard<DecimalType>,
+                             StringLTGuard<StringType>> {
     using DecimalCppType = RunTimeCppType<DecimalType>;
     using DecimalColumnType = RunTimeColumnType<DecimalType>;
     using StringCppType = RunTimeCppType<StringType>;

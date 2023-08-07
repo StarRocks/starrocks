@@ -45,7 +45,7 @@ PARTITION: UNPARTITIONED
 
 RESULT SINK
 
-27:MERGING-EXCHANGE
+28:MERGING-EXCHANGE
 limit: 100
 
 PLAN FRAGMENT 1
@@ -53,47 +53,107 @@ OUTPUT EXPRS:
 PARTITION: HASH_PARTITIONED: 2: S_NAME
 
 STREAM DATA SINK
-EXCHANGE ID: 27
+EXCHANGE ID: 28
 UNPARTITIONED
 
-26:TOP-N
+27:TOP-N
 |  order by: <slot 77> 77: count DESC, <slot 2> 2: S_NAME ASC
 |  offset: 0
 |  limit: 100
 |
-25:AGGREGATE (merge finalize)
-|  output: count(77: count)
+26:AGGREGATE (update finalize)
+|  output: count(*)
 |  group by: 2: S_NAME
 |
-24:EXCHANGE
+25:EXCHANGE
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
 PARTITION: RANDOM
 
 STREAM DATA SINK
-EXCHANGE ID: 24
+EXCHANGE ID: 25
 HASH_PARTITIONED: 2: S_NAME
 
-23:AGGREGATE (update serialize)
-|  STREAMING
-|  output: count(*)
-|  group by: 2: S_NAME
-|
-22:Project
+24:Project
 |  <slot 2> : 2: S_NAME
 |
-21:HASH JOIN
+23:HASH JOIN
+|  join op: RIGHT SEMI JOIN (BUCKET_SHUFFLE)
+|  colocate: false, reason:
+|  equal join conjunct: 41: L_ORDERKEY = 9: L_ORDERKEY
+|  other join predicates: 43: L_SUPPKEY != 11: L_SUPPKEY
+|
+|----22:EXCHANGE
+|
+0:OlapScanNode
+TABLE: lineitem
+PREAGGREGATION: ON
+partitions=1/1
+rollup: lineitem
+tabletRatio=20/20
+cardinality=600000000
+avgRowSize=12.0
+
+PLAN FRAGMENT 3
+OUTPUT EXPRS:
+PARTITION: RANDOM
+
+STREAM DATA SINK
+EXCHANGE ID: 22
+BUCKET_SHUFFLE_HASH_PARTITIONED: 9: L_ORDERKEY
+
+21:Project
+|  <slot 2> : 2: S_NAME
+|  <slot 9> : 9: L_ORDERKEY
+|  <slot 11> : 11: L_SUPPKEY
+|
+20:HASH JOIN
+|  join op: RIGHT ANTI JOIN (BUCKET_SHUFFLE)
+|  colocate: false, reason:
+|  equal join conjunct: 59: L_ORDERKEY = 9: L_ORDERKEY
+|  other join predicates: 61: L_SUPPKEY != 11: L_SUPPKEY
+|
+|----19:EXCHANGE
+|
+2:Project
+|  <slot 59> : 59: L_ORDERKEY
+|  <slot 61> : 61: L_SUPPKEY
+|
+1:OlapScanNode
+TABLE: lineitem
+PREAGGREGATION: ON
+PREDICATES: 71: L_RECEIPTDATE > 70: L_COMMITDATE
+partitions=1/1
+rollup: lineitem
+tabletRatio=20/20
+cardinality=300000000
+avgRowSize=20.0
+
+PLAN FRAGMENT 4
+OUTPUT EXPRS:
+PARTITION: RANDOM
+
+STREAM DATA SINK
+EXCHANGE ID: 19
+BUCKET_SHUFFLE_HASH_PARTITIONED: 9: L_ORDERKEY
+
+18:Project
+|  <slot 2> : 2: S_NAME
+|  <slot 9> : 9: L_ORDERKEY
+|  <slot 11> : 11: L_SUPPKEY
+|
+17:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
 |  colocate: false, reason:
 |  equal join conjunct: 26: O_ORDERKEY = 9: L_ORDERKEY
 |
-|----20:EXCHANGE
+|----16:EXCHANGE
 |
-1:Project
+4:Project
 |  <slot 26> : 26: O_ORDERKEY
 |
-0:OlapScanNode
+3:OlapScanNode
 TABLE: orders
 PREAGGREGATION: ON
 PREDICATES: 28: O_ORDERSTATUS = 'F'
@@ -102,90 +162,42 @@ rollup: orders
 tabletRatio=10/10
 cardinality=50000000
 avgRowSize=9.0
-numNodes=0
 
-PLAN FRAGMENT 3
+PLAN FRAGMENT 5
 OUTPUT EXPRS:
 PARTITION: RANDOM
 
 STREAM DATA SINK
-EXCHANGE ID: 20
+EXCHANGE ID: 16
 BUCKET_SHUFFLE_HASH_PARTITIONED: 9: L_ORDERKEY
 
-19:Project
+15:Project
 |  <slot 2> : 2: S_NAME
 |  <slot 9> : 9: L_ORDERKEY
+|  <slot 11> : 11: L_SUPPKEY
 |
-18:HASH JOIN
-|  join op: RIGHT SEMI JOIN (COLOCATE)
-|  colocate: true
-|  equal join conjunct: 41: L_ORDERKEY = 9: L_ORDERKEY
-|  other join predicates: 43: L_SUPPKEY != 11: L_SUPPKEY
+14:HASH JOIN
+|  join op: INNER JOIN (BROADCAST)
+|  colocate: false, reason:
+|  equal join conjunct: 11: L_SUPPKEY = 1: S_SUPPKEY
 |
-|----17:Project
-|    |  <slot 2> : 2: S_NAME
-|    |  <slot 9> : 9: L_ORDERKEY
-|    |  <slot 11> : 11: L_SUPPKEY
-|    |
-|    16:HASH JOIN
-|    |  join op: RIGHT ANTI JOIN (COLOCATE)
-|    |  colocate: true
-|    |  equal join conjunct: 59: L_ORDERKEY = 9: L_ORDERKEY
-|    |  other join predicates: 61: L_SUPPKEY != 11: L_SUPPKEY
-|    |
-|    |----15:Project
-|    |    |  <slot 2> : 2: S_NAME
-|    |    |  <slot 9> : 9: L_ORDERKEY
-|    |    |  <slot 11> : 11: L_SUPPKEY
-|    |    |
-|    |    14:HASH JOIN
-|    |    |  join op: INNER JOIN (BROADCAST)
-|    |    |  colocate: false, reason:
-|    |    |  equal join conjunct: 11: L_SUPPKEY = 1: S_SUPPKEY
-|    |    |
-|    |    |----13:EXCHANGE
-|    |    |
-|    |    6:Project
-|    |    |  <slot 9> : 9: L_ORDERKEY
-|    |    |  <slot 11> : 11: L_SUPPKEY
-|    |    |
-|    |    5:OlapScanNode
-|    |       TABLE: lineitem
-|    |       PREAGGREGATION: ON
-|    |       PREDICATES: 21: L_RECEIPTDATE > 20: L_COMMITDATE
-|    |       partitions=1/1
-|    |       rollup: lineitem
-|    |       tabletRatio=20/20
-|    |       cardinality=300000000
-|    |       avgRowSize=20.0
-|    |       numNodes=0
-|    |
-|    4:Project
-|    |  <slot 59> : 59: L_ORDERKEY
-|    |  <slot 61> : 61: L_SUPPKEY
-|    |
-|    3:OlapScanNode
-|       TABLE: lineitem
-|       PREAGGREGATION: ON
-|       PREDICATES: 71: L_RECEIPTDATE > 70: L_COMMITDATE
-|       partitions=1/1
-|       rollup: lineitem
-|       tabletRatio=20/20
-|       cardinality=300000000
-|       avgRowSize=20.0
-|       numNodes=0
+|----13:EXCHANGE
 |
-2:OlapScanNode
+6:Project
+|  <slot 9> : 9: L_ORDERKEY
+|  <slot 11> : 11: L_SUPPKEY
+|
+5:OlapScanNode
 TABLE: lineitem
 PREAGGREGATION: ON
+PREDICATES: 21: L_RECEIPTDATE > 20: L_COMMITDATE
 partitions=1/1
 rollup: lineitem
 tabletRatio=20/20
-cardinality=600000000
-avgRowSize=12.0
-numNodes=0
+cardinality=300000000
+avgRowSize=20.0
 
-PLAN FRAGMENT 4
+PLAN FRAGMENT 6
 OUTPUT EXPRS:
 PARTITION: RANDOM
 
@@ -212,9 +224,8 @@ rollup: supplier
 tabletRatio=1/1
 cardinality=1000000
 avgRowSize=33.0
-numNodes=0
 
-PLAN FRAGMENT 5
+PLAN FRAGMENT 7
 OUTPUT EXPRS:
 PARTITION: RANDOM
 
@@ -234,6 +245,5 @@ rollup: nation
 tabletRatio=1/1
 cardinality=1
 avgRowSize=29.0
-numNodes=0
 [end]
 

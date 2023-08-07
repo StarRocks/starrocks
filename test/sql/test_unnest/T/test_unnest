@@ -1,0 +1,23 @@
+-- name: test_select
+select * from TABLE(unnest(ARRAY<INT>[1, NULL, 10]));
+-- name: test_alias
+select x from TABLE(unnest(ARRAY<INT>[1, NULL, 10])) t(x);
+-- name: test_cross_join
+select t0.x, t1.x from TABLE(unnest(ARRAY<INT>[1])) t0(x), TABLE(unnest(ARRAY<INT>[1, NULL, 10])) t1(x);
+-- name: test_cross_join2
+select t0.x, t1.x from TABLE(unnest(ARRAY<INT>[10, NULL, 100])) t0(x), TABLE(unnest(ARRAY<INT>[1, NULL, 10])) t1(x);
+-- name: test_cross_join4
+select t0.x, t1.x from TABLE(unnest(ARRAY<INT>[NULL, NULL])) t0(x), TABLE(unnest(ARRAY<INT>[1, NULL, 10])) t1(x);
+-- name: test_cross_join_conditional
+select t0.x, t1.x from TABLE(unnest(ARRAY<INT>[1])) t0(x), TABLE(unnest(ARRAY<INT>[1, NULL, 10])) t1(x) where t0.x=t1.x;
+-- name: test_cross_join_conditional2
+select t0.x, t1.x from TABLE(unnest(ARRAY<INT>[1, 2, NULL])) t0(x), TABLE(unnest(ARRAY<INT>[1, NULL, 10])) t1(x) where t0.x=t1.x;
+-- name: test_left_join
+select * from TABLE(unnest(ARRAY<INT>[1])) t0(x) LEFT JOIN TABLE(unnest(ARRAY<INT>[1, NULL, 10])) t1(x) on t0.x=t1.x;
+-- name: test_right_join
+select * from TABLE(unnest(ARRAY<INT>[1])) t0(x) RIGHT JOIN TABLE(unnest(ARRAY<INT>[1, NULL, 10])) t1(x) on t0.x=t1.x;
+-- name: test_subquery
+select x + 1 from (select * from TABLE(unnest(ARRAY<INT>[1], ARRAY<INT>[2, 3])) t(x, y)) t0;
+-- name: test_view
+create view v_unnest_subquery as select x + y from (select * from TABLE(unnest(ARRAY<INT>[1])) t0(x), TABLE(unnest(ARRAY<INT>[2, 3])) t1(x)) t2(x, y);
+select * from v_unnest_subquery;

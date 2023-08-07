@@ -1,0 +1,299 @@
+-- name: test_next_day
+CREATE TABLE IF NOT EXISTS `next_day_test` (
+  `d1` DATE,
+  `d2` DATETIME
+)
+DISTRIBUTED BY HASH(`d1`)
+PROPERTIES(
+  "replication_num" = "1"
+);
+
+INSERT INTO `next_day_test`(d1, d2)
+VALUES ('2023-04-01', '2023-04-01 20:13:14'),
+       ('2023-04-02', '2023-04-02 20:13:14'),
+       ('2023-04-03', '2023-04-03 20:13:14'),
+       ('2023-04-04', '2023-04-04 20:13:14'),
+       ('2023-04-05', '2023-04-05 20:13:14'),
+       ('2023-04-06', '2023-04-06 20:13:14'),
+       ('2023-04-07', '2023-04-07 20:13:14'),
+       ('2023-02-27', '2023-02-27 20:13:14'),
+       ('2023-02-28', '2023-02-28 20:13:14'),
+       ('2024-02-27', '2024-02-27 20:13:14'),
+       ('2024-02-28', '2024-02-28 20:13:14'),
+       ('2024-02-29', '2024-02-29 20:13:14');
+
+CREATE TABLE IF NOT EXISTS `dow_test` (
+  `d3` DATE,
+  `dow_2` CHAR(20),
+  `dow_3` VARCHAR(30),
+  `dow_full` STRING
+)
+DISTRIBUTED BY HASH(`d3`)
+PROPERTIES(
+  "replication_num" = "1"
+);
+
+INSERT INTO `dow_test`(d3, dow_2, dow_3, dow_full)
+VALUES ('2023-04-01', 'Mo', 'Mon', 'Monday'),
+       ('2023-04-02', 'Tu', 'Tue', 'Tuesday'),
+       ('2023-04-03', 'We', 'Wed', 'Wednesday'),
+       ('2023-04-04', 'Th', 'Thu', 'Thursday'),
+       ('2023-04-05', 'Fr', 'Fri', 'Friday'),
+       ('2023-04-06', 'Sa', 'Sat', 'Saturday'),
+       ('2023-04-07', 'Su', 'Sun', 'Sunday');
+
+
+select next_day('2023-04-05', 'Mo');
+select next_day('2023-04-05', 'Tue');
+select next_day('2023-04-05', 'Wednesday');
+select next_day('2023-04-05 20:13:14', 'Thursday');
+select next_day('2023-02-27', 'Tuesday');
+select next_day('2023-02-28', 'Tuesday');
+select next_day('2023-02-27', 'Friday');
+select next_day('2023-02-28', 'Friday');
+select next_day('2024-02-27', 'Wednesday');
+select next_day('2024-02-28', 'Wednesday');
+select next_day('2024-02-29', 'Wednesday');
+select d1, next_day(d1, 'Fr'), d2, next_day(d2, 'Fr') from next_day_test order by d1;
+select d1, next_day(d1, 'Sat'), d2, next_day(d2,'Sat') from next_day_test order by d1;
+select d1, next_day(d1, 'Sunday'), d2, next_day(d2, 'Sunday') from next_day_test order by d1;
+
+select next_day('2023-02-29', 'Tuesday');
+select next_day('2023-02-29', 'Friday');
+select next_day('2024-02-30', 'Friday');
+select next_day('2023-0405', 'Friday');
+select next_day('2023-04-05 20:13:61', 'Friday');
+select next_day('2023_xxx', 'Friday');
+
+select next_day('2023-04-05', 'F');
+select next_day('2023-04-05', 'Frid');
+select next_day('2023-04-05', 'xxx');
+
+select next_day('2023-02-29', 'Tuesday') from next_day_test;
+select next_day('2024-02-30', 'Friday') from next_day_test;
+select next_day('2023-04-05 20:13:61', 'Friday') from next_day_test;
+select next_day('2023_xxx', 'Friday') from next_day_test;
+
+select next_day('2023-04-05', 'F') from next_day_test;
+select next_day('2023-04-05', 'Frid') from next_day_test;
+select next_day('2023-04-05', 'xxx') from next_day_test;
+
+select next_day('2023-04-05', null);
+select next_day(null, "Friday");
+select next_day(null, null);
+select next_day('2023-04-05', null) from next_day_test;
+select next_day(null, 'Friday') from next_day_test;
+select next_day(null, null) from next_day_test;
+
+select d3, dow_2, next_day(d3, dow_2) from dow_test order by d3;
+select d3, dow_3, next_day(d3, dow_3) from dow_test order by d3;
+select d3, dow_full, next_day(d3, dow_full) from dow_test order by d3;
+select d1, dow_2, next_day(d1, dow_2) from next_day_test a join dow_test b on a.d1 = b.d3 order by d1;
+
+-- name: test_previous_day
+CREATE TABLE IF NOT EXISTS `previous_day_test` (
+  `d1` DATE,
+  `d2` DATETIME
+)
+DISTRIBUTED BY HASH(`d1`)
+PROPERTIES(
+  "replication_num" = "1"
+);
+
+INSERT INTO `previous_day_test`(d1, d2)
+VALUES ('2023-04-09', '2023-04-09 23:08:11'),
+       ('2023-04-10', '2023-04-10 23:08:11'),
+       ('2023-04-11', '2023-04-11 23:08:11'),
+       ('2023-04-12', '2023-04-12 23:08:11'),
+       ('2023-04-13', '2023-04-13 23:08:11'),
+       ('2023-04-14', '2023-04-14 23:08:11'),
+       ('2023-04-15', '2023-04-15 23:08:11'),
+       ('2023-02-28', '2023-02-28 23:08:11'),
+       ('2023-03-01', '2023-03-01 23:08:11'),
+       ('2024-02-29', '2024-02-29 23:08:11'),
+       ('2024-03-01', '2024-03-01 23:08:11'),
+       ('2024-03-02', '2024-03-02 23:08:11');
+
+CREATE TABLE IF NOT EXISTS `previous_dow` (
+  `d3` DATE,
+  `dow_2` CHAR(20),
+  `dow_3` VARCHAR(30),
+  `dow_full` STRING
+)
+DISTRIBUTED BY HASH(`d3`)
+PROPERTIES(
+  "replication_num" = "1"
+);
+
+INSERT INTO `previous_dow`(d3, dow_2, dow_3, dow_full)
+VALUES ('2023-04-09', 'Mo', 'Mon', 'Monday'),
+       ('2023-04-10', 'Tu', 'Tue', 'Tuesday'),
+       ('2023-04-11', 'We', 'Wed', 'Wednesday'),
+       ('2023-04-12', 'Th', 'Thu', 'Thursday'),
+       ('2023-04-13', 'Fr', 'Fri', 'Friday'),
+       ('2023-04-14', 'Sa', 'Sat', 'Saturday'),
+       ('2023-04-15', 'Su', 'Sun', 'Sunday');
+
+
+select previous_day('2023-04-09', 'Mo');
+select previous_day('2023-04-09', 'Tue');
+select previous_day('2023-04-09', 'Wednesday');
+select previous_day('2023-04-09 20:13:14', 'Thursday');
+select previous_day('2023-02-28', 'Tuesday');
+select previous_day('2023-03-01', 'Tuesday');
+select previous_day('2023-02-28', 'Friday');
+select previous_day('2023-03-01', 'Friday');
+select previous_day('2024-02-29', 'Wednesday');
+select previous_day('2024-03-01', 'Wednesday');
+select previous_day('2024-03-02', 'Wednesday');
+select d1, previous_day(d1, 'Fr'), d2, previous_day(d2, 'Fr') from previous_day_test order by d1;
+select d1, previous_day(d1, 'Sat'), d2, previous_day(d2,'Sat') from previous_day_test order by d1;
+select d1, previous_day(d1, 'Sunday'), d2, previous_day(d2, 'Sunday') from previous_day_test order by d1;
+
+select previous_day('2023-02-29', 'Tuesday');
+select previous_day('2023-02-29', 'Friday');
+select previous_day('2024-02-30', 'Friday');
+select previous_day('2023-0405', 'Friday');
+select previous_day('2023-04-05 20:13:61', 'Friday');
+select previous_day('2023_xxx', 'Friday');
+
+select previous_day('2023-04-05', 'F');
+select previous_day('2023-04-05', 'Frid');
+select previous_day('2023-04-05', 'xxx');
+
+select previous_day('2023-02-29', 'Tuesday') from previous_day_test;
+select previous_day('2024-02-30', 'Friday') from previous_day_test;
+select previous_day('2023-04-05 20:13:61', 'Friday') from previous_day_test;
+select previous_day('2023_xxx', 'Friday') from previous_day_test;
+
+select previous_day('2023-04-05', 'F') from previous_day_test;
+select previous_day('2023-04-05', 'Frid') from previous_day_test;
+select previous_day('2023-04-05', 'xxx') from previous_day_test;
+
+select previous_day('2023-04-05', null);
+select previous_day(null, "Friday");
+select previous_day(null, null);
+select previous_day('2023-04-05', null) from previous_day_test;
+select previous_day(null, 'Friday') from previous_day_test;
+select previous_day(null, null) from previous_day_test;
+
+select d3, dow_2, previous_day(d3, dow_2) from previous_dow order by d3;
+select d3, dow_3, previous_day(d3, dow_3) from previous_dow order by d3;
+select d3, dow_full, previous_day(d3, dow_full) from previous_dow order by d3;
+select d1, dow_2, previous_day(d1, dow_2) from previous_day_test a join previous_dow b on a.d1 = b.d3 order by d1;
+
+
+-- name: test_week_iso
+select week_iso("2023-01-01");
+select week_iso("2023-01-02");
+select week_iso("2023-01-03");
+select week_iso("");
+select week_iso(NULL);
+
+-- name: test_dayofweek_iso
+select dayofweek_iso("2023-01-01");
+select dayofweek_iso("2023-01-02");
+select dayofweek_iso("2023-01-03");
+select dayofweek_iso("");
+select dayofweek_iso(NULL);
+
+-- name: test_makedate
+CREATE TABLE IF NOT EXISTS `makedate_test` (
+  `id` int,
+  `col_year` int,
+  `col_day` int
+)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES(
+  "replication_num" = "1"
+);
+
+INSERT INTO `makedate_test`(id, col_year, col_day)
+VALUES (1, NUll, NUll),
+       (2, 1, NUll),
+       (3, NULL, 1),
+       (4, 0, 1),
+       (5, 2023, 0),
+       (6, 2023, 32),
+       (7, 2023, 365),
+       (8, 2023, 366),
+       (9, 9999, 1),
+       (10, 9999, 365),
+       (11, 9999, 366),
+       (12, 10000, 1),
+       (13, 1, -1);
+
+select makedate(NUll,NUll);
+select makedate(1, NUll);
+select makedate(NULL, 1);
+select makedate(0, 1);
+select makedate(2023, 0);
+select makedate(2023, 32);
+select makedate(2023, 365);
+select makedate(2023, 366);
+select makedate(9999, 1);
+select makedate(9999, 365);
+select makedate(9999, 366);
+select makedate(10000, 1);
+select makedate(1, -1);
+
+select makedate(col_year, col_day) from makedate_test order by id;
+
+-- name: test_last_day
+select last_day('2023-02-12', 'month');
+select last_day('2020-02-12');
+select last_day('2023-05-10', 'quarter');
+select last_day('2023-05-10', 'year');
+create database test_last_day_db;
+use test_last_day_db;
+CREATE TABLE IF NOT EXISTS `last_day_table` (
+  `d1` DATE,
+  `d2` DATETIME
+)
+DISTRIBUTED BY HASH(`d1`)
+PROPERTIES(
+  "replication_num" = "1"
+);
+INSERT INTO `last_day_table`(d1, d2)
+VALUES ('2020-02-12', '2020-02-12 08:08:14'),
+       ('2021-03-28', '2021-03-28 08:08:14'),
+       ('2022-04-28', '2022-04-28 08:08:14'),
+       ('2023-05-29', '2023-05-29 08:08:14');
+CREATE TABLE IF NOT EXISTS `last_day_with_optional_table` (
+  `d1` DATE,
+  `d2` DATETIME,
+  `optional` CHAR(8)
+)
+DISTRIBUTED BY HASH(`d1`)
+PROPERTIES(
+  "replication_num" = "1"
+);
+INSERT INTO `last_day_with_optional_table`(d1, d2, optional)
+VALUES ('2020-02-12', '2020-02-12 08:08:14', 'month'),
+       ('2021-03-28', '2021-03-28 08:08:14', 'quarter'),
+       ('2022-04-28', '2022-04-28 08:08:14', 'year'),
+       ('2023-05-29', '2023-05-29 08:08:14', 'year');
+select d1, last_day(d1, 'month'), d2, last_day(d2, 'month') from last_day_table order by d1;
+select d1, optional, last_day(d1, optional), d2, optional, last_day(d2, optional) from last_day_with_optional_table order by d1;
+drop database test_last_day_db;
+
+-- name: test_to_iso8601
+CREATE TABLE IF NOT EXISTS `to_iso8601_test`(
+  `d1` DATE,
+  `d2` DATETIME
+)
+DISTRIBUTED BY HASH(`d1`)
+PROPERTIES(
+  "replication_num" = "1"
+);
+
+INSERT INTO `to_iso8601_test`(d1, d2)
+VALUES ('2020-01-01','2020-01-01 00:00:00'),
+  ('2020-01-02', '2020-01-01 00:00:00.1'),
+  ('2020-01-03', '2020-01-01 00:00:00.12'),
+  ('2020-01-04', '2020-01-01 00:00:00.123'),
+  ('2020-01-05', '2020-01-01 00:00:00.1234');
+
+select to_iso8601(d1),to_iso8601(d2) from to_iso8601_test order by d1;
+
+select to_iso8601(date'2020-01-01'), to_iso8601(datetime'2020-01-01 00:00:00'),to_iso8601(datetime'2020-01-01 00:00:00.1');

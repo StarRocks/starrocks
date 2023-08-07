@@ -20,6 +20,7 @@
 #include "exec/cross_join_node.h"
 #include "exec/exchange_node.h"
 #include "exec/olap_scan_node.h"
+#include "exec/pipeline/adaptive/lazy_instantiate_drivers_operator.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
@@ -34,6 +35,7 @@
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/sink/export_sink_operator.h"
 #include "exec/pipeline/sink/file_sink_operator.h"
+#include "exec/pipeline/sink/iceberg_table_sink_operator.h"
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 #include "exec/pipeline/sink/mysql_table_sink_operator.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
@@ -48,6 +50,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/export_sink.h"
+#include "runtime/iceberg_table_sink.h"
 #include "runtime/memory_scratch_sink.h"
 #include "runtime/multi_cast_data_stream_sink.h"
 #include "runtime/mysql_table_sink.h"
@@ -56,6 +59,7 @@
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/debug/query_trace.h"
 #include "util/pretty_printer.h"
+#include "util/runtime_profile.h"
 #include "util/time.h"
 #include "util/uid_util.h"
 
@@ -64,6 +68,7 @@ namespace starrocks::pipeline {
 using WorkGroupManager = workgroup::WorkGroupManager;
 using WorkGroup = workgroup::WorkGroup;
 using WorkGroupPtr = workgroup::WorkGroupPtr;
+using PipelineGroupMap = std::unordered_map<SourceOperatorFactory*, Pipelines>;
 
 /// UnifiedExecPlanFragmentParams.
 const std::vector<TScanRangeParams> UnifiedExecPlanFragmentParams::_no_scan_ranges;
@@ -124,10 +129,13 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     _query_ctx->extend_query_lifetime();
 
     if (query_options.__isset.enable_profile && query_options.enable_profile) {
-        _query_ctx->set_report_profile();
+        _query_ctx->set_enable_profile();
     }
     if (query_options.__isset.pipeline_profile_level) {
         _query_ctx->set_profile_level(query_options.pipeline_profile_level);
+    }
+    if (query_options.__isset.runtime_profile_report_interval) {
+        _query_ctx->set_runtime_profile_report_interval(std::max(1L, query_options.runtime_profile_report_interval));
     }
 
     bool enable_query_trace = false;
@@ -151,6 +159,13 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
     _fragment_ctx->set_fragment_instance_id(fragment_instance_id);
     _fragment_ctx->set_fe_addr(coord);
     _fragment_ctx->set_is_stream_pipeline(is_stream_pipeline);
+    if (request.common().__isset.adaptive_dop_param) {
+        _fragment_ctx->set_enable_adaptive_dop(true);
+        const auto& tadaptive_dop_param = request.common().adaptive_dop_param;
+        auto& adaptive_dop_param = _fragment_ctx->adaptive_dop_param();
+        adaptive_dop_param.max_block_rows_per_driver_seq = tadaptive_dop_param.max_block_rows_per_driver_seq;
+        adaptive_dop_param.max_output_amplification_factor = tadaptive_dop_param.max_output_amplification_factor;
+    }
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
               << " fragment_instance_id=" << print_id(fragment_instance_id)
@@ -160,18 +175,14 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
 }
 
 Status FragmentExecutor::_prepare_workgroup(const UnifiedExecPlanFragmentParams& request) {
-    bool enable_resource_group =
-            request.common().__isset.enable_resource_group && request.common().enable_resource_group;
-    if (!enable_resource_group) {
-        return Status::OK();
-    }
-
-    WorkGroupPtr wg = nullptr;
-    if (request.common().__isset.workgroup && request.common().workgroup.id != WorkGroup::DEFAULT_WG_ID) {
+    WorkGroupPtr wg;
+    if (!request.common().__isset.workgroup || request.common().workgroup.id == WorkGroup::DEFAULT_WG_ID) {
+        wg = WorkGroupManager::instance()->get_default_workgroup();
+    } else if (request.common().workgroup.id == WorkGroup::DEFAULT_MV_WG_ID) {
+        wg = WorkGroupManager::instance()->get_default_mv_workgroup();
+    } else {
         wg = std::make_shared<WorkGroup>(request.common().workgroup);
         wg = WorkGroupManager::instance()->add_workgroup(wg);
-    } else {
-        wg = WorkGroupManager::instance()->get_default_workgroup();
     }
     DCHECK(wg != nullptr);
     RETURN_IF_ERROR(_query_ctx->init_query_once(wg.get()));
@@ -198,21 +209,20 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     runtime_state->set_fragment_ctx(_fragment_ctx.get());
     runtime_state->set_query_ctx(_query_ctx);
 
-    if (wg != nullptr && wg->use_big_query_mem_limit()) {
-        _query_ctx->init_mem_tracker(wg->big_query_mem_limit(), wg->mem_tracker());
-    } else {
-        auto* parent_mem_tracker = wg != nullptr ? wg->mem_tracker() : exec_env->query_pool_mem_tracker();
-        auto per_instance_mem_limit = query_options.__isset.mem_limit ? query_options.mem_limit : -1;
-        auto option_query_mem_limit = query_options.__isset.query_mem_limit ? query_options.query_mem_limit : -1;
-        int64_t query_mem_limit = _query_ctx->compute_query_mem_limit(
-                parent_mem_tracker->limit(), per_instance_mem_limit, degree_of_parallelism, option_query_mem_limit);
-        _query_ctx->init_mem_tracker(query_mem_limit, parent_mem_tracker);
-    }
+    auto* parent_mem_tracker = wg->mem_tracker();
+    auto per_instance_mem_limit = query_options.__isset.mem_limit ? query_options.mem_limit : -1;
+    auto option_query_mem_limit = query_options.__isset.query_mem_limit ? query_options.query_mem_limit : -1;
+    int64_t query_mem_limit = _query_ctx->compute_query_mem_limit(parent_mem_tracker->limit(), per_instance_mem_limit,
+                                                                  degree_of_parallelism, option_query_mem_limit);
+    int64_t big_query_mem_limit = wg->use_big_query_mem_limit() ? wg->big_query_mem_limit() : -1;
+    _query_ctx->init_mem_tracker(query_mem_limit, parent_mem_tracker, big_query_mem_limit, wg.get());
 
     auto query_mem_tracker = _query_ctx->mem_tracker();
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
 
-    int func_version = request.common().__isset.func_version ? request.common().func_version : 2;
+    int func_version = request.common().__isset.func_version
+                               ? request.common().func_version
+                               : TFunctionVersion::type::RUNTIME_FILTER_SERIALIZE_VERSION_2;
     runtime_state->set_func_version(func_version);
     runtime_state->init_mem_trackers(query_mem_tracker);
     runtime_state->set_be_number(request.backend_num());
@@ -287,6 +297,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
     const auto& fragment = request.common().fragment;
     const auto dop = _calc_dop(exec_env, request);
     const auto& query_options = request.common().query_options;
+    const int chunk_size = runtime_state->chunk_size();
 
     bool enable_shared_scan = request.common().__isset.enable_shared_scan && request.common().enable_shared_scan;
     bool enable_tablet_internal_parallel =
@@ -319,7 +330,9 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 
     MorselQueueFactoryMap& morsel_queue_factories = _fragment_ctx->morsel_queue_factories();
 
-    if (fragment.__isset.cache_param) {
+    // If spill is turned on, then query cache will be turned off automatically
+    // TODO: Fix
+    if (fragment.__isset.cache_param && !runtime_state->enable_spill()) {
         auto const& tcache_param = fragment.cache_param;
         auto& cache_param = _fragment_ctx->cache_param();
         cache_param.plan_node_id = tcache_param.id;
@@ -333,29 +346,31 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
         }
         cache_param.can_use_multiversion = tcache_param.can_use_multiversion;
         cache_param.keys_type = tcache_param.keys_type;
+        if (tcache_param.__isset.cached_plan_node_ids) {
+            cache_param.cached_plan_node_ids.insert(tcache_param.cached_plan_node_ids.begin(),
+                                                    tcache_param.cached_plan_node_ids.end());
+        }
         _fragment_ctx->set_enable_cache(true);
     }
 
     for (auto& i : scan_nodes) {
         auto* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges = request.scan_ranges_of_node(scan_node->id());
-
-        PerDriverScanRangesMap& scan_ranges_per_driver = _fragment_ctx->scan_ranges_per_driver();
-        if (scan_ranges.size() >= dop && _fragment_ctx->enable_cache()) {
-            for (auto k = 0; k < scan_ranges.size(); ++k) {
-                scan_ranges_per_driver[k % dop].push_back(scan_ranges[k]);
-            }
-        }
-
-        const auto& scan_ranges_per_driver_seq = !scan_ranges_per_driver.empty()
-                                                         ? scan_ranges_per_driver
-                                                         : request.per_driver_seq_scan_ranges_of_node(scan_node->id());
-
+        const auto& scan_ranges_per_driver_seq = request.per_driver_seq_scan_ranges_of_node(scan_node->id());
         _fragment_ctx->cache_param().num_lanes = scan_node->io_tasks_per_scan_operator();
 
-        for (auto& [driver_seq, scan_ranges] : scan_ranges_per_driver_seq) {
-            for (auto& scan_range : scan_ranges) {
-                if (scan_range.scan_range.__isset.internal_scan_range && fragment.__isset.cache_param) {
+        if (scan_ranges_per_driver_seq.empty()) {
+            _fragment_ctx->set_enable_cache(false);
+        }
+
+        bool should_compute_cache_key_prefix = _fragment_ctx->enable_cache() &&
+                                               _fragment_ctx->cache_param().cached_plan_node_ids.count(scan_node->id());
+        if (should_compute_cache_key_prefix) {
+            for (auto& [driver_seq, scan_ranges] : scan_ranges_per_driver_seq) {
+                for (auto& scan_range : scan_ranges) {
+                    if (!scan_range.scan_range.__isset.internal_scan_range) {
+                        continue;
+                    }
                     const auto& tcache_param = fragment.cache_param;
                     auto& internal_scan_range = scan_range.scan_range.internal_scan_range;
                     auto tablet_id = internal_scan_range.tablet_id;
@@ -376,9 +391,6 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
             }
         }
 
-        if (scan_ranges_per_driver_seq.empty()) {
-            _fragment_ctx->set_enable_cache(false);
-        }
         // TODO (by satanson): shared_scan mechanism conflicts with per-tablet computation that is required for query
         //  cache, so it is turned off at present, it would be solved in the future.
         if (_fragment_ctx->enable_cache()) {
@@ -398,11 +410,13 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
     for (auto& i : scan_nodes) {
         auto* scan_node = down_cast<ScanNode*>(i);
         if (scan_node->limit() > 0) {
-            // the upper bound of records we actually will scan is `limit * dop * io_parallelism`.
+            // The upper bound of records we actually will scan is `limit * dop * io_parallelism`.
             // For SQL like: select * from xxx limit 5, the underlying scan_limit should be 5 * parallelism
-            // Otherwise this SQL would exceed the bigquery_rows_limit due to underlying IO parallelization
+            // Otherwise this SQL would exceed the bigquery_rows_limit due to underlying IO parallelization.
+            // Some chunk sources scan `chunk_size` rows at a time, so normalize `limit` to be rounded up to `chunk_size`.
             logical_scan_limit += scan_node->limit();
-            physical_scan_limit += scan_node->limit() * dop * scan_node->io_tasks_per_scan_operator();
+            int64_t normalized_limit = (scan_node->limit() + chunk_size - 1) / chunk_size * chunk_size;
+            physical_scan_limit += normalized_limit * dop * scan_node->io_tasks_per_scan_operator();
         } else {
             // Not sure how many rows will be scan.
             logical_scan_limit = -1;
@@ -473,10 +487,40 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
     return Status::OK();
 }
 
+Status create_lazy_instantiate_drivers_pipeline(RuntimeState* state, PipelineBuilderContext* ctx,
+                                                QueryContext* query_ctx, FragmentContext* fragment_ctx,
+                                                PipelineGroupMap&& unready_pipeline_groups, Drivers& drivers) {
+    if (unready_pipeline_groups.empty()) {
+        return Status::OK();
+    }
+
+    int32_t min_leader_plan_node_id = unready_pipeline_groups.begin()->first->plan_node_id();
+    for (const auto& [leader_source_op, _] : unready_pipeline_groups) {
+        min_leader_plan_node_id = std::min(min_leader_plan_node_id, leader_source_op->plan_node_id());
+    }
+
+    auto source_op = std::make_shared<LazyInstantiateDriversOperatorFactory>(
+            ctx->next_operator_id(), min_leader_plan_node_id, std::move(unready_pipeline_groups));
+    source_op->set_degree_of_parallelism(1);
+
+    OpFactories ops;
+    ops.emplace_back(std::move(source_op));
+    ops.emplace_back(std::make_shared<NoopSinkOperatorFactory>(ctx->next_operator_id(), min_leader_plan_node_id));
+
+    auto pipe = std::make_shared<Pipeline>(ctx->next_pipe_id(), ops);
+    fragment_ctx->pipelines().emplace_back(pipe);
+
+    RETURN_IF_ERROR(pipe->prepare(state));
+    pipe->instantiate_drivers(state);
+
+    return Status::OK();
+}
+
 Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
     const auto degree_of_parallelism = _calc_dop(exec_env, request);
     const auto& fragment = request.common().fragment;
     const auto& params = request.common().params;
+    auto is_stream_pipeline = request.is_stream_pipeline();
     ExecNode* plan = _fragment_ctx->plan();
 
     Drivers drivers;
@@ -485,7 +529,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     const auto& pipelines = _fragment_ctx->pipelines();
 
     // Build pipelines
-    PipelineBuilderContext context(_fragment_ctx.get(), degree_of_parallelism);
+    PipelineBuilderContext context(_fragment_ctx.get(), degree_of_parallelism, is_stream_pipeline);
     PipelineBuilder builder(context);
     _fragment_ctx->set_pipelines(builder.build(*_fragment_ctx, plan));
 
@@ -496,13 +540,8 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
         if (tsink.type == TDataSinkType::RESULT_SINK) {
             _query_ctx->set_result_sink(true);
         }
-        RowDescriptor row_desc;
         RETURN_IF_ERROR(DataSink::create_data_sink(runtime_state, tsink, fragment.output_exprs, params,
-                                                   request.sender_id(), row_desc, &datasink));
-        RuntimeProfile* sink_profile = datasink->profile();
-        if (sink_profile != nullptr) {
-            runtime_state->runtime_profile()->add_child(sink_profile, true, nullptr);
-        }
+                                                   request.sender_id(), plan->row_desc(), &datasink));
         RETURN_IF_ERROR(_decompose_data_sink_to_operator(runtime_state, &context, request, datasink, tsink,
                                                          fragment.output_exprs));
     }
@@ -520,8 +559,21 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
         }
     }
 
+    PipelineGroupMap unready_pipeline_groups;
     for (const auto& pipeline : pipelines) {
+        auto* source_op = pipeline->source_operator_factory();
+        if (!source_op->is_adaptive_group_active()) {
+            auto* group_leader_source_op = source_op->group_leader();
+            unready_pipeline_groups[group_leader_source_op].emplace_back(pipeline);
+            continue;
+        }
+
         pipeline->instantiate_drivers(runtime_state);
+    }
+
+    if (!unready_pipeline_groups.empty()) {
+        RETURN_IF_ERROR(create_lazy_instantiate_drivers_pipeline(
+                runtime_state, &context, _query_ctx, _fragment_ctx.get(), std::move(unready_pipeline_groups), drivers));
     }
 
     // Acquire driver token to avoid overload
@@ -553,28 +605,73 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     UnifiedExecPlanFragmentParams request(common_request, unique_request);
 
     bool prepare_success = false;
-    int64_t prepare_time = 0;
-    DeferOp defer([this, &request, &prepare_success, &prepare_time]() {
+    struct {
+        int64_t prepare_time = 0;
+        int64_t prepare_query_ctx_time = 0;
+        int64_t prepare_fragment_ctx_time = 0;
+        int64_t prepare_runtime_state_time = 0;
+        int64_t prepare_pipeline_driver_time = 0;
+
+        int64_t process_mem_bytes = GlobalEnv::GetInstance()->process_mem_tracker()->consumption();
+        size_t num_process_drivers = ExecEnv::GetInstance()->driver_limiter()->num_total_drivers();
+    } profiler;
+
+    DeferOp defer([this, &request, &prepare_success, &profiler]() {
         if (prepare_success) {
             auto fragment_ctx = _query_ctx->fragment_mgr()->get(request.fragment_instance_id());
-            auto* prepare_timer =
-                    ADD_TIMER(fragment_ctx->runtime_state()->runtime_profile(), "FragmentInstancePrepareTime");
-            COUNTER_SET(prepare_timer, prepare_time);
+            auto* profile = fragment_ctx->runtime_state()->runtime_profile();
+
+            auto* prepare_timer = ADD_TIMER(profile, "FragmentInstancePrepareTime");
+            COUNTER_SET(prepare_timer, profiler.prepare_time);
+
+            auto* prepare_query_ctx_timer =
+                    ADD_CHILD_TIMER_THESHOLD(profile, "prepare-query-ctx", "FragmentInstancePrepareTime", 10_ms);
+            COUNTER_SET(prepare_query_ctx_timer, profiler.prepare_query_ctx_time);
+
+            auto* prepare_fragment_ctx_timer =
+                    ADD_CHILD_TIMER_THESHOLD(profile, "prepare-fragment-ctx", "FragmentInstancePrepareTime", 10_ms);
+            COUNTER_SET(prepare_fragment_ctx_timer, profiler.prepare_fragment_ctx_time);
+
+            auto* prepare_runtime_state_timer =
+                    ADD_CHILD_TIMER_THESHOLD(profile, "prepare-runtime-state", "FragmentInstancePrepareTime", 10_ms);
+            COUNTER_SET(prepare_runtime_state_timer, profiler.prepare_runtime_state_time);
+
+            auto* prepare_pipeline_driver_timer =
+                    ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver", "FragmentInstancePrepareTime", 10_ms);
+            COUNTER_SET(prepare_pipeline_driver_timer, profiler.prepare_runtime_state_time);
+
+            auto* process_mem_counter = ADD_COUNTER(profile, "InitialProcessMem", TUnit::BYTES);
+            COUNTER_SET(process_mem_counter, profiler.process_mem_bytes);
+            auto* num_process_drivers_counter = ADD_COUNTER(profile, "InitialProcessDriverCount", TUnit::UNIT);
+            COUNTER_SET(num_process_drivers_counter, static_cast<int64_t>(profiler.num_process_drivers));
         } else {
-            _fail_cleanup();
+            _fail_cleanup(prepare_success);
         }
     });
-    SCOPED_RAW_TIMER(&prepare_time);
-    RETURN_IF_ERROR(exec_env->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
 
-    RETURN_IF_ERROR(_prepare_query_ctx(exec_env, request));
-    RETURN_IF_ERROR(_prepare_fragment_ctx(request));
-    RETURN_IF_ERROR(_prepare_workgroup(request));
-    RETURN_IF_ERROR(_prepare_runtime_state(exec_env, request));
-    RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
-    RETURN_IF_ERROR(_prepare_global_dict(request));
-    RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request));
-    RETURN_IF_ERROR(_prepare_stream_load_pipe(exec_env, request));
+    SCOPED_RAW_TIMER(&profiler.prepare_time);
+    RETURN_IF_ERROR(
+            GlobalEnv::GetInstance()->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
+    {
+        SCOPED_RAW_TIMER(&profiler.prepare_query_ctx_time);
+        RETURN_IF_ERROR(_prepare_query_ctx(exec_env, request));
+    }
+    {
+        SCOPED_RAW_TIMER(&profiler.prepare_fragment_ctx_time);
+        RETURN_IF_ERROR(_prepare_fragment_ctx(request));
+    }
+    {
+        SCOPED_RAW_TIMER(&profiler.prepare_runtime_state_time);
+        RETURN_IF_ERROR(_prepare_workgroup(request));
+        RETURN_IF_ERROR(_prepare_runtime_state(exec_env, request));
+        RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
+        RETURN_IF_ERROR(_prepare_global_dict(request));
+    }
+    {
+        SCOPED_RAW_TIMER(&profiler.prepare_pipeline_driver_time);
+        RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request));
+        RETURN_IF_ERROR(_prepare_stream_load_pipe(exec_env, request));
+    }
 
     RETURN_IF_ERROR(_query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx));
     prepare_success = true;
@@ -586,7 +683,7 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     bool prepare_success = false;
     DeferOp defer([this, &prepare_success]() {
         if (!prepare_success) {
-            _fail_cleanup();
+            _fail_cleanup(true);
         }
     });
 
@@ -594,10 +691,9 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
             [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); }));
     prepare_success = true;
 
-    auto* executor =
-            _fragment_ctx->enable_resource_group() ? exec_env->wg_driver_executor() : exec_env->driver_executor();
+    DCHECK(_fragment_ctx->enable_resource_group());
+    auto* executor = exec_env->wg_driver_executor();
     _fragment_ctx->iterate_drivers([executor, fragment_ctx = _fragment_ctx.get()](const DriverPtr& driver) {
-        DCHECK(!fragment_ctx->enable_resource_group() || driver->workgroup() != nullptr);
         executor->submit(driver.get());
         return Status::OK();
     });
@@ -605,10 +701,12 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     return Status::OK();
 }
 
-void FragmentExecutor::_fail_cleanup() {
+void FragmentExecutor::_fail_cleanup(bool fragment_has_registed) {
     if (_query_ctx) {
         if (_fragment_ctx) {
-            _query_ctx->fragment_mgr()->unregister(_fragment_ctx->fragment_instance_id());
+            if (fragment_has_registed) {
+                _query_ctx->fragment_mgr()->unregister(_fragment_ctx->fragment_instance_id());
+            }
             _fragment_ctx->destroy_pass_through_chunk_buffer();
             _fragment_ctx.reset();
         }
@@ -639,7 +737,8 @@ std::shared_ptr<ExchangeSinkOperatorFactory> _create_exchange_sink_operator(Pipe
     auto exchange_sink = std::make_shared<ExchangeSinkOperatorFactory>(
             context->next_operator_id(), stream_sink.dest_node_id, sink_buffer, sender->get_partition_type(),
             sender->destinations(), is_pipeline_level_shuffle, dest_dop, sender->sender_id(),
-            sender->get_dest_node_id(), sender->get_partition_exprs(), sender->get_enable_exchange_pass_through(),
+            sender->get_dest_node_id(), sender->get_partition_exprs(),
+            !is_dest_merge && sender->get_enable_exchange_pass_through(),
             sender->get_enable_exchange_perf() && !context->has_aggregation, fragment_ctx, sender->output_columns());
     return exchange_sink;
 }
@@ -664,6 +763,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
                                                            result_sink->get_file_opts(), dop, fragment_ctx);
         } else {
             op = std::make_shared<ResultSinkOperatorFactory>(context->next_operator_id(), result_sink->get_sink_type(),
+                                                             result_sink->get_format_type(),
                                                              result_sink->get_output_exprs(), fragment_ctx);
         }
         // Add result sink operator to last pipeline
@@ -697,10 +797,11 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
 
         // === create sink op ====
         auto pseudo_plan_node_id = context->next_pseudo_plan_node_id();
+        auto* upstream_pipeline = fragment_ctx->pipelines().back().get();
         {
             OpFactoryPtr sink_op = std::make_shared<MultiCastLocalExchangeSinkOperatorFactory>(
                     context->next_operator_id(), pseudo_plan_node_id, mcast_local_exchanger);
-            fragment_ctx->pipelines().back()->add_op_factory(sink_op);
+            upstream_pipeline->add_op_factory(sink_op);
         }
 
         // ==== create source/sink pipelines ====
@@ -715,6 +816,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
             auto source_op = std::make_shared<MultiCastLocalExchangeSourceOperatorFactory>(
                     context->next_operator_id(), pseudo_plan_node_id, i, mcast_local_exchanger);
             source_op->set_degree_of_parallelism(dop);
+            source_op->set_group_leader(upstream_pipeline->source_operator_factory());
 
             // sink op
             auto sink_op = _create_exchange_sink_operator(context, t_stream_sink, sender.get(), dop);
@@ -741,10 +843,6 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
             if (sink != nullptr) {
                 RETURN_IF_ERROR(sink->init(thrift_sink, runtime_state));
             }
-            RuntimeProfile* sink_profile = sink->profile();
-            if (sink_profile != nullptr) {
-                runtime_state->runtime_profile()->add_child(sink_profile, true, nullptr);
-            }
             tablet_sinks.emplace_back(std::move(sink));
         }
         OpFactoryPtr tablet_sink_op = std::make_shared<OlapTableSinkOperatorFactory>(
@@ -762,31 +860,13 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
             std::vector<OpFactories> pred_operators_list;
             pred_operators_list.push_back(fragment_ctx->pipelines().back()->get_op_factories());
 
-            size_t max_row_count = 0;
+            size_t max_input_dop = 0;
             auto* source_operator =
                     down_cast<SourceOperatorFactory*>(fragment_ctx->pipelines().back()->get_op_factories()[0].get());
-            max_row_count += source_operator->degree_of_parallelism() * runtime_state->chunk_size();
+            max_input_dop += source_operator->degree_of_parallelism();
 
-            auto pseudo_plan_node_id = context->next_pseudo_plan_node_id();
-            auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(
-                    max_row_count * PipelineBuilderContext::localExchangeBufferChunks());
-            auto local_exchange_source = std::make_shared<LocalExchangeSourceOperatorFactory>(
-                    context->next_operator_id(), pseudo_plan_node_id, mem_mgr);
-            local_exchange_source->set_runtime_state(runtime_state);
-            auto exchanger = std::make_shared<PassthroughExchanger>(mem_mgr, local_exchange_source.get());
-
-            auto local_exchange_sink = std::make_shared<LocalExchangeSinkOperatorFactory>(
-                    context->next_operator_id(), pseudo_plan_node_id, exchanger);
-            fragment_ctx->pipelines().back()->add_op_factory(local_exchange_sink);
-
-            OpFactories operators_source_with_local_exchange;
-            local_exchange_source->set_degree_of_parallelism(desired_tablet_sink_dop);
-            operators_source_with_local_exchange.emplace_back(std::move(local_exchange_source));
-            operators_source_with_local_exchange.emplace_back(std::move(tablet_sink_op));
-
-            auto pipeline_with_local_exchange_source =
-                    std::make_shared<Pipeline>(context->next_pipe_id(), operators_source_with_local_exchange);
-            fragment_ctx->pipelines().emplace_back(std::move(pipeline_with_local_exchange_source));
+            context->maybe_interpolate_local_passthrough_exchange_for_sink(runtime_state, tablet_sink_op, max_input_dop,
+                                                                           desired_tablet_sink_dop);
         } else {
             fragment_ctx->pipelines().back()->add_op_factory(tablet_sink_op);
         }
@@ -815,6 +895,43 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         OpFactoryPtr op = std::make_shared<MemoryScratchSinkOperatorFactory>(context->next_operator_id(), row_desc,
                                                                              output_expr, fragment_ctx);
         fragment_ctx->pipelines().back()->add_op_factory(op);
+    } else if (typeid(*datasink) == typeid(starrocks::IcebergTableSink)) {
+        auto* iceberg_table_sink = down_cast<starrocks::IcebergTableSink*>(datasink.get());
+        TableDescriptor* table_desc =
+                runtime_state->desc_tbl().get_table_descriptor(thrift_sink.iceberg_table_sink.target_table_id);
+        auto* iceberg_table_desc = down_cast<IcebergTableDescriptor*>(table_desc);
+
+        std::vector<TExpr> partition_expr;
+        std::vector<ExprContext*> partition_expr_ctxs;
+        auto output_expr = iceberg_table_sink->get_output_expr();
+        for (const auto& index : iceberg_table_desc->partition_index_in_schema()) {
+            partition_expr.push_back(output_expr[index]);
+        }
+
+        RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state->obj_pool(), partition_expr, &partition_expr_ctxs,
+                                                runtime_state));
+
+        auto* source_operator =
+                down_cast<SourceOperatorFactory*>(fragment_ctx->pipelines().back()->source_operator_factory());
+
+        size_t desired_iceberg_sink_dop = request.pipeline_sink_dop();
+        size_t source_operator_dop = source_operator->degree_of_parallelism();
+        OpFactoryPtr iceberg_table_sink_op = std::make_shared<IcebergTableSinkOperatorFactory>(
+                context->next_operator_id(), fragment_ctx, iceberg_table_sink->get_output_expr(), iceberg_table_desc,
+                thrift_sink.iceberg_table_sink, partition_expr_ctxs);
+
+        if (iceberg_table_desc->is_unpartitioned_table() || thrift_sink.iceberg_table_sink.is_static_partition_sink) {
+            if (desired_iceberg_sink_dop != source_operator_dop) {
+                context->maybe_interpolate_local_passthrough_exchange_for_sink(
+                        runtime_state, iceberg_table_sink_op, source_operator_dop, desired_iceberg_sink_dop);
+            } else {
+                fragment_ctx->pipelines().back()->get_op_factories().emplace_back(std::move(iceberg_table_sink_op));
+            }
+        } else {
+            context->maybe_interpolate_local_key_partition_exchange_for_sink(runtime_state, iceberg_table_sink_op,
+                                                                             partition_expr_ctxs, source_operator_dop,
+                                                                             desired_iceberg_sink_dop);
+        }
     }
 
     return Status::OK();

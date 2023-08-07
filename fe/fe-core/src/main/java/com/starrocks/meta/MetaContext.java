@@ -40,22 +40,12 @@ package com.starrocks.meta;
  */
 public class MetaContext {
 
-    private int metaVersion;
     private int starrocksMetaVersion;
 
     private static ThreadLocal<MetaContext> threadLocalInfo = new ThreadLocal<MetaContext>();
 
     public MetaContext() {
 
-    }
-
-    public void setMetaVersion(int metaVersion) {
-        this.metaVersion = metaVersion;
-    }
-
-    //NOTICE: for community meta version
-    public int getMetaVersion() {
-        return metaVersion;
     }
 
     public void setStarRocksMetaVersion(int starrocksVersion) {

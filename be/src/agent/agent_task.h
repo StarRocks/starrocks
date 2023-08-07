@@ -30,6 +30,7 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
 void run_storage_medium_migrate_task(const std::shared_ptr<StorageMediumMigrateTaskRequest>& agent_task_req,
                                      ExecEnv* exec_env);
 void run_check_consistency_task(const std::shared_ptr<CheckConsistencyTaskRequest>& agent_task_req, ExecEnv* exec_env);
+void run_compaction_task(const std::shared_ptr<CompactionTaskRequest>& agent_task_req, ExecEnv* exec_env);
 void run_upload_task(const std::shared_ptr<UploadAgentTaskRequest>& agent_task_req, ExecEnv* exec_env);
 void run_download_task(const std::shared_ptr<DownloadAgentTaskRequest>& agent_task_req, ExecEnv* exec_env);
 void run_make_snapshot_task(const std::shared_ptr<SnapshotAgentTaskRequest>& agent_task_req, ExecEnv* exec_env);
@@ -38,4 +39,6 @@ void run_release_snapshot_task(const std::shared_ptr<ReleaseSnapshotAgentTaskReq
 void run_move_dir_task(const std::shared_ptr<MoveDirAgentTaskRequest>& agent_task_req, ExecEnv* exec_env);
 void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTaskRequest>& agent_task_req,
                                ExecEnv* exec_env);
+void run_drop_auto_increment_map_task(const std::shared_ptr<DropAutoIncrementMapAgentTaskRequest>& agent_task_req,
+                                      ExecEnv* exec_env);
 } // namespace starrocks

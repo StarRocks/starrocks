@@ -12,18 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
@@ -32,6 +38,7 @@ import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -46,6 +53,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -83,7 +91,7 @@ public class HiveMetadataTest {
         metastore = new HiveMetastore(client, "hive_catalog");
         cachingHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
                 metastore, executorForHmsRefresh, 100, 10, 1000, false);
-        hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true);
+        hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration(), MetastoreType.HMS, "hive_catalog");
 
         hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
         FileSystem fs = new MockedRemoteFileSystem(TEST_FILES);
@@ -164,7 +172,7 @@ public class HiveMetadataTest {
                 Lists.newArrayList("2"), hiveTable.getPartitionColumns());
 
         List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemoteFileInfos(
-                hiveTable, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
+                hiveTable, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), -1, null, null);
         Assert.assertEquals(2, remoteFileInfos.size());
 
         RemoteFileInfo fileInfo = remoteFileInfos.get(0);
@@ -210,9 +218,11 @@ public class HiveMetadataTest {
         PartitionKey hivePartitionKey2 = PartitionUtil.createPartitionKey(
                 Lists.newArrayList("2"), hiveTable.getPartitionColumns());
 
-        Statistics statistics = hiveMetadata.getTableStatistics(
-                optimizerContext, hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
-                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
+        Map<ColumnRefOperator, Column> columns = new HashMap<>();
+        columns.put(partColumnRefOperator, null);
+        columns.put(dataColumnRefOperator, null);
+        Statistics statistics = hiveMetadata.getTableStatistics(optimizerContext, hiveTable, columns,
+                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null);
         Assert.assertEquals(1, statistics.getOutputRowCount(), 0.001);
         Assert.assertEquals(2, statistics.getColumnStatistics().size());
         Assert.assertTrue(statistics.getColumnStatistics().get(partColumnRefOperator).isUnknown());
@@ -228,16 +238,19 @@ public class HiveMetadataTest {
                 Lists.newArrayList("1"), hiveTable.getPartitionColumns());
         PartitionKey hivePartitionKey2 = PartitionUtil.createPartitionKey(
                 Lists.newArrayList("2"), hiveTable.getPartitionColumns());
-        Statistics statistics = hiveMetadata.getTableStatistics(
-                optimizerContext, hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
-                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
+        Map<ColumnRefOperator, Column> columns = new HashMap<>();
+        columns.put(partColumnRefOperator, null);
+        columns.put(dataColumnRefOperator, null);
+
+        Statistics statistics = hiveMetadata.getTableStatistics(optimizerContext, hiveTable, columns,
+                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null);
         Assert.assertEquals(1,  statistics.getOutputRowCount(), 0.001);
         Assert.assertEquals(2, statistics.getColumnStatistics().size());
 
         cachingHiveMetastore.getPartitionStatistics(hiveTable, Lists.newArrayList("col1=1", "col1=2"));
-        statistics = hiveMetadata.getTableStatistics(
-                optimizerContext, hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
-                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
+        statistics = hiveMetadata.getTableStatistics(optimizerContext, hiveTable, columns,
+                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null);
+
         Assert.assertEquals(100, statistics.getOutputRowCount(), 0.001);
         Map<ColumnRefOperator, ColumnStatistic> columnStatistics = statistics.getColumnStatistics();
         ColumnStatistic partitionColumnStats = columnStatistics.get(partColumnRefOperator);
@@ -252,5 +265,56 @@ public class HiveMetadataTest {
         Assert.assertEquals(0.03, dataColumnStats.getNullsFraction(), 0.001);
         Assert.assertEquals(4, dataColumnStats.getAverageRowSize(), 0.001);
         Assert.assertEquals(5, dataColumnStats.getDistinctValuesCount(), 0.001);
+    }
+
+    @Test
+    public void createDbTest() throws AlreadyExistsException {
+        ExceptionChecker.expectThrowsWithMsg(AlreadyExistsException.class,
+                "Database Already Exists",
+                () -> hiveMetadata.createDb("db1", new HashMap<>()));
+
+        Map<String, String> conf = new HashMap<>();
+        conf.put("location", "abs://xxx/zzz");
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Invalid location URI: abs://xxx/zzz",
+                () -> hiveMetadata.createDb("db3", conf));
+
+        conf.clear();
+        conf.put("not_support_prop", "xxx");
+        ExceptionChecker.expectThrowsWithMsg(IllegalArgumentException.class,
+                "Unrecognized property: not_support_prop",
+                () -> hiveMetadata.createDb("db3", conf));
+
+        conf.clear();
+        hiveMetadata.createDb("db4", conf);
+    }
+
+    @Test
+    public void dropDbTest() {
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Database d1 not empty",
+                () -> hiveMetadata.dropDb("d1", true));
+
+        ExceptionChecker.expectThrowsWithMsg(MetaNotFoundException.class,
+                "Failed to access database empty_db",
+                () -> hiveMetadata.dropDb("empty_db", true));
+    }
+
+    @Test
+    public void testMetastoreType() {
+        Assert.assertEquals(MetastoreType.HMS, MetastoreType.get("hive"));
+        Assert.assertEquals(MetastoreType.GLUE, MetastoreType.get("glue"));
+        Assert.assertEquals(MetastoreType.DLF, MetastoreType.get("dlf"));
+    }
+
+    @Test
+    public void testDropTable() throws DdlException {
+        TableName tableName = new TableName("hive_catalog", "hive_db", "hive_table");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Table location will be cleared. 'Force' must be set when dropping a hive table." +
+                        " Please execute 'drop table hive_catalog.hive_db.hive_table force",
+                () -> hiveMetadata.dropTable(new DropTableStmt(false, tableName, false)));
+
+        hiveMetadata.dropTable(new DropTableStmt(false, tableName, true));
     }
 }

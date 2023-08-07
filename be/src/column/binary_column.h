@@ -17,6 +17,7 @@
 #include "column/bytes.h"
 #include "column/column.h"
 #include "column/datum.h"
+#include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "util/slice.h"
 
@@ -36,22 +37,33 @@ public:
 
     using Container = Buffer<Slice>;
 
+    struct BinaryDataProxyContainer {
+        BinaryDataProxyContainer(const BinaryColumnBase& column) : _column(column) {}
+
+        Slice operator[](size_t index) const { return _column.get_slice(index); }
+
+        size_t size() { return _column.size(); }
+
+    private:
+        const BinaryColumnBase& _column;
+    };
+
     // TODO(kks): when we create our own vector, we could let vector[-1] = 0,
     // and then we don't need explicitly emplace_back zero value
-    BinaryColumnBase<T>() { _offsets.emplace_back(0); }
+    BinaryColumnBase() { _offsets.emplace_back(0); }
     // Default value is empty string
-    explicit BinaryColumnBase<T>(size_t size) : _offsets(size + 1, 0) {}
-    BinaryColumnBase<T>(Bytes bytes, Offsets offsets) : _bytes(std::move(bytes)), _offsets(std::move(offsets)) {
+    explicit BinaryColumnBase(size_t size) : _offsets(size + 1, 0) {}
+    BinaryColumnBase(Bytes bytes, Offsets offsets) : _bytes(std::move(bytes)), _offsets(std::move(offsets)) {
         if (_offsets.empty()) {
             _offsets.emplace_back(0);
         }
     }
 
     // NOTE: do *NOT* copy |_slices|
-    BinaryColumnBase<T>(const BinaryColumnBase<T>& rhs) : _bytes(rhs._bytes), _offsets(rhs._offsets) {}
+    BinaryColumnBase(const BinaryColumnBase<T>& rhs) : _bytes(rhs._bytes), _offsets(rhs._offsets) {}
 
     // NOTE: do *NOT* copy |_slices|
-    BinaryColumnBase<T>(BinaryColumnBase<T>&& rhs) noexcept
+    BinaryColumnBase(BinaryColumnBase<T>&& rhs) noexcept
             : _bytes(std::move(rhs._bytes)), _offsets(std::move(rhs._offsets)) {}
 
     BinaryColumnBase<T>& operator=(const BinaryColumnBase<T>& rhs) {
@@ -72,7 +84,7 @@ public:
 
     bool has_large_column() const override;
 
-    ~BinaryColumnBase<T>() override {
+    ~BinaryColumnBase() override {
         if (!_offsets.empty()) {
             DCHECK_EQ(_bytes.size(), _offsets.back());
         } else {
@@ -80,7 +92,6 @@ public:
         }
     }
 
-    bool low_cardinality() const override { return false; }
     bool is_binary() const override { return std::is_same_v<T, uint32_t> != 0; }
     bool is_large_binary() const override { return std::is_same_v<T, uint64_t> != 0; }
 
@@ -168,7 +179,7 @@ public:
 
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
-    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
+    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) override;
 
     bool append_nulls(size_t count) override { return false; }
 
@@ -196,7 +207,7 @@ public:
     }
 
     void append_default(size_t count) override {
-        _offsets.insert(_offsets.end(), count, _bytes.size());
+        _offsets.insert(_offsets.end(), count, static_cast<uint32_t>(_bytes.size()));
         _slices_cache = false;
     }
 
@@ -204,7 +215,7 @@ public:
 
     void fill_default(const Filter& filter) override;
 
-    Status update_rows(const Column& src, const uint32_t* indexes) override;
+    void update_rows(const Column& src, const uint32_t* indexes) override;
 
     uint32_t max_one_element_serialize_size() const override;
 
@@ -221,13 +232,13 @@ public:
 
     uint32_t serialize_size(size_t idx) const override {
         // max size of one string is 2^32, so use sizeof(uint32_t) not sizeof(T)
-        return sizeof(uint32_t) + _offsets[idx + 1] - _offsets[idx];
+        return static_cast<uint32_t>(sizeof(uint32_t) + _offsets[idx + 1] - _offsets[idx]);
     }
 
     MutableColumnPtr clone_empty() const override { return BinaryColumnBase<T>::create_mutable(); }
 
     ColumnPtr cut(size_t start, size_t length) const;
-    size_t filter_range(const Column::Filter& filter, size_t start, size_t to) override;
+    size_t filter_range(const Filter& filter, size_t start, size_t to) override;
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
@@ -261,6 +272,8 @@ public:
         return _slices;
     }
 
+    const BinaryDataProxyContainer& get_proxy_data() const { return _immuable_container; }
+
     Bytes& get_bytes() { return _bytes; }
 
     const Bytes& get_bytes() const { return _bytes; }
@@ -275,6 +288,8 @@ public:
     size_t container_memory_usage() const override {
         return _bytes.capacity() + _offsets.capacity() * sizeof(_offsets[0]) + _slices.capacity() * sizeof(_slices[0]);
     }
+
+    size_t reference_memory_usage(size_t from, size_t size) const override { return 0; }
 
     void swap_column(Column& rhs) override {
         auto& r = down_cast<BinaryColumnBase<T>&>(rhs);
@@ -297,17 +312,15 @@ public:
 
     void invalidate_slice_cache() { _slices_cache = false; }
 
-    std::string debug_item(uint32_t idx) const override;
+    std::string debug_item(size_t idx) const override;
+
+    std::string raw_item_value(size_t idx) const override;
 
     std::string debug_string() const override {
         std::stringstream ss;
         size_t size = this->size();
-        if (size == 0) {
-            return "[]";
-        }
-
         ss << "[";
-        for (size_t i = 0; i < size - 1; i++) {
+        for (size_t i = 0; i + 1 < size; ++i) {
             ss << debug_item(i) << ", ";
         }
         if (size > 0) {
@@ -327,6 +340,7 @@ private:
 
     mutable Container _slices;
     mutable bool _slices_cache = false;
+    BinaryDataProxyContainer _immuable_container = BinaryDataProxyContainer(*this);
 };
 
 using Offsets = BinaryColumnBase<uint32_t>::Offsets;

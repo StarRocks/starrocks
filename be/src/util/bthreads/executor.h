@@ -34,7 +34,7 @@ class ThreadPool;
 namespace starrocks::bthreads {
 
 // Used to run bthread::ExecutionQueue task in pthread instead of bthread.
-// Reference: https://github.com/apache/incubator-brpc/blob/master/docs/cn/execution_queue.md
+// Reference: https://github.com/apache/brpc/blob/master/docs/cn/execution_queue.md
 class ThreadPoolExecutor : public bthread::Executor {
 public:
     constexpr static int64_t kDefaultBusySleepMs = 50;
@@ -52,6 +52,8 @@ public:
         assert(_thread_pool == nullptr);
         _thread_pool = thread_pool;
     }
+
+    ThreadPool* get_thread_pool() { return _thread_pool; }
 
     void set_ownership(Ownership ownership) { _ownership = ownership; }
 

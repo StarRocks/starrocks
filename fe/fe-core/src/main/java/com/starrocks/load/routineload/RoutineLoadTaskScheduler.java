@@ -44,12 +44,12 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.routineload.RoutineLoadJob.JobState;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRoutineLoadTask;
@@ -73,7 +73,7 @@ import java.util.concurrent.TimeUnit;
  * <p>
  * The scheduler will be blocked in step3 till the queue receive a new task
  */
-public class RoutineLoadTaskScheduler extends LeaderDaemon {
+public class RoutineLoadTaskScheduler extends FrontendDaemon {
 
     private static final Logger LOG = LogManager.getLogger(RoutineLoadTaskScheduler.class);
 
@@ -81,7 +81,7 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
     private static final long SLOT_FULL_SLEEP_MS = 10000; // 10s
     private static final int THREAD_POOL_SIZE = 10;
 
-    private final RoutineLoadManager routineLoadManager;
+    private final RoutineLoadMgr routineLoadManager;
     private final LinkedBlockingQueue<RoutineLoadTaskInfo> needScheduleTasksQueue = Queues.newLinkedBlockingQueue();
     private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
     private final ExecutorService threadPool = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
@@ -91,10 +91,10 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
     @VisibleForTesting
     public RoutineLoadTaskScheduler() {
         super("Routine load task scheduler", 0);
-        this.routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadManager();
+        this.routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
     }
 
-    public RoutineLoadTaskScheduler(RoutineLoadManager routineLoadManager) {
+    public RoutineLoadTaskScheduler(RoutineLoadMgr routineLoadManager) {
         super("Routine load task scheduler", 0);
         this.routineLoadManager = routineLoadManager;
     }
@@ -320,12 +320,13 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
     }
 
     private void submitTask(long beId, TRoutineLoadTask tTask) throws LoadException {
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
-        if (backend == null) {
+        // TODO: need to refactor after be split into cn + dn
+        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(beId);
+        if (node == null) {
             throw new LoadException("failed to send tasks to backend " + beId + " because not exist");
         }
 
-        TNetworkAddress address = new TNetworkAddress(backend.getHost(), backend.getBePort());
+        TNetworkAddress address = new TNetworkAddress(node.getHost(), node.getBePort());
 
         boolean ok = false;
         BackendService.Client client = null;

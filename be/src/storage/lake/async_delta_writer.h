@@ -34,6 +34,7 @@ class Chunk;
 namespace starrocks::lake {
 
 class AsyncDeltaWriterImpl;
+class TabletManager;
 
 // AsyncDeltaWriter is a wrapper on DeltaWriter to support non-blocking async write.
 // All submitted tasks will be executed in the FIFO order.
@@ -44,9 +45,19 @@ public:
     using Ptr = std::unique_ptr<AsyncDeltaWriter>;
     using Callback = std::function<void(Status st)>;
 
-    // |slots| and |mem_tracker| must outlive the AsyncDeltaWriter
-    static Ptr create(int64_t tablet_id, int64_t txn_id, int64_t partition_id,
+    // |tablet_manager|、|slots| and |mem_tracker| must outlive the AsyncDeltaWriter
+    static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
                       const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker);
+
+    // |tablet_manager|、|slots| and |mem_tracker| must outlive the AsyncDeltaWriter
+    static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
+                      const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
+                      MemTracker* mem_tracker);
+
+    // |tablet_manager|、|slots| and |mem_tracker| must outlive the AsyncDeltaWriter
+    static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
+                      const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
+                      bool miss_auto_increment_column, int64_t table_id, MemTracker* mem_tracker);
 
     explicit AsyncDeltaWriter(AsyncDeltaWriterImpl* impl) : _impl(impl) {}
 

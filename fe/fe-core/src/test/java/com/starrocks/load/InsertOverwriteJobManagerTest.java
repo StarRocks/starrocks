@@ -64,12 +64,12 @@ public class InsertOverwriteJobManagerTest {
     @Mocked
     private InsertOverwriteJobRunner runner;
 
-    private InsertOverwriteJobManager insertOverwriteJobManager;
+    private InsertOverwriteJobMgr insertOverwriteJobManager;
     private List<Long> targetPartitionIds;
 
     @Before
     public void setUp() {
-        insertOverwriteJobManager = new InsertOverwriteJobManager();
+        insertOverwriteJobManager = new InsertOverwriteJobMgr();
         targetPartitionIds = Lists.newArrayList(10L, 20L, 30L, 40L);
     }
 
@@ -153,7 +153,7 @@ public class InsertOverwriteJobManagerTest {
 
         ByteArrayInputStream inputStream = new ByteArrayInputStream(outputStream.toByteArray());
         DataInputStream dataInputStream = new DataInputStream(inputStream);
-        InsertOverwriteJobManager newInsertOverwriteJobManager = InsertOverwriteJobManager.read(dataInputStream);
+        InsertOverwriteJobMgr newInsertOverwriteJobManager = InsertOverwriteJobMgr.read(dataInputStream);
         Assert.assertEquals(1, newInsertOverwriteJobManager.getJobNum());
         InsertOverwriteJob newJob = insertOverwriteJobManager.getInsertOverwriteJob(1000L);
         Assert.assertEquals(insertOverwriteJob1, newJob);

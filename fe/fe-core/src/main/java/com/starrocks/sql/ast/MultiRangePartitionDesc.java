@@ -25,23 +25,29 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.sql.parser.NodePosition;
 
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.time.DayOfWeek;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.time.temporal.ChronoField;
-import java.time.temporal.WeekFields;
+import java.time.temporal.TemporalAdjusters;
+import java.util.Calendar;
 import java.util.List;
 import java.util.Map;
+import java.util.TimeZone;
 
 public class MultiRangePartitionDesc extends PartitionDesc {
 
     private final String defaultPrefix = "p";
+    private final String defaultTempPartitionPrefix = "tp";
     private final String partitionBegin;
     private final String partitionEnd;
     private Long step;
-    private String timeUnit;
+    private final String timeUnit;
+    private static final SimpleDateFormat DATEKEY_SDF = new SimpleDateFormat("yyyyMMdd");
     private final ImmutableSet<TimestampArithmeticExpr.TimeUnit> supportedTimeUnitType = ImmutableSet.of(
             TimestampArithmeticExpr.TimeUnit.HOUR,
             TimestampArithmeticExpr.TimeUnit.DAY,
@@ -51,17 +57,12 @@ public class MultiRangePartitionDesc extends PartitionDesc {
     );
 
     public MultiRangePartitionDesc(String partitionBegin, String partitionEnd, Long step,
-                                   String timeUnit) {
+                                   String timeUnit, NodePosition pos) {
+        super(pos);
         this.partitionBegin = partitionBegin;
         this.partitionEnd = partitionEnd;
         this.step = step;
         this.timeUnit = timeUnit;
-    }
-
-    public MultiRangePartitionDesc(String partitionBegin, String partitionEnd, Long offset) {
-        this.partitionBegin = partitionBegin;
-        this.partitionEnd = partitionEnd;
-        this.step = offset;
     }
 
     public Long getStep() {
@@ -76,23 +77,22 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         return timeUnit;
     }
 
-    public List<SingleRangePartitionDesc> convertToSingle(Type firstPartitionColumnType,
-                                                          Map<String, String> properties) throws AnalysisException {
+    public List<SingleRangePartitionDesc> convertToSingle(PartitionConvertContext context) throws AnalysisException {
 
         if (this.getStep() <= 0) {
             throw new AnalysisException("Batch partition every clause mush be larger than zero.");
         }
-
+        Type firstPartitionColumnType = context.getFirstPartitionColumnType();
         if (firstPartitionColumnType.isDateType()) {
-            return buildDateTypePartition(properties);
+            return buildDateTypePartition(context);
         } else if (firstPartitionColumnType.isIntegerType()) {
-            return buildNumberTypePartition(properties);
+            return buildNumberTypePartition(context);
         } else {
             throw new AnalysisException("Unsupported batch partition build type:" + firstPartitionColumnType + ".");
         }
     }
 
-    private List<SingleRangePartitionDesc> buildDateTypePartition(Map<String, String> properties)
+    private List<SingleRangePartitionDesc> buildDateTypePartition(PartitionConvertContext context)
             throws AnalysisException {
         // int type does not support datekey int type
 
@@ -121,6 +121,11 @@ public class MultiRangePartitionDesc extends PartitionDesc {
             throw new AnalysisException("Unknown timeunit for batch build partition.");
         }
 
+        if (context.isAutoPartitionTable() && timeInterval != 1) {
+            throw new AnalysisException("Automatically create partition tables and create partitions in advance " +
+                    "only supports an interval of 1");
+        }
+
         String partitionName;
         TimestampArithmeticExpr.TimeUnit timeUnitType = TimestampArithmeticExpr.TimeUnit.fromName(timeUnit);
         if (timeUnitType == null) {
@@ -132,16 +137,19 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         long currentLoopNum = 0;
         long maxAllowedLimit = Config.max_partitions_in_one_batch;
 
-        // In china, the Monday is the first day of week. In western country, the Sunday is the first day of week.
-        // The semantics is should be consistent between batching partition and dynamic partition.
+        // In China, the Monday is the first day of week. In western country, the Sunday is the first day of week.
+        // The semantics it should be consistent between batching partition and dynamic partition.
         // If the option is not set, the Monday will be the first day of week.
-        // The 1st January is the first week of every year. Every year have 52 weeks.
-        // The last week will end at 31st December.
         // If user set dynamic_partition.start_day_of_week table properties
         // it will follow this configuration to set day of week
         int dayOfWeek = 1;
         int dayOfMonth = 1;
+        TimeZone timeZone = TimeUtils.getSystemTimeZone();
         String partitionPrefix = defaultPrefix;
+        if (context.isTempPartition()) {
+            partitionPrefix = defaultTempPartitionPrefix;
+        }
+        Map<String, String> properties = context.getProperties();
         if (properties != null) {
             if (properties.containsKey(DynamicPartitionProperty.START_DAY_OF_WEEK)) {
                 String dayOfWeekStr = properties.get(DynamicPartitionProperty.START_DAY_OF_WEEK);
@@ -170,26 +178,102 @@ public class MultiRangePartitionDesc extends PartitionDesc {
                 }
             }
         }
-        WeekFields weekFields = WeekFields.of(DayOfWeek.of(dayOfWeek), 1);
+
+        DateTimeFormatter outputDateFormat = DateUtils.DATE_FORMATTER;
+        if (context.getFirstPartitionColumnType() == Type.DATETIME) {
+            outputDateFormat = DateUtils.DATE_TIME_FORMATTER;
+        }
+
+        if (context.isAutoPartitionTable() || !Config.enable_create_partial_partition_in_batch) {
+            LocalDateTime standardBeginTime;
+            LocalDateTime standardEndTime;
+            String extraMsg = "";
+            switch (timeUnitType) {
+                case HOUR:
+                    standardBeginTime = beginTime.withMinute(0).withSecond(0).withNano(0);
+                    standardEndTime = endTime.withMinute(0).withSecond(0).withNano(0);
+                    if (standardBeginTime.equals(standardEndTime)) {
+                        standardEndTime = standardEndTime.plusHours(timeInterval);
+                    }
+                    break;
+                case DAY:
+                    standardBeginTime = beginTime.withHour(0).withMinute(0).withSecond(0).withNano(0);
+                    standardEndTime = endTime.withHour(0).withMinute(0).withSecond(0).withNano(0);
+                    if (standardBeginTime.equals(standardEndTime)) {
+                        standardEndTime = standardEndTime.plusDays(timeInterval);
+                    }
+                    break;
+                case WEEK:
+                    standardBeginTime = beginTime.with(TemporalAdjusters.previousOrSame(DayOfWeek.of(dayOfWeek)));
+                    standardEndTime = endTime.with(TemporalAdjusters.previousOrSame(DayOfWeek.of(dayOfWeek)));
+                    if (standardBeginTime.equals(standardEndTime)) {
+                        standardEndTime = standardEndTime.plusWeeks(timeInterval);
+                    }
+                    extraMsg = "with start day of week " + dayOfWeek;
+                    break;
+                case MONTH:
+                    standardBeginTime = beginTime.withDayOfMonth(dayOfMonth);
+                    standardEndTime = endTime.withDayOfMonth(dayOfMonth);
+                    if (standardBeginTime.equals(standardEndTime)) {
+                        standardEndTime = standardEndTime.plusMonths(timeInterval);
+                    }
+                    extraMsg = "with start day of month " + dayOfMonth;
+                    break;
+                case YEAR:
+                    standardBeginTime = beginTime.withDayOfYear(1);
+                    standardEndTime = endTime.withDayOfYear(1);
+                    if (standardBeginTime.equals(standardEndTime)) {
+                        standardEndTime = standardEndTime.plusYears(timeInterval);
+                    }
+                    break;
+                default:
+                    throw new AnalysisException("Batch build partition does not support time interval type: " +
+                            timeUnit);
+            }
+            if (!(standardBeginTime.equals(beginTime) && standardEndTime.equals(endTime))) {
+                String msg = "Batch build partition range [" + partitionBegin + "," + partitionEnd + ")" +
+                        " should be a standard unit of time (" + timeUnitType + ") " + extraMsg + ". suggest range ["
+                        + standardBeginTime.format(outputDateFormat) + "," + standardEndTime.format(outputDateFormat)
+                        + ")";
+                if (!context.isAutoPartitionTable()) {
+                    msg += "If you want to create partial partitions in batch, you can turn off this check by " +
+                            "setting the FE config enable_create_partial_partition_in_batch=true";
+                }
+                throw new AnalysisException(msg);
+            }
+        }
+
         while (beginTime.isBefore(endTime)) {
-            PartitionValue lowerPartitionValue = new PartitionValue(beginTime.format(beginDateTimeFormat));
+            PartitionValue lowerPartitionValue = new PartitionValue(beginTime.format(outputDateFormat));
 
             switch (timeUnitType) {
                 case HOUR:
                     partitionName = partitionPrefix + beginTime.format(DateUtils.HOUR_FORMATTER);
+                    beginTime = beginTime.withMinute(0).withSecond(0).withNano(0);
                     beginTime = beginTime.plusHours(timeInterval);
                     break;
                 case DAY:
                     partitionName = partitionPrefix + beginTime.format(DateUtils.DATEKEY_FORMATTER);
+                    beginTime = beginTime.withHour(0).withMinute(0).withSecond(0).withNano(0);
                     beginTime = beginTime.plusDays(timeInterval);
                     break;
                 case WEEK:
-                    LocalDate localDate = LocalDate.of(beginTime.getYear(), beginTime.getMonthValue(),
-                            beginTime.getDayOfMonth());
-                    int weekOfYear = localDate.get(weekFields.weekOfYear());
-                    partitionName = String.format("%s%s_%02d", partitionPrefix,
-                            beginTime.format(DateUtils.YEAR_FORMATTER), weekOfYear);
-                    beginTime = beginTime.with(ChronoField.DAY_OF_WEEK, dayOfMonth);
+                    // Compatible with dynamic partitioning
+                    // First calculate the first day of the week, then calculate the week of the year
+                    beginTime = beginTime.with(TemporalAdjusters.previousOrSame(DayOfWeek.of(dayOfWeek)));
+                    Calendar calendar = Calendar.getInstance(timeZone);
+                    try {
+                        calendar.setTime(DATEKEY_SDF.parse(beginTime.format(DateUtils.DATEKEY_FORMATTER)));
+                    } catch (ParseException e) {
+                        throw new RuntimeException(e);
+                    }
+                    int weekOfYear = calendar.get(Calendar.WEEK_OF_YEAR);
+                    if (weekOfYear <= 1 && calendar.get(Calendar.MONTH) >= 11) {
+                        // eg: JDK think 2019-12-30 as the first week of year 2020, we need to handle this.
+                        // to make it as the 53rd week of year 2019.
+                        weekOfYear += 52;
+                    }
+                    partitionName = partitionPrefix + String.format("%s_%02d", calendar.get(Calendar.YEAR), weekOfYear);
                     beginTime = beginTime.plusWeeks(timeInterval);
                     break;
                 case MONTH:
@@ -210,11 +294,12 @@ public class MultiRangePartitionDesc extends PartitionDesc {
                 beginTime = endTime;
             }
 
-            PartitionValue upperPartitionValue = new PartitionValue(beginTime.format(beginDateTimeFormat));
+            PartitionValue upperPartitionValue = new PartitionValue(beginTime.format(outputDateFormat));
             PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(Lists.newArrayList(lowerPartitionValue),
                     Lists.newArrayList(upperPartitionValue));
+            // properties are from table, do not use in new SingleRangePartitionDesc.
             SingleRangePartitionDesc singleRangePartitionDesc = new SingleRangePartitionDesc(false,
-                    partitionName, partitionKeyDesc, properties);
+                    partitionName, partitionKeyDesc, null);
             singleRangePartitionDescs.add(singleRangePartitionDesc);
 
             currentLoopNum++;
@@ -225,7 +310,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         return singleRangePartitionDescs;
     }
 
-    private List<SingleRangePartitionDesc> buildNumberTypePartition(Map<String, String> properties)
+    private List<SingleRangePartitionDesc> buildNumberTypePartition(PartitionConvertContext context)
             throws AnalysisException {
         if (this.getTimeUnit() != null) {
             throw new AnalysisException("Batch build partition EVERY is date type " +
@@ -245,19 +330,24 @@ public class MultiRangePartitionDesc extends PartitionDesc {
             throw new AnalysisException("Batch build partition start value should less then end value.");
         }
 
+        String prefix = defaultPrefix;
+        if (context.isTempPartition()) {
+            prefix = defaultTempPartitionPrefix;
+        }
         Long step = this.getStep();
         List<SingleRangePartitionDesc> singleRangePartitionDescs = Lists.newArrayList();
         long currentLoopNum = 0;
         long maxAllowedLimit = Config.max_partitions_in_one_batch;
         while (beginNum < endNum) {
-            String partitionName = defaultPrefix + beginNum;
+            String partitionName = prefix + beginNum;
             PartitionValue lowerPartitionValue = new PartitionValue(Long.toString(beginNum));
             beginNum += step;
             PartitionValue upperPartitionValue = new PartitionValue(Long.toString(beginNum));
             PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(Lists.newArrayList(lowerPartitionValue),
                     Lists.newArrayList(upperPartitionValue));
+            // properties are from table, do not use in new SingleRangePartitionDesc.
             SingleRangePartitionDesc singleRangePartitionDesc = new SingleRangePartitionDesc(false,
-                    partitionName, partitionKeyDesc, properties);
+                    partitionName, partitionKeyDesc, null);
             singleRangePartitionDescs.add(singleRangePartitionDesc);
 
             currentLoopNum++;

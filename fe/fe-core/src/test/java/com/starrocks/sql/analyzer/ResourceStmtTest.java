@@ -93,4 +93,25 @@ public class ResourceStmtTest {
         // bad case for resource name
         analyzeFail("drop resource 01hive");
     }
+
+    @Test
+    public void testCreateResourceStmtToString() {
+        CreateResourceStmt stmt = (CreateResourceStmt) analyzeSuccess(
+                "CREATE EXTERNAL RESOURCE \"spark0\" PROPERTIES " +
+                        "( \"type\" = \"spark\", \"spark.master\" = \"yarn\", \"spark.submit.deployMode\" = \"cluster\"," +
+                        " \"spark.jars\" = \"xxx.jar,yyy.jar\", \"spark.files\" = \"/tmp/aaa,/tmp/bbb\", " +
+                        "\"spark.executor.memory\" = \"1g\", \"spark.yarn.queue\" = \"queue0\"," +
+                        "\"spark.hadoop.yarn.resourcemanager.address\" = \"resourcemanager_host:8032\"," +
+                        "\"spark.hadoop.fs.defaultFS\" = \"hdfs://namenode_host:9000\", " +
+                        "\"working_dir\" = \"hdfs://namenode_host:9000/tmp/starrocks\", " +
+                        "\"broker\" = \"broker0\", \"broker.username\" = \"user0\", \"broker.password\" = \"password0\" )");
+
+        Assert.assertEquals("CREATE EXTERNAL RESOURCE spark0 PROPERTIES (\"spark.executor.memory\" = \"1g\"," +
+                " \"spark.master\" = \"yarn\", \"working_dir\" = \"hdfs://namenode_host:9000/tmp/starrocks\", \"broker.password\" = \"***\"," +
+                " \"spark.submit.deployMode\" = \"cluster\", \"type\" = \"spark\", \"broker\" = \"broker0\"," +
+                " \"spark.hadoop.yarn.resourcemanager.address\" = \"resourcemanager_host:8032\"," +
+                " \"spark.files\" = \"/tmp/aaa,/tmp/bbb\", \"spark.hadoop.fs.defaultFS\" = \"hdfs://namenode_host:9000\"," +
+                " \"spark.yarn.queue\" = \"queue0\", \"broker.username\" = \"user0\"," +
+                " \"spark.jars\" = \"xxx.jar,yyy.jar\")", AstToStringBuilder.toString(stmt));
+    }
 }

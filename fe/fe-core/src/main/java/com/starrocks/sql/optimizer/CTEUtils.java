@@ -16,7 +16,6 @@
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
@@ -25,70 +24,50 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
-import java.util.LinkedList;
+import java.util.BitSet;
 
 public class CTEUtils {
-
     public static void collectCteOperators(OptExpression anchor, OptimizerContext context) {
         context.getCteContext().reset();
-        collectCteProduce(anchor, context);
-        collectCteConsume(anchor, context);
+        collectCteOperatorsImpl(anchor, context, new BitSet());
     }
 
-    /*
-     * Estimate the complexity of the produce plan
-     * */
-    private static void collectCteProduce(OptExpression root, OptimizerContext context) {
-        for (OptExpression child : root.getInputs()) {
-            collectCteProduce(child, context);
-        }
-
-        if (OperatorType.LOGICAL_CTE_PRODUCE.equals(root.getOp().getOpType())) {
+    public static void collectCteOperatorsImpl(OptExpression root, OptimizerContext context, BitSet searchConsume) {
+        if (OperatorType.LOGICAL_CTE_ANCHOR.equals(root.getOp().getOpType())) {
             // produce
-            LogicalCTEProduceOperator produce = (LogicalCTEProduceOperator) root.getOp();
-            context.getCteContext().addCTEProduce(produce.getCteId());
+            LogicalCTEAnchorOperator anchor = (LogicalCTEAnchorOperator) root.getOp();
+            context.getCteContext().addCTEProduce(anchor.getCteId());
+
+            Preconditions.checkState(root.getInputs().get(0).getOp() instanceof LogicalCTEProduceOperator);
+            LogicalCTEProduceOperator produce = (LogicalCTEProduceOperator) root.getInputs().get(0).getOp();
+            Preconditions.checkState(produce.getCteId() == anchor.getCteId());
+
+            BitSet left = (BitSet) searchConsume.clone();
+            collectCteOperatorsImpl(root.inputAt(0), context, left);
+
+            BitSet right = (BitSet) searchConsume.clone();
+            right.set(anchor.getCteId());
+            collectCteOperatorsImpl(root.inputAt(1), context, right);
+            return;
         }
-    }
 
-    private static void collectCteConsume(OptExpression root, OptimizerContext context) {
-        for (Integer cteId : context.getCteContext().getAllCTEProduce()) {
-            OptExpression anchor = findCteAnchor(root, cteId);
-            Preconditions.checkNotNull(anchor);
-            collectCteConsumeImpl(anchor, cteId, context);
-        }
-    }
-
-    private static OptExpression findCteAnchor(OptExpression root, Integer cteId) {
-        LinkedList<OptExpression> queue = Lists.newLinkedList();
-        queue.addLast(root);
-
-        while (!queue.isEmpty()) {
-            OptExpression expression = queue.pollFirst();
-            if (OperatorType.LOGICAL_CTE_ANCHOR.equals(expression.getOp().getOpType()) &&
-                    ((LogicalCTEAnchorOperator) expression.getOp()).getCteId() == cteId) {
-                return expression.getInputs().get(1);
-            }
-
-            expression.getInputs().forEach(queue::addLast);
-        }
-        return null;
-    }
-
-    private static void collectCteConsumeImpl(OptExpression root, Integer cteId, OptimizerContext context) {
         if (OperatorType.LOGICAL_CTE_CONSUME.equals(root.getOp().getOpType())) {
-            if (((LogicalCTEConsumeOperator) root.getOp()).getCteId() != cteId) {
-                // not ask children
-                return;
-            }
             // consumer
             LogicalCTEConsumeOperator consume = (LogicalCTEConsumeOperator) root.getOp();
-            context.getCteContext().addCTEConsume(consume.getCteId());
-            // not ask children
+
+            if (searchConsume.get(consume.getCteId())) {
+                context.getCteContext().addCTEConsume(consume.getCteId());
+                searchConsume = new BitSet();
+            }
+
+            if (root.arity() > 0) {
+                collectCteOperatorsImpl(root.inputAt(0), context, searchConsume);
+            }
             return;
         }
 
         for (OptExpression child : root.getInputs()) {
-            collectCteConsumeImpl(child, cteId, context);
+            collectCteOperatorsImpl(child, context, searchConsume);
         }
     }
 

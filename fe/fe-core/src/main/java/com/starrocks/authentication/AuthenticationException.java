@@ -19,4 +19,8 @@ public class AuthenticationException extends Exception {
     public AuthenticationException(String msg) {
         super(msg);
     }
+
+    public AuthenticationException(String msg, Exception e) {
+        super(msg, e);
+    }
 }

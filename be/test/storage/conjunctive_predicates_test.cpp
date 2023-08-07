@@ -29,12 +29,12 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/primitive_type.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
 #include "storage/predicate_parser.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -71,12 +71,12 @@ using PredicatePtr = std::unique_ptr<ColumnPredicate>;
 
 // NOLINTNEXTLINE
 TEST(ConjunctivePredicatesTest, test_evaluate) {
-    VectorizedSchemaPtr schema(new VectorizedSchema());
-    auto c0_field = std::make_shared<VectorizedField>(0, "c0", TYPE_INT, true);
-    auto c1_field = std::make_shared<VectorizedField>(1, "c1", TYPE_CHAR, true);
-    auto c2_field = std::make_shared<VectorizedField>(2, "c2", TYPE_DATE, true);
-    auto c3_field = std::make_shared<VectorizedField>(3, "c3", TYPE_DATETIME, true);
-    auto c4_field = std::make_shared<VectorizedField>(4, "c4", TYPE_DECIMALV2, true);
+    SchemaPtr schema(new Schema());
+    auto c0_field = std::make_shared<Field>(0, "c0", TYPE_INT, true);
+    auto c1_field = std::make_shared<Field>(1, "c1", TYPE_CHAR, true);
+    auto c2_field = std::make_shared<Field>(2, "c2", TYPE_DATE, true);
+    auto c3_field = std::make_shared<Field>(3, "c3", TYPE_DATETIME, true);
+    auto c4_field = std::make_shared<Field>(4, "c4", TYPE_DECIMALV2, true);
 
     schema->append(c0_field);
     schema->append(c1_field);
@@ -171,8 +171,8 @@ TEST(ConjunctivePredicatesTest, test_evaluate) {
 
 // NOLINTNEXTLINE
 TEST(ConjunctivePredicatesTest, test_evaluate_and) {
-    VectorizedSchemaPtr schema(new VectorizedSchema());
-    schema->append(std::make_shared<VectorizedField>(0, "c0", TYPE_INT, true));
+    SchemaPtr schema(new Schema());
+    schema->append(std::make_shared<Field>(0, "c0", TYPE_INT, true));
 
     auto c0 = ChunkHelper::column_from_field_type(TYPE_INT, true);
 
@@ -210,8 +210,8 @@ TEST(ConjunctivePredicatesTest, test_evaluate_and) {
 
 // NOLINTNEXTLINE
 TEST(ConjunctivePredicatesTest, test_evaluate_or) {
-    VectorizedSchemaPtr schema(new VectorizedSchema());
-    schema->append(std::make_shared<VectorizedField>(0, "c0", TYPE_INT, true));
+    SchemaPtr schema(new Schema());
+    schema->append(std::make_shared<Field>(0, "c0", TYPE_INT, true));
 
     auto c0 = ChunkHelper::column_from_field_type(TYPE_INT, true);
 
@@ -249,9 +249,9 @@ TEST(ConjunctivePredicatesTest, test_evaluate_or) {
 }
 
 struct MockConstExprBuilder {
-    template <LogicalType ptype>
+    template <LogicalType ltype>
     Expr* operator()(ObjectPool* pool) {
-        if constexpr (pt_is_decimal<ptype>) {
+        if constexpr (lt_is_decimal<ltype>) {
             CHECK(false) << "not supported";
             return nullptr;
         } else {
@@ -263,16 +263,16 @@ struct MockConstExprBuilder {
             expr_node.__isset.child_type = true;
             expr_node.type = gen_type_desc(TPrimitiveType::INT);
 
-            using CppType = RunTimeCppType<ptype>;
+            using CppType = RunTimeCppType<ltype>;
             CppType literal_value;
-            if constexpr (pt_is_string<ptype>) {
+            if constexpr (lt_is_string<ltype>) {
                 literal_value = "123";
-            } else if constexpr (pt_is_integer<ptype>) {
+            } else if constexpr (lt_is_integer<ltype>) {
                 literal_value = 123;
             } else {
                 literal_value = CppType{};
             }
-            Expr* expr = pool->add(new MockConstVectorizedExpr<ptype>(expr_node, literal_value));
+            Expr* expr = pool->add(new MockConstVectorizedExpr<ltype>(expr_node, literal_value));
             return expr;
         }
     }
@@ -290,11 +290,11 @@ public:
         }
     }
 
-    TupleDescriptor* _create_tuple_desc(LogicalType ptype) {
+    TupleDescriptor* _create_tuple_desc(LogicalType ltype) {
         TDescriptorTableBuilder table_builder;
         TTupleDescriptorBuilder tuple_builder;
 
-        tuple_builder.add_slot(_create_slot_desc(ptype, "c1", 0));
+        tuple_builder.add_slot(_create_slot_desc(ltype, "c1", 0));
         tuple_builder.build(&table_builder);
 
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
@@ -308,22 +308,22 @@ public:
         return tuple_desc;
     }
 
-    TabletSchemaPB create_tablet_schema(LogicalType ptype) {
+    TabletSchemaPB create_tablet_schema(LogicalType ltype) {
         TabletSchemaPB tablet_schema;
 
         ColumnPB* col = tablet_schema.add_column();
         col->set_name("c1");
-        std::string type_name = type_to_string(ptype);
+        std::string type_name = type_to_string(ltype);
         col->set_type(type_name);
 
         return tablet_schema;
     }
 
     // Build an expression: col < literal
-    Expr* build_predicate(LogicalType ptype, TExprOpcode::type op, SlotDescriptor* slot) {
+    Expr* build_predicate(LogicalType ltype, TExprOpcode::type op, SlotDescriptor* slot) {
         TExprNode expr_node;
         expr_node.opcode = op;
-        expr_node.child_type = to_thrift(ptype);
+        expr_node.child_type = to_thrift(ltype);
         expr_node.node_type = TExprNodeType::BINARY_PRED;
         expr_node.num_children = 2;
         expr_node.__isset.opcode = true;
@@ -332,7 +332,7 @@ public:
 
         Expr* expr = _pool.add(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
         ColumnRef* column_ref = _pool.add(new ColumnRef(slot));
-        Expr* col2 = type_dispatch_basic(ptype, MockConstExprBuilder(), &_pool);
+        Expr* col2 = type_dispatch_basic(ltype, MockConstExprBuilder(), &_pool);
         expr->_children.push_back(column_ref);
         expr->_children.push_back(col2);
 
@@ -347,16 +347,16 @@ protected:
 // normalize a simple predicate: col op const
 // NOLINTNEXTLINE
 TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
-    auto [op, ptype] = GetParam();
+    auto [op, ltype] = GetParam();
 
     _pool.clear();
-    TupleDescriptor* tuple_desc = _create_tuple_desc(ptype);
+    TupleDescriptor* tuple_desc = _create_tuple_desc(ltype);
     std::vector<std::string> key_column_names = {"c1"};
     SlotDescriptor* slot = tuple_desc->slots()[0];
-    std::vector<ExprContext*> conjunct_ctxs = {_pool.add(new ExprContext(build_predicate(ptype, op, slot)))};
+    std::vector<ExprContext*> conjunct_ctxs = {_pool.add(new ExprContext(build_predicate(ltype, op, slot)))};
     ASSERT_OK(Expr::prepare(conjunct_ctxs, &_runtime_state));
     ASSERT_OK(Expr::open(conjunct_ctxs, &_runtime_state));
-    auto tablet_schema = TabletSchema::create(create_tablet_schema(ptype));
+    auto tablet_schema = TabletSchema::create(create_tablet_schema(ltype));
 
     OlapScanConjunctsManager cm;
     cm.conjunct_ctxs_ptr = &conjunct_ctxs;
@@ -367,7 +367,7 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
 
     ASSERT_OK(cm.parse_conjuncts(true, 1));
     // col >= false will be elimated
-    if (ptype == TYPE_BOOLEAN && op == TExprOpcode::GE) {
+    if (ltype == TYPE_BOOLEAN && op == TExprOpcode::GE) {
         ASSERT_EQ(0, cm.olap_filters.size());
         return;
     } else {
@@ -382,7 +382,7 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
         ASSERT_TRUE(!!predicate);
 
         // BOOLEAN is special, col <= false will be convert to col = false
-        if (ptype == TYPE_BOOLEAN && op == TExprOpcode::LE) {
+        if (ltype == TYPE_BOOLEAN && op == TExprOpcode::LE) {
             ASSERT_EQ(TExprOpcode::EQ, convert_predicate_type_to_thrift(predicate->type()));
         } else {
             ASSERT_EQ(op, convert_predicate_type_to_thrift(predicate->type()));

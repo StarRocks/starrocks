@@ -38,6 +38,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.io.Text;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TLargeIntLiteral;
@@ -74,7 +75,10 @@ public class LargeIntLiteral extends LiteralExpr {
     }
 
     public LargeIntLiteral(String value) throws AnalysisException {
-        super();
+        this(value, NodePosition.ZERO);
+    }
+    public LargeIntLiteral(String value, NodePosition pos) throws AnalysisException {
+        super(pos);
         BigInteger bigInt;
         try {
             bigInt = new BigInteger(value);
@@ -254,7 +258,8 @@ public class LargeIntLiteral extends LiteralExpr {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), value);
+        // IntLiteral(0) equals to LargeIntLiteral(0), so their hash codes must equal.
+        return Objects.hash(getLongValue());
     }
 
     @Override

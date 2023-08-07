@@ -1,0 +1,100 @@
+commit 6bfac7c766bddb2ac9eda2c2acd98009b9da95bd
+Author: stdpain <drfeng08@gmail.com>
+Date:   Mon Jan 9 10:00:35 2023 +0800
+
+    add a interface to reuse memory for GlobalReplace
+
+diff --git a/re2/re2.cc b/re2/re2.cc
+index b24c6d6..9d4969e 100644
+--- a/re2/re2.cc
++++ b/re2/re2.cc
+@@ -461,6 +461,30 @@ bool RE2::Replace(std::string* str,
+ int RE2::GlobalReplace(std::string* str,
+                        const RE2& re,
+                        const StringPiece& rewrite) {
++  std::string out;
++  int count = _GlobalReplace(*str, re, rewrite, out);
++  if (count > 0) {
++    using std::swap;
++    swap(out, *str);
++  }
++  return count;
++}
++
++int RE2::GlobalReplace(const StringPiece& str,
++                       const RE2& re,
++                       const StringPiece& rewrite, 
++                       std::string& out) {
++  int count = _GlobalReplace(str, re, rewrite, out);
++  if (count == 0) {
++    out.append(str.data(), str.size());
++  }
++  return count;
++}
++
++int RE2::_GlobalReplace(const StringPiece& str,
++                        const RE2& re,
++                        const StringPiece& rewrite, 
++                        std::string& out) {
+   StringPiece vec[kVecSize];
+   int nvec = 1 + MaxSubmatch(rewrite);
+   if (nvec > 1 + re.NumberOfCapturingGroups())
+@@ -468,17 +492,16 @@ int RE2::GlobalReplace(std::string* str,
+   if (nvec > static_cast<int>(arraysize(vec)))
+     return false;
+ 
+-  const char* p = str->data();
+-  const char* ep = p + str->size();
++  const char* p = str.data();
++  const char* ep = p + str.size();
+   const char* lastend = NULL;
+-  std::string out;
+   int count = 0;
+   while (p <= ep) {
+     if (maximum_global_replace_count != -1 &&
+         count >= maximum_global_replace_count)
+       break;
+-    if (!re.Match(*str, static_cast<size_t>(p - str->data()),
+-                  str->size(), UNANCHORED, vec, nvec))
++    if (!re.Match(str, static_cast<size_t>(p - str.data()),
++                  str.size(), UNANCHORED, vec, nvec))
+       break;
+     if (p < vec[0].data())
+       out.append(p, vec[0].data() - p);
+@@ -523,8 +546,6 @@ int RE2::GlobalReplace(std::string* str,
+ 
+   if (p < ep)
+     out.append(p, ep - p);
+-  using std::swap;
+-  swap(out, *str);
+   return count;
+ }
+ 
+diff --git a/re2/re2.h b/re2/re2.h
+index 1d82518..7da0922 100644
+--- a/re2/re2.h
++++ b/re2/re2.h
+@@ -485,6 +485,11 @@ class RE2 {
+                            const RE2& re,
+                            const StringPiece& rewrite);
+ 
++  static int GlobalReplace(const StringPiece& str,
++                           const RE2& re,
++                           const StringPiece& rewrite, 
++                           std::string& out);
++
+   // Like Replace, except that if the pattern matches, "rewrite"
+   // is copied into "out" with substitutions.  The non-matching
+   // portions of "text" are ignored.
+@@ -767,6 +772,11 @@ class RE2 {
+ 
+   re2::Prog* ReverseProg() const;
+ 
++  static int _GlobalReplace(const StringPiece& str,
++                            const RE2& re,
++                            const StringPiece& rewrite, 
++                            std::string& out);
++
+   // First cache line is relatively cold fields.
+   const std::string* pattern_;    // string regular expression
+   Options options_;               // option flags

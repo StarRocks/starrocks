@@ -80,7 +80,7 @@ public class RewriteGroupingSetsByCTERule extends TransformationRule {
         OptExpression repeatOpt = input.inputAt(0);
 
         ColumnRefFactory columnRefFactory = context.getColumnRefFactory();
-        int cteId = columnRefFactory.getNextRelationId();
+        int cteId = context.getCteContext().getNextCteId();
         OptExpression cteProduce = OptExpression.create(new LogicalCTEProduceOperator(cteId), repeatOpt.getInputs());
 
         List<OptExpression> children = new ArrayList<>();
@@ -180,7 +180,7 @@ public class RewriteGroupingSetsByCTERule extends TransformationRule {
         if (consumeOutputMap.isEmpty()) {
             List<ColumnRefOperator> outputColumns =
                     produceOperator.getOutputColumns(new ExpressionContext(cteProduce)).getStream().
-                            mapToObj(factory::getColumnRef).collect(Collectors.toList());
+                            map(factory::getColumnRef).collect(Collectors.toList());
             ColumnRefOperator smallestColumn = Utils.findSmallestColumnRef(outputColumns);
             ColumnRefOperator consumeOutput =
                     factory.create(smallestColumn, smallestColumn.getType(), smallestColumn.isNullable());

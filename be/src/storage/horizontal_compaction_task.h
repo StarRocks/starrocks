@@ -26,7 +26,7 @@ namespace starrocks {
 class RowsetWriter;
 
 class TabletReader;
-class VectorizedSchema;
+class Schema;
 class HorizontalCompactionTask : public CompactionTask {
 public:
     HorizontalCompactionTask() : CompactionTask(HORIZONTAL_COMPACTION) {}
@@ -35,7 +35,7 @@ public:
 
 private:
     Status _horizontal_compact_data(Statistics* statistics);
-    StatusOr<size_t> _compact_data(int32_t chunk_size, TabletReader& reader, const VectorizedSchema& schema,
+    StatusOr<size_t> _compact_data(int32_t chunk_size, TabletReader& reader, const Schema& schema,
                                    RowsetWriter* output_rs_writer);
     void _failure_callback();
     void _success_callback();

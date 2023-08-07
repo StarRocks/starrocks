@@ -18,6 +18,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 // Show create database statement
 //  Syntax:
@@ -33,6 +34,11 @@ public class ShowCreateDbStmt extends ShowStmt {
     private String db;
 
     public ShowCreateDbStmt(String db) {
+        this(db, NodePosition.ZERO);
+    }
+
+    public ShowCreateDbStmt(String db, NodePosition pos) {
+        super(pos);
         this.db = db;
     }
 

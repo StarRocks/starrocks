@@ -14,5 +14,19 @@
 
 package com.starrocks.sql.ast;
 
-public interface AnalyzeTypeDesc {
+import com.starrocks.analysis.ParseNode;
+import com.starrocks.sql.parser.NodePosition;
+
+public abstract class AnalyzeTypeDesc implements ParseNode {
+
+    protected final NodePosition pos;
+
+    protected AnalyzeTypeDesc(NodePosition pos) {
+        this.pos = pos;
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
+    }
 }

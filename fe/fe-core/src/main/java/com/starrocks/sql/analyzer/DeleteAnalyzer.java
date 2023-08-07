@@ -58,17 +58,17 @@ public class DeleteAnalyzer {
             BinaryPredicate binaryPredicate = (BinaryPredicate) predicate;
             Expr leftExpr = binaryPredicate.getChild(0);
             if (!(leftExpr instanceof SlotRef)) {
-                throw new SemanticException("Left expr of binary predicate should be column name");
+                throw new SemanticException("Left expr of binary predicate should be column name", leftExpr.getPos());
             }
             Expr rightExpr = binaryPredicate.getChild(1);
             if (!(rightExpr instanceof LiteralExpr)) {
-                throw new SemanticException("Right expr of binary predicate should be value");
+                throw new SemanticException("Right expr of binary predicate should be value", rightExpr.getPos());
             }
             deleteConditions.add(binaryPredicate);
         } else if (predicate instanceof CompoundPredicate) {
             CompoundPredicate compoundPredicate = (CompoundPredicate) predicate;
             if (compoundPredicate.getOp() != CompoundPredicate.Operator.AND) {
-                throw new SemanticException("Compound predicate's op should be AND");
+                throw new SemanticException("Compound predicate's op should be AND", predicate.getPos());
             }
 
             analyzePredicate(compoundPredicate.getChild(0), deleteConditions);
@@ -77,31 +77,31 @@ public class DeleteAnalyzer {
             IsNullPredicate isNullPredicate = (IsNullPredicate) predicate;
             Expr leftExpr = isNullPredicate.getChild(0);
             if (!(leftExpr instanceof SlotRef)) {
-                throw new SemanticException("Left expr of is_null predicate should be column name");
+                throw new SemanticException("Left expr of is_null predicate should be column name", leftExpr.getPos());
             }
             deleteConditions.add(isNullPredicate);
         } else if (predicate instanceof InPredicate) {
             InPredicate inPredicate = (InPredicate) predicate;
             Expr leftExpr = inPredicate.getChild(0);
             if (!(leftExpr instanceof SlotRef)) {
-                throw new SemanticException("Left expr of binary predicate should be column name");
+                throw new SemanticException("Left expr of binary predicate should be column name", leftExpr.getPos());
             }
             int inElementNum = inPredicate.getInElementNum();
             int maxAllowedInElementNumOfDelete = Config.max_allowed_in_element_num_of_delete;
             if (inElementNum > maxAllowedInElementNumOfDelete) {
                 throw new SemanticException("Element num of predicate should not be more than " +
-                        maxAllowedInElementNumOfDelete);
+                        maxAllowedInElementNumOfDelete, inPredicate.getPos());
             }
             for (int i = 1; i <= inElementNum; i++) {
                 Expr expr = inPredicate.getChild(i);
                 if (!(expr instanceof LiteralExpr)) {
-                    throw new SemanticException("Child of in predicate should be value");
+                    throw new SemanticException("Child of in predicate should be value", expr.getPos());
                 }
             }
             deleteConditions.add(inPredicate);
         } else {
             throw new SemanticException("Where clause only supports compound predicate, binary predicate, " +
-                    "is_null predicate and in predicate");
+                    "is_null predicate and in predicate", predicate.getPos());
         }
     }
 
@@ -109,15 +109,15 @@ public class DeleteAnalyzer {
         PartitionNames partitionNames = deleteStatement.getPartitionNames();
         if (partitionNames != null) {
             if (partitionNames.isTemp()) {
-                throw new SemanticException("Do not support deleting temp partitions");
+                throw new SemanticException("Do not support deleting temp partitions", partitionNames.getPos());
             }
             List<String> names = partitionNames.getPartitionNames();
             if (names.isEmpty()) {
-                throw new SemanticException("No partition specifed in partition lists");
+                throw new SemanticException("No partition specifed in partition lists", partitionNames.getPos());
             }
             // check if partition name is not empty string
             if (names.stream().anyMatch(entity -> Strings.isNullOrEmpty(entity))) {
-                throw new SemanticException("there are empty partition name");
+                throw new SemanticException("there are empty partition name", partitionNames.getPos());
             }
         }
 
@@ -141,14 +141,14 @@ public class DeleteAnalyzer {
     public static void analyze(DeleteStmt deleteStatement, ConnectContext session) {
         TableName tableName = deleteStatement.getTableName();
         MetaUtils.normalizationTableName(session, tableName);
+        MetaUtils.checkNotSupportCatalog(tableName.getCatalog(), "DELETE");
         MetaUtils.getDatabase(session, tableName);
         Table table = MetaUtils.getTable(session, tableName);
 
         if (table instanceof MaterializedView) {
-            throw new SemanticException(
-                    "The data of '%s' cannot be deleted because '%s' is a materialized view," +
-                            "and the data of materialized view must be consistent with the base table.",
-                    tableName.getTbl(), tableName.getTbl());
+            String msg = String.format("The data of '%s' cannot be deleted because it is a materialized view," +
+                    "and the data of materialized view must be consistent with the base table.", tableName.getTbl());
+            throw new SemanticException(msg, tableName.getPos());
         }
 
         if (!(table instanceof OlapTable && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS)) {
@@ -161,7 +161,8 @@ public class DeleteAnalyzer {
             throw new SemanticException("Delete must specify where clause to prevent full table delete");
         }
         if (deleteStatement.getPartitionNames() != null) {
-            throw new SemanticException("Delete for primary key table do not support specifying partitions");
+            throw new SemanticException("Delete for primary key table do not support specifying partitions",
+                    deleteStatement.getPartitionNames().getPos());
         }
 
         SelectList selectList = new SelectList();

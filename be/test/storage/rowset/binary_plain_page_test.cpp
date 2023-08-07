@@ -39,10 +39,14 @@
 #include <vector>
 
 #include "column/binary_column.h"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
 #include "runtime/mem_pool.h"
 #include "storage/olap_common.h"
+#include "storage/range.h"
 #include "storage/rowset/page_decoder.h"
 #include "storage/types.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -77,8 +81,7 @@ public:
         page_builder.get_last_value(&last_value);
         ASSERT_EQ(slices[count - 1], last_value);
 
-        PageDecoderOptions decoder_options;
-        PageDecoderType page_decoder(owned_slice.slice(), decoder_options);
+        PageDecoderType page_decoder(owned_slice.slice());
         Status status = page_decoder.init();
         ASSERT_TRUE(status.ok());
 
@@ -104,9 +107,9 @@ public:
 
         auto column2 = BinaryColumn::create();
         page_decoder.seek_to_position_in_page(0);
-        SparseRange read_range;
-        read_range.add(Range(0, 1));
-        read_range.add(Range(2, 3));
+        SparseRange<> read_range;
+        read_range.add(Range<>(0, 1));
+        read_range.add(Range<>(2, 3));
         status = page_decoder.next_batch(read_range, column2.get());
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(2, column2->size());
@@ -156,6 +159,16 @@ TEST_F(BinaryPlainPageTest, test_reserve_head) {
     for (uint32_t i = 0; i < 5; i++) {
         EXPECT_EQ(slices[i], decoder.string_at_index(i));
     }
+
+    auto column = BinaryColumn::create();
+    SparseRange<> range(0, 5);
+    ASSERT_OK(decoder.next_batch(range, column.get()));
+    ASSERT_EQ(column->debug_string(), "['first value', 'second value', 'third value', 'fourth value', 'fifth value']");
+
+    ASSERT_OK(decoder.seek_to_position_in_page(0));
+    ASSERT_OK(decoder.next_batch(SparseRange<>(0, 1), column.get()));
+    ASSERT_EQ(column->debug_string(),
+              "['first value', 'second value', 'third value', 'fourth value', 'fifth value', 'first value']");
 }
 
 } // namespace starrocks

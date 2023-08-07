@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Map;
@@ -26,12 +27,20 @@ public class AnalyzeStmt extends StatementBase {
     private List<String> columnNames;
     private final boolean isSample;
     private final boolean isAsync;
+    private boolean isExternal = false;
     private Map<String, String> properties;
     private final AnalyzeTypeDesc analyzeTypeDesc;
 
     public AnalyzeStmt(TableName tbl, List<String> columns, Map<String, String> properties,
                        boolean isSample, boolean isAsync,
                        AnalyzeTypeDesc analyzeTypeDesc) {
+        this(tbl, columns, properties, isSample, isAsync, analyzeTypeDesc, NodePosition.ZERO);
+    }
+
+    public AnalyzeStmt(TableName tbl, List<String> columns, Map<String, String> properties,
+                       boolean isSample, boolean isAsync,
+                       AnalyzeTypeDesc analyzeTypeDesc, NodePosition pos) {
+        super(pos);
         this.tbl = tbl;
         this.columnNames = columns;
         this.isSample = isSample;
@@ -70,6 +79,14 @@ public class AnalyzeStmt extends StatementBase {
 
     public AnalyzeTypeDesc getAnalyzeTypeDesc() {
         return analyzeTypeDesc;
+    }
+
+    public boolean isExternal() {
+        return isExternal;
+    }
+
+    public void setExternal(boolean isExternal) {
+        this.isExternal = isExternal;
     }
 
     @Override

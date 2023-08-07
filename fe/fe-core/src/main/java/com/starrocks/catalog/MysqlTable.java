@@ -36,9 +36,9 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TMySQLTable;
@@ -68,12 +68,19 @@ public class MysqlTable extends Table {
 
     // For starrocks, mysql table can be created by specifying odbc resource,
     // but we do not support odbc resource, so we just read this property for meta compatible
+    @SerializedName(value = "rn")
     private String odbcCatalogResourceName;
+    @SerializedName(value = "host")
     private String host;
+    @SerializedName(value = "port")
     private String port;
+    @SerializedName(value = "userName")
     private String userName;
+    @SerializedName(value = "passwd")
     private String passwd;
+    @SerializedName(value = "dn")
     private String mysqlDatabaseName;
+    @SerializedName(value = "tn")
     private String mysqlTableName;
 
     public MysqlTable() {
@@ -249,36 +256,31 @@ public class MysqlTable extends Table {
 
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
-
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_92) {
-            // Read MySQL meta
-            int size = in.readInt();
-            Map<String, String> serializeMap = Maps.newHashMap();
-            for (int i = 0; i < size; i++) {
-                String key = Text.readString(in);
-                String value = Text.readString(in);
-                serializeMap.put(key, value);
-            }
-
-            odbcCatalogResourceName = serializeMap.get(ODBC_CATALOG_RESOURCE);
-            host = serializeMap.get(MYSQL_HOST);
-            port = serializeMap.get(MYSQL_PORT);
-            userName = serializeMap.get(MYSQL_USER);
-            passwd = serializeMap.get(MYSQL_PASSWORD);
-            mysqlDatabaseName = serializeMap.get(MYSQL_DATABASE);
-            mysqlTableName = serializeMap.get(MYSQL_TABLE);
-        } else {
-            host = Text.readString(in);
-            port = Text.readString(in);
-            userName = Text.readString(in);
-            passwd = Text.readString(in);
-            mysqlDatabaseName = Text.readString(in);
-            mysqlTableName = Text.readString(in);
+        // Read MySQL meta
+        int size = in.readInt();
+        Map<String, String> serializeMap = Maps.newHashMap();
+        for (int i = 0; i < size; i++) {
+            String key = Text.readString(in);
+            String value = Text.readString(in);
+            serializeMap.put(key, value);
         }
+
+        odbcCatalogResourceName = serializeMap.get(ODBC_CATALOG_RESOURCE);
+        host = serializeMap.get(MYSQL_HOST);
+        port = serializeMap.get(MYSQL_PORT);
+        userName = serializeMap.get(MYSQL_USER);
+        passwd = serializeMap.get(MYSQL_PASSWORD);
+        mysqlDatabaseName = serializeMap.get(MYSQL_DATABASE);
+        mysqlTableName = serializeMap.get(MYSQL_TABLE);
     }
 
     @Override
     public boolean isSupported() {
+        return true;
+    }
+
+    @Override
+    public boolean supportInsert() {
         return true;
     }
 }

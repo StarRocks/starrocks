@@ -41,7 +41,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.UserIdentity;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.OlapTable;
@@ -50,21 +50,23 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.hive.ReplayMetadataMgr;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.meta.MetaContext;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.EditLog;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.InsertPlanner;
@@ -74,11 +76,14 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -100,6 +105,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.codec.binary.Hex;
 import org.junit.Assert;
 
@@ -153,15 +159,15 @@ public class UtFrameUtils {
             "DISTRIBUTED BY HASH(`table_id`, `column_name`, `db_id`) BUCKETS 10\n" +
             "PROPERTIES (\n" +
             "\"replication_num\" = \"1\",\n" +
-            "\"in_memory\" = \"false\",\n" +
-            "\"storage_format\" = \"DEFAULT\"\n" +
+            "\"in_memory\" = \"false\"\n" +
             ");";
 
     // Help to create a mocked ConnectContext.
     public static ConnectContext createDefaultCtx() {
         ConnectContext ctx = new ConnectContext(null);
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        ctx.setQualifiedUser(Auth.ROOT_USER);
+        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        ctx.setQualifiedUser(AuthenticationMgr.ROOT_USER);
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.setThreadLocalInfo();
         ctx.setDumpInfo(new MockDumpInfo());
@@ -236,6 +242,7 @@ public class UtFrameUtils {
             ClientPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
 
             startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/", startBDB);
+
             addMockBackend(10001);
 
             // sleep to wait first heartbeat
@@ -254,11 +261,21 @@ public class UtFrameUtils {
         createMinStarRocksCluster(false);
     }
 
+    public static Backend addMockBackend(int backendId, String host, int beThriftPort) throws Exception {
+        // start be
+        MockedBackend backend = new MockedBackend(host, beThriftPort);
+        // add be
+        return addMockBackend(backend, backendId);
+    }
+
     public static Backend addMockBackend(int backendId) throws Exception {
         // start be
         MockedBackend backend = new MockedBackend("127.0.0.1");
-
         // add be
+        return addMockBackend(backend, backendId);
+    }
+
+    private static Backend addMockBackend(MockedBackend backend, int backendId) {
         Backend be = new Backend(backendId, backend.getHost(), backend.getHeartBeatPort());
         Map<String, DiskInfo> disks = Maps.newHashMap();
         DiskInfo diskInfo1 = new DiskInfo(backendId + "/path1");
@@ -352,7 +369,7 @@ public class UtFrameUtils {
     public static Pair<CreateMaterializedViewStatement, ExecPlan> planMVMaintenance(ConnectContext connectContext,
                                                                                     String sql)
             throws DdlException, CloneNotSupportedException {
-        connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
 
         List<StatementBase> statements =
                 com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode());
@@ -369,8 +386,8 @@ public class UtFrameUtils {
                 if (optHints != null) {
                     SessionVariable sessionVariable = (SessionVariable) oldSessionVariable.clone();
                     for (String key : optHints.keySet()) {
-                        VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(optHints.get(key))),
-                                true);
+                        VariableMgr.setSystemVariable(sessionVariable,
+                                new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
                     }
                     connectContext.setSessionVariable(sessionVariable);
                 }
@@ -386,13 +403,18 @@ public class UtFrameUtils {
         }
     }
 
-    public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
-            throws Exception {
-        connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
+    private interface GetPlanHook<R> {
+        R apply(ConnectContext context, StatementBase statementBase, ExecPlan execPlan) throws Exception;
+    }
+
+    private static <R> R buildPlan(ConnectContext connectContext, String originStmt,
+                                   GetPlanHook<R> returnedSupplier) throws Exception {
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
+        originStmt = LogUtil.removeCommentAndLineSeparator(originStmt);
 
         List<StatementBase> statements;
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Parser")) {
-            statements = SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode());
+            statements = SqlParser.parse(originStmt, connectContext.getSessionVariable());
         }
         connectContext.getDumpInfo().setOriginStmt(originStmt);
         SessionVariable oldSessionVariable = connectContext.getSessionVariable();
@@ -407,8 +429,8 @@ public class UtFrameUtils {
                 if (optHints != null) {
                     SessionVariable sessionVariable = (SessionVariable) oldSessionVariable.clone();
                     for (String key : optHints.keySet()) {
-                        VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(optHints.get(key))),
-                                true);
+                        VariableMgr.setSystemVariable(sessionVariable,
+                                new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
                     }
                     connectContext.setSessionVariable(sessionVariable);
                 }
@@ -422,11 +444,60 @@ public class UtFrameUtils {
             testView(connectContext, originStmt, statementBase);
 
             validatePlanConnectedness(execPlan);
-            return new Pair<>(LogicalPlanPrinter.print(execPlan.getPhysicalPlan()), execPlan);
+            return returnedSupplier.apply(connectContext, statementBase, execPlan);
         } finally {
             // before returning we have to restore session variable.
             connectContext.setSessionVariable(oldSessionVariable);
         }
+    }
+
+    public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
+            throws Exception {
+        return buildPlan(connectContext, originStmt,
+                (context, statementBase, execPlan) -> new Pair<>(printPhysicalPlan(execPlan.getPhysicalPlan()),
+                        execPlan));
+    }
+
+    public static DefaultCoordinator startScheduling(ConnectContext connectContext, String originStmt) throws Exception {
+        return buildPlan(connectContext, originStmt,
+                (context, statementBase, execPlan) -> {
+                    DefaultCoordinator scheduler = createScheduler(context, statementBase, execPlan);
+
+                    scheduler.startScheduling();
+
+                    return scheduler;
+                });
+    }
+
+    public static DefaultCoordinator getScheduler(ConnectContext connectContext, String originStmt) throws Exception {
+        return buildPlan(connectContext, originStmt, UtFrameUtils::createScheduler);
+    }
+
+    private static DefaultCoordinator createScheduler(ConnectContext context, StatementBase statementBase, ExecPlan execPlan) {
+        context.setExecutionId(new TUniqueId(1, 2));
+        DefaultCoordinator scheduler;
+        if (statementBase instanceof DmlStmt) {
+            if (statementBase instanceof InsertStmt) {
+                scheduler = new DefaultCoordinator.Factory().createInsertScheduler(context,
+                        execPlan.getFragments(), execPlan.getScanNodes(),
+                        execPlan.getDescTbl().toThrift());
+            } else {
+                throw new RuntimeException("can only handle insert DML");
+            }
+        } else {
+            scheduler = new DefaultCoordinator.Factory().createQueryScheduler(context,
+                    execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
+        }
+
+        return scheduler;
+    }
+
+    public static String printPhysicalPlan(OptExpression execPlan) {
+        return LogicalPlanPrinter.print(execPlan, isPrintPlanTableNames());
+    }
+
+    public static boolean isPrintPlanTableNames() {
+        return false;
     }
 
     private static void testView(ConnectContext connectContext, String originStmt, StatementBase statementBase)
@@ -457,6 +528,11 @@ public class UtFrameUtils {
 
     public static String printPlan(ExecPlan plan) {
         return Explain.toString(plan.getPhysicalPlan(), plan.getOutputColumns());
+    }
+
+    public static String explainLogicalPlan(ConnectContext ctx, String sql) throws Exception {
+        Pair<String, ExecPlan> planAndExplain = getPlanAndFragment(ctx, sql);
+        return printPlan(planAndExplain.second);
     }
 
     public static String getStmtDigest(ConnectContext connectContext, String originStmt) throws Exception {
@@ -497,11 +573,12 @@ public class UtFrameUtils {
         // mock replay external table info
         if (!replayDumpInfo.getHmsTableMap().isEmpty()) {
             ReplayMetadataMgr replayMetadataMgr = new ReplayMetadataMgr(
-                    connectContext.getGlobalStateMgr().getLocalMetastore(),
-                    connectContext.getGlobalStateMgr().getConnectorMgr(),
+                    GlobalStateMgr.getCurrentState().getLocalMetastore(),
+                    GlobalStateMgr.getCurrentState().getConnectorMgr(),
+                    GlobalStateMgr.getCurrentState().getResourceMgr(),
                     replayDumpInfo.getHmsTableMap(),
                     replayDumpInfo.getTableStatisticsMap());
-            connectContext.getGlobalStateMgr().setMetadataMgr(replayMetadataMgr);
+            GlobalStateMgr.getCurrentState().setMetadataMgr(replayMetadataMgr);
         }
 
         // create table
@@ -528,7 +605,7 @@ public class UtFrameUtils {
                 starRocksAssert.withDatabase(dbName);
             }
             starRocksAssert.useDatabase(dbName);
-            starRocksAssert.withTable(entry.getValue());
+            starRocksAssert.withSingleReplicaTable(entry.getValue());
         }
         // create view
         for (Map.Entry<String, String> entry : replayDumpInfo.getCreateViewStmtMap().entrySet()) {
@@ -554,8 +631,9 @@ public class UtFrameUtils {
         // mock table row count
         for (Map.Entry<String, Map<String, Long>> entry : replayDumpInfo.getPartitionRowCountMap().entrySet()) {
             String dbName = entry.getKey().split("\\.")[0];
-            OlapTable replayTable = (OlapTable) connectContext.getGlobalStateMgr().getDb("" + dbName)
+            OlapTable replayTable = (OlapTable) GlobalStateMgr.getCurrentState().getDb("" + dbName)
                     .getTable(entry.getKey().split("\\.")[1]);
+
             for (Map.Entry<String, Long> partitionEntry : entry.getValue().entrySet()) {
                 setPartitionStatistics(replayTable, partitionEntry.getKey(), partitionEntry.getValue());
             }
@@ -564,7 +642,7 @@ public class UtFrameUtils {
         for (Map.Entry<String, Map<String, ColumnStatistic>> entry : replayDumpInfo.getTableStatisticsMap()
                 .entrySet()) {
             String dbName = entry.getKey().split("\\.")[0];
-            Table replayTable = connectContext.getGlobalStateMgr().getDb("" + dbName)
+            Table replayTable = GlobalStateMgr.getCurrentState().getDb("" + dbName)
                     .getTable(entry.getKey().split("\\.")[1]);
             for (Map.Entry<String, ColumnStatistic> columnStatisticEntry : entry.getValue().entrySet()) {
                 GlobalStateMgr.getCurrentStatisticStorage()
@@ -587,40 +665,80 @@ public class UtFrameUtils {
         }
     }
 
-    private static Pair<String, ExecPlan> getQueryExecPlan(QueryStatement statement, ConnectContext connectContext) {
+    private static Pair<String, ExecPlan> getQueryExecPlan(QueryStatement statement, ConnectContext connectContext)
+            throws Exception {
+        Map<String, String> optHints = null;
+        SessionVariable sessionVariableBackup = connectContext.getSessionVariable();
+        if (statement.getQueryRelation() instanceof SelectRelation) {
+            SelectRelation selectRelation = (SelectRelation) statement.getQueryRelation();
+            optHints = selectRelation.getSelectList().getOptHints();
+        }
+
+        if (optHints != null) {
+            SessionVariable sessionVariable = (SessionVariable) sessionVariableBackup.clone();
+            for (String key : optHints.keySet()) {
+                VariableMgr.setSystemVariable(sessionVariable,
+                        new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
+            }
+            connectContext.setSessionVariable(sessionVariable);
+        }
+
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
-                .transform((statement).getQueryRelation());
 
-        Optimizer optimizer = new Optimizer();
-        OptExpression optimizedPlan = optimizer.optimize(
-                connectContext,
-                logicalPlan.getRoot(),
-                new PhysicalPropertySet(),
-                new ColumnRefSet(logicalPlan.getOutputColumn()),
-                columnRefFactory);
+        LogicalPlan logicalPlan;
+        try (PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Transformer")) {
+            logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
+                    .transform((statement).getQueryRelation());
 
-        ExecPlan execPlan = PlanFragmentBuilder
-                .createPhysicalPlan(optimizedPlan, connectContext,
-                        logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>(),
-                        TResultSinkType.MYSQL_PROTOCAL, true);
+        }
+
+        OptExpression optimizedPlan;
+        try (PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Optimizer")) {
+            Optimizer optimizer = new Optimizer();
+            optimizedPlan = optimizer.optimize(
+                    connectContext,
+                    logicalPlan.getRoot(),
+                    new PhysicalPropertySet(),
+                    new ColumnRefSet(logicalPlan.getOutputColumn()),
+                    columnRefFactory);
+        }
+
+        ExecPlan execPlan;
+        try (PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Builder")) {
+            execPlan = PlanFragmentBuilder
+                    .createPhysicalPlan(optimizedPlan, connectContext,
+                            logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>(),
+                            TResultSinkType.MYSQL_PROTOCAL, true);
+        }
 
         return new Pair<>(LogicalPlanPrinter.print(optimizedPlan), execPlan);
     }
 
     private static Pair<String, ExecPlan> getInsertExecPlan(InsertStmt statement, ConnectContext connectContext) {
+        PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Planner");
         ExecPlan execPlan = new InsertPlanner().plan(statement, connectContext);
+        t.close();
         return new Pair<>(LogicalPlanPrinter.print(execPlan.getPhysicalPlan()), execPlan);
     }
 
     public static Pair<String, ExecPlan> getNewPlanAndFragmentFromDump(ConnectContext connectContext,
                                                                        QueryDumpInfo replayDumpInfo) throws Exception {
         String replaySql = initMockEnv(connectContext, replayDumpInfo);
+        replaySql = LogUtil.removeCommentAndLineSeparator(replaySql);
         Map<String, Database> dbs = null;
         try {
-            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql,
-                    connectContext.getSessionVariable()).get(0);
-            com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
+            StatementBase statementBase;
+            try (PlannerProfile.ScopedTimer st = PlannerProfile.getScopedTimer("Parse")) {
+                statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql,
+                        connectContext.getSessionVariable()).get(0);
+                if (statementBase instanceof QueryStatement) {
+                    replaceTableCatalogName(statementBase);
+                }
+            }
+
+            try (PlannerProfile.ScopedTimer st1 = PlannerProfile.getScopedTimer("Analyze")) {
+                com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
+            }
 
             dbs = AnalyzerUtils.collectAllDatabase(connectContext, statementBase);
             lock(dbs);
@@ -636,6 +754,17 @@ public class UtFrameUtils {
         } finally {
             unLock(dbs);
             tearMockEnv();
+        }
+    }
+
+    private static void replaceTableCatalogName(StatementBase statementBase) {
+        List<TableRelation> tableRelations = AnalyzerUtils.collectTableRelations(statementBase);
+        for (TableRelation tableRelation : tableRelations) {
+            if (tableRelation.getName().getCatalog() != null) {
+                String catalogName = tableRelation.getName().getCatalog();
+                tableRelation.getName().setCatalog(
+                        CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName(catalogName, "hive"));
+            }
         }
     }
 
@@ -700,9 +829,8 @@ public class UtFrameUtils {
         private DataOutputBuffer buffer;
         private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
 
-        protected static void setUpImageVersion() {
+        public static void setUpImageVersion() {
             MetaContext metaContext = new MetaContext();
-            metaContext.setMetaVersion(FeMetaVersion.VERSION_CURRENT);
             metaContext.setStarRocksMetaVersion(StarRocksFEMetaVersion.VERSION_CURRENT);
             metaContext.setThreadLocalInfo();
             isSetup.set(true);
@@ -808,6 +936,7 @@ public class UtFrameUtils {
     public static ConnectContext initCtxForNewPrivilege(UserIdentity userIdentity) throws Exception {
         ConnectContext ctx = new ConnectContext(null);
         ctx.setCurrentUserIdentity(userIdentity);
+        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
         ctx.setQualifiedUser(userIdentity.getQualifiedUser());
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         globalStateMgr.initAuth(true);

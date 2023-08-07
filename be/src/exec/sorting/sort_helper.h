@@ -75,18 +75,6 @@ struct SorterComparator<TimestampValue> {
     }
 };
 
-template <class PermutationType>
-static std::string dubug_column(const Column* column, const PermutationType& permutation) {
-    if (column == nullptr) {
-        return "null";
-    }
-    std::string res;
-    for (auto p : permutation) {
-        res += fmt::format("{:>5}, ", column->debug_item(p.index_in_chunk));
-    }
-    return res;
-}
-
 // TODO: reduce duplicate code
 template <class NullPred>
 static inline Status sort_and_tie_helper_nullable_vertical(const std::atomic<bool>& cancel,
@@ -199,7 +187,7 @@ static inline Status sort_and_tie_helper_nullable(const std::atomic<bool>& cance
 }
 
 template <class DataComparator, class PermutationType>
-static inline Status sort_and_tie_helper(const bool& cancel, const Column* column, bool is_asc_order,
+static inline Status sort_and_tie_helper(const std::atomic<bool>& cancel, const Column* column, bool is_asc_order,
                                          PermutationType& permutation, Tie& tie, DataComparator cmp,
                                          std::pair<int, int> range, bool build_tie, size_t limit = 0,
                                          size_t* limited = nullptr) {
@@ -230,16 +218,16 @@ static inline Status sort_and_tie_helper(const bool& cancel, const Column* colum
             *limited = limit + equal_count;
         } else {
             if (is_asc_order) {
-                ::pdqsort(cancel, begin, end, lesser);
+                ::pdqsort(begin, end, lesser);
             } else {
-                ::pdqsort(cancel, begin, end, greater);
+                ::pdqsort(begin, end, greater);
             }
         }
     };
 
     TieIterator iterator(tie, range.first, range.second);
     while (iterator.next()) {
-        if (UNLIKELY(cancel)) {
+        if (UNLIKELY(cancel.load(std::memory_order_acquire))) {
             return Status::Cancelled("Sort cancelled");
         }
         int range_first = iterator.range_first;

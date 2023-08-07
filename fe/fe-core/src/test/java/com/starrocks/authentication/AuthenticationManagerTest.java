@@ -15,18 +15,23 @@
 
 package com.starrocks.authentication;
 
-import com.starrocks.analysis.UserIdentity;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.CreateUserInfo;
 import com.starrocks.persist.OperationType;
+import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.SetDefaultRoleExecutor;
 import com.starrocks.sql.ast.AlterUserStmt;
+import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropUserStmt;
+import com.starrocks.sql.ast.SetDefaultRoleStmt;
+import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -59,10 +64,10 @@ public class AuthenticationManagerTest {
 
     @Test
     public void testInitDefault() throws Exception {
-        AuthenticationManager manager = ctx.getGlobalStateMgr().getAuthenticationManager();
+        AuthenticationMgr manager = ctx.getGlobalStateMgr().getAuthenticationMgr();
         Assert.assertTrue(manager.doesUserExist(UserIdentity.ROOT));
         Assert.assertFalse(manager.doesUserExist(UserIdentity.createAnalyzedUserIdentWithIp("fake", "%")));
-        Assert.assertEquals(new UserProperty().getMaxConn(), manager.getMaxConn(AuthenticationManager.ROOT_USER));
+        Assert.assertEquals(new UserProperty().getMaxConn(), manager.getMaxConn(AuthenticationMgr.ROOT_USER));
     }
 
     @Test
@@ -72,7 +77,7 @@ public class AuthenticationManagerTest {
         byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
         byte[] scramble = MysqlPassword.scramble(seed, "abc");
 
-        AuthenticationManager masterManager = new AuthenticationManager();
+        AuthenticationMgr masterManager = new AuthenticationMgr();
         Assert.assertNull(masterManager.checkPassword(
                 testUserWithIp.getQualifiedUser(), testUserWithIp.getHost(), scramble, seed));
         Assert.assertFalse(masterManager.doesUserExist(testUser));
@@ -87,16 +92,12 @@ public class AuthenticationManagerTest {
         masterManager.createUser(stmt);
         Assert.assertTrue(masterManager.doesUserExist(testUser));
         Assert.assertFalse(masterManager.doesUserExist(testUserWithIp));
-        UserIdentity user = masterManager.checkPassword(testUser.getQualifiedUser(), "10.1.1.1", new byte[0], new byte[0]);
+        UserIdentity user = masterManager.checkPassword(testUser.getQualifiedUser(),
+                "10.1.1.1", new byte[0], new byte[0]);
         Assert.assertEquals(user, testUser);
 
         // create twice fail
-        try {
-            masterManager.createUser(stmt);
-            Assert.fail();
-        } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("failed to create user"));
-        }
+        masterManager.createUser(stmt);
 
         // master create test@10.1.1.1
         sql = "create user 'test'@'10.1.1.1' identified by 'abc'";
@@ -116,7 +117,7 @@ public class AuthenticationManagerTest {
         Assert.assertNull(user);
 
         // start to replay
-        AuthenticationManager followerManager = AuthenticationManager.load(emptyImage.getDataInputStream());
+        AuthenticationMgr followerManager = AuthenticationMgr.load(emptyImage.getDataInputStream());
         Assert.assertFalse(followerManager.doesUserExist(testUser));
         Assert.assertFalse(followerManager.doesUserExist(testUserWithIp));
 
@@ -154,7 +155,7 @@ public class AuthenticationManagerTest {
         Assert.assertNull(user);
 
         // purely loaded from image
-        AuthenticationManager imageManager = AuthenticationManager.load(finalImage.getDataInputStream());
+        AuthenticationMgr imageManager = AuthenticationMgr.load(finalImage.getDataInputStream());
         Assert.assertTrue(imageManager.doesUserExist(testUser));
         Assert.assertTrue(imageManager.doesUserExist(testUserWithIp));
         user = imageManager.checkPassword(testUser.getQualifiedUser(), "10.1.1.1", scramble, seed);
@@ -164,13 +165,93 @@ public class AuthenticationManagerTest {
     }
 
     @Test
+    public void testCreateUserWithDefaultRole() throws Exception {
+        AuthenticationMgr masterManager = ctx.getGlobalStateMgr().getAuthenticationMgr();
+        AuthorizationMgr authorizationManager = ctx.getGlobalStateMgr().getAuthorizationMgr();
+
+        String sql = "create role test_r1";
+        CreateRoleStmt createStmt =
+                (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        authorizationManager.createRole(createStmt);
+
+        sql = "create role test_r2";
+        createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        authorizationManager.createRole(createStmt);
+
+        sql = "create role test_r3";
+        createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        authorizationManager.createRole(createStmt);
+
+        sql = "create user test2 default role test_r1";
+        CreateUserStmt stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        masterManager.createUser(stmt);
+        Set<Long> s = authorizationManager.getDefaultRoleIdsByUser(
+                UserIdentity.createAnalyzedUserIdentWithIp("test2", "%"));
+        Long roleId = authorizationManager.getRoleIdByNameAllowNull("test_r1");
+        Assert.assertEquals(1, s.size());
+        Assert.assertTrue(s.contains(roleId));
+
+        sql = "create user test_u3 default role test_r1, test_r2";
+        stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        masterManager.createUser(stmt);
+        s = authorizationManager.getDefaultRoleIdsByUser(
+                UserIdentity.createAnalyzedUserIdentWithIp("test_u3", "%"));
+        Assert.assertEquals(2, s.size());
+
+        roleId = authorizationManager.getRoleIdByNameAllowNull("test_r1");
+        Assert.assertTrue(s.contains(roleId));
+        roleId = authorizationManager.getRoleIdByNameAllowNull("test_r2");
+        Assert.assertTrue(s.contains(roleId));
+
+        sql = "alter user test_u3 default role test_r1";
+        SetDefaultRoleStmt setDefaultRoleStmt = (SetDefaultRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        SetDefaultRoleExecutor.execute(setDefaultRoleStmt, ctx);
+        s = authorizationManager.getDefaultRoleIdsByUser(
+                UserIdentity.createAnalyzedUserIdentWithIp("test_u3", "%"));
+        Assert.assertEquals(1, s.size());
+        roleId = authorizationManager.getRoleIdByNameAllowNull("test_r1");
+        Assert.assertTrue(s.contains(roleId));
+
+        sql = "alter user test_u3 default role test_r1, test_r2";
+        setDefaultRoleStmt = (SetDefaultRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        SetDefaultRoleExecutor.execute(setDefaultRoleStmt, ctx);
+        s = authorizationManager.getDefaultRoleIdsByUser(
+                UserIdentity.createAnalyzedUserIdentWithIp("test_u3", "%"));
+        Assert.assertEquals(2, s.size());
+
+        sql = "alter user test_u3 default role test_r3";
+        try {
+            setDefaultRoleStmt = (SetDefaultRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            SetDefaultRoleExecutor.execute(setDefaultRoleStmt, ctx);
+            Assert.fail();
+        } catch (AnalysisException e) {
+            Assert.assertEquals("Getting analyzing error. Detail message: Role test_r3 is not granted to 'test_u3'@'%'.",
+                    e.getMessage());
+        }
+
+        sql = "alter user test_u3 default role NONE";
+        setDefaultRoleStmt = (SetDefaultRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        SetDefaultRoleExecutor.execute(setDefaultRoleStmt, ctx);
+        s = authorizationManager.getDefaultRoleIdsByUser(
+                UserIdentity.createAnalyzedUserIdentWithIp("test_u3", "%"));
+        Assert.assertEquals(0, s.size());
+
+        sql = "alter user test_u3 default role ALL";
+        setDefaultRoleStmt = (SetDefaultRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        SetDefaultRoleExecutor.execute(setDefaultRoleStmt, ctx);
+        s = authorizationManager.getDefaultRoleIdsByUser(
+                UserIdentity.createAnalyzedUserIdentWithIp("test_u3", "%"));
+        Assert.assertEquals(2, s.size());
+    }
+
+    @Test
     public void testDropAlterUser() throws Exception {
         UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test", "%");
         UserIdentity testUserWithIp = UserIdentity.createAnalyzedUserIdentWithIp("test", "10.1.1.1");
         byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
         byte[] scramble = MysqlPassword.scramble(seed, "abc");
 
-        AuthenticationManager manager = ctx.getGlobalStateMgr().getAuthenticationManager();
+        AuthenticationMgr manager = ctx.getGlobalStateMgr().getAuthenticationMgr();
         Assert.assertNull(manager.checkPassword(
                 testUser.getQualifiedUser(), testUser.getHost(), scramble, seed));
         Assert.assertFalse(manager.doesUserExist(testUser));
@@ -203,13 +284,8 @@ public class AuthenticationManagerTest {
         // can drop twice
         DDLStmtExecutor.execute(dropStmt, ctx);
 
-        // cannot alter twice
-        try {
-            DDLStmtExecutor.execute(stmt, ctx);
-            Assert.fail();
-        } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("failed to alter user 'test'@'%'"));
-        }
+        // can alter twice
+        DDLStmtExecutor.execute(stmt, ctx);
 
         // still has max connection
         Assert.assertNotEquals(0, manager.getMaxConn("test"));
@@ -217,9 +293,11 @@ public class AuthenticationManagerTest {
         sql = "drop user 'test'@'10.1.1.1' ";
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
         DDLStmtExecutor.execute(dropStmt, ctx);
+        Assert.assertFalse(manager.doesUserExist(testUserWithIp));
 
         // can't get max connection after all test user are dropped
-        Assert.assertThrows(NullPointerException.class, () -> manager.getMaxConn("test"));
+        Assert.assertEquals(AuthenticationMgr.DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER,
+                manager.getMaxConn("test"));
     }
 
     @Test
@@ -228,7 +306,7 @@ public class AuthenticationManagerTest {
         byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
         byte[] scramble = MysqlPassword.scramble(seed, "abc");
 
-        AuthenticationManager masterManager = ctx.getGlobalStateMgr().getAuthenticationManager();
+        AuthenticationMgr masterManager = ctx.getGlobalStateMgr().getAuthenticationMgr();
         Assert.assertFalse(masterManager.doesUserExist(testUser));
         Assert.assertTrue(masterManager.doesUserExist(UserIdentity.ROOT));
 
@@ -248,9 +326,15 @@ public class AuthenticationManagerTest {
         // 3. alter user
         sql = "alter user test identified by 'abc'";
         AlterUserStmt alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        masterManager.alterUser(alterUserStmt);
+        masterManager.alterUser(alterUserStmt.getUserIdentity(), alterUserStmt.getAuthenticationInfo());
         Assert.assertEquals(testUser, masterManager.checkPassword(
                 testUser.getQualifiedUser(), "10.1.1.1", scramble, seed));
+
+        // 3.1 update user property
+        sql = "set property for 'test' 'max_user_connections' = '555'";
+        SetUserPropertyStmt setUserPropertyStmt = (SetUserPropertyStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        masterManager.updateUserProperty("test", setUserPropertyStmt.getPropertyPairList());
+        Assert.assertEquals(555, masterManager.getMaxConn("test"));
 
         // 4. save image after alter
         UtFrameUtils.PseudoImage alterImage = new UtFrameUtils.PseudoImage();
@@ -267,7 +351,7 @@ public class AuthenticationManagerTest {
         masterManager.save(finalImage.getDataOutputStream());
 
         // 7. verify replay...
-        AuthenticationManager followerManager = AuthenticationManager.load(emptyImage.getDataInputStream());
+        AuthenticationMgr followerManager = AuthenticationMgr.load(emptyImage.getDataInputStream());
         Assert.assertFalse(followerManager.doesUserExist(testUser));
         // 7.1 replay create user
         CreateUserInfo createInfo = (CreateUserInfo)
@@ -284,22 +368,27 @@ public class AuthenticationManagerTest {
         followerManager.replayAlterUser(alterInfo.getUserIdentity(), alterInfo.getAuthenticationInfo());
         Assert.assertEquals(testUser, followerManager.checkPassword(
                 testUser.getQualifiedUser(), "10.1.1.1", scramble, seed));
+        // 7.2.1 replay update user property
+        UserPropertyInfo userPropertyInfo = (UserPropertyInfo)
+                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_USER_PROP_V3);
+        followerManager.replayUpdateUserProperty(userPropertyInfo);
+        Assert.assertEquals(555, followerManager.getMaxConn("test"));
         // 7.3 replay drop user
         UserIdentity dropInfo = (UserIdentity)
-                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_DROP_USER_V2);
+                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_DROP_USER_V3);
         followerManager.replayDropUser(dropInfo);
         Assert.assertFalse(followerManager.doesUserExist(testUser));
         Assert.assertTrue(followerManager.doesUserExist(UserIdentity.ROOT));
 
         // 8. verify alter image
-        AuthenticationManager alterManager = AuthenticationManager.load(alterImage.getDataInputStream());
+        AuthenticationMgr alterManager = AuthenticationMgr.load(alterImage.getDataInputStream());
         Assert.assertTrue(alterManager.doesUserExist(testUser));
         Assert.assertEquals(testUser, alterManager.checkPassword(
                 testUser.getQualifiedUser(), "10.1.1.1", scramble, seed));
         Assert.assertTrue(alterManager.doesUserExist(UserIdentity.ROOT));
 
         // 9. verify final image
-        AuthenticationManager finalManager = AuthenticationManager.load(finalImage.getDataInputStream());
+        AuthenticationMgr finalManager = AuthenticationMgr.load(finalImage.getDataInputStream());
         Assert.assertFalse(finalManager.doesUserExist(testUser));
         Assert.assertTrue(finalManager.doesUserExist(UserIdentity.ROOT));
     }
@@ -309,7 +398,7 @@ public class AuthenticationManagerTest {
         UserIdentity testUserWithHost = UserIdentity.createAnalyzedUserIdentWithDomain("user_with_host", "host01");
         byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
         byte[] scramble = MysqlPassword.scramble(seed, "abc");
-        AuthenticationManager manager = ctx.getGlobalStateMgr().getAuthenticationManager();
+        AuthenticationMgr manager = ctx.getGlobalStateMgr().getAuthenticationMgr();
         Assert.assertFalse(manager.doesUserExist(testUserWithHost));
 
         // create a user with host name
@@ -370,7 +459,7 @@ public class AuthenticationManagerTest {
 
     @Test
     public void testSortUserIdentity() throws Exception {
-        AuthenticationManager manager = ctx.getGlobalStateMgr().getAuthenticationManager();
+        AuthenticationMgr manager = ctx.getGlobalStateMgr().getAuthenticationMgr();
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "create user sort_user@['host01'] identified by 'abc'", ctx), ctx);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
@@ -389,6 +478,6 @@ public class AuthenticationManagerTest {
             }
         }
         Assert.assertEquals(Arrays.asList(
-                    "'sort_user'@'10.1.1.1'", "'sort_user'@'10.1.1.2'", "'sort_user'@['host01']", "'sort_user'@'%'"), l);
+                "'sort_user'@'10.1.1.1'", "'sort_user'@'10.1.1.2'", "'sort_user'@['host01']", "'sort_user'@'%'"), l);
     }
 }

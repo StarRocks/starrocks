@@ -12,35 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.physical;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Table;
-import com.starrocks.external.elasticsearch.EsShardPartitions;
+import com.starrocks.connector.elasticsearch.EsShardPartitions;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.Projection;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 
 public class PhysicalEsScanOperator extends PhysicalScanOperator {
     private final List<EsShardPartitions> selectedIndex;
 
-    public PhysicalEsScanOperator(Table table,
-                                  Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-                                  List<EsShardPartitions> selectedIndex,
-                                  long limit,
-                                  ScalarOperator predicate,
-                                  Projection projection) {
-        super(OperatorType.PHYSICAL_ES_SCAN, table, colRefToColumnMetaMap, limit, predicate, projection);
-        this.selectedIndex = selectedIndex;
+    public PhysicalEsScanOperator(LogicalEsScanOperator scanOperator) {
+        super(OperatorType.PHYSICAL_ES_SCAN, scanOperator);
+        this.selectedIndex = scanOperator.getSelectedIndex();
     }
 
     public List<EsShardPartitions> getSelectedIndex() {
@@ -55,25 +43,5 @@ public class PhysicalEsScanOperator extends PhysicalScanOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitPhysicalEsScan(optExpression, context);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
-            return false;
-        }
-        PhysicalEsScanOperator that = (PhysicalEsScanOperator) o;
-        return Objects.equals(selectedIndex, that.selectedIndex);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), selectedIndex);
     }
 }

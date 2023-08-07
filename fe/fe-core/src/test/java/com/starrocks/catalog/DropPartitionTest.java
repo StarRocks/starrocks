@@ -35,30 +35,37 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.staros.proto.AwsCredentialInfo;
+import com.staros.proto.AwsDefaultCredentialInfo;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
-import com.starrocks.common.Config;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.SharedNothingStorageVolumeMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
-import org.junit.AfterClass;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Map;
 
 public class DropPartitionTest {
     private static ConnectContext connectContext;
@@ -79,7 +86,6 @@ public class DropPartitionTest {
         createDb(createDbStmtStr);
         createTable(createTableStr);
 
-        Config.use_staros = true;
         StarOSAgent agent = new StarOSAgent();
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
@@ -88,10 +94,13 @@ public class DropPartitionTest {
         S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
         s3FsBuilder.setBucket("test-bucket");
         s3FsBuilder.setRegion("test-region");
+        s3FsBuilder.setCredential(AwsCredentialInfo.newBuilder()
+                .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()));
         S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
 
         fsBuilder.setFsType(FileStoreType.S3);
         fsBuilder.setFsKey("test-bucket");
+        fsBuilder.setFsName("test-fsname");
         fsBuilder.setS3FsInfo(s3FsInfo);
         FileStoreInfo fsInfo = fsBuilder.build();
 
@@ -101,34 +110,49 @@ public class DropPartitionTest {
 
         new Expectations(agent) {
             {
-                agent.allocateFilePath(anyLong);
+                agent.allocateFilePath(anyString, anyLong);
                 result = pathInfo;
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
-                agent.createShards(anyInt, anyInt, pathInfo, (FileCacheInfo) any, anyLong);
+                agent.createShards(anyInt, pathInfo, (FileCacheInfo) any, anyLong, (Map<String, String>) any);
                 returns(Lists.newArrayList(10001L, 10002L, 10003L),
                         Lists.newArrayList(10004L, 10005L, 10006L),
                         Lists.newArrayList(10007L, 10008L, 10009L));
-                agent.getPrimaryBackendIdByShard(anyLong);
+                agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
             }
         };
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new MockUp<SharedNothingStorageVolumeMgr>() {
+            @Mock
+            public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException {
+                return StorageVolume.fromFileStoreInfo(fsInfo);
+            }
+
+            @Mock
+            public String getStorageVolumeIdOfTable(long tableId) {
+                return fsInfo.getFsKey();
+            }
+        };
+
         Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
 
         String createLakeTableStr = "create table test.lake_table(k1 date, k2 int, k3 smallint, v1 varchar(2048), "
                 + "v2 datetime default '2014-02-04 15:36:00')"
-                + " engine = starrocks duplicate key(k1, k2, k3)"
+                + " duplicate key(k1, k2, k3)"
                 + " PARTITION BY RANGE(k1, k2, k3)"
                 + " (PARTITION p1 VALUES [(\"2014-01-01\", \"10\", \"200\"), (\"2014-01-01\", \"20\", \"300\")),"
                 + " PARTITION p2 VALUES [(\"2014-06-01\", \"100\", \"200\"), (\"2014-07-01\", \"100\", \"300\")))"
                 + " DISTRIBUTED BY HASH(k2) BUCKETS 3"
-                + " PROPERTIES ( \"enable_storage_cache\" = \"true\", \"storage_cache_ttl\" = \"3600\");";
+                + " PROPERTIES ( \"datacache.enable\" = \"true\")";
         createTable(createLakeTableStr);
-    }
-
-    @AfterClass
-    public static void afterClass() {
-        Config.use_staros = false;
     }
 
     private static void createDb(String sql) throws Exception {

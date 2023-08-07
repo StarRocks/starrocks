@@ -15,10 +15,10 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 public class ShowAuthenticationStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA;
@@ -39,6 +39,11 @@ public class ShowAuthenticationStmt extends ShowStmt {
     // SHOW ALL AUTHENTICATION -> (null, true)
     // SHOW AUTHENTICATION FOR xx -> (xx, false)
     public ShowAuthenticationStmt(UserIdentity userIdent, boolean isAll) {
+        this(userIdent, isAll, NodePosition.ZERO);
+    }
+
+    public ShowAuthenticationStmt(UserIdentity userIdent, boolean isAll, NodePosition pos) {
+        super(pos);
         this.userIdent = userIdent;
         this.isAll = isAll;
     }

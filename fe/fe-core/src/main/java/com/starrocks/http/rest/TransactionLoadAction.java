@@ -134,6 +134,13 @@ public class TransactionLoadAction extends RestBaseAction {
             channelIdStr = request.getRequest().headers().get(CHANNEL_ID_STR);
         }
 
+        if (channelNumStr != null && channelIdStr == null) {
+            throw new DdlException("Must provide channel_id when stream load begin.");
+        }
+        if (channelNumStr == null && channelIdStr != null) {
+            throw new DdlException("Must provide channel_num when stream load begin.");
+        }
+
         Long backendID = null;
 
         if (Strings.isNullOrEmpty(dbName)) {
@@ -150,10 +157,10 @@ public class TransactionLoadAction extends RestBaseAction {
             if (db == null) {
                 throw new UserException("database " + dbName + " not exists");
             }
-            TransactionStatus txnStatus = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelState(db.getId(),
+            TransactionStatus txnStatus = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelStatus(db.getId(),
                     label);
+            Long txnID = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelTxnID(db.getId(), label);
             if (txnStatus == TransactionStatus.PREPARED) {
-                Long txnID = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelTxnID(db.getId(), label);
                 if (txnID == -1) {
                     throw new UserException("label " + label + " txn not exist");
                 }
@@ -168,6 +175,26 @@ public class TransactionLoadAction extends RestBaseAction {
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(db.getId(), txnID,
                             "User Aborted");
                 }
+                resp.addResultEntry("Label", label);
+                sendResult(request, response, resp);
+                return;
+            } else if (txnStatus == TransactionStatus.COMMITTED || txnStatus == TransactionStatus.VISIBLE) {
+                // whether txnId is valid or not is not important
+                if (op.equalsIgnoreCase(TXN_ROLLBACK)) {
+                    throw new UserException(String.format(
+                        "cannot abort committed transaction %s, label %s ", Long.toString(txnID), label));
+                }
+                resp.setOKMsg("label " + label + " transaction " + txnID + " has already committed");
+                resp.addResultEntry("Label", label);
+                sendResult(request, response, resp);
+                return;
+            } else if (txnStatus == TransactionStatus.ABORTED) {
+                // whether txnId is valid or not is not important
+                if (op.equalsIgnoreCase(TXN_COMMIT)) {
+                    throw new UserException(String.format(
+                        "cannot commit aborted transaction %s, label %s ", Long.toString(txnID), label));
+                }
+                resp.setOKMsg("label " + label + " transaction " + txnID + " has already aborted");
                 resp.addResultEntry("Label", label);
                 sendResult(request, response, resp);
                 return;
@@ -198,17 +225,14 @@ public class TransactionLoadAction extends RestBaseAction {
             if (timeout != null) {
                 timeoutMillis = Long.parseLong(timeout) * 1000;
             }
-            if (channelNumStr == null) {
-                throw new DdlException("Must provide channel num when stream load begin.");
-            }
             int channelNum = Integer.parseInt(channelNumStr);
             int channelId = Integer.parseInt(channelIdStr);
-            if (channelId >= channelNum) {
-                throw new DdlException("channel id should be less than channel num");
+            if (channelId >= channelNum || channelId < 0) {
+                throw new DdlException("channel id should be between [0, " + String.valueOf(channelNum - 1) + "].");
             }
 
             // context.parseHttpHeader(request.getRequest().headers());
-            GlobalStateMgr.getCurrentState().getStreamLoadManager().beginLoadTask(
+            GlobalStateMgr.getCurrentState().getStreamLoadMgr().beginLoadTask(
                     dbName, tableName, label, timeoutMillis, channelNum, channelId, resp);
             sendResult(request, response, resp);
             return;
@@ -217,8 +241,8 @@ public class TransactionLoadAction extends RestBaseAction {
         if (op.equalsIgnoreCase(LOAD) && channelIdStr != null) {
             int channelId = Integer.parseInt(channelIdStr);
             TransactionResult resp = new TransactionResult();
-            TNetworkAddress redirectAddr = GlobalStateMgr.getCurrentState().getStreamLoadManager().executeLoadTask(
-                    label, channelId, request.getRequest().headers(), resp);
+            TNetworkAddress redirectAddr = GlobalStateMgr.getCurrentState().getStreamLoadMgr().executeLoadTask(
+                    label, channelId, request.getRequest().headers(), resp, dbName, tableName);
             if (!resp.stateOK() || resp.containMsg()) {
                 sendResult(request, response, resp);
                 return;
@@ -232,13 +256,13 @@ public class TransactionLoadAction extends RestBaseAction {
         if (op.equalsIgnoreCase(TXN_PREPARE) && channelIdStr != null) {
             int channelId = Integer.parseInt(channelIdStr);
             TransactionResult resp = new TransactionResult();
-            GlobalStateMgr.getCurrentState().getStreamLoadManager().prepareLoadTask(
+            GlobalStateMgr.getCurrentState().getStreamLoadMgr().prepareLoadTask(
                     label, channelId, request.getRequest().headers(), resp);
             if (!resp.stateOK() || resp.containMsg()) {
                 sendResult(request, response, resp);
                 return;
             }
-            GlobalStateMgr.getCurrentState().getStreamLoadManager().tryPrepareLoadTaskTxn(label, resp);
+            GlobalStateMgr.getCurrentState().getStreamLoadMgr().tryPrepareLoadTaskTxn(label, resp);
             sendResult(request, response, resp);
             return;
         }
@@ -246,7 +270,7 @@ public class TransactionLoadAction extends RestBaseAction {
         if (op.equalsIgnoreCase(TXN_COMMIT) && channelIdStr != null) {
             int channelId = Integer.parseInt(channelIdStr);
             TransactionResult resp = new TransactionResult();
-            GlobalStateMgr.getCurrentState().getStreamLoadManager().commitLoadTask(label, resp);
+            GlobalStateMgr.getCurrentState().getStreamLoadMgr().commitLoadTask(label, resp);
             sendResult(request, response, resp);
             return;
         }
@@ -254,7 +278,7 @@ public class TransactionLoadAction extends RestBaseAction {
         if (op.equalsIgnoreCase(TXN_ROLLBACK) && channelIdStr != null) {
             int channelId = Integer.parseInt(channelIdStr);
             TransactionResult resp = new TransactionResult();
-            GlobalStateMgr.getCurrentState().getStreamLoadManager().rollbackLoadTask(label, resp);
+            GlobalStateMgr.getCurrentState().getStreamLoadMgr().rollbackLoadTask(label, resp);
             sendResult(request, response, resp);
             return;
         }

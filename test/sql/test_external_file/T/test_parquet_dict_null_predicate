@@ -1,0 +1,72 @@
+-- name: testExternalParquetDictNullPredicate
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_parquet_dict_with_null_value/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/dict_with_null_value.parquet oss://${oss_bucket}/test_parquet_dict_with_null_value/${uuid0}/dict_with_null_value.parquet | grep -Pv "(average|elapsed)"
+
+-- MySQL [tpch_100g_zhangyan_parquet_lz4]> select c_mktsegment from customer_with_nulls3;
+-- +--------------+
+-- | c_mktsegment |
+-- +--------------+
+-- | BUILDING     |
+-- | MACHINERY    |
+-- | NULL         |
+-- | AUTOMOBILE   |
+-- | AUTOMOBILE   |
+-- | AUTOMOBILE   |
+-- | AUTOMOBILE   |
+-- | BUILDING     |
+-- | FURNITURE    |
+-- | NULL         |
+-- | BUILDING     |
+-- | NULL         |
+-- | BUILDING     |
+-- | FURNITURE    |
+-- | NULL         |
+-- | FURNITURE    |
+-- | AUTOMOBILE   |
+-- | BUILDING     |
+-- | NULL         |
+-- | FURNITURE    |
+-- | MACHINERY    |
+-- | MACHINERY    |
+-- | NULL         |
+-- | MACHINERY    |
+-- | FURNITURE    |
+-- | AUTOMOBILE   |
+-- | BUILDING     |
+-- | FURNITURE    |
+-- | FURNITURE    |
+-- | BUILDING     |
+-- +--------------+
+
+CREATE EXTERNAL TABLE tpch_customer_null
+(
+    c_custkey int,
+    c_name string,
+    c_address string,
+    c_nationkey int,
+    c_phone string,
+    c_acctbal decimal(15,2),
+    c_mktsegment string,
+    c_comment string
+) 
+ENGINE=file
+PROPERTIES 
+(
+    "path" = "oss://${oss_bucket}/test_parquet_dict_with_null_value/${uuid0}/",
+    "format" = "parquet"
+);
+
+select count(*) from tpch_customer_null;
+
+-- BUILDING = 7, NULL = 6
+select count(*) from tpch_customer_null where (c_mktsegment = 'BUILDING' OR c_mktsegment is NULL);
+
+-- BUILDING = 7, NULL = 6
+select count(*) from tpch_customer_null where coalesce(c_mktsegment, 'BUILDING') = 'BUILDING';
+
+select count(*) from tpch_customer_null where c_mktsegment is null;
+
+select count(*) from tpch_customer_null where c_mktsegment is not null;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_parquet_dict_with_null_value/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null

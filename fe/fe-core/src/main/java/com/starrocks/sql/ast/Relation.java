@@ -20,12 +20,20 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.parser.NodePosition;
+
+import java.util.List;
 
 public abstract class Relation implements ParseNode {
     private Scope scope;
-    protected TableName alias;
 
-    public Relation() {
+    protected TableName alias;
+    protected List<String> explicitColumnNames;
+
+    protected final NodePosition pos;
+
+    protected Relation(NodePosition pos) {
+        this.pos = pos;
     }
 
     public Scope getScope() {
@@ -53,6 +61,27 @@ public abstract class Relation implements ParseNode {
 
     public TableName getResolveTableName() {
         return alias;
+    }
+
+    public List<String> getColumnOutputNames() {
+        return explicitColumnNames;
+    }
+
+    public boolean isDualRelation() {
+        return false;
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
+    }
+
+    public void setColumnOutputNames(List<String> explicitColumnNames) {
+        this.explicitColumnNames = explicitColumnNames;
+    }
+
+    public List<String> getExplicitColumnNames() {
+        return explicitColumnNames;
     }
 
     @Override

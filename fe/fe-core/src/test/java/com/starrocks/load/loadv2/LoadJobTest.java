@@ -57,12 +57,15 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import mockit.Expectations;
 import mockit.Injectable;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
 
 public class LoadJobTest {
 
@@ -137,6 +140,14 @@ public class LoadJobTest {
                 leaderTaskExecutor.submit((LeaderTask) any);
                 minTimes = 0;
                 result = true;
+            }
+        };
+
+        GlobalStateMgr.getCurrentState().setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
+        new MockUp<EditLog>() {
+            @Mock
+            public void logSaveNextId(long nextId) {
+
             }
         };
 

@@ -44,6 +44,7 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
+#include "storage/delta_column_group.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/short_key_index.h"
@@ -53,11 +54,13 @@
 
 namespace starrocks {
 
+class ColumnAccessPath;
 class TabletSchema;
 class ShortKeyIndexDecoder;
 
 class ChunkIterator;
-class VectorizedSchema;
+class IndexReadOptions;
+class Schema;
 class SegmentIterator;
 class SegmentReadOptions;
 
@@ -93,10 +96,12 @@ public:
                                                    uint32_t segment_id,
                                                    std::shared_ptr<const TabletSchema> tablet_schema,
                                                    size_t* footer_length_hint = nullptr,
-                                                   const FooterPointerPB* partial_rowset_footer = nullptr);
+                                                   const FooterPointerPB* partial_rowset_footer = nullptr,
+                                                   bool skip_fill_local_cache = true);
 
-    static Status parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer, size_t* footer_length_hint,
-                                       const FooterPointerPB* partial_rowset_footer);
+    [[nodiscard]] static Status parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer,
+                                                     size_t* footer_length_hint,
+                                                     const FooterPointerPB* partial_rowset_footer);
 
     Segment(const private_type&, std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
             const TabletSchema* tablet_schema);
@@ -107,14 +112,17 @@ public:
     ~Segment();
 
     // may return EndOfFile
-    StatusOr<ChunkIteratorPtr> new_iterator(const VectorizedSchema& schema, const SegmentReadOptions& read_options);
+    StatusOr<ChunkIteratorPtr> new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
+
+    StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx);
 
     uint64_t id() const { return _segment_id; }
 
     // TODO: remove this method, create `ColumnIterator` via `ColumnReader`.
-    StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator(uint32_t cid);
+    StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator(uint32_t cid, ColumnAccessPath* path = nullptr);
 
-    Status new_bitmap_index_iterator(uint32_t cid, BitmapIndexIterator** iter);
+    [[nodiscard]] Status new_bitmap_index_iterator(uint32_t cid, const IndexReadOptions& options,
+                                                   BitmapIndexIterator** iter);
 
     size_t num_short_keys() const { return _tablet_schema->num_short_key_columns(); }
 
@@ -148,7 +156,7 @@ public:
 
     FileSystem* file_system() const { return _fs.get(); }
 
-    bool keep_in_memory() const { return _tablet_schema->is_in_memory(); }
+    const TabletSchema& tablet_schema() const { return *_tablet_schema; }
 
     const std::string& file_name() const { return _fname; }
 
@@ -156,12 +164,23 @@ public:
 
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.
-    Status load_index();
+    [[nodiscard]] Status load_index(bool skip_fill_local_cache = true);
     bool has_loaded_index() const;
 
     const ShortKeyIndexDecoder* decoder() const { return _sk_index_decoder.get(); }
 
     int64_t mem_usage() { return _basic_info_mem_usage() + _short_key_index_mem_usage(); }
+
+    int64_t get_data_size() {
+        auto res = _fs->get_file_size(_fname);
+        if (res.ok()) {
+            return res.value();
+        }
+        return 0;
+    }
+
+    // read short_key_index, for data check, just used in unit test now
+    [[nodiscard]] Status get_short_key_index(std::vector<std::string>* sk_index_values);
 
     DISALLOW_COPY_AND_MOVE(Segment);
 
@@ -189,7 +208,7 @@ private:
         std::shared_ptr<const TabletSchema> _schema;
     };
 
-    Status _load_index();
+    Status _load_index(bool skip_fill_local_cache);
 
     void _reset();
 
@@ -204,12 +223,14 @@ private:
     }
 
     // open segment file and read the minimum amount of necessary information (footer)
-    Status _open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer);
+    Status _open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer, bool skip_fill_local_cache);
     Status _create_column_readers(SegmentFooterPB* footer);
 
-    StatusOr<ChunkIteratorPtr> _new_iterator(const VectorizedSchema& schema, const SegmentReadOptions& read_options);
+    StatusOr<ChunkIteratorPtr> _new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
 
     void _prepare_adapter_info();
+
+    bool _use_segment_zone_map_filter(const SegmentReadOptions& read_options);
 
     friend class SegmentIterator;
 
@@ -236,8 +257,6 @@ private:
     std::unique_ptr<std::vector<LogicalType>> _column_storage_types;
     // When reading old type format data this will be set to true.
     bool _needs_chunk_adapter = false;
-    // When the storage types is different with TabletSchema
-    bool _needs_block_adapter = false;
 };
 
 } // namespace starrocks

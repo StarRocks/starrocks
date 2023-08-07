@@ -6,7 +6,7 @@
 #include "column/fixed_length_column.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "udf/java/java_udf.h"
 
 namespace starrocks {

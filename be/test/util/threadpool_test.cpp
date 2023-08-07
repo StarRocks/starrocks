@@ -165,7 +165,7 @@ TEST_F(ThreadPoolTest, TestThreadPoolWithNoMaxThreads) {
     // By default a threadpool's max_threads is set to the number of CPUs, so
     // this test submits more tasks than that to ensure that the number of CPUs
     // isn't some kind of upper bound.
-    const int kNumCPUs = base::NumCPUs();
+    const int kNumCPUs = CpuInfo::num_cores();
 
     // Build a threadpool with no limit on the maximum number of threads.
     ASSERT_TRUE(rebuild_pool_with_builder(

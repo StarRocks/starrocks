@@ -22,7 +22,7 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -59,7 +59,7 @@ private:
 };
 
 jlong JavaNativeMethods::resizeStringData(JNIEnv* env, jclass clazz, jlong columnAddr, jint byteSize) {
-    auto* column = reinterpret_cast<Column*>(columnAddr);
+    auto* column = reinterpret_cast<Column*>(columnAddr); // NOLINT
     BinaryColumn* binary_column = nullptr;
     if (column->is_nullable()) {
         binary_column = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(down_cast<NullableColumn*>(column)->data_column());
@@ -79,7 +79,7 @@ jlong JavaNativeMethods::resizeStringData(JNIEnv* env, jclass clazz, jlong colum
 }
 
 jlongArray JavaNativeMethods::getAddrs(JNIEnv* env, jclass clazz, jlong columnAddr) {
-    auto* column = reinterpret_cast<Column*>(columnAddr);
+    auto* column = reinterpret_cast<Column*>(columnAddr); // NOLINT
     // return fixed array size
     int array_size = 3;
     auto jarr = env->NewLongArray(array_size);
@@ -98,7 +98,7 @@ jlong JavaNativeMethods::memory_malloc(JNIEnv* env, jclass clazz, jlong bytes) {
 
 void JavaNativeMethods::memory_free(JNIEnv* env, jclass clazz, jlong address) {
     VLOG_ROW << "Freed memory address " << address << ".";
-    free(reinterpret_cast<void*>(address));
+    free(reinterpret_cast<void*>(address)); // NOLINT
 }
 
 } // namespace starrocks

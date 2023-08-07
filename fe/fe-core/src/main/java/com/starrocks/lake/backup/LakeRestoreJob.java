@@ -16,8 +16,8 @@
 package com.starrocks.lake.backup;
 
 import autovalue.shaded.com.google.common.common.collect.Maps;
-import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.backup.BackupJobInfo;
@@ -36,6 +36,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
@@ -52,6 +53,7 @@ import com.starrocks.proto.RestoreSnapshotsRequest;
 import com.starrocks.proto.RestoreSnapshotsResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.THdfsProperties;
@@ -125,7 +127,7 @@ public class LakeRestoreJob extends RestoreJob {
                 Partition part = tbl.getPartition(idChain.getPartId());
                 MaterializedIndex index = part.getIndex(idChain.getIdxId());
                 tablet = (LakeTablet) index.getTablet(idChain.getTabletId());
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(tablet.getPrimaryBackendId());
+                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(tablet.getPrimaryComputeNodeId());
                 LakeTableSnapshotInfo info = new LakeTableSnapshotInfo(db.getId(), idChain.getTblId(),
                         idChain.getPartId(), idChain.getIdxId(), idChain.getTabletId(),
                         backend.getId(), tbl.getSchemaHashByIndexId(index.getId()), -1);
@@ -205,7 +207,12 @@ public class LakeRestoreJob extends RestoreJob {
     protected void sendDownloadTasks() {
         for (Map.Entry<Long, RestoreSnapshotsRequest> entry : requests.entrySet()) {
             Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(entry.getKey());
-            LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+            LakeService lakeService = null;
+            try {
+                lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+            } catch (RpcException e) {
+                throw new RuntimeException(e);
+            }
             Future<RestoreSnapshotsResponse> response = lakeService.restoreSnapshots(entry.getValue());
             responses.put(entry.getKey(), response);
         }
@@ -243,7 +250,7 @@ public class LakeRestoreJob extends RestoreJob {
     }
 
     @Override
-    protected void updateTablets(MaterializedIndex idx, Partition part) {
+    protected void updateTablets(MaterializedIndex idx, PhysicalPartition part) {
         // It is no need to update tablets for lake table.
     }
 
@@ -292,7 +299,7 @@ public class LakeRestoreJob extends RestoreJob {
             localPartitionInfo.addPartition(restorePart.getId(), false, remoteRange,
                     remoteDataProperty, (short) restoreReplicationNum,
                     remotePartitionInfo.getIsInMemory(remotePartId),
-                    remotePartitionInfo.getStorageCacheInfo(remotePartId));
+                    remotePartitionInfo.getDataCacheInfo(remotePartId));
             localTbl.addPartition(restorePart);
             if (modify) {
                 // modify tablet inverted index
@@ -307,8 +314,7 @@ public class LakeRestoreJob extends RestoreJob {
             FilePathInfo pathInfo = globalStateMgr.getStarOSAgent().allocateFilePath(remoteOlapTbl.getId());
             LakeTable remoteLakeTbl = (LakeTable) remoteOlapTbl;
             StorageInfo storageInfo = remoteLakeTbl.getTableProperty().getStorageInfo();
-            remoteLakeTbl.setStorageInfo(pathInfo, storageInfo.isEnableStorageCache(),
-                    storageInfo.getStorageCacheTtlS(), storageInfo.isAllowAsyncWriteBack());
+            remoteLakeTbl.setStorageInfo(pathInfo, storageInfo.getDataCacheInfo());
             remoteLakeTbl.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum);
         } catch (DdlException e) {
             return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());

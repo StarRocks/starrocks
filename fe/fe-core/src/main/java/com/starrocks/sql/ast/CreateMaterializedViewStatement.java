@@ -18,10 +18,11 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
 
 import java.util.List;
@@ -42,6 +43,8 @@ import java.util.Map;
 public class CreateMaterializedViewStatement extends DdlStmt {
 
     private TableName tableName;
+    private final List<ColWithComment> colWithComments;
+
     private boolean ifNotExists;
     private String comment;
     private RefreshSchemeDesc refreshSchemeDesc;
@@ -49,11 +52,12 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private Map<String, String> properties;
     private QueryStatement queryStatement;
     private DistributionDesc distributionDesc;
+    private final List<String> sortKeys;
     private KeysType keysType = KeysType.DUP_KEYS;
     protected String inlineViewDef;
 
     private String simpleViewDef;
-    private List<MaterializedView.BaseTableInfo> baseTableInfos;
+    private List<BaseTableInfo> baseTableInfos;
 
     // Maintenance information
     ExecPlan maintenancePlan;
@@ -65,16 +69,23 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     // record expression which related with partition by clause
     private Expr partitionRefTableExpr;
 
-    public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists, String comment,
-                                           RefreshSchemeDesc refreshSchemeDesc, ExpressionPartitionDesc expressionPartitionDesc,
-                                           DistributionDesc distributionDesc, Map<String, String> properties,
-                                           QueryStatement queryStatement) {
+    public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists,
+                                           List<ColWithComment> colWithComments,
+                                           String comment,
+                                           RefreshSchemeDesc refreshSchemeDesc,
+                                           ExpressionPartitionDesc expressionPartitionDesc,
+                                           DistributionDesc distributionDesc, List<String> sortKeys,
+                                           Map<String, String> properties,
+                                           QueryStatement queryStatement, NodePosition pos) {
+        super(pos);
         this.tableName = tableName;
+        this.colWithComments = colWithComments;
         this.ifNotExists = ifNotExists;
         this.comment = comment;
         this.refreshSchemeDesc = refreshSchemeDesc;
         this.expressionPartitionDesc = expressionPartitionDesc;
         this.distributionDesc = distributionDesc;
+        this.sortKeys = sortKeys;
         this.properties = properties;
         this.queryStatement = queryStatement;
     }
@@ -85,6 +96,10 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public void setTableName(TableName tableName) {
         this.tableName = tableName;
+    }
+
+    public List<ColWithComment> getColWithComments() {
+        return colWithComments;
     }
 
     public boolean isIfNotExists() {
@@ -131,6 +146,10 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         return distributionDesc;
     }
 
+    public List<String> getSortKeys() {
+        return sortKeys;
+    }
+
     public void setDistributionDesc(DistributionDesc distributionDesc) {
         this.distributionDesc = distributionDesc;
     }
@@ -175,11 +194,11 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.mvColumnItems = mvColumnItems;
     }
 
-    public List<MaterializedView.BaseTableInfo> getBaseTableInfos() {
+    public List<BaseTableInfo> getBaseTableInfos() {
         return baseTableInfos;
     }
 
-    public void setBaseTableInfos(List<MaterializedView.BaseTableInfo> baseTableInfos) {
+    public void setBaseTableInfos(List<BaseTableInfo> baseTableInfos) {
         this.baseTableInfos = baseTableInfos;
     }
 

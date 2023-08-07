@@ -35,6 +35,7 @@
 namespace cpp starrocks
 namespace java com.starrocks.thrift
 
+include "CloudConfiguration.thrift"
 include "Exprs.thrift"
 include "Types.thrift"
 include "Descriptors.thrift"
@@ -50,13 +51,28 @@ enum TDataSinkType {
     OLAP_TABLE_SINK,
     MEMORY_SCRATCH_SINK,
     MULTI_CAST_DATA_STREAM_SINK,
+    SCHEMA_TABLE_SINK,
+    ICEBERG_TABLE_SINK
 }
 
 enum TResultSinkType {
     MYSQL_PROTOCAL,
     FILE,
     STATISTIC,
-    VARIABLE
+    VARIABLE,
+    HTTP_PROTOCAL
+}
+
+enum TResultSinkFormatType {
+    JSON,
+    OTHERS
+}
+
+struct TParquetOptions {
+    // parquet row group max size in bytes
+    1: optional i64 parquet_max_group_bytes
+    2: optional Types.TCompressionType compression_type
+    3: optional bool use_dict
 }
 
 struct TResultFileSinkOptions {
@@ -73,7 +89,9 @@ struct TResultFileSinkOptions {
     // hdfs_write_buffer_size_kb for writing through lib hdfs directly
     9: optional i32 hdfs_write_buffer_size_kb = 0
     // properties from hdfs-site.xml, core-site.xml and load_properties
-    10: optional PlanNodes.THdfsProperties hdfs_properties 
+    10: optional PlanNodes.THdfsProperties hdfs_properties
+    11: optional TParquetOptions parquet_options
+    12: optional list<string> file_column_names
 }
 
 struct TMemoryScratchSink {
@@ -86,7 +104,10 @@ struct TPlanFragmentDestination {
   1: required Types.TUniqueId fragment_instance_id
 
   // ... which is being executed on this server
-  2: required Types.TNetworkAddress server
+
+  // 'deprecated_server' changed from required to optional in version 3.2
+  // can be removed in version 4.0
+  2: optional Types.TNetworkAddress deprecated_server
   3: optional Types.TNetworkAddress brpc_server
 
   4: optional i32 pipeline_driver_sequence
@@ -129,6 +150,7 @@ struct TMultiCastDataStreamSink {
 struct TResultSink {
     1: optional TResultSinkType type;
     2: optional TResultFileSinkOptions file_options;
+    3: optional TResultSinkFormatType format;
 }
 
 struct TMysqlTableSink {
@@ -182,6 +204,28 @@ struct TOlapTableSink {
     18: optional Types.TWriteQuorumType write_quorum_type
     19: optional bool enable_replicated_storage
     20: optional string merge_condition
+    21: optional bool null_expr_in_auto_increment
+    22: optional bool miss_auto_increment_column
+    23: optional bool abort_delete // Deprecated
+    24: optional i32 auto_increment_slot_id
+    25: optional Types.TPartialUpdateMode partial_update_mode
+    26: optional string label
+    // enable colocated for sync mv 
+    27: optional bool enable_colocate_mv_index 
+}
+
+struct TSchemaTableSink {
+    1: optional string table
+    2: optional Descriptors.TNodesInfo nodes_info
+}
+
+struct TIcebergTableSink {
+    1: optional string location
+    2: optional string file_format
+    3: optional i64 target_table_id
+    4: optional Types.TCompressionType compression_type
+    5: optional bool is_static_partition_sink
+    6: optional CloudConfiguration.TCloudConfiguration cloud_configuration
 }
 
 struct TDataSink {
@@ -193,4 +237,6 @@ struct TDataSink {
   7: optional TOlapTableSink olap_table_sink
   8: optional TMemoryScratchSink memory_scratch_sink
   9: optional TMultiCastDataStreamSink multi_cast_stream_sink
+  10: optional TSchemaTableSink schema_table_sink
+  11: optional TIcebergTableSink iceberg_table_sink
 }

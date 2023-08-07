@@ -44,10 +44,10 @@ cardinality: 100
 column statistics:
 * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.0031873E7] ESTIMATE
 * c_name-->[-Infinity, Infinity, 0.0, 25.0, 1.5E7] ESTIMATE
-* o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.4999999999989533E8] ESTIMATE
+* o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.499996859999979E8] ESTIMATE
 * o_totalprice-->[811.73, 591036.15, 0.0, 8.0, 3.469658E7] ESTIMATE
 * o_orderdate-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2412.0] ESTIMATE
-* sum-->[1.0, 6.000379019995813E8, 0.0, 8.0, 50.0] ESTIMATE
+* sum-->[1.0, 6.000366459206501E8, 0.0, 8.0, 50.0] ESTIMATE
 
 PLAN FRAGMENT 1(F09)
 
@@ -63,22 +63,22 @@ OutPut Exchange Id: 20
 |  column statistics:
 |  * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.0031873E7] ESTIMATE
 |  * c_name-->[-Infinity, Infinity, 0.0, 25.0, 1.5E7] ESTIMATE
-|  * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.4999999999989533E8] ESTIMATE
+|  * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.499996859999979E8] ESTIMATE
 |  * o_totalprice-->[811.73, 591036.15, 0.0, 8.0, 3.469658E7] ESTIMATE
 |  * o_orderdate-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2412.0] ESTIMATE
-|  * sum-->[1.0, 6.000379019995813E8, 0.0, 8.0, 50.0] ESTIMATE
+|  * sum-->[1.0, 6.000366459206501E8, 0.0, 8.0, 50.0] ESTIMATE
 |
 18:AGGREGATE (update finalize)
 |  aggregate: sum[([22: l_quantity, DECIMAL64(15,2), true]); args: DECIMAL64; result: DECIMAL128(38,2); args nullable: true; result nullable: true]
 |  group by: [2: c_name, VARCHAR, true], [1: c_custkey, INT, true], [9: o_orderkey, INT, true], [13: o_orderdate, DATE, true], [12: o_totalprice, DECIMAL64(15,2), true]
-|  cardinality: 600037902
+|  cardinality: 600036646
 |  column statistics:
 |  * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.0031873E7] ESTIMATE
 |  * c_name-->[-Infinity, Infinity, 0.0, 25.0, 1.5E7] ESTIMATE
-|  * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.4999999999989533E8] ESTIMATE
+|  * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.499996859999979E8] ESTIMATE
 |  * o_totalprice-->[811.73, 591036.15, 0.0, 8.0, 3.469658E7] ESTIMATE
 |  * o_orderdate-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2412.0] ESTIMATE
-|  * sum-->[1.0, 6.000379019995813E8, 0.0, 8.0, 50.0] ESTIMATE
+|  * sum-->[1.0, 6.000366459206501E8, 0.0, 8.0, 50.0] ESTIMATE
 |
 17:Project
 |  output columns:
@@ -88,11 +88,11 @@ OutPut Exchange Id: 20
 |  12 <-> [12: o_totalprice, DECIMAL64(15,2), true]
 |  13 <-> [13: o_orderdate, DATE, true]
 |  22 <-> [22: l_quantity, DECIMAL64(15,2), true]
-|  cardinality: 600037902
+|  cardinality: 600036646
 |  column statistics:
 |  * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.0031873E7] ESTIMATE
 |  * c_name-->[-Infinity, Infinity, 0.0, 25.0, 1.5E7] ESTIMATE
-|  * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.4999999999989533E8] ESTIMATE
+|  * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.499996859999979E8] ESTIMATE
 |  * o_totalprice-->[811.73, 591036.15, 0.0, 8.0, 3.469658E7] ESTIMATE
 |  * o_orderdate-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2412.0] ESTIMATE
 |  * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
@@ -103,15 +103,15 @@ OutPut Exchange Id: 20
 |  build runtime filters:
 |  - filter_id = 2, build_expr = (9: o_orderkey), remote = true
 |  output columns: 1, 2, 9, 12, 13, 22
-|  cardinality: 600037902
+|  cardinality: 600036646
 |  column statistics:
 |  * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.0031873E7] ESTIMATE
 |  * c_name-->[-Infinity, Infinity, 0.0, 25.0, 1.5E7] ESTIMATE
-|  * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.4999999999989533E8] ESTIMATE
+|  * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.499996859999979E8] ESTIMATE
 |  * o_totalprice-->[811.73, 591036.15, 0.0, 8.0, 3.469658E7] ESTIMATE
 |  * o_orderdate-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2412.0] ESTIMATE
-|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.4999999999989533E8] ESTIMATE
 |  * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.499996859999979E8] ESTIMATE
 |
 |----15:Project
 |    |  output columns:
@@ -120,11 +120,11 @@ OutPut Exchange Id: 20
 |    |  9 <-> [9: o_orderkey, INT, true]
 |    |  12 <-> [12: o_totalprice, DECIMAL64(15,2), true]
 |    |  13 <-> [13: o_orderdate, DATE, true]
-|    |  cardinality: 150000000
+|    |  cardinality: 149999686
 |    |  column statistics:
 |    |  * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.0031873E7] ESTIMATE
 |    |  * c_name-->[-Infinity, Infinity, 0.0, 25.0, 1.5E7] ESTIMATE
-|    |  * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.4999999999989533E8] ESTIMATE
+|    |  * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.499996859999979E8] ESTIMATE
 |    |  * o_totalprice-->[811.73, 591036.15, 0.0, 8.0, 3.469658E7] ESTIMATE
 |    |  * o_orderdate-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2412.0] ESTIMATE
 |    |
@@ -134,30 +134,30 @@ OutPut Exchange Id: 20
 |    |  build runtime filters:
 |    |  - filter_id = 1, build_expr = (34: l_orderkey), remote = false
 |    |  output columns: 1, 2, 9, 12, 13
-|    |  cardinality: 150000000
+|    |  cardinality: 149999686
 |    |  column statistics:
 |    |  * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.0031873E7] ESTIMATE
 |    |  * c_name-->[-Infinity, Infinity, 0.0, 25.0, 1.5E7] ESTIMATE
-|    |  * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.4999999999989533E8] ESTIMATE
+|    |  * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.499996859999979E8] ESTIMATE
 |    |  * o_totalprice-->[811.73, 591036.15, 0.0, 8.0, 3.469658E7] ESTIMATE
 |    |  * o_orderdate-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2412.0] ESTIMATE
-|    |  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.4999999999989533E8] ESTIMATE
+|    |  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.499996859999979E8] ESTIMATE
 |    |
 |    |----13:Project
 |    |    |  output columns:
 |    |    |  34 <-> [34: l_orderkey, INT, true]
-|    |    |  cardinality: 150000000
+|    |    |  cardinality: 149999686
 |    |    |  column statistics:
-|    |    |  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.4999999999989533E8] ESTIMATE
+|    |    |  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.499996859999979E8] ESTIMATE
 |    |    |
 |    |    12:AGGREGATE (merge finalize)
 |    |    |  aggregate: sum[([50: sum, DECIMAL128(38,2), true]); args: DECIMAL64; result: DECIMAL128(38,2); args nullable: true; result nullable: true]
 |    |    |  group by: [34: l_orderkey, INT, true]
 |    |    |  having: [50: sum, DECIMAL128(38,2), true] > 315
-|    |    |  cardinality: 150000000
+|    |    |  cardinality: 149999686
 |    |    |  column statistics:
-|    |    |  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.4999999999989533E8] ESTIMATE
-|    |    |  * sum-->[315.0, 4.5E14, 0.0, 8.0, 50.0] ESTIMATE
+|    |    |  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.499996859999979E8] ESTIMATE
+|    |    |  * sum-->[315.0, 1.5E8, 0.0, 8.0, 50.0] ESTIMATE
 |    |    |
 |    |    11:EXCHANGE
 |    |       distribution type: SHUFFLE
@@ -198,7 +198,6 @@ TABLE: lineitem
 NON-PARTITION PREDICATES: 34: l_orderkey IS NOT NULL
 partitions=1/1
 avgRowSize=16.0
-numNodes=0
 cardinality: 600037902
 column statistics:
 * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
@@ -261,7 +260,6 @@ TABLE: customer
 NON-PARTITION PREDICATES: 1: c_custkey IS NOT NULL
 partitions=1/1
 avgRowSize=33.0
-numNodes=0
 cardinality: 15000000
 column statistics:
 * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7] ESTIMATE
@@ -278,7 +276,6 @@ TABLE: orders
 NON-PARTITION PREDICATES: 10: o_custkey IS NOT NULL
 partitions=1/1
 avgRowSize=28.0
-numNodes=0
 cardinality: 150000000
 probe runtime filters:
 - filter_id = 0, probe_expr = (10: o_custkey)
@@ -299,7 +296,6 @@ TABLE: lineitem
 NON-PARTITION PREDICATES: 18: l_orderkey IS NOT NULL
 partitions=1/1
 avgRowSize=16.0
-numNodes=0
 cardinality: 600037902
 probe runtime filters:
 - filter_id = 2, probe_expr = (18: l_orderkey)

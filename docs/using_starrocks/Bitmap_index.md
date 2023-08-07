@@ -17,7 +17,7 @@ You can benefit from bitmap indexes in the following aspects:
 ## Usage notes
 
 - You can create a bitmap index for a column that can be filtered by using the equal (`=`) or [NOT] IN operator.
-- You can create bitmap indexes for all columns of a table that uses the Duplicate Key Model or Unique Key Model. For a table that uses the Aggregate Key Model or Primary Key model, you can only create bitmap indexes for key columns.
+- You can create bitmap indexes for all columns of a Duplicate Key table or Unique Key table. For an Aggregate table or Primary Key table, you can only create bitmap indexes for key columns.
 - The columns of the FLOAT, DOUBLE, BOOLEAN, and DECIMAL types do not support creating bitmap indexes.
 - You can check whether a query uses bitmap indexes by viewing the `BitmapIndexFilterRows` field of the query's profile.
 
@@ -38,7 +38,7 @@ There are two ways to create a bitmap index for a column.
     )
     ENGINE = olap
     AGGREGATE KEY(k1, k2)
-    DISTRIBUTED BY HASH(k1) BUCKETS 10
+    DISTRIBUTED BY HASH(k1)
     PROPERTIES ("storage_type" = "column");
     ```
 
@@ -47,10 +47,10 @@ There are two ways to create a bitmap index for a column.
     | **Parameter** | **Required** | **Description**                                              |
     | ------------- | ------------ | ------------------------------------------------------------ |
     | index_name    | Yes          | The name of the bitmap index.  The naming conventions are as follows:<ul><li>The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.</li><li>The name cannot exceed 64 characters in length.</li></ul>The name of bitmap index must be unique in a table.                              |
-    | column_name   | Yes          | The name of the column on which a bitmap index is created. You can only create one bitmap index for a columns. |
+    | column_name   | Yes          | The name of the column on which a bitmap index is created. You can specify multiple column names to create bitmap indexes for multiple columns at a time. Separate multiple columns with commas (`,`).  |
     | COMMENT       | No           | The comment of the bitmap index.                             |
 
-    You can create bitmap indexes for multiple columns at a time by specifying multiple `INDEX index_name (column_name [, ...]) [USING BITMAP] [COMMENT '']` commands. These commands need to be separated with commas (,). For other parameter descriptions of the CREATE TABLE statement, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
+    You can create bitmap indexes for multiple columns at a time by specifying multiple `INDEX index_name (column_name [, ...]) [USING BITMAP] [COMMENT '']` commands. These commands need to be separated with commas (`,`). For other parameter descriptions of the CREATE TABLE statement, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
 
 - Create a bitmap index for a column of a table using the CREATE INDEX statement. For parameter descriptions and examples, see [CREATE INDEX](../sql-reference/sql-statements/data-definition/CREATE%20INDEX.md).
 
@@ -141,7 +141,7 @@ If you want to find out the female employees whose salary is in the `level_1`, y
 
 ```SQL
  SELECT xxx FROM employee 
- WHERE Gender = female AND Income_level = Level_1;
+ WHERE Gender = female AND Income_level = level_1;
 ```
 
 After the query is sent, StarRocks search for the dictionaries of `Gender` and `Income_level` at the same time to get the following information:

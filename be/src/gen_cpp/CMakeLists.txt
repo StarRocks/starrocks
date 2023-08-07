@@ -85,6 +85,7 @@ set(SRC_FILES
     ${GEN_CPP_DIR}/tablet_schema.pb.cc
     ${GEN_CPP_DIR}/lake_types.pb.cc
     ${GEN_CPP_DIR}/lake_service.pb.cc
+    ${GEN_CPP_DIR}/binlog.pb.cc
     #$${GEN_CPP_DIR}/opcode/functions.cc
     #$${GEN_CPP_DIR}/opcode/vector-functions.cc
     #$${GEN_CPP_DIR}/opcode/opcode-registry-init.cc

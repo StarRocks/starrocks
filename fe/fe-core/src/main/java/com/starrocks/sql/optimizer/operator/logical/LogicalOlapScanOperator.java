@@ -12,18 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.ast.PartitionNames;
-import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.sql.optimizer.base.HashDistributionSpec;
+import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
@@ -35,12 +34,19 @@ import java.util.Map;
 import java.util.Objects;
 
 public final class LogicalOlapScanOperator extends LogicalScanOperator {
-    private final HashDistributionSpec hashDistributionSpec;
-    private final long selectedIndexId;
-    private final List<Long> selectedPartitionId;
-    private final PartitionNames partitionNames;
-    private final List<Long> selectedTabletId;
-    private final List<Long> hintsTabletIds;
+    private DistributionSpec distributionSpec;
+    private long selectedIndexId;
+    private List<Long> selectedPartitionId;
+    private PartitionNames partitionNames;
+    private boolean hasTableHints;
+    private List<Long> selectedTabletId;
+    private List<Long> hintsTabletIds;
+
+    private List<ScalarOperator> prunedPartitionPredicates;
+    private boolean usePkIndex;
+
+    // record if this scan is derived from SplitScanORToUnionRule
+    private boolean fromSplitOR;
 
     // Only for UT
     public LogicalOlapScanOperator(Table table) {
@@ -51,57 +57,55 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             Table table,
             Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
             Map<Column, ColumnRefOperator> columnMetaToColRefMap,
-            HashDistributionSpec hashDistributionSpec,
+            DistributionSpec distributionSpec,
             long limit,
             ScalarOperator predicate) {
-        this(table, colRefToColumnMetaMap, columnMetaToColRefMap, hashDistributionSpec, limit, predicate,
+        this(table, colRefToColumnMetaMap, columnMetaToColRefMap, distributionSpec, limit, predicate,
                 ((OlapTable) table).getBaseIndexId(),
                 null,
                 null,
+                false,
                 Lists.newArrayList(),
-                Lists.newArrayList());
+                Lists.newArrayList(),
+                false);
     }
 
     public LogicalOlapScanOperator(
             Table table,
             Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
             Map<Column, ColumnRefOperator> columnMetaToColRefMap,
-            HashDistributionSpec hashDistributionSpec,
+            DistributionSpec distributionSpec,
             long limit,
             ScalarOperator predicate,
             long selectedIndexId,
             List<Long> selectedPartitionId,
             PartitionNames partitionNames,
+            boolean hasTableHints,
             List<Long> selectedTabletId,
-            List<Long> hintsTabletIds) {
+            List<Long> hintsTabletIds,
+            boolean usePkIndex) {
         super(OperatorType.LOGICAL_OLAP_SCAN, table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate,
                 null);
 
         Preconditions.checkState(table instanceof OlapTable);
-        this.hashDistributionSpec = hashDistributionSpec;
+        this.distributionSpec = distributionSpec;
         this.selectedIndexId = selectedIndexId;
         this.selectedPartitionId = selectedPartitionId;
         this.partitionNames = partitionNames;
+        this.hasTableHints = hasTableHints;
         this.selectedTabletId = selectedTabletId;
         this.hintsTabletIds = hintsTabletIds;
+        this.prunedPartitionPredicates = Lists.newArrayList();
+        this.usePkIndex = usePkIndex;
     }
 
-    private LogicalOlapScanOperator(Builder builder) {
-        super(OperatorType.LOGICAL_OLAP_SCAN, builder.table,
-                builder.colRefToColumnMetaMap, builder.columnMetaToColRefMap,
-                builder.getLimit(),
-                builder.getPredicate(),
-                builder.getProjection());
-        this.hashDistributionSpec = builder.hashDistributionSpec;
-        this.selectedIndexId = builder.selectedIndexId;
-        this.selectedPartitionId = builder.selectedPartitionId;
-        this.partitionNames = builder.partitionNames;
-        this.selectedTabletId = builder.selectedTabletId;
-        this.hintsTabletIds = builder.hintsTabletIds;
+    private LogicalOlapScanOperator() {
+        super(OperatorType.LOGICAL_OLAP_SCAN);
+        this.prunedPartitionPredicates = ImmutableList.of();
     }
 
-    public HashDistributionSpec getDistributionSpec() {
-        return hashDistributionSpec;
+    public DistributionSpec getDistributionSpec() {
+        return distributionSpec;
     }
 
     public long getSelectedIndexId() {
@@ -124,8 +128,20 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         return hintsTabletIds;
     }
 
-    public boolean canDoReplicatedJoin() {
-        return Utils.canDoReplicatedJoin((OlapTable) table, selectedIndexId, selectedPartitionId, selectedTabletId);
+    public boolean hasTableHints() {
+        return hasTableHints;
+    }
+
+    public boolean isUsePkIndex() {
+        return usePkIndex;
+    }
+
+    public List<ScalarOperator> getPrunedPartitionPredicates() {
+        return prunedPartitionPredicates;
+    }
+
+    public boolean isFromSplitOR() {
+        return fromSplitOR;
     }
 
     @Override
@@ -138,15 +154,14 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
+
         if (!super.equals(o)) {
             return false;
         }
+
         LogicalOlapScanOperator that = (LogicalOlapScanOperator) o;
         return selectedIndexId == that.selectedIndexId &&
-                Objects.equals(hashDistributionSpec, that.hashDistributionSpec) &&
+                Objects.equals(distributionSpec, that.distributionSpec) &&
                 Objects.equals(selectedPartitionId, that.selectedPartitionId) &&
                 Objects.equals(partitionNames, that.partitionNames) &&
                 Objects.equals(selectedTabletId, that.selectedTabletId) &&
@@ -155,50 +170,84 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), hashDistributionSpec, selectedIndexId, selectedPartitionId,
-                partitionNames,
+        return Objects.hash(super.hashCode(), selectedIndexId, selectedPartitionId,
                 selectedTabletId, hintsTabletIds);
+    }
+
+    public static Builder builder() {
+        return new Builder();
     }
 
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalOlapScanOperator, LogicalOlapScanOperator.Builder> {
-        private HashDistributionSpec hashDistributionSpec;
-        private long selectedIndexId;
-        private List<Long> selectedPartitionId;
-        private PartitionNames partitionNames;
-        private List<Long> selectedTabletId;
-        private List<Long> hintsTabletIds;
-
         @Override
-        public LogicalOlapScanOperator build() {
-            return new LogicalOlapScanOperator(this);
+        protected LogicalOlapScanOperator newInstance() {
+            return new LogicalOlapScanOperator();
         }
 
         @Override
         public Builder withOperator(LogicalOlapScanOperator scanOperator) {
             super.withOperator(scanOperator);
 
-            this.hashDistributionSpec = scanOperator.hashDistributionSpec;
-            this.selectedIndexId = scanOperator.selectedIndexId;
-            this.selectedPartitionId = scanOperator.selectedPartitionId;
-            this.partitionNames = scanOperator.partitionNames;
-            this.selectedTabletId = scanOperator.selectedTabletId;
-            this.hintsTabletIds = scanOperator.hintsTabletIds;
+            builder.distributionSpec = scanOperator.distributionSpec;
+            builder.selectedIndexId = scanOperator.selectedIndexId;
+            builder.selectedPartitionId = scanOperator.selectedPartitionId;
+            builder.partitionNames = scanOperator.partitionNames;
+            builder.hasTableHints = scanOperator.hasTableHints;
+            builder.selectedTabletId = scanOperator.selectedTabletId;
+            builder.hintsTabletIds = scanOperator.hintsTabletIds;
+            builder.prunedPartitionPredicates = scanOperator.prunedPartitionPredicates;
+            builder.usePkIndex = scanOperator.usePkIndex;
             return this;
         }
 
         public Builder setSelectedIndexId(long selectedIndexId) {
-            this.selectedIndexId = selectedIndexId;
+            builder.selectedIndexId = selectedIndexId;
             return this;
         }
 
         public Builder setSelectedTabletId(List<Long> selectedTabletId) {
-            this.selectedTabletId = selectedTabletId;
+            builder.selectedTabletId = ImmutableList.copyOf(selectedTabletId);
             return this;
         }
 
         public Builder setSelectedPartitionId(List<Long> selectedPartitionId) {
-            this.selectedPartitionId = selectedPartitionId;
+            builder.selectedPartitionId = ImmutableList.copyOf(selectedPartitionId);
+            return this;
+        }
+
+        public Builder setPrunedPartitionPredicates(List<ScalarOperator> prunedPartitionPredicates) {
+            builder.prunedPartitionPredicates = ImmutableList.copyOf(prunedPartitionPredicates);
+            return this;
+        }
+
+        public Builder setDistributionSpec(DistributionSpec distributionSpec) {
+            builder.distributionSpec = distributionSpec;
+            return this;
+        }
+
+        public Builder setPartitionNames(PartitionNames partitionNames) {
+            builder.partitionNames = partitionNames;
+            return this;
+        }
+
+        public Builder setHintsTabletIds(List<Long> hintsTabletIds) {
+            builder.hintsTabletIds = ImmutableList.copyOf(hintsTabletIds);
+            return this;
+        }
+
+        public Builder setHasTableHints(boolean hasTableHints) {
+            builder.hasTableHints = hasTableHints;
+            return this;
+        }
+
+        public Builder setFromSplitOR(boolean fromSplitOR) {
+            builder.fromSplitOR = fromSplitOR;
+            return this;
+        }
+
+        public Builder setUsePkIndex(boolean usePkIndex) {
+            builder.usePkIndex = usePkIndex;
             return this;
         }
     }

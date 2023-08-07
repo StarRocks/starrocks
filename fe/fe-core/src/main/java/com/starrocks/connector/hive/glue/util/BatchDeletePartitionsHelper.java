@@ -25,7 +25,8 @@ import com.amazonaws.services.glue.model.GetPartitionResult;
 import com.amazonaws.services.glue.model.Partition;
 import com.amazonaws.services.glue.model.PartitionError;
 import com.starrocks.connector.hive.glue.converters.CatalogToHiveConverter;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
 import java.util.Collection;
@@ -34,7 +35,7 @@ import java.util.Map;
 
 public final class BatchDeletePartitionsHelper {
 
-    private static final Logger LOGGER = Logger.getLogger(BatchDeletePartitionsHelper.class);
+    private static final Logger LOGGER = LogManager.getLogger(BatchDeletePartitionsHelper.class);
 
     private final AWSGlue client;
     private final String namespaceName;

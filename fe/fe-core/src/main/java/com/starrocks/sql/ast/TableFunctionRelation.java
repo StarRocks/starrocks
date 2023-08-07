@@ -15,9 +15,11 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.catalog.TableFunction;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -38,9 +40,12 @@ public class TableFunctionRelation extends Relation {
     private TableFunction tableFunction;
     private List<Expr> childExpressions;
 
-    private List<String> columnNames;
+    public TableFunctionRelation(FunctionCallExpr functionCallExpr) {
+        this(functionCallExpr.getFnName().toString().toLowerCase(), functionCallExpr.getParams(), functionCallExpr.getPos());
+    }
 
-    public TableFunctionRelation(String functionName, FunctionParams functionParams) {
+    public TableFunctionRelation(String functionName, FunctionParams functionParams, NodePosition pos) {
+        super(pos);
         this.functionName = new FunctionName(functionName);
         this.functionParams = functionParams;
     }
@@ -67,14 +72,6 @@ public class TableFunctionRelation extends Relation {
 
     public void setChildExpressions(List<Expr> childExpressions) {
         this.childExpressions = childExpressions;
-    }
-
-    public List<String> getColumnNames() {
-        return columnNames;
-    }
-
-    public void setColumnNames(List<String> columnNames) {
-        this.columnNames = columnNames;
     }
 
     @Override

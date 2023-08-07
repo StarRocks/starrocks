@@ -17,22 +17,27 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 
+if (CLANG_TIDY_PATH)
+    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
+endif()
+
 add_subdirectory(rowset)
 
 add_library(Storage STATIC
-    array_type_info.cpp
     aggregate_type.cpp
     base_tablet.cpp
     decimal12.cpp
     decimal_type_info.cpp
     delete_handler.cpp
     del_vector.cpp
+    delta_column_group.cpp
     key_coder.cpp
     memtable_flush_executor.cpp
     segment_flush_executor.cpp
     segment_replicate_executor.cpp
     metadata_util.cpp
     kv_store.cpp
+    local_tablet_reader.cpp
     olap_common.cpp
     olap_server.cpp
     options.cpp
@@ -42,6 +47,7 @@ add_library(Storage STATIC
     primary_key_encoder.cpp
     protobuf_file.cpp
     rowset_update_state.cpp
+    rowset_column_update_state.cpp
     update_compaction_state.cpp
     version_graph.cpp
     storage_engine.cpp
@@ -103,9 +109,11 @@ add_library(Storage STATIC
     rowset/segment_options.cpp
     rowset/rowid_range_option.cpp
     rowset/rowset_meta.cpp
+    rowset/horizontal_update_rowset_writer.cpp
     task/engine_batch_load_task.cpp
     task/engine_checksum_task.cpp
     task/engine_clone_task.cpp
+    task/engine_manual_compaction_task.cpp
     task/engine_storage_migration_task.cpp
     task/engine_alter_tablet_task.cpp
     aggregate_iterator.cpp
@@ -161,9 +169,11 @@ add_library(Storage STATIC
     push_utils.cpp
     lake/async_delta_writer.cpp
     lake/compaction_policy.cpp
+    lake/compaction_scheduler.cpp
+    lake/compaction_task.cpp
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
-    lake/gc.cpp
+    lake/vacuum.cpp
     lake/general_tablet_writer.cpp
     lake/pk_tablet_writer.cpp
     lake/rowset.cpp
@@ -178,4 +188,13 @@ add_library(Storage STATIC
     lake/rowset_update_state.cpp
     lake/meta_file.cpp
     lake/lake_primary_index.cpp
-)
+    lake/vertical_compaction_task.cpp
+    binlog_util.cpp
+    binlog_file_writer.cpp
+    binlog_file_reader.cpp
+    binlog_builder.cpp
+    binlog_manager.cpp
+    binlog_reader.cpp
+    lake/update_compaction_state.cpp
+    lake/txn_log_applier.cpp
+    lake/lake_local_persistent_index.cpp)

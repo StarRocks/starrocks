@@ -15,18 +15,17 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.base.Function;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryPredicate.Operator;
-import com.starrocks.analysis.ColumnDef;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -35,13 +34,17 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.CsvFormat;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
-import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -51,6 +54,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 // used to describe data info which is needed to import.
 //
 //      data_desc:
@@ -59,6 +63,7 @@ import java.util.TreeSet;
 //          INTO TABLE tbl_name
 //          [PARTITION (p1, p2)]
 //          [COLUMNS TERMINATED BY separator]
+//          [ROWS TERMINATED BY separator]
 //          [FORMAT AS format]
 //          [(tmp_col1, tmp_col2, col3, ...)]
 //          [COLUMNS FROM PATH AS (col1, ...)]
@@ -77,7 +82,7 @@ import java.util.TreeSet;
  * The transform after the keyword named SET is the old ways which only supports the hadoop function.
  * It old way of transform will be removed gradually. It
  */
-public class DataDescription {
+public class DataDescription implements ParseNode {
     private static final Logger LOG = LogManager.getLogger(DataDescription.class);
     // function isn't built-in function, hll_hash is not built-in function in hadoop load.
     private static final List<String> HADOOP_SUPPORT_FUNCTION_NAMES = Arrays.asList(
@@ -101,6 +106,9 @@ public class DataDescription {
     private final RowDelimiter rowDelimiter;
     private final String fileFormat;
     private final boolean isNegative;
+
+    private CsvFormat csvFormat;
+    private Map<String, String> formatProperties;
 
     // column names of source files
     private List<String> fileFieldNames;
@@ -128,6 +136,8 @@ public class DataDescription {
 
     private boolean isHadoopLoad = false;
 
+    private final NodePosition pos;
+
     public DataDescription(String tableName,
                            PartitionNames partitionNames,
                            List<String> filePaths,
@@ -138,7 +148,7 @@ public class DataDescription {
                            boolean isNegative,
                            List<Expr> columnMappingList) {
         this(tableName, partitionNames, filePaths, columns, columnSeparator, rowDelimiter, fileFormat, null, isNegative,
-                columnMappingList, null);
+                columnMappingList, null, null);
     }
 
     public DataDescription(String tableName,
@@ -151,7 +161,25 @@ public class DataDescription {
                            List<String> columnsFromPath,
                            boolean isNegative,
                            List<Expr> columnMappingList,
-                           Expr whereExpr) {
+                           Expr whereExpr,
+                           CsvFormat csvFormat) {
+        this(tableName, partitionNames, filePaths, columns, columnSeparator, rowDelimiter, fileFormat, columnsFromPath,
+                isNegative, columnMappingList, whereExpr, csvFormat, NodePosition.ZERO);
+    }
+
+    public DataDescription(String tableName,
+                           PartitionNames partitionNames,
+                           List<String> filePaths,
+                           List<String> columns,
+                           ColumnSeparator columnSeparator,
+                           RowDelimiter rowDelimiter,
+                           String fileFormat,
+                           List<String> columnsFromPath,
+                           boolean isNegative,
+                           List<Expr> columnMappingList,
+                           Expr whereExpr,
+                           CsvFormat csvFormat, NodePosition pos) {
+        this.pos = pos;
         this.tableName = tableName;
         this.partitionNames = partitionNames;
         this.filePaths = filePaths;
@@ -164,6 +192,7 @@ public class DataDescription {
         this.columnMappingList = columnMappingList;
         this.whereExpr = whereExpr;
         this.srcTableName = null;
+        this.csvFormat = csvFormat;
     }
 
     // data from table external_hive_table
@@ -173,6 +202,16 @@ public class DataDescription {
                            boolean isNegative,
                            List<Expr> columnMappingList,
                            Expr whereExpr) {
+        this(tableName, partitionNames, srcTableName, isNegative, columnMappingList, whereExpr, NodePosition.ZERO);
+    }
+
+    public DataDescription(String tableName,
+                           PartitionNames partitionNames,
+                           String srcTableName,
+                           boolean isNegative,
+                           List<Expr> columnMappingList,
+                           Expr whereExpr, NodePosition pos) {
+        this.pos = pos;
         this.tableName = tableName;
         this.partitionNames = partitionNames;
         this.filePaths = null;
@@ -201,6 +240,10 @@ public class DataDescription {
 
     public List<String> getFilePaths() {
         return filePaths;
+    }
+
+    public CsvFormat getCsvFormat() {
+        return csvFormat;
     }
 
     public List<String> getFileFieldNames() {
@@ -339,7 +382,7 @@ public class DataDescription {
                         + "Expr: " + columnExpr.toSql());
             }
             BinaryPredicate predicate = (BinaryPredicate) columnExpr;
-            if (predicate.getOp() != Operator.EQ) {
+            if (predicate.getOp() != BinaryType.EQ) {
                 throw new AnalysisException("Mapping function expr only support the column or eq binary predicate. "
                         + "The mapping operator error, op: " + predicate.getOp());
             }
@@ -600,25 +643,18 @@ public class DataDescription {
             throw new AnalysisException("No table name in load statement.");
         }
 
-        if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            // check auth
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), fullDbName, tableName,
-                                                                         PrivPredicate.LOAD)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
-                                                    ConnectContext.get().getQualifiedUser(),
-                                                    ConnectContext.get().getRemoteIP(), tableName);
+        try {
+            Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(),
+                    ConnectContext.get().getCurrentRoleIds(), fullDbName, tableName, PrivilegeType.INSERT);
+
+            if (isLoadFromTable()) {
+                Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(),
+                        ConnectContext.get().getCurrentRoleIds(), fullDbName, srcTableName, PrivilegeType.SELECT);
             }
-        }
-        // check hive table auth
-        if (isLoadFromTable()) {
-            if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), fullDbName, srcTableName,
-                                                                             PrivPredicate.SELECT)) {
-                    ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
-                                                        ConnectContext.get().getQualifiedUser(),
-                                                        ConnectContext.get().getRemoteIP(), srcTableName);
-                }
-            }
+        } catch (AccessDeniedException e) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT/INSERT",
+                    ConnectContext.get().getQualifiedUser(),
+                    ConnectContext.get().getRemoteIP(), srcTableName);
         }
     }
 
@@ -662,7 +698,9 @@ public class DataDescription {
             sb.append("DATA FROM TABLE ").append(srcTableName);
         } else {
             sb.append("DATA INFILE (");
-            Joiner.on(", ").appendTo(sb, Lists.transform(filePaths, s -> "'" + s + "'")).append(")");
+            assert filePaths != null;
+            Joiner.on(", ").appendTo(sb, filePaths.stream().map(s -> "'" + s + "'")
+                    .collect(Collectors.toList())).append(")");
         }
         if (isNegative) {
             sb.append(" NEGATIVE");
@@ -684,12 +722,21 @@ public class DataDescription {
         }
         if (fileFieldNames != null && !fileFieldNames.isEmpty()) {
             sb.append(" (");
-            Joiner.on(", ").appendTo(sb, fileFieldNames).append(")");
+            sb.append(Joiner.on(", ").join(
+                    fileFieldNames.stream().map(f -> "`" + f + "`").collect(Collectors.toList())));
+            sb.append(")");
         }
         if (columnMappingList != null && !columnMappingList.isEmpty()) {
             sb.append(" SET (");
-            Joiner.on(", ").appendTo(sb, Lists.transform(columnMappingList, (Function<Expr, Object>) Expr::toSql)).append(")");
+            sb.append(Joiner.on(", ").join(columnMappingList.stream()
+                    .map(AstToSQLBuilder::toSQL).collect(Collectors.toList())));
+            sb.append(")");
         }
         return sb.toString();
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 }

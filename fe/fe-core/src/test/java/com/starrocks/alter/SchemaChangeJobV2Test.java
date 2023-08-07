@@ -50,17 +50,14 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
-import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
@@ -145,21 +142,21 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         assertEquals(1, replica1.getLastSuccessVersion());
 
         // runPendingJob
-        schemaChangeHandler.runAfterCatalogReady();
+        schemaChangeJob.runPendingJob();
         Assert.assertEquals(JobState.WAITING_TXN, schemaChangeJob.getJobState());
         Assert.assertEquals(2, testPartition.getMaterializedIndices(IndexExtState.ALL).size());
         Assert.assertEquals(1, testPartition.getMaterializedIndices(IndexExtState.VISIBLE).size());
         Assert.assertEquals(1, testPartition.getMaterializedIndices(IndexExtState.SHADOW).size());
 
         // runWaitingTxnJob
-        schemaChangeHandler.runAfterCatalogReady();
+        schemaChangeJob.runWaitingTxnJob();
         Assert.assertEquals(JobState.RUNNING, schemaChangeJob.getJobState());
 
         int retryCount = 0;
         int maxRetry = 5;
         while (retryCount < maxRetry) {
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
-            schemaChangeHandler.runAfterCatalogReady();
+            schemaChangeJob.runRunningJob();
             if (schemaChangeJob.getJobState() == JobState.FINISHED) {
                 break;
             }
@@ -198,26 +195,26 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
 
         // runPendingJob
         replica1.setState(Replica.ReplicaState.DECOMMISSION);
-        schemaChangeHandler.runAfterCatalogReady();
+        schemaChangeJob.runPendingJob();
         Assert.assertEquals(JobState.PENDING, schemaChangeJob.getJobState());
 
         // table is stable runPendingJob again
         replica1.setState(Replica.ReplicaState.NORMAL);
-        schemaChangeHandler.runAfterCatalogReady();
+        schemaChangeJob.runPendingJob();
         Assert.assertEquals(JobState.WAITING_TXN, schemaChangeJob.getJobState());
         Assert.assertEquals(2, testPartition.getMaterializedIndices(IndexExtState.ALL).size());
         Assert.assertEquals(1, testPartition.getMaterializedIndices(IndexExtState.VISIBLE).size());
         Assert.assertEquals(1, testPartition.getMaterializedIndices(IndexExtState.SHADOW).size());
 
         // runWaitingTxnJob
-        schemaChangeHandler.runAfterCatalogReady();
+        schemaChangeJob.runWaitingTxnJob();
         Assert.assertEquals(JobState.RUNNING, schemaChangeJob.getJobState());
 
         int retryCount = 0;
         int maxRetry = 5;
         while (retryCount < maxRetry) {
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
-            schemaChangeHandler.runAfterCatalogReady();
+            schemaChangeJob.runRunningJob();
             if (schemaChangeJob.getJobState() == JobState.FINISHED) {
                 break;
             }
@@ -317,7 +314,6 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
 
         SchemaChangeJobV2 schemaChangeJobV2 = new SchemaChangeJobV2(1, 1, 1, "test", 600000);
-        schemaChangeJobV2.setStorageFormat(TStorageFormat.V2);
         Deencapsulation.setField(schemaChangeJobV2, "jobState", AlterJobV2.JobState.FINISHED);
         Map<Long, SchemaVersionAndHash> indexSchemaVersionAndHashMap = Maps.newHashMap();
         indexSchemaVersionAndHashMap.put(Long.valueOf(1000), new SchemaVersionAndHash(10, 20));
@@ -329,15 +325,10 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         out.close();
 
         // read objects from file
-        MetaContext metaContext = new MetaContext();
-        metaContext.setMetaVersion(FeMetaVersion.VERSION_86);
-        metaContext.setThreadLocalInfo();
-
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         SchemaChangeJobV2 result = (SchemaChangeJobV2) AlterJobV2.read(in);
         Assert.assertEquals(1, result.getJobId());
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, result.getJobState());
-        Assert.assertEquals(TStorageFormat.V2, Deencapsulation.getField(result, "storageFormat"));
 
         Assert.assertNotNull(Deencapsulation.getField(result, "partitionIndexMap"));
         Assert.assertNotNull(Deencapsulation.getField(result, "partitionIndexTabletMap"));

@@ -16,17 +16,34 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TableName;
+import com.starrocks.sql.parser.NodePosition;
+
+import java.util.Map;
 
 public class CreateTableLikeStmt extends DdlStmt {
-
     private final boolean ifNotExists;
     private final TableName tableName;
     private final TableName existedTableName;
 
-    public CreateTableLikeStmt(boolean ifNotExists, TableName tableName, TableName existedTableName) {
+    private final PartitionDesc partitionDesc;
+    private final DistributionDesc distributionDesc;
+    private final Map<String, String> properties;
+
+    private CreateTableStmt createTableStmt;
+
+    public CreateTableLikeStmt(boolean ifNotExists, TableName tableName,
+                               TableName existedTableName,
+                               PartitionDesc partitionDesc,
+                               DistributionDesc distributionDesc,
+                               Map<String, String> properties,
+                               NodePosition pos) {
+        super(pos);
         this.ifNotExists = ifNotExists;
         this.tableName = tableName;
         this.existedTableName = existedTableName;
+        this.partitionDesc = partitionDesc;
+        this.distributionDesc = distributionDesc;
+        this.properties = properties;
     }
 
     public boolean isSetIfNotExists() {
@@ -55,6 +72,26 @@ public class CreateTableLikeStmt extends DdlStmt {
 
     public TableName getExistedDbTbl() {
         return existedTableName;
+    }
+
+    public CreateTableStmt getCreateTableStmt() {
+        return createTableStmt;
+    }
+
+    public void setCreateTableStmt(CreateTableStmt createTableStmt) {
+        this.createTableStmt = createTableStmt;
+    }
+
+    public PartitionDesc getPartitionDesc() {
+        return partitionDesc;
+    }
+
+    public DistributionDesc getDistributionDesc() {
+        return distributionDesc;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
     }
 
     @Override

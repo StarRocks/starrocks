@@ -38,6 +38,7 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
@@ -57,6 +58,11 @@ public class InPredicate extends Predicate {
     // First child is the comparison expr for which we
     // should check membership in the inList (the remaining children).
     public InPredicate(Expr compareExpr, List<Expr> inList, boolean isNotIn) {
+        this(compareExpr, inList, isNotIn, NodePosition.ZERO);
+    }
+
+    public InPredicate(Expr compareExpr, List<Expr> inList, boolean isNotIn, NodePosition pos) {
+        super(pos);
         children.add(compareExpr);
         children.addAll(inList);
         this.isNotIn = isNotIn;
@@ -79,6 +85,11 @@ public class InPredicate extends Predicate {
 
     // C'tor for initializing an [NOT] IN predicate with a subquery child.
     public InPredicate(Expr compareExpr, Expr subquery, boolean isNotIn) {
+        this(compareExpr, subquery, isNotIn, NodePosition.ZERO);
+    }
+
+    public InPredicate(Expr compareExpr, Expr subquery, boolean isNotIn, NodePosition pos) {
+        super(pos);
         Preconditions.checkNotNull(compareExpr);
         Preconditions.checkNotNull(subquery);
         children.add(compareExpr);
@@ -120,7 +131,11 @@ public class InPredicate extends Predicate {
         msg.node_type = TExprNodeType.IN_PRED;
         msg.setOpcode(opcode);
         msg.setVector_opcode(vectorOpcode);
-        msg.setChild_type(getChild(0).getType().getPrimitiveType().toThrift());
+        if (getChild(0).getType().isComplexType()) {
+            msg.setChild_type_desc(getChild(0).getType().toThrift());
+        } else {
+            msg.setChild_type(getChild(0).getType().getPrimitiveType().toThrift());
+        }
     }
 
     @Override

@@ -40,10 +40,9 @@ import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
@@ -84,7 +83,7 @@ public class TempPartitionTest {
     public static void setup() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
-        FeConstants.default_scheduler_interval_millisecond = 100;
+        Config.alter_scheduler_interval_millisecond = 100;
         starRocksAssert = new StarRocksAssert(ctx);
     }
 
@@ -114,7 +113,7 @@ public class TempPartitionTest {
     private void alterTableWithNewAnalyzer(String sql, boolean expectedException) throws Exception {
         try {
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-            GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
             if (expectedException) {
                 Assert.fail("expected exception not thrown");
             }
@@ -207,6 +206,167 @@ public class TempPartitionTest {
 
         // show temp partition
         checkShowPartitionsResultNum("db1.tbl1", true, 0);
+    }
+
+    @Test
+    public void testForSingleListPartitionTable() throws Exception {
+        starRocksAssert = new StarRocksAssert();
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test(\n" +
+                        "    id bigint not null ,\n" +
+                        "    province varchar(20) not null,\n" +
+                        "    dt varchar(20) not null\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(id)\n" +
+                        "PARTITION BY LIST (province) (\n" +
+                        "   PARTITION p_fj VALUES IN (\"fuzhou\", \"xiamen\"),\n" +
+                        "   PARTITION p_gd VALUES IN (\"shenzhen\", \"guangzhou\")\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 10 \n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\"\n" +
+                        ");");
+
+        String addTempStmtStr1 = "alter table test.test add temporary partition tp_zj " +
+                "VALUES IN (\"hangzhou\", \"ningbo\");";
+        alterTableWithNewAnalyzer(addTempStmtStr1, false);
+        String failReplaceStrict = "alter table test.test replace partition(p_fj, p_gd) " +
+                "with temporary partition(tp_zj) properties('strict_range' = 'true', 'use_temp_partition_name' = 'true');";
+        alterTableWithNewAnalyzer(failReplaceStrict, true);
+        String dropTempStr = "alter table test.test drop temporary partition tp_zj;";
+        alterTableWithNewAnalyzer(dropTempStr, false);
+
+        String addTempStmtStr2 = "alter table test.test add temporary partition tp_fj_gd " +
+                "VALUES IN (\"fuzhou\", \"xiamen\", \"shenzhen\", \"guangzhou\");";
+        alterTableWithNewAnalyzer(addTempStmtStr2, false);
+        String passReplaceStrict = "alter table test.test replace partition(p_fj, p_gd) " +
+                "with temporary partition(tp_fj_gd) properties('strict_range' = 'true', 'use_temp_partition_name' = 'true');";
+        alterTableWithNewAnalyzer(passReplaceStrict, false);
+
+        String addStmtStr1 = "alter table test.test add partition p_zj " +
+                "VALUES IN (\"hangzhou\", \"ningbo\");";
+        alterTableWithNewAnalyzer(addStmtStr1, false);
+        String addStmtStr2 = "alter table test.test add partition p_js " +
+                "VALUES IN (\"nanjing\", \"suzhou\");";
+        alterTableWithNewAnalyzer(addStmtStr2, false);
+
+        String addTempStmtStr3 = "alter table test.test add temporary partition tp_bj_zj " +
+                "VALUES IN (\"beijing\", \"hangzhou\");";
+        alterTableWithNewAnalyzer(addTempStmtStr3, false);
+        String failReplaceNotStrict1 = "alter table test.test replace partition(p_js) " +
+                "with temporary partition(tp_bj_zj) properties('strict_range' = 'false', 'use_temp_partition_name' = 'true');";
+        alterTableWithNewAnalyzer(failReplaceNotStrict1, true);
+        dropTempStr = "alter table test.test drop temporary partition tp_bj_zj;";
+        alterTableWithNewAnalyzer(dropTempStr, false);
+
+        String addTempStmtStr4 = "alter table test.test add temporary partition tp_bj_js " +
+                "VALUES IN (\"beijing\", \"nanjing\");";
+        alterTableWithNewAnalyzer(addTempStmtStr4, false);
+        String failReplaceNotStrict2 = "alter table test.test replace partition(p_zj) " +
+                "with temporary partition(tp_bj_js) properties('strict_range' = 'false', 'use_temp_partition_name' = 'true');";
+        alterTableWithNewAnalyzer(failReplaceNotStrict2, true);
+        dropTempStr = "alter table test.test drop temporary partition tp_bj_js;";
+        alterTableWithNewAnalyzer(dropTempStr, false);
+
+        String addTempStmtStr5 = "alter table test.test add temporary partition tp_zj " +
+                "VALUES IN (\"hangzhou\", \"ningbo\");";
+        alterTableWithNewAnalyzer(addTempStmtStr5, false);
+        String passReplaceNotStrict1 = "alter table test.test replace partition(p_zj, p_js) " +
+                "with temporary partition(tp_zj) properties('strict_range' = 'false', 'use_temp_partition_name' = 'true');";
+        alterTableWithNewAnalyzer(passReplaceNotStrict1, false);
+
+        String addStmtStr3 = "alter table test.test add partition p_sc " +
+                "VALUES IN (\"chengdu\", \"chongqing\");";
+        alterTableWithNewAnalyzer(addStmtStr3, false);
+        String addStmtStr4 = "alter table test.test add partition p_hb " +
+                "VALUES IN (\"wuhang\", \"sanxia\");";
+        alterTableWithNewAnalyzer(addStmtStr4, false);
+        String addTempStmtStr6 = "alter table test.test add temporary partition tp_sc " +
+                "VALUES IN (\"chengdu\", \"chongqing\");";
+        alterTableWithNewAnalyzer(addTempStmtStr6, false);
+        String passReplaceNotStrict2 = "alter table test.test replace partition(p_sc, p_hb) " +
+                "with temporary partition(tp_sc) properties('strict_range' = 'false', 'use_temp_partition_name' = 'true');";
+        alterTableWithNewAnalyzer(passReplaceNotStrict2, false);
+    }
+
+    @Test
+    public void testForMultiListPartitionTable() throws Exception {
+        starRocksAssert = new StarRocksAssert();
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test(\n" +
+                        "    id bigint not null ,\n" +
+                        "    province varchar(20) not null,\n" +
+                        "    dt varchar(20) not null\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(id)\n" +
+                        "PARTITION BY LIST (dt, province) (\n" +
+                        "   PARTITION p_20230401_bj VALUES IN ((\"2023-04-01\", \"beijing\")),\n" +
+                        "   PARTITION p_20230401_sh VALUES IN ((\"2023-04-01\", \"shanghai\"))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 10 \n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\"\n" +
+                        ");");
+
+        String addTempStmtStr1 = "alter table test.test add temporary partition tp_20230401_bj " +
+                "VALUES IN ((\"2023-04-01\", \"beijing\"));";
+        alterTableWithNewAnalyzer(addTempStmtStr1, false);
+        String failReplaceStrict = "alter table test.test replace partition(p_20230401_bj, p_20230401_sh) " +
+                "with temporary partition(tp_20230401_bj) " +
+                "properties('strict_range' = 'true', 'use_temp_partition_name' = 'true');";
+        alterTableWithNewAnalyzer(failReplaceStrict, true);
+        String dropTempStr = "alter table test.test drop temporary partition tp_20230401_bj;";
+        alterTableWithNewAnalyzer(dropTempStr, false);
+
+        String addTempStmtStr2 = "alter table test.test add temporary partition tp_20230401_bj_sh " +
+                "VALUES IN ((\"2023-04-01\", \"beijing\"), (\"2023-04-01\", \"shanghai\"));";
+        alterTableWithNewAnalyzer(addTempStmtStr2, false);
+        String passReplaceStrict = "alter table test.test replace partition(p_20230401_bj, p_20230401_sh) " +
+                "with temporary partition(tp_20230401_bj_sh) " +
+                "properties('strict_range' = 'true', 'use_temp_partition_name' = 'true');";
+        alterTableWithNewAnalyzer(passReplaceStrict, false);
+
+        String addStmtStr1 = "alter table test.test add partition p_20230404_bj " +
+                "VALUES IN ((\"2023-04-04\", \"beijing\"));";
+        alterTableWithNewAnalyzer(addStmtStr1, false);
+        String addStmtStr2 = "alter table test.test add partition p_20230404_sh " +
+                "VALUES IN ((\"2023-04-04\", \"shanghai\"));";
+        alterTableWithNewAnalyzer(addStmtStr2, false);
+        String addTempStmtStr3 = "alter table test.test add temporary partition tp_20230401_bj " +
+                "VALUES IN ((\"2023-04-01\", \"beijing\"));";
+        alterTableWithNewAnalyzer(addTempStmtStr3, false);
+        String failReplaceNotStrict1 = "alter table test.test replace partition(p_20230404_bj, p_20230404_sh) " +
+                "with temporary partition(tp_20230401_bj) " +
+                "properties('strict_range' = 'false', 'use_temp_partition_name' = 'true');";
+        alterTableWithNewAnalyzer(failReplaceNotStrict1, true);
+        String failReplaceNotStrict2 = "alter table test.test replace partition(p_20230404_bj) " +
+                "with temporary partition(tp_20230401_bj) " +
+                "properties('strict_range' = 'false', 'use_temp_partition_name' = 'true');";
+        alterTableWithNewAnalyzer(failReplaceNotStrict2, true);
+
+        String addTempStmtStr4 = "alter table test.test add temporary partition tp_20230404_bj " +
+                "VALUES IN ((\"2023-04-04\", \"beijing\"));";
+        alterTableWithNewAnalyzer(addTempStmtStr4, false);
+        String passReplaceNotStrict1 = "alter table test.test replace partition(p_20230404_bj, p_20230404_sh) " +
+                "with temporary partition(tp_20230404_bj) " +
+                "properties('strict_range' = 'false', 'use_temp_partition_name' = 'true');";
+        alterTableWithNewAnalyzer(passReplaceNotStrict1, false);
+
+        String addStmtStr3 = "alter table test.test add partition p_20230405_bj " +
+                "VALUES IN ((\"2023-04-05\", \"beijing\"));";
+        alterTableWithNewAnalyzer(addStmtStr3, false);
+        String addStmtStr4 = "alter table test.test add partition p_20230405_sh " +
+                "VALUES IN ((\"2023-04-05\", \"shanghai\"));";
+        alterTableWithNewAnalyzer(addStmtStr4, false);
+        String addTempStmtStr5 = "alter table test.test add temporary partition tp_20230405_sh " +
+                "VALUES IN ((\"2023-04-05\", \"shanghai\"));";
+        alterTableWithNewAnalyzer(addTempStmtStr5, false);
+        String passReplaceNotStrict2 = "alter table test.test replace partition(p_20230405_bj, p_20230405_sh) " +
+                "with temporary partition(tp_20230405_sh) " +
+                "properties('strict_range' = 'false', 'use_temp_partition_name' = 'true');";
+        alterTableWithNewAnalyzer(passReplaceNotStrict2, false);
     }
 
     @Test
@@ -481,7 +641,7 @@ public class TempPartitionTest {
         checkTablet("db2.tbl2", "p2", false, 2);
         checkTablet("db2.tbl2", "tp3", false, 2);
 
-        // for now, we have 2 partitions: p2, tp3, [min, 20), [20, 30). 0 temp partition. 
+        // for now, we have 2 partitions: p2, tp3, [min, 20), [20, 30). 0 temp partition.
         stmtStr = "alter table db2.tbl2 add temporary partition tp4 values less than('20') " +
                 "('in_memory' = 'true') distributed by hash(k1) buckets 3";
         alterTableWithNewAnalyzer(stmtStr, true);
@@ -572,6 +732,41 @@ public class TempPartitionTest {
         checkShowPartitionsResultNum("db3.tbl3", true, 0);
     }
 
+    @Test
+    public void testTempPartitionPrune() throws Exception {
+        starRocksAssert.withDatabase("db4").useDatabase("db4").withTable(
+                "create table db4.tbl4 (k1 int, k2 int)\n" +
+                        "partition by range(k1)\n" +
+                        "(\n" +
+                        "partition p1 values less than('10'),\n" +
+                        "partition p2 values less than('20')\n" +
+                        ")\n" +
+                        "distributed by hash(k2) buckets 1\n" +
+                        "properties('replication_num' = '1');");
+
+        String stmtStr = "alter table db4.tbl4 add temporary partition tp1 values [('10'), ('15'))";
+        alterTableWithNewAnalyzer(stmtStr, false);
+        stmtStr = "alter table db4.tbl4 add temporary partition tp2 values [('15'), ('25'))";
+        alterTableWithNewAnalyzer(stmtStr, false);
+        stmtStr = "alter table db4.tbl4 add temporary partition tp3 values [('25'), ('31'))";
+        alterTableWithNewAnalyzer(stmtStr, false);
+
+        String sql = "select * from db4.tbl4 temporary partitions(tp1, tp2)";
+        boolean flag = FeConstants.runningUnitTest;
+        try {
+            FeConstants.runningUnitTest = true;
+            String plan = UtFrameUtils.getFragmentPlan(UtFrameUtils.createDefaultCtx(), sql);
+            Assert.assertTrue(plan, plan.contains("0:OlapScanNode\n" +
+                    "     TABLE: tbl4\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=2/2\n" +
+                    "     rollup: tbl4"));
+        } finally {
+            FeConstants.runningUnitTest = flag;
+        }
+
+    }
+
     private void testSerializeOlapTable(OlapTable tbl) throws IOException, AnalysisException {
         // 1. Write objects to file
         File file = new File(tempPartitionFile);
@@ -593,10 +788,6 @@ public class TempPartitionTest {
 
     private void testSerializeTempPartitions(TempPartitions tempPartitionsInstance)
             throws IOException, AnalysisException {
-        MetaContext metaContext = new MetaContext();
-        metaContext.setMetaVersion(FeMetaVersion.VERSION_77);
-        metaContext.setThreadLocalInfo();
-
         // 1. Write objects to file
         File file = new File(tempPartitionFile);
         file.createNewFile();

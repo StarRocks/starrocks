@@ -51,6 +51,8 @@ public:
 
         void update_expire_time(int64_t expire_ms) { _expire_ms = expire_ms; }
 
+        uint32_t get_ref() const { return _ref.load(); }
+
     protected:
         friend class DynamicCache<Key, T>;
         typedef typename std::list<Entry*>::const_iterator Handle;
@@ -156,12 +158,11 @@ public:
     }
 
     // remove an object get/get_or_create'ed earlier
-    void remove(Entry* entry) {
+    bool remove(Entry* entry) {
         std::lock_guard<std::mutex> lg(_lock);
         entry->_ref--;
         if (entry->_ref != 1) {
-            LOG(ERROR) << "remove() failed: cache entry ref != 1 " << entry->_value;
-            DCHECK(false);
+            return false;
         } else {
             _map.erase(entry->key());
             _list.erase(entry->_handle);
@@ -169,6 +170,7 @@ public:
             _size -= entry->_size;
             if (_mem_tracker) _mem_tracker->release(entry->_size);
             delete entry;
+            return true;
         }
     }
 
@@ -301,10 +303,16 @@ public:
         return ret;
     }
 
+    void try_evict(size_t target_capacity) {
+        std::lock_guard<std::mutex> lg(_lock);
+        _evict(target_capacity);
+        return;
+    }
+
 private:
-    bool _evict() {
+    bool _evict(size_t target_capacity) {
         auto itr = _list.begin();
-        while (_size > _capacity && itr != _list.end()) {
+        while (_size > target_capacity && itr != _list.end()) {
             Entry* entry = (*itr);
             // no need to check iobj != obj, cause obj is in use, so _ref > 1
             if (entry->_ref == 1) {
@@ -322,6 +330,8 @@ private:
         }
         return _size <= _capacity;
     }
+
+    bool _evict() { return _evict(_capacity); }
 
     mutable std::mutex _lock;
     List _list;

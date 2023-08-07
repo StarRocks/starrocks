@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.join;
 
 import com.google.common.collect.Lists;
@@ -30,19 +29,24 @@ import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
-import com.starrocks.statistic.StatsConstants;
+import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
+import com.starrocks.sql.optimizer.validate.InputDependenciesChecker;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.BitSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 public abstract class JoinOrder {
+
+    private static final Logger LOGGER = LogManager.getLogger(JoinOrder.class);
     /**
      * Like {@link OptExpression} or {@link com.starrocks.sql.optimizer.GroupExpression} ,
      * Description of an expression in the join order environment
@@ -205,7 +209,7 @@ public abstract class JoinOrder {
             BitSet atomBit = new BitSet();
             atomBit.set(i);
             ExpressionInfo atomExprInfo = new ExpressionInfo(atoms.get(i));
-            computeCost(atomExprInfo, true);
+            computeCost(atomExprInfo);
 
             GroupInfo groupInfo = new GroupInfo(atomBit);
             groupInfo.bestExprInfo = atomExprInfo;
@@ -271,61 +275,71 @@ public abstract class JoinOrder {
         expr.setStatistics(expressionContext.getStatistics());
     }
 
-    protected void computeCost(ExpressionInfo exprInfo, boolean penaltyCross) {
+    protected void computeCost(ExpressionInfo exprInfo) {
         double cost = exprInfo.expr.getStatistics().getOutputRowCount();
         exprInfo.rowCount = cost;
         if (exprInfo.leftChildExpr != null) {
-            cost = cost > (StatsConstants.MAXIMUM_COST - exprInfo.leftChildExpr.bestExprInfo.cost) ?
-                    StatsConstants.MAXIMUM_COST : cost + exprInfo.leftChildExpr.bestExprInfo.cost;
+            cost = cost > (StatisticsEstimateCoefficient.MAXIMUM_COST - exprInfo.leftChildExpr.bestExprInfo.cost) ?
+                    StatisticsEstimateCoefficient.MAXIMUM_COST : cost + exprInfo.leftChildExpr.bestExprInfo.cost;
 
-            cost = cost > (StatsConstants.MAXIMUM_COST - exprInfo.rightChildExpr.bestExprInfo.cost) ?
-                    StatsConstants.MAXIMUM_COST : cost + exprInfo.rightChildExpr.bestExprInfo.cost;
+            cost = cost > (StatisticsEstimateCoefficient.MAXIMUM_COST - exprInfo.rightChildExpr.bestExprInfo.cost) ?
+                    StatisticsEstimateCoefficient.MAXIMUM_COST : cost + exprInfo.rightChildExpr.bestExprInfo.cost;
 
             LogicalJoinOperator joinOperator = (LogicalJoinOperator) exprInfo.expr.getOp();
-            if (penaltyCross && joinOperator.getJoinType().isCrossJoin()) {
-                cost = cost > (StatsConstants.MAXIMUM_COST / StatsConstants.CROSS_JOIN_COST_PENALTY) ?
-                        StatsConstants.MAXIMUM_COST : cost * StatsConstants.CROSS_JOIN_COST_PENALTY;
+            if (joinOperator.getJoinType().isCrossJoin()) {
+                cost = cost > (StatisticsEstimateCoefficient.MAXIMUM_COST /
+                        StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY) ?
+                        StatisticsEstimateCoefficient.MAXIMUM_COST :
+                        cost * StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY;
             }
         }
         exprInfo.cost = cost;
     }
 
-    protected ExpressionInfo buildJoinExpr(GroupInfo leftGroup, GroupInfo rightGroup) {
+    protected Optional<ExpressionInfo> buildJoinExpr(GroupInfo leftGroup, GroupInfo rightGroup) {
         ExpressionInfo leftExprInfo = leftGroup.bestExprInfo;
         ExpressionInfo rightExprInfo = rightGroup.bestExprInfo;
-        Pair<ScalarOperator, ScalarOperator> predicates = buildInnerJoinPredicate(
-                leftGroup.atoms, rightGroup.atoms);
+        Pair<ScalarOperator, ScalarOperator> predicates = buildInnerJoinPredicate(leftGroup.atoms, rightGroup.atoms);
+
+        ScalarOperator eqPredicate = predicates.first;
+        ScalarOperator otherPredicate = predicates.second;
+
         LogicalJoinOperator newJoin;
-        if (predicates.first != null) {
-            newJoin =
-                    new LogicalJoinOperator(JoinOperator.INNER_JOIN, predicates.first);
+        if (eqPredicate != null) {
+            newJoin = new LogicalJoinOperator(JoinOperator.INNER_JOIN, eqPredicate);
         } else {
-            newJoin =
-                    new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null);
+            newJoin = new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null);
         }
-        newJoin.setPredicate(predicates.second);
+        newJoin.setPredicate(otherPredicate);
 
         Map<ColumnRefOperator, ScalarOperator> leftExpression = new HashMap<>();
         Map<ColumnRefOperator, ScalarOperator> rightExpression = new HashMap<>();
-        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : expressionMap.entrySet()) {
-            // If entry.getValue is Constant, then this ColumnRef does not belong to any child.
-            // Then you can add this constant mapping on any child
-            if (predicates.first != null && predicates.first.getUsedColumns().contains(entry.getKey())) {
-                if (leftExprInfo.expr.getOutputColumns().containsAll(entry.getValue().getUsedColumns())
-                        || entry.getValue() instanceof ConstantOperator) {
-                    leftExpression.put(entry.getKey(), entry.getValue());
-                } else if (rightExprInfo.expr.getOutputColumns().containsAll(entry.getValue().getUsedColumns())
-                        || entry.getValue() instanceof ConstantOperator) {
-                    rightExpression.put(entry.getKey(), entry.getValue());
-                }
+        if (eqPredicate != null || otherPredicate != null) {
+            ColumnRefSet useColumns = new ColumnRefSet();
+
+            if (eqPredicate != null) {
+                useColumns.union(eqPredicate.getUsedColumns());
             }
 
-            if (predicates.second != null && predicates.second.getUsedColumns().contains(entry.getKey())) {
-                if (leftExprInfo.expr.getOutputColumns().containsAll(entry.getValue().getUsedColumns())
-                        || entry.getValue() instanceof ConstantOperator) {
+            if (otherPredicate != null) {
+                useColumns.union(otherPredicate.getUsedColumns());
+            }
+
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : expressionMap.entrySet()) {
+                if (!useColumns.contains(entry.getKey())) {
+                    continue;
+                }
+
+                if (entry.getValue().isConstantRef()) {
+                    // constant always on left
                     leftExpression.put(entry.getKey(), entry.getValue());
-                } else if (rightExprInfo.expr.getOutputColumns().containsAll(entry.getValue().getUsedColumns())
-                        || entry.getValue() instanceof ConstantOperator) {
+                    continue;
+                }
+
+                ColumnRefSet valueUseColumns = entry.getValue().getUsedColumns();
+                if (leftExprInfo.expr.getOutputColumns().containsAll(valueUseColumns)) {
+                    leftExpression.put(entry.getKey(), entry.getValue());
+                } else if (rightExprInfo.expr.getOutputColumns().containsAll(valueUseColumns)) {
                     rightExpression.put(entry.getKey(), entry.getValue());
                 }
             }
@@ -336,14 +350,26 @@ public abstract class JoinOrder {
 
         // In StarRocks, we only support hash join.
         // So we always use small table as right child
+        OptExpression joinExpr;
         if (leftExprInfo.rowCount < rightExprInfo.rowCount) {
-            OptExpression joinExpr = OptExpression.create(newJoin, rightExprInfo.expr,
+            joinExpr = OptExpression.create(newJoin, rightExprInfo.expr,
                     leftExprInfo.expr);
-            return new ExpressionInfo(joinExpr, rightGroup, leftGroup);
         } else {
-            OptExpression joinExpr = OptExpression.create(newJoin, leftExprInfo.expr,
+            joinExpr = OptExpression.create(newJoin, leftExprInfo.expr,
                     rightExprInfo.expr);
-            return new ExpressionInfo(joinExpr, leftGroup, rightGroup);
+        }
+
+        try {
+            InputDependenciesChecker.getInstance().validate(joinExpr, context.getTaskContext());
+        } catch (Exception e) {
+            LOGGER.debug("the reorder result is not a valid plan.", e);
+            return Optional.empty();
+        }
+
+        if (leftExprInfo.rowCount < rightExprInfo.rowCount) {
+            return Optional.of(new ExpressionInfo(joinExpr, rightGroup, leftGroup));
+        } else {
+            return Optional.of(new ExpressionInfo(joinExpr, leftGroup, rightGroup));
         }
     }
 
@@ -356,7 +382,7 @@ public abstract class JoinOrder {
         if (exprInfo.expr.getOp().getProjection() != null) {
             projection.putAll(exprInfo.expr.getOp().getProjection().getColumnRefMap());
         } else {
-            exprInfo.expr.getOutputColumns().getStream().mapToObj(context.getColumnRefFactory()::getColumnRef)
+            exprInfo.expr.getOutputColumns().getStream().map(context.getColumnRefFactory()::getColumnRef)
                     .forEach(c -> projection.put(c, c));
         }
 
@@ -376,6 +402,9 @@ public abstract class JoinOrder {
         exprInfo.expr.deriveLogicalPropertyItself();
     }
 
+    /*
+     * Pair<Equal-On-Predicate, Other-Predicate>
+     */
     private Pair<ScalarOperator, ScalarOperator> buildInnerJoinPredicate(BitSet left, BitSet right) {
         List<ScalarOperator> equalOnPredicates = Lists.newArrayList();
         List<ScalarOperator> otherPredicates = Lists.newArrayList();

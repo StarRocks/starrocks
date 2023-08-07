@@ -18,6 +18,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 public class ShowEnginesStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
@@ -29,6 +30,14 @@ public class ShowEnginesStmt extends ShowStmt {
                     .addColumn(new Column("XA", ScalarType.createVarchar(3)))
                     .addColumn(new Column("Savepoints", ScalarType.createVarchar(3)))
                     .build();
+
+    public ShowEnginesStmt() {
+        this(NodePosition.ZERO);
+    }
+
+    public ShowEnginesStmt(NodePosition pos) {
+        super(pos);
+    }
 
     @Override
     public ShowResultSetMetaData getMetaData() {

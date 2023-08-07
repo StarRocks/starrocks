@@ -86,6 +86,8 @@ public:
 
     std::shared_ptr<LoadChannel> remove_load_channel(const UniqueId& load_id);
 
+    void close();
+
 private:
     static void* load_channel_clean_bg_worker(void* arg);
 

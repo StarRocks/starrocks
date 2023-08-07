@@ -24,6 +24,7 @@ import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
+import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.velocity.VelocityContext;
 
 import java.io.StringWriter;
@@ -36,20 +37,21 @@ import java.util.stream.Collectors;
 public class SampleStatisticsCollectJob extends StatisticsCollectJob {
 
     private static final String INSERT_SELECT_METRIC_SAMPLE_TEMPLATE =
-            "SELECT $tableId, '$columnName', $dbId, '$tableName', '$dbName', COUNT(1) * $ratio, "
+            "SELECT $tableId, '$columnNameStr', $dbId, '$dbNameStr.$tableNameStr', '$dbNameStr', COUNT(1) * $ratio, "
                     + "$dataSize * $ratio, 0, 0, '', '', NOW() "
-                    + "FROM (SELECT `$columnName` FROM $tableName $hints ) as t";
+                    + "FROM (SELECT `$columnName` as column_key FROM `$dbName`.`$tableName` $hints ) as t ";
 
     private static final String INSERT_SELECT_TYPE_SAMPLE_TEMPLATE =
-            "SELECT $tableId, '$columnName', $dbId, '$tableName', '$dbName', IFNULL(SUM(t1.count), 0) * $ratio, "
+            "SELECT $tableId, '$columnNameStr', $dbId, '$dbNameStr.$tableNameStr', '$dbNameStr', "
+                    + "       IFNULL(SUM(t1.count), 0) * $ratio, "
                     + "       $dataSize * $ratio, $countDistinctFunction, "
-                    + "       IFNULL(SUM(IF(t1.`$columnName` IS NULL, t1.count, 0)), 0) * $ratio, "
-                    + "       IFNULL(MAX(t1.`$columnName`), ''), IFNULL(MIN(t1.`$columnName`), ''), NOW() "
+                    + "       IFNULL(SUM(IF(t1.`column_key` IS NULL, t1.count, 0)), 0) * $ratio, "
+                    + "       $maxFunction, $minFunction, NOW() "
                     + "FROM ( "
-                    + "    SELECT t0.`$columnName`, COUNT(1) as count "
-                    + "    FROM (SELECT `$columnName` FROM $tableName $hints) as t0 "
-                    + "    GROUP BY t0.`$columnName` "
-                    + ") as t1";
+                    + "    SELECT t0.`$columnName` as column_key, COUNT(1) as count "
+                    + "    FROM (SELECT `$columnName` FROM `$dbName`.`$tableName` $hints) as t0 "
+                    + "    GROUP BY t0.column_key "
+                    + ") as t1 ";
 
     protected static final String INSERT_STATISTIC_TEMPLATE =
             "INSERT INTO " + StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
@@ -58,6 +60,21 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
                                       StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
                                       Map<String, String> properties) {
         super(db, table, columns, type, scheduleType, properties);
+    }
+
+    protected int splitColumns(long rowCount) {
+        long splitSize;
+        if (rowCount == 0) {
+            splitSize = columns.size();
+        } else {
+            splitSize = Config.statistic_collect_max_row_count_per_query / rowCount + 1;
+            if (splitSize > columns.size()) {
+                splitSize = columns.size();
+            }
+        }
+        // Supports a maximum of 256 tasks for a union,
+        // preventing unexpected situations caused by too many tasks being executed at one time
+        return (int) Math.min(256, splitSize);
     }
 
     @Override
@@ -79,7 +96,20 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
         }
     }
 
-    private String buildSampleInsertSQL(Long dbId, Long tableId, List<String> columnNames, long rows) {
+    private String getDataSize(Column column) {
+        if (column.getPrimitiveType().isCharFamily()) {
+            return "IFNULL(SUM(CHAR_LENGTH(`column_key`)), 0)";
+        }
+
+        long typeSize = column.getType().getTypeSize();
+
+        if (column.getType().canStatistic()) {
+            return "IFNULL(SUM(t1.count), 0) * " + typeSize;
+        }
+        return "COUNT(1) * " + typeSize;
+    }
+
+    protected String buildSampleInsertSQL(Long dbId, Long tableId, List<String> columnNames, long rows) {
         Table table = MetaUtils.getTable(dbId, tableId);
 
         long hitRows = 1;
@@ -137,11 +167,16 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
             context.put("dbId", dbId);
             context.put("tableId", tableId);
             context.put("columnName", name);
+            context.put("columnNameStr", StringEscapeUtils.escapeSql(name));
             context.put("dbName", db.getFullName());
-            context.put("tableName", db.getOriginName() + "." + table.getName());
-            context.put("dataSize", getDataSize(column, true));
+            context.put("dbNameStr", StringEscapeUtils.escapeSql(db.getFullName()));
+            context.put("tableName", table.getName());
+            context.put("tableNameStr", StringEscapeUtils.escapeSql(table.getName()));
+            context.put("dataSize", getDataSize(column));
             context.put("ratio", ratio);
             context.put("hints", hintTablets);
+            context.put("maxFunction", getMinMaxFunction(column, "t1.`column_key`", true));
+            context.put("minFunction", getMinMaxFunction(column, "t1.`column_key`", false));
 
             // countDistinctFunction
             if (lowerDistributeColumns.size() == 1 && lowerDistributeColumns.contains(name.toLowerCase())) {

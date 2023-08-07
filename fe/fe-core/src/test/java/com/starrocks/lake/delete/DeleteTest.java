@@ -18,7 +18,9 @@ package com.starrocks.lake.delete;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -39,8 +41,8 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.DeleteJob;
+import com.starrocks.load.DeleteMgr;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.EditLog;
 import com.starrocks.proto.DeleteDataRequest;
@@ -103,7 +105,7 @@ public class DeleteTest {
     private Database db;
     private Auth auth;
     private ConnectContext connectContext = new ConnectContext();
-    private DeleteHandler deleteHandler;
+    private DeleteMgr deleteHandler;
 
     private Database createDb() {
         // Schema
@@ -137,7 +139,7 @@ public class DeleteTest {
         table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
 
         Database db = new Database(dbId, dbName);
-        db.createTable(table);
+        db.registerTableUnlocked(table);
         return db;
     }
 
@@ -158,7 +160,7 @@ public class DeleteTest {
                 GlobalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
 
-                systemInfoService.getBackend(anyLong);
+                systemInfoService.getBackendOrComputeNode(anyLong);
                 result = backend;
             }
         };
@@ -167,7 +169,7 @@ public class DeleteTest {
     @Before
     public void setUp() {
         connectContext.setGlobalStateMgr(globalStateMgr);
-        deleteHandler = new DeleteHandler();
+        deleteHandler = new DeleteMgr();
         auth = AccessTestUtil.fetchAdminAccess();
         db = createDb();
     }
@@ -223,7 +225,7 @@ public class DeleteTest {
             }
         };
 
-        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryPredicate.Operator.GT, new SlotRef(null, "k1"),
+        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
                 new IntLiteral(3));
 
         DeleteStmt deleteStmt = new DeleteStmt(new TableName(dbName, tableName),
@@ -289,7 +291,7 @@ public class DeleteTest {
             }
         };
 
-        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryPredicate.Operator.GT, new SlotRef(null, "k1"),
+        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
                 new IntLiteral(3));
 
         DeleteStmt deleteStmt = new DeleteStmt(new TableName(dbName, tableName),
@@ -332,7 +334,7 @@ public class DeleteTest {
         };
 
         // Not supported type
-        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryPredicate.Operator.GT, new SlotRef(null, "v1"),
+        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "v1"),
                 new StringLiteral("[]"));
         DeleteStmt deleteStmt = new DeleteStmt(new TableName(dbName, tableName),
                 new PartitionNames(false, Lists.newArrayList(partitionName)), binaryPredicate);
@@ -341,7 +343,19 @@ public class DeleteTest {
         try {
             deleteHandler.process(deleteStmt);
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("Type[ARRAY<bigint(20)>] not supported"));
+            Assert.assertTrue(e.getMessage().contains("unsupported delete condition on Array/Map/Struct type column"));
+        }
+
+        // Not supported type
+        IsNullPredicate isNull = new IsNullPredicate(new SlotRef(null, "v1"), true);
+        deleteStmt = new DeleteStmt(new TableName(dbName, tableName),
+                new PartitionNames(false, Lists.newArrayList(partitionName)), isNull);
+
+        com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
+        try {
+            deleteHandler.process(deleteStmt);
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("unsupported delete condition on Array/Map/Struct type"));
         }
     }
 }

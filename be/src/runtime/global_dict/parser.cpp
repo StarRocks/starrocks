@@ -27,9 +27,9 @@
 #include "runtime/global_dict/dict_column.h"
 #include "runtime/global_dict/miscs.h"
 #include "runtime/global_dict/types.h"
-#include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "simd/gather.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 

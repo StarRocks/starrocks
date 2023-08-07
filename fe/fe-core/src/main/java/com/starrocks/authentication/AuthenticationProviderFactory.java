@@ -23,29 +23,29 @@ import java.util.Map;
 
 public class AuthenticationProviderFactory {
     private static final Logger LOG = LogManager.getLogger(AuthenticationProviderFactory.class);
-    private static Map<String, AuthenticationProvider> pluginNameToAuthenticationProvider = new HashMap<>();
+    private static final Map<String, AuthenticationProvider> PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER = new HashMap<>();
 
     private AuthenticationProviderFactory() {}
 
     public static void installPlugin(String pluginName, AuthenticationProvider provider) {
-        if (pluginNameToAuthenticationProvider.containsKey(pluginName)) {
-            LOG.warn("Plugin {} has already installed!", pluginName);
+        if (PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.containsKey(pluginName)) {
+            LOG.warn("Plugin {} has already been installed!", pluginName);
         }
-        pluginNameToAuthenticationProvider.put(pluginName, provider);
+        PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.put(pluginName, provider);
     }
 
     public static void uninstallPlugin(String pluginName) {
-        if (!pluginNameToAuthenticationProvider.containsKey(pluginName)) {
-            LOG.warn("Cannot find {} from {} ", pluginName, pluginNameToAuthenticationProvider.keySet());
+        if (!PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.containsKey(pluginName)) {
+            LOG.warn("Cannot find {} from {} ", pluginName, PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.keySet());
         }
-        pluginNameToAuthenticationProvider.remove(pluginName);
+        PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.remove(pluginName);
     }
 
     public static AuthenticationProvider create(String plugin) throws AuthenticationException {
-        if (! pluginNameToAuthenticationProvider.containsKey(plugin)) {
+        if (!PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.containsKey(plugin)) {
             throw new AuthenticationException("Cannot find " + plugin + " from "
-                + pluginNameToAuthenticationProvider.keySet());
+                + PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.keySet());
         }
-        return pluginNameToAuthenticationProvider.get(plugin);
+        return PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.get(plugin);
     }
 }

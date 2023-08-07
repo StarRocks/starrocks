@@ -70,7 +70,7 @@ public:
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-        auto schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+        auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
         for (long key : keys) {
@@ -94,7 +94,7 @@ public:
         request.__set_version(1);
         request.__set_version_hash(0);
         request.tablet_schema.schema_hash = schema_hash;
-        request.tablet_schema.short_key_column_count = 6;
+        request.tablet_schema.short_key_column_count = 1;
         request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
         request.tablet_schema.storage_type = TStorageType::COLUMN;
 
@@ -141,7 +141,7 @@ public:
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*partial_schema.get());
+        auto schema = ChunkHelper::convert_schema(*partial_schema.get());
 
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         EXPECT_TRUE(2 == chunk->num_columns());
@@ -162,7 +162,7 @@ protected:
     std::unique_ptr<MemTracker> _metadata_mem_tracker;
 };
 
-static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, VectorizedSchema& schema) {
+static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, Schema& schema) {
     TabletReaderParams params;
     if (!reader.prepare().ok()) {
         LOG(ERROR) << "reader prepare failed";
@@ -198,7 +198,7 @@ static ssize_t read_until_eof(const ChunkIteratorPtr& iter) {
 }
 
 static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
-    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    Schema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
     TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -225,7 +225,7 @@ TEST_F(RowsetUpdateStateTest, prepare_partial_update_states) {
     auto pool = StorageEngine::instance()->update_manager()->apply_thread_pool();
     for (int i = 0; i < rowsets.size(); i++) {
         auto version = i + 2;
-        auto st = _tablet->rowset_commit(version, rowsets[i]);
+        auto st = _tablet->rowset_commit(version, rowsets[i], 0);
         ASSERT_TRUE(st.ok()) << st.to_string();
         // Ensure that there is at most one thread doing the version apply job.
         ASSERT_LE(pool->num_threads(), 1);
@@ -261,7 +261,7 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
     RowsetSharedPtr rowset = create_rowset(_tablet, keys);
     auto pool = StorageEngine::instance()->update_manager()->apply_thread_pool();
     auto version = 2;
-    auto st = _tablet->rowset_commit(version, rowset);
+    auto st = _tablet->rowset_commit(version, rowset, 0);
     ASSERT_TRUE(st.ok()) << st.to_string();
     ASSERT_LE(pool->num_threads(), 1);
     ASSERT_EQ(version, _tablet->updates()->max_version());
@@ -297,7 +297,7 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
     writer_context.segments_overlap = NONOVERLAPPING;
     std::unique_ptr<RowsetWriter> writer;
     EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-    auto schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     auto chunk = ChunkHelper::new_chunk(schema, N);
     auto& cols = chunk->columns();
     for (size_t i = 0; i < N; i++) {
@@ -308,7 +308,7 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
     CHECK_OK(writer->flush_chunk(*chunk));
     RowsetSharedPtr new_rowset = *writer->build();
     version = 3;
-    st = _tablet->rowset_commit(version, new_rowset);
+    st = _tablet->rowset_commit(version, new_rowset, 0);
     ASSERT_TRUE(st.ok()) << st.to_string();
     ASSERT_LE(pool->num_threads(), 1);
     ASSERT_EQ(version, _tablet->updates()->max_version());

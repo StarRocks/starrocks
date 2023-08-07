@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Function;
@@ -153,6 +154,11 @@ public class ScalarApply2JoinRule extends TransformationRule {
         // any_value aggregate
         ScalarOperator subqueryOperator = apply.getSubqueryOperator();
         CallOperator anyValueCallOp = SubqueryUtils.createAnyValueOperator(subqueryOperator);
+        if (anyValueCallOp.getFunction() == null) {
+            throw new SemanticException(String.format(
+                    "NOT support scalar correlated sub-query of type %s",
+                    subqueryOperator.getType().toSql()));
+        }
         ColumnRefOperator anyValue = factory.create("anyValue", anyValueCallOp.getType(), anyValueCallOp.isNullable());
         aggregates.put(anyValue, anyValueCallOp);
 
@@ -185,13 +191,14 @@ public class ScalarApply2JoinRule extends TransformationRule {
         // Add assertion column
         IsNullPredicateOperator countRowsIsNullPredicate = new IsNullPredicateOperator(countRows);
         BinaryPredicateOperator countRowsLEOneRowPredicate =
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, countRows,
+                new BinaryPredicateOperator(BinaryType.LE, countRows,
                         ConstantOperator.createBigint(1));
         PredicateOperator countRowsPredicate =
                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, countRowsIsNullPredicate,
                         countRowsLEOneRowPredicate);
-        Function assertTrueFn = Expr.getBuiltinFunction(FunctionSet.ASSERT_TRUE, new Type[] {Type.BOOLEAN, Type.VARCHAR},
-                Function.CompareMode.IS_IDENTICAL);
+        Function assertTrueFn =
+                Expr.getBuiltinFunction(FunctionSet.ASSERT_TRUE, new Type[] {Type.BOOLEAN, Type.VARCHAR},
+                        Function.CompareMode.IS_IDENTICAL);
         CallOperator assertTrueCallOp = new CallOperator(FunctionSet.ASSERT_TRUE, Type.BOOLEAN,
                 Lists.newArrayList(countRowsPredicate,
                         ConstantOperator.createVarchar("correlate scalar subquery result must 1 row")), assertTrueFn);
@@ -241,8 +248,9 @@ public class ScalarApply2JoinRule extends TransformationRule {
         assertOptExpression.getInputs().add(input.getInputs().get(1));
 
         // use hint, forbidden reorder un-correlate subquery
-        OptExpression joinOptExpression = new OptExpression(
-                LogicalJoinOperator.builder().setJoinType(JoinOperator.CROSS_JOIN).setJoinHint("broadcast").build());
+        OptExpression joinOptExpression = new OptExpression(LogicalJoinOperator.builder()
+                .setJoinType(JoinOperator.CROSS_JOIN)
+                .setJoinHint(JoinOperator.HINT_BROADCAST).build());
         joinOptExpression.getInputs().add(input.getInputs().get(0));
         joinOptExpression.getInputs().add(assertOptExpression);
 

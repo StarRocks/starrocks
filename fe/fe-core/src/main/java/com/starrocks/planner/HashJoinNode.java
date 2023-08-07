@@ -35,8 +35,11 @@
 package com.starrocks.planner;
 
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.analysis.SlotId;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TEqJoinCondition;
@@ -48,7 +51,6 @@ import com.starrocks.thrift.TPlanNodeType;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * Hash join between left child and right child.
@@ -65,7 +67,6 @@ public class HashJoinNode extends JoinNode {
                         List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
         super("HASH JOIN", id, outer, inner, joinOp, eqJoinConjuncts, otherJoinConjuncts);
     }
-
 
     @Override
     protected void toThrift(TPlanNode msg) {
@@ -139,5 +140,37 @@ public class HashJoinNode extends JoinNode {
         planNode.setHash_join_node(hashJoinNode);
         planNode.setNode_type(TPlanNodeType.HASH_JOIN_NODE);
         normalizeConjuncts(normalizer, planNode, conjuncts);
+    }
+
+    @Override
+    public void collectEquivRelation(FragmentNormalizer normalizer) {
+        if (!joinOp.isSemiJoin() && !joinOp.isInnerJoin()) {
+            return;
+        }
+        for (BinaryPredicate eq : eqJoinConjuncts) {
+            if (!eq.getOp().equals(BinaryType.EQ)) {
+                continue;
+            }
+            SlotId lhsSlotId = ((SlotRef) eq.getChild(0)).getSlotId();
+            SlotId rhsSlotId = ((SlotRef) eq.getChild(1)).getSlotId();
+            normalizer.getEquivRelation().union(lhsSlotId, rhsSlotId);
+        }
+    }
+
+    @Override
+    public boolean extractConjunctsToNormalize(FragmentNormalizer normalizer) {
+        if (!joinOp.isInnerJoin() && joinOp.isSemiJoin()) {
+            return false;
+        }
+        return super.extractConjunctsToNormalize(normalizer);
+    }
+
+    @Override
+    public boolean canUseRuntimeAdaptiveDop() {
+        if (joinOp.isRightJoin() || joinOp.isFullOuterJoin()) {
+            return false;
+        }
+
+        return getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
     }
 }

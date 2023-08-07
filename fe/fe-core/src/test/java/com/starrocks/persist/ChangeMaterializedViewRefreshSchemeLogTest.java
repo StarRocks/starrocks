@@ -15,6 +15,7 @@
 
 package com.starrocks.persist;
 
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -25,11 +26,15 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.common.Config;
+import com.starrocks.common.io.Text;
 import com.starrocks.thrift.TTabletType;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -87,6 +92,26 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
         Assert.assertEquals(readChangeLogAsyncRefreshContext.getTimeUnit(), "DAY");
         Assert.assertEquals(readChangeLogAsyncRefreshContext.getStep(), 1);
         in.close();
+    }
+
+    @Test
+    public void testFallBack() throws IOException {
+        Config.ignore_materialized_view_error = true;
+        String str = "bad data";
+        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+        Text.writeString(new DataOutputStream(byteArrayOutputStream), str);
+        byteArrayOutputStream.close();
+        byte[] data = byteArrayOutputStream.toByteArray();
+        DataInputStream in = new DataInputStream(new ByteArrayInputStream(data));
+        ChangeMaterializedViewRefreshSchemeLog readChangeLog = ChangeMaterializedViewRefreshSchemeLog.read(in);
+        Assert.assertEquals(0, readChangeLog.getDbId());
+        Config.ignore_materialized_view_error = false;
+    }
+
+    @Test
+    public void testReplayWhenDbIsEmpty() {
+        AlterJobMgr alterJobMgr = new AlterJobMgr();
+        alterJobMgr.replayChangeMaterializedViewRefreshScheme(new ChangeMaterializedViewRefreshSchemeLog());
     }
 
 }

@@ -77,6 +77,9 @@ Status StorageEngine::start_bg_threads() {
     _update_cache_expire_thread = std::thread([this] { _update_cache_expire_thread_callback(nullptr); });
     Thread::set_thread_name(_update_cache_expire_thread, "cache_expire");
 
+    _update_cache_evict_thread = std::thread([this] { _update_cache_evict_thread_callback(nullptr); });
+    Thread::set_thread_name(_update_cache_expire_thread, "evict_update_cache");
+
     _unused_rowset_monitor_thread = std::thread([this] { _unused_rowset_monitor_thread_callback(nullptr); });
     Thread::set_thread_name(_unused_rowset_monitor_thread, "rowset_monitor");
 
@@ -194,6 +197,11 @@ Status StorageEngine::start_bg_threads() {
     _repair_compaction_thread = std::thread([this] { _repair_compaction_thread_callback(nullptr); });
     Thread::set_thread_name(_repair_compaction_thread, "repair_compact");
 
+    for (uint32_t i = 0; i < config::manual_compaction_threads; i++) {
+        _manual_compaction_threads.emplace_back([this] { _manual_compaction_thread_callback(nullptr); });
+        Thread::set_thread_name(_manual_compaction_threads.back(), "manual_compact");
+    }
+
     // tablet checkpoint thread
     for (auto data_dir : data_dirs) {
         _tablet_checkpoint_threads.emplace_back([this, data_dir] { _tablet_checkpoint_callback((void*)data_dir); });
@@ -257,7 +265,7 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
         if (config::disable_storage_page_cache) {
             continue;
         }
-        MemTracker* memtracker = ExecEnv::GetInstance()->process_mem_tracker();
+        MemTracker* memtracker = GlobalEnv::GetInstance()->process_mem_tracker();
         if (memtracker == nullptr || !memtracker->has_limit() || cache == nullptr) {
             continue;
         }
@@ -297,7 +305,7 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
             size_t bytes_to_dec = dec_advisor->bytes_should_gc(MonoTime::Now(), delta_high);
             evict_pagecache(cache, static_cast<int64_t>(bytes_to_dec), _bg_worker_stopped);
         } else {
-            int64_t max_cache_size = std::max(ExecEnv::GetInstance()->get_storage_page_cache_size(), kcacheMinSize);
+            int64_t max_cache_size = std::max(GlobalEnv::GetInstance()->get_storage_page_cache_size(), kcacheMinSize);
             int64_t cur_cache_size = cache->get_capacity();
             if (cur_cache_size >= max_cache_size) {
                 continue;
@@ -423,7 +431,7 @@ void* StorageEngine::_repair_compaction_thread_callback(void* arg) {
             }
             vector<pair<uint32_t, string>> rowset_results;
             for (auto rowsetid : task.second) {
-                auto st = tablet->updates()->compaction(ExecEnv::GetInstance()->compaction_mem_tracker(), {rowsetid});
+                auto st = tablet->updates()->compaction(GlobalEnv::GetInstance()->compaction_mem_tracker(), {rowsetid});
                 if (!st.ok()) {
                     LOG(WARNING) << "repair compaction failed tablet: " << task.first << " rowset: " << rowsetid << " "
                                  << st;
@@ -639,6 +647,33 @@ void* StorageEngine::_update_cache_expire_thread_callback(void* arg) {
 #endif
     }
 
+    return nullptr;
+}
+
+void* StorageEngine::_update_cache_evict_thread_callback(void* arg) {
+#ifdef GOOGLE_PROFILER
+    ProfilerRegisterThread();
+#endif
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
+        SLEEP_IN_BG_WORKER(config::update_cache_evict_internal_sec);
+        if (!config::enable_auto_evict_update_cache) {
+            continue;
+        }
+
+        // Check config valid
+        int64_t memory_urgent_level = config::memory_urgent_level;
+        int64_t memory_high_level = config::memory_high_level;
+        if (UNLIKELY(!(memory_urgent_level > memory_high_level && memory_high_level >= 1 &&
+                       memory_urgent_level <= 100))) {
+            LOG(ERROR) << "memory water level config is illegal: memory_urgent_level=" << memory_urgent_level
+                       << " memory_high_level=" << memory_high_level;
+            continue;
+        }
+        _update_manager->evict_cache(memory_urgent_level, memory_high_level);
+#if defined(USE_STAROS) && !defined(BE_TEST)
+        ExecEnv::GetInstance()->lake_update_manager()->evict_cache(memory_urgent_level, memory_high_level);
+#endif
+    }
     return nullptr;
 }
 

@@ -1,0 +1,135 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto2";
+
+package starrocks;
+option java_package = "com.starrocks.proto";
+
+import "types.proto";
+
+message FileIdPB {
+    // Unique id for a rowset used by a binlog file. It's the publish version
+    // for duplicate key, and TabletUpdate#_next_rowset_id for primary key.
+    // For duplicate key, the binlog file only uses incremental rowsets which
+    // can be distinguished by the publish version, see Tablet#_inc_rs_version_map.
+    // Compared to use the data structure RowsetId, this can save the space,
+    // and use the existing index to get rowset_id -> Rowset, that's,
+    // Tablet#_inc_rs_version_map for duplicate key, and TabletUpdates#_rowsets
+    // for primary key
+    optional int64 rowset_id = 1;
+    optional int32 segment_index = 2;
+}
+
+enum LogEntryTypePB {
+    INSERT_RANGE_PB = 0;
+    UPDATE_PB = 1;
+    DELETE_PB = 2;
+    EMPTY_PB = 3;
+}
+
+message InsertRangePB {
+    optional FileIdPB file_id = 1;
+    optional int32 start_row_id = 2;
+    optional int32 num_rows = 3;
+}
+
+message UpdatePB {
+    optional FileIdPB before_file_id = 1;
+    optional int32 before_row_id = 2;
+    optional FileIdPB after_file_id = 3;
+    optional int32 after_row_id = 4;
+}
+
+message DeletePB {
+    optional FileIdPB file_id = 1;
+    optional int32 row_id = 2;
+}
+
+message LogEntryPB {
+    optional LogEntryTypePB entry_type = 1;
+    optional InsertRangePB insert_range_data = 2;
+    optional UpdatePB update_data = 3;
+    optional DeletePB delete_data = 4;
+}
+
+message PageContentPB {
+    repeated LogEntryPB entries = 1;
+}
+
+enum PageType {
+    NORMAL = 0;
+}
+
+message PageHeaderPB {
+    // type of page
+    optional PageType page_type = 1;
+    // compress type
+    optional CompressionTypePB compress_type = 2;
+    // size of uncompressed page
+    optional int32 uncompressed_size = 3;
+    // size of compressed page
+    optional int32 compressed_size = 4;
+    // crc for compressed page
+    optional int32 compressed_page_crc = 5;
+    // the version of change events in the page
+    optional int64 version = 6;
+    // number of log entries
+    optional int32 num_log_entries = 7;
+    // sequence number of the first change event in the page
+    optional int64 start_seq_id = 8;
+    // sequence number of the last change event in the page
+    optional int64 end_seq_id = 9;
+    // timestamp of change events in the page. Currently events
+    // in a version have the same timestamp
+    optional int64 timestamp_in_us = 10;
+    // whether this is the last page of the version
+    optional bool end_of_version = 11;
+    // rowsets that this page uses
+    repeated int64 rowsets = 12;
+}
+
+message BinlogFileHeaderPB {
+    optional int32 format_version = 1;
+}
+
+// Meta for a binlog file
+message BinlogFileMetaPB {
+    optional int64 id = 1;
+    // the version of the first change event in the file
+    optional int64 start_version = 2;
+    // the sequence number for the first change event in the file
+    optional int64 start_seq_id = 3;
+    // timestamp for the first change evnet in the file
+    optional int64 start_timestamp_in_us = 4;
+    // the version of the last change event in the file
+    optional int64 end_version = 5;
+    // the sequence number for the last change event in the file
+    optional int64 end_seq_id = 6;
+    // timestamp for the last change evnet in the file
+    optional int64 end_timestamp_in_us = 7;
+    // whether this file is end of end_version
+    optional bool version_eof = 8;
+    // number of pages in this file
+    optional int64 num_pages = 9;
+    // file size of the binlog file
+    optional int64 file_size = 10;
+    // rowsets that this binlog file uses
+    repeated int64 rowsets = 11;
+}
+
+message BinlogLsnPB {
+    optional int64 version = 1;
+    optional int64 seq_id = 2;
+}

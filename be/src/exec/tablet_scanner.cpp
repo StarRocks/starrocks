@@ -43,6 +43,7 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
     _runtime_state = runtime_state;
     _skip_aggregation = params.skip_aggregation;
     _need_agg_finalize = params.need_agg_finalize;
+    _update_num_scan_range = params.update_num_scan_range;
 
     RETURN_IF_ERROR(Expr::clone_if_not_exists(runtime_state, &_pool, *params.conjunct_ctxs, &_conjunct_ctxs));
     RETURN_IF_ERROR(_get_tablet(params.scan_range));
@@ -51,12 +52,12 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
     RETURN_IF_ERROR(_init_global_dicts());
     RETURN_IF_ERROR(_init_reader_params(params.key_ranges));
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
-    VectorizedSchema child_schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, _reader_columns);
+    Schema child_schema = ChunkHelper::convert_schema(tablet_schema, _reader_columns);
     _reader = std::make_shared<TabletReader>(_tablet, Version(0, _version), std::move(child_schema));
     if (_reader_columns.size() == _scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
-        VectorizedSchema output_schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, _scanner_columns);
+        Schema output_schema = ChunkHelper::convert_schema(tablet_schema, _scanner_columns);
         _prj_iter = new_projection_iterator(output_schema, _reader);
     }
 
@@ -137,17 +138,18 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     // we will not call agg object finalize method in scan node,
     // to avoid the unnecessary SerDe and improve query performance
     _params.need_agg_finalize = _need_agg_finalize;
-    _params.use_page_cache = !config::disable_storage_page_cache;
+    _params.use_page_cache = _runtime_state->use_page_cache();
+    auto parser = _pool.add(new PredicateParser(_tablet->tablet_schema()));
+    std::vector<PredicatePtr> preds;
+    RETURN_IF_ERROR(_parent->_conjuncts_manager.get_column_predicates(parser, &preds));
+
     // Improve for select * from table limit x, x is small
-    if (_parent->_limit != -1 && _parent->_limit < runtime_state()->chunk_size()) {
+    if (preds.empty() && _parent->_limit != -1 && _parent->_limit < runtime_state()->chunk_size()) {
         _params.chunk_size = _parent->_limit;
     } else {
         _params.chunk_size = runtime_state()->chunk_size();
     }
 
-    auto parser = _pool.add(new PredicateParser(_tablet->tablet_schema()));
-    std::vector<PredicatePtr> preds;
-    RETURN_IF_ERROR(_parent->_conjuncts_manager.get_column_predicates(parser, &preds));
     for (auto& p : preds) {
         if (parser->can_pushdown(p.get())) {
             _params.predicates.push_back(p.get());
@@ -157,8 +159,8 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
         _predicate_free_pool.emplace_back(std::move(p));
     }
 
-    ConjunctivePredicatesRewriter not_pushdown_predicate_rewriter(_predicates, *_params.global_dictmaps);
-    not_pushdown_predicate_rewriter.rewrite_predicate(&_pool);
+    GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(_predicates, *_params.global_dictmaps);
+    RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_pool));
 
     // Range
     for (auto key_range : *key_ranges) {
@@ -275,7 +277,7 @@ Status TabletScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
             SCOPED_TIMER(_expr_filter_timer);
             size_t nrows = chunk->num_rows();
             _selection.resize(nrows);
-            _predicates.evaluate(chunk, _selection.data(), 0, nrows);
+            RETURN_IF_ERROR(_predicates.evaluate(chunk, _selection.data(), 0, nrows));
             chunk->filter(_selection);
             DCHECK_CHUNK(chunk);
         }
@@ -337,6 +339,7 @@ void TabletScanner::update_counter() {
 
     COUNTER_UPDATE(_parent->_get_rowsets_timer, _reader->stats().get_rowsets_ns);
     COUNTER_UPDATE(_parent->_get_delvec_timer, _reader->stats().get_delvec_ns);
+    COUNTER_UPDATE(_parent->_get_delta_column_group_timer, _reader->stats().get_delta_column_group_ns);
     COUNTER_UPDATE(_parent->_seg_init_timer, _reader->stats().segment_init_ns);
 
     int64_t cond_evaluate_ns = 0;

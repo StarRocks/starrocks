@@ -22,68 +22,11 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "serde/column_array_serde.h"
+#include "storage/chunk_helper.h"
 #include "util/coding.h"
 #include "util/raw_container.h"
 
 namespace starrocks::serde {
-
-EncodeContext::EncodeContext(const int col_num, const int encode_level) : _session_encode_level(encode_level) {
-    for (auto i = 0; i < col_num; ++i) {
-        _column_encode_level.emplace_back(_session_encode_level);
-        _raw_bytes.emplace_back(0);
-        _encoded_bytes.emplace_back(0);
-    }
-    DCHECK(_session_encode_level != 0);
-    // the lowest bit is set and other bits are not zero, then enable adjust.
-    if (_session_encode_level & 1 && (_session_encode_level >> 1)) {
-        _enable_adjust = true;
-    }
-}
-
-void EncodeContext::update(const int col_id, uint64_t mem_bytes, uint64_t encode_byte) {
-    DCHECK(_session_encode_level != 0);
-    if (!_enable_adjust) {
-        return;
-    }
-    // decide to encode or not by the encoding ratio of the first EncodeSamplingNum of every _frequency chunks
-    if (_times % _frequency < EncodeSamplingNum) {
-        _raw_bytes[col_id] += mem_bytes;
-        _encoded_bytes[col_id] += encode_byte;
-    }
-}
-
-// if encode ratio < EncodeRatioLimit, encode it, otherwise not.
-void EncodeContext::_adjust(const int col_id) {
-    auto old_level = _column_encode_level[col_id];
-    if (_encoded_bytes[col_id] < _raw_bytes[col_id] * EncodeRatioLimit) {
-        _column_encode_level[col_id] = _session_encode_level;
-    } else {
-        _column_encode_level[col_id] = 0;
-    }
-    if (old_level != _column_encode_level[col_id] || _session_encode_level < -1) {
-        VLOG_ROW << "Old encode level " << old_level << " is changed to " << _column_encode_level[col_id]
-                 << " because the first " << EncodeSamplingNum << " of " << _frequency << " in total " << _times
-                 << " chunks' compression ratio is " << _encoded_bytes[col_id] * 1.0 / _raw_bytes[col_id]
-                 << " higher than limit " << EncodeRatioLimit;
-    }
-    _encoded_bytes[col_id] = 0;
-    _raw_bytes[col_id] = 0;
-}
-
-void EncodeContext::set_encode_levels_in_pb(ChunkPB* const res) {
-    res->mutable_encode_level()->Reserve(static_cast<int>(_column_encode_level.size()));
-    for (const auto& level : _column_encode_level) {
-        res->mutable_encode_level()->Add(level);
-    }
-    ++_times;
-    // must adjust after writing the current encode_level
-    if (_enable_adjust && (_times % _frequency == EncodeSamplingNum)) {
-        for (auto col_id = 0; col_id < _column_encode_level.size(); ++col_id) {
-            _adjust(col_id);
-        }
-        _frequency = _frequency > 1000000000 ? _frequency : _frequency * 2;
-    }
-}
 
 int64_t ProtobufChunkSerde::max_serialized_size(const Chunk& chunk, const std::shared_ptr<EncodeContext>& context) {
     int64_t serialized_size = 8; // 4 bytes version plus 4 bytes row number
@@ -238,7 +181,7 @@ StatusOr<Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor& row_desc, c
     return chunk;
 }
 
-StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, int64_t* deserialized_bytes) {
+StatusOr<Chunk> deserialize_chunk_pb_with_schema(const Schema& schema, std::string_view buff) {
     using ColumnHelper = ColumnHelper;
     using Chunk = Chunk;
 
@@ -247,6 +190,37 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
     uint32_t version = decode_fixed32_le(cur);
     if (version != 1) {
         return Status::Corruption("invalid version");
+    }
+    cur += 4;
+
+    uint32_t rows = decode_fixed32_le(cur);
+    cur += 4;
+
+    auto chunk = ChunkHelper::new_chunk(schema, rows);
+    for (auto& column : chunk->columns()) {
+        cur = ColumnArraySerde::deserialize(cur, column.get());
+    }
+    return Chunk(std::move(*chunk));
+}
+
+static SlotId get_slot_id_by_index(const Chunk::SlotHashMap& slot_id_to_index, int target_index) {
+    for (const auto& [slot_id, index] : slot_id_to_index) {
+        if (index == target_index) {
+            return slot_id;
+        }
+    }
+    return -1;
+}
+
+StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, int64_t* deserialized_bytes) {
+    using ColumnHelper = ColumnHelper;
+    using Chunk = Chunk;
+
+    auto* cur = reinterpret_cast<const uint8_t*>(buff.data());
+
+    uint32_t version = decode_fixed32_le(cur);
+    if (version != 1) {
+        return Status::Corruption(fmt::format("invalid version: {}", version));
     }
     cur += 4;
 
@@ -270,9 +244,14 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
         }
     }
 
-    for (auto& col : columns) {
-        if (col->size() != rows) {
-            return Status::Corruption(fmt::format("mismatched row count: {} vs {}", col->size(), rows));
+    for (int i = 0; i < columns.size(); ++i) {
+        size_t col_num_rows = columns[i]->size();
+        if (col_num_rows != rows) {
+            SlotId slot_id = get_slot_id_by_index(_meta.slot_id_to_index, i);
+            return Status::Corruption(
+                    fmt::format("Internal error. Detail: deserialize chunk data failed. column slot id: {}, column row "
+                                "count: {}, expected row count: {}. There is probably a bug here.",
+                                slot_id, col_num_rows, rows));
         }
     }
 
@@ -289,9 +268,14 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
         for (auto& column : extra_columns) {
             cur = ColumnArraySerde::deserialize(cur, column.get());
         }
-        for (auto& col : extra_columns) {
-            if (col->size() != rows) {
-                return Status::Corruption(fmt::format("mismatched row count: {} vs {}", col->size(), rows));
+        for (int i = 0; i < extra_columns.size(); ++i) {
+            size_t col_num_rows = extra_columns[i]->size();
+            if (col_num_rows != rows) {
+                return Status::Corruption(
+                        fmt::format("Internal error. Detail: deserialize chunk data failed. extra column index: {}, "
+                                    "column row count: {}, expected "
+                                    "row count: {}. There is probably a bug here.",
+                                    i, col_num_rows, rows));
             }
         }
         chunk_extra_data = std::make_shared<ChunkExtraColumnsData>(_meta.extra_data_metas, std::move(extra_columns));

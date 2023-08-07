@@ -18,7 +18,7 @@
 
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
-#include "column/vectorized_schema.h"
+#include "column/schema.h"
 #include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
@@ -30,9 +30,9 @@ namespace starrocks {
 
 template <LogicalType field_type, typename DatumType>
 void test_integral_pk() {
-    auto f = std::make_shared<VectorizedField>(0, "c0", field_type, false);
+    auto f = std::make_shared<Field>(0, "c0", field_type, false);
     f->set_is_key(true);
-    auto schema = std::make_shared<VectorizedSchema>(VectorizedFields{f}, PRIMARY_KEYS, std::vector<ColumnId>{0});
+    auto schema = std::make_shared<Schema>(Fields{f}, PRIMARY_KEYS, std::vector<ColumnId>{0});
     auto pk_index = TEST_create_primary_index(*schema);
 
     constexpr int kSegmentSize = 20;
@@ -155,9 +155,9 @@ PARALLEL_TEST(PrimaryIndexTest, test_largeint) {
 
 template <LogicalType field_type>
 void test_binary_pk() {
-    auto f = std::make_shared<VectorizedField>(0, "c0", field_type, false);
+    auto f = std::make_shared<Field>(0, "c0", field_type, false);
     f->set_is_key(true);
-    auto schema = std::make_shared<VectorizedSchema>(VectorizedFields{f}, PRIMARY_KEYS, std::vector<ColumnId>{0});
+    auto schema = std::make_shared<Schema>(Fields{f}, PRIMARY_KEYS, std::vector<ColumnId>{0});
     auto pk_index = TEST_create_primary_index(*schema);
 
     constexpr int kSegmentSize = 20;
@@ -268,12 +268,11 @@ PARALLEL_TEST(PrimaryIndexTest, test_varchar) {
 }
 
 PARALLEL_TEST(PrimaryIndexTest, test_composite_key) {
-    auto f1 = std::make_shared<VectorizedField>(0, "c0", TYPE_TINYINT, false);
+    auto f1 = std::make_shared<Field>(0, "c0", TYPE_TINYINT, false);
     f1->set_is_key(true);
-    auto f2 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
+    auto f2 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
     f2->set_is_key(true);
-    auto schema =
-            std::make_shared<VectorizedSchema>(VectorizedFields{f1, f2}, PRIMARY_KEYS, std::vector<ColumnId>{0, 1});
+    auto schema = std::make_shared<Schema>(Fields{f1, f2}, PRIMARY_KEYS, std::vector<ColumnId>{0, 1});
     auto pk_index = TEST_create_primary_index(*schema);
 
     constexpr int kSegmentSize = 100;

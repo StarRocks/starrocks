@@ -17,10 +17,12 @@
 #include "exec/data_sink.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
+#include "exec/workgroup/work_group.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
+#include "util/time.h"
 
 namespace starrocks::pipeline {
 
@@ -79,12 +81,13 @@ void FragmentContext::set_data_sink(std::unique_ptr<DataSink> data_sink) {
     _data_sink = std::move(data_sink);
 }
 
-void FragmentContext::count_down_pipeline(RuntimeState* state, size_t val) {
+void FragmentContext::count_down_pipeline(size_t val) {
     bool all_pipelines_finished = _num_finished_pipelines.fetch_add(val) + val == _pipelines.size();
     if (!all_pipelines_finished) {
         return;
     }
 
+    auto* state = runtime_state();
     auto* query_ctx = state->query_ctx();
 
     state->runtime_profile()->reverse_childs();
@@ -98,11 +101,55 @@ void FragmentContext::count_down_pipeline(RuntimeState* state, size_t val) {
 
     finish();
     auto status = final_status();
-    state->exec_env()->driver_executor()->report_exec_state(query_ctx, this, status, true);
+    state->exec_env()->wg_driver_executor()->report_exec_state(query_ctx, this, status, true, true);
 
     destroy_pass_through_chunk_buffer();
 
     query_ctx->count_down_fragments();
+}
+
+bool FragmentContext::need_report_exec_state() {
+    auto* state = runtime_state();
+    auto* query_ctx = state->query_ctx();
+    if (!query_ctx->enable_profile()) {
+        return false;
+    }
+    const auto now = MonotonicNanos();
+    const auto interval_ns = query_ctx->get_runtime_profile_report_interval_ns();
+    auto last_report_ns = _last_report_exec_state_ns.load();
+    return now - last_report_ns >= interval_ns;
+}
+
+void FragmentContext::report_exec_state_if_necessary() {
+    auto* state = runtime_state();
+    auto* query_ctx = state->query_ctx();
+    if (!query_ctx->enable_profile()) {
+        return;
+    }
+    const auto now = MonotonicNanos();
+    const auto interval_ns = query_ctx->get_runtime_profile_report_interval_ns();
+    auto last_report_ns = _last_report_exec_state_ns.load();
+    if (now - last_report_ns < interval_ns) {
+        return;
+    }
+
+    int64_t normalized_report_ns;
+    if (now - last_report_ns > 2 * interval_ns) {
+        // Maybe the first time, then initialized it.
+        normalized_report_ns = now;
+    } else {
+        // Fix the report interval regardless the noise.
+        normalized_report_ns = last_report_ns + interval_ns;
+    }
+    if (_last_report_exec_state_ns.compare_exchange_strong(last_report_ns, normalized_report_ns)) {
+        for (auto& pipeline : _pipelines) {
+            for (auto& driver : pipeline->drivers()) {
+                driver->runtime_report_action();
+            }
+        }
+
+        state->exec_env()->wg_driver_executor()->report_exec_state(query_ctx, this, Status::OK(), false, true);
+    }
 }
 
 void FragmentContext::set_final_status(const Status& status) {
@@ -122,8 +169,7 @@ void FragmentContext::set_final_status(const Status& status) {
             } else {
                 LOG(WARNING) << ss.str();
             }
-            DriverExecutor* executor = enable_resource_group() ? _runtime_state->exec_env()->wg_driver_executor()
-                                                               : _runtime_state->exec_env()->driver_executor();
+            DriverExecutor* executor = _runtime_state->exec_env()->wg_driver_executor();
             iterate_drivers([executor](const DriverPtr& driver) {
                 executor->cancel(driver.get());
                 return Status::OK();
@@ -138,6 +184,10 @@ void FragmentContext::set_stream_load_contexts(const std::vector<StreamLoadConte
 }
 
 void FragmentContext::cancel(const Status& status) {
+    if (_runtime_state != nullptr && _runtime_state->query_ctx() != nullptr) {
+        _runtime_state->query_ctx()->release_workgroup_token_once();
+    }
+
     _runtime_state->set_is_cancelled(true);
     set_final_status(status);
 
@@ -145,8 +195,7 @@ void FragmentContext::cancel(const Status& status) {
     if (query_options.query_type == TQueryType::LOAD && (query_options.load_job_type == TLoadJobType::BROKER ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
-        starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(_query_id,
-                                                                                             _fragment_instance_id);
+        ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(_query_id, _fragment_instance_id);
     }
 
     if (_stream_load_contexts.size() > 0) {
@@ -172,6 +221,7 @@ FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragme
         auto&& ctx = std::make_unique<FragmentContext>();
         auto* raw_ctx = ctx.get();
         _fragment_contexts.emplace(fragment_id, std::move(ctx));
+        raw_ctx->set_workgroup(workgroup::WorkGroupManager::instance()->get_default_workgroup());
         return raw_ctx;
     }
 }
@@ -192,7 +242,7 @@ Status FragmentContextManager::register_ctx(const TUniqueId& fragment_id, Fragme
     if (query_options.query_type == TQueryType::LOAD && (query_options.load_job_type == TLoadJobType::BROKER ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
-        RETURN_IF_ERROR(starrocks::ExecEnv::GetInstance()->profile_report_worker()->register_pipeline_load(
+        RETURN_IF_ERROR(ExecEnv::GetInstance()->profile_report_worker()->register_pipeline_load(
                 fragment_ctx->query_id(), fragment_id));
     }
     _fragment_contexts.emplace(fragment_id, std::move(fragment_ctx));
@@ -221,8 +271,8 @@ void FragmentContextManager::unregister(const TUniqueId& fragment_id) {
              query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
              query_options.load_job_type == TLoadJobType::INSERT_VALUES) &&
             !it->second->runtime_state()->is_cancelled()) {
-            starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(it->second->query_id(),
-                                                                                                 fragment_id);
+            ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(it->second->query_id(),
+                                                                                      fragment_id);
         }
         const auto& stream_load_contexts = it->second->_stream_load_contexts;
 
@@ -261,21 +311,19 @@ void FragmentContext::destroy_pass_through_chunk_buffer() {
 Status FragmentContext::reset_epoch() {
     _num_finished_epoch_pipelines = 0;
     for (const auto& pipeline : _pipelines) {
+        RETURN_IF_ERROR(_runtime_state->reset_epoch());
         RETURN_IF_ERROR(pipeline->reset_epoch(_runtime_state.get()));
     }
     return Status::OK();
 }
 
 void FragmentContext::count_down_epoch_pipeline(RuntimeState* state, size_t val) {
-    VLOG_ROW << "count_down_epoch_pipeline"
-             << ", num_finished_epoch_pipelines:" << _num_finished_epoch_pipelines
-             << ", pipeline size:" << _pipelines.size();
-
     bool all_pipelines_finished = _num_finished_epoch_pipelines.fetch_add(val) + val == _pipelines.size();
     if (!all_pipelines_finished) {
         return;
     }
 
-    // TODO: do epoch report stats
+    state->query_ctx()->stream_epoch_manager()->count_down_fragment_ctx(state, this);
 }
+
 } // namespace starrocks::pipeline

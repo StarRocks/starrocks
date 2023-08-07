@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rewrite;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
@@ -23,6 +22,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CloneOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
@@ -30,10 +30,14 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 
 import java.util.List;
 
@@ -74,7 +78,8 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
         boolean[] update = {false};
         List<ScalarOperator> clonedOperators = visitList(collectionElementOp.getChildren(), update);
         if (update[0]) {
-            return new CollectionElementOperator(collectionElementOp.getType(), clonedOperators.get(0), clonedOperators.get(1));
+            return new CollectionElementOperator(collectionElementOp.getType(), clonedOperators.get(0),
+                    clonedOperators.get(1));
         }
         return collectionElementOp;
     }
@@ -128,7 +133,6 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
             return predicate;
         }
     }
-
 
     @Override
     public ScalarOperator visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
@@ -211,10 +215,65 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
                 clonedElseClause = clonedOperators.get(clonedOperators.size() - 1);
             }
 
-            int whenThenEndIdx = operator.getElseClause() == null ? clonedOperators.size() : clonedOperators.size() - 1;
+            int whenThenEndIdx = operator.hasElse() ? clonedOperators.size() - 1 : clonedOperators.size();
             clonedWhenThenClauses = clonedOperators.subList(operator.getWhenStart(), whenThenEndIdx);
 
             return new CaseWhenOperator(operator.getType(), clonedCaseClause, clonedElseClause, clonedWhenThenClauses);
+        } else {
+            return operator;
+        }
+    }
+
+    @Override
+    public ScalarOperator visitSubfield(SubfieldOperator operator, Void context) {
+        boolean[] update = {false};
+        List<ScalarOperator> child = visitList(operator.getChildren(), update);
+        if (update[0]) {
+            return new SubfieldOperator(child.get(0), operator.getType(), operator.getFieldNames());
+        } else {
+            return operator;
+        }
+    }
+
+    @Override
+    public ScalarOperator visitMap(MapOperator operator, Void context) {
+        boolean[] update = {false};
+        List<ScalarOperator> children = visitList(operator.getChildren(), update);
+        if (update[0]) {
+            return new MapOperator(operator.getType(), children);
+        } else {
+            return operator;
+        }
+    }
+
+    @Override
+    public ScalarOperator visitMultiInPredicate(MultiInPredicateOperator operator, Void context) {
+        boolean[] update = {false};
+        List<ScalarOperator> children = visitList(operator.getChildren(), update);
+        if (update[0]) {
+            return new MultiInPredicateOperator(operator.isNotIn(), children, operator.getTupleSize());
+        } else {
+            return operator;
+        }
+    }
+
+    @Override
+    public ScalarOperator visitLambdaFunctionOperator(LambdaFunctionOperator operator, Void context) {
+        boolean[] update = {false};
+        List<ScalarOperator> children = visitList(operator.getChildren(), update);
+        if (update[0]) {
+            return new LambdaFunctionOperator(operator.getRefColumns(), children.get(0), operator.getType());
+        } else {
+            return operator;
+        }
+    }
+
+    @Override
+    public ScalarOperator visitCloneOperator(CloneOperator operator, Void context) {
+        boolean[] update = {false};
+        List<ScalarOperator> children = visitList(operator.getChildren(), update);
+        if (update[0]) {
+            return new CloneOperator(children.get(0));
         } else {
             return operator;
         }

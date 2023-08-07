@@ -16,11 +16,17 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.sql.parser.NodePosition;
 
 public class KillAnalyzeStmt extends StatementBase {
     private final long analyzeId;
 
     public KillAnalyzeStmt(long analyzeId) {
+        this(analyzeId, NodePosition.ZERO);
+    }
+
+    public KillAnalyzeStmt(long analyzeId, NodePosition pos) {
+        super(pos);
         this.analyzeId = analyzeId;
     }
 

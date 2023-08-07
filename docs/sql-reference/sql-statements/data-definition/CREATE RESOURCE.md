@@ -8,7 +8,7 @@ Syntax:
 
 ```sql
 CREATE [EXTERNAL] RESOURCE "resource_name"
-PROPERTIES ("key"="value", ...);
+PROPERTIES ("key"="value", ...)
 ```
 
 Note:  
@@ -53,7 +53,7 @@ Note:
     If Spark is used for ETL, working_DIR and broker need to be specified. The instructions are as follows:
 
     ```plain text
-    working_dir: Directory used by ETL. It is required when spark is used as ETL resource. For example：hdfs://host:port/tmp/starrocks。
+    working_dir: Directory used by ETL. It is required when spark is used as ETL resource. For example: hdfs://host:port/tmp/starrocks.
     broker: Name of broker. It is required when spark is used as ETL resource and needs to be configured beforehand by using `ALTER SYSTEM ADD BROKER` command. 
     broker.property_key: It is the property information needed to be specified when broker reads the intermediate files created by ETL. 
     ```

@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.alter.AlterOpType;
+import com.starrocks.sql.parser.NodePosition;
 
 // clause which is used to swap table
 // eg:
@@ -24,7 +25,11 @@ public class SwapTableClause extends AlterTableClause {
     private final String tblName;
 
     public SwapTableClause(String tblName) {
-        super(AlterOpType.SWAP);
+        this(tblName, NodePosition.ZERO);
+    }
+
+    public SwapTableClause(String tblName, NodePosition pos) {
+        super(AlterOpType.SWAP, pos);
         this.tblName = tblName;
     }
 

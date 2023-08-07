@@ -35,6 +35,10 @@ DataSourcePtr BinlogDataSourceProvider::create_data_source(const TScanRange& sca
     return std::make_unique<BinlogDataSource>(this, scan_range);
 }
 
+const TupleDescriptor* BinlogDataSourceProvider::tuple_descriptor(RuntimeState* state) const {
+    return state->desc_tbl().get_tuple_descriptor(_binlog_scan_node.tuple_id);
+}
+
 // ================================
 
 BinlogDataSource::BinlogDataSource(const BinlogDataSourceProvider* provider, const TScanRange& scan_range)
@@ -44,53 +48,139 @@ Status BinlogDataSource::open(RuntimeState* state) {
     const TBinlogScanNode& binlog_scan_node = _provider->_binlog_scan_node;
     _runtime_state = state;
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(binlog_scan_node.tuple_id);
+    _is_stream_pipeline = state->fragment_ctx()->is_stream_pipeline();
+
+#ifndef NDEBUG
+    // for ut
+    if (state->fragment_ctx()->is_stream_test()) {
+        return Status::OK();
+    }
+#endif
+
     ASSIGN_OR_RETURN(_tablet, _get_tablet())
+    RETURN_IF_ERROR(_tablet->support_binlog());
     ASSIGN_OR_RETURN(_binlog_read_schema, _build_binlog_schema())
-    VLOG(2) << "Tablet id " << _tablet->tablet_uid() << ", version " << _scan_range.offset.version << ", seq_id "
-            << _scan_range.offset.lsn << ", binlog read schema " << _binlog_read_schema;
+
+    BinlogReaderParams reader_params;
+    reader_params.chunk_size = state->chunk_size();
+    reader_params.output_schema = _binlog_read_schema;
+    _binlog_reader = std::make_shared<BinlogReader>(_tablet, reader_params);
+    RETURN_IF_ERROR(_binlog_reader->init());
+
+    VLOG(3) << "Open binlog connector, tablet: " << _tablet->full_name()
+            << ", binlog reader id: " << _binlog_reader->reader_id() << ", is_stream_pipeline: " << _is_stream_pipeline
+            << ", binlog read schema: " << _binlog_read_schema;
+
     return Status::OK();
 }
 
-void BinlogDataSource::close(RuntimeState* state) {}
+void BinlogDataSource::close(RuntimeState* state) {
+    if (_binlog_reader != nullptr) {
+        _binlog_reader->close();
+        _binlog_reader.reset();
+    }
+}
 
 Status BinlogDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     SCOPED_RAW_TIMER(&_cpu_time_ns);
+
+#ifndef NDEBUG
+    // for ut
+    if (state->fragment_ctx()->is_stream_test()) {
+        return _mock_chunk_test(chunk);
+    }
+#endif
+    if (_need_seek_binlog.load(std::memory_order::acquire)) {
+        if (!_is_stream_pipeline) {
+            RETURN_IF_ERROR(_prepare_non_stream_pipeline());
+        }
+        RETURN_IF_ERROR(_binlog_reader->seek(_start_version, _start_seq_id));
+        _need_seek_binlog.store(false);
+    }
+
     _init_chunk(chunk, state->chunk_size());
-    // TODO replace with BinlogReader
-    return _mock_chunk(chunk->get());
+    Status status = _binlog_reader->get_next(chunk, _max_version_exclusive);
+    VLOG_IF(3, !status.ok()) << "Fail to read binlog, tablet: " << _tablet->full_name()
+                             << ", binlog reader id: " << _binlog_reader->reader_id()
+                             << ", start_version: " << _start_version << ", _start_seq_id: " << _start_seq_id
+                             << ", _max_version_exclusive: " << _max_version_exclusive << ", " << status;
+    return status;
+}
+
+Status BinlogDataSource::_prepare_non_stream_pipeline() {
+    BinlogRange binlog_range = _tablet->binlog_manager()->current_binlog_range();
+    if (binlog_range.is_empty()) {
+        VLOG(3) << "There is no binlog to scan, tablet: " << _tablet->full_name()
+                << ", binlog reader id: " << _binlog_reader->reader_id();
+        return Status::EndOfFile("There is no binlog");
+    }
+
+    _start_version.store(binlog_range.start_version());
+    _start_seq_id.store(binlog_range.start_seq_id());
+    _max_version_exclusive.store(binlog_range.end_version() + 1);
+
+    VLOG(3) << "Prepare to scan binlog, tablet: " << _tablet->full_name()
+            << ", binlog reader id: " << _binlog_reader->reader_id() << ", " << binlog_range.debug_string();
+
+    return Status::OK();
+}
+
+Status BinlogDataSource::set_offset(int64_t table_version, int64_t changelog_id) {
+    _mock_chunk_num = 0;
+    _need_seek_binlog.store(true);
+    _start_version.store(table_version);
+    _start_seq_id.store(changelog_id);
+    // Note MV can't read binlog across versions currently, so the max_version_exclusive is _start_version + 1
+    _max_version_exclusive.store(table_version + 1);
+    VLOG(3) << "Binlog connector set offset, tablet: " << _tablet->full_name()
+            << ", binlog reader id: " << _binlog_reader->reader_id() << ", version: " << table_version
+            << ", seq_id: " << changelog_id;
+    return Status::OK();
+}
+
+Status BinlogDataSource::reset_status() {
+    _rows_read_number = 0;
+    _bytes_read = 0;
+    _cpu_time_ns = 0;
+    VLOG(3) << "Binlog connector reset status, tablet: " << _tablet->full_name()
+            << ", binlog reader id: " << _binlog_reader->reader_id();
+    return Status::OK();
 }
 
 BinlogMetaFieldMap BinlogDataSource::_build_binlog_meta_fields(ColumnId start_cid) {
     BinlogMetaFieldMap fields;
     ColumnId cid = start_cid;
-    VectorizedFieldPtr op_field = std::make_shared<VectorizedField>(cid, BINLOG_OP, get_type_info(TYPE_TINYINT),
-                                                                    STORAGE_AGGREGATE_NONE, 1, false, false);
-    fields.emplace(BINLOG_OP, op_field);
+    FieldPtr op_field = std::make_shared<Field>(cid, _column_name_constants.BINLOG_OP_COLUMN_NAME,
+                                                get_type_info(TYPE_TINYINT), STORAGE_AGGREGATE_NONE, 1, false, false);
+    fields.emplace(_column_name_constants.BINLOG_OP_COLUMN_NAME, op_field);
     cid += 1;
 
-    VectorizedFieldPtr version_field = std::make_shared<VectorizedField>(
-            cid, BINLOG_VERSION, get_type_info(TYPE_BIGINT), STORAGE_AGGREGATE_NONE, 8, false, false);
-    fields.emplace(BINLOG_VERSION, version_field);
+    FieldPtr version_field =
+            std::make_shared<Field>(cid, _column_name_constants.BINLOG_VERSION_COLUMN_NAME, get_type_info(TYPE_BIGINT),
+                                    STORAGE_AGGREGATE_NONE, 8, false, false);
+    fields.emplace(_column_name_constants.BINLOG_VERSION_COLUMN_NAME, version_field);
     cid += 1;
 
-    VectorizedFieldPtr seq_id_field = std::make_shared<VectorizedField>(cid, BINLOG_SEQ_ID, get_type_info(TYPE_BIGINT),
-                                                                        STORAGE_AGGREGATE_NONE, 8, false, false);
-    fields.emplace(BINLOG_SEQ_ID, seq_id_field);
+    FieldPtr seq_id_field =
+            std::make_shared<Field>(cid, _column_name_constants.BINLOG_SEQ_ID_COLUMN_NAME, get_type_info(TYPE_BIGINT),
+                                    STORAGE_AGGREGATE_NONE, 8, false, false);
+    fields.emplace(_column_name_constants.BINLOG_SEQ_ID_COLUMN_NAME, seq_id_field);
     cid += 1;
 
-    VectorizedFieldPtr timestamp_field = std::make_shared<VectorizedField>(
-            cid, BINLOG_TIMESTAMP, get_type_info(TYPE_BIGINT), STORAGE_AGGREGATE_NONE, 8, false, false);
-    fields.emplace(BINLOG_TIMESTAMP, timestamp_field);
+    FieldPtr timestamp_field =
+            std::make_shared<Field>(cid, _column_name_constants.BINLOG_TIMESTAMP_COLUMN_NAME,
+                                    get_type_info(TYPE_BIGINT), STORAGE_AGGREGATE_NONE, 8, false, false);
+    fields.emplace(_column_name_constants.BINLOG_TIMESTAMP_COLUMN_NAME, timestamp_field);
     cid += 1;
 
     return fields;
 }
 
-StatusOr<VectorizedSchema> BinlogDataSource::_build_binlog_schema() {
+StatusOr<Schema> BinlogDataSource::_build_binlog_schema() {
     BinlogMetaFieldMap binlog_meta_map = _build_binlog_meta_fields(_tablet->tablet_schema().num_columns());
     std::vector<uint32_t> data_column_cids;
     std::vector<uint32_t> meta_column_slot_index;
-    VectorizedFields meta_fields;
+    Fields meta_fields;
     int slot_index = -1;
     for (auto slot : _tuple_desc->slots()) {
         DCHECK(slot->is_materialized());
@@ -98,18 +188,18 @@ StatusOr<VectorizedSchema> BinlogDataSource::_build_binlog_schema() {
         int32_t index = _tablet->field_index(slot->col_name());
         if (index >= 0) {
             data_column_cids.push_back(index);
-        } else if (slot->col_name() == BINLOG_OP) {
+        } else if (slot->col_name() == _column_name_constants.BINLOG_OP_COLUMN_NAME) {
             meta_column_slot_index.push_back(slot_index);
-            meta_fields.emplace_back(binlog_meta_map[BINLOG_OP]);
-        } else if (slot->col_name() == BINLOG_VERSION) {
+            meta_fields.emplace_back(binlog_meta_map[_column_name_constants.BINLOG_OP_COLUMN_NAME]);
+        } else if (slot->col_name() == _column_name_constants.BINLOG_VERSION_COLUMN_NAME) {
             meta_column_slot_index.push_back(slot_index);
-            meta_fields.emplace_back(binlog_meta_map[BINLOG_VERSION]);
-        } else if (slot->col_name() == BINLOG_SEQ_ID) {
+            meta_fields.emplace_back(binlog_meta_map[_column_name_constants.BINLOG_VERSION_COLUMN_NAME]);
+        } else if (slot->col_name() == _column_name_constants.BINLOG_SEQ_ID_COLUMN_NAME) {
             meta_column_slot_index.push_back(slot_index);
-            meta_fields.emplace_back(binlog_meta_map[BINLOG_SEQ_ID]);
-        } else if (slot->col_name() == BINLOG_TIMESTAMP) {
+            meta_fields.emplace_back(binlog_meta_map[_column_name_constants.BINLOG_SEQ_ID_COLUMN_NAME]);
+        } else if (slot->col_name() == _column_name_constants.BINLOG_TIMESTAMP_COLUMN_NAME) {
             meta_column_slot_index.push_back(slot_index);
-            meta_fields.emplace_back(binlog_meta_map[BINLOG_TIMESTAMP]);
+            meta_fields.emplace_back(binlog_meta_map[_column_name_constants.BINLOG_TIMESTAMP_COLUMN_NAME]);
         } else {
             std::string msg = fmt::format("invalid field name: {}", slot->col_name());
             LOG(WARNING) << msg;
@@ -122,7 +212,7 @@ StatusOr<VectorizedSchema> BinlogDataSource::_build_binlog_schema() {
     }
 
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
-    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, data_column_cids);
+    Schema schema = ChunkHelper::convert_schema(tablet_schema, data_column_cids);
     for (int32_t i = 0; i < meta_column_slot_index.size(); i++) {
         uint32_t index = meta_column_slot_index[i];
         if (index >= schema.num_fields()) {
@@ -136,11 +226,6 @@ StatusOr<VectorizedSchema> BinlogDataSource::_build_binlog_schema() {
 }
 
 Status BinlogDataSource::_mock_chunk(Chunk* chunk) {
-    int32_t num = _chunk_num.fetch_add(1, std::memory_order_relaxed);
-    if (num >= 2) {
-        return Status::EndOfFile(fmt::format("Has sent {} chunks", num));
-    }
-
     for (int row = 0; row < 10; row++) {
         for (int col = 0; col < chunk->num_columns(); col++) {
             LogicalType type = _binlog_read_schema.field(col)->type()->type();
@@ -180,6 +265,35 @@ Status BinlogDataSource::_mock_chunk(Chunk* chunk) {
     return Status::OK();
 }
 
+Status BinlogDataSource::_mock_chunk_test(ChunkPtr* chunk) {
+    VLOG_ROW << "[binlog data source] mock_chunk:";
+    int32_t num = _mock_chunk_num.fetch_add(1, std::memory_order_relaxed);
+    if (num >= 1) {
+        return Status::EndOfFile(fmt::format("Has sent {} chunks", num));
+    }
+    auto chunk_temp = std::make_shared<Chunk>();
+    int64_t start = 0;
+    int64_t step = 1;
+    int64_t ndv_count = 100;
+    for (auto idx = 0; idx < 2; idx++) {
+        auto column = Int64Column::create();
+        for (int64_t i = 0; i < 4; i++) {
+            start += step;
+            VLOG_ROW << "Append col:" << idx << ", row:" << start;
+            column->append(start % ndv_count);
+        }
+        chunk_temp->append_column(column, SlotId(idx));
+    }
+
+    // ops
+    auto ops = Int8Column::create();
+    for (int64_t i = 0; i < 1; i++) {
+        ops->append(0);
+    }
+    *chunk = StreamChunkConverter::make_stream_chunk(std::move(chunk_temp), std::move(ops));
+    return Status::OK();
+}
+
 StatusOr<TabletSharedPtr> BinlogDataSource::_get_tablet() {
     TTabletId tablet_id = _scan_range.tablet_id;
     std::string err;
@@ -206,6 +320,14 @@ int64_t BinlogDataSource::num_bytes_read() const {
 
 int64_t BinlogDataSource::cpu_time_spent() const {
     return _cpu_time_ns;
+}
+
+int64_t BinlogDataSource::num_rows_read_in_epoch() const {
+    return _rows_read_in_epoch;
+}
+
+int64_t BinlogDataSource::cpu_time_spent_in_epoch() const {
+    return _cpu_time_spent_in_epoch;
 }
 
 } // namespace starrocks::connector

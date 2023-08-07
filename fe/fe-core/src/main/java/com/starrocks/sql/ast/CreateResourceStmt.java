@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.catalog.Resource.ResourceType;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
@@ -28,6 +29,12 @@ public class CreateResourceStmt extends DdlStmt {
     private ResourceType resourceType;
 
     public CreateResourceStmt(boolean isExternal, String resourceName, Map<String, String> properties) {
+        this(isExternal, resourceName, properties, NodePosition.ZERO);
+    }
+
+    public CreateResourceStmt(boolean isExternal, String resourceName, Map<String, String> properties,
+                              NodePosition pos) {
+        super(pos);
         this.isExternal = isExternal;
         this.resourceName = resourceName;
         this.properties = properties;
@@ -58,6 +65,11 @@ public class CreateResourceStmt extends DdlStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateResourceStatement(this, context);
+    }
+
+    @Override
+    public boolean needAuditEncryption() {
+        return true;
     }
 }
 

@@ -25,26 +25,35 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+import com.starrocks.common.Version;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.http.rest.TransactionResult;
+import com.starrocks.load.LoadJobWithWarehouse;
 import com.starrocks.load.loadv2.LoadJob;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.qe.Coordinator;
+import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.BackendService;
-import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStreamLoadChannel;
+import com.starrocks.thrift.TStreamLoadInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.AbstractTxnStateChangeCallback;
 import com.starrocks.transaction.TabletCommitInfo;
@@ -66,8 +75,9 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Writable {
-    private static final Logger LOG = LogManager.getLogger(StreamLoadManager.class);
+public class StreamLoadTask extends AbstractTxnStateChangeCallback
+        implements Writable, GsonPostProcessable, GsonPreProcessable, LoadJobWithWarehouse {
+    private static final Logger LOG = LogManager.getLogger(StreamLoadTask.class);
 
     public enum State {
         BEGIN,
@@ -80,9 +90,19 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         FINISHED
     }
 
+    public enum Type {
+        STREAM_LOAD,
+        ROUTINE_LOAD,
+        PARALLEL_STREAM_LOAD     // default
+    }
+
     @SerializedName(value = "id")
     private long id;
     private TUniqueId loadId;
+    @SerializedName("loadIdHi")
+    private long loadIdHi;
+    @SerializedName("loadIdLo")
+    private long loadIdLo;
     @SerializedName(value = "label")
     private String label;
     @SerializedName(value = "dbId")
@@ -128,6 +148,11 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
     @SerializedName(value = "numLoadBytesTotal")
     private long numLoadBytesTotal;
 
+    // used for sync stream load and routine load
+    private boolean isSyncStreamLoad = false;
+
+    private Type type = Type.PARALLEL_STREAM_LOAD;
+
     private List<State> channels;
     private StreamLoadParam streamLoadParam;
     private StreamLoadInfo streamLoadInfo;
@@ -157,7 +182,18 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
     }
 
     public StreamLoadTask(long id, Database db, OlapTable table, String label,
-            long timeoutMs, int channelNum, int channelId, long createTimeMs) {
+                          long timeoutMs, long createTimeMs, boolean isRoutineLoad) {
+        this(id, db, table, label, timeoutMs, 1, 0, createTimeMs);
+        isSyncStreamLoad = true;
+        if (isRoutineLoad) {
+            type = Type.ROUTINE_LOAD;
+        } else {
+            type = Type.STREAM_LOAD;
+        }
+    }
+
+    public StreamLoadTask(long id, Database db, OlapTable table, String label,
+                          long timeoutMs, int channelNum, int channelId, long createTimeMs) {
         this.id = id;
         UUID uuid = UUID.randomUUID();
         this.loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
@@ -199,17 +235,32 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         this.isCommitting = false;
     }
 
+    @Override
+    public String getCurrentWarehouse() {
+        // TODO(lzh): pass the current warehouse.
+        return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+    }
+
+    @Override
+    public boolean isFinal() {
+        return isFinalState();
+    }
+
+    @Override
+    public long getFinishTimestampMs() {
+        return endTimeMs();
+    }
+
     public void beginTxn(int channelId, int channelNum, TransactionResult resp) {
         long startTimeMs = System.currentTimeMillis();
         boolean exception = false;
         writeLock();
         try {
             if (channelNum != this.channelNum) {
-                throw new Exception("channel num " + String.valueOf(channelNum) + " does not equal to original channel num "
-                    + String.valueOf(this.channelNum));
+                throw new Exception("channel num " + channelNum + " does not equal to original channel num " + this.channelNum);
             }
-            if (channelId >= this.channelNum) {
-                throw new Exception("channel id should be less than channel num");
+            if (channelId >= this.channelNum || channelId < 0) {
+                throw new Exception("channel id should be between [0, " + String.valueOf(this.channelNum - 1) + "].");
             }
 
             switch (this.state) {
@@ -284,8 +335,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         boolean exception = false;
         readLock();
         try {
-            if (channelId >= this.channelNum) {
-                throw new Exception("channel id should be less than channel num");
+            if (channelId >= this.channelNum || channelId < 0) {
+                throw new Exception("channel id should be between [0, " + String.valueOf(this.channelNum - 1) + "].");
             }
             switch (this.state) {
                 case BEFORE_LOAD: {
@@ -306,7 +357,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
                     TNetworkAddress redirectAddr = channelIdToBEHTTPAddress.get(channelId);
                     if (redirectAddr == null) {
                         throw new Exception(
-                            "can not find redirect address for stream load label " + label + ", channel id " + channelId);
+                                "can not find redirect address for stream load label " + label + ", channel id " + channelId);
                     }
                     return redirectAddr;
                 }
@@ -355,8 +406,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         boolean exception = false;
         writeLock();
         try {
-            if (channelId >= this.channelNum) {
-                throw new Exception("channel id should be less than channel num");
+            if (channelId >= this.channelNum || channelId < 0) {
+                throw new Exception("channel id should be between [0, " + String.valueOf(this.channelNum - 1) + "].");
             }
             switch (this.state) {
                 case BEFORE_LOAD: {
@@ -387,7 +438,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
                     TNetworkAddress redirectAddr = channelIdToBEHTTPAddress.get(channelId);
                     if (redirectAddr == null) {
                         throw new Exception(
-                            "can not find redirect address for stream load label " + label + ", channel id " + channelId);
+                                "can not find redirect address for stream load label " + label + ", channel id " + channelId);
                     }
                     return redirectAddr;
                 }
@@ -430,14 +481,14 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         return null;
     }
 
-    public void prepareChannel(int channelId,  HttpHeaders headers, TransactionResult resp) {
+    public void prepareChannel(int channelId, HttpHeaders headers, TransactionResult resp) {
         long startTimeMs = System.currentTimeMillis();
         boolean needUnLock = true;
         boolean exception = false;
         writeLock();
         try {
-            if (channelId >= this.channelNum) {
-                throw new Exception("channel id should be less than channel num");
+            if (channelId >= this.channelNum || channelId < 0) {
+                throw new Exception("channel id should be between [0, " + String.valueOf(this.channelNum - 1) + "].");
             }
             switch (this.state) {
                 case BEFORE_LOAD: {
@@ -453,7 +504,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
                     this.preparedChannelNum += 1;
                     LOG.info("stream load {} channel_id {} start preparing. db: {}, tbl: {}, txn_id: {}",
                             label, channelId, dbName, tableName, txnId);
-                    
+
                     resp.addResultEntry("Label", this.label);
                     resp.addResultEntry("TxnId", this.txnId);
                     resp.addResultEntry("ChannelId", channelId);
@@ -469,7 +520,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
                             && this.channels.get(channelId) != State.LOADING) {
                         throw new Exception(
                                 "channel state should be BEGIN | BEFORE_LOAD | LOADING when task is going to prepare, " +
-                                " cur state is " + this.state);
+                                        " cur state is " + this.state);
                     }
                     this.channels.set(channelId, State.PREPARING);
                     this.state = State.PREPARING;
@@ -485,7 +536,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
                     writeUnlock();
                     needUnLock = false;
                     unprotectedFinishStreamLoadChannel(channelId);
-                    return; 
+                    return;
                 }
                 case PREPARING: {
                     if (this.channels.get(channelId) != State.BEGIN
@@ -493,7 +544,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
                             && this.channels.get(channelId) != State.LOADING) {
                         throw new Exception(
                                 "channel state should be BEGIN | BEFORE_LOAD | LOADING when channel is ready for prepare, " +
-                                "cur state is " + this.state);
+                                        "cur state is " + this.state);
                     }
                     this.channels.set(channelId, State.PREPARING);
                     this.state = State.PREPARING;
@@ -506,8 +557,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
                     resp.addResultEntry("Prepared Channel Num", this.preparedChannelNum);
                     writeUnlock();
                     needUnLock = false;
-                    unprotectedFinishStreamLoadChannel(channelId);        
-                    return; 
+                    unprotectedFinishStreamLoadChannel(channelId);
+                    return;
                 }
                 case PREPARED: {
                     resp.setOKMsg("stream load task " + label + " has already been prepared");
@@ -571,12 +622,12 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
             }
             if (this.state != State.PREPARING) {
                 throw new UserException("stream load task " + this.label
-                         + " s state (" + this.state + ") is not preparing, can not prepare txn");
+                        + " s state (" + this.state + ") is not preparing, can not prepare txn");
             }
             unprotectedWaitCoordFinish();
             if (!checkDataQuality()) {
-                throw new UserException("abnormal data more than max filter rate, tracking_url: " + 
-                    this.trackingUrl);
+                throw new UserException("abnormal data more than max filter rate, tracking_url: " +
+                        this.trackingUrl);
             }
         } catch (Exception e) {
             this.errorMsg = new LogBuilder(LogKey.STREAM_LOAD_TASK, id, ':').add("label", label)
@@ -593,7 +644,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
             resp.setErrorMsg(this.errorMsg);
             return;
         }
-        
+
         try {
             unprotectedPrepareTxn();
         } catch (Exception e) {
@@ -609,7 +660,6 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
             resp.setErrorMsg(this.errorMsg);
             return;
         }
-            
 
         resp.addResultEntry("NumberTotalRows", numRowsNormal + numRowsAbnormal + numRowsUnselected);
         resp.addResultEntry("NumberLoadedRows", numRowsNormal);
@@ -664,7 +714,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         }
 
         LOG.info("stream load {} finish commiting. db: {}, tbl: {}, txn_id: {}",
-                    label, dbName, tableName, txnId);
+                label, dbName, tableName, txnId);
         resp.addResultEntry("NumberTotalRows", numRowsNormal + numRowsAbnormal + numRowsUnselected);
         resp.addResultEntry("NumberLoadedRows", numRowsNormal);
         resp.addResultEntry("NumberFilteredRows", numRowsAbnormal);
@@ -682,11 +732,11 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
             if (isCommitting) {
                 resp.setOKMsg("txn can not be cancelled because task state is committing");
                 return;
-            } 
+            }
         } finally {
             readUnlock();
         }
-        
+
         String errorMsg = cancelTask("manual abort");
         if (errorMsg != null) {
             resp.setOKMsg("stream load " + label + " abort fail");
@@ -697,6 +747,10 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         }
     }
 
+    private Coordinator.Factory getCoordinatorFactory() {
+        return new DefaultCoordinator.Factory();
+    }
+
     public void unprotectedExecute(HttpHeaders headers) throws UserException {
         streamLoadParam = StreamLoadParam.parseHttpHeader(headers);
         streamLoadInfo = StreamLoadInfo.fromStreamLoadContext(loadId, txnId, (int) timeoutMs / 1000, streamLoadParam);
@@ -705,14 +759,13 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         }
         LoadPlanner loadPlanner = new LoadPlanner(id, loadId, txnId, dbId, dbName, table,
                 streamLoadInfo.isStrictMode(), streamLoadInfo.getTimezone(), streamLoadInfo.isPartialUpdate(),
-                null, null, streamLoadInfo.getLoadMemLimit(), streamLoadInfo.getExecMemLimit(), 
+                null, null, streamLoadInfo.getLoadMemLimit(), streamLoadInfo.getExecMemLimit(),
                 streamLoadInfo.getNegative(), channelNum, streamLoadInfo.getColumnExprDescs(), streamLoadInfo, label,
                 streamLoadInfo.getTimeout());
-        
+
         loadPlanner.plan();
 
-        coord = new Coordinator(loadPlanner);
-        coord.setLoadJobType(TLoadJobType.STREAM_LOAD);
+        coord = getCoordinatorFactory().createStreamLoadScheduler(loadPlanner);
 
         try {
             QeProcessorImpl.INSTANCE.registerQuery(loadId, coord);
@@ -727,7 +780,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
             this.channelIdToBEHTTPPort = coord.getChannelIdToBEPortMap();
         } catch (Exception e) {
             throw new UserException(e.getMessage());
-        } 
+        }
     }
 
     private void unprotectedFinishStreamLoadChannel(int channelId) throws UserException {
@@ -779,6 +832,10 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
                     throw new LoadException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
                 }
 
+                if (coord.isEnableLoadProfile()) {
+                    collectProfile();
+                }
+
                 this.trackingUrl = coord.getTrackingUrl();
                 if (!status.ok()) {
                     throw new LoadException(status.getErrorMsg());
@@ -792,7 +849,6 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
     }
-
 
     public void cancelTask() {
         cancelTask(null);
@@ -809,12 +865,12 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         try {
             if (isFinalState()) {
                 if (state == State.CANCELLED) {
-                    return "cur task state is: " + state 
+                    return "cur task state is: " + state
                             + ", error_msg: " + errorMsg;
                 } else {
                     return "cur task state is: " + state;
                 }
-            } 
+            }
         } finally {
             readUnlock();
         }
@@ -835,7 +891,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
             return e.getMessage();
         }
         LOG.info("stream load {} cancel. db: {}, tbl: {}, txn_id: {}",
-                    label, dbName, tableName, txnId);
+                label, dbName, tableName, txnId);
         return null;
     }
 
@@ -845,7 +901,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                 TransactionState.LoadJobSourceType.FRONTEND_STREAMING, id,
                 timeoutMs / 1000);
-    } 
+    }
 
     public void unprotectedPrepareTxn() throws UserException {
         List<TabletCommitInfo> commitInfos = TabletCommitInfo.fromThrift(coord.getCommitInfos());
@@ -855,11 +911,11 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
                 beforeLoadTimeMs, startLoadingTimeMs, startPreparingTimeMs, finishPreparingTimeMs,
                 endTimeMs, numRowsNormal, numRowsAbnormal, numRowsUnselected, numLoadBytesTotal,
                 trackingUrl);
-        GlobalStateMgr.getCurrentGlobalTransactionMgr().prepareTransaction(dbId, 
+        GlobalStateMgr.getCurrentGlobalTransactionMgr().prepareTransaction(dbId,
                 txnId, commitInfos, failInfos, txnCommitAttachment);
     }
 
-    public boolean checkNeedRemove(long currentMs) {
+    public boolean checkNeedRemove(long currentMs, boolean isForce) {
         readLock();
         try {
             if (!isFinalState()) {
@@ -869,7 +925,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
             readUnlock();
         }
         Preconditions.checkState(endTimeMs != -1, endTimeMs);
-        if ((currentMs - endTimeMs) > Config.label_keep_max_second * 1000) {
+        if (isForce || ((currentMs - endTimeMs) > Config.stream_load_task_keep_max_second * 1000L)) {
             return true;
         }
         return false;
@@ -953,6 +1009,13 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         if (!txnOperated) {
             return;
         }
+
+        // sync stream load collect profile
+        if (isSyncStreamLoad() && coord.isProfileAlreadyReported()) {
+            collectProfile();
+            QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
+        }
+
         writeLock();
         try {
             for (int i = 0; i < channelNum; i++) {
@@ -963,6 +1026,64 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         } finally {
             writeUnlock();
         }
+    }
+
+    public void collectProfile() {
+        long currentTimestamp = System.currentTimeMillis();
+        long totalTimeMs = currentTimestamp - createTimeMs;
+
+        // For the usage scenarios of flink cdc or routine load,
+        // the frequency of stream load maybe very high, resulting in many profiles,
+        // but we may only care about the long-duration stream load profile.
+        if (totalTimeMs < Config.stream_load_profile_collect_second * 1000) {
+            LOG.info(String.format("Load %s, totalTimeMs %d < Config.stream_load_profile_collect_second %d)",
+                    label, totalTimeMs, Config.stream_load_profile_collect_second));
+            return;
+        }
+
+        RuntimeProfile profile = new RuntimeProfile("Load");
+        RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
+        summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(loadId));
+        summaryProfile.addInfoString(ProfileManager.START_TIME,
+                TimeUtils.longToTimeString(createTimeMs));
+
+        summaryProfile.addInfoString(ProfileManager.END_TIME, TimeUtils.longToTimeString(System.currentTimeMillis()));
+        summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
+
+        summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Load");
+        summaryProfile.addInfoString("StarRocks Version",
+                String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
+        summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, dbName);
+
+        Map<String, String> loadCounters = coord.getLoadCounters();
+        if (loadCounters != null && loadCounters.size() != 0) {
+            summaryProfile.addInfoString("NumRowsNormal", loadCounters.get(LoadEtlTask.DPP_NORMAL_ALL));
+            summaryProfile.addInfoString("NumLoadBytesTotal", loadCounters.get(LoadJob.LOADED_BYTES));
+            summaryProfile.addInfoString("NumRowsAbnormal", loadCounters.get(LoadEtlTask.DPP_ABNORMAL_ALL));
+            summaryProfile.addInfoString("numRowsUnselected", loadCounters.get(LoadJob.UNSELECTED_ROWS));
+        }
+
+        profile.addChild(summaryProfile);
+        if (coord.getQueryProfile() != null) {
+            if (!isSyncStreamLoad()) {
+                coord.endProfile();
+                profile.addChild(coord.buildMergedQueryProfile(null));
+            } else {
+                profile.addChild(coord.getQueryProfile());
+            }
+        }
+
+        ProfileManager.getInstance().pushLoadProfile(profile);
+    }
+
+    public void setLoadState(long loadBytes, long loadRows, long filteredRows, long unselectedRows,
+                             String errorLogUrl, String errorMsg) {
+        this.numRowsNormal = loadRows;
+        this.numRowsAbnormal = filteredRows;
+        this.numRowsUnselected = unselectedRows;
+        this.numLoadBytesTotal = loadBytes;
+        this.trackingUrl = errorLogUrl;
+        this.errorMsg = errorMsg;
     }
 
     @Override
@@ -979,7 +1100,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         } finally {
             writeUnlock();
         }
-    } 
+    }
 
     @Override
     public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason)
@@ -987,12 +1108,17 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         if (!txnOperated) {
             return;
         }
+
+        if (isSyncStreamLoad && coord.isEnableLoadProfile()) {
+            QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
+        }
+
         writeLock();
         try {
             if (isFinalState()) {
                 return;
             }
-            if (coord != null) {
+            if (coord != null && !isSyncStreamLoad) {
                 coord.cancel();
                 QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
             }
@@ -1098,7 +1224,6 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         this.numLoadBytesTotal = attachment.getNumLoadBytesTotal();
     }
 
-
     public OlapTable getTable() throws MetaNotFoundException {
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (database == null) {
@@ -1156,6 +1281,10 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         return label;
     }
 
+    public void setLabel(String label) {
+        this.label = label;
+    }
+
     public long getId() {
         return id;
     }
@@ -1163,9 +1292,47 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
     public String getStateName() {
         return state.name();
     }
-    
+
     public void setTUniqueId(TUniqueId loadId) {
         this.loadId = loadId;
+    }
+
+    public long getTxnId() {
+        return txnId;
+    }
+
+    public void setTxnId(long txnId) {
+        this.txnId = txnId;
+    }
+
+    public void setType(Type type) {
+        this.type = type;
+    }
+
+    public boolean isSyncStreamLoad() {
+        return isSyncStreamLoad;
+    }
+
+    public boolean isRoutineLoadTask() {
+        return type == Type.ROUTINE_LOAD;
+    }
+
+    // for sync stream load
+    public void setCoordinator(Coordinator coord) {
+        this.coord = coord;
+    }
+
+    public String getStringByType() {
+        switch (this.type) {
+            case ROUTINE_LOAD:
+                return "ROUTINE_LOAD";
+            case STREAM_LOAD:
+                return "STREAM_LOAD";
+            case PARALLEL_STREAM_LOAD:
+                return "PARALLEL_STREAM_LOAD";
+            default:
+                return "UNKNOWN";
+        }
     }
 
     public List<String> getShowInfo() {
@@ -1174,7 +1341,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
             List<String> row = Lists.newArrayList();
             row.add(label);
             row.add(String.valueOf(id));
-            row.add(loadId.toString());
+            row.add(DebugUtil.printId(loadId));
             row.add(String.valueOf(txnId));
             row.add(dbName);
             row.add(tableName);
@@ -1183,7 +1350,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
             row.add(trackingUrl);
             row.add(String.valueOf(channelNum));
             row.add(String.valueOf(preparedChannelNum));
-            
+
             row.add(String.valueOf(numRowsNormal));
             row.add(String.valueOf(numRowsAbnormal));
             row.add(String.valueOf(numRowsUnselected));
@@ -1205,6 +1372,13 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
                 channelStateBuilder.append(channels.get(i).name());
             }
             row.add(channelStateBuilder.toString());
+            row.add(getStringByType());
+            // tracking url
+            if (trackingUrl != null) {
+                row.add("select tracking_log from information_schema.load_tracking_logs where job_id=" + id);
+            } else {
+                row.add("");
+            }
             return row;
         } finally {
             readUnlock();
@@ -1241,6 +1415,70 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         TUniqueId loadId = new TUniqueId(hi, lo);
         task.init();
         task.setTUniqueId(loadId);
+        // Only task which type is PARALLEL will be persisted
+        // just set type to PARALLEL
+        task.setType(Type.PARALLEL_STREAM_LOAD);
         return task;
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        loadId = new TUniqueId(loadIdHi, loadIdLo);
+    }
+
+    @Override
+    public void gsonPreProcess() throws IOException {
+        loadIdHi = loadId.getHi();
+        loadIdLo = loadId.getLo();
+    }
+
+    public TStreamLoadInfo toThrift() {
+        readLock();
+        try {
+            TStreamLoadInfo info = new TStreamLoadInfo();
+            info.setLabel(label);
+            info.setId(id);
+            info.setLoad_id(DebugUtil.printId(loadId));
+            info.setTxn_id(txnId);
+            info.setDb_name(dbName);
+            info.setTable_name(tableName);
+            info.setState(state.name());
+            info.setError_msg(errorMsg);
+
+            // tracking url
+            if (trackingUrl != null) {
+                info.setTracking_url(trackingUrl);
+                info.setTracking_sql("select tracking_log from information_schema.load_tracking_logs where job_id=" + id);
+            }
+
+            info.setChannel_num(channelNum);
+            info.setPrepared_channel_num(preparedChannelNum);
+
+            info.setNum_rows_normal(numRowsNormal);
+            info.setNum_rows_ab_normal(numRowsAbnormal);
+            info.setNum_load_bytes(numLoadBytesTotal);
+            info.setNum_rows_unselected(numRowsUnselected);
+
+            info.setTimeout_second(timeoutMs / 1000);
+            info.setCreate_time_ms(TimeUtils.longToTimeString(createTimeMs));
+            info.setBefore_load_time_ms(TimeUtils.longToTimeString(beforeLoadTimeMs));
+            info.setStart_loading_time_ms(TimeUtils.longToTimeString(startLoadingTimeMs));
+            info.setStart_preparing_time_ms(TimeUtils.longToTimeString(startPreparingTimeMs));
+            info.setFinish_preparing_time_ms(TimeUtils.longToTimeString(finishPreparingTimeMs));
+            info.setEnd_time_ms(TimeUtils.longToTimeString(endTimeMs));
+
+            StringBuilder channelStateBuilder = new StringBuilder();
+            for (int i = 0; i < channels.size(); i++) {
+                if (i > 0) {
+                    channelStateBuilder.append(" | ");
+                }
+                channelStateBuilder.append(channels.get(i).name());
+            }
+            info.setChannel_state(channelStateBuilder.toString());
+            info.setType(getStringByType());
+            return info;
+        } finally {
+            readUnlock();
+        }
     }
 }

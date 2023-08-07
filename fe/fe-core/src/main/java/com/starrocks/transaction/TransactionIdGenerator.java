@@ -17,28 +17,25 @@
 
 package com.starrocks.transaction;
 
-import com.starrocks.persist.EditLog;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-public class TransactionIdGenerator {
+public class TransactionIdGenerator implements GsonPostProcessable {
 
     public static final long NEXT_ID_INIT_VALUE = 1;
     private static final int BATCH_ID_INTERVAL = 1000;
 
     private long nextId = NEXT_ID_INIT_VALUE;
     // has to set it to an invalid value, then it will be logged when id is firstly increment
+    @SerializedName("bi")
     private long batchEndId = 0;
 
-    private EditLog editLog;
-
     public TransactionIdGenerator() {
-    }
-
-    public void setEditLog(EditLog editLog) {
-        this.editLog = editLog;
     }
 
     // performance is more quickly
@@ -48,7 +45,7 @@ public class TransactionIdGenerator {
             return nextId;
         } else {
             batchEndId = batchEndId + BATCH_ID_INTERVAL;
-            editLog.logSaveTransactionId(batchEndId);
+            GlobalStateMgr.getCurrentState().getEditLog().logSaveTransactionId(batchEndId);
             ++nextId;
             return nextId;
         }
@@ -73,6 +70,11 @@ public class TransactionIdGenerator {
     public void readFields(DataInput in) throws IOException {
         batchEndId = in.readLong();
         // maybe a little rough
+        nextId = batchEndId;
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
         nextId = batchEndId;
     }
 }

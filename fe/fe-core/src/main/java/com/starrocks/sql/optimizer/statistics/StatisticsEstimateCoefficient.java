@@ -50,8 +50,20 @@ public class StatisticsEstimateCoefficient {
     public static final double DEFAULT_ANTI_JOIN_SELECTIVITY_COEFFICIENT = 0.4;
     // default shuffle column row count limit
     public static final double DEFAULT_PRUNE_SHUFFLE_COLUMN_ROWS_LIMIT = 200000;
-    // default push down aggregate row count limit, 100w
-    public static final long DEFAULT_PUSH_DOWN_AGGREGATE_ROWS_LIMIT = 1000000;
+    // a small scale rows, such as default push down aggregate row count limit, 100w
+    public static final long SMALL_SCALE_ROWS_LIMIT = 1000000;
     // default or predicate limit
     public static final int DEFAULT_OR_OPERATOR_LIMIT = 16;
+
+    public static final double CROSS_JOIN_COST_PENALTY = 2;
+
+    public static final int CROSS_JOIN_RIGHT_COST_PENALTY = 2;
+
+    public static final int BROADCAST_JOIN_MEM_EXCEED_PENALTY = 1000;
+
+    public static final double MAXIMUM_COST = Double.MAX_VALUE / Math.pow(10, 50);
+
+    public static final double MAXIMUM_ROW_COUNT = Double.MAX_VALUE / Math.pow(10, 100);
+
+    public static final double MAXIMUM_OUTPUT_SIZE = Double.MAX_VALUE / Math.pow(10, 80);
 }

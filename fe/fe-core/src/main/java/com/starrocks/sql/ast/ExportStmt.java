@@ -35,6 +35,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -79,6 +80,12 @@ public class ExportStmt extends StatementBase {
 
     public ExportStmt(TableRef tableRef, List<String> columnNames, String path,
                       Map<String, String> properties, BrokerDesc brokerDesc) {
+        this(tableRef, columnNames, path, properties, brokerDesc, NodePosition.ZERO);
+    }
+
+    public ExportStmt(TableRef tableRef, List<String> columnNames, String path,
+                      Map<String, String> properties, BrokerDesc brokerDesc, NodePosition pos) {
+        super(pos);
         this.tableRef = tableRef;
         this.columnNames = columnNames;
         this.path = path.trim();
@@ -172,7 +179,7 @@ public class ExportStmt extends StatementBase {
             switch (tblType) {
                 case MYSQL:
                 case OLAP:
-                case LAKE:
+                case CLOUD_NATIVE:
                     break;
                 case BROKER:
                 case SCHEMA:

@@ -663,6 +663,258 @@ int DateTimeValue::compute_format_len(const char* format, int len) {
     return size;
 }
 
+bool DateTimeValue::to_joda_format_string(const char* format, int len, char* to) const {
+    // max buffer size is 128
+    // we need write a terminal zero
+    constexpr int buffer_size = 127;
+    const char* buffer_start = to;
+    char buf[64];
+    char* pos = nullptr;
+    const char* ptr = format;
+    const char* end = format + len;
+    char ch = '\0';
+
+    while (ptr < end) {
+        int write_size = to - buffer_start;
+        if (write_size == buffer_size) return false;
+        // '\'' is the escape for text，the text in '\'' do not need to convert
+        ch = *ptr;
+        if (ch == '\'') {
+            ++ptr;
+            while (ptr < end && *ptr != '\'') {
+                *to++ = *ptr++;
+            }
+            if (ptr < end && *ptr == '\'') {
+                // skip the '\''
+                ++ptr;
+                continue;
+            }
+        }
+
+        // compute the size of same char, this will determine if additional prefixes are required,
+        // eg. format 'yyyyyy' need to display '002023'
+        const char* next_ch_ptr = ptr;
+        uint32_t same_ch_size = 0;
+        uint32_t buf_size = 0;
+        uint32_t actual_size = 0;
+        ch = *ptr;
+        for (; ch == *next_ch_ptr && next_ch_ptr < end; ++next_ch_ptr) {
+            ++same_ch_size;
+        }
+
+        switch (ch) {
+        case 'G':
+            // era
+            if (write_size + 2 >= buffer_size) return false;
+            if (_year <= 0) {
+                to = append_string("BC", to);
+            } else {
+                to = append_string("AD", to);
+            }
+            break;
+        case 'C':
+            // century of era
+            pos = int_to_str(_year / 100, buf);
+            buf_size = pos - buf;
+            actual_size = std::max(buf_size, same_ch_size);
+            if (write_size + actual_size >= buffer_size) return false;
+            to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
+            break;
+        case 'Y':
+            // year of era
+            if (_year <= 0) {
+                pos = int_to_str(1 - _year, buf);
+            } else {
+                pos = int_to_str(_year, buf);
+            }
+            buf_size = pos - buf;
+            actual_size = std::max(buf_size, same_ch_size);
+            if (write_size + actual_size >= buffer_size) return false;
+            to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
+            break;
+        case 'x': {
+            // weekyear
+            if (_type == TIME_TIME) {
+                return false;
+            }
+            uint32_t year = 0;
+            calc_week(*this, mysql_week_mode(3), &year);
+            pos = int_to_str(year, buf);
+            buf_size = pos - buf;
+            actual_size = std::max(buf_size, same_ch_size);
+            if (write_size + actual_size >= buffer_size) return false;
+            to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
+            break;
+        }
+        case 'w':
+            // week of weekyear
+            if (_type == TIME_TIME) {
+                return false;
+            }
+            pos = int_to_str(week(mysql_week_mode(3)), buf);
+            buf_size = pos - buf;
+            actual_size = std::max(buf_size, same_ch_size);
+            if (write_size + actual_size >= buffer_size) return false;
+            to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
+            break;
+        case 'e': {
+            // day of week
+            if (_type == TIME_TIME || (_month == 0 && _year == 0)) {
+                return false;
+            }
+            uint8_t weekday = calc_weekday(daynr(), true);
+            if (weekday == 0) weekday = 7;
+            pos = int_to_str(weekday, buf);
+            buf_size = pos - buf;
+            actual_size = std::max(buf_size, same_ch_size);
+            if (write_size + actual_size >= buffer_size) return false;
+            to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
+            break;
+        }
+        case 'E':
+            // weekday name (Sunday..Saturday)
+            if (same_ch_size > 3) {
+                if (write_size + 8 >= buffer_size) return false;
+                to = append_string(s_day_name[weekday()], to);
+            } else {
+                if (write_size + 3 >= buffer_size) return false;
+                if (_type == TIME_TIME || (_year == 0 && _month == 0)) {
+                    return false;
+                }
+                to = append_string(s_ab_day_name[weekday()], to);
+            }
+            break;
+        case 'y':
+            // year
+            pos = int_to_str(_year, buf);
+            buf_size = pos - buf;
+            actual_size = std::max(buf_size, same_ch_size);
+            if (write_size + actual_size >= buffer_size) return false;
+            to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
+            break;
+        case 'D':
+            // day of year (001..366)
+            pos = int_to_str(daynr() - calc_daynr(_year, 1, 1) + 1, buf);
+            buf_size = pos - buf;
+            actual_size = std::max(buf_size, same_ch_size);
+            if (write_size + actual_size >= buffer_size) return false;
+            to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
+            break;
+        case 'M':
+            if (same_ch_size > 3) {
+                // month name (January..December)
+                if (write_size + 9 >= buffer_size) return false;
+                if (_month == 0) {
+                    return false;
+                }
+                to = append_string(s_month_name[_month], to);
+                break;
+            } else if (same_ch_size == 3) {
+                // Abbreviated month name
+                if (write_size + 3 >= buffer_size) return false;
+                if (_month == 0) {
+                    return false;
+                }
+                to = append_string(s_ab_month_name[_month], to);
+                break;
+            } else {
+                // month, numeric (00..12)
+                pos = int_to_str(_month, buf);
+                buf_size = pos - buf;
+                actual_size = std::max(buf_size, same_ch_size);
+                if (write_size + actual_size >= buffer_size) return false;
+                to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
+                break;
+            }
+        case 'd':
+            // day of month (00...31)
+            pos = int_to_str(_day, buf);
+            buf_size = pos - buf;
+            actual_size = std::max(buf_size, same_ch_size);
+            if (write_size + actual_size >= buffer_size) return false;
+            to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
+            break;
+        case 'a':
+            // AM or PM
+            if (write_size + 2 >= buffer_size) return false;
+            if ((_hour % 24) >= 12) {
+                to = append_string("PM", to);
+            } else {
+                to = append_string("AM", to);
+            }
+            break;
+        case 'K':
+            // hour (0..11)
+            pos = int_to_str((_hour % 24 + 12) % 12, buf);
+            buf_size = pos - buf;
+            actual_size = std::max(buf_size, same_ch_size);
+            if (write_size + actual_size >= buffer_size) return false;
+            to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
+            break;
+        case 'h':
+            // hour (1..12)
+            pos = int_to_str((_hour % 24 + 11) % 12 + 1, buf);
+            buf_size = pos - buf;
+            actual_size = std::max(buf_size, same_ch_size);
+            if (write_size + actual_size >= buffer_size) return false;
+            to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
+            break;
+        case 'H':
+            // hour (0..23)
+            pos = int_to_str(_hour, buf);
+            buf_size = pos - buf;
+            actual_size = std::max(buf_size, same_ch_size);
+            if (write_size + actual_size >= buffer_size) return false;
+            to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
+            break;
+        case 'k':
+            // hour (1..24)
+            pos = int_to_str((_hour + 23) % 24 + 1, buf);
+            buf_size = pos - buf;
+            actual_size = std::max(buf_size, same_ch_size);
+            if (write_size + actual_size >= buffer_size) return false;
+            to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
+            break;
+        case 'm':
+            // minutes, numeric (00..59)
+            pos = int_to_str(_minute, buf);
+            buf_size = pos - buf;
+            actual_size = std::max(buf_size, same_ch_size);
+            if (write_size + 2 >= buffer_size) return false;
+            to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
+            break;
+        case 's':
+            // seconds (00..59)
+            pos = int_to_str(_second, buf);
+            buf_size = pos - buf;
+            actual_size = std::max(buf_size, same_ch_size);
+            if (write_size + actual_size >= buffer_size) return false;
+            to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
+            break;
+        case 'S':
+            // fraction of second
+            pos = int_to_str(_microsecond / 100000, buf);
+            buf_size = pos - buf;
+            actual_size = std::max(buf_size, same_ch_size);
+            if (write_size + actual_size >= buffer_size) return false;
+            to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
+            break;
+        case 'z':
+        case 'Z':
+            // sr do not support datetime with timezone type， just ignore
+            break;
+        default:
+            if (write_size + 1 >= buffer_size) return false;
+            *to++ = ch;
+            break;
+        }
+
+        ptr = next_ch_ptr;
+    }
+    *to++ = '\0';
+    return true;
+}
+
 bool DateTimeValue::to_format_string(const char* format, int len, char* to) const {
     // max buffer size is 128
     // we need write a terminal zero
@@ -1146,7 +1398,7 @@ bool DateTimeValue::from_date_format_str(const char* format, int format_len, con
             int64_t int_value = 0;
             ptr++;
             switch (*ptr++) {
-                // Year
+            // Year
             case 'y':
                 // Year, numeric (two digits)
                 tmp = val + min(2, val_end - val);
@@ -1171,7 +1423,7 @@ bool DateTimeValue::from_date_format_str(const char* format, int format_len, con
                 val = tmp;
                 date_part_used = true;
                 break;
-                // Month
+            // Month
             case 'm':
             case 'c':
                 tmp = val + min(2, val_end - val);
@@ -1196,7 +1448,7 @@ bool DateTimeValue::from_date_format_str(const char* format, int format_len, con
                 }
                 _month = int_value;
                 break;
-                // Day
+            // Day
             case 'd':
             case 'e':
                 tmp = val + min(2, val_end - val);
@@ -1216,12 +1468,12 @@ bool DateTimeValue::from_date_format_str(const char* format, int format_len, con
                 val = tmp + min(2, val_end - tmp);
                 date_part_used = true;
                 break;
-                // Hour
+            // Hour
             case 'h':
             case 'I':
             case 'l':
                 usa_time = true;
-                // Fall through
+            // Fall through
             case 'k':
             case 'H':
                 tmp = val + min(2, val_end - val);
@@ -1232,7 +1484,7 @@ bool DateTimeValue::from_date_format_str(const char* format, int format_len, con
                 val = tmp;
                 time_part_used = true;
                 break;
-                // Minute
+            // Minute
             case 'i':
                 tmp = val + min(2, val_end - val);
                 if (!str_to_int64(val, &tmp, &int_value)) {
@@ -1242,7 +1494,7 @@ bool DateTimeValue::from_date_format_str(const char* format, int format_len, con
                 val = tmp;
                 time_part_used = true;
                 break;
-                // Second
+            // Second
             case 's':
             case 'S':
                 tmp = val + min(2, val_end - val);
@@ -1253,7 +1505,7 @@ bool DateTimeValue::from_date_format_str(const char* format, int format_len, con
                 val = tmp;
                 time_part_used = true;
                 break;
-                // Micro second
+            // Micro second
             case 'f':
                 tmp = val + min(6, val_end - val);
                 if (!str_to_int64(val, &tmp, &int_value)) {
@@ -1264,7 +1516,7 @@ bool DateTimeValue::from_date_format_str(const char* format, int format_len, con
                 val = tmp;
                 frac_part_used = true;
                 break;
-                // AM/PM
+            // AM/PM
             case 'p':
                 if ((val_end - val) < 2 || toupper(*(val + 1)) != 'M' || !usa_time) {
                     return false;
@@ -1276,7 +1528,7 @@ bool DateTimeValue::from_date_format_str(const char* format, int format_len, con
                 time_part_used = true;
                 val += 2;
                 break;
-                // Weekday
+            // Weekday
             case 'W':
                 int_value = check_word(s_day_name, val, val_end, &val);
                 if (int_value < 0) {
@@ -1337,7 +1589,7 @@ bool DateTimeValue::from_date_format_str(const char* format, int format_len, con
                 val = tmp;
                 date_part_used = true;
                 break;
-                // strict week number, must be used with %V or %v
+            // strict week number, must be used with %V or %v
             case 'x':
             case 'X':
                 strict_week_number_year_type = (*(ptr - 1) == 'X');
@@ -1466,6 +1718,7 @@ bool DateTimeValue::date_add_interval(const TimeInterval& interval, TimeUnit uni
     int sign = interval.is_neg ? -1 : 1;
     switch (unit) {
     case MICROSECOND:
+    case MILLISECOND:
     case SECOND:
     case MINUTE:
     case HOUR:
@@ -1615,7 +1868,7 @@ const char* DateTimeValue::day_name() const {
 
 DateTimeValue DateTimeValue::local_time() {
     DateTimeValue value;
-    value.from_unixtime(time(nullptr), TimezoneUtils::default_time_zone);
+    value.from_unixtime(time(nullptr), TimezoneUtils::local_time_zone());
     return value;
 }
 

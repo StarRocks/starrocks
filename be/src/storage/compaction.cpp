@@ -154,7 +154,7 @@ Status Compaction::do_compaction_impl() {
 
 Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Statistics* stats_output) {
     TRACE_COUNTER_SCOPE_LATENCY_US("merge_rowsets_latency_us");
-    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     TabletReader reader(_tablet, _output_rs_writer->version(), schema);
     TabletReaderParams reader_params;
     reader_params.reader_type = compaction_type();
@@ -238,7 +238,7 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
             mask_buffer->flip_to_read();
         }
 
-        VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema(), _column_groups[i]);
+        Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema(), _column_groups[i]);
         TabletReader reader(_tablet, _output_rs_writer->version(), schema, is_key, mask_buffer.get());
         RETURN_IF_ERROR(reader.prepare());
         TabletReaderParams reader_params;
@@ -345,10 +345,14 @@ Status Compaction::modify_rowsets() {
         return Status::InternalError("Process is going to quit. The compaction will stop.");
     }
 
+    std::vector<RowsetSharedPtr> to_replace;
     std::unique_lock wrlock(_tablet->get_header_lock());
-    _tablet->modify_rowsets({_output_rowset}, _input_rowsets);
+    _tablet->modify_rowsets({_output_rowset}, _input_rowsets, &to_replace);
     _tablet->save_meta();
     Rowset::close_rowsets(_input_rowsets);
+    for (auto& rs : to_replace) {
+        StorageEngine::instance()->add_unused_rowset(rs);
+    }
 
     return Status::OK();
 }

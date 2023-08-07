@@ -49,6 +49,10 @@ DataSourcePtr MySQLDataSourceProvider::create_data_source(const TScanRange& scan
     return std::make_unique<MySQLDataSource>(this, scan_range);
 }
 
+const TupleDescriptor* MySQLDataSourceProvider::tuple_descriptor(RuntimeState* state) const {
+    return state->desc_tbl().get_tuple_descriptor(_mysql_scan_node.tuple_id);
+}
+
 // ================================
 
 MySQLDataSource::MySQLDataSource(const MySQLDataSourceProvider* provider, const TScanRange& scan_range)
@@ -150,15 +154,7 @@ Status MySQLDataSource::open(RuntimeState* state) {
 #undef APPLY_FOR_NUMERICAL_TYPE
 #undef DIRECT_APPEND_TO_SQL
 
-#define CONVERT_APPEND_TO_SQL          \
-    std::stringstream ss;              \
-    for (char c : value.to_string()) { \
-        if (c == '"') {                \
-            ss << '\\';                \
-        }                              \
-        ss << c;                       \
-    }                                  \
-    vector_values.emplace_back(fmt::format("'{}'", ss.str()));
+#define CONVERT_APPEND_TO_SQL vector_values.emplace_back(_mysql_scanner->escape(value.to_string()).to_string());
                 APPLY_FOR_VARCHAR_DATE_TYPE(READ_CONST_PREDICATE, CONVERT_APPEND_TO_SQL)
 #undef APPLY_FOR_VARCHAR_DATE_TYPE
 #undef CONVERT_APPEND_TO_SQL
@@ -326,6 +322,11 @@ Status MySQLDataSource::append_text_to_column(const char* data, const int& len, 
 
     // Parse the raw-text data. Translate the text string to internal format.
     switch (slot_desc->type().type) {
+    case TYPE_JSON: {
+        ASSIGN_OR_RETURN(auto value, JsonValue::parse(Slice(data, len)));
+        reinterpret_cast<JsonColumn*>(data_column)->append(std::move(value));
+        break;
+    }
     case TYPE_VARCHAR:
     case TYPE_CHAR: {
         Slice value(data, len);
@@ -485,9 +486,9 @@ Status MySQLDataSource::append_text_to_column(const char* data, const int& len, 
     return Status::OK();
 }
 
-template <LogicalType PT, typename CppType>
+template <LogicalType LT, typename CppType>
 void MySQLDataSource::append_value_to_column(Column* column, CppType& value) {
-    using ColumnType = typename starrocks::RunTimeColumnType<PT>;
+    using ColumnType = typename starrocks::RunTimeColumnType<LT>;
 
     auto* runtime_column = down_cast<ColumnType*>(column);
     runtime_column->append(value);

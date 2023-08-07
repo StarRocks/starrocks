@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.alter.AlterOpType;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Map;
@@ -29,7 +30,11 @@ public class ReorderColumnsClause extends AlterTableColumnClause {
     }
 
     public ReorderColumnsClause(List<String> cols, String rollup, Map<String, String> properties) {
-        super(AlterOpType.SCHEMA_CHANGE, rollup, properties);
+        this(cols, rollup, properties, NodePosition.ZERO);
+    }
+
+    public ReorderColumnsClause(List<String> cols, String rollup, Map<String, String> properties, NodePosition pos) {
+        super(AlterOpType.SCHEMA_CHANGE, rollup, properties, pos);
         this.columnsByPos = cols;
     }
 

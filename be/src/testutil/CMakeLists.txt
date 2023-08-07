@@ -12,13 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+if (CLANG_TIDY_PATH)
+    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
+endif()
+
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/testutil")
 
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/testutil")
 
 add_library(TestUtil
+    assert.cpp
     desc_tbl_builder.cc
     function_utils.cpp
+    sync_point.cc
+    sync_point_impl.cc
 )
 

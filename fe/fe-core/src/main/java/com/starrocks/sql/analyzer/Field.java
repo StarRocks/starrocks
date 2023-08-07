@@ -20,6 +20,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.QualifiedName;
 
 import java.util.LinkedList;
@@ -40,6 +41,7 @@ public class Field {
      */
     private final TableName relationAlias;
     private final Expr originExpression;
+    private boolean isNullable;
 
     // Record tmp match record.
     private final List<Integer> tmpUsedStructFieldPos = new LinkedList<>();
@@ -54,6 +56,25 @@ public class Field {
         this.relationAlias = relationAlias;
         this.originExpression = originExpression;
         this.visible = visible;
+        this.isNullable = true;
+    }
+
+    public Field(String name, Type type, TableName relationAlias, Expr originExpression, boolean visible, boolean isNullable) {
+        this.name = name;
+        this.type = type;
+        this.relationAlias = relationAlias;
+        this.originExpression = originExpression;
+        this.visible = visible;
+        this.isNullable = isNullable;
+    }
+
+    public Field(Field other) {
+        this.name = other.name;
+        this.type = other.type;
+        this.relationAlias = other.relationAlias;
+        this.originExpression = other.originExpression;
+        this.visible = other.visible;
+        this.isNullable = other.isNullable;
     }
 
     public String getName() {
@@ -78,6 +99,14 @@ public class Field {
 
     public boolean isVisible() {
         return visible;
+    }
+
+    public boolean isNullable() {
+        return isNullable;
+    }
+
+    public void setNullable(boolean isNullable) {
+        this.isNullable = isNullable;
     }
 
     public boolean canResolve(SlotRef expr) {
@@ -182,7 +211,8 @@ public class Field {
     }
 
     public boolean matchesPrefix(TableName tableName) {
-        if (tableName.getCatalog() != null && !tableName.getCatalog().equals(relationAlias.getCatalog())) {
+        if (tableName.getCatalog() != null && relationAlias.getCatalog() != null &&
+                !tableName.getCatalog().equals(relationAlias.getCatalog())) {
             return false;
         }
 
@@ -190,7 +220,11 @@ public class Field {
             return false;
         }
 
-        return tableName.getTbl().equals(relationAlias.getTbl());
+        if (ConnectContext.get() != null && ConnectContext.get().isRelationAliasCaseInsensitive()) {
+            return tableName.getTbl().equalsIgnoreCase(relationAlias.getTbl());
+        } else {
+            return tableName.getTbl().equals(relationAlias.getTbl());
+        }
     }
 
     @Override

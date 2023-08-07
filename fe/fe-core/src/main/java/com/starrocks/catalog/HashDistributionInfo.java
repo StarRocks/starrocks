@@ -72,6 +72,11 @@ public class HashDistributionInfo extends DistributionInfo {
         this.bucketNum = bucketNum;
     }
 
+    @Override
+    public boolean supportColocate() {
+        return true;
+    }
+
     public List<Column> getDistributionColumns() {
         return distributionColumns;
     }
@@ -159,6 +164,11 @@ public class HashDistributionInfo extends DistributionInfo {
     }
 
     @Override
+    public HashDistributionInfo copy() {
+        return new HashDistributionInfo(bucketNum, distributionColumns);
+    }
+
+    @Override
     public String toSql() {
         StringBuilder builder = new StringBuilder();
         builder.append("DISTRIBUTED BY HASH(");
@@ -169,8 +179,10 @@ public class HashDistributionInfo extends DistributionInfo {
         }
         String colList = Joiner.on(", ").join(colNames);
         builder.append(colList);
-
-        builder.append(") BUCKETS ").append(bucketNum).append(" ");
+        builder.append(")");
+        if (bucketNum > 0) {
+            builder.append(" BUCKETS ").append(bucketNum).append(" ");
+        }
         return builder.toString();
     }
 
@@ -185,7 +197,9 @@ public class HashDistributionInfo extends DistributionInfo {
         }
         builder.append("]; ");
 
-        builder.append("bucket num: ").append(bucketNum).append("; ");
+        if (bucketNum > 0) {
+            builder.append("bucket num: ").append(bucketNum).append("; ");
+        }
 
         return builder.toString();
     }

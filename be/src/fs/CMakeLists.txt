@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+if (CLANG_TIDY_PATH)
+    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
+endif()
+
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/fs")
 
 # where to put generated binaries
@@ -24,7 +28,8 @@ set(EXEC_FILES
     fs_broker.cpp
     fs_memory.cpp
     fs_s3.cpp
-    fs_hdfs.cpp
+    hdfs/fs_hdfs.cpp
+    hdfs/hdfs_fs_cache.cpp
     fs_util.cpp
     fs_starlet.cpp
     )

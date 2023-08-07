@@ -15,6 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.AggregationNode;
@@ -24,6 +25,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -33,6 +35,12 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     public static void beforeClass() throws Exception {
         DistributedEnvPlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
+        Config.tablet_sched_disable_colocate_overall_balance = true;
+    }
+
+    @After
+    public void after() {
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
     //  agg
@@ -55,11 +63,10 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         String sql = "select count(distinct P_TYPE) from part group by P_BRAND;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "1:AGGREGATE (update serialize)\n"
-                + "  |  STREAMING\n"
-                + "  |  output: multi_distinct_count(5: P_TYPE)");
-        assertContains(plan, "3:AGGREGATE (merge finalize)\n"
-                + "  |  output: multi_distinct_count(11: count)");
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: multi_distinct_count(5: P_TYPE)\n" +
+                "  |  group by: 4: P_BRAND");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -660,7 +667,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         assertContains(plan, "4:OlapScanNode\n" +
                 "     table: nation, rollup: nation\n" +
                 "     preAggregation: on\n" +
-                "     Predicates: 18: N_NATIONKEY IN (1, 2)\n" +
+                "     Predicates: 23: N_NATIONKEY IN (2, 1)\n" +
                 "     partitionsRatio=1/1, tabletsRatio=1/1");
         // eval predicate cardinality in join node
         assertContains(plan, "6:NESTLOOP JOIN\n" +
@@ -721,7 +728,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  equal join conjunct: [1: PS_PARTKEY, INT, false] = [7: P_PARTKEY, INT, true]\n" +
                 "  |  other predicates: 7: P_PARTKEY IS NULL\n" +
-                "  |  output columns: 1, 2\n" +
+                "  |  output columns: 1, 2, 7\n" +
                 "  |  cardinality: 8000000");
         // test right outer join
         sql = "select ps_partkey,ps_suppkey from partsupp right outer join part on " +
@@ -1079,7 +1086,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  group by: 1: C_CUSTKEY, 2: C_NAME");
     }
 
-
     @Test
     public void testAggNodeAndBucketDistribution() throws Exception {
         // For the local one-phase aggregation, enable AssignScanRangesPerDriverSeq and disable SharedScan.
@@ -1402,5 +1408,87 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  output columns:\n" +
                 "  |  1 <-> [1: LO_ORDERKEY, INT, false]\n" +
                 "  |  cardinality: 9223372036854775807");
+    }
+
+    @Test
+    public void testAggExecuteInOneTablet() throws Exception {
+        String sql;
+        String plan;
+
+        // dates_n only contains one tablet.
+        sql = "select count(d_datekey), d_date from dates_n group by d_date";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "LocalShuffleColumns");
+        assertContains(plan, "  1:AGGREGATE (update finalize)");
+        assertContains(plan, "  0:OlapScanNode");
+
+        // dates_n only contains one tablet.
+        sql = "select count(d_date), d_datekey from dates_n group by d_datekey";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "LocalShuffleColumns");
+        assertContains(plan, "  1:AGGREGATE (update finalize)");
+        assertContains(plan, "  0:OlapScanNode");
+
+        // dates_n only contains one tablet.
+        //       HashJoin(Colocate)
+        //      /               \
+        // OlapScanNode       BlockingAgg
+        //                       |
+        //                    OlapScanNode
+        sql = "WITH w1 as (SELECT count(d_date) as cnt, d_datekey FROM dates_n group by d_datekey) " +
+                "SELECT * from dates_n join [colocate] w1 using(d_datekey)";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "LocalShuffleColumns");
+        assertContains(plan, "  3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (COLOCATE)\n" +
+                "  |  colocate: true\n" +
+                "  |  equal join conjunct: [19: d_datekey, INT, true] = [36: d_datekey, INT, true]\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (36: d_datekey), remote = false\n" +
+                "  |  cardinality: 2300\n" +
+                "  |  \n" +
+                "  |----2:AGGREGATE (update finalize)");
+
+        // lineorder_new_l contains more than one tablet.
+        sql = "select count(P_TYPE), LO_ORDERKEY from lineorder_new_l group by LO_ORDERKEY";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "     LocalShuffleColumns:\n" +
+                "     - 1: LO_ORDERKEY");
+        assertContains(plan, "  1:AGGREGATE (update finalize)");
+        assertContains(plan, "  0:OlapScanNode");
+    }
+
+    @Test
+    public void testValidateJoinReorderPlan() throws Exception {
+        String sql = "select  \n" +
+                "  ref_0.N_NAME as c0, \n" +
+                "  case when ref_3.C_NATIONKEY > ref_3.C_ACCTBAL then ref_1.O_ORDERPRIORITY else " +
+                "ref_1.O_SHIPPRIORITY end as c1\n" +
+                "from \n" +
+                "  nation as ref_0 inner join nation n1 on ref_0.N_NAME = n1.N_NAME" +
+                "  join nation n2 on ref_0.N_NAME = n2.N_NAME join nation n3 on ref_0.N_NAME = n3.N_NAME" +
+                "  join nation n4 on ref_0.N_NAME = n4.N_NAME" +
+                "            inner join orders as ref_1\n" +
+                "            on (ref_0.N_REGIONKEY = ref_1.O_CUSTKEY )\n" +
+                "          left join t2 as ref_2\n" +
+                "          on (ref_0.N_NATIONKEY = ref_2.v8 )\n" +
+                "        inner join customer as ref_3\n" +
+                "        on (ref_1.O_ORDERPRIORITY = ref_3.C_NAME )\n" +
+                "      inner join supplier as ref_4\n" +
+                "      on (ref_1.O_CLERK = ref_4.S_PHONE )\n" +
+                "    left join supplier as ref_5\n" +
+                "    on (ref_2.v9 = ref_5.S_SUPPKEY )\n" +
+                "where cast(coalesce(ref_3.C_MKTSEGMENT, ref_0.N_NAME) as VARCHAR) = ref_5.S_ADDRESS";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "39:Project\n" +
+                "  |  <slot 2> : 2: N_NAME\n" +
+                "  |  <slot 64> : if(CAST(42: C_NATIONKEY AS DOUBLE) > 44: C_ACCTBAL, 31: O_ORDERPRIORITY, " +
+                "CAST(33: O_SHIPPRIORITY AS VARCHAR(15)))\n" +
+                "  |  \n" +
+                "  38:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 65: cast = 38: v9\n" +
+                "  |  equal join conjunct: 58: S_ADDRESS = 66: coalesce");
     }
 }

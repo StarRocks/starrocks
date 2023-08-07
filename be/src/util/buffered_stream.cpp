@@ -16,77 +16,14 @@
 
 #include "common/config.h"
 #include "fs/fs.h"
+#include "gutil/strings/fastmem.h"
 #include "util/bit_util.h"
 
 namespace starrocks {
 
 // ===================================================================================
 
-DefaultBufferedInputStream::DefaultBufferedInputStream(RandomAccessFile* file, [[may_unused]] uint64_t offset,
-                                                       uint64_t length)
-        : _file(file), _end_offset(offset + length) {}
-
-Status DefaultBufferedInputStream::get_bytes(const uint8_t** buffer, size_t* nbytes, bool peek) {
-    if (*nbytes <= num_remaining()) {
-        *buffer = _buf.get() + _buf_position;
-        if (!peek) {
-            _buf_position += *nbytes;
-        }
-        return Status::OK();
-    }
-
-    reserve(*nbytes);
-    RETURN_IF_ERROR(_read_data());
-
-    size_t max_get = std::min(*nbytes, num_remaining());
-    *buffer = _buf.get() + _buf_position;
-    *nbytes = max_get;
-    if (!peek) {
-        _buf_position += max_get;
-    }
-    return Status::OK();
-}
-
-void DefaultBufferedInputStream::reserve(size_t nbytes) {
-    if (nbytes <= _buf_capacity - _buf_position) {
-        return;
-    }
-
-    if (nbytes > _buf_capacity) {
-        size_t new_capacity = BitUtil::next_power_of_two(nbytes);
-        std::unique_ptr<uint8_t[]> new_buf(new uint8_t[new_capacity]);
-        if (num_remaining() > 0) {
-            memcpy(new_buf.get(), _buf.get() + _buf_position, num_remaining());
-        }
-        _buf = std::move(new_buf);
-        _buf_capacity = new_capacity;
-    } else {
-        if (num_remaining() > 0 && _buf_position > 0) {
-            memmove(_buf.get(), _buf.get() + _buf_position, num_remaining());
-        }
-    }
-
-    _buf_written -= _buf_position;
-    _buf_position = 0;
-}
-
-Status DefaultBufferedInputStream::_read_data() {
-    size_t bytes_read = std::min(left_capactiy(), _end_offset - _file_offset);
-    Slice slice(_buf.get() + _buf_written, bytes_read);
-    ASSIGN_OR_RETURN(slice.size, _file->read_at(_file_offset, slice.data, slice.size));
-    _file_offset += slice.size;
-    _buf_written += slice.size;
-    return Status::OK();
-}
-
-Status DefaultBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes, bool peek) {
-    seek_to(offset);
-    return get_bytes(buffer, nbytes, peek);
-}
-
-// ===================================================================================
-
-SharedBufferedInputStream::SharedBufferedInputStream(RandomAccessFile* file) : _file(file) {}
+SharedBufferedInputStream::SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream) : _stream(stream) {}
 
 Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& ranges) {
     if (ranges.size() == 0) {
@@ -150,7 +87,7 @@ Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& rang
     return Status::OK();
 }
 
-Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes, bool peek) {
+Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes) {
     auto iter = _map.upper_bound(offset);
     if (iter == _map.end()) {
         return Status::RuntimeError("failed to find shared buffer based on offset");
@@ -162,7 +99,7 @@ Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offse
 
     if (sb.buffer.capacity() == 0) {
         sb.buffer.reserve(sb.size);
-        RETURN_IF_ERROR(_file->read_at_fully(sb.offset, sb.buffer.data(), sb.size));
+        RETURN_IF_ERROR(_stream->read_at_fully(sb.offset, sb.buffer.data(), sb.size));
     }
 
     *buffer = sb.buffer.data() + offset - sb.offset;
@@ -176,6 +113,18 @@ void SharedBufferedInputStream::release() {
 void SharedBufferedInputStream::release_to_offset(int64_t offset) {
     auto it = _map.upper_bound(offset);
     _map.erase(_map.begin(), it);
+}
+
+Status SharedBufferedInputStream::read_at_fully(int64_t offset, void* out, int64_t count) {
+    const uint8_t* buffer = nullptr;
+    size_t nbytes = count;
+    RETURN_IF_ERROR(get_bytes(&buffer, offset, &nbytes));
+    strings::memcpy_inlined(out, buffer, count);
+    return Status::OK();
+}
+
+StatusOr<int64_t> SharedBufferedInputStream::get_size() {
+    return _stream->get_size();
 }
 
 } // namespace starrocks

@@ -419,6 +419,74 @@ bool HyperLogLog::deserialize(const Slice& slice) {
     return true;
 }
 
+static float harmomic_tables[65] = {
+        1.0f / static_cast<float>(1L << 0),
+        1.0f / static_cast<float>(1L << 1),
+        1.0f / static_cast<float>(1L << 2),
+        1.0f / static_cast<float>(1L << 3),
+        1.0f / static_cast<float>(1L << 4),
+        1.0f / static_cast<float>(1L << 5),
+        1.0f / static_cast<float>(1L << 6),
+        1.0f / static_cast<float>(1L << 7),
+        1.0f / static_cast<float>(1L << 8),
+        1.0f / static_cast<float>(1L << 9),
+        1.0f / static_cast<float>(1L << 10),
+        1.0f / static_cast<float>(1L << 11),
+        1.0f / static_cast<float>(1L << 12),
+        1.0f / static_cast<float>(1L << 13),
+        1.0f / static_cast<float>(1L << 14),
+        1.0f / static_cast<float>(1L << 15),
+        1.0f / static_cast<float>(1L << 16),
+        1.0f / static_cast<float>(1L << 17),
+        1.0f / static_cast<float>(1L << 18),
+        1.0f / static_cast<float>(1L << 19),
+        1.0f / static_cast<float>(1L << 20),
+        1.0f / static_cast<float>(1L << 21),
+        1.0f / static_cast<float>(1L << 22),
+        1.0f / static_cast<float>(1L << 23),
+        1.0f / static_cast<float>(1L << 24),
+        1.0f / static_cast<float>(1L << 25),
+        1.0f / static_cast<float>(1L << 26),
+        1.0f / static_cast<float>(1L << 27),
+        1.0f / static_cast<float>(1L << 28),
+        1.0f / static_cast<float>(1L << 29),
+        1.0f / static_cast<float>(1L << 30),
+        1.0f / static_cast<float>(1L << 31),
+        1.0f / static_cast<float>(1L << 32),
+        1.0f / static_cast<float>(1L << 33),
+        1.0f / static_cast<float>(1L << 34),
+        1.0f / static_cast<float>(1L << 35),
+        1.0f / static_cast<float>(1L << 36),
+        1.0f / static_cast<float>(1L << 37),
+        1.0f / static_cast<float>(1L << 38),
+        1.0f / static_cast<float>(1L << 39),
+        1.0f / static_cast<float>(1L << 40),
+        1.0f / static_cast<float>(1L << 41),
+        1.0f / static_cast<float>(1L << 42),
+        1.0f / static_cast<float>(1L << 43),
+        1.0f / static_cast<float>(1L << 44),
+        1.0f / static_cast<float>(1L << 45),
+        1.0f / static_cast<float>(1L << 46),
+        1.0f / static_cast<float>(1L << 47),
+        1.0f / static_cast<float>(1L << 48),
+        1.0f / static_cast<float>(1L << 49),
+        1.0f / static_cast<float>(1L << 50),
+        1.0f / static_cast<float>(1L << 51),
+        1.0f / static_cast<float>(1L << 52),
+        1.0f / static_cast<float>(1L << 53),
+        1.0f / static_cast<float>(1L << 54),
+        1.0f / static_cast<float>(1L << 55),
+        1.0f / static_cast<float>(1L << 56),
+        1.0f / static_cast<float>(1L << 57),
+        1.0f / static_cast<float>(1L << 58),
+        1.0f / static_cast<float>(1L << 59),
+        1.0f / static_cast<float>(1L << 60),
+        1.0f / static_cast<float>(1L << 61),
+        1.0f / static_cast<float>(1L << 62),
+        1.0f / static_cast<float>(1L << 63),
+        5.421010862427522e-20f,
+};
+
 int64_t HyperLogLog::estimate_cardinality() const {
     if (_type == HLL_DATA_EMPTY) {
         return 0;
@@ -445,7 +513,7 @@ int64_t HyperLogLog::estimate_cardinality() const {
     int num_zero_registers = 0;
 
     for (int i = 0; i < HLL_REGISTERS_COUNT; ++i) {
-        harmonic_mean += powf(2.0f, -_registers.data[i]);
+        harmonic_mean += harmomic_tables[_registers.data[i]];
 
         if (_registers.data[i] == 0) {
             ++num_zero_registers;

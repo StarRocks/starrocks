@@ -15,9 +15,9 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.Type;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.sql.analyzer.SemanticException;
-import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -53,14 +53,14 @@ public class JsonTypeTest extends PlanTestBase {
     @Test
     public void testJoin() {
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
-                "Type percentile/hll/bitmap/json/struct/map not support aggregation/group-by/order-by/union/join",
+                Type.NOT_SUPPORT_JOIN_ERROR_MSG,
                 () -> getFragmentPlan("select * from tjson_test t1 join tjson_test t2 using(v_json)"));
 
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
-                "Type percentile/hll/bitmap/json/struct/map not support aggregation/group-by/order-by/union/join",
+                Type.NOT_SUPPORT_JOIN_ERROR_MSG,
                 () -> getFragmentPlan("select * from tjson_test t1 join tjson_test t2 on t1.v_json = t2.v_json"));
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
-                "Type percentile/hll/bitmap/json/struct/map not support aggregation/group-by/order-by/union/join",
+                Type.NOT_SUPPORT_JOIN_ERROR_MSG,
                 () -> getFragmentPlan("select * from tjson_test t1 join tjson_test t2 on t1.v_json > t2.v_json"));
 
         ExceptionChecker.expectThrowsNoException(
@@ -75,7 +75,7 @@ public class JsonTypeTest extends PlanTestBase {
                         " cast(t1.v_json->'a' as int) = cast(t2.v_json->'a' as int) and t1.v_id = t2.v_id"));
 
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
-                "Type percentile/hll/bitmap/json/struct/map not support aggregation/group-by/order-by/union/join",
+                Type.NOT_SUPPORT_JOIN_ERROR_MSG,
                 () -> getFragmentPlan("select * from tjson_test t1 join tjson_test t2 on" +
                         " t1.v_id = t2.v_id and t1.v_json = t2.v_json"));
     }
@@ -114,13 +114,8 @@ public class JsonTypeTest extends PlanTestBase {
                     String.format("parse_json('1') %s CAST(false AS JSON)", operator));
         }
 
-        try {
-            getFragmentPlan("select parse_json('1') in (1, 2, 3)");
-            getFragmentPlan("select parse_json('1') in (parse_json('1'), parse_json('2')");
-            Assert.fail("should throw");
-        } catch (SemanticException e) {
-            Assert.assertEquals("InPredicate of JSON is not supported", e.getMessage());
-        }
+        assertPlanContains("select parse_json('1') in (1, 2, 3)", "IN");
+        assertPlanContains("select parse_json('1') in (parse_json('1'), parse_json('2'))", "OR");
     }
 
     /**
@@ -218,5 +213,20 @@ public class JsonTypeTest extends PlanTestBase {
                 "json_array(CAST(3: v_SMALLINT AS JSON), CAST(4: v_TINYINT AS JSON), " +
                         "CAST(5: v_INT AS JSON), CAST(8: v_BOOLEAN AS JSON), " +
                         "CAST(9: v_DOUBLE AS JSON), CAST(11: v_VARCHAR AS JSON))");
+    }
+
+    @Test
+    public void testCastJsonToArray() throws Exception {
+        assertPlanContains("select cast(json_array(1,2,3) as array<int>)",
+                "CAST(json_array(CAST(1 AS JSON), CAST(2 AS JSON), CAST(3 AS JSON)) AS ARRAY<INT>)");
+        assertPlanContains("select cast(json_array(1,2,3) as array<varchar>)",
+                "CAST(json_array(CAST(1 AS JSON), CAST(2 AS JSON), CAST(3 AS JSON)) AS ARRAY<VARCHAR>)");
+        assertPlanContains("select cast(json_array(1,2,3) as array<JSON>)",
+                "CAST(json_array(CAST(1 AS JSON), CAST(2 AS JSON), CAST(3 AS JSON)) AS ARRAY<JSON>)");
+
+        // Multi-dimension array casting is not supported
+        assertExceptionMessage("select cast(json_array(1,2,3) as array<array<int>>)",
+                "Getting analyzing error from line 1, column 7 to line 1, column 50. Detail message: " +
+                        "Invalid type cast from json to array<array<int(11)>> in sql `json_array(1, 2, 3)`.");
     }
 }

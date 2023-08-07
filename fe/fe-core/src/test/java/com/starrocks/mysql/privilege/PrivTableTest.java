@@ -16,9 +16,7 @@
 package com.starrocks.mysql.privilege;
 
 import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.UserIdentity;
-import com.starrocks.common.FeMetaVersion;
-import com.starrocks.meta.MetaContext;
+import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
@@ -38,10 +36,6 @@ public class PrivTableTest {
      */
     @Test
     public void testSerializedAndDeserialized() throws Exception {
-        MetaContext metaContext = new MetaContext();
-        metaContext.setMetaVersion(FeMetaVersion.VERSION_CURRENT);
-        metaContext.setThreadLocalInfo();
-
         // use ResourcePrivTable because PrivTable is a abstract class
         ResourcePrivTable table = new ResourcePrivTable();
         PrivBitSet resourceUsage = PrivBitSet.of(Privilege.USAGE_PRIV);

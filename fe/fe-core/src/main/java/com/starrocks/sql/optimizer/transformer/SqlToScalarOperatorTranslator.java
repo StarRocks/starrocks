@@ -15,7 +15,6 @@
 package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
@@ -40,6 +39,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MultiInPredicate;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
@@ -60,6 +60,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
+import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -86,16 +87,17 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -107,6 +109,8 @@ import static java.util.Objects.requireNonNull;
  * Translator from Expr to ScalarOperator
  */
 public final class SqlToScalarOperatorTranslator {
+    private static final Logger LOG = LogManager.getLogger(SqlToScalarOperatorTranslator.class);
+
     private SqlToScalarOperatorTranslator() {
     }
 
@@ -191,6 +195,8 @@ public final class SqlToScalarOperatorTranslator {
 
         public final boolean hasSubquery;
         public final boolean useSemiAnti;
+
+        // only for recording outer exprs to an un-correlate subquery in a predicate
         public final List<Expr> outerExprs;
 
         public Context() {
@@ -209,15 +215,39 @@ public final class SqlToScalarOperatorTranslator {
             if (!hasSubquery) {
                 return this;
             }
-            List<Expr> outerExprs = Collections.emptyList();
-            if (node.getChildren().stream().anyMatch(Subquery.class::isInstance)) {
-                outerExprs = node.getChildren().stream().filter(c -> !(c instanceof Subquery))
-                        .collect(Collectors.toList());
-            }
+            List<Expr> res = findOuterExprs(node);
             if (!this.useSemiAnti && outerExprs.isEmpty()) {
                 return this;
             }
-            return new Context(true, false, outerExprs);
+            return new Context(true, false, res);
+        }
+
+        private List<Expr> findOuterExprs(Expr node) {
+            List<Expr> res = Lists.newArrayList();
+            if (node instanceof Predicate && node.getChildren().stream().anyMatch(Subquery.class::isInstance)) {
+                for (Expr child : node.getChildren()) {
+                    if (collectSubqueryNum(child) == 0) {
+                        res.add(child);
+                    }
+                }
+            }
+            return res;
+        }
+
+        private int collectSubqueryNum(Expr node) {
+            int num = 0;
+            for (Expr child : node.getChildren()) {
+                if (num > 0) {
+                    return num;
+                }
+
+                if (child instanceof Subquery) {
+                    num++;
+                } else {
+                    num += collectSubqueryNum(child);
+                }
+            }
+            return num;
         }
     }
 
@@ -229,13 +259,6 @@ public final class SqlToScalarOperatorTranslator {
         private final CTETransformerContext cteContext;
         public final OptExprBuilder builder;
         public final Map<ScalarOperator, SubqueryOperator> subqueryPlaceholders;
-        // TODO(SmithCruise) The code here is ugly, we should move these rules into optimizer
-        // ArrayDeque will push into and pop out the head
-        // Example: the Deque is [1,2,3,4]
-        // when push(5) -> [5,1,2,3,4]
-        // then pop() -> [1,2,3,4]
-        // Empty usedSubFieldPos means select all fields
-        private final Deque<Integer> usedSubFieldPos = new ArrayDeque<>();
 
         public Visitor(ExpressionMapping expressionMapping, ColumnRefFactory columnRefFactory,
                        List<ColumnRefOperator> correlation, ConnectContext session,
@@ -277,45 +300,27 @@ public final class SqlToScalarOperatorTranslator {
                 correlation.add(columnRefOperator);
             }
 
-            ScalarOperator returnValue = columnRefOperator;
-
             // If origin type is struct type, means that node contains subfield access
             if (node.getTrueOriginType().isStructType()) {
                 Preconditions.checkArgument(node.getUsedStructFieldPos() != null, "StructType SlotRef must have" +
                         "an non-empty usedStructFiledPos!");
                 Preconditions.checkArgument(node.getUsedStructFieldPos().size() > 0);
-                returnValue = SubfieldOperator.build(columnRefOperator, node.getOriginType(), node.getUsedStructFieldPos());
-
-                for (int i = node.getUsedStructFieldPos().size() - 1; i >= 0; i--) {
-                    usedSubFieldPos.push(node.getUsedStructFieldPos().get(i));
-                }
-
-                columnRefOperator.addUsedSubfieldPos(ImmutableList.copyOf(usedSubFieldPos));
-
-                for (int i = 0; i < node.getUsedStructFieldPos().size(); i++) {
-                    usedSubFieldPos.pop();
-                }
+                return SubfieldOperator.build(columnRefOperator, node.getOriginType(), node.getUsedStructFieldPos());
             } else {
-                columnRefOperator.addUsedSubfieldPos(ImmutableList.copyOf(usedSubFieldPos));
+                return columnRefOperator;
             }
-            return returnValue;
         }
 
         @Override
         public ScalarOperator visitSubfieldExpr(SubfieldExpr node, Context context) {
             Preconditions.checkArgument(node.getChildren().size() == 1);
-
-            usedSubFieldPos.push(node.getFieldPos(node.getFieldName()));
             ScalarOperator child = visit(node.getChild(0), context);
-            usedSubFieldPos.pop();
-            return SubfieldOperator.build(child, node);
+            return new SubfieldOperator(child, node.getType(), node.getFieldNames());
         }
 
         @Override
         public ScalarOperator visitFieldReference(FieldReference node, Context context) {
             ColumnRefOperator scalarOperator = expressionMapping.getColumnRefWithIndex(node.getFieldIndex());
-            // Consider a Table [a:int, b:int], for SELECT * FROM tbl, a and b will be FieldReference, not SlotRef.
-            scalarOperator.addUsedSubfieldPos(ImmutableList.copyOf(usedSubFieldPos));
             return scalarOperator;
         }
 
@@ -330,17 +335,19 @@ public final class SqlToScalarOperatorTranslator {
         }
 
         @Override
+        public ScalarOperator visitMapExpr(MapExpr node, Context context) {
+            List<ScalarOperator> mapElements = new ArrayList<>();
+            for (Expr expr : node.getChildren()) {
+                mapElements.add(visit(expr, context.clone(node)));
+            }
+            return new MapOperator(node.getType(), mapElements);
+        }
+
+        @Override
         public ScalarOperator visitCollectionElementExpr(CollectionElementExpr node, Context context) {
             Preconditions.checkState(node.getChildren().size() == 2);
-            // key value all selected used in map
-            if (node.getChild(0).getType().isMapType()) {
-                usedSubFieldPos.push(-1);
-            }
             ScalarOperator collectionOperator = visit(node.getChild(0), context.clone(node));
             ScalarOperator subscriptOperator = visit(node.getChild(1), context.clone(node));
-            if (node.getChild(0).getType().isMapType()) {
-                usedSubFieldPos.pop();
-            }
             return new CollectionElementOperator(node.getType(), collectionOperator, subscriptOperator);
         }
 
@@ -375,10 +382,6 @@ public final class SqlToScalarOperatorTranslator {
         @Override
         public ScalarOperator visitLambdaFunctionExpr(LambdaFunctionExpr node,
                                                       Context context) {
-            // To avoid the ids of lambda arguments are different after each visit()
-            if (node.getTransformed() != null) {
-                return node.getTransformed();
-            }
             Preconditions.checkArgument(node.getChildren().size() >= 2);
             List<ColumnRefOperator> refs = Lists.newArrayList();
             List<LambdaArgument> args = Lists.newArrayList();
@@ -391,13 +394,16 @@ public final class SqlToScalarOperatorTranslator {
             expressionMapping = new ExpressionMapping(scope, refs, expressionMapping);
             ScalarOperator lambda = visit(node.getChild(0), context.clone(node));
             expressionMapping = old; // recover it
-            node.setTransformed(new LambdaFunctionOperator(refs, lambda, Type.FUNCTION));
-            return node.getTransformed();
+            return new LambdaFunctionOperator(refs, lambda, Type.FUNCTION);
         }
 
         @Override
         public ScalarOperator visitLambdaArguments(LambdaArgument node, Context context) {
-            return columnRefFactory.create(node.getName(), node.getType(), node.isNullable(), true);
+            // To avoid the ids of lambda arguments are different after each visit()
+            if (node.getTransformed() == null) {
+                node.setTransformed(columnRefFactory.create(node.getName(), node.getType(), node.isNullable(), true));
+            }
+            return node.getTransformed();
         }
 
         @Override
@@ -430,38 +436,9 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitBinaryPredicate(BinaryPredicate node, Context context) {
-            switch (node.getOp()) {
-                case EQ:
-                    return new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
-                            visit(node.getChild(0), context.clone(node)),
-                            visit(node.getChild(1), context.clone(node)));
-                case NE:
-                    return new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.NE,
-                            visit(node.getChild(0), context.clone(node)),
-                            visit(node.getChild(1), context.clone(node)));
-                case GT:
-                    return new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GT,
-                            visit(node.getChild(0), context.clone(node)),
-                            visit(node.getChild(1), context.clone(node)));
-                case GE:
-                    return new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE,
-                            visit(node.getChild(0), context.clone(node)),
-                            visit(node.getChild(1), context.clone(node)));
-                case LT:
-                    return new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LT,
-                            visit(node.getChild(0), context.clone(node)),
-                            visit(node.getChild(1), context.clone(node)));
-                case LE:
-                    return new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE,
-                            visit(node.getChild(0), context.clone(node)),
-                            visit(node.getChild(1), context.clone(node)));
-                case EQ_FOR_NULL:
-                    return new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
-                            visit(node.getChild(0), context.clone(node)),
-                            visit(node.getChild(1), context.clone(node)));
-                default:
-                    throw new UnsupportedOperationException("nonsupport binary predicate type");
-            }
+            return new BinaryPredicateOperator(node.getOp(),
+                    visit(node.getChild(0), context.clone(node)),
+                    visit(node.getChild(1), context.clone(node)));
         }
 
         @Override
@@ -563,7 +540,8 @@ public final class SqlToScalarOperatorTranslator {
             }
             List<ColumnRefOperator> rightColRefs = subqueryPlan.getOutputColumn();
             if (rightColRefs.size() != leftExprs.size()) {
-                throw new SemanticException("subquery must return the same number of columns as provided by the IN predicate");
+                throw new SemanticException(
+                        "subquery must return the same number of columns as provided by the IN predicate");
             }
             ScalarOperator inPredicateOperator = new MultiInPredicateOperator(node.isNotIn(), leftExprs, rightColRefs);
             ColumnRefOperator outputPredicateRef = columnRefFactory.create(inPredicateOperator,
@@ -588,6 +566,11 @@ public final class SqlToScalarOperatorTranslator {
         @Override
         public ScalarOperator visitInPredicate(InPredicate node, Context context)
                 throws SemanticException {
+            List<Expr> lhsSubQueries = Lists.newArrayList();
+            node.getChild(0).collect(Subquery.class, lhsSubQueries);
+            if (!lhsSubQueries.isEmpty()) {
+                throw new SemanticException("Subquery in left-side child of in-predicate is not supported");
+            }
             if (!(node.getChild(1) instanceof Subquery)) {
                 return new InPredicateOperator(node.isNotIn(),
                         node.getChildren().stream()
@@ -666,29 +649,19 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitFunctionCall(FunctionCallExpr node, Context context) {
-            if (node.getFnName().getFunction().equalsIgnoreCase("map_keys") ||
-                    node.getFnName().getFunction().equalsIgnoreCase("map_size")) {
-                usedSubFieldPos.push(0);
-            }
-            if (node.getFnName().getFunction().equalsIgnoreCase("map_values")) {
-                usedSubFieldPos.push(1);
-            }
             List<ScalarOperator> arguments = node.getChildren()
                     .stream()
                     .map(child -> visit(child, context.clone(node)))
                     .collect(Collectors.toList());
-            if (node.getFnName().getFunction().equalsIgnoreCase("map_keys") ||
-                    node.getFnName().getFunction().equalsIgnoreCase("map_size") ||
-                    node.getFnName().getFunction().equalsIgnoreCase("map_values")) {
-                usedSubFieldPos.pop();
-            }
 
-            return new CallOperator(
+            CallOperator callOperator = new CallOperator(
                     node.getFnName().getFunction(),
                     node.getType(),
                     arguments,
                     node.getFn(),
                     node.getParams().isDistinct());
+            callOperator.setHints(node.getHints());
+            return callOperator;
         }
 
         @Override
@@ -859,6 +832,7 @@ public final class SqlToScalarOperatorTranslator {
                 // So if you need to visit SlotRef here, it must be the case where the old version of analyzed is true
                 // (currently mainly used by some Load logic).
                 // TODO: delete old analyze in Load
+                LOG.warn("Can't use IgnoreSlotVisitor with not analyzed slot ref: " + node.toSql());
                 throw unsupportedException("Can't use IgnoreSlotVisitor with not analyzed slot ref");
             }
             return new ColumnRefOperator(node.getSlotId().asInt(),

@@ -1,0 +1,358 @@
+-- name: test_non_dup_random
+create table t1(k int, v int) duplicate key(k);
+-- result:
+-- !result
+create table t2(k int, v int) primary key(k);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Currently only support default distribution in DUP_KEYS.')
+-- !result
+create table t2(k int, v int) primary key(k) distributed by random buckets 20;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 45 to line 1, column 75. Detail message: Random distribution must be used in DUP_KEYS or AGG_KEYS without replace.')
+-- !result
+create table t3(k int, v int) unique key(k);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Currently only support default distribution in DUP_KEYS.')
+-- !result
+create table t3(k int, v int) unique key(k) distributed by random buckets 20;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 44 to line 1, column 74. Detail message: Random distribution must be used in DUP_KEYS or AGG_KEYS without replace.')
+-- !result
+create table t4(k int, v int sum) aggregate key(k);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Currently only support default distribution in DUP_KEYS.')
+-- !result
+create table t4(k int, v int sum) aggregate key(k) distributed by random buckets 20;
+-- result:
+-- !result
+drop table t4;
+-- result:
+-- !result
+-- name: test_create_default_random_distribution_table
+create table t(k int, v int);
+-- result:
+-- !result
+insert into t values(1,1);
+-- result:
+-- !result
+select * from t;
+-- result:
+1	1
+-- !result
+-- name: test_automatic_partition_random_distribute
+create table t(k date, v int) partition by date_trunc('day', k) properties('replication_num'='3');
+-- result:
+-- !result
+insert into t values('2023-02-14', 2),('2033-03-01',2);
+-- result:
+-- !result
+select * from t;
+-- result:
+2023-02-14	2
+2033-03-01	2
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` date NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `v`)
+PARTITION BY date_trunc('day', k)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+-- name: test_async_mv
+create table t(k int, v int);
+-- result:
+-- !result
+create materialized view tva REFRESH ASYNC as select k, sum(v) from t group by k;
+-- result:
+-- !result
+insert into t values(1,1),(1,2);
+-- result:
+-- !result
+[UC]refresh materialized view tva;
+-- result:
+8f3247bb-dff2-11ed-b085-00163e05ba4a
+-- !result
+select * from tva;
+-- result:
+-- !result
+-- name: test_add_partition
+create table t(k int, v int) partition by range(k) (partition p1 values less than ("0")) distributed by random buckets 10;
+-- result:
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `v`)
+PARTITION BY RANGE(`k`)
+(PARTITION p1 VALUES [("-2147483648"), ("0")))
+DISTRIBUTED BY RANDOM BUCKETS 10
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+alter table t add partition p2 values less than ("20");
+-- result:
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `v`)
+PARTITION BY RANGE(`k`)
+(PARTITION p1 VALUES [("-2147483648"), ("0")),
+PARTITION p2 VALUES [("0"), ("20")))
+DISTRIBUTED BY RANDOM BUCKETS 10
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+alter table t add partition p3 values less than ("30") distributed by random buckets 20;
+-- result:
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `v`)
+PARTITION BY RANGE(`k`)
+(PARTITION p1 VALUES [("-2147483648"), ("0")),
+PARTITION p2 VALUES [("0"), ("20")),
+PARTITION p3 VALUES [("20"), ("30")))
+DISTRIBUTED BY RANDOM BUCKETS 10
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+alter table t add partition p4 values less than ("40") distributed by random;
+-- result:
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `v`)
+PARTITION BY RANGE(`k`)
+(PARTITION p1 VALUES [("-2147483648"), ("0")),
+PARTITION p2 VALUES [("0"), ("20")),
+PARTITION p3 VALUES [("20"), ("30")),
+PARTITION p4 VALUES [("30"), ("40")))
+DISTRIBUTED BY RANDOM BUCKETS 10
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+alter table t add partition p5 values less than ("50") distributed by hash(k) buckets 10;
+-- result:
+E: (1064, 'Unexpected exception: Cannot assign different distribution type. default is: RANDOM')
+-- !result
+insert into t values(-1,-1),(5,5),(15,15),(35,35);
+-- result:
+-- !result
+select * from t;
+-- result:
+35	35
+15	15
+-1	-1
+5	5
+-- !result
+-- name: test_create_random_distribution_table
+create table t(k int, v int);
+-- result:
+-- !result
+create table t1(k int, v int) duplicate key(k);
+-- result:
+-- !result
+create table t2(k int, v int) duplicate key(k) distributed by random;
+-- result:
+-- !result
+create table t3(k int, v int) duplicate key(k) distributed by random buckets 10;
+-- result:
+-- !result
+show create table t3;
+-- result:
+t3	CREATE TABLE `t3` (
+  `k` int(11) NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY RANDOM BUCKETS 10
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+create table t4(k int, v int) distributed by random;
+-- result:
+-- !result
+create table t5(k int, v int) distributed by random buckets 10;
+-- result:
+-- !result
+show create table t5;
+-- result:
+t5	CREATE TABLE `t5` (
+  `k` int(11) NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `v`)
+DISTRIBUTED BY RANDOM BUCKETS 10
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+-- name: test_partition_random_distribution
+create table t(k int, v int) partition by range(k) (partition p1 values less than ("0"));
+-- result:
+-- !result
+create table t1(k int, v int) partition by range(k) (partition p1 values less than ("0")) distributed by random;
+-- result:
+-- !result
+create table t2(k int, v int) partition by range(k) (partition p1 values less than ("0")) distributed by random buckets 10;
+-- result:
+-- !result
+show create table t2;
+-- result:
+t2	CREATE TABLE `t2` (
+  `k` int(11) NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `v`)
+PARTITION BY RANGE(`k`)
+(PARTITION p1 VALUES [("-2147483648"), ("0")))
+DISTRIBUTED BY RANDOM BUCKETS 10
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into t2 values(-1,-1);
+-- result:
+-- !result
+select * from t2;
+-- result:
+-1	-1
+-- !result
+-- name: test_bucket_shuffle
+create table t(k int);
+-- result:
+-- !result
+insert into t values(1),(1);
+-- result:
+-- !result
+create table t2(k int, v int) distributed by hash(k);
+-- result:
+-- !result
+insert into t2 values(1,1),(1,2),(1,3);
+-- result:
+-- !result
+select * from t join t2 on t.k = t2.k;
+-- result:
+1	1	1
+1	1	1
+1	1	2
+1	1	2
+1	1	3
+1	1	3
+-- !result
+-- name: test_sync_mv
+create table t(k int, v int);
+-- result:
+-- !result
+create materialized view tv as select k, sum(v) from t group by k;
+-- result:
+-- !result
+insert into t values(1,1),(1,2);
+-- result:
+-- !result
+select sum(v) from t;
+-- result:
+3
+-- !result
+-- name: test_ctas
+create table t(k int, v int);
+-- result:
+-- !result
+create table c as select * from t;
+-- result:
+-- !result
+show create table c;
+-- result:
+[REGEX].*DISTRIBUTED BY RANDOM.*
+-- !result
+create table c1 distributed by random as select * from t;
+-- result:
+-- !result
+show create table c1;
+-- result:
+[REGEX].*DISTRIBUTED BY RANDOM.*
+-- !result
+create table c2 distributed by random buckets 10 as select * from t;
+-- result:
+-- !result
+show create table c2;
+-- result:
+[REGEX].*DISTRIBUTED BY RANDOM BUCKETS 10.*
+-- !result
+
+-- name: test_select_async_mv
+create table t(k int, v int);
+-- result:
+-- !result
+insert into t values(1,1);
+-- result:
+-- !result
+create materialized view tva REFRESH ASYNC as select k, sum(v) from t group by k;
+-- result:
+-- !result
+select sleep(2);
+-- result:
+1
+-- !result
+ explain select sum(v) from t;
+-- result:
+[REGEX].*rollup: tva.*
+-- !result

@@ -19,6 +19,7 @@ package com.starrocks.common;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
+import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -65,12 +66,12 @@ public class PatternMatcher {
      * The following characters are not permitted:
      *   <([{^=$!|]})?*+>
      */
-    private static String convertMysqlPattern(String mysqlPattern) throws AnalysisException {
+    private static String convertMysqlPattern(String mysqlPattern) {
         String newMysqlPattern = mysqlPattern;
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < newMysqlPattern.length(); ++i) {
             char ch = newMysqlPattern.charAt(i);
-            checkPermittedCharactor(ch);
+            checkPermittedCharacter(ch);
             switch (ch) {
                 case '%':
                     sb.append(".*");
@@ -137,18 +138,16 @@ public class PatternMatcher {
             }
         }
 
-        // System.out.println("result: " + sb.toString());
         return sb.toString();
     }
 
-    private static void checkPermittedCharactor(char c) throws AnalysisException {
+    private static void checkPermittedCharacter(char c) {
         if (FORBIDDEN_CHARS.contains(c)) {
-            throw new AnalysisException("Forbidden charactor: '" + c + "'");
+            throw new SemanticException("Forbidden character: '" + c + "'");
         }
     }
 
-    public static PatternMatcher createMysqlPattern(String mysqlPattern, boolean caseSensitive)
-            throws AnalysisException {
+    public static PatternMatcher createMysqlPattern(String mysqlPattern, boolean caseSensitive) {
         PatternMatcher matcher = new PatternMatcher();
 
         // Match nothing
@@ -162,7 +161,7 @@ public class PatternMatcher {
                 matcher.pattern = Pattern.compile(javaPattern, Pattern.CASE_INSENSITIVE);
             }
         } catch (Exception e) {
-            throw new AnalysisException("Bad pattern in SQL: " + e.getMessage());
+            throw new SemanticException("Bad pattern in SQL: " + e.getMessage());
         }
         return matcher;
     }

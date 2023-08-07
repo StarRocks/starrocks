@@ -8,9 +8,9 @@ JSON constructor functions are used to construct JSON data, such as JSON objects
 
 | Function                                                     | Description                                                  | Example                                                   | Return value                           |
 | ------------------------------------------------------------ | ------------------------------------------------------------ | --------------------------------------------------------- | -------------------------------------- |
-| [json_object](./json-constructor-functions/json_object.md) | Converts one or more key-value pairs to a JSON object that consists of the key-value pairs, which are sorted by key in dictionary order. | SELECT JSON_OBJECT(' Daniel Smith', 26, 'Lily Smith', 25) | {"Daniel Smith": 26, "Lily Smith": 25} |
-| [json_array](./json-constructor-functions/json_array.md) | Converts each element of an SQL array to a JSON value and returns a JSON array that consists of those JSON values. | SELECT JSON_ARRAY(1, 2, 3)                                | [1,2,3]                                |
-| [parse_json](./json-constructor-functions/parse_json.md) | Converts a string to a JSON value.                           | SELECT PARSE_JSON('{"a": 1}')                             | {"a": 1}                               |
+| [json_object](./json-constructor-functions/json_object.md) | Converts one or more key-value pairs to a JSON object that consists of the key-value pairs, which are sorted by key in dictionary order. | SELECT JSON_OBJECT(' Daniel Smith', 26, 'Lily Smith', 25); | {"Daniel Smith": 26, "Lily Smith": 25} |
+| [json_array](./json-constructor-functions/json_array.md) | Converts each element of an SQL array to a JSON value and returns a JSON array that consists of those JSON values. | SELECT JSON_ARRAY(1, 2, 3);                                | [1,2,3]                                |
+| [parse_json](./json-constructor-functions/parse_json.md) | Converts a string to a JSON value.                           | SELECT PARSE_JSON('{"a": 1}');                             | {"a": 1}                               |
 
 ## JSON query functions and processing functions
 
@@ -18,22 +18,21 @@ JSON query functions and processing functions are used to query and process JSON
 
 | Function                                                     | Description                                                  | Example                                                    | Return value                                               |
 | ------------------------------------------------------------ | ------------------------------------------------------------ | ---------------------------------------------------------- | ---------------------------------------------------------- |
-| [arrow function](./json-query-and-processing-functions/arrow-function.md) | Queries the element that can be located by a path expression in a JSON object. | SELECT {"a": {"b": 1}} -> '$.a.b'                          | 1                                                          |
-| [cast](./json-query-and-processing-functions/cast.md) | Converts data between a JSON data type and an SQL data type. | SELECT CAST(PARSE_JSON('1') as INT);                       | 1      |
-| [get_json_double](./json-query-and-processing-functions/get_json_double.md)   | Analyzes and gets the floating point value from a specified path in a JSON string.  | SELECT get_json_double('{"k1":1.3, "k2":"2"}', "$.k1") | 1.3 |
-| [get_json_int](./json-query-and-processing-functions/get_json_int.md)   | Analyzes and gets the integer value from a specified path in a JSON string.  | SELECT get_json_int('{"k1":1, "k2":"2"}', "$.k1") | 1 |
+| [arrow function](./json-query-and-processing-functions/arrow-function.md) | Queries the element that can be located by a path expression in a JSON object. | SELECT parse_json('{"a": {"b": 1}}') -> '$.a.b';                          | 1                                                          |
+| [cast](./json-query-and-processing-functions/cast.md) | Converts data between a JSON data type and an SQL data type. | SELECT CAST(1 AS JSON);                       | 1      |
+| [get_json_double](./json-query-and-processing-functions/get_json_double.md)   | Analyzes and gets the floating point value from a specified path in a JSON string.  | SELECT get_json_double('{"k1":1.3, "k2":"2"}', "$.k1"); | 1.3 |
+| [get_json_int](./json-query-and-processing-functions/get_json_int.md)   | Analyzes and gets the integer value from a specified path in a JSON string.  | SELECT get_json_int('{"k1":1, "k2":"2"}', "$.k1"); | 1 |
 | [get_json_string](./json-query-and-processing-functions/get_json_string.md)   | Analyzes and gets the strings from a specified path in a JSON string.  | SELECT get_json_string('{"k1":"v1", "k2":"v2"}', "$.k1"); | v1 |
-| [json_query](./json-query-and-processing-functions/json_query.md) | Queries the value of an element that can be located by a path expression in a JSON object. | SELECT JSON_QUERY({"a": 1}, '$.a')                         | 1                                                   |
-| [json_each](./json-query-and-processing-functions/json_each.md) | Expands the top-level elements of a JSON object into key-value pairs. | SELECT * FROM JSON_EACH('{"a": 1, "b":{"c": 3, "d": null}} | key \| value -----+----  a \| 1  b \|  {"c": 3, "d": null} |
-| [json_exists](./json-query-and-processing-functions/json_exists.md) | Checks whether a JSON object contains an element that can be located by a path expression. If the element exists, this function returns 1. If the element does not exist, the function returns 0. | SELECT JSON_EXISTS({"a": 1}, '$.a')                        | 1                                     |
-| [json_keys](../../sql-functions/json-functions/json-processing-functions/json_keys.md) | Returns the top-level keys from a JSON object as a JSON array, or, if a path is specified, the top-level keys from the path.   | SELECT JSON_KEYS('{"a": 1, "b": 2, "c": 3}') |  ["a", "b", "c"]|
-| [json_length](../../sql-functions/json-functions/json-processing-functions/json_length.md) | Returns the length of a JSON document.  | select json_length('{"Name": "Alice"}') |{"Name": "Alice"}|
-| [json_query](../../sql-functions/json-functions/json-processing-functions/json_query.md) | Queries the value of an element that can be located by the json_path expression in a JSON object and returns a JSON value.  | SELECT JSON_QUERY({"a": 1}, '$.a')             | 1                                                            |
-| [json_string](./json-query-and-processing-functions/json_string.md)   | Converts the JSON object to a JSON string      | select json_string(parse_json('{"Name": "Alice"}')) | {"Name": "Alice"}  |
+| [json_query](./json-query-and-processing-functions/json_query.md) | Queries the value of an element that can be located by a path expression in a JSON object. | SELECT JSON_QUERY('{"a": 1}', '$.a');                         | 1                                                   |
+| [json_each](./json-query-and-processing-functions/json_each.md) | Expands the top-level elements of a JSON object into key-value pairs. | SELECT * FROM tj_test, LATERAL JSON_EACH(j); | ![json_each](../../../assets/json_each.png) |
+| [json_exists](./json-query-and-processing-functions/json_exists.md) | Checks whether a JSON object contains an element that can be located by a path expression. If the element exists, this function returns 1. If the element does not exist, the function returns 0. | SELECT JSON_EXISTS('{"a": 1}', '$.a');                       | 1                                     |
+| [json_keys](../../sql-functions/json-functions/json-processing-functions/json_keys.md) | Returns the top-level keys from a JSON object as a JSON array, or, if a path is specified, the top-level keys from the path.   | SELECT JSON_KEYS('{"a": 1, "b": 2, "c": 3}'); |  ["a", "b", "c"]|
+| [json_length](../../sql-functions/json-functions/json-processing-functions/json_length.md) | Returns the length of a JSON document.  | SELECT json_length('{"Name": "Alice"}'); |  1  |
+| [json_string](./json-query-and-processing-functions/json_string.md)   | Converts the JSON object to a JSON string      | SELECT json_string(parse_json('{"Name": "Alice"}')); | {"Name": "Alice"}  |
 
 ## JSON operators
 
-StarRocks supports the following JSON operators: `<`, `<=`, `>`, `>=`, `=`, and `!=`. You can use these operators to query JSON data. StarRocks does not support the `IN` operator. For more information about the JSON operators, see [JSON operators](./json-operators.md).
+StarRocks supports the following JSON comparison operators: `<`, `<=`, `>`, `>=`, `=`, and `!=`. You can use these operators to query JSON data. However, it does not allow you to use `IN` to query JSON data. For more information about JSON operators, see [JSON operators](./json-operators.md).
 
 ## JSON path expressions
 

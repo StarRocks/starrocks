@@ -213,6 +213,10 @@ std::string Status::code_as_string() const {
         return "Data quality error";
     case TStatusCode::RESOURCE_BUSY:
         return "Resource busy";
+    case TStatusCode::SR_EAGAIN:
+        return "Resource temporarily unavailable";
+    case TStatusCode::REMOTE_FILE_NOT_FOUND:
+        return "Remote file not found";
     default: {
         char tmp[30];
         snprintf(tmp, sizeof(tmp), "Unknown code(%d): ", static_cast<int>(code()));
@@ -263,7 +267,7 @@ Status Status::clone_and_prepend(const Slice& msg) const {
     auto msg2 = message();
     std::string_view msg_view(reinterpret_cast<const char*>(msg.data), msg.size);
     std::string_view msg_view2(reinterpret_cast<const char*>(msg2.data), msg2.size);
-    return {code(), fmt::format("{}:{}", msg_view, msg_view2)};
+    return {code(), fmt::format("{}: {}", msg_view, msg_view2)};
 }
 
 Status Status::clone_and_append(const Slice& msg) const {
@@ -273,7 +277,7 @@ Status Status::clone_and_append(const Slice& msg) const {
     auto msg2 = message();
     std::string_view msg_view(reinterpret_cast<const char*>(msg.data), msg.size);
     std::string_view msg_view2(reinterpret_cast<const char*>(msg2.data), msg2.size);
-    return {code(), fmt::format("{}:{}", msg_view2, msg_view)};
+    return {code(), fmt::format("{}: {}", msg_view2, msg_view)};
 }
 
 Status Status::clone_and_append_context(const char* filename, int line, const char* expr) const {

@@ -29,11 +29,6 @@ MetaScanNode::~MetaScanNode() {
     }
 }
 
-Status MetaScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
-    RETURN_IF_ERROR(ExecNode::init(tnode, state));
-    return Status::OK();
-}
-
 void MetaScanNode::_init_counter(RuntimeState* state) {
     _scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
     _meta_scan_profile = _runtime_profile->create_child("META_SCAN", true, false);
@@ -68,13 +63,13 @@ Status MetaScanNode::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status MetaScanNode::close(RuntimeState* state) {
+void MetaScanNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
 
     SCOPED_TIMER(_runtime_profile->total_time_counter());
-    return ScanNode::close(state);
+    ScanNode::close(state);
 }
 
 } // namespace starrocks

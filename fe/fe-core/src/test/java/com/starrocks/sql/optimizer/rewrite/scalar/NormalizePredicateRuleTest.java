@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -34,7 +35,7 @@ public class NormalizePredicateRuleTest {
         NormalizePredicateRule rule = new NormalizePredicateRule();
         ScalarOperatorRewriteContext context = new ScalarOperatorRewriteContext();
 
-        BinaryPredicateOperator bpo = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator bpo = new BinaryPredicateOperator(BinaryType.EQ,
                 new ColumnRefOperator(1, Type.INT, "test", true),
                 ConstantOperator.createInt(1));
 
@@ -50,7 +51,7 @@ public class NormalizePredicateRuleTest {
         NormalizePredicateRule rule = new NormalizePredicateRule();
         ScalarOperatorRewriteContext context = new ScalarOperatorRewriteContext();
 
-        BinaryPredicateOperator bpo = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator bpo = new BinaryPredicateOperator(BinaryType.EQ,
                 ConstantOperator.createInt(1),
                 new ColumnRefOperator(1, Type.INT, "test", true));
 
@@ -66,7 +67,7 @@ public class NormalizePredicateRuleTest {
         NormalizePredicateRule rule = new NormalizePredicateRule();
         ScalarOperatorRewriteContext context = new ScalarOperatorRewriteContext();
 
-        BinaryPredicateOperator bpo = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator bpo = new BinaryPredicateOperator(BinaryType.EQ,
                 ConstantOperator.createInt(1),
                 ConstantOperator.createInt(2));
 
@@ -86,7 +87,7 @@ public class NormalizePredicateRuleTest {
         );
 
         ScalarOperator result = rule.apply(inOp, context);
-        BinaryPredicateOperator eqOp = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator eqOp = new BinaryPredicateOperator(BinaryType.EQ,
                 ConstantOperator.createInt(1),
                 new ColumnRefOperator(0, Type.INT, "col1", true)
         );

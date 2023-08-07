@@ -12,14 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -338,7 +339,10 @@ public class Memo {
 
     private void removeGroupInitLogicExpression(Group group) {
         GroupExpression initGroupExpression = group.getFirstLogicalExpression();
-        groupExpressions.remove(initGroupExpression);
+        // This remove must be successful, otherwise GroupExpression::op or GroupExpression::inputs
+        // may be updated without re-inserted.
+        Preconditions.checkNotNull(groupExpressions.remove(initGroupExpression),
+                "GroupExpression has been updated without re-inserting");
 
         Preconditions.checkState(group.isValidInitState());
 
@@ -347,5 +351,17 @@ public class Memo {
 
     public void deriveAllGroupLogicalProperty() {
         getRootGroup().getFirstLogicalExpression().deriveLogicalPropertyRecursively();
+    }
+
+    // debug tool to collect scan group info
+    public Map<Table, List<Group>> collectScanGroup() {
+        Map<Table, List<Group>> map = Maps.newHashMap();
+        for (Group group : groups) {
+            if (group.getFirstLogicalExpression().getOp() instanceof LogicalOlapScanOperator) {
+                LogicalOlapScanOperator scanOperator = group.getFirstLogicalExpression().getOp().cast();
+                map.computeIfAbsent(scanOperator.getTable(), e -> Lists.newArrayList()).add(group);
+            }
+        }
+        return map;
     }
 }

@@ -15,7 +15,6 @@
 #include "mem_state_table.h"
 
 namespace starrocks::stream {
-
 namespace {
 
 void convert_datum_rows_to_chunk(const std::vector<DatumRow>& rows, Chunk* chunk) {
@@ -44,10 +43,6 @@ Status DatumRowIterator::do_get_next(Chunk* chunk) {
     return Status::EndOfFile("end of empty iterator");
 }
 
-Status MemStateTable::init() {
-    return Status::OK();
-}
-
 Status MemStateTable::prepare(RuntimeState* state) {
     return Status::OK();
 }
@@ -60,48 +55,93 @@ Status MemStateTable::commit(RuntimeState* state) {
     return Status::OK();
 }
 
-bool MemStateTable::_equal_keys(const DatumKeyRow& m_k, const DatumRow key) const {
-    for (auto i = 0; i < key.size(); i++) {
-        if (!key[i].equal_datum_key(m_k[i])) {
+bool MemStateTable::_equal_keys(const DatumKeyRow& m_k, const DatumKeyRow& keys) const {
+    for (auto i = 0; i < keys.size(); i++) {
+        Datum datum(keys[i]);
+        if (!datum.equal_datum_key(m_k[i])) {
             return false;
         }
     }
     return true;
 }
 
-ChunkPtrOr MemStateTable::seek(const DatumRow& key) const {
-    // point seek
-    DCHECK_EQ(key.size(), _k_num);
-    auto key_row = _convert_datum_row_to_key(key, 0, _k_num);
-    if (auto iter = _kv_mapping.find(key_row); iter != _kv_mapping.end()) {
-        auto chunk_ptr = ChunkHelper::new_chunk(_v_schema, 1);
-        convert_datum_rows_to_chunk({iter->second}, chunk_ptr.get());
-        return std::move(chunk_ptr);
-    } else {
-        return Status::EndOfFile("NotFound");
+Status MemStateTable::seek(const Columns& keys, StateTableResult& values) const {
+    auto num_rows = keys[0]->size();
+    auto& found = values.found;
+    auto& result_chunk = values.result_chunk;
+    found.resize(num_rows, 0);
+    result_chunk = ChunkHelper::new_chunk(_v_schema, num_rows);
+    for (size_t i = 0; i < num_rows; i++) {
+        auto key_row = _convert_columns_to_key(keys, i);
+        if (auto iter = _kv_mapping.find(key_row); iter != _kv_mapping.end()) {
+            found[i] = 1;
+            RETURN_IF_ERROR(_append_datum_row_to_chunk(iter->second, result_chunk));
+        }
     }
+    return Status::OK();
 }
 
-std::vector<ChunkPtrOr> MemStateTable::seek(const std::vector<DatumRow>& keys) const {
-    std::vector<ChunkPtrOr> ans;
-    ans.reserve(keys.size());
-    for (auto& key : keys) {
-        ans.emplace_back(seek(key));
+Status MemStateTable::_append_null_to_chunk(ChunkPtr& result_chunk) const {
+    for (auto& column : result_chunk->columns()) {
+        column->append_nulls(1);
     }
-    return ans;
+    return Status::OK();
 }
 
-ChunkIteratorPtrOr MemStateTable::prefix_scan(const DatumRow& key) const {
-    DCHECK_LE(key.size(), _k_num);
+Status MemStateTable::_append_datum_row_to_chunk(const DatumRow& v_row, ChunkPtr& result_chunk) const {
+    DCHECK_EQ(v_row.size(), result_chunk->num_columns());
+    auto& columns = result_chunk->columns();
+    for (size_t i = 0; i < result_chunk->num_columns(); i++) {
+        columns[i]->append_datum(v_row[i]);
+    }
+    return Status::OK();
+}
+
+Status MemStateTable::seek(const Columns& keys, const std::vector<uint8_t>& selection, StateTableResult& values) const {
+    DCHECK_LT(0, keys.size());
+    auto num_rows = keys[0]->size();
+    DCHECK_EQ(selection.size(), num_rows);
+
+    auto& found = values.found;
+    auto& result_chunk = values.result_chunk;
+    found.resize(num_rows, 0);
+    result_chunk = ChunkHelper::new_chunk(_v_schema, num_rows);
+    VLOG_ROW << "selection size:" << selection.size() << ", num_rows:" << num_rows
+             << ", num_columns:" << result_chunk->num_columns();
+    for (size_t i = 0; i < num_rows; i++) {
+        if (selection[i]) {
+            auto key_row = _convert_columns_to_key(keys, i);
+            if (auto iter = _kv_mapping.find(key_row); iter != _kv_mapping.end()) {
+                VLOG_ROW << "append key with selection";
+                found[i] = 1;
+                RETURN_IF_ERROR(_append_datum_row_to_chunk(iter->second, result_chunk));
+            } else {
+                VLOG_ROW << "append null without selection";
+            }
+        } else {
+            VLOG_ROW << "append null";
+        }
+    }
+    return Status::OK();
+}
+
+Status MemStateTable::seek(const Columns& keys, const std::vector<std::string>& projection_columns,
+                           StateTableResult& values) const {
+    return Status::NotSupported("Seek with projection columns is not supported yet.");
+}
+
+ChunkIteratorPtrOr MemStateTable::prefix_scan(const Columns& keys, size_t row_idx) const {
+    auto key_row = _convert_columns_to_key(keys, row_idx);
+    DCHECK_LE(key_row.size(), _k_num);
     // prefix scan
     std::vector<DatumRow> rows;
     for (auto iter = _kv_mapping.begin(); iter != _kv_mapping.end(); iter++) {
         // if equal
         auto m_k = iter->first;
-        if (_equal_keys(m_k, key)) {
+        if (_equal_keys(m_k, key_row)) {
             DatumRow row;
             // add extra key cols + value cols
-            for (int32_t s = key.size(); s < m_k.size(); s++) {
+            for (int32_t s = key_row.size(); s < m_k.size(); s++) {
                 row.push_back(Datum(m_k[s]));
             }
             for (auto& datum : iter->second) {
@@ -113,31 +153,28 @@ ChunkIteratorPtrOr MemStateTable::prefix_scan(const DatumRow& key) const {
     if (rows.empty()) {
         return Status::EndOfFile("");
     }
-    auto schema = _make_schema_from_slots(std::vector<SlotDescriptor*>{_slots.begin() + key.size(), _slots.end()});
+    auto schema = _make_schema_from_slots(std::vector<SlotDescriptor*>{_slots.begin() + key_row.size(), _slots.end()});
     return std::make_shared<DatumRowIterator>(schema, std::move(rows));
 }
 
-VectorizedSchema MemStateTable::_make_schema_from_slots(const std::vector<SlotDescriptor*>& slots) const {
-    VectorizedFields fields;
+ChunkIteratorPtrOr MemStateTable::prefix_scan(const std::vector<std::string>& projection_columns, const Columns& keys,
+                                              size_t row_idx) const {
+    return Status::NotSupported("PrefixScan with projection columns is not supported yet.");
+}
+
+Schema MemStateTable::_make_schema_from_slots(const std::vector<SlotDescriptor*>& slots) const {
+    Fields fields;
     for (auto& slot : slots) {
         auto type_desc = slot->type();
         VLOG_ROW << "[make_schema_from_slots] type:" << type_desc;
-        auto field = std::make_shared<VectorizedField>(slot->id(), slot->col_name(), type_desc.type, false);
+        // TODO: Must be nullable!
+        auto field = std::make_shared<Field>(slot->id(), slot->col_name(), type_desc.type, slot->is_nullable());
         fields.emplace_back(std::move(field));
     }
-    return VectorizedSchema(std::move(fields), KeysType::PRIMARY_KEYS, {});
+    return Schema(std::move(fields), KeysType::PRIMARY_KEYS, {});
 }
 
-std::vector<ChunkIteratorPtrOr> MemStateTable::prefix_scan(const std::vector<DatumRow>& keys) const {
-    std::vector<ChunkIteratorPtrOr> ans;
-    ans.reserve(keys.size());
-    for (auto& key : keys) {
-        ans.emplace_back(prefix_scan(key));
-    }
-    return ans;
-}
-
-DatumRow MemStateTable::_make_datum_row(Chunk* chunk, size_t start, size_t end, int row_idx) {
+DatumRow MemStateTable::_make_datum_row(const ChunkPtr& chunk, size_t start, size_t end, int row_idx) {
     DatumRow row;
     for (size_t i = start; i < end; i++) {
         DCHECK_LT(i, chunk->num_columns());
@@ -147,7 +184,7 @@ DatumRow MemStateTable::_make_datum_row(Chunk* chunk, size_t start, size_t end, 
     return row;
 }
 
-DatumKeyRow MemStateTable::_make_datum_key_row(Chunk* chunk, size_t start, size_t end, int row_idx) {
+DatumKeyRow MemStateTable::_make_datum_key_row(const ChunkPtr& chunk, size_t start, size_t end, int row_idx) {
     DatumKeyRow row;
     for (size_t i = start; i < end; i++) {
         DCHECK_LT(i, chunk->num_columns());
@@ -157,16 +194,16 @@ DatumKeyRow MemStateTable::_make_datum_key_row(Chunk* chunk, size_t start, size_
     return row;
 }
 
-DatumKeyRow MemStateTable::_convert_datum_row_to_key(const DatumRow& row, size_t start, size_t end) {
+DatumKeyRow MemStateTable::_convert_columns_to_key(const Columns& cols, size_t idx) const {
     DatumKeyRow key_row;
-    for (size_t i = start; i < end; i++) {
-        auto datum = row[i];
+    for (size_t i = 0; i < cols.size(); i++) {
+        auto datum = cols[i]->get(idx);
         key_row.push_back(datum.convert2DatumKey());
     }
     return key_row;
 }
 
-Status MemStateTable::flush(RuntimeState* state, StreamChunk* chunk) {
+Status MemStateTable::write(RuntimeState* state, const StreamChunkPtr& chunk) {
     DCHECK(chunk);
     auto chunk_size = chunk->num_rows();
     if (StreamChunkConverter::has_ops_column(chunk)) {
@@ -190,6 +227,10 @@ Status MemStateTable::flush(RuntimeState* state, StreamChunk* chunk) {
             _kv_mapping[k] = std::move(v);
         }
     }
+    return Status::OK();
+}
+
+Status MemStateTable::reset_epoch(RuntimeState* state) {
     return Status::OK();
 }
 

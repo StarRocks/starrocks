@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <type_traits>
 #include <utility>
 
 #include "column/array_column.h"
@@ -23,6 +24,7 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
+#include "runtime/large_int_value.h"
 #include "runtime/types.h"
 
 namespace starrocks {
@@ -148,5 +150,50 @@ public:
 private:
     std::vector<std::unique_ptr<Expr>> _field_casts;
 };
+
+// cast NULL OR Boolean to ComplexType
+// For example.
+//  cast map{1: NULL} to map<int, ARRAY<int>>
+class MustNullExpr final : public Expr {
+public:
+    MustNullExpr(const TExprNode& node) : Expr(node) {}
+
+    MustNullExpr(const MustNullExpr& rhs) : Expr(rhs) {}
+
+    ~MustNullExpr() override = default;
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new MustNullExpr(*this)); }
+};
+
+/**
+ * Cast other type to string without float, double, string
+ */
+struct CastToString {
+    template <typename Type, typename ResultType>
+    static std::string apply(const Type& v) {
+        if constexpr (IsTemporal<Type>() || IsDecimal<Type>) {
+            // DateValue, TimestampValue, DecimalV2
+            return v.to_string();
+        } else if constexpr (IsInt128<Type>) {
+            // int128_t
+            return LargeIntValue::to_string(v);
+        } else {
+            // int8_t ~ int64_t, boolean
+            return SimpleItoa(v);
+        }
+    }
+
+    template <typename Type>
+    static bool constexpr extend_type() {
+        return (IsTemporal<Type>() || IsDecimal<Type> || IsInt128<Type>);
+    }
+};
+
+StatusOr<ColumnPtr> cast_nested_to_json(const ColumnPtr& column);
+
+// cast column[idx] to coresponding json type.
+StatusOr<std::string> cast_type_to_json_str(const ColumnPtr& column, int idx);
 
 } // namespace starrocks

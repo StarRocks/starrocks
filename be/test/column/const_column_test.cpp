@@ -18,6 +18,7 @@
 
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
+#include "column/json_column.h"
 #include "testutil/parallel_test.h"
 
 namespace starrocks {
@@ -352,6 +353,29 @@ PARALLEL_TEST(ConstColumnTest, test_replicate) {
 
     ASSERT_EQ(7, c2->size());
     ASSERT_EQ(1, c2->get(6).get_int32());
+}
+
+PARALLEL_TEST(ConstColumnTest, test_reference_memory_usage) {
+    {
+        auto create_int_const_column = [](int32_t value, size_t size) {
+            auto c = Int32Column::create();
+            c->append_numbers(&value, sizeof(value));
+            return ConstColumn::create(c, size);
+        };
+
+        auto column = create_int_const_column(1, 10);
+        ASSERT_EQ(0, column->reference_memory_usage());
+    }
+    {
+        auto create_json_const_column = [](const std::string& json_str, size_t size) {
+            auto c = JsonColumn::create();
+            auto json_value = JsonValue::parse(json_str).value();
+            c->append_datum(&json_value);
+            return ConstColumn::create(c, size);
+        };
+        auto column = create_json_const_column("1", 10);
+        ASSERT_EQ(2, column->reference_memory_usage());
+    }
 }
 
 } // namespace starrocks

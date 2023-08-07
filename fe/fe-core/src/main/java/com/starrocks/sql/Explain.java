@@ -29,6 +29,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
@@ -62,6 +63,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionTableScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
@@ -72,10 +74,12 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CloneOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
@@ -109,7 +113,12 @@ public class Explain {
     }
 
     public static CostEstimate buildCost(OptExpression optExpression) {
-        return CostModel.calculateCostEstimate(new ExpressionContext(optExpression));
+        CostEstimate totalCost = CostModel.calculateCostEstimate(new ExpressionContext(optExpression));
+        for (OptExpression child : optExpression.getInputs()) {
+            CostEstimate curCost = buildCost(child);
+            totalCost = CostEstimate.addCost(totalCost, curCost);
+        }
+        return totalCost;
     }
 
     private static class OperatorStr {
@@ -224,7 +233,7 @@ public class Explain {
             PhysicalIcebergScanOperator scan = (PhysicalIcebergScanOperator) optExpression.getOp();
 
             StringBuilder sb = new StringBuilder("- ICEBERG-SCAN [")
-                    .append(((IcebergTable) scan.getTable()).getTable())
+                    .append(((IcebergTable) scan.getTable()).getRemoteTableName())
                     .append("]")
                     .append(buildOutputColumns(scan,
                             "[" + scan.getOutputColumns().stream().map(new ExpressionPrinter()::print)
@@ -363,7 +372,7 @@ public class Explain {
                 HashDistributionDesc desc =
                         ((HashDistributionSpec) exchange.getDistributionSpec()).getHashDistributionDesc();
                 sb.append("- EXCHANGE(SHUFFLE) ");
-                sb.append(desc.getColumns());
+                sb.append(desc.getExplainInfo());
             } else {
                 sb.append("- EXCHANGE(").append(exchange.getDistributionSpec()).append(")");
             }
@@ -573,7 +582,8 @@ public class Explain {
                                                       OperatorPrinter.ExplainContext context) {
             PhysicalTableFunctionOperator tableFunction = (PhysicalTableFunctionOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("- TABLE FUNCTION [" + tableFunction.getFn().functionName() + "]");
-            sb.append(buildOutputColumns(tableFunction, "[" + tableFunction.getOutputColumns() + "]"));
+            sb.append(buildOutputColumns(tableFunction,
+                    "[" + new ColumnRefSet(tableFunction.getOutputColRefs()) + "]"));
             sb.append("\n");
 
             buildCostEstimate(sb, optExpression, context.step);
@@ -712,6 +722,22 @@ public class Explain {
 
             return new OperatorStr(sb.toString(), context.step, Collections.emptyList());
         }
+
+        @Override
+        public OperatorStr visitPhysicalTableFunctionTableScan(OptExpression optExpr, ExplainContext context) {
+            PhysicalTableFunctionTableScanOperator scan = (PhysicalTableFunctionTableScanOperator) optExpr.getOp();
+            StringBuilder sb = new StringBuilder("- TableFunctionScan[")
+                    .append(scan.getTable().toString())
+                    .append("]")
+                    .append(buildOutputColumns(scan,
+                            "[" + scan.getOutputColumns().stream().map(new ExpressionPrinter()::print)
+                                    .collect(Collectors.joining(", ")) + "]"))
+                    .append("\n");
+            buildCostEstimate(sb, optExpr, context.step);
+            buildCommonProperty(sb, scan, context.step);
+
+            return new OperatorStr(sb.toString(), context.step, Collections.emptyList());
+        }
     }
 
     public static class ExpressionPrinter
@@ -797,6 +823,11 @@ public class Explain {
         }
 
         @Override
+        public String visitCloneOperator(CloneOperator operator, Void context) {
+            return "CLONE(" + print(operator.getChild(0)) + ")";
+        }
+
+        @Override
         public String visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
             return print(predicate.getChild(0)) + " " + predicate.getBinaryType().toString() + " " +
                     print(predicate.getChild(1));
@@ -868,6 +899,7 @@ public class Explain {
             }
         }
 
+        @Override
         public String visitLikePredicateOperator(LikePredicateOperator predicate, Void context) {
             if (LikePredicateOperator.LikeType.LIKE.equals(predicate.getLikeType())) {
                 return print(predicate.getChild(0)) + " LIKE " + print(predicate.getChild(1));
@@ -876,10 +908,12 @@ public class Explain {
             return print(predicate.getChild(0)) + " REGEXP " + print(predicate.getChild(1));
         }
 
+        @Override
         public String visitCastOperator(CastOperator operator, Void context) {
             return "cast(" + print(operator.getChild(0)) + " as " + operator.getType().toSql() + ")";
         }
 
+        @Override
         public String visitCaseWhenOperator(CaseWhenOperator operator, Void context) {
             StringBuilder stringBuilder = new StringBuilder();
             stringBuilder.append("CASE ");
@@ -901,6 +935,11 @@ public class Explain {
 
             stringBuilder.append("END");
             return stringBuilder.toString();
+        }
+
+        @Override
+        public String visitDictMappingOperator(DictMappingOperator operator, Void context) {
+            return operator.toString();
         }
     }
 

@@ -20,10 +20,13 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.FieldId;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.parser.NodePosition;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -76,12 +79,28 @@ public class SelectRelation extends QueryRelation {
 
     private Map<Expr, FieldId> columnReferences;
 
+    /**
+     *  materializeExpressionToColumnRef stores the mapping relationship
+     *  between materialized expressions and materialized columns
+     */
+    private Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
+
     public SelectRelation(
             SelectList selectList,
             Relation fromRelation,
             Expr predicate,
             GroupByClause groupByClause,
             Expr having) {
+        this(selectList, fromRelation, predicate, groupByClause, having, NodePosition.ZERO);
+    }
+
+    public SelectRelation(
+            SelectList selectList,
+            Relation fromRelation,
+            Expr predicate,
+            GroupByClause groupByClause,
+            Expr having, NodePosition pos) {
+        super(pos);
         this.selectList = selectList;
         this.relation = fromRelation;
         this.predicate = predicate;
@@ -141,11 +160,9 @@ public class SelectRelation extends QueryRelation {
 
         this.columnReferences = analyzeState.getColumnReferences();
 
-        this.setScope(analyzeState.getOutputScope());
-    }
+        this.generatedExprToColumnRef = analyzeState.getGeneratedExprToColumnRef();
 
-    public List<Expr> getOutputExpr() {
-        return outputExpr;
+        this.setScope(analyzeState.getOutputScope());
     }
 
     public Expr getPredicate() {
@@ -286,12 +303,12 @@ public class SelectRelation extends QueryRelation {
                 || (orderByAnalytic != null && orderByAnalytic.size() > 0);
     }
 
-    public List<OrderByElement> getSortClause() {
-        return sortClause;
-    }
-
     @Override
     public List<Expr> getOutputExpression() {
         return outputExpr;
+    }
+
+    public Map<Expr, SlotRef> getGeneratedExprToColumnRef() {
+        return generatedExprToColumnRef;
     }
 }

@@ -109,7 +109,7 @@ string DelVector::to_string() const {
 void DelVector::_update_stats() {
     // TODO(cbl): optimization
     if (_roaring) {
-        roaring_statistics_t st;
+        roaring::api::roaring_statistics_t st;
         roaring_bitmap_statistics(&_roaring->roaring, &st);
         _memory_usage = st.n_bytes_array_containers + st.n_bytes_bitset_containers + st.n_bytes_run_containers;
         //_memory_usage = _roaring->getSizeInBytes(false);
@@ -118,6 +118,14 @@ void DelVector::_update_stats() {
         _memory_usage = 0;
         _cardinality = 0;
     }
+}
+
+void DelVector::copy_from(const DelVector& delvec) {
+    _loaded = delvec._loaded;
+    _version = delvec._version;
+    _cardinality = delvec._cardinality;
+    _memory_usage = delvec._memory_usage;
+    _roaring = std::make_unique<Roaring>(*delvec._roaring);
 }
 
 } // namespace starrocks

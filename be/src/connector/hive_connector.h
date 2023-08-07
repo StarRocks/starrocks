@@ -16,6 +16,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
+#include "exec/connector_scan_node.h"
 #include "exec/hdfs_scanner.h"
 
 namespace starrocks::connector {
@@ -39,6 +40,7 @@ public:
     friend class HiveDataSource;
     HiveDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node);
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
+    const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 
 protected:
     ConnectorScanNode* _scan_node;
@@ -53,11 +55,17 @@ public:
     Status open(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
+    const std::string get_custom_coredump_msg() const override;
+    std::atomic<int32_t>* get_lazy_column_coalesce_counter() {
+        return _provider->_scan_node->get_lazy_column_coalesce_counter();
+    }
 
     int64_t raw_rows_read() const override;
     int64_t num_rows_read() const override;
     int64_t num_bytes_read() const override;
     int64_t cpu_time_spent() const override;
+    int64_t io_time_spent() const override;
+    int64_t estimated_mem_usage() const override;
 
 private:
     const HiveDataSourceProvider* _provider;
@@ -65,12 +73,16 @@ private:
 
     // ============= init func =============
     Status _init_conjunct_ctxs(RuntimeState* state);
+    void _update_has_any_predicate();
     Status _decompose_conjunct_ctxs(RuntimeState* state);
     void _init_tuples_and_slots(RuntimeState* state);
     void _init_counter(RuntimeState* state);
 
     Status _init_partition_values();
     Status _init_scanner(RuntimeState* state);
+    HdfsScanner* _create_hudi_jni_scanner();
+    HdfsScanner* _create_paimon_jni_scanner(FSOptions& options);
+    Status _check_all_slots_nullable();
 
     // =====================================
     ObjectPool _pool;
@@ -88,7 +100,7 @@ private:
     // 1. conjuncts that column is not exist in file, are used to filter file in file reader.
     // 2. conjuncts that column is materialized, are evaled in group reader.
     std::unordered_map<SlotId, std::vector<ExprContext*>> _conjunct_ctxs_by_slot;
-    std::unordered_set<SlotId> _conjunct_slots;
+    std::unordered_set<SlotId> _slots_in_conjunct;
 
     // partition conjuncts of each partition slot.
     std::vector<ExprContext*> _partition_conjunct_ctxs;
@@ -115,6 +127,8 @@ private:
 
     std::vector<std::string> _hive_column_names;
     bool _case_sensitive = false;
+    bool _can_use_any_column = false;
+    bool _can_use_min_max_count_opt = false;
     const HiveTableDescriptor* _hive_table = nullptr;
 
     // ======================================

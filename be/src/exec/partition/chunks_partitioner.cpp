@@ -18,7 +18,7 @@
 
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -34,48 +34,22 @@ ChunksPartitioner::ChunksPartitioner(const bool has_nullable_partition_column,
 Status ChunksPartitioner::prepare(RuntimeState* state) {
     _state = state;
     _mem_pool = std::make_unique<MemPool>();
-    _obj_pool = state->obj_pool();
+    _obj_pool = std::make_unique<ObjectPool>();
     _init_hash_map_variant();
     return Status::OK();
 }
 
-Status ChunksPartitioner::offer(const ChunkPtr& chunk) {
-    DCHECK(!_partition_it.has_value());
-
-    if (!_is_downgrade) {
-        for (size_t i = 0; i < _partition_exprs.size(); i++) {
-            ASSIGN_OR_RETURN(_partition_columns[i], _partition_exprs[i]->evaluate(chunk.get()));
-        }
-    }
-
-    if (false) {
-    }
-#define HASH_MAP_METHOD(NAME)                                                                          \
-    else if (_hash_map_variant.type == PartitionHashMapVariant::Type::NAME) {                          \
-        TRY_CATCH_BAD_ALLOC(_split_chunk_by_partition<decltype(_hash_map_variant.NAME)::element_type>( \
-                *_hash_map_variant.NAME, chunk));                                                      \
-    }
-    APPLY_FOR_PARTITION_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-
-    return Status::OK();
-}
-
-ChunkPtr ChunksPartitioner::consume_from_downgrade_buffer() {
+ChunkPtr ChunksPartitioner::consume_from_passthrough_buffer() {
     ChunkPtr chunk = nullptr;
-    if (_downgrade_buffer.empty()) {
+    if (_passthrough_buffer.empty()) {
         return chunk;
     }
     {
         std::lock_guard<std::mutex> l(_buffer_lock);
-        chunk = _downgrade_buffer.front();
-        _downgrade_buffer.pop();
+        chunk = _passthrough_buffer.front();
+        _passthrough_buffer.pop();
     }
     return chunk;
-}
-
-int32_t ChunksPartitioner::num_partitions() {
-    return _hash_map_variant.size();
 }
 
 bool ChunksPartitioner::_is_partition_columns_fixed_size(const std::vector<ExprContext*>& partition_expr_ctxs,
@@ -90,8 +64,8 @@ bool ChunksPartitioner::_is_partition_columns_fixed_size(const std::vector<ExprC
             *has_null = true;
             size += 1; // 1 bytes for  null flag.
         }
-        LogicalType ptype = ctx->root()->type().type;
-        size_t byte_size = get_size_of_fixed_length_type(ptype);
+        LogicalType ltype = ctx->root()->type().type;
+        size_t byte_size = get_size_of_fixed_length_type(ltype);
         if (byte_size == 0) return false;
         size += byte_size;
     }
@@ -191,14 +165,11 @@ void ChunksPartitioner::_init_hash_map_variant() {
     }
     _hash_map_variant.init(_state, type);
 
-#define SET_FIXED_SLICE_HASH_MAP_FIELD(TYPE)                       \
-    if (type == PartitionHashMapVariant::Type::TYPE) {             \
-        _hash_map_variant.TYPE->has_null_column = has_null_column; \
-        _hash_map_variant.TYPE->fixed_byte_size = fixed_byte_size; \
-    }
-    SET_FIXED_SLICE_HASH_MAP_FIELD(phase1_slice_fx4);
-    SET_FIXED_SLICE_HASH_MAP_FIELD(phase1_slice_fx8);
-    SET_FIXED_SLICE_HASH_MAP_FIELD(phase1_slice_fx16);
-#undef SET_FIXED_SLICE_HASH_MAP_FIELD
+    _hash_map_variant.visit([&](auto& hash_map_with_key) {
+        if constexpr (std::decay_t<decltype(*hash_map_with_key)>::is_fixed_length_slice) {
+            hash_map_with_key->has_null_column = has_null_column;
+            hash_map_with_key->fixed_byte_size = fixed_byte_size;
+        }
+    });
 }
 } // namespace starrocks

@@ -49,9 +49,10 @@ import java.util.List;
 public class LoadProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("JobId").add("Label").add("State").add("Progress")
-            .add("Type").add("Priority").add("EtlInfo").add("TaskInfo").add("ErrorMsg").add("CreateTime")
+            .add("Type").add("Priority").add("ScanRows").add("FilteredRows").add("UnselectedRows")
+            .add("SinkRows").add("EtlInfo").add("TaskInfo").add("ErrorMsg").add("CreateTime")
             .add("EtlStartTime").add("EtlFinishTime").add("LoadStartTime").add("LoadFinishTime")
-            .add("URL").add("JobDetails")
+            .add("TrackingSQL").add("JobDetails")
             .build();
 
     // label and state column index of result
@@ -75,7 +76,7 @@ public class LoadProcDir implements ProcDirInterface {
 
         // merge load job from load and loadManager
         LinkedList<List<Comparable>> loadJobInfos = Lists.newLinkedList();
-        loadJobInfos.addAll(GlobalStateMgr.getCurrentState().getLoadManager().getLoadJobInfosByDb(db.getId(), null,
+        loadJobInfos.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobInfosByDb(db.getId(), null,
                 false,
                 null));
         int counter = 0;

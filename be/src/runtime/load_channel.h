@@ -65,12 +65,18 @@ class LoadChannel;
 class LoadChannelMgr;
 class OlapTableSchemaParam;
 
+namespace lake {
+class TabletManager;
+}
+
 // A LoadChannel manages tablets channels for all indexes
 // corresponding to a certain load job
 class LoadChannel {
+    using LakeTabletManager = lake::TabletManager;
+
 public:
-    LoadChannel(LoadChannelMgr* mgr, const UniqueId& load_id, const std::string& txn_trace_parent, int64_t timeout_s,
-                std::unique_ptr<MemTracker> mem_tracker);
+    LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr, const UniqueId& load_id,
+                const std::string& txn_trace_parent, int64_t timeout_s, std::unique_ptr<MemTracker> mem_tracker);
 
     ~LoadChannel();
 
@@ -92,7 +98,7 @@ public:
 
     void abort();
 
-    void abort(int64_t index_id, const std::vector<int64_t>& tablet_ids);
+    void abort(int64_t index_id, const std::vector<int64_t>& tablet_ids, const std::string& reason);
 
     time_t last_updated_time() const { return _last_updated_time.load(std::memory_order_relaxed); }
 
@@ -114,6 +120,7 @@ private:
     Status _deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer);
 
     LoadChannelMgr* _load_mgr;
+    LakeTabletManager* _lake_tablet_mgr;
     UniqueId _load_id;
     int64_t _timeout_s;
     std::atomic<bool> _has_chunk_meta;

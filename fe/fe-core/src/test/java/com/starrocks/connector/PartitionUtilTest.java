@@ -20,15 +20,16 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.BoolLiteral;
+import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetaClient;
@@ -40,6 +41,7 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -103,6 +105,19 @@ public class PartitionUtilTest {
     }
 
     @Test
+    public void testHiveTimestampPartitionNames() throws AnalysisException {
+        List<String> partitionValues = Lists.newArrayList("2007-01-01 10:35:00.0", "2007-01-01 10:35:00.123");
+        List<Column> columns = new ArrayList<>();
+        columns.add(new Column("a", Type.fromPrimitiveType(PrimitiveType.DATETIME)));
+        columns.add(new Column("b", Type.fromPrimitiveType(PrimitiveType.DATETIME)));
+
+        PartitionKey partitionKey = PartitionUtil.createPartitionKey(partitionValues, columns, Table.TableType.HIVE);
+        List<String> res = PartitionUtil.fromPartitionKey(partitionKey);
+        Assert.assertEquals("2007-01-01 10:35:00.0", res.get(0));
+        Assert.assertEquals("2007-01-01 10:35:00.123", res.get(1));
+    }
+
+    @Test
     public void testHivePartitionNames() {
         List<String> partitionValues = Lists.newArrayList("1", "2", "3");
         String partitionNames = "a=1/b=2/c=3";
@@ -140,15 +155,20 @@ public class PartitionUtilTest {
     }
 
     @Test
-    public void testGetPartitionRange(@Mocked Table table) throws UserException {
+    public void testGetPartitionRange(@Mocked HiveTable table) throws UserException {
         Column partitionColumn = new Column("date", Type.DATE);
         List<String> partitionNames = ImmutableList.of("date=2022-08-02", "date=2022-08-19", "date=2022-08-21",
                 "date=2022-09-01", "date=2022-10-01", "date=2022-12-02");
 
         new MockUp<PartitionUtil>() {
             @Mock
-            public Pair<List<String>, List<Column>> getPartitionNamesAndColumns(Table table) {
-                return Pair.create(partitionNames, ImmutableList.of(partitionColumn));
+            public List<String> getPartitionNames(Table table) {
+                return partitionNames;
+            }
+
+            @Mock
+            public List<Column> getPartitionColumns(Table table) {
+                return ImmutableList.of(partitionColumn);
             }
         };
         new Expectations() {
@@ -163,9 +183,11 @@ public class PartitionUtilTest {
             }
         };
 
-        Map<String, Range<PartitionKey>> partitionMap = PartitionUtil.getPartitionRange(table, partitionColumn);
+        Map<String, Range<PartitionKey>> partitionMap = PartitionUtil.getPartitionKeyRange(table, partitionColumn);
         Assert.assertEquals(partitionMap.size(), partitionNames.size());
         Assert.assertTrue(partitionMap.containsKey("p20221202"));
-        Assert.assertTrue(partitionMap.get("p20221202").upperEndpoint().isMaxValue());
+        PartitionKey upperBound = new PartitionKey();
+        upperBound.pushColumn(new DateLiteral(2022, 12, 03), PrimitiveType.DATE);
+        Assert.assertTrue(partitionMap.get("p20221202").upperEndpoint().equals(upperBound));
     }
 }

@@ -7,7 +7,7 @@ View all compute nodes in your StarRocks cluster.
 ## Syntax
 
 ```SQL
-SHOW COMPUTE NODES;
+SHOW COMPUTE NODES
 ```
 
 ## Output

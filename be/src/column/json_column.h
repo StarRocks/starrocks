@@ -42,10 +42,14 @@ public:
     int compare_at(size_t left, size_t right, const starrocks::Column& rhs, int nan_direction_hint) const override;
     void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
     void put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx) const override;
-    std::string debug_item(uint32_t idx) const override;
+    std::string debug_item(size_t idx) const override;
     std::string get_name() const override;
 
-private:
+    const uint8_t* deserialize_and_append(const uint8_t* pos) override;
+    uint32_t serialize_size(size_t idx) const override;
+    uint32_t serialize(size_t idx, uint8_t* pos) override;
+    void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
+                         uint32_t max_one_row_size) override;
 };
 
 } // namespace starrocks

@@ -34,9 +34,7 @@
 
 package com.starrocks.qe;
 
-import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -46,9 +44,9 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.iceberg.StarRocksIcebergException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.mysql.MysqlChannel;
@@ -59,12 +57,15 @@ import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.MysqlServerStatusFlag;
 import com.starrocks.plugin.AuditEvent.EventType;
 import com.starrocks.proto.PQueryStatistics;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TMasterOpRequest;
@@ -81,6 +82,7 @@ import java.nio.channels.AsynchronousCloseException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 
@@ -90,10 +92,10 @@ import java.util.Optional;
 public class ConnectProcessor {
     private static final Logger LOG = LogManager.getLogger(ConnectProcessor.class);
 
-    private final ConnectContext ctx;
+    protected final ConnectContext ctx;
     private ByteBuffer packetBuf;
 
-    private StmtExecutor executor = null;
+    protected StmtExecutor executor = null;
 
     public ConnectProcessor(ConnectContext context) {
         this.ctx = context;
@@ -105,9 +107,13 @@ public class ConnectProcessor {
         try {
             String[] parts = identifier.trim().split("\\s+");
             if (parts.length == 2) {
-                Preconditions.checkState(parts[0].equalsIgnoreCase("catalog"),
-                        "You might want to use \"USE 'CATALOG <catalog_name>'\"");
-                ctx.getGlobalStateMgr().changeCatalog(ctx, parts[1]);
+                if (parts[0].equalsIgnoreCase("catalog")) {
+                    ctx.getGlobalStateMgr().changeCatalog(ctx, parts[1]);
+                } else if (parts[0].equalsIgnoreCase("warehouse")) {
+                    ctx.getGlobalStateMgr().changeWarehouse(ctx, parts[1]);
+                } else {
+                    ctx.getState().setError("not supported command");
+                }
             } else {
                 ctx.getGlobalStateMgr().changeCatalogDb(ctx, identifier);
             }
@@ -204,18 +210,22 @@ public class ConnectProcessor {
 
         if (!ctx.getState().isQuery() && (parsedStmt != null && parsedStmt.needAuditEncryption())) {
             // Some information like username, password in the stmt should not be printed.
-            ctx.getAuditEventBuilder().setStmt(AstToStringBuilder.toString(parsedStmt));
-        } else if (ctx.getState().isQuery() && containsComment(origStmt)) {
-            // avoid audit log can't replay
+            ctx.getAuditEventBuilder().setStmt(AstToSQLBuilder.toSQL(parsedStmt));
+        } else if (parsedStmt == null) {
+            // invalid sql, record the original statement to avoid audit log can't replay
             ctx.getAuditEventBuilder().setStmt(origStmt);
         } else {
-            ctx.getAuditEventBuilder().setStmt(origStmt.replace("\n", " "));
+            ctx.getAuditEventBuilder().setStmt(LogUtil.removeCommentAndLineSeparator(origStmt));
         }
 
         GlobalStateMgr.getCurrentAuditEventProcessor().handleAuditEvent(ctx.getAuditEventBuilder().build());
     }
 
     public String computeStatementDigest(StatementBase queryStmt) {
+        if (queryStmt == null) {
+            return "";
+        }
+
         String digest = SqlDigestBuilder.build(queryStmt);
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
@@ -231,7 +241,7 @@ public class ConnectProcessor {
         return (sql.contains("--")) || sql.contains("#");
     }
 
-    private void addFinishedQueryDetail() {
+    protected void addFinishedQueryDetail() {
         if (!Config.enable_collect_query_detail_info) {
             return;
         }
@@ -252,14 +262,30 @@ public class ConnectProcessor {
         queryDetail.setEndTime(endTime);
         queryDetail.setLatency(elapseMs);
         queryDetail.setResourceGroupName(ctx.getResourceGroup() != null ? ctx.getResourceGroup().getName() : "");
+        // add execution statistics into queryDetail
+        queryDetail.setReturnRows(ctx.getReturnRows());
+        PQueryStatistics statistics = executor.getQueryStatisticsForAuditLog();
+        if (statistics != null) {
+            queryDetail.setScanBytes(statistics.scanBytes);
+            queryDetail.setScanRows(statistics.scanRows);
+            queryDetail.setCpuCostNs(statistics.cpuCostNs == null ? -1 : statistics.cpuCostNs);
+            queryDetail.setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
+        }
+
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail);
     }
 
-    private void addRunningQueryDetail(StatementBase parsedStmt) {
+    protected void addRunningQueryDetail(StatementBase parsedStmt) {
         if (!Config.enable_collect_query_detail_info) {
             return;
         }
-        String sql = parsedStmt.getOrigStmt().originStmt;
+        String sql;
+        if (!ctx.getState().isQuery() && parsedStmt.needAuditEncryption()) {
+            sql = AstToStringBuilder.toString(parsedStmt);
+        } else {
+            sql = parsedStmt.getOrigStmt().originStmt;
+        }
+
         boolean isQuery = parsedStmt instanceof QueryStatement;
         QueryDetail queryDetail = new QueryDetail(
                 DebugUtil.printId(ctx.getQueryId()),
@@ -279,7 +305,7 @@ public class ConnectProcessor {
     }
 
     // process COM_QUERY statement,
-    private void handleQuery() {
+    protected void handleQuery() {
         MetricRepo.COUNTER_REQUEST_ALL.increase(1L);
         // convert statement to Java string
         String originStmt = null;
@@ -352,14 +378,14 @@ public class ConnectProcessor {
             LOG.warn("Process one query failed because IOException: ", e);
             ctx.getState().setError("StarRocks process failed");
         } catch (UserException e) {
-            LOG.warn("Process one query failed because.", e);
+            LOG.warn("Process one query failed. SQL: " + originStmt + ", because.", e);
             ctx.getState().setError(e.getMessage());
             // set is as ANALYSIS_ERR so that it won't be treated as a query failure.
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
         } catch (Throwable e) {
             // Catch all throwable.
             // If reach here, maybe StarRocks bug.
-            LOG.warn("Process one query failed because unknown reason: ", e);
+            LOG.warn("Process one query failed. SQL: " + originStmt + ", because unknown reason: ", e);
             ctx.getState().setError("Unexpected exception: " + e.getMessage());
             if (parsedStmt instanceof KillStmt) {
                 // ignore kill stmt execute err(not monitor it)
@@ -415,9 +441,6 @@ public class ConnectProcessor {
                 serializer.writeField(db.getOriginName(), table.getName(), column, true);
                 channel.sendOnePacket(serializer.toByteBuffer());
             }
-
-        } catch (StarRocksIcebergException e) {
-            LOG.error("errors happened when getting Iceberg table {}", tableName, e);
         } catch (StarRocksConnectorException e) {
             LOG.error("errors happened when getting table {}", tableName, e);
         } finally {
@@ -432,7 +455,7 @@ public class ConnectProcessor {
         if (command == null) {
             ErrorReport.report(ErrorCode.ERR_UNKNOWN_COM_ERROR);
             ctx.getState().setError("Unknown command(" + command + ")");
-            LOG.warn("Unknown command(" + command + ")");
+            LOG.debug("Unknown MySQL protocol command");
             return;
         }
         ctx.setCommand(command);
@@ -465,7 +488,7 @@ public class ConnectProcessor {
                 break;
             default:
                 ctx.getState().setError("Unsupported command(" + command + ")");
-                LOG.warn("Unsupported command(" + command + ")");
+                LOG.debug("Unsupported command: {}", command);
                 break;
         }
     }
@@ -545,6 +568,18 @@ public class ConnectProcessor {
     }
 
     public TMasterOpResult proxyExecute(TMasterOpRequest request) {
+        ctx.setCurrentCatalog(request.catalog);
+        if (ctx.getCurrentCatalog() == null) {
+            // if we upgrade Master FE first, the request from old FE does not set "catalog".
+            // so ctx.getCurrentCatalog() will get null,
+            // return error directly.
+            TMasterOpResult result = new TMasterOpResult();
+            ctx.getState().setError(
+                    "Missing current catalog. You need to upgrade this Frontend to the same version as Leader Frontend.");
+            result.setMaxJournalId(GlobalStateMgr.getCurrentState().getMaxJournalId());
+            result.setPacket(getResultPacket());
+            return result;
+        }
         ctx.setDatabase(request.db);
         ctx.setQualifiedUser(request.user);
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -571,6 +606,14 @@ public class ConnectProcessor {
             UserIdentity currentUserIdentity = UserIdentity.fromThrift(request.getCurrent_user_ident());
             ctx.setCurrentUserIdentity(currentUserIdentity);
         }
+
+        if (request.isSetUser_roles()) {
+            List<Long> roleIds = request.getUser_roles().getRole_id_list();
+            ctx.setCurrentRoleIds(new HashSet<>(roleIds));
+        } else {
+            ctx.setCurrentRoleIds(new HashSet<>());
+        }
+
         if (request.isSetIsLastStmt()) {
             ctx.setIsLastStmt(request.isIsLastStmt());
         } else {
@@ -685,7 +728,7 @@ public class ConnectProcessor {
         try {
             packetBuf = channel.fetchOnePacket();
             if (packetBuf == null) {
-                throw new IOException("Error happened when receiving packet.");
+                throw new RpcException(ctx.getRemoteIP(), "Error happened when receiving packet.");
             }
         } catch (AsynchronousCloseException e) {
             // when this happened, timeout checker close this channel
@@ -705,6 +748,10 @@ public class ConnectProcessor {
         while (!ctx.isKilled()) {
             try {
                 processOnce();
+            } catch (RpcException rpce) {
+                LOG.debug("Exception happened in one session(" + ctx + ").", rpce);
+                ctx.setKilled();
+                break;
             } catch (Exception e) {
                 // TODO(zhaochun): something wrong
                 LOG.warn("Exception happened in one seesion(" + ctx + ").", e);

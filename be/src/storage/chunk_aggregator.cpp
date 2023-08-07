@@ -21,8 +21,8 @@
 
 namespace starrocks {
 
-ChunkAggregator::ChunkAggregator(const starrocks::VectorizedSchema* schema, uint32_t reserve_rows,
-                                 uint32_t max_aggregate_rows, double factor, bool is_vertical_merge, bool is_key)
+ChunkAggregator::ChunkAggregator(const starrocks::Schema* schema, uint32_t reserve_rows, uint32_t max_aggregate_rows,
+                                 double factor, bool is_vertical_merge, bool is_key)
         : _schema(schema),
           _reserve_rows(reserve_rows),
           _max_aggregate_rows(max_aggregate_rows),
@@ -34,9 +34,6 @@ ChunkAggregator::ChunkAggregator(const starrocks::VectorizedSchema* schema, uint
     // ensure that the key fields are sorted by id and placed before others.
     for (size_t i = 0; i < _schema->num_key_fields(); i++) {
         CHECK(_schema->field(i)->is_key());
-    }
-    for (size_t i = 0; i + 1 < _schema->num_key_fields(); i++) {
-        CHECK_LT(_schema->field(i)->id(), _schema->field(i + 1)->id());
     }
 #endif
     _key_fields = _schema->num_key_fields();
@@ -63,14 +60,14 @@ ChunkAggregator::ChunkAggregator(const starrocks::VectorizedSchema* schema, uint
     aggregate_reset();
 }
 
-ChunkAggregator::ChunkAggregator(const VectorizedSchema* schema, uint32_t max_aggregate_rows, double factor)
+ChunkAggregator::ChunkAggregator(const Schema* schema, uint32_t max_aggregate_rows, double factor)
         : ChunkAggregator(schema, max_aggregate_rows, max_aggregate_rows, factor, false, false) {}
 
-ChunkAggregator::ChunkAggregator(const VectorizedSchema* schema, uint32_t reserve_rows, uint32_t max_aggregate_rows,
+ChunkAggregator::ChunkAggregator(const Schema* schema, uint32_t reserve_rows, uint32_t max_aggregate_rows,
                                  double factor)
         : ChunkAggregator(schema, reserve_rows, max_aggregate_rows, factor, false, false) {}
 
-ChunkAggregator::ChunkAggregator(const VectorizedSchema* schema, uint32_t max_aggregate_rows, double factor,
+ChunkAggregator::ChunkAggregator(const Schema* schema, uint32_t max_aggregate_rows, double factor,
                                  bool is_vertical_merge, bool is_key)
         : ChunkAggregator(schema, max_aggregate_rows, max_aggregate_rows, factor, is_vertical_merge, is_key) {}
 
@@ -202,8 +199,8 @@ void ChunkAggregator::aggregate_reset() {
     }
     _has_aggregate = false;
 
-    _element_memory_usage = 0;
-    _element_memory_usage_num_rows = 0;
+    _reference_memory_usage = 0;
+    _reference_memory_usage_num_rows = 0;
     _bytes_usage = 0;
     _bytes_usage_num_rows = 0;
 }
@@ -232,16 +229,16 @@ size_t ChunkAggregator::memory_usage() {
     }
     --num_rows;
 
-    if (_element_memory_usage_num_rows == num_rows) {
-        return container_memory_usage + _element_memory_usage;
-    } else if (_element_memory_usage_num_rows > num_rows) {
-        _element_memory_usage_num_rows = 0;
-        _element_memory_usage = 0;
+    if (_reference_memory_usage_num_rows == num_rows) {
+        return container_memory_usage + _reference_memory_usage;
+    } else if (_reference_memory_usage_num_rows > num_rows) {
+        _reference_memory_usage_num_rows = 0;
+        _reference_memory_usage = 0;
     }
-    _element_memory_usage += _aggregate_chunk->element_memory_usage(_element_memory_usage_num_rows,
-                                                                    num_rows - _element_memory_usage_num_rows);
-    _element_memory_usage_num_rows = num_rows;
-    return container_memory_usage + _element_memory_usage;
+    _reference_memory_usage += _aggregate_chunk->reference_memory_usage(_reference_memory_usage_num_rows,
+                                                                        num_rows - _reference_memory_usage_num_rows);
+    _reference_memory_usage_num_rows = num_rows;
+    return container_memory_usage + _reference_memory_usage;
 }
 
 size_t ChunkAggregator::bytes_usage() {

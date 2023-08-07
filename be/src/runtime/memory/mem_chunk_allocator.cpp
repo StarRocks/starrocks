@@ -44,6 +44,7 @@
 #include "util/bit_util.h"
 #include "util/cpu_info.h"
 #include "util/defer_op.h"
+#include "util/failpoint/fail_point.h"
 #include "util/runtime_profile.h"
 #include "util/spinlock.h"
 #include "util/starrocks_metrics.h"
@@ -146,13 +147,18 @@ MemChunkAllocator::MemChunkAllocator(MemTracker* mem_tracker, size_t reserve_lim
 }
 
 bool MemChunkAllocator::allocate(size_t size, MemChunk* chunk) {
+    FAIL_POINT_TRIGGER_RETURN(random_error, false);
     bool ret = true;
 #ifndef BE_TEST
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
     DeferOp op([&] {
         if (ret) {
-            _mem_tracker->release(chunk->size);
-            prev_tracker->consume(chunk->size);
+            if (LIKELY(_mem_tracker != nullptr)) {
+                _mem_tracker->release(chunk->size);
+            }
+            if (LIKELY(prev_tracker != nullptr)) {
+                prev_tracker->consume(chunk->size);
+            }
         }
         tls_thread_status.set_mem_tracker(prev_tracker);
     });
@@ -205,8 +211,12 @@ void MemChunkAllocator::free(const MemChunk& chunk) {
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
     DeferOp op([&] {
         int64_t chunk_size = chunk.size;
-        prev_tracker->release(chunk_size);
-        _mem_tracker->consume(chunk_size);
+        if (LIKELY(prev_tracker != nullptr)) {
+            prev_tracker->release(chunk_size);
+        }
+        if (LIKELY(_mem_tracker != nullptr)) {
+            _mem_tracker->consume(chunk_size);
+        }
         tls_thread_status.set_mem_tracker(prev_tracker);
     });
 #endif

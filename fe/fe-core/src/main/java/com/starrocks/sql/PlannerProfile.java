@@ -16,8 +16,12 @@ package com.starrocks.sql;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
+import com.google.common.collect.Maps;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.StatementBase;
+import org.apache.hadoop.util.Lists;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -31,6 +35,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static com.starrocks.connector.RemoteFileOperations.HMS_PARTITIONS_REMOTE_FILES;
 import static com.starrocks.connector.hive.HiveMetastoreOperations.BACKGROUND_THREAD_NAME_PREFIX;
 
 /**
@@ -113,7 +118,42 @@ public class PlannerProfile {
         }
     }
 
+    public static class LogTracer {
+        private final String name;
+        // To avoid logs too large, restrict the logs' size for each tracer.
+        private static final int MAX_LOG_SIZE = 128;
+        // Container to store the trace logs.
+        private final List<String> logs = Collections.synchronizedList(Lists.newLinkedList());
+
+        public LogTracer(String name) {
+            this.name = name;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public void log(String content) {
+            if (logs.size() >= MAX_LOG_SIZE) {
+                return;
+            }
+            this.logs.add(content);
+        }
+
+        public List<String> getLogs() {
+            return this.logs;
+        }
+
+        public String toString(String name) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("-- [TRACE: " + name + "]\n");
+            this.logs.stream().forEach(log -> sb.append("   " + log + "\n"));
+            return sb.toString();
+        }
+    }
+
     private final Map<String, ScopedTimer> timers = new ConcurrentHashMap<>();
+    private final Map<String, LogTracer> tracers = Collections.synchronizedMap(Maps.newLinkedHashMap());
     private final Map<String, String> customProperties = new ConcurrentHashMap<>();
     private final Map<String, Long> timePoint = new ConcurrentHashMap<>();
     private final AtomicInteger orders = new AtomicInteger();
@@ -128,12 +168,14 @@ public class PlannerProfile {
     }
 
     public static ScopedTimer getScopedTimer(String name) {
-        // to avoid null.
-        PlannerProfile p = new PlannerProfile();
         ConnectContext ctx = ConnectContext.get();
-        if (ctx != null) {
-            p = ctx.getPlannerProfile();
+        if (ctx == null || ctx.getPlannerProfile() == null ||
+                (ctx.getExplainLevel() != StatementBase.ExplainLevel.OPTIMIZER &&
+                        !ctx.getSessionVariable().isEnableProfile())) {
+            return null;
         }
+
+        PlannerProfile p = ctx.getPlannerProfile();
         ScopedTimer t = p.getOrCreateScopedTimer(name);
         t.start();
         return t;
@@ -145,7 +187,13 @@ public class PlannerProfile {
         if (ctx != null) {
             p = ctx.getPlannerProfile();
         }
-        p.customProperties.put(name, value);
+        if (name.equals(HMS_PARTITIONS_REMOTE_FILES) && p.customProperties.containsKey(HMS_PARTITIONS_REMOTE_FILES)) {
+            int currentSize = Integer.parseInt(p.customProperties.get(HMS_PARTITIONS_REMOTE_FILES));
+            int addedSize = Integer.parseInt(value);
+            p.customProperties.put(name, String.valueOf(currentSize + addedSize));
+        } else {
+            p.customProperties.put(name, value);
+        }
 
         String threadName = Thread.currentThread().getName();
         if (threadName.startsWith(BACKGROUND_THREAD_NAME_PREFIX)) {
@@ -226,6 +274,7 @@ public class PlannerProfile {
 
     public void reset() {
         timers.clear();
+        tracers.clear();
         customProperties.clear();
     }
 
@@ -239,15 +288,52 @@ public class PlannerProfile {
 
     private static String print(String name, long point, ScopedTimer timer) {
         return String.format("%8dms|", point) + String.join("", Collections.nCopies(timer.level, "    "))
-                + "-- " + name + "[" + timer.getTotalCount() + "] " + timer.getTotalTime() + "ms\n";
+                + "-- " + name + "[" + timer.getTotalCount() + "] "
+                + DebugUtil.getPrettyStringMs(timer.getTotalTime()) + "\n";
     }
 
-    public static String printPlannerTimeCost(PlannerProfile profile) {
+    public static String printPlannerTimer(PlannerProfile profile) {
         StringBuilder trace = new StringBuilder();
         Map<String, PlannerProfile.ScopedTimer> times = profile.getTimers();
 
         times.entrySet().stream().sorted(Comparator.comparingInt(o -> o.getValue().order)).forEach(
                 entry -> trace.append(print(entry.getKey(), profile.timePoint.get(entry.getKey()), entry.getValue())));
         return trace.toString();
+    }
+
+    ///// LOG TRACER /////
+    private LogTracer getOrCreateLogTracer(String name) {
+        return tracers.computeIfAbsent(name, key -> new LogTracer(name));
+    }
+
+    public Map<String, LogTracer> getTracers() {
+        return tracers;
+    }
+
+    /**
+     * Callers should take care the result of this method may be null because tracer is only
+     * enabled when trace command or profile is enabled.
+     *
+     * @param name : tracer's name to display.
+     * @return
+     */
+    public static LogTracer getLogTracer(String name) {
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx == null || ctx.getPlannerProfile() == null ||
+                ctx.getExplainLevel() != StatementBase.ExplainLevel.REWRITE) {
+            return null;
+        }
+
+        PlannerProfile p = ctx.getPlannerProfile();
+        return p.getOrCreateLogTracer(name);
+    }
+
+    public static String printPlannerTrace(PlannerProfile profile) {
+        StringBuilder sb = new StringBuilder();
+        Map<String, LogTracer> traces = profile.getTracers();
+        traces.entrySet().stream()
+                .forEach(entry ->
+                        sb.append(entry.getValue().toString(entry.getKey())));
+        return sb.toString();
     }
 }

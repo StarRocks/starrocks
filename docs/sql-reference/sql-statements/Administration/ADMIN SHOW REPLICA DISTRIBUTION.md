@@ -7,7 +7,7 @@ This statement is used to show the distribution status of a table or a partition
 Syntax:
 
 ```sql
-ADMIN SHOW REPLICA DISTRIBUTION FROM [db_name.]tbl_name [PARTITION (p1, ...)];
+ADMIN SHOW REPLICA DISTRIBUTION FROM [db_name.]tbl_name [PARTITION (p1, ...)]
 ```
 
 Note:

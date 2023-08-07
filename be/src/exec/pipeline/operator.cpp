@@ -18,10 +18,12 @@
 #include <utility>
 
 #include "exec/exec_node.h"
+#include "exec/pipeline/query_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
+#include "util/failpoint/fail_point.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
@@ -32,6 +34,7 @@ const int32_t Operator::s_pseudo_plan_node_id_for_export_sink = -97;
 const int32_t Operator::s_pseudo_plan_node_id_for_olap_table_sink = -98;
 const int32_t Operator::s_pseudo_plan_node_id_for_result_sink = -99;
 const int32_t Operator::s_pseudo_plan_node_id_upper_bound = -100;
+const int32_t Operator::s_pseudo_plan_node_id_for_iceberg_table_sink = -101;
 
 Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id,
                    int32_t driver_sequence)
@@ -61,7 +64,9 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
 }
 
 Status Operator::prepare(RuntimeState* state) {
-    _mem_tracker = std::make_shared<MemTracker>(_common_metrics.get(), -1, _name, nullptr);
+    FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
+    _mem_tracker = std::make_shared<MemTracker>(_common_metrics.get(), std::make_tuple(true, true, true), "Operator",
+                                                -1, _name, nullptr);
     _total_timer = ADD_TIMER(_common_metrics, "OperatorTotalTime");
     _push_timer = ADD_TIMER(_common_metrics, "PushTotalTime");
     _pull_timer = ADD_TIMER(_common_metrics, "PullTotalTime");
@@ -74,6 +79,9 @@ Status Operator::prepare(RuntimeState* state) {
     _push_row_num_counter = ADD_COUNTER(_common_metrics, "PushRowNum", TUnit::UNIT);
     _pull_chunk_num_counter = ADD_COUNTER(_common_metrics, "PullChunkNum", TUnit::UNIT);
     _pull_row_num_counter = ADD_COUNTER(_common_metrics, "PullRowNum", TUnit::UNIT);
+    if (state->query_ctx() && state->query_ctx()->spill_manager()) {
+        _mem_resource_manager.prepare(this, state->query_ctx()->spill_manager());
+    }
     return Status::OK();
 }
 
@@ -95,6 +103,7 @@ RuntimeFilterHub* Operator::runtime_filter_hub() {
 }
 
 void Operator::close(RuntimeState* state) {
+    _mem_resource_manager.close();
     if (auto* rf_bloom_filters = runtime_bloom_filters()) {
         _init_rf_counters(false);
         _runtime_in_filter_num_counter->set((int64_t)runtime_in_filters().size());
@@ -200,9 +209,10 @@ RuntimeState* Operator::runtime_state() const {
 
 void Operator::_init_rf_counters(bool init_bloom) {
     if (_runtime_in_filter_num_counter == nullptr) {
-        _runtime_in_filter_num_counter = ADD_COUNTER_SKIP_MERGE(_common_metrics, "RuntimeInFilterNum", TUnit::UNIT);
-        _runtime_bloom_filter_num_counter =
-                ADD_COUNTER_SKIP_MERGE(_common_metrics, "RuntimeBloomFilterNum", TUnit::UNIT);
+        _runtime_in_filter_num_counter =
+                ADD_COUNTER_SKIP_MERGE(_common_metrics, "RuntimeInFilterNum", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
+        _runtime_bloom_filter_num_counter = ADD_COUNTER_SKIP_MERGE(_common_metrics, "RuntimeBloomFilterNum",
+                                                                   TUnit::UNIT, TCounterMergeType::SKIP_ALL);
     }
     if (init_bloom && _bloom_filter_eval_context.join_runtime_filter_timer == nullptr) {
         _bloom_filter_eval_context.join_runtime_filter_timer = ADD_TIMER(_common_metrics, "JoinRuntimeFilterTime");
@@ -235,6 +245,7 @@ OperatorFactory::OperatorFactory(int32_t id, std::string name, int32_t plan_node
 }
 
 Status OperatorFactory::prepare(RuntimeState* state) {
+    FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
     _state = state;
     if (_runtime_filter_collector) {
         // TODO(hcf) no proper profile for rf_filter_collector attached to

@@ -16,7 +16,7 @@
 
 #include "column/type_traits.h"
 #include "runtime/decimalv3.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "util/guard.h"
 
 namespace starrocks {
@@ -170,7 +170,7 @@ struct ArithmeticBinaryOperator<Op, TYPE_DECIMALV2, DivModOpGuard<Op>, guard::Gu
 };
 
 template <LogicalType Type>
-struct ArithmeticBinaryOperator<ModOp, Type, guard::Guard, FloatPTGuard<Type>> {
+struct ArithmeticBinaryOperator<ModOp, Type, guard::Guard, FloatLTGuard<Type>> {
     template <typename LType, typename RType, typename ResultType>
     static inline ReturnType<Type, ResultType> apply(const LType& l, const RType& r) {
         auto result = fmod(l, (r + (r == 0)));
@@ -232,6 +232,20 @@ T decimal_div_integer(const T& dividend, const T& divisor, int dividend_scale) {
     return quotient;
 }
 
+template <typename T>
+T decimal_sub(const T& lhs, const T& rhs, int scale) {
+    // compute adjust_scale_factor
+    auto [_1, _2, adjust_scale] = compute_decimal_result_type<T, SubOp>(scale, scale);
+    T adjust_scale_factor = get_scale_factor<T>(adjust_scale);
+    // scale lhs up by adjust_scale
+    T scaled_lhs = 0;
+    DecimalV3Cast::to_decimal<T, T, T, true, false>(lhs, adjust_scale_factor, &scaled_lhs);
+    // compute the delta
+    T delta = 0;
+    DecimalV3Arithmetics<T, false>::sub(scaled_lhs, rhs, &delta);
+    return delta;
+}
+
 class Decimal128P38S9 {
 public:
     using Type = int128_t;
@@ -282,10 +296,10 @@ private:
 };
 
 template <typename Op, LogicalType Type>
-struct ArithmeticBinaryOperator<Op, Type, DecimalOpGuard<Op>, DecimalPTGuard<Type>> {
+struct ArithmeticBinaryOperator<Op, Type, DecimalOpGuard<Op>, DecimalLTGuard<Type>> {
     template <bool check_overflow, typename LType, typename RType, typename ResultType>
     static inline bool apply(const LType& l, const RType& r, ResultType* result) {
-        [[maybe_unused]] static constexpr ResultType zero = ResultType(0);
+        [[maybe_unused]] static constexpr auto zero = ResultType(0);
         using DecimalV3Operators = DecimalV3Arithmetics<ResultType, check_overflow>;
         [[maybe_unused]] bool overflow = false;
         if constexpr (is_add_op<Op>) {
@@ -371,11 +385,11 @@ struct ArithmeticBinaryOperator<Op, Type, DecimalOpGuard<Op>, DecimalPTGuard<Typ
 };
 
 template <typename Op, LogicalType Type>
-struct ArithmeticBinaryOperator<Op, Type, DecimalFastMulOpGuard<Op>, DecimalPTGuard<Type>> {
+struct ArithmeticBinaryOperator<Op, Type, DecimalFastMulOpGuard<Op>, DecimalLTGuard<Type>> {
     template <bool check_overflow, bool adjust_left, typename LType, typename RType, typename ResultType>
     static inline bool apply(const LType& l, const RType& r, ResultType* result,
                              [[maybe_unused]] const RType& scale_factor) {
-        if constexpr (pt_is_decimal128<Type>) {
+        if constexpr (lt_is_decimal128<Type>) {
             *result = i64_x_i64_produce_i128(l, r);
         } else {
             *result = i32_x_i32_produce_i64(l, r);

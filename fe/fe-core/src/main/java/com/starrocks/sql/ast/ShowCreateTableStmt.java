@@ -19,6 +19,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 // SHOW CREATE TABLE statement.
 public class ShowCreateTableStmt extends ShowStmt {
@@ -61,6 +62,11 @@ public class ShowCreateTableStmt extends ShowStmt {
     private final CreateTableType type;
 
     public ShowCreateTableStmt(TableName tbl, CreateTableType type) {
+        this(tbl, type, NodePosition.ZERO);
+    }
+
+    public ShowCreateTableStmt(TableName tbl, CreateTableType type, NodePosition pos) {
+        super(pos);
         this.tbl = tbl;
         this.type = type;
     }
@@ -88,7 +94,6 @@ public class ShowCreateTableStmt extends ShowStmt {
     public static ShowResultSetMetaData getMaterializedViewMetaData() {
         return MATERIALIZED_VIEW_META_DATA;
     }
-
 
     @Override
     public ShowResultSetMetaData getMetaData() {

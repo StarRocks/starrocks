@@ -18,6 +18,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.google.re2j.Pattern;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
@@ -60,7 +61,6 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarFunction;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
@@ -68,41 +68,52 @@ import com.starrocks.catalog.Type;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.privilege.AuthorizationMgr;
+import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.privilege.RolePrivilegeCollectionV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
+import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static com.starrocks.sql.analyzer.AnalyticAnalyzer.verifyAnalyticExpression;
-import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class ExpressionAnalyzer {
     private static final Pattern HAS_TIME_PART = Pattern.compile("^.*[HhIiklrSsT]+.*$");
     private final ConnectContext session;
 
     public ExpressionAnalyzer(ConnectContext session) {
+        if (session == null) {
+            // For some load requests, the ConnectContext will be null
+            session = new ConnectContext();
+        }
         this.session = session;
     }
 
@@ -116,11 +127,12 @@ public class ExpressionAnalyzer {
         bottomUpAnalyze(visitor, expression, scope);
     }
 
-    private boolean isHighOrderFunction(Expr expr) {
+    private boolean isArrayHighOrderFunction(Expr expr) {
         if (expr instanceof FunctionCallExpr) {
-            // expand this in the future.
             if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_MAP) ||
                     ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER) ||
+                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ANY_MATCH) ||
+                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ALL_MATCH) ||
                     ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_SORTBY)) {
                 return true;
             } else if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.TRANSFORM)) {
@@ -132,39 +144,91 @@ public class ExpressionAnalyzer {
         return false;
     }
 
-    private Expr rewriteHighOrderFunction(Expr expr) {
+    private boolean isMapHighOrderFunction(Expr expr) {
+        if (expr instanceof FunctionCallExpr) {
+            if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.MAP_FILTER) ||
+                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.TRANSFORM_VALUES) ||
+                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.TRANSFORM_KEYS) ||
+                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.MAP_APPLY)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isHighOrderFunction(Expr expr) {
+        return isArrayHighOrderFunction(expr) || isMapHighOrderFunction(expr);
+    }
+
+    private void rewriteHighOrderFunction(Expr expr, Visitor visitor, Scope scope) {
         Preconditions.checkState(expr instanceof FunctionCallExpr);
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
-        if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER)
-                && functionCallExpr.getChild(0) instanceof LambdaFunctionExpr) {
-            // array_filter(lambda_func_expr, arr1...) -> array_filter(arr1, array_map(lambda_func_expr, arr1...))
-            FunctionCallExpr arrayMap = new FunctionCallExpr(FunctionSet.ARRAY_MAP,
-                    Lists.newArrayList(functionCallExpr.getChildren()));
-            arrayMap.setType(Type.BOOLEAN);
-            Expr arr1 = functionCallExpr.getChild(1);
-            functionCallExpr.clearChildren();
-            functionCallExpr.addChild(arr1);
-            functionCallExpr.addChild(arrayMap);
-            return arrayMap;
-        } else if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.ARRAY_SORTBY)
-                && functionCallExpr.getChild(0) instanceof LambdaFunctionExpr) {
-            // array_sortby(lambda_func_expr, arr1...) -> array_sortby(arr1, array_map(lambda_func_expr, arr1...))
-            FunctionCallExpr arrayMap = new FunctionCallExpr(FunctionSet.ARRAY_MAP,
-                    Lists.newArrayList(functionCallExpr.getChildren()));
-            Expr arr1 = functionCallExpr.getChild(1);
-            functionCallExpr.clearChildren();
-            functionCallExpr.addChild(arr1);
-            functionCallExpr.addChild(arrayMap);
-            functionCallExpr.setType(arr1.getType());
-            return arrayMap;
+        if (!(functionCallExpr.getChild(0) instanceof LambdaFunctionExpr)) {
+            return;
         }
-        return null;
+        switch (functionCallExpr.getFnName().getFunction()) {
+            case FunctionSet.ARRAY_FILTER: {
+                // array_filter(lambda_func_expr, arr1...) -> array_filter(arr1, array_map(lambda_func_expr, arr1...))
+                FunctionCallExpr arrayMap = new FunctionCallExpr(FunctionSet.ARRAY_MAP,
+                        Lists.newArrayList(functionCallExpr.getChildren()));
+                arrayMap.setType(Type.ARRAY_BOOLEAN);
+                Expr arr1 = functionCallExpr.getChild(1);
+                functionCallExpr.clearChildren();
+                functionCallExpr.addChild(arr1);
+                functionCallExpr.addChild(arrayMap);
+                visitor.visit(arrayMap, scope);
+                break;
+            }
+            case FunctionSet.ALL_MATCH:
+            case FunctionSet.ANY_MATCH: {
+                // func(lambda_func_expr, arr1...) -> func(array_map(lambda_func_expr, arr1...))
+                FunctionCallExpr arrayMap = new FunctionCallExpr(FunctionSet.ARRAY_MAP,
+                        Lists.newArrayList(functionCallExpr.getChildren()));
+                arrayMap.setType(Type.ARRAY_BOOLEAN);
+                functionCallExpr.clearChildren();
+                functionCallExpr.addChild(arrayMap);
+                visitor.visit(arrayMap, scope);
+                break;
+            }
+            case FunctionSet.ARRAY_SORTBY: {
+                // array_sortby(lambda_func_expr, arr1...) -> array_sortby(arr1, array_map(lambda_func_expr, arr1...))
+                FunctionCallExpr arrayMap = new FunctionCallExpr(FunctionSet.ARRAY_MAP,
+                        Lists.newArrayList(functionCallExpr.getChildren()));
+                Expr arr1 = functionCallExpr.getChild(1);
+                functionCallExpr.clearChildren();
+                functionCallExpr.addChild(arr1);
+                functionCallExpr.addChild(arrayMap);
+                functionCallExpr.setType(arr1.getType());
+                visitor.visit(arrayMap, scope);
+                break;
+            }
+            case FunctionSet.MAP_FILTER:
+                // map_filter((k,v)->(k,expr),map) -> map_filter(map, map_values(map_apply((k,v)->(k,expr),map)))
+                FunctionCallExpr mapApply = new FunctionCallExpr(FunctionSet.MAP_APPLY,
+                        Lists.newArrayList(functionCallExpr.getChildren()));
+                Expr map = functionCallExpr.getChild(1);
+                visitor.visit(mapApply, scope);
+
+                FunctionCallExpr mapValues = new FunctionCallExpr(FunctionSet.MAP_VALUES, Lists.newArrayList(mapApply));
+                visitor.visit(mapValues, scope);
+                functionCallExpr.clearChildren();
+                functionCallExpr.addChild(map);
+                functionCallExpr.addChild(mapValues);
+                break;
+        }
     }
 
     // only high-order functions can use lambda functions.
     void analyzeHighOrderFunction(Visitor visitor, Expr expression, Scope scope) {
         if (!isHighOrderFunction(expression)) {
-            throw new SemanticException("Lambda Functions can only be used in supported high-order functions.");
+            String funcName = "";
+            if (expression instanceof FunctionCallExpr) {
+                funcName = ((FunctionCallExpr) expression).getFnName().getFunction();
+            } else {
+                funcName = expression.toString();
+            }
+            throw new SemanticException(funcName + " can't use lambda functions, " +
+                    "as it is not a supported high-order function", expression.getPos());
         }
         int childSize = expression.getChildren().size();
         // move the lambda function to the first if it is at the last.
@@ -175,29 +239,85 @@ public class ExpressionAnalyzer {
             }
             expression.setChild(0, last);
         }
-        // the first child is lambdaFunction, following input arrays
-        for (int i = 1; i < childSize; ++i) {
-            Expr expr = expression.getChild(i);
+        if (isArrayHighOrderFunction(expression)) {
+            // the first child is lambdaFunction, following input arrays
+            for (int i = 1; i < childSize; ++i) {
+                Expr expr = expression.getChild(i);
+                bottomUpAnalyze(visitor, expr, scope);
+            }
+            // putting lambda inputs should after analyze
+            for (int i = 1; i < childSize; ++i) {
+                Expr expr = expression.getChild(i);
+                if (expr instanceof NullLiteral) {
+                    expr.setType(Type.ARRAY_INT); // Let it have item type.
+                }
+                if (!expr.getType().isArrayType()) {
+                    throw new SemanticException(i + "th lambda input should be arrays", expr.getPos());
+                }
+                Type itemType = ((ArrayType) expr.getType()).getItemType();
+                scope.putLambdaInput(new PlaceHolderExpr(-1, expr.isNullable(), itemType));
+            }
+        } else {
+            Preconditions.checkState(expression instanceof FunctionCallExpr);
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) expression;
+            // map_apply(func, map)
+            if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.MAP_APPLY)) {
+                if (!(expression.getChild(0).getChild(0) instanceof MapExpr)) {
+                    throw new SemanticException("The right part of map lambda function (" +
+                            expression.getChild(0).toSql() + ") should have key and value arguments",
+                            expression.getChild(0).getPos());
+                }
+            } else {
+                if (expression.getChild(0).getChild(0) instanceof MapExpr) {
+                    throw new SemanticException("The right part of map lambda function (" +
+                            expression.getChild(0).toSql() + ") should have only one arguments",
+                            expression.getChild(0).getPos());
+                }
+            }
+            if (expression.getChild(0).getChildren().size() != 3) {
+                Expr child = expression.getChild(0);
+                throw new SemanticException("The left part of map lambda function (" +
+                        child.toSql() + ") should have 2 arguments, but there are "
+                        + (child.getChildren().size() - 1) + " arguments", child.getPos());
+            }
+            Expr expr = expression.getChild(1);
             bottomUpAnalyze(visitor, expr, scope);
             if (expr instanceof NullLiteral) {
-                expr.setType(Type.ARRAY_INT); // Let it have item type.
+                expr.setType(Type.ANY_MAP); // Let it have item type.
             }
-            if (!expr.getType().isArrayType()) {
-                throw new SemanticException("Lambda inputs should be arrays.");
+            if (!expr.getType().isMapType()) {
+                throw new SemanticException("Lambda inputs should be maps", expr.getPos());
             }
-            Type itemType = ((ArrayType) expr.getType()).getItemType();
-            if (itemType == Type.NULL) { // Since slot_ref with Type.NULL is rewritten to Literal in toThrift(),
-                // rather than a common columnRef, so change its type here.
-                itemType = Type.BOOLEAN;
+            Type keyType = ((MapType) expr.getType()).getKeyType();
+            Type valueType = ((MapType) expr.getType()).getValueType();
+            scope.putLambdaInput(new PlaceHolderExpr(-1, true, keyType));
+            scope.putLambdaInput(new PlaceHolderExpr(-2, true, valueType));
+            // lambda functions should be rewritten before visited
+            if ((functionCallExpr.getFnName().getFunction().equals(FunctionSet.MAP_FILTER)) ||
+                    functionCallExpr.getFnName().getFunction().equals(FunctionSet.TRANSFORM_VALUES)) {
+                // (k,v) -> expr => (k,v) -> (k,expr)
+                Expr lambdaFunc = functionCallExpr.getChild(0);
+                LambdaArgument larg = (LambdaArgument) lambdaFunc.getChild(1);
+                Expr slotRef = new SlotRef(null, larg.getName(), larg.getName());
+                lambdaFunc.setChild(0, new MapExpr(Type.ANY_MAP, Lists.newArrayList(slotRef,
+                        lambdaFunc.getChild(0))));
+                if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.TRANSFORM_VALUES)) {
+                    functionCallExpr.resetFnName("", FunctionSet.MAP_APPLY);
+                }
+            } else if ((functionCallExpr.getFnName().getFunction().equals(FunctionSet.TRANSFORM_KEYS))) {
+                // (k,v) -> expr => (k,v) -> (expr, v)
+                Expr lambdaFunc = functionCallExpr.getChild(0);
+                LambdaArgument larg = (LambdaArgument) lambdaFunc.getChild(2);
+                Expr slotRef = new SlotRef(null, larg.getName(), larg.getName());
+                lambdaFunc.setChild(0, new MapExpr(Type.ANY_MAP, Lists.newArrayList(
+                        lambdaFunc.getChild(0), slotRef)));
+                functionCallExpr.resetFnName("", FunctionSet.MAP_APPLY);
             }
-            scope.putLambdaInput(new PlaceHolderExpr(-1, expr.isNullable(), itemType));
         }
         // visit LambdaFunction
         visitor.visit(expression.getChild(0), scope);
-        Expr res = rewriteHighOrderFunction(expression);
-        if (res != null) {
-            visitor.visit(res, scope);
-        }
+        rewriteHighOrderFunction(expression, visitor, scope);
+        scope.clearLambdaInputs();
     }
 
     private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
@@ -211,7 +331,7 @@ public class ExpressionAnalyzer {
         visitor.visit(expression, scope);
     }
 
-    static class Visitor extends AstVisitor<Void, Scope> {
+    public static class Visitor extends AstVisitor<Void, Scope> {
         private static final List<String> ADD_DATE_FUNCTIONS = Lists.newArrayList(FunctionSet.DATE_ADD,
                 FunctionSet.ADDDATE, FunctionSet.DAYS_ADD, FunctionSet.TIMESTAMPADD);
         private static final List<String> SUB_DATE_FUNCTIONS =
@@ -228,7 +348,8 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitExpression(Expr node, Scope scope) {
-            throw unsupportedException("not yet implemented: expression analyzer for " + node.getClass().getName());
+            throw new SemanticException("not yet implemented: expression analyzer for " + node.getClass().getName(),
+                    node.getPos());
         }
 
         private void handleResolvedField(SlotRef slot, ResolvedField resolvedField) {
@@ -241,16 +362,28 @@ public class ExpressionAnalyzer {
             // User enter an invalid sql, like SELECT 'col'.b FROM tbl;
             // 'col' will be parsed as StringLiteral, it's invalid.
             // TODO(SmithCruise) We should handle this problem in parser in the future.
-            Preconditions.checkArgument(child.getType().isStructType(),
-                    String.format("%s must be a struct type, check if you are using `'`", child.toSql()));
-            StructType structType = (StructType) child.getType();
-            StructField structField = structType.getField(node.getFieldName());
-
-            if (structField == null) {
-                throw new SemanticException("Struct subfield '%s' cannot be resolved", node.getFieldName());
+            if (!child.getType().isStructType()) {
+                throw new SemanticException(child.toSql() + " must be a struct type, check if you are using `'`",
+                        child.getPos());
             }
 
-            node.setType(structField.getType());
+            List<String> fieldNames = node.getFieldNames();
+            List<String> rightNames = Lists.newArrayList();
+            Type tmpType = child.getType();
+            for (String fieldName : fieldNames) {
+                StructType structType = (StructType) tmpType;
+                StructField structField = structType.getField(fieldName);
+                if (structField == null) {
+                    throw new SemanticException(String.format("Struct subfield '%s' cannot be resolved", fieldName),
+                            node.getPos());
+                }
+                rightNames.add(structField.getName());
+                tmpType = structField.getType();
+            }
+
+            // set right field names
+            node.setFieldNames(rightNames);
+            node.setType(tmpType);
             return null;
         }
 
@@ -259,6 +392,9 @@ public class ExpressionAnalyzer {
             ResolvedField resolvedField = scope.resolveField(node);
             node.setType(resolvedField.getField().getType());
             node.setTblName(resolvedField.getField().getRelationAlias());
+            // help to get nullable info in Analyzer phase
+            // now it is used in creating mv to decide nullable of fields
+            node.setNullable(resolvedField.getField().isNullable());
 
             if (node.getType().isStructType()) {
                 // If SlotRef is a struct type, it needs special treatment, reset SlotRef's col, label name.
@@ -295,11 +431,6 @@ public class ExpressionAnalyzer {
                                 node.getChildren().stream().map(Expr::getType).collect(Collectors.toList()));
                     }
 
-                    // Array<DECIMALV3> type is not supported in current version, turn it into DECIMALV2 type
-                    if (targetItemType.isDecimalV3()) {
-                        targetItemType = ScalarType.DECIMALV2;
-                    }
-
                     for (int i = 0; i < node.getChildren().size(); i++) {
                         if (!node.getChildren().get(i).getType().matchesType(targetItemType)) {
                             node.castChild(targetItemType, i);
@@ -311,7 +442,22 @@ public class ExpressionAnalyzer {
                     throw new SemanticException(e.getMessage());
                 }
             } else {
-                node.setType(new ArrayType(Type.NULL));
+                node.setType(Type.ARRAY_NULL);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitMapExpr(MapExpr node, Scope scope) {
+            if (!node.getChildren().isEmpty()) {
+                Type originalType = node.getType();
+                if (originalType == Type.ANY_MAP) {
+                    Type keyType = node.getKeyCommonType();
+                    Type valueType = node.getValueCommonType();
+                    node.setType(new MapType(keyType, valueType));
+                }
+            } else {
+                node.setType(new MapType(Type.NULL, Type.NULL));
             }
             return null;
         }
@@ -320,13 +466,9 @@ public class ExpressionAnalyzer {
         public Void visitCollectionElementExpr(CollectionElementExpr node, Scope scope) {
             Expr expr = node.getChild(0);
             Expr subscript = node.getChild(1);
-            if (!expr.getType().isArrayType() && !expr.getType().isMapType()) {
-                throw new SemanticException("cannot subscript type " + expr.getType()
-                        + " because it is not an array or a map");
-            }
             if (expr.getType().isArrayType()) {
                 if (!subscript.getType().isNumericType()) {
-                    throw new SemanticException("array subscript must have type integer");
+                    throw new SemanticException("array subscript must have type integer", subscript.getPos());
                 }
                 try {
                     if (subscript.getType().getPrimitiveType() != PrimitiveType.INT) {
@@ -336,7 +478,7 @@ public class ExpressionAnalyzer {
                 } catch (AnalysisException e) {
                     throw new SemanticException(e.getMessage());
                 }
-            } else {
+            } else if (expr.getType().isMapType()) {
                 try {
                     if (subscript.getType().getPrimitiveType() !=
                             ((MapType) expr.getType()).getKeyType().getPrimitiveType()) {
@@ -346,6 +488,24 @@ public class ExpressionAnalyzer {
                 } catch (AnalysisException e) {
                     throw new SemanticException(e.getMessage());
                 }
+            } else if (expr.getType().isStructType()) {
+                if (!(subscript instanceof IntLiteral)) {
+                    throw new SemanticException("struct subscript must have integer pos", subscript.getPos());
+                }
+                long index = ((IntLiteral) subscript).getValue();
+                long fieldSize = ((StructType) expr.getType()).getFields().size();
+                if (fieldSize < Math.abs(index)) {
+                    throw new SemanticException("the pos is out of struct subfields", subscript.getPos());
+                } else if (index == 0) {
+                    throw new SemanticException("the pos can't set to zero", subscript.getPos());
+                }
+
+                index = index > 0 ? index - 1 : fieldSize + index;
+                StructField structField = ((StructType) expr.getType()).getFields().get((int) index);
+                node.setType(structField.getType());
+            } else {
+                throw new SemanticException("cannot subscript type " + expr.getType()
+                        + " because it is not an array or a map or a struct", expr.getPos());
             }
 
             return null;
@@ -355,7 +515,7 @@ public class ExpressionAnalyzer {
         public Void visitArraySliceExpr(ArraySliceExpr node, Scope scope) {
             if (!node.getChild(0).getType().isArrayType()) {
                 throw new SemanticException("cannot subscript type" +
-                        node.getChild(0).getType() + " because it is not an array");
+                        node.getChild(0).getType() + " because it is not an array", node.getChild(0).getPos());
             }
             node.setType(node.getChild(0).getType());
             return null;
@@ -366,24 +526,28 @@ public class ExpressionAnalyzer {
             Expr item = node.getChild(0);
             Expr key = node.getChild(1);
             if (!key.isLiteral() || !key.getType().isStringType()) {
-                throw new SemanticException("right operand of -> should be string literal, but got " + key);
+                throw new SemanticException("right operand of -> should be string literal, but got " + key,
+                        key.getPos());
             }
             if (!item.getType().isJsonType()) {
                 throw new SemanticException(
-                        "-> operator could only be used for json column, but got " + item.getType());
+                        "-> operator could only be used for json column, but got " + item.getType(), item.getPos());
             }
             node.setType(Type.JSON);
             return null;
         }
 
         @Override
-        public Void visitLambdaFunctionExpr(LambdaFunctionExpr node, Scope scope) {
+        public Void visitLambdaFunctionExpr(LambdaFunctionExpr node, Scope scope) { // (x,y) -> x+y or (k,v) -> (k1,v1)
             if (scope.getLambdaInputs().size() == 0) {
-                throw new SemanticException("Lambda Functions can only be used in high-order functions with arrays.");
+                throw new SemanticException(
+                        "Lambda Functions can only be used in high-order functions with arrays/maps",
+                        node.getPos());
             }
             if (scope.getLambdaInputs().size() != node.getChildren().size() - 1) {
-                throw new SemanticException("Lambda arguments should equal to lambda input arrays.");
+                throw new SemanticException("Lambda arguments should equal to lambda input arrays", node.getPos());
             }
+
             // process lambda arguments
             Set<String> set = new HashSet<>();
             List<LambdaArgument> args = Lists.newArrayList();
@@ -391,7 +555,8 @@ public class ExpressionAnalyzer {
                 args.add((LambdaArgument) node.getChild(i));
                 String name = ((LambdaArgument) node.getChild(i)).getName();
                 if (set.contains(name)) {
-                    throw new SemanticException("Lambda argument: " + name + " is duplicated.");
+                    throw new SemanticException("Lambda argument: " + name + " is duplicated",
+                            node.getChild(i).getPos());
                 }
                 set.add(name);
                 // bind argument with input arrays' data type and nullable info
@@ -409,17 +574,18 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitCompoundPredicate(CompoundPredicate node, Scope scope) {
+            node.setType(Type.BOOLEAN);
             for (int i = 0; i < node.getChildren().size(); i++) {
-                Type type = node.getChild(i).getType();
-                if (!type.isBoolean() && !type.isNull()) {
-                    throw new SemanticException("Operand '%s' part of predicate " +
-                            "'%s' should return type 'BOOLEAN' but returns type '%s'.",
-                            AstToStringBuilder.toString(node), AstToStringBuilder.toString(node.getChild(i)),
-                            type.toSql());
+                Expr child = node.getChild(i);
+                if (child.getType().isBoolean() || child.getType().isNull()) {
+                    // do nothing
+                } else if (!session.getSessionVariable().isEnableStrictType() &&
+                        Type.canCastTo(child.getType(), Type.BOOLEAN)) {
+                    node.getChildren().set(i, new CastExpr(Type.BOOLEAN, child));
+                } else {
+                    throw new SemanticException(child.toSql() + " can not be converted to boolean type.");
                 }
             }
-
-            node.setType(Type.BOOLEAN);
             return null;
         }
 
@@ -434,7 +600,7 @@ public class ExpressionAnalyzer {
                 if (!Type.canCastTo(type, compatibleType)) {
                     throw new SemanticException(
                             "between predicate type " + type.toSql() + " with type " + compatibleType.toSql()
-                                    + " is invalid.");
+                                    + " is invalid", node.getPos());
                 }
             }
 
@@ -446,16 +612,15 @@ public class ExpressionAnalyzer {
             Type type1 = node.getChild(0).getType();
             Type type2 = node.getChild(1).getType();
 
-            Type compatibleType =
-                    TypeManager.getCompatibleTypeForBinary(node.getOp().isNotRangeComparison(), type1, type2);
+            Type compatibleType = TypeManager.getCompatibleTypeForBinary(node.getOp(), type1, type2);
             // check child type can be cast
-            final String ERROR_MSG = "Column type %s does not support binary predicate operation.";
+            final String ERROR_MSG = "Column type %s does not support binary predicate operation with type %s";
             if (!Type.canCastTo(type1, compatibleType)) {
-                throw new SemanticException(String.format(ERROR_MSG, type1.toSql()));
+                throw new SemanticException(String.format(ERROR_MSG, type1.toSql(), type2.toSql()), node.getPos());
             }
 
             if (!Type.canCastTo(type2, compatibleType)) {
-                throw new SemanticException(String.format(ERROR_MSG, type1.toSql()));
+                throw new SemanticException(String.format(ERROR_MSG, type1.toSql(), type2.toSql()), node.getPos());
             }
 
             node.setType(Type.BOOLEAN);
@@ -469,22 +634,21 @@ public class ExpressionAnalyzer {
                 Type t1 = node.getChild(0).getType().getNumResultType();
                 Type t2 = node.getChild(1).getType().getNumResultType();
                 if (t1.isDecimalV3() || t2.isDecimalV3()) {
+                    ArithmeticExpr.TypeTriple typeTriple = null;
                     try {
-                        node.rewriteDecimalOperation();
+                        typeTriple = node.rewriteDecimalOperation();
                     } catch (AnalysisException ex) {
                         throw new SemanticException(ex.getMessage());
                     }
-                    Type lhsType = node.getChild(0).getType();
-                    Type rhsType = node.getChild(1).getType();
-                    Type resultType = node.getType();
-                    Type[] args = {lhsType, rhsType};
+                    Preconditions.checkArgument(typeTriple != null);
+                    Type[] args = {typeTriple.lhsTargetType, typeTriple.rhsTargetType};
                     Function fn = Expr.getBuiltinFunction(op.getName(), args, Function.CompareMode.IS_IDENTICAL);
                     // In resolved function instance, it's argTypes and resultType are wildcard decimal type
                     // (both precision and and scale are -1, only used in function instance resolution), it's
                     // illegal for a function and expression to has a wildcard decimal type as its type in BE,
                     // so here substitute wildcard decimal types with real decimal types.
-                    Function newFn = new ScalarFunction(fn.getFunctionName(), args, resultType, fn.hasVarArgs());
-                    node.setType(resultType);
+                    Function newFn = new ScalarFunction(fn.getFunctionName(), args, typeTriple.returnType, fn.hasVarArgs());
+                    node.setType(typeTriple.returnType);
                     node.setFn(newFn);
                     return null;
                 }
@@ -530,7 +694,8 @@ public class ExpressionAnalyzer {
                         break;
                     default:
                         // the programmer forgot to deal with a case
-                        throw unsupportedException("Unknown arithmetic operation " + op + " in: " + node);
+                        throw new SemanticException("Unknown arithmetic operation " + op + " in: " + node,
+                                node.getPos());
                 }
 
                 if (node.getChild(0).getType().equals(Type.NULL) && node.getChild(1).getType().equals(Type.NULL)) {
@@ -538,20 +703,29 @@ public class ExpressionAnalyzer {
                     rhsType = Type.NULL;
                 }
 
+                if (lhsType.isInvalid() || rhsType.isInvalid()) {
+                    throw new SemanticException("Any function type can not cast to " + Type.INVALID.toSql());
+                }
+
                 if (!Type.NULL.equals(node.getChild(0).getType()) && !Type.canCastTo(t1, lhsType)) {
                     throw new SemanticException(
                             "cast type " + node.getChild(0).getType().toSql() + " with type " + lhsType.toSql()
-                                    + " is invalid.");
+                                    + " is invalid", node.getPos());
                 }
 
                 if (!Type.NULL.equals(node.getChild(1).getType()) && !Type.canCastTo(t2, rhsType)) {
                     throw new SemanticException(
                             "cast type " + node.getChild(1).getType().toSql() + " with type " + rhsType.toSql()
-                                    + " is invalid.");
+                                    + " is invalid", node.getPos());
                 }
 
                 Function fn = Expr.getBuiltinFunction(op.getName(), new Type[] {lhsType, rhsType},
                         Function.CompareMode.IS_SUPERTYPE_OF);
+
+                if (fn == null) {
+                    throw new SemanticException(String.format(
+                            "No matching function '%s' with operand types %s and %s", node.getOp().getName(), t1, t2));
+                }
 
                 /*
                  * commonType is the common type of the parameters of the function,
@@ -568,18 +742,15 @@ public class ExpressionAnalyzer {
                 node.setType(Type.BIGINT);
                 node.setFn(fn);
             } else if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.UNARY_POSTFIX) {
-                throw unsupportedException("not yet implemented: expression analyzer for " + node.getClass().getName());
+                throw new SemanticException("not yet implemented: expression analyzer for " + node.getClass().getName(),
+                        node.getPos());
             } else {
-                throw unsupportedException("not yet implemented: expression analyzer for " + node.getClass().getName());
+                throw new SemanticException("not yet implemented: expression analyzer for " + node.getClass().getName(),
+                        node.getPos());
             }
 
             return null;
         }
-
-        List<String> addDateFunctions = Lists.newArrayList(FunctionSet.DATE_ADD,
-                FunctionSet.ADDDATE, FunctionSet.DAYS_ADD, FunctionSet.TIMESTAMPADD);
-        List<String> subDateFunctions = Lists.newArrayList(FunctionSet.DATE_SUB, FunctionSet.SUBDATE,
-                FunctionSet.DAYS_SUB);
 
         @Override
         public Void visitTimestampArithmeticExpr(TimestampArithmeticExpr node, Scope scope) {
@@ -605,8 +776,9 @@ public class ExpressionAnalyzer {
             Function fn = Expr.getBuiltinFunction(funcOpName.toLowerCase(), argumentTypes,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (fn == null) {
-                throw new SemanticException("No matching function with signature: %s(%s).", funcOpName, Joiner.on(", ")
+                String msg = String.format("No matching function with signature: %s(%s)", funcOpName, Joiner.on(", ")
                         .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
+                throw new SemanticException(msg, node.getPos());
             }
             node.setType(fn.getReturnType());
             node.setFn(fn);
@@ -623,19 +795,30 @@ public class ExpressionAnalyzer {
         public Void visitInPredicate(InPredicate node, Scope scope) {
             predicateBaseAndCheck(node);
 
+            List<Expr> queryExpressions = Lists.newArrayList();
+            node.collect(arg -> arg instanceof Subquery, queryExpressions);
+            if (queryExpressions.size() > 0 && node.getChildren().size() > 2) {
+                throw new SemanticException("In Predicate only support literal expression list", node.getPos());
+            }
+
             // check compatible type
             List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
             Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
 
-            for (Type type : list) {
-                // TODO(mofei) support it
-                if (type.isJsonType()) {
-                    throw new SemanticException("InPredicate of JSON is not supported");
+            if (compatibleType == Type.INVALID) {
+                throw new SemanticException("The input types (" + list.stream().map(Type::toSql).collect(
+                        Collectors.joining(",")) + ") of in predict are not compatible", node.getPos());
+            }
+
+            for (Expr child : node.getChildren()) {
+                Type type = child.getType();
+                if (type.isJsonType() && queryExpressions.size() > 0) { // TODO: enable it after support join on JSON
+                    throw new SemanticException("In predicate of JSON does not support subquery", child.getPos());
                 }
                 if (!Type.canCastTo(type, compatibleType)) {
                     throw new SemanticException(
                             "in predicate type " + type.toSql() + " with type " + compatibleType.toSql()
-                                    + " is invalid.");
+                                    + " is invalid", child.getPos());
                 }
             }
 
@@ -646,14 +829,17 @@ public class ExpressionAnalyzer {
         public Void visitMultiInPredicate(MultiInPredicate node, Scope scope) {
             predicateBaseAndCheck(node);
             List<Type> leftTypes =
-                    node.getChildren().stream().limit(node.getNumberOfColumns()).map(Expr::getType).collect(Collectors.toList());
+                    node.getChildren().stream().limit(node.getNumberOfColumns()).map(Expr::getType)
+                            .collect(Collectors.toList());
 
             Subquery inSubquery = (Subquery) node.getChild(node.getNumberOfColumns());
             List<Type> rightTypes =
                     inSubquery.getQueryStatement().getQueryRelation().getOutputExpression().stream().map(Expr::getType).
                             collect(Collectors.toList());
             if (leftTypes.size() != rightTypes.size()) {
-                throw new SemanticException("subquery must return the same number of columns as provided by the IN predicate");
+                throw new SemanticException(
+                        "subquery must return the same number of columns as provided by the IN predicate",
+                        node.getPos());
             }
 
             for (int i = 0; i < rightTypes.size(); ++i) {
@@ -665,7 +851,7 @@ public class ExpressionAnalyzer {
                 if (!Type.canCastTo(leftTypes.get(i), rightTypes.get(i))) {
                     throw new SemanticException(
                             "in predicate type " + leftTypes.get(i).toSql() + " with type " + rightTypes.get(i).toSql()
-                                    + " is invalid.");
+                                    + " is invalid");
                 }
             }
             return null;
@@ -677,7 +863,7 @@ public class ExpressionAnalyzer {
                 BigInteger value = ((LargeIntLiteral) node).getValue();
                 if (value.compareTo(LargeIntLiteral.LARGE_INT_MIN) < 0 ||
                         value.compareTo(LargeIntLiteral.LARGE_INT_MAX) > 0) {
-                    throw new SemanticException("Number Overflow. literal: " + value);
+                    throw new SemanticException(PARSER_ERROR_MSG.numOverflow(value.toString()), node.getPos());
                 }
             }
             return null;
@@ -699,13 +885,13 @@ public class ExpressionAnalyzer {
             if (!type1.isStringType() && !type1.isNull()) {
                 throw new SemanticException(
                         "left operand of " + node.getOp().toString() + " must be of type STRING: " +
-                                AstToStringBuilder.toString(node));
+                                AstToStringBuilder.toString(node), node.getPos());
             }
 
             if (!type2.isStringType() && !type2.isNull()) {
                 throw new SemanticException(
                         "right operand of " + node.getOp().toString() + " must be of type STRING: " +
-                                AstToStringBuilder.toString(node));
+                                AstToStringBuilder.toString(node), node.getPos());
             }
 
             // check pattern
@@ -714,7 +900,7 @@ public class ExpressionAnalyzer {
                     Pattern.compile(((StringLiteral) node.getChild(1)).getValue());
                 } catch (PatternSyntaxException e) {
                     throw new SemanticException(
-                            "Invalid regular expression in '" + AstToStringBuilder.toString(node) + "'");
+                            "Invalid regular expression in '" + AstToStringBuilder.toString(node) + "'", node.getPos());
                 }
             }
 
@@ -728,9 +914,10 @@ public class ExpressionAnalyzer {
 
             for (Expr expr : node.getChildren()) {
                 if (expr.getType().isOnlyMetricType() ||
-                        (expr.getType().isComplexType() && !(node instanceof IsNullPredicate))) {
+                        (expr.getType().isComplexType() && !(node instanceof IsNullPredicate) &&
+                                !(node instanceof InPredicate))) {
                     throw new SemanticException(
-                            "HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate");
+                            "HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate", node.getPos());
                 }
             }
         }
@@ -747,7 +934,8 @@ public class ExpressionAnalyzer {
             if (!Type.canCastTo(cast.getChild(0).getType(), castType)) {
                 throw new SemanticException("Invalid type cast from " + cast.getChild(0).getType().toSql() + " to "
                         + castType.toSql() + " in sql `" +
-                        AstToStringBuilder.toString(cast.getChild(0)).replace("%", "%%") + "`");
+                        AstToStringBuilder.toString(cast.getChild(0)).replace("%", "%%") + "`",
+                        cast.getPos());
             }
 
             cast.setType(castType);
@@ -766,91 +954,122 @@ public class ExpressionAnalyzer {
             Function fn;
             String fnName = node.getFnName().getFunction();
 
+            // throw exception direct
+            checkFunction(fnName, node, argumentTypes);
+
             if (fnName.equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
-                //Compatible with the logic of the original search function "count distinct"
-                //TODO: fix how we equal count distinct.
+                // Compatible with the logic of the original search function "count distinct"
+                // TODO: fix how we equal count distinct.
                 fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {argumentTypes[0]},
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else if (fnName.equals(FunctionSet.EXCHANGE_BYTES) || fnName.equals(FunctionSet.EXCHANGE_SPEED)) {
-                fn = Expr.getBuiltinFunction(fnName, argumentTypes,
-                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                fn = fn.copy();
                 fn.setArgsType(argumentTypes); // as accepting various types
                 fn.setIsNullable(false);
-            } else if (fnName.equals(FunctionSet.TIME_SLICE) || fnName.equals(FunctionSet.DATE_SLICE)) {
-                // This must before test for DecimalV3.
-                if (!(node.getChild(1) instanceof IntLiteral)) {
-                    throw new SemanticException(
-                            fnName + " requires second parameter must be a constant interval");
+            } else if (fnName.equals(FunctionSet.ARRAY_AGG)) {
+                // move order by expr to node child, and extract is_asc and null_first information.
+                fn = Expr.getBuiltinFunction(fnName, new Type[] {argumentTypes[0]},
+                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                fn = fn.copy();
+                List<OrderByElement> orderByElements = node.getParams().getOrderByElements();
+                List<Boolean> isAscOrder = new ArrayList<>();
+                List<Boolean> nullsFirst = new ArrayList<>();
+                if (orderByElements != null) {
+                    for (OrderByElement elem : orderByElements) {
+                        isAscOrder.add(elem.getIsAsc());
+                        nullsFirst.add(elem.getNullsFirstParam());
+                    }
                 }
-                if (((IntLiteral) node.getChild(1)).getValue() <= 0) {
-                    throw new SemanticException(
-                            fnName + " requires second parameter must be greater than 0");
+                Type[] argsTypes = new Type[argumentTypes.length];
+                for (int i = 0; i < argumentTypes.length; ++i) {
+                    argsTypes[i] = argumentTypes[i] == Type.NULL ? Type.BOOLEAN : argumentTypes[i];
                 }
-                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            } else if (FunctionSet.decimalRoundFunctions.contains(fnName) ||
-                    Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3)) {
+                fn.setArgsType(argsTypes); // as accepting various types
+                ArrayList<Type> structTypes = new ArrayList<>(argsTypes.length);
+                for (Type t : argsTypes) {
+                    structTypes.add(new ArrayType(t));
+                }
+                ((AggregateFunction) fn).setIntermediateType(new StructType(structTypes));
+                ((AggregateFunction) fn).setIsAscOrder(isAscOrder);
+                ((AggregateFunction) fn).setNullsFirst(nullsFirst);
+                fn.setRetType(new ArrayType(argsTypes[0]));     // return null if scalar agg with empty input
+            } else if (FunctionSet.PERCENTILE_DISC.equals(fnName)) {
+                argumentTypes[1] = Type.DOUBLE;
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
+                // correct decimal's precision and scale
+                if (fn.getArgs()[0].isDecimalV3()) {
+                    List<Type> argTypes = Arrays.asList(argumentTypes[0], fn.getArgs()[1]);
+
+                    AggregateFunction newFn = new AggregateFunction(fn.getFunctionName(), argTypes, argumentTypes[0],
+                            ((AggregateFunction) fn).getIntermediateType(), fn.hasVarArgs());
+
+                    newFn.setFunctionId(fn.getFunctionId());
+                    newFn.setChecksum(fn.getChecksum());
+                    newFn.setBinaryType(fn.getBinaryType());
+                    newFn.setHasVarArgs(fn.hasVarArgs());
+                    newFn.setId(fn.getId());
+                    newFn.setUserVisible(fn.isUserVisible());
+                    newFn.setisAnalyticFn(((AggregateFunction) fn).isAnalyticFn());
+
+                    fn = newFn;
+                }
+            } else if (FunctionSet.CONCAT.equals(fnName) && node.getChildren().stream().anyMatch(child ->
+                    child.getType().isArrayType())) {
+                List<Type> arrayTypes = Arrays.stream(argumentTypes).map(argumentType -> {
+                    if (argumentType.isArrayType()) {
+                        return argumentType;
+                    } else {
+                        return new ArrayType(argumentType);
+                    }
+                }).collect(Collectors.toList());
+                // check if all array types are compatible
+                TypeManager.getCommonSuperType(arrayTypes);
+                for (int i = 0; i < argumentTypes.length; ++i) {
+                    if (!argumentTypes[i].isArrayType()) {
+                        node.setChild(i, new ArrayExpr(new ArrayType(argumentTypes[i]),
+                                Lists.newArrayList(node.getChild(i))));
+                    }
+                }
+
+                argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+                node.resetFnName(null, FunctionSet.ARRAY_CONCAT);
+                if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV3(FunctionSet.ARRAY_CONCAT, argumentTypes)) {
+                    fn = DecimalV3FunctionAnalyzer.getDecimalV3Function(session, node, argumentTypes);
+                } else {
+                    fn = Expr.getBuiltinFunction(FunctionSet.ARRAY_CONCAT, argumentTypes,
+                            Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                }
+            } else if (FunctionSet.NAMED_STRUCT.equals(fnName)) {
+                // deriver struct type
+                fn = Expr.getBuiltinFunction(FunctionSet.NAMED_STRUCT, argumentTypes,
+                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                fn = fn.copy();
+                ArrayList<StructField> sf = Lists.newArrayList();
+                for (int i = 0; i < node.getChildren().size(); i = i + 2) {
+                    StringLiteral literal = (StringLiteral) node.getChild(i);
+                    sf.add(new StructField(literal.getStringValue(), node.getChild(i + 1).getType()));
+                }
+                fn.setRetType(new StructType(sf));
+            } else if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV3(fnName, argumentTypes)) {
                 // Since the priority of decimal version is higher than double version (according functionId),
                 // and in `Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF` mode, `Expr.getBuiltinFunction` always
                 // return decimal version even if the input parameters are not decimal, such as (INT, INT),
                 // lacking of specific decimal type process defined in `getDecimalV3Function`. So we force round functions
                 // to go through `getDecimalV3Function` here
-                if (FunctionSet.varianceFunctions.contains(fnName)) {
-                    // When decimal values are too small, the stddev and variance alogrithm of decimal-version do not
-                    // work incorrectly. because we use decimal128(38,9) multiplication in this algorithm,
-                    // decimal128(38,9) * decimal128(38,9) produces a result of decimal128(38,9). if two numbers are
-                    // too small, for an example, 0.000000001 * 0.000000001 produces 0.000000000, so the algorithm
-                    // can not work. Because of this reason, stddev and variance on very small decimal numbers always
-                    // yields a zero, so we use double instead of decimal128(38,9) to compute stddev and variance of
-                    // decimal types.
-                    Type[] doubleArgTypes = Stream.of(argumentTypes).map(t -> Type.DOUBLE).toArray(Type[]::new);
-                    fn = Expr.getBuiltinFunction(fnName, doubleArgTypes,
-                            Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-                } else {
-                    fn = getDecimalV3Function(node, argumentTypes);
-                }
+                fn = DecimalV3FunctionAnalyzer.getDecimalV3Function(session, node, argumentTypes);
             } else if (Arrays.stream(argumentTypes).anyMatch(arg -> arg.matchesType(Type.TIME))) {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                 if (fn instanceof AggregateFunction) {
-                    throw new SemanticException("Time Type can not used in %s function",
-                            fnName);
+                    throw new SemanticException("Time Type can not used in" + fnName + " function", node.getPos());
                 }
             } else if (FunctionSet.STR_TO_DATE.equals(fnName)) {
                 fn = getStrToDateFunction(node, argumentTypes);
-            } else if (fnName.equals(FunctionSet.ARRAY_FILTER)) {
-                if (node.getChildren().size() != 2) {
-                    throw new SemanticException(fnName + " should have 2 array inputs or lambda functions.");
-                }
-                if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
-                    throw new SemanticException("The first input of " + fnName +
-                            " should be an array or a lambda function.");
-                }
-                if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
-                    throw new SemanticException("The second input of " + fnName +
-                            " should be an array or a lambda function.");
-                }
-                // force the second array be of Type.ARRAY_BOOLEAN
-                node.setChild(1, new CastExpr(Type.ARRAY_BOOLEAN, node.getChild(1)));
-                argumentTypes[1] = Type.ARRAY_BOOLEAN;
-                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            } else if (fnName.equals(FunctionSet.ARRAY_SORTBY)) {
-                if (node.getChildren().size() != 2) {
-                    throw new SemanticException(fnName + " should have 2 array inputs or lambda functions.");
-                }
-                if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
-                    throw new SemanticException("The first input of " + fnName +
-                            " should be an array or a lambda function.");
-                }
-                if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
-                    throw new SemanticException("The second input of " + fnName +
-                            " should be an array or a lambda function.");
-                }
-                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            } else if (fnName.equals(FunctionSet.ARRAY_SLICE)) {
-                // Default type is TINYINT, it would match to a wrong function
-                for (int i = 1; i < argumentTypes.length; i++) {
-                    argumentTypes[i] = Type.BIGINT;
-                }
-                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_SUPERTYPE_OF);
+            } else if (FunctionSet.ARRAY_GENERATE.equals(fnName)) {
+                fn = getArrayGenerateFunction(node);
+                argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+            } else if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV2(fnName, argumentTypes)) {
+                fn = DecimalV3FunctionAnalyzer.getDecimalV2Function(node, argumentTypes);
             } else {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }
@@ -858,25 +1077,42 @@ public class ExpressionAnalyzer {
             if (fn == null) {
                 fn = AnalyzerUtils.getUdfFunction(session, node.getFnName(), argumentTypes);
             }
+            if (fn == null) {
+                fn = ScalarOperatorEvaluator.INSTANCE.getMetaFunction(node.getFnName(), argumentTypes);
+            }
 
             if (fn == null) {
-                throw new SemanticException("No matching function with signature: %s(%s).",
+                String msg = String.format("No matching function with signature: %s(%s)",
                         fnName,
                         node.getParams().isStar() ? "*" : Joiner.on(", ")
                                 .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
+                throw new SemanticException(msg, node.getPos());
             }
 
             if (fn instanceof TableFunction) {
-                throw unsupportedException("Table function cannot be used in expression");
+                throw new SemanticException("Table function cannot be used in expression", node.getPos());
             }
 
-            // check params type, don't check var args type
             for (int i = 0; i < fn.getNumArgs(); i++) {
                 if (!argumentTypes[i].matchesType(fn.getArgs()[i]) &&
-                        !Type.canCastToAsFunctionParameter(argumentTypes[i], fn.getArgs()[i])) {
-                    throw new SemanticException("No matching function with signature: %s(%s).", fnName,
-                            node.getParams().isStar() ? "*" : Joiner.on(", ")
-                                    .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
+                        !Type.canCastTo(argumentTypes[i], fn.getArgs()[i])) {
+                    String msg = String.format("No matching function with signature: %s(%s)", fnName,
+                            node.getParams().isStar() ? "*" :
+                                    Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.joining(", ")));
+                    throw new SemanticException(msg, node.getPos());
+                }
+            }
+
+            if (fn.hasVarArgs()) {
+                Type varType = fn.getArgs()[fn.getNumArgs() - 1];
+                for (int i = fn.getNumArgs(); i < argumentTypes.length; i++) {
+                    if (!argumentTypes[i].matchesType(varType) &&
+                            !Type.canCastTo(argumentTypes[i], varType)) {
+                        String msg = String.format("Variadic function %s(%s) can't support type: %s", fnName,
+                                Arrays.stream(fn.getArgs()).map(Type::toSql).collect(Collectors.joining(", ")),
+                                argumentTypes[i]);
+                        throw new SemanticException(msg, node.getPos());
+                    }
                 }
             }
 
@@ -884,6 +1120,208 @@ public class ExpressionAnalyzer {
             node.setType(fn.getReturnType());
             FunctionAnalyzer.analyze(node);
             return null;
+        }
+
+        private void checkFunction(String fnName, FunctionCallExpr node, Type[] argumentTypes) {
+            switch (fnName) {
+                case FunctionSet.TIME_SLICE:
+                case FunctionSet.DATE_SLICE:
+                    if (!(node.getChild(1) instanceof IntLiteral)) {
+                        throw new SemanticException(
+                                fnName + " requires second parameter must be a constant interval", node.getPos());
+                    }
+                    if (((IntLiteral) node.getChild(1)).getValue() <= 0) {
+                        throw new SemanticException(
+                                fnName + " requires second parameter must be greater than 0", node.getPos());
+                    }
+                    break;
+                case FunctionSet.ARRAY_FILTER:
+                    if (node.getChildren().size() != 2) {
+                        throw new SemanticException(fnName + " should have 2 array inputs or lambda functions",
+                                node.getPos());
+                    }
+                    if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
+                        throw new SemanticException("The first input of " + fnName +
+                                " should be an array or a lambda function", node.getPos());
+                    }
+                    if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
+                        throw new SemanticException("The second input of " + fnName +
+                                " should be an array or a lambda function", node.getPos());
+                    }
+                    // force the second array be of Type.ARRAY_BOOLEAN
+                    if (!Type.canCastTo(node.getChild(1).getType(), Type.ARRAY_BOOLEAN)) {
+                        throw new SemanticException("The second input of array_filter " +
+                                node.getChild(1).getType().toString() + "  can't cast to ARRAY<BOOL>", node.getPos());
+                    }
+                    break;
+                case FunctionSet.ALL_MATCH:
+                case FunctionSet.ANY_MATCH:
+                    if (node.getChildren().size() != 1) {
+                        throw new SemanticException(fnName + " should have a input array", node.getPos());
+                    }
+                    if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
+                        throw new SemanticException("The first input of " + fnName + " should be an array",
+                                node.getPos());
+                    }
+                    // force the second array be of Type.ARRAY_BOOLEAN
+                    if (!Type.canCastTo(node.getChild(0).getType(), Type.ARRAY_BOOLEAN)) {
+                        throw new SemanticException("The second input of " + fnName +
+                                node.getChild(0).getType().toString() + "  can't cast to ARRAY<BOOL>", node.getPos());
+                    }
+                    break;
+                case FunctionSet.ARRAY_SORTBY:
+                    if (node.getChildren().size() != 2) {
+                        throw new SemanticException(fnName + " should have 2 array inputs or lambda functions",
+                                node.getPos());
+                    }
+                    if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
+                        throw new SemanticException("The first input of " + fnName +
+                                " should be an array or a lambda function", node.getPos());
+                    }
+                    if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
+                        throw new SemanticException("The second input of " + fnName +
+                                " should be an array or a lambda function", node.getPos());
+                    }
+                    break;
+                case FunctionSet.ARRAY_GENERATE:
+                    if (node.getChildren().size() < 1 || node.getChildren().size() > 3) {
+                        throw new SemanticException(fnName + " has wrong input numbers");
+                    }
+                    for (Expr expr : node.getChildren()) {
+                        if ((expr instanceof SlotRef) && node.getChildren().size() != 3) {
+                            throw new SemanticException(fnName + " with IntColumn doesn't support default parameters");
+                        }
+                        if (!(expr instanceof IntLiteral) && !(expr instanceof LargeIntLiteral) &&
+                                !(expr instanceof SlotRef) && !(expr instanceof NullLiteral)) {
+                            throw new SemanticException(fnName + "'s parameter only support Integer");
+                        }
+                    }
+                    break;
+                case FunctionSet.MAP_FILTER:
+                    if (node.getChildren().size() != 2) {
+                        throw new SemanticException(fnName + " should have 2 inputs, " +
+                                "but there are just " + node.getChildren().size() + " inputs.");
+                    }
+                    if (!node.getChild(0).getType().isMapType() && !node.getChild(0).getType().isNull()) {
+                        throw new SemanticException("The first input of " + fnName +
+                                " should be a map or a lambda function.");
+                    }
+                    if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
+                        throw new SemanticException("The second input of " + fnName +
+                                " should be a array or a lambda function.");
+                    }
+                    // force the second array be of Type.ARRAY_BOOLEAN
+                    if (!Type.canCastTo(node.getChild(1).getType(), Type.ARRAY_BOOLEAN)) {
+                        throw new SemanticException("The second input of map_filter " +
+                                node.getChild(1).getType().toString() + "  can't cast to ARRAY<BOOL>");
+                    }
+                    break;
+                case FunctionSet.ARRAY_AGG: {
+                    for (int i = 1; i < argumentTypes.length; ++i) {
+                        if (argumentTypes[i].isComplexType()) {
+                            throw new SemanticException("array_agg can't support order by nested types, " +
+                                    "but " + i + "-th input is " + argumentTypes[i].toSql());
+                        }
+                    }
+                    break;
+                }
+                case FunctionSet.NAMED_STRUCT: {
+                    if (node.getChildren().size() < 2) {
+                        throw new SemanticException(fnName + " should have at least two inputs", node.getPos());
+                    }
+                    if (node.getChildren().size() % 2 != 0) {
+                        throw new SemanticException(fnName + " arguments must be in name/value pairs", node.getPos());
+                    }
+
+                    Set<String> check = Sets.newHashSet();
+                    for (int i = 0; i < node.getChildren().size(); i = i + 2) {
+                        if (!(node.getChild(i) instanceof StringLiteral)) {
+                            throw new SemanticException(
+                                    "The " + (i + 1) + "-th input of named_struct must be string literal",
+                                    node.getPos());
+                        }
+
+                        String name = ((StringLiteral) node.getChild(i)).getValue();
+                        if (check.contains(name.toLowerCase())) {
+                            throw new SemanticException("named_struct contains duplicate subfield name: " +
+                                    name + " at " + (i + 1) + "-th input", node.getPos());
+                        }
+
+                        check.add(name.toLowerCase());
+                    }
+                    break;
+                }
+                case FunctionSet.ROW: {
+                    if (node.getChildren().size() < 1) {
+                        throw new SemanticException(fnName + " should have at least one input.", node.getPos());
+                    }
+                    break;
+                }
+                case FunctionSet.ARRAY_AVG:
+                case FunctionSet.ARRAY_MAX:
+                case FunctionSet.ARRAY_MIN:
+                case FunctionSet.ARRAY_SORT:
+                case FunctionSet.ARRAY_SUM:
+                case FunctionSet.ARRAY_CUM_SUM:
+                case FunctionSet.ARRAY_DIFFERENCE:
+                case FunctionSet.ARRAY_DISTINCT:
+                case FunctionSet.ARRAY_LENGTH:
+                case FunctionSet.ARRAY_TO_BITMAP: {
+                    if (node.getChildren().size() != 1) {
+                        throw new SemanticException(fnName + " should have only one input", node.getPos());
+                    }
+                    if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
+                        throw new SemanticException("The only one input of " + fnName +
+                                " should be an array, rather than " + node.getChild(0).getType().toSql(),
+                                node.getPos());
+                    }
+
+                    break;
+                }
+                case FunctionSet.ARRAY_CONTAINS_ALL:
+                case FunctionSet.ARRAYS_OVERLAP: {
+                    if (node.getChildren().size() != 2) {
+                        throw new SemanticException(fnName + " should have only two inputs", node.getPos());
+                    }
+                    for (int i = 0; i < node.getChildren().size(); ++i) {
+                        if (!node.getChild(i).getType().isArrayType() && !node.getChild(i).getType().isNull()) {
+                            throw new SemanticException((i + 1) + "-th input of " + fnName +
+                                    " should be an array, rather than " + node.getChild(i).getType().toSql(),
+                                    node.getPos());
+                        }
+                    }
+                    break;
+                }
+                case FunctionSet.ARRAY_INTERSECT:
+                case FunctionSet.ARRAY_CONCAT: {
+                    if (node.getChildren().isEmpty()) {
+                        throw new SemanticException(fnName + " should have at least one input.", node.getPos());
+                    }
+                    for (int i = 0; i < node.getChildren().size(); ++i) {
+                        if (!node.getChild(i).getType().isArrayType() && !node.getChild(i).getType().isNull()) {
+                            throw new SemanticException((i + 1) + "-th input of " + fnName +
+                                    " should be an array, rather than " + node.getChild(i).getType().toSql(),
+                                    node.getPos());
+                        }
+                    }
+                    break;
+                }
+                case FunctionSet.ARRAY_CONTAINS:
+                case FunctionSet.ARRAY_APPEND:
+                case FunctionSet.ARRAY_JOIN:
+                case FunctionSet.ARRAY_POSITION:
+                case FunctionSet.ARRAY_REMOVE:
+                case FunctionSet.ARRAY_SLICE: {
+                    if (node.getChildren().isEmpty()) {
+                        throw new SemanticException(fnName + " should have at least one input.", node.getPos());
+                    }
+                    if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
+                        throw new SemanticException("The first input of " + fnName +
+                                " should be an array", node.getPos());
+                    }
+                    break;
+                }
+            }
         }
 
         private Function getStrToDateFunction(FunctionCallExpr node, Type[] argumentTypes) {
@@ -912,7 +1350,7 @@ public class ExpressionAnalyzer {
 
             ExpressionMapping expressionMapping =
                     new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()),
-                            com.google.common.collect.Lists.newArrayList());
+                            Lists.newArrayList());
 
             ScalarOperator format = SqlToScalarOperatorTranslator.translate(node.getChild(1), expressionMapping,
                     new ColumnRefFactory());
@@ -924,95 +1362,46 @@ public class ExpressionAnalyzer {
             return fn;
         }
 
-        Function getDecimalV3Function(FunctionCallExpr node, Type[] argumentTypes) {
-            Function fn;
-            String fnName = node.getFnName().getFunction();
-            Type commonType = DecimalV3FunctionAnalyzer.normalizeDecimalArgTypes(argumentTypes, fnName);
-            fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-
-            if (fn == null) {
-                fn = AnalyzerUtils.getUdfFunction(session, node.getFnName(), argumentTypes);
+        private Function getArrayGenerateFunction(FunctionCallExpr node) {
+            // add the default parameters for array_generate
+            if (node.getChildren().size() == 1) {
+                LiteralExpr secondParam = (LiteralExpr) node.getChild(0);
+                node.clearChildren();
+                node.addChild(new IntLiteral(1));
+                node.addChild(secondParam);
             }
-
-            if (fn == null) {
-                throw new SemanticException("No matching function with signature: %s(%s).", fnName,
-                        node.getParams().isStar() ? "*" : Joiner.on(", ")
-                                .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
-            }
-
-            if (DecimalV3FunctionAnalyzer.DECIMAL_AGG_FUNCTION.contains(fnName)) {
-                Type argType = node.getChild(0).getType();
-                // stddev/variance always use decimal128(38,9) to computing result.
-                if (DecimalV3FunctionAnalyzer.DECIMAL_AGG_VARIANCE_STDDEV_TYPE
-                        .contains(fnName) && argType.isDecimalV3()) {
-                    argType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
-                    node.setChild(0, TypeManager.addCastExpr(node.getChild(0), argType));
+            if (node.getChildren().size() == 2) {
+                int idx = 0;
+                BigInteger[] childValues = new BigInteger[2];
+                Boolean hasNUll = false;
+                for (Expr expr : node.getChildren()) {
+                    if (expr instanceof NullLiteral) {
+                        hasNUll = true;
+                    } else if (expr instanceof IntLiteral) {
+                        childValues[idx++] = BigInteger.valueOf(((IntLiteral) expr).getValue());
+                    } else {
+                        childValues[idx++] = ((LargeIntLiteral) expr).getValue();
+                    }
                 }
-                fn = DecimalV3FunctionAnalyzer
-                        .rectifyAggregationFunction((AggregateFunction) fn, argType, commonType);
-            } else if (DecimalV3FunctionAnalyzer.DECIMAL_UNARY_FUNCTION_SET.contains(fnName) ||
-                    DecimalV3FunctionAnalyzer.DECIMAL_IDENTICAL_TYPE_FUNCTION_SET.contains(fnName) ||
-                    FunctionSet.IF.equals(fnName) || FunctionSet.MAX_BY.equals(fnName)) {
-                // DecimalV3 types in resolved fn's argument should be converted into commonType so that right CastExprs
-                // are interpolated into FunctionCallExpr's children whose type does match the corresponding argType of fn.
-                List<Type> argTypes;
-                if (FunctionSet.MONEY_FORMAT.equals(fnName)) {
-                    argTypes = Arrays.asList(argumentTypes);
+
+                if (hasNUll || childValues[0].compareTo(childValues[1]) < 0) {
+                    node.addChild(new IntLiteral(1));
                 } else {
-                    argTypes = Arrays.stream(fn.getArgs()).map(t -> t.isDecimalV3() ? commonType : t)
-                            .collect(Collectors.toList());
+                    node.addChild(new IntLiteral(-1));
                 }
-
-                Type returnType = fn.getReturnType();
-                // Decimal v3 function return type maybe need change
-                if (returnType.isDecimalV3() && commonType.isValid()) {
-                    returnType = commonType;
-                }
-
-                if (FunctionSet.MAX_BY.equals(fnName)) {
-                    AggregateFunction newFn = new AggregateFunction(fn.getFunctionName(),
-                            Arrays.asList(argumentTypes), returnType,
-                            Type.VARCHAR, fn.hasVarArgs());
-                    newFn.setFunctionId(fn.getFunctionId());
-                    newFn.setChecksum(fn.getChecksum());
-                    newFn.setBinaryType(fn.getBinaryType());
-                    newFn.setHasVarArgs(fn.hasVarArgs());
-                    newFn.setId(fn.getId());
-                    newFn.setUserVisible(fn.isUserVisible());
-                    newFn.setisAnalyticFn(true);
-                    fn = newFn;
-                    return fn;
-                }
-
-                ScalarFunction newFn = new ScalarFunction(fn.getFunctionName(), argTypes, returnType,
-                        fn.getLocation(), ((ScalarFunction) fn).getSymbolName(),
-                        ((ScalarFunction) fn).getPrepareFnSymbol(),
-                        ((ScalarFunction) fn).getCloseFnSymbol());
-                newFn.setFunctionId(fn.getFunctionId());
-                newFn.setChecksum(fn.getChecksum());
-                newFn.setBinaryType(fn.getBinaryType());
-                newFn.setHasVarArgs(fn.hasVarArgs());
-                newFn.setId(fn.getId());
-                newFn.setUserVisible(fn.isUserVisible());
-
-                fn = newFn;
-            } else if (FunctionSet.decimalRoundFunctions.contains(fnName)) {
-                // Decimal version of truncate/round/round_up_to may change the scale, we need to calculate the scale of the return type
-                // And we need to downgrade to double version if second param is neither int literal nor SlotRef expression
-                List<Type> argTypes = Arrays.stream(fn.getArgs()).map(t -> t.isDecimalV3() ? commonType : t)
-                        .collect(Collectors.toList());
-                fn = DecimalV3FunctionAnalyzer.getFunctionOfRound(node, fn, argTypes);
             }
-            return fn;
+            Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+            return Expr.getBuiltinFunction(FunctionSet.ARRAY_GENERATE, argumentTypes,
+                    Function.CompareMode.IS_SUPERTYPE_OF);
         }
 
         @Override
         public Void visitGroupingFunctionCall(GroupingFunctionCallExpr node, Scope scope) {
             if (node.getChildren().size() < 1) {
-                throw new SemanticException("GROUPING functions required at least one parameters");
+                throw new SemanticException("GROUPING functions required at least one parameters", node.getPos());
             }
             if (node.getChildren().stream().anyMatch(e -> !(e instanceof SlotRef))) {
-                throw new SemanticException("grouping functions only support column.");
+                throw new SemanticException("grouping functions only support column", node.getPos());
             }
 
             Type[] childTypes = new Type[1];
@@ -1043,11 +1432,6 @@ public class ExpressionAnalyzer {
                 end--;
             }
 
-            // check is scalar type
-            if (node.getChildren().stream().anyMatch(d -> !d.getType().isScalarType())) {
-                throw new SemanticException("case-when only support scalar type");
-            }
-
             // check when type
             List<Type> whenTypes = Lists.newArrayList();
 
@@ -1059,7 +1443,7 @@ public class ExpressionAnalyzer {
                 whenTypes.add(node.getChild(i).getType());
             }
 
-            Type compatibleType = Type.NULL;
+            Type compatibleType = Type.BOOLEAN;
             if (null != caseExpr) {
                 compatibleType = TypeManager.getCompatibleTypeForCaseWhen(whenTypes);
             }
@@ -1067,7 +1451,7 @@ public class ExpressionAnalyzer {
             for (Type type : whenTypes) {
                 if (!Type.canCastTo(type, compatibleType)) {
                     throw new SemanticException("Invalid when type cast " + type.toSql()
-                            + " to " + compatibleType.toSql());
+                            + " to " + compatibleType.toSql(), node.getPos());
                 }
             }
 
@@ -1087,7 +1471,7 @@ public class ExpressionAnalyzer {
             for (Type type : thenTypes) {
                 if (!Type.canCastTo(type, returnType)) {
                     throw new SemanticException("Invalid then type cast " + type.toSql()
-                            + " to " + returnType.toSql());
+                            + " to " + returnType.toSql(), node.getPos());
                 }
             }
 
@@ -1131,14 +1515,43 @@ public class ExpressionAnalyzer {
                 node.setStrValue(ClusterNamespace.getNameFromFullName(session.getDatabase()));
             } else if (funcType.equalsIgnoreCase("USER")) {
                 node.setType(Type.VARCHAR);
-                node.setStrValue(session.getUserIdentity().toString());
+
+                String user = session.getQualifiedUser();
+                String remoteIP = session.getRemoteIP();
+
+                node.setStrValue(new UserIdentity(user, remoteIP).toString());
             } else if (funcType.equalsIgnoreCase("CURRENT_USER")) {
                 node.setType(Type.VARCHAR);
                 node.setStrValue(session.getCurrentUserIdentity().toString());
+            } else if (funcType.equalsIgnoreCase("CURRENT_ROLE")) {
+                node.setType(Type.VARCHAR);
+                AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+                List<String> roleName = new ArrayList<>();
+
+                try {
+                    for (Long roleId : session.getCurrentRoleIds()) {
+                        RolePrivilegeCollectionV2 rolePrivilegeCollection =
+                                manager.getRolePrivilegeCollectionUnlocked(roleId, false);
+                        if (rolePrivilegeCollection != null) {
+                            roleName.add(rolePrivilegeCollection.getName());
+                        }
+                    }
+                } catch (PrivilegeException e) {
+                    throw new SemanticException(e.getMessage());
+                }
+
+                if (roleName.isEmpty()) {
+                    node.setStrValue("NONE");
+                } else {
+                    node.setStrValue(Joiner.on(", ").join(roleName));
+                }
             } else if (funcType.equalsIgnoreCase("CONNECTION_ID")) {
                 node.setType(Type.BIGINT);
                 node.setIntValue(session.getConnectionId());
                 node.setStrValue("");
+            } else if (funcType.equalsIgnoreCase("CATALOG")) {
+                node.setType(Type.VARCHAR);
+                node.setStrValue(session.getCurrentCatalog());
             }
             return null;
         }
@@ -1148,20 +1561,20 @@ public class ExpressionAnalyzer {
             try {
                 if (node.getSetType().equals(SetType.USER)) {
                     UserVariable userVariable = session.getUserVariables(node.getName());
-                    //If referring to an uninitialized variable, its value is NULL and a string type.
+                    // If referring to an uninitialized variable, its value is NULL and a string type.
                     if (userVariable == null) {
                         node.setType(Type.STRING);
                         node.setIsNull();
                         return null;
                     }
 
-                    Type variableType = userVariable.getResolvedExpression().getType();
+                    Type variableType = userVariable.getEvaluatedExpression().getType();
                     node.setType(variableType);
 
-                    if (userVariable.getResolvedExpression() instanceof NullLiteral) {
+                    if (userVariable.getEvaluatedExpression() instanceof NullLiteral) {
                         node.setIsNull();
                     } else {
-                        node.setValue(userVariable.getResolvedExpression().getRealObjectValue());
+                        node.setValue(userVariable.getEvaluatedExpression().getRealObjectValue());
                     }
                 } else {
                     VariableMgr.fillValue(session.getSessionVariable(), node);
@@ -1171,7 +1584,7 @@ public class ExpressionAnalyzer {
                         node.setValue(SqlModeHelper.decode((long) node.getValue()));
                     }
                 }
-            } catch (AnalysisException | DdlException e) {
+            } catch (DdlException e) {
                 throw new SemanticException(e.getMessage());
             }
             return null;
@@ -1212,3 +1625,4 @@ public class ExpressionAnalyzer {
     }
 
 }
+

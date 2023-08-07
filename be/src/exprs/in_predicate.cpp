@@ -16,21 +16,30 @@
 
 #include "common/object_pool.h"
 #include "exprs/in_const_predicate.hpp"
-#include "runtime/primitive_type.h"
-#include "runtime/primitive_type_infra.h"
+#include "types/logical_type.h"
+#include "types/logical_type_infra.h"
 
 namespace starrocks {
 
 struct InConstPredicateBuilder {
-    template <LogicalType ptype>
+    template <LogicalType ltype>
     Expr* operator()(const TExprNode& node) {
-        return new VectorizedInConstPredicate<ptype>(node);
+        if constexpr (lt_is_collection<ltype> || ltype == TYPE_JSON) {
+            return new VectorizedInConstPredicateGeneric(node);
+        } else {
+            return new VectorizedInConstPredicate<ltype>(node);
+        }
     }
 };
 
 Expr* VectorizedInPredicateFactory::from_thrift(const TExprNode& node) {
     // children type
     LogicalType child_type = thrift_to_type(node.child_type);
+    if (node.__isset.child_type_desc) {
+        child_type = TypeDescriptor::from_thrift(node.child_type_desc).type;
+    } else {
+        child_type = thrift_to_type(node.child_type);
+    }
 
     if (child_type == TYPE_CHAR) {
         child_type = TYPE_VARCHAR;
@@ -39,7 +48,7 @@ Expr* VectorizedInPredicateFactory::from_thrift(const TExprNode& node) {
     switch (node.opcode) {
     case TExprOpcode::FILTER_IN:
     case TExprOpcode::FILTER_NOT_IN:
-        return type_dispatch_basic(child_type, InConstPredicateBuilder(), node);
+        return type_dispatch_basic_and_complex_types(child_type, InConstPredicateBuilder(), node);
     case TExprOpcode::FILTER_NEW_IN:
     case TExprOpcode::FILTER_NEW_NOT_IN:
         // NOTE: These two opcode are deprecated

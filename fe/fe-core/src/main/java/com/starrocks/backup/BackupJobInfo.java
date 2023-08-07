@@ -40,6 +40,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.backup.RestoreFileMapping.IdChain;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
@@ -49,6 +50,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
@@ -140,6 +142,8 @@ public class BackupJobInfo implements Writable {
         public String name;
         @SerializedName(value = "id")
         public long id;
+        @SerializedName(value = "autoIncrementId")
+        public Long autoIncrementId;
         @SerializedName(value = "partitions")
         public Map<String, BackupPartitionInfo> partitions = Maps.newHashMap();
 
@@ -161,6 +165,14 @@ public class BackupJobInfo implements Writable {
                 if (!partNames.contains(iter.next().getKey())) {
                     iter.remove();
                 }
+            }
+        }
+
+        public void checkAndRecoverAutoIncrementId(Table tbl) {
+            Long newId = tbl.getId();
+    
+            if (autoIncrementId != null) {
+                GlobalStateMgr.getCurrentState().addOrReplaceAutoIncrementIdByTableId(newId, autoIncrementId);
             }
         }
 
@@ -271,8 +283,8 @@ public class BackupJobInfo implements Writable {
         jobInfo.dbName = dbName;
         jobInfo.dbId = dbId;
         jobInfo.success = true;
-        jobInfo.metaVersion = FeConstants.meta_version;
-        jobInfo.starrocksMetaVersion = FeConstants.starrocks_meta_version;
+        jobInfo.metaVersion = FeConstants.META_VERSION;
+        jobInfo.starrocksMetaVersion = FeConstants.STARROCKS_META_VERSION;
 
         // tbls
         for (Table tbl : tbls) {
@@ -282,6 +294,7 @@ public class BackupJobInfo implements Writable {
             tableInfo.name = tbl.getName();
             jobInfo.tables.put(tableInfo.name, tableInfo);
             // partitions
+            // TODO(meegoo): support sub partition
             for (Partition partition : olapTbl.getPartitions()) {
                 BackupPartitionInfo partitionInfo = new BackupPartitionInfo();
                 partitionInfo.id = partition.getId();
@@ -304,6 +317,15 @@ public class BackupJobInfo implements Writable {
                         }
                         idxInfo.tablets.add(tabletInfo);
                     }
+                }
+            }
+
+            tableInfo.autoIncrementId = null;
+            Long id = GlobalStateMgr.getCurrentState().getCurrentAutoIncrementIdByTableId(tbl.getId());
+            for (Column col : tbl.getBaseSchema()) {
+                if (col.isAutoIncrement() && id != null) {
+                    tableInfo.autoIncrementId = id;
+                    break;
                 }
             }
         }
@@ -358,6 +380,7 @@ public class BackupJobInfo implements Writable {
          *               },
          *           },
          *           "id": 10001
+         *           "autoIncrementId": 10000
          *       }
          *   }
          * }
@@ -372,13 +395,13 @@ public class BackupJobInfo implements Writable {
             jobInfo.metaVersion = root.getInt("meta_version");
         } catch (JSONException e) {
             // meta_version does not exist
-            jobInfo.metaVersion = FeConstants.meta_version;
+            jobInfo.metaVersion = FeConstants.META_VERSION;
         }
         try {
             jobInfo.starrocksMetaVersion = root.getInt("starrocks_meta_version");
         } catch (JSONException e) {
             // starrocks_meta_version does not exist
-            jobInfo.starrocksMetaVersion = FeConstants.starrocks_meta_version;
+            jobInfo.starrocksMetaVersion = FeConstants.STARROCKS_META_VERSION;
         }
 
         JSONObject backupObjs = root.getJSONObject("backup_objects");
@@ -388,6 +411,11 @@ public class BackupJobInfo implements Writable {
             tblInfo.name = tblName;
             JSONObject tbl = backupObjs.getJSONObject(tblName);
             tblInfo.id = tbl.getLong("id");
+            try {
+                tblInfo.autoIncrementId = tbl.getLong("autoIncrementId");
+            } catch (Exception e) {
+                tblInfo.autoIncrementId = null;
+            }
             JSONObject parts = tbl.getJSONObject("partitions");
             String[] partsNames = JSONObject.getNames(parts);
             for (String partName : partsNames) {
@@ -477,14 +505,15 @@ public class BackupJobInfo implements Writable {
         root.put("backup_time", backupTime);
         JSONObject backupObj = new JSONObject();
         root.put("backup_objects", backupObj);
-        root.put("meta_version", FeConstants.meta_version);
-        root.put("starrocks_meta_version", FeConstants.starrocks_meta_version);
+        root.put("meta_version", FeConstants.META_VERSION);
+        root.put("starrocks_meta_version", FeConstants.STARROCKS_META_VERSION);
 
         for (BackupTableInfo tblInfo : tables.values()) {
             JSONObject tbl = new JSONObject();
             if (verbose) {
                 tbl.put("id", tblInfo.id);
             }
+            tbl.put("autoIncrementId", tblInfo.autoIncrementId);
             JSONObject parts = new JSONObject();
             tbl.put("partitions", parts);
             for (BackupPartitionInfo partInfo : tblInfo.partitions.values()) {

@@ -27,6 +27,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.load.routineload.RoutineLoadFunctionalExprProvider;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -81,6 +82,7 @@ public class ShowRoutineLoadStmt extends ShowStmt {
                     .add("Progress")
                     .add("ReasonOfStateChanged")
                     .add("ErrorLogUrls")
+                    .add("TrackingSQL")
                     .add("OtherMsg")
                     .build();
 
@@ -91,14 +93,22 @@ public class ShowRoutineLoadStmt extends ShowStmt {
     private List<OrderByElement> orderElements;
     private LimitElement limitElement;
 
+
     public ShowRoutineLoadStmt(LabelName labelName, boolean includeHistory) {
-        this.labelName = labelName;
-        this.includeHistory = includeHistory;
+        this(labelName, includeHistory, null, null, null, NodePosition.ZERO);
     }
 
     public ShowRoutineLoadStmt(LabelName labelName, boolean includeHistory, Expr expr,
                                List<OrderByElement> orderElements, LimitElement limitElement) {
-        this(labelName, includeHistory);
+        this(labelName, includeHistory, expr, orderElements, limitElement, NodePosition.ZERO);
+    }
+
+    public ShowRoutineLoadStmt(LabelName labelName, boolean includeHistory, Expr expr,
+                               List<OrderByElement> orderElements, LimitElement limitElement,
+                               NodePosition pos) {
+        super(pos);
+        this.labelName = labelName;
+        this.includeHistory = includeHistory;
         this.whereClause = expr;
         this.orderElements = orderElements;
         this.limitElement = limitElement;

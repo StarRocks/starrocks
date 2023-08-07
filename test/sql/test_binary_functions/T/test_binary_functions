@@ -1,0 +1,41 @@
+-- name: test_binary_functions
+select to_binary('ab'); 
+select to_binary('ab', 'HEX');
+select to_binary('ab', 'hex');
+select to_binary('qw==', 'ENCODE64');
+select to_binary('qw==', 'encode64');
+select to_binary('ab', 'utf8');
+select to_binary('ab', 'UTF8');
+
+select from_binary(to_binary('ab', 'utf8'), 'utf8');
+select from_binary(to_binary('ab', 'hex'), 'hex');
+select from_binary(to_binary('ab', 'hex'), 'encode64');
+
+-- bad case
+select to_binary('', 'hex');
+select to_binary('', 'utf8');
+select to_binary('', 'encode64');
+select to_binary('1', 'hex');
+select to_binary('XY', 'hex');
+select to_binary('XYZ0', 'hex');
+select to_binary('1', 'encode64');
+select from_binary(to_binary('X', 'hex'), 'hex');
+select from_binary(to_binary('0X', 'hex'), 'hex');
+select from_binary(to_binary('1', 'encode64'), 'hex');
+
+create table t0(c0 INT, c1 varbinary(16), c2 varchar(16)) 
+        DUPLICATE KEY(c0) 
+        DISTRIBUTED BY HASH(c0) 
+        BUCKETS 1 
+        PROPERTIES('replication_num'='1');
+-- insert 1 row
+insert into t0 values (1, x'ab01', 'ab01');
+select from_binary(c1, 'hex'), from_binary(to_binary(c2, 'hex'), 'hex')  from t0;
+select hex(from_binary(c1, 'utf8')), from_binary(to_binary(c2, 'encode64'), 'hex')  from t0;
+select from_binary(c1, 'encode64'), from_binary(to_binary(c2, 'utf8'), 'hex')  from t0;
+
+-- insert 1 row
+insert into t0 values (2, x'abab', 'abab');
+select from_binary(c1, 'hex'), from_binary(to_binary(c2, 'hex'), 'hex')  from t0 order by c0;
+select hex(from_binary(c1, 'utf8')), from_binary(to_binary(c2, 'encode64'), 'hex')  from t0 order by c0;
+select from_binary(c1, 'encode64'), from_binary(to_binary(c2, 'utf8'), 'hex')  from t0 order by c0;

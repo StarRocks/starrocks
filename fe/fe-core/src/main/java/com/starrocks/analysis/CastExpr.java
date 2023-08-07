@@ -42,6 +42,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
@@ -63,7 +64,11 @@ public class CastExpr extends Expr {
     private boolean noOp = false;
 
     public CastExpr(Type targetType, Expr e) {
-        super();
+        this(targetType, e, NodePosition.ZERO);
+    }
+
+    public CastExpr(Type targetType, Expr e, NodePosition pos) {
+        super(pos);
         Preconditions.checkArgument(targetType.isValid());
         Preconditions.checkNotNull(e);
         type = targetType;
@@ -85,6 +90,11 @@ public class CastExpr extends Expr {
      * Copy c'tor used in clone().
      */
     public CastExpr(TypeDef targetTypeDef, Expr e) {
+        this(targetTypeDef, e, NodePosition.ZERO);
+    }
+
+    public CastExpr(TypeDef targetTypeDef, Expr e, NodePosition pos) {
+        super(pos);
         Preconditions.checkNotNull(targetTypeDef);
         Preconditions.checkNotNull(e);
         this.targetTypeDef = targetTypeDef;
@@ -114,13 +124,10 @@ public class CastExpr extends Expr {
 
     @Override
     public String toSqlImpl() {
-        if (isImplicit) {
-            return getChild(0).toSql();
-        }
-        if (isAnalyzed) {
+        if (targetTypeDef == null) {
             return "CAST(" + getChild(0).toSql() + " AS " + type.toString() + ")";
         } else {
-            return "CAST(" + getChild(0).toSql() + " AS " + targetTypeDef.toString() + ")";
+            return "CAST(" + getChild(0).toSql() + " AS " + targetTypeDef + ")";
         }
     }
 
@@ -230,7 +237,7 @@ public class CastExpr extends Expr {
     @Override
     public boolean isNullable() {
         Expr fromExpr = getChild(0);
-        if (ScalarType.isFullyCompatible(fromExpr.getType(), getType())) {
+        if (fromExpr.getType().isFullyCompatible(getType())) {
             return fromExpr.isNullable();
         }
         return true;

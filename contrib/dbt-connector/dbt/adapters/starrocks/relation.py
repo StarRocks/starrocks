@@ -13,10 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from dbt.adapters.base.relation import BaseRelation, Policy
-from dbt.exceptions import RuntimeException
+from dbt.exceptions import DbtRuntimeError
 
 
 @dataclass
@@ -35,17 +35,17 @@ class StarRocksIncludePolicy(Policy):
 
 @dataclass(frozen=True, eq=False, repr=False)
 class StarRocksRelation(BaseRelation):
-    quote_policy: StarRocksQuotePolicy = StarRocksQuotePolicy()
+    quote_policy: StarRocksQuotePolicy = field(default_factory=lambda: StarRocksQuotePolicy())
     include_policy: StarRocksIncludePolicy = StarRocksIncludePolicy()
     quote_character: str = "`"
 
     def __post_init__(self):
         if self.database is not None:
-            raise RuntimeException(f"Cannot set database {self.database} in StarRocks!")
+            raise DbtRuntimeError(f"Cannot set database {self.database} in StarRocks!")
 
     def render(self):
         if self.include_policy.database and self.include_policy.schema:
-            raise RuntimeException(
+            raise DbtRuntimeError(
                 "Got a StarRocks relation with schema and database set to include, but only one can be set"
             )
         return super().render()

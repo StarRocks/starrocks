@@ -32,7 +32,7 @@ CREATE TABLE sales_records(
     sale_date date, 
     sale_amt bigint
 ) distributed BY hash(record_id) 
-properties("replication_num" = "1");
+properties("replication_num" = "3");
 ```
 
 Create a materialized view based on the `sale_amt` column of the table.
@@ -57,11 +57,10 @@ CREATE TABLE sales_records(
 ) ENGINE=OLAP
 AGGREGATE KEY(`record_id`, `seller_id`, `store_id`)
 COMMENT "OLAP"
-DISTRIBUTED BY HASH(`record_id`) BUCKETS 3
+DISTRIBUTED BY HASH(`record_id`)
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"storage_format" = "DEFAULT"
+    "replication_num" = "3",
+    "storage_format" = "DEFAULT"
 );
 ```
 

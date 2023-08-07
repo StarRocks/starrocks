@@ -43,13 +43,13 @@ enum AggDistinctType { COUNT = 0, SUM = 1 };
 
 static const size_t MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA = 24;
 
-template <LogicalType PT, LogicalType SumPT, typename = guard::Guard>
+template <LogicalType LT, LogicalType SumLT, typename = guard::Guard>
 struct DistinctAggregateState {};
 
-template <LogicalType PT, LogicalType SumPT>
-struct DistinctAggregateState<PT, SumPT, FixedLengthPTGuard<PT>> {
-    using T = RunTimeCppType<PT>;
-    using SumType = RunTimeCppType<SumPT>;
+template <LogicalType LT, LogicalType SumLT>
+struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
+    using T = RunTimeCppType<LT>;
+    using SumType = RunTimeCppType<SumLT>;
 
     size_t update(T key) {
         auto pair = set.insert(key);
@@ -107,8 +107,8 @@ struct DistinctAggregateState<PT, SumPT, FixedLengthPTGuard<PT>> {
     HashSet<T> set;
 };
 
-template <LogicalType PT, LogicalType SumPT>
-struct DistinctAggregateState<PT, SumPT, StringPTGuard<PT>> {
+template <LogicalType LT, LogicalType SumLT>
+struct DistinctAggregateState<LT, SumLT, StringLTGuard<LT>> {
     DistinctAggregateState() = default;
     using KeyType = typename SliceHashSet::key_type;
 
@@ -187,13 +187,13 @@ struct DistinctAggregateState<PT, SumPT, StringPTGuard<PT>> {
 };
 
 // use a different way to do serialization to gain performance.
-template <LogicalType PT, LogicalType SumPT, typename = guard::Guard>
+template <LogicalType LT, LogicalType SumLT, typename = guard::Guard>
 struct DistinctAggregateStateV2 {};
 
-template <LogicalType PT, LogicalType SumPT>
-struct DistinctAggregateStateV2<PT, SumPT, FixedLengthPTGuard<PT>> {
-    using T = RunTimeCppType<PT>;
-    using SumType = RunTimeCppType<SumPT>;
+template <LogicalType LT, LogicalType SumLT>
+struct DistinctAggregateStateV2<LT, SumLT, FixedLengthLTGuard<LT>> {
+    using T = RunTimeCppType<LT>;
+    using SumType = RunTimeCppType<SumLT>;
     using MyHashSet = HashSet<T>;
     static constexpr size_t item_size = phmap::item_serialize_size<MyHashSet>::value;
 
@@ -257,6 +257,7 @@ struct DistinctAggregateStateV2<PT, SumPT, FixedLengthPTGuard<PT>> {
         return sum;
     }
 
+    // NOLINTBEGIN
     ~DistinctAggregateStateV2() {
 #ifdef PHMAP_USE_CUSTOM_INFO_HANDLE
         const auto& info = set.infoz();
@@ -264,25 +265,26 @@ struct DistinctAggregateStateV2<PT, SumPT, FixedLengthPTGuard<PT>> {
                   << ", insert probe length = " << info.insert_probe_length << ", # of rehash = " << info.rehash_number;
 #endif
     }
+    // NOLINTEND
 
     MyHashSet set;
 };
 
-template <LogicalType PT, LogicalType SumPT>
-struct DistinctAggregateStateV2<PT, SumPT, StringPTGuard<PT>> : public DistinctAggregateState<PT, SumPT> {};
+template <LogicalType LT, LogicalType SumLT>
+struct DistinctAggregateStateV2<LT, SumLT, StringLTGuard<LT>> : public DistinctAggregateState<LT, SumLT> {};
 
 // Dear god this template class as template parameter kills me!
-template <LogicalType PT, LogicalType SumPT,
+template <LogicalType LT, LogicalType SumLT,
           template <LogicalType X, LogicalType Y, typename = guard::Guard> class TDistinctAggState,
-          AggDistinctType DistinctType, typename T = RunTimeCppType<PT>>
+          AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
 class TDistinctAggregateFunction : public AggregateFunctionBatchHelper<
-                                           TDistinctAggState<PT, SumPT>,
-                                           TDistinctAggregateFunction<PT, SumPT, TDistinctAggState, DistinctType, T>> {
+                                           TDistinctAggState<LT, SumLT>,
+                                           TDistinctAggregateFunction<LT, SumLT, TDistinctAggState, DistinctType, T>> {
 public:
-    using ColumnType = RunTimeColumnType<PT>;
+    using ColumnType = RunTimeColumnType<LT>;
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
-        const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
+        const auto* column = down_cast<const ColumnType*>(columns[0]);
         size_t mem_usage;
         if constexpr (IsSlice<T>) {
             mem_usage = this->data(state).update(ctx->mem_pool(), column->get_slice(row_num));
@@ -297,7 +299,7 @@ public:
     // And this is a quite useful pattern for phmap::flat_hash_table.
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
-        const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
+        const auto* column = down_cast<const ColumnType*>(columns[0]);
         size_t mem_usage = 0;
         auto& agg_state = this->data(state);
 
@@ -327,14 +329,14 @@ public:
 
     void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                       AggDataPtr* states) const override {
-        const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
+        const auto* column = down_cast<const ColumnType*>(columns[0]);
         size_t mem_usage = 0;
 
         // We find that agg_states are scatterd in `states`, we can collect them together with hash value,
         // so there will be good cache locality. We can also collect column data into this `CacheEntry` to
         // exploit cache locality further, but I don't see much steady performance gain by doing that.
         struct CacheEntry {
-            TDistinctAggState<PT, SumPT>* agg_state;
+            TDistinctAggState<LT, SumLT>* agg_state;
             size_t hash_value;
         };
 
@@ -398,7 +400,7 @@ public:
         auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
         Bytes& bytes = dst_column->get_bytes();
 
-        const ColumnType* src_column = down_cast<const ColumnType*>(src[0].get());
+        const auto* src_column = down_cast<const ColumnType*>(src[0].get());
         if constexpr (IsSlice<T>) {
             bytes.reserve(chunk_size * (sizeof(uint32_t) + src_column->get_slice(0).size));
         } else {
@@ -450,20 +452,20 @@ public:
     }
 };
 
-template <LogicalType PT, AggDistinctType DistinctType, typename T = RunTimeCppType<PT>>
+template <LogicalType LT, AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
 class DistinctAggregateFunction
-        : public TDistinctAggregateFunction<PT, SumResultPT<PT>, DistinctAggregateState, DistinctType, T> {};
+        : public TDistinctAggregateFunction<LT, SumResultLT<LT>, DistinctAggregateState, DistinctType, T> {};
 
-template <LogicalType PT, AggDistinctType DistinctType, typename T = RunTimeCppType<PT>>
+template <LogicalType LT, AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
 class DistinctAggregateFunctionV2
-        : public TDistinctAggregateFunction<PT, SumResultPT<PT>, DistinctAggregateStateV2, DistinctType, T> {};
+        : public TDistinctAggregateFunction<LT, SumResultLT<LT>, DistinctAggregateStateV2, DistinctType, T> {};
 
-template <LogicalType PT, AggDistinctType DistinctType, typename T = RunTimeCppType<PT>>
+template <LogicalType LT, AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
 class DecimalDistinctAggregateFunction
-        : public TDistinctAggregateFunction<PT, TYPE_DECIMAL128, DistinctAggregateStateV2, DistinctType, T> {};
+        : public TDistinctAggregateFunction<LT, TYPE_DECIMAL128, DistinctAggregateStateV2, DistinctType, T> {};
 
 // now we only support String
-struct DictMergeState : DistinctAggregateStateV2<TYPE_VARCHAR, SumResultPT<TYPE_VARCHAR>> {
+struct DictMergeState : DistinctAggregateStateV2<TYPE_VARCHAR, SumResultLT<TYPE_VARCHAR>> {
     DictMergeState() = default;
 
     bool over_limit = false;

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.system;
 
 import com.google.common.base.Objects;
@@ -24,6 +23,8 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.GlobalVariable;
+import com.starrocks.server.RunMode;
+import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -70,12 +71,10 @@ public class ComputeNode implements IComputable, Writable {
     private final AtomicBoolean isDecommissioned;
     @SerializedName("decommissionType")
     private volatile int decommissionType;
-    @SerializedName("ownerClusterName")
-    private volatile String ownerClusterName;
+
     // to index the state in some cluster
     @SerializedName("backendState")
     private volatile int backendState;
-    // private BackendState backendState;
 
     @SerializedName("heartbeatErrMsg")
     private String heartbeatErrMsg = "";
@@ -88,10 +87,15 @@ public class ComputeNode implements IComputable, Writable {
 
     // port of starlet on BE
     @SerializedName("starletPort")
-    private volatile int starletPort;
+    private volatile int starletPort = 0;
 
     @SerializedName("lastWriteFail")
     private volatile boolean lastWriteFail = false;
+
+    // Indicate there is whether storage_path or not with CN node
+    // It must be true for Backend
+    @SerializedName("isSetStoragePath")
+    private volatile boolean isSetStoragePath = false;
 
     private volatile int numRunningQueries = 0;
     private volatile long memLimitBytes = 0;
@@ -111,7 +115,6 @@ public class ComputeNode implements IComputable, Writable {
         this.httpPort = 0;
         this.beRpcPort = 0;
 
-        this.ownerClusterName = "";
         this.backendState = Backend.BackendState.free.ordinal();
 
         this.decommissionType = DecommissionType.SystemDecommission.ordinal();
@@ -131,7 +134,6 @@ public class ComputeNode implements IComputable, Writable {
         this.isAlive = new AtomicBoolean(false);
         this.isDecommissioned = new AtomicBoolean(false);
 
-        this.ownerClusterName = "";
         this.backendState = Backend.BackendState.free.ordinal();
         this.decommissionType = DecommissionType.SystemDecommission.ordinal();
     }
@@ -151,6 +153,10 @@ public class ComputeNode implements IComputable, Writable {
     // for test only
     public void setStarletPort(int starletPort) {
         this.starletPort = starletPort;
+    }
+
+    public boolean isSetStoragePath() {
+        return isSetStoragePath;
     }
 
     public long getId() {
@@ -183,6 +189,22 @@ public class ComputeNode implements IComputable, Writable {
 
     public int getBrpcPort() {
         return brpcPort;
+    }
+
+    public TNetworkAddress getAddress() {
+        return new TNetworkAddress(host, bePort);
+    }
+
+    public TNetworkAddress getBrpcAddress() {
+        return new TNetworkAddress(host, brpcPort);
+    }
+
+    public TNetworkAddress getBeRpcAddress() {
+        return new TNetworkAddress(host, beRpcPort);
+    }
+
+    public TNetworkAddress getHttpAddress() {
+        return new TNetworkAddress(host, httpPort);
     }
 
     public String getHeartbeatErrMsg() {
@@ -305,6 +327,7 @@ public class ComputeNode implements IComputable, Writable {
     public long getMemUsedBytes() {
         return memUsedBytes;
     }
+
     public long getMemLimitBytes() {
         return memLimitBytes;
     }
@@ -321,7 +344,7 @@ public class ComputeNode implements IComputable, Writable {
     }
 
     public void updateResourceUsage(int numRunningQueries, long memLimitBytes, long memUsedBytes,
-                                       int cpuUsedPermille) {
+                                    int cpuUsedPermille) {
 
         this.numRunningQueries = numRunningQueries;
         this.memLimitBytes = memLimitBytes;
@@ -367,10 +390,6 @@ public class ComputeNode implements IComputable, Writable {
                 isAlive.get() + "]";
     }
 
-    public void clearClusterName() {
-        ownerClusterName = "";
-    }
-
     public Backend.BackendState getBackendState() {
         switch (backendState) {
             case 0:
@@ -398,10 +417,6 @@ public class ComputeNode implements IComputable, Writable {
         this.isAlive = isAlive;
     }
 
-    public AtomicBoolean getIsDecommissioned() {
-        return isDecommissioned;
-    }
-
     public void setDecommissionType(int decommissionType) {
         this.decommissionType = decommissionType;
     }
@@ -419,10 +434,6 @@ public class ComputeNode implements IComputable, Writable {
 
     public int getCpuCores() {
         return cpuCores;
-    }
-
-    public void setCpuCores(int cpuCores) {
-        this.cpuCores = cpuCores;
     }
 
     /**
@@ -456,9 +467,14 @@ public class ComputeNode implements IComputable, Writable {
                 this.brpcPort = hbResponse.getBrpcPort();
             }
 
-            if (Config.integrate_starmgr && this.starletPort != hbResponse.getStarletPort()) {
+            if (RunMode.allowCreateLakeTable() && this.starletPort != hbResponse.getStarletPort()) {
                 isChanged = true;
                 this.starletPort = hbResponse.getStarletPort();
+            }
+
+            if (RunMode.allowCreateLakeTable() && this.isSetStoragePath != hbResponse.isSetStoragePath()) {
+                isChanged = true;
+                this.isSetStoragePath = hbResponse.isSetStoragePath();
             }
 
             this.lastUpdateMs = hbResponse.getHbTime();
@@ -466,7 +482,7 @@ public class ComputeNode implements IComputable, Writable {
                 isChanged = true;
                 // From version 2.5 we not use isAlive to determine whether to update the lastStartTime 
                 // This line to set 'lastStartTime' will be removed in due time
-                this.lastStartTime = hbResponse.getHbTime(); 
+                this.lastStartTime = hbResponse.getHbTime();
                 LOG.info("{} is alive, last start time: {}", this.toString(), hbResponse.getHbTime());
                 this.isAlive.set(true);
             } else if (this.lastStartTime <= 0) {
@@ -476,6 +492,10 @@ public class ComputeNode implements IComputable, Writable {
             if (hbResponse.getRebootTime() > this.lastStartTime) {
                 this.lastStartTime = hbResponse.getRebootTime();
                 isChanged = true;
+                // reboot time change means the BE has been restarted
+                // but alive state may be not changed since the BE may be restarted in a short time
+                // we need notify coordinator to cancel query
+                becomeDead = true;
             }
 
             if (this.cpuCores != hbResponse.getCpuCores()) {
@@ -506,7 +526,7 @@ public class ComputeNode implements IComputable, Writable {
         }
         if (!isReplay) {
             hbResponse.aliveStatus = isAlive.get() ?
-                HeartbeatResponse.AliveStatus.ALIVE : HeartbeatResponse.AliveStatus.NOT_ALIVE;
+                    HeartbeatResponse.AliveStatus.ALIVE : HeartbeatResponse.AliveStatus.NOT_ALIVE;
         } else {
             if (hbResponse.aliveStatus != null) {
                 // The metadata before the upgrade does not contain hbResponse.aliveStatus,

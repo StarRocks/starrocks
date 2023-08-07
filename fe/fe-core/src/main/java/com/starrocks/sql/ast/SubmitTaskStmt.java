@@ -15,6 +15,9 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.TaskName;
+import com.starrocks.sql.parser.NodePosition;
+
 import java.util.Map;
 
 public class SubmitTaskStmt extends DdlStmt {
@@ -30,14 +33,26 @@ public class SubmitTaskStmt extends DdlStmt {
     private String sqlText;
 
     private CreateTableAsSelectStmt createTableAsSelectStmt;
+    private InsertStmt insertStmt;
 
-    public SubmitTaskStmt(String dbName, String taskName, Map<String, String> properties, int sqlBeginIndex,
-                          CreateTableAsSelectStmt createTableAsSelectStmt) {
-        this.dbName = dbName;
-        this.taskName = taskName;
+    public SubmitTaskStmt(TaskName taskName, Map<String, String> properties, int sqlBeginIndex,
+                          CreateTableAsSelectStmt createTableAsSelectStmt, NodePosition pos) {
+        super(pos);
+        this.dbName = taskName.getDbName();
+        this.taskName = taskName.getName();
         this.properties = properties;
         this.sqlBeginIndex = sqlBeginIndex;
         this.createTableAsSelectStmt = createTableAsSelectStmt;
+    }
+
+    public SubmitTaskStmt(TaskName taskName, Map<String, String> properties, int sqlBeginIndex,
+                          InsertStmt insertStmt, NodePosition pos) {
+        super(pos);
+        this.dbName = taskName.getDbName();
+        this.taskName = taskName.getName();
+        this.properties = properties;
+        this.sqlBeginIndex = sqlBeginIndex;
+        this.insertStmt = insertStmt;
     }
 
     public String getDbName() {
@@ -86,6 +101,14 @@ public class SubmitTaskStmt extends DdlStmt {
 
     public void setCreateTableAsSelectStmt(CreateTableAsSelectStmt createTableAsSelectStmt) {
         this.createTableAsSelectStmt = createTableAsSelectStmt;
+    }
+
+    public InsertStmt getInsertStmt() {
+        return insertStmt;
+    }
+
+    public void setInsertStmt(InsertStmt insertStmt) {
+        this.insertStmt = insertStmt;
     }
 
     @Override

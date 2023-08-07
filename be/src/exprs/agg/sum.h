@@ -17,39 +17,39 @@
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
-template <LogicalType PT, typename = guard::Guard>
-inline constexpr LogicalType SumResultPT = PT;
+template <LogicalType LT, typename = guard::Guard>
+inline constexpr LogicalType SumResultLT = LT;
 
-template <LogicalType PT>
-inline constexpr LogicalType SumResultPT<PT, SumBigIntPTGuard<PT>> = TYPE_BIGINT;
+template <LogicalType LT>
+inline constexpr LogicalType SumResultLT<LT, SumBigIntLTGuard<LT>> = TYPE_BIGINT;
 
-template <LogicalType PT>
-inline constexpr LogicalType SumResultPT<PT, FloatPTGuard<PT>> = TYPE_DOUBLE;
+template <LogicalType LT>
+inline constexpr LogicalType SumResultLT<LT, FloatLTGuard<LT>> = TYPE_DOUBLE;
 
-template <LogicalType PT>
-inline constexpr LogicalType SumResultPT<PT, SumDecimal64PTGuard<PT>> = TYPE_DECIMAL64;
+template <LogicalType LT>
+inline constexpr LogicalType SumResultLT<LT, SumDecimal64LTGuard<LT>> = TYPE_DECIMAL64;
 
 // Only for compile, we don't support timestamp and date sum
-template <LogicalType PT>
-inline constexpr LogicalType SumResultPT<PT, DateOrDateTimePTGuard<PT>> = TYPE_DATETIME;
+template <LogicalType LT>
+inline constexpr LogicalType SumResultLT<LT, DateOrDateTimeLTGuard<LT>> = TYPE_DATETIME;
 
 template <typename T>
 struct SumAggregateState {
     T sum{};
 };
 
-template <LogicalType PT, typename T = RunTimeCppType<PT>, LogicalType ResultPT = SumResultPT<PT>,
-          typename ResultType = RunTimeCppType<ResultPT>>
+template <LogicalType LT, typename T = RunTimeCppType<LT>, LogicalType ResultLT = SumResultLT<LT>,
+          typename ResultType = RunTimeCppType<ResultLT>>
 class SumAggregateFunction final
         : public AggregateFunctionBatchHelper<SumAggregateState<ResultType>,
-                                              SumAggregateFunction<PT, T, ResultPT, ResultType>> {
+                                              SumAggregateFunction<LT, T, ResultLT, ResultType>> {
 public:
-    using InputColumnType = RunTimeColumnType<PT>;
-    using ResultColumnType = RunTimeColumnType<ResultPT>;
+    using InputColumnType = RunTimeColumnType<LT>;
+    using ResultColumnType = RunTimeColumnType<ResultLT>;
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
         this->data(state).sum = {};
@@ -119,7 +119,7 @@ public:
                     size_t end) const override {
         DCHECK_GT(end, start);
         ResultType result = this->data(state).sum;
-        ResultColumnType* column = down_cast<ResultColumnType*>(dst);
+        auto* column = down_cast<ResultColumnType*>(dst);
         for (size_t i = start; i < end; ++i) {
             column->get_data()[i] = result;
         }
@@ -133,7 +133,7 @@ public:
 
     void batch_serialize(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
                          size_t state_offset, Column* to) const override {
-        ResultColumnType* column = down_cast<ResultColumnType*>(to);
+        auto* column = down_cast<ResultColumnType*>(to);
         Buffer<ResultType>& result_data = column->get_data();
         for (size_t i = 0; i < chunk_size; i++) {
             result_data.emplace_back(this->data(agg_states[i] + state_offset).sum);
@@ -175,8 +175,8 @@ public:
     std::string get_name() const override { return "sum"; }
 };
 
-template <LogicalType PT, typename = DecimalPTGuard<PT>>
+template <LogicalType LT, typename = DecimalLTGuard<LT>>
 using DecimalSumAggregateFunction =
-        SumAggregateFunction<PT, RunTimeCppType<PT>, TYPE_DECIMAL128, RunTimeCppType<TYPE_DECIMAL128>>;
+        SumAggregateFunction<LT, RunTimeCppType<LT>, TYPE_DECIMAL128, RunTimeCppType<TYPE_DECIMAL128>>;
 
 } // namespace starrocks

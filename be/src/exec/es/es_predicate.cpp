@@ -51,10 +51,9 @@
 #include "exprs/expr_context.h"
 #include "exprs/in_const_predicate.hpp"
 #include "runtime/large_int_value.h"
-#include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
-#include "service/backend_options.h"
+#include "types/logical_type.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -144,7 +143,7 @@ EsPredicate::~EsPredicate() {
     _disjuncts.clear();
 }
 
-Status EsPredicate::build_disjuncts_list(bool use_vectorized) {
+Status EsPredicate::build_disjuncts_list() {
     return _vec_build_disjuncts_list(_context->root());
 }
 
@@ -368,13 +367,13 @@ Status build_inpred_values(const Predicate* pred, bool& is_not_in, Func&& func) 
     return Status::OK();
 }
 
-#define BUILD_INPRED_VALUES(TYPE)                                                                                   \
-    case TYPE: {                                                                                                    \
-        RETURN_IF_ERROR(build_inpred_values<TYPE>(pred, is_not_in, [&](auto& v) {                                   \
-            in_pred_values.emplace_back(new VExtLiteral(slot_desc->type().type,                                     \
-                                                        ColumnHelper::create_const_column<TYPE>(v, 1), _timezone)); \
-        }));                                                                                                        \
-        break;                                                                                                      \
+#define BUILD_INPRED_VALUES(TYPE)                                                                        \
+    case TYPE: {                                                                                         \
+        RETURN_IF_ERROR(build_inpred_values<TYPE>(pred, is_not_in, [&](auto& v) {                        \
+            in_pred_values.emplace_back(_pool->add(new VExtLiteral(                                      \
+                    slot_desc->type().type, ColumnHelper::create_const_column<TYPE>(v, 1), _timezone))); \
+        }));                                                                                             \
+        break;                                                                                           \
     }
 
 Status EsPredicate::_build_in_predicate(const Expr* conjunct, bool* handled) {
@@ -412,18 +411,18 @@ Status EsPredicate::_build_in_predicate(const Expr* conjunct, bool* handled) {
         bool is_not_in = false;
         // insert in list to ExtLiteral
         switch (expr->type().type) {
-            BUILD_INPRED_VALUES(TYPE_BOOLEAN);
-            BUILD_INPRED_VALUES(TYPE_INT);
-            BUILD_INPRED_VALUES(TYPE_TINYINT);
-            BUILD_INPRED_VALUES(TYPE_SMALLINT);
-            BUILD_INPRED_VALUES(TYPE_BIGINT);
-            BUILD_INPRED_VALUES(TYPE_LARGEINT);
-            BUILD_INPRED_VALUES(TYPE_FLOAT);
-            BUILD_INPRED_VALUES(TYPE_DOUBLE);
-            BUILD_INPRED_VALUES(TYPE_DATE);
-            BUILD_INPRED_VALUES(TYPE_DATETIME);
-            BUILD_INPRED_VALUES(TYPE_CHAR);
-            BUILD_INPRED_VALUES(TYPE_VARCHAR);
+            BUILD_INPRED_VALUES(TYPE_BOOLEAN)
+            BUILD_INPRED_VALUES(TYPE_INT)
+            BUILD_INPRED_VALUES(TYPE_TINYINT)
+            BUILD_INPRED_VALUES(TYPE_SMALLINT)
+            BUILD_INPRED_VALUES(TYPE_BIGINT)
+            BUILD_INPRED_VALUES(TYPE_LARGEINT)
+            BUILD_INPRED_VALUES(TYPE_FLOAT)
+            BUILD_INPRED_VALUES(TYPE_DOUBLE)
+            BUILD_INPRED_VALUES(TYPE_DATE)
+            BUILD_INPRED_VALUES(TYPE_DATETIME)
+            BUILD_INPRED_VALUES(TYPE_CHAR)
+            BUILD_INPRED_VALUES(TYPE_VARCHAR)
         default:
             DCHECK(false) << "unsupported type:" << expr->type().type;
             return Status::InternalError("unsupported type to push down to ES");

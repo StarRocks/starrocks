@@ -17,12 +17,14 @@ package com.starrocks.sql.optimizer.operator.logical;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class LogicalFilterOperator extends LogicalOperator {
     public LogicalFilterOperator(ScalarOperator predicate) {
@@ -30,8 +32,8 @@ public class LogicalFilterOperator extends LogicalOperator {
         this.predicate = predicate;
     }
 
-    private LogicalFilterOperator(Builder builder) {
-        super(OperatorType.LOGICAL_FILTER, builder.getLimit(), builder.getPredicate(), builder.getProjection());
+    private LogicalFilterOperator() {
+        super(OperatorType.LOGICAL_FILTER);
     }
 
     public ScalarOperator getPredicate() {
@@ -49,6 +51,11 @@ public class LogicalFilterOperator extends LogicalOperator {
         } else {
             return expressionContext.getChildLogicalProperty(0).getOutputColumns();
         }
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        return projectInputRow(inputs.get(0).getRowOutputInfo());
     }
 
     @Override
@@ -74,14 +81,8 @@ public class LogicalFilterOperator extends LogicalOperator {
     public static class Builder
             extends LogicalOperator.Builder<LogicalFilterOperator, LogicalFilterOperator.Builder> {
         @Override
-        public LogicalFilterOperator build() {
-            return new LogicalFilterOperator(this);
-        }
-
-        @Override
-        public LogicalFilterOperator.Builder withOperator(LogicalFilterOperator operator) {
-            super.withOperator(operator);
-            return this;
+        protected LogicalFilterOperator newInstance() {
+            return new LogicalFilterOperator();
         }
     }
 }

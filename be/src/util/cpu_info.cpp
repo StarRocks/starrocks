@@ -17,8 +17,6 @@
 
 #include "util/cpu_info.h"
 
-#include <limits>
-
 #if defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__))
 /* GCC-compatible compiler, targeting x86/x86-64 */
 #include <x86intrin.h>
@@ -55,9 +53,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
-#include <sstream>
 
 #include "common/config.h"
 #include "common/env_config.h"
@@ -83,24 +79,9 @@ DEFINE_int32(num_cores, 0,
              " according to /proc/cpuinfo.");
 
 namespace starrocks {
-// Helper function to warn if a given file does not contain an expected string as its
-// first line. If the file cannot be opened, no error is reported.
-void WarnIfFileNotEqual(const string& filename, const string& expected, const string& warning_text) {
-    std::ifstream file(filename);
-    if (!file) return;
-    string line;
-    getline(file, line);
-    if (line != expected) {
-        LOG(ERROR) << "Expected " << expected << ", actual " << line << std::endl << warning_text;
-    }
-}
-} // namespace starrocks
-
-namespace starrocks {
 
 bool CpuInfo::initialized_ = false;
 int64_t CpuInfo::hardware_flags_ = 0;
-int64_t CpuInfo::original_hardware_flags_;
 int64_t CpuInfo::cycles_per_ms_;
 int CpuInfo::num_cores_ = 1;
 int CpuInfo::max_num_cores_ = 1;
@@ -173,7 +154,6 @@ void CpuInfo::init() {
     } else {
         cycles_per_ms_ = 1000000;
     }
-    original_hardware_flags_ = hardware_flags_;
 
     if (num_cores > 0) {
         num_cores_ = num_cores;
@@ -344,16 +324,6 @@ void CpuInfo::_init_num_cores_with_cgroup() {
     }
 }
 
-void CpuInfo::_init_fake_numa_for_test(int max_num_numa_nodes, const std::vector<int>& core_to_numa_node) {
-    DCHECK_EQ(max_num_cores_, core_to_numa_node.size());
-    max_num_numa_nodes_ = max_num_numa_nodes;
-    for (int i = 0; i < max_num_cores_; ++i) {
-        core_to_numa_node_[i] = core_to_numa_node[i];
-    }
-    numa_node_to_cores_.clear();
-    _init_numa_node_to_cores();
-}
-
 void CpuInfo::_init_numa_node_to_cores() {
     DCHECK(numa_node_to_cores_.empty());
     numa_node_to_cores_.resize(max_num_numa_nodes_);
@@ -362,45 +332,6 @@ void CpuInfo::_init_numa_node_to_cores() {
         std::vector<int>* cores_of_node = &numa_node_to_cores_[core_to_numa_node_[core]];
         numa_node_core_idx_[core] = cores_of_node->size();
         cores_of_node->push_back(core);
-    }
-}
-
-void CpuInfo::verify_cpu_requirements() {
-    if (!CpuInfo::is_supported(CpuInfo::SSSE3)) {
-        LOG(ERROR) << "CPU does not support the Supplemental SSE3 (SSSE3) instruction set. "
-                   << "This setup is generally unsupported and Impala might be unstable.";
-    }
-}
-
-void CpuInfo::verify_performance_governor() {
-    for (int cpu_id = 0; cpu_id < CpuInfo::num_cores(); ++cpu_id) {
-        const string governor_file =
-                strings::Substitute("/sys/devices/system/cpu/cpu$0/cpufreq/scaling_governor", cpu_id);
-        const string warning_text = strings::Substitute(
-                "WARNING: CPU $0 is not using 'performance' governor. Note that changing the "
-                "governor to 'performance' will reset the no_turbo setting to 0.",
-                cpu_id);
-        WarnIfFileNotEqual(governor_file, "performance", warning_text);
-    }
-}
-
-void CpuInfo::verify_turbo_disabled() {
-    WarnIfFileNotEqual("/sys/devices/system/cpu/intel_pstate/no_turbo", "1",
-                       "WARNING: CPU turbo is enabled. This setting can change the clock frequency of CPU "
-                       "cores during the benchmark run, which can lead to inaccurate results. You can "
-                       "disable CPU turbo by writing a 1 to "
-                       "/sys/devices/system/cpu/intel_pstate/no_turbo. Note that changing the governor to "
-                       "'performance' will reset this to 0.");
-}
-
-void CpuInfo::enable_feature(long flag, bool enable) {
-    DCHECK(initialized_);
-    if (!enable) {
-        hardware_flags_ &= ~flag;
-    } else {
-        // Can't turn something on that can't be supported
-        DCHECK((original_hardware_flags_ & flag) != 0);
-        hardware_flags_ |= flag;
     }
 }
 

@@ -14,10 +14,14 @@
 
 #pragma once
 
+#include <cstddef>
 #include <memory>
+#include <utility>
 
 #include "exec/olap_common.h"
 #include "exprs/runtime_filter_bank.h"
+#include "runtime/global_dict/config.h"
+#include "runtime/runtime_state.h"
 #include "storage/column_predicate.h"
 #include "storage/olap_runtime_range_pruner.h"
 #include "storage/predicate_parser.h"
@@ -25,30 +29,31 @@
 namespace starrocks {
 namespace detail {
 struct RuntimeColumnPredicateBuilder {
-    template <LogicalType ptype>
-    StatusOr<std::vector<std::unique_ptr<ColumnPredicate>>> operator()(PredicateParser* parser,
+    template <LogicalType ltype>
+    StatusOr<std::vector<std::unique_ptr<ColumnPredicate>>> operator()(const ColumnIdToGlobalDictMap* global_dictmaps,
+                                                                       PredicateParser* parser,
                                                                        const RuntimeFilterProbeDescriptor* desc,
                                                                        const SlotDescriptor* slot) {
         // keep consistent with ColumnRangeBuilder
-        if constexpr (ptype == TYPE_TIME || ptype == TYPE_NULL || ptype == TYPE_JSON || pt_is_float<ptype> ||
-                      pt_is_binary<ptype>) {
-            CHECK(false) << "unreachable path";
+        if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || ltype == TYPE_JSON || lt_is_float<ltype> ||
+                      lt_is_binary<ltype>) {
+            DCHECK(false) << "unreachable path";
             return Status::NotSupported("unreachable path");
         } else {
             std::vector<std::unique_ptr<ColumnPredicate>> preds;
 
             // Treat tinyint and boolean as int
-            constexpr LogicalType limit_type = ptype == TYPE_TINYINT || ptype == TYPE_BOOLEAN ? TYPE_INT : ptype;
+            constexpr LogicalType limit_type = ltype == TYPE_TINYINT || ltype == TYPE_BOOLEAN ? TYPE_INT : ltype;
             // Map TYPE_CHAR to TYPE_VARCHAR
-            constexpr LogicalType mapping_type = ptype == TYPE_CHAR ? TYPE_VARCHAR : ptype;
+            constexpr LogicalType mapping_type = ltype == TYPE_CHAR ? TYPE_VARCHAR : ltype;
 
             using value_type = typename RunTimeTypeLimits<limit_type>::value_type;
             using RangeType = ColumnValueRange<value_type>;
 
             const std::string& col_name = slot->col_name();
-            RangeType full_range(col_name, ptype, RunTimeTypeLimits<ptype>::min_value(),
-                                 RunTimeTypeLimits<ptype>::max_value());
-            if constexpr (pt_is_decimal<limit_type>) {
+            RangeType full_range(col_name, ltype, RunTimeTypeLimits<ltype>::min_value(),
+                                 RunTimeTypeLimits<ltype>::max_value());
+            if constexpr (lt_is_decimal<limit_type>) {
                 full_range.set_precision(slot->type().precision);
                 full_range.set_scale(slot->type().scale);
             }
@@ -58,26 +63,18 @@ struct RuntimeColumnPredicateBuilder {
 
             const JoinRuntimeFilter* rf = desc->runtime_filter();
 
-            const RuntimeBloomFilter<mapping_type>* filter = down_cast<const RuntimeBloomFilter<mapping_type>*>(rf);
-
-            using ValueType = typename RunTimeTypeTraits<mapping_type>::CppType;
-            SQLFilterOp min_op;
-            if (filter->left_open_interval()) {
-                min_op = to_olap_filter_type(TExprOpcode::GE, false);
+            // applied global-dict optimized column
+            if constexpr (ltype == TYPE_VARCHAR) {
+                auto cid = parser->column_id(*slot);
+                if (auto iter = global_dictmaps->find(cid); iter != global_dictmaps->end()) {
+                    build_minmax_range<RangeType, value_type, LowCardDictType, GlobalDictCodeDecoder>(range, rf,
+                                                                                                      iter->second);
+                } else {
+                    build_minmax_range<RangeType, value_type, mapping_type, DummyDecoder>(range, rf, nullptr);
+                }
             } else {
-                min_op = to_olap_filter_type(TExprOpcode::GT, false);
+                build_minmax_range<RangeType, value_type, mapping_type, DummyDecoder>(range, rf, nullptr);
             }
-            ValueType min_value = filter->min_value();
-            range.add_range(min_op, static_cast<value_type>(min_value));
-
-            SQLFilterOp max_op;
-            if (filter->right_open_interval()) {
-                max_op = to_olap_filter_type(TExprOpcode::LE, false);
-            } else {
-                max_op = to_olap_filter_type(TExprOpcode::LT, false);
-            }
-            ValueType max_value = filter->max_value();
-            range.add_range(max_op, static_cast<value_type>(max_value));
 
             std::vector<TCondition> filters;
             range.to_olap_filter(filters);
@@ -97,19 +94,93 @@ struct RuntimeColumnPredicateBuilder {
             return preds;
         }
     }
+
+    template <class InputType>
+    struct DummyDecoder {
+        DummyDecoder(std::nullptr_t) {}
+        auto decode(InputType input) const { return input; }
+    };
+
+    template <class InputType>
+    struct GlobalDictCodeDecoder {
+        GlobalDictCodeDecoder(const GlobalDictMap* dict_map) : _dict_map(dict_map) {}
+        Slice decode(DictId input) const {
+            for (const auto& [k, v] : *_dict_map) {
+                if (v == input) {
+                    return k;
+                }
+            }
+            if (input < 0) {
+                return Slice::min_value();
+            } else {
+                return Slice::max_value();
+            }
+        }
+
+    private:
+        const GlobalDictMap* _dict_map;
+    };
+
+    template <class RuntimeFilter, class Decoder>
+    struct MinMaxParser {
+        MinMaxParser(const RuntimeFilter* runtime_filter_, Decoder* decoder)
+                : runtime_filter(runtime_filter_), decoder(decoder) {}
+        auto min_value() {
+            auto code = runtime_filter->min_value();
+            return decoder->decode(code);
+        }
+        auto max_value() {
+            auto code = runtime_filter->max_value();
+            return decoder->decode(code);
+        }
+
+    private:
+        const RuntimeFilter* runtime_filter;
+        const Decoder* decoder;
+    };
+
+    template <class Range, class value_type, LogicalType mapping_type, template <class> class Decoder, class... Args>
+    static void build_minmax_range(Range& range, const JoinRuntimeFilter* rf, Args&&... args) {
+        const RuntimeBloomFilter<mapping_type>* filter = down_cast<const RuntimeBloomFilter<mapping_type>*>(rf);
+        using DecoderType = Decoder<typename RunTimeTypeTraits<mapping_type>::CppType>;
+        DecoderType decoder(std::forward<Args>(args)...);
+        MinMaxParser<RuntimeBloomFilter<mapping_type>, DecoderType> parser(filter, &decoder);
+        SQLFilterOp min_op;
+        if (filter->left_close_interval()) {
+            min_op = to_olap_filter_type(TExprOpcode::GE, false);
+        } else {
+            min_op = to_olap_filter_type(TExprOpcode::GT, false);
+        }
+        auto min_value = parser.min_value();
+        range.add_range(min_op, static_cast<value_type>(min_value));
+
+        SQLFilterOp max_op;
+        if (filter->right_close_interval()) {
+            max_op = to_olap_filter_type(TExprOpcode::LE, false);
+        } else {
+            max_op = to_olap_filter_type(TExprOpcode::LT, false);
+        }
+
+        auto max_value = parser.max_value();
+        range.add_range(max_op, static_cast<value_type>(max_value));
+    }
 };
 } // namespace detail
 
-inline Status OlapRuntimeScanRangePruner::_update(RuntimeFilterArrivedCallBack&& updater, size_t raw_read_rows) {
+inline Status OlapRuntimeScanRangePruner::_update(const ColumnIdToGlobalDictMap* global_dictmaps,
+                                                  RuntimeFilterArrivedCallBack&& updater, size_t raw_read_rows) {
     if (_arrived_runtime_filters_masks.empty()) {
         return Status::OK();
     }
     for (size_t i = 0; i < _arrived_runtime_filters_masks.size(); ++i) {
+        // 1. runtime filter arrived
+        // 2. runtime filter updated and read rows greater than rf_update_threhold
+        // we will filter by index
         if (auto rf = _unarrived_runtime_filters[i]->runtime_filter()) {
             size_t rf_version = rf->rf_version();
             if (_arrived_runtime_filters_masks[i] == 0 ||
                 (rf_version > _rf_versions[i] && raw_read_rows - _raw_read_rows > rf_update_threhold)) {
-                ASSIGN_OR_RETURN(auto predicates, _get_predicates(i));
+                ASSIGN_OR_RETURN(auto predicates, _get_predicates(global_dictmaps, i));
                 auto raw_predicates = _as_raw_predicates(predicates);
                 if (!raw_predicates.empty()) {
                     RETURN_IF_ERROR(updater(raw_predicates.front()->column_id(), raw_predicates));
@@ -124,14 +195,15 @@ inline Status OlapRuntimeScanRangePruner::_update(RuntimeFilterArrivedCallBack&&
     return Status::OK();
 }
 
-inline auto OlapRuntimeScanRangePruner::_get_predicates(size_t idx) -> StatusOr<PredicatesPtrs> {
+inline auto OlapRuntimeScanRangePruner::_get_predicates(const ColumnIdToGlobalDictMap* global_dictmaps, size_t idx)
+        -> StatusOr<PredicatesPtrs> {
     auto rf = _unarrived_runtime_filters[idx]->runtime_filter();
     if (rf->has_null()) return PredicatesPtrs{};
     // convert to olap filter
     auto slot_desc = _slot_descs[idx];
     return type_dispatch_predicate<StatusOr<PredicatesPtrs>>(slot_desc->type().type, false,
-                                                             detail::RuntimeColumnPredicateBuilder(), _parser,
-                                                             _unarrived_runtime_filters[idx], slot_desc);
+                                                             detail::RuntimeColumnPredicateBuilder(), global_dictmaps,
+                                                             _parser, _unarrived_runtime_filters[idx], slot_desc);
 }
 
 inline auto OlapRuntimeScanRangePruner::_as_raw_predicates(

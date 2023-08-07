@@ -26,37 +26,30 @@
 namespace starrocks {
 
 // This tree is usd for manage restful api path.
-template<class T>
+template <class T>
 class PathTrie {
 public:
-    PathTrie() :
-            _root("/", "*"),
-            _root_value(nullptr)
-            {
-    };
+    PathTrie() : _root("/", "*"), _root_value(nullptr){};
 
     ~PathTrie() {
         if (_root_value != nullptr) {
-            _allocator.destroy(_root_value);
-            _allocator.deallocate(_root_value, 1);
+            traits_alloc::destroy(_allocator, _root_value);
+            traits_alloc::deallocate(_allocator, _root_value, 1);
         }
     }
 
     class TrieNode {
     public:
-        TrieNode(const std::string& key, std::string  wildcard) :
-                _value(nullptr), 
-                _wildcard(std::move(wildcard)) {
+        TrieNode(const std::string& key, std::string wildcard) : _value(nullptr), _wildcard(std::move(wildcard)) {
             if (is_named_wildcard(key)) {
                 _named_wildcard = extract_template(key);
             }
         }
 
-        TrieNode(const std::string& key, const T& value, std::string  wildcard) :
-                _value(nullptr),
-                _wildcard(std::move(wildcard)) {
-            _value = _allocator.allocate(1);
-            _allocator.construct(_value, value);
+        TrieNode(const std::string& key, const T& value, std::string wildcard)
+                : _value(nullptr), _wildcard(std::move(wildcard)) {
+            _value = traits_alloc::allocate(_allocator, 1);
+            traits_alloc::construct(_allocator, _value, value);
             if (is_named_wildcard(key)) {
                 _named_wildcard = extract_template(key);
             }
@@ -68,8 +61,8 @@ public:
                 iter.second = nullptr;
             }
             if (_value != nullptr) {
-                _allocator.destroy(_value);
-                _allocator.deallocate(_value, 1);
+                traits_alloc::destroy(_allocator, _value);
+                traits_alloc::deallocate(_allocator, _value, 1);
             }
         }
 
@@ -101,8 +94,7 @@ public:
                 // If this is a template, set this to the node
                 if (is_named_wildcard(token)) {
                     std::string temp = extract_template(token);
-                    if (node->_named_wildcard.empty() 
-                            || node->_named_wildcard.compare(temp) == 0) {
+                    if (node->_named_wildcard.empty() || node->_named_wildcard.compare(temp) == 0) {
                         node->_named_wildcard = temp;
                     } else {
                         // Duplicated
@@ -111,8 +103,8 @@ public:
                 }
                 if (index == path.size() - 1) {
                     if (node->_value == nullptr) {
-                        node->_value = _allocator.allocate(1);
-                        _allocator.construct(node->_value, value);
+                        node->_value = traits_alloc::allocate(_allocator, 1);
+                        traits_alloc::construct(_allocator, node->_value, value);
                         return true;
                     }
                     // Already register by other path
@@ -122,8 +114,8 @@ public:
             return node->insert(path, index + 1, value);
         }
 
-        bool retrieve(const std::vector<std::string> path, int index, 
-                      T* value, std::map<std::string, std::string>* params) {
+        bool retrieve(const std::vector<std::string> path, int index, T* value,
+                      std::map<std::string, std::string>* params) {
             // check max index
             if (index >= path.size()) {
                 return false;
@@ -133,15 +125,13 @@ public:
             TrieNode* node = get_child(token);
             if (node == nullptr) {
                 node = get_child(_wildcard);
-                if (node ==  nullptr) {
+                if (node == nullptr) {
                     return false;
                 }
                 use_wildcard = true;
             } else {
                 // If we the last one, but we have no value, check wildcard
-                if (index == path.size() - 1 
-                        && node->_value == nullptr 
-                        && get_child(_wildcard) != nullptr) {
+                if (index == path.size() - 1 && node->_value == nullptr && get_child(_wildcard) != nullptr) {
                     node = get_child(_wildcard);
                     use_wildcard = true;
                 } else {
@@ -155,7 +145,7 @@ public:
                 if (node->_value == nullptr) {
                     return false;
                 }
-                _allocator.construct(value, *node->_value);
+                traits_alloc::construct(_allocator, value, *node->_value);
                 return true;
             }
 
@@ -174,10 +164,10 @@ public:
             }
             return false;
         }
+
     private:
         bool is_named_wildcard(const std::string& key) {
-            if (key.find('{') != std::string::npos 
-                    && key.find('}') != std::string::npos) {
+            if (key.find('{') != std::string::npos && key.find('}') != std::string::npos) {
                 return true;
             }
             return false;
@@ -197,8 +187,7 @@ public:
             return pair->second;
         }
 
-        void put(std::map<std::string, std::string>* params, 
-                TrieNode* node, const std::string& token) {
+        void put(std::map<std::string, std::string>* params, TrieNode* node, const std::string& token) {
             if (params != nullptr && !node->_named_wildcard.empty()) {
                 params->insert(std::make_pair(node->_named_wildcard, token));
             }
@@ -209,6 +198,7 @@ public:
         std::string _named_wildcard;
         std::map<std::string, TrieNode*> _children;
         std::allocator<T> _allocator;
+        using traits_alloc = std::allocator_traits<decltype(_allocator)>;
     };
 
     bool insert(const std::string& path, const T& value) {
@@ -216,8 +206,8 @@ public:
         split(path, &path_array);
         if (path_array.empty()) {
             if (_root_value == nullptr) {
-                _root_value = _allocator.allocate(1);
-                _allocator.construct(_root_value, value);
+                _root_value = traits_alloc::allocate(_allocator, 1);
+                traits_alloc::construct(_allocator, _root_value, value);
                 return true;
             } else {
                 return false;
@@ -230,17 +220,14 @@ public:
         return _root.insert(path_array, index, value);
     }
 
-    bool retrieve(const std::string& path, T* value) {
-        return retrieve(path, value, nullptr);
-    }
+    bool retrieve(const std::string& path, T* value) { return retrieve(path, value, nullptr); }
 
-    bool retrieve(const std::string& path, T* value, 
-                  std::map<std::string, std::string>* params) {
+    bool retrieve(const std::string& path, T* value, std::map<std::string, std::string>* params) {
         if (path.empty()) {
             if (_root_value == nullptr) {
                 return false;
             } else {
-                _allocator.construct(value, *_root_value);
+                traits_alloc::construct(_allocator, value, *_root_value);
                 return true;
             }
         }
@@ -250,7 +237,7 @@ public:
             if (_root_value == nullptr) {
                 return false;
             } else {
-                _allocator.construct(value, *_root_value);
+                traits_alloc::construct(_allocator, value, *_root_value);
                 return true;
             }
         }
@@ -283,6 +270,7 @@ private:
     T* _root_value;
     char _separator{'/'};
     std::allocator<T> _allocator;
+    using traits_alloc = std::allocator_traits<decltype(_allocator)>;
 };
 
-}
+} // namespace starrocks

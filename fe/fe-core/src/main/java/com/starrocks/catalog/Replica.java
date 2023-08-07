@@ -35,10 +35,8 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -104,6 +102,12 @@ public class Replica implements Writable {
     //      causing `version not found` error
     @SerializedName(value = "minReadableVersion")
     private volatile long minReadableVersion = 0;
+
+    // The last version reported from BE, this version should be increased monotonically.
+    // Use this version to detect data lose on BE.
+    // This version is only accessed by ReportHandler, so lock is unnecessary when updating.
+    private volatile long lastReportVersion = 0;
+
     private int schemaHash = -1;
     @SerializedName(value = "dataSize")
     private volatile long dataSize = 0;
@@ -131,7 +135,7 @@ public class Replica implements Writable {
     private boolean setBadForce = false;
 
     /*
-     * If set to true, with means this replica need to be repaired. explicitly.
+     * If set to true, which means this replica need to be repaired explicitly.
      * This can happen when this replica is created by a balance clone task, and
      * when task finished, the version of this replica is behind the partition's visible version.
      * So this replica need a further repair.
@@ -176,6 +180,8 @@ public class Replica implements Writable {
     // if lastWriteFail is true, we can not use it as replicated storage primary replica
     private volatile boolean lastWriteFail = false;
 
+    private boolean isErrorState = false;
+
     public Replica() {
     }
 
@@ -193,6 +199,13 @@ public class Replica implements Writable {
     public Replica(long replicaId, long backendId, long version, int schemaHash,
                    long dataSize, long rowCount, ReplicaState state,
                    long lastFailedVersion, long lastSuccessVersion) {
+        this(replicaId, backendId, version, schemaHash, dataSize, rowCount, state,
+                lastFailedVersion, lastSuccessVersion, 0);
+    }
+
+    public Replica(long replicaId, long backendId, long version, int schemaHash,
+                   long dataSize, long rowCount, ReplicaState state,
+                   long lastFailedVersion, long lastSuccessVersion, long minReadableVersion) {
         this.id = replicaId;
         this.backendId = backendId;
         this.version = version;
@@ -213,6 +226,7 @@ public class Replica implements Writable {
         } else {
             this.lastSuccessVersion = lastSuccessVersion;
         }
+        this.minReadableVersion = minReadableVersion;
     }
 
     public void setLastWriteFail(boolean lastWriteFail) {
@@ -305,6 +319,18 @@ public class Replica implements Writable {
         return this.setBadForce;
     }
 
+    public boolean isErrorState() {
+        return this.isErrorState;
+    }
+
+    public boolean setIsErrorState(boolean state) {
+        if (this.isErrorState == state) {
+            return false;
+        }
+        this.isErrorState = state;
+        return true;
+    }
+
     public boolean needFurtherRepair() {
         if (needFurtherRepair && System.currentTimeMillis() - this.furtherRepairSetTime < FURTHER_REPAIR_TIMEOUT_MS) {
             return true;
@@ -354,22 +380,6 @@ public class Replica implements Writable {
     public synchronized void updateVersion(long version) {
         updateReplicaInfo(version, this.lastFailedVersion,
                 this.lastSuccessVersion, this.minReadableVersion, dataSize, rowCount);
-    }
-
-    public void updateVersionInfoForRecovery(
-            long newVersion,
-            long lastFailedVersion,
-            long lastSuccessVersion) {
-
-        LOG.warn("update replica {} on backend {}'s version for recovery. version: {}."
-                        + " last failed version: {}:{}, last success version: {}:{}",
-                this.id, this.backendId, this.version, newVersion,
-                this.lastFailedVersion, lastFailedVersion,
-                this.lastSuccessVersion, lastSuccessVersion);
-
-        this.version = newVersion;
-        this.lastFailedVersion = lastFailedVersion;
-        this.lastSuccessVersion = lastSuccessVersion;
     }
 
     /* last failed version:  LFV
@@ -529,6 +539,10 @@ public class Replica implements Writable {
         strBuffer.append(version);
         strBuffer.append(", versionHash=");
         strBuffer.append(0);
+        strBuffer.append(", minReadableVersion=");
+        strBuffer.append(minReadableVersion);
+        strBuffer.append(", lastReportVersion=");
+        strBuffer.append(lastReportVersion);
         strBuffer.append(", dataSize=");
         strBuffer.append(dataSize);
         strBuffer.append(", rowCount=");
@@ -577,12 +591,10 @@ public class Replica implements Writable {
         dataSize = in.readLong();
         rowCount = in.readLong();
         state = ReplicaState.valueOf(Text.readString(in));
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_45) {
-            lastFailedVersion = in.readLong();
-            minReadableVersion = in.readLong(); // originally used as version_hash, now reused as minReadableVersion
-            lastSuccessVersion = in.readLong();
-            in.readLong(); // read a version_hash for compatibility
-        }
+        lastFailedVersion = in.readLong();
+        minReadableVersion = in.readLong(); // originally used as version_hash, now reused as minReadableVersion
+        lastSuccessVersion = in.readLong();
+        in.readLong(); // read a version_hash for compatibility
     }
 
     public static Replica read(DataInput in) throws IOException {
@@ -639,5 +651,13 @@ public class Replica implements Writable {
 
     public long getWatermarkTxnId() {
         return watermarkTxnId;
+    }
+
+    public void setLastReportVersion(long lastReportVersion) {
+        this.lastReportVersion = lastReportVersion;
+    }
+
+    public long getLastReportVersion() {
+        return this.lastReportVersion;
     }
 }

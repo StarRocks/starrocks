@@ -65,6 +65,7 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.journal.JournalException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Frontend;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -74,11 +75,11 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
+import java.util.stream.Collectors;
 
 /* this class contains the reference to bdb environment.
  * including all the opened databases and the replicationGroupAdmin.
@@ -101,7 +102,6 @@ public class BDBEnvironment {
     private DatabaseConfig dbConfig;
     private TransactionConfig txnConfig;
     private CloseSafeDatabase epochDB = null;  // used for fencing
-    private ReplicationGroupAdmin replicationGroupAdmin = null;
 
     // mark whether environment is closing, if true, all calling to environment will fail
     private volatile boolean closing = false;
@@ -202,7 +202,7 @@ public class BDBEnvironment {
         replicationConfig
                 .setConfigParam(ReplicationConfig.REPLICA_TIMEOUT, Config.bdbje_heartbeat_timeout_second + " s");
         replicationConfig
-                .setConfigParam(ReplicationConfig.FEEDER_TIMEOUT, Config.bdbje_heartbeat_timeout_second + " s");
+                .setConfigParam(ReplicationConfig.FEEDER_TIMEOUT, (10 + Config.bdbje_heartbeat_timeout_second) + " s");
         replicationConfig
                 .setConfigParam(ReplicationConfig.REPLAY_COST_PERCENT,
                         String.valueOf(Config.bdbje_replay_cost_percent));
@@ -228,6 +228,8 @@ public class BDBEnvironment {
         environmentConfig.setConfigParam(EnvironmentConfig.FILE_LOGGING_LEVEL, Config.bdbje_log_level);
         environmentConfig.setConfigParam(EnvironmentConfig.CLEANER_THREADS,
                 String.valueOf(Config.bdbje_cleaner_threads));
+        environmentConfig.setConfigParam(EnvironmentConfig.RESERVED_DISK,
+                String.valueOf(Config.bdbje_reserved_disk_size));
 
         if (isElectable) {
             Durability durability = new Durability(getSyncPolicy(Config.master_sync_policy),
@@ -266,25 +268,6 @@ public class BDBEnvironment {
             try {
                 LOG.info("start to setup bdb environment for {} times", i + 1);
                 replicatedEnvironment = new ReplicatedEnvironment(envHome, replicationConfig, environmentConfig);
-
-                // get replicationGroupAdmin object.
-                Set<InetSocketAddress> adminNodes = new HashSet<InetSocketAddress>();
-                // 1. add helper node
-                HostAndPort helperAddress = HostAndPort.fromString(helperHostPort);
-                InetSocketAddress helper = new InetSocketAddress(helperAddress.getHost(),
-                        helperAddress.getPort());
-                adminNodes.add(helper);
-                LOG.info("add helper[{}] as ReplicationGroupAdmin", helperHostPort);
-                // 2. add self if is electable
-                if (!selfNodeHostPort.equals(helperHostPort) && isElectable) {
-                    HostAndPort selfNodeAddress = HostAndPort.fromString(selfNodeHostPort);
-                    InetSocketAddress self = new InetSocketAddress(selfNodeAddress.getHost(),
-                            selfNodeAddress.getPort());
-                    adminNodes.add(self);
-                    LOG.info("add self[{}] as ReplicationGroupAdmin", selfNodeHostPort);
-                }
-
-                replicationGroupAdmin = new ReplicationGroupAdmin(STARROCKS_JOURNAL_GROUP, adminNodes);
 
                 // get a BDBHA object and pass the reference to GlobalStateMgr
                 HAProtocol protocol = new BDBHA(this, selfNodeName);
@@ -434,11 +417,13 @@ public class BDBEnvironment {
     }
 
     public ReplicationGroupAdmin getReplicationGroupAdmin() {
-        return this.replicationGroupAdmin;
-    }
-
-    public void setNewReplicationGroupAdmin(Set<InetSocketAddress> newHelperNodes) {
-        this.replicationGroupAdmin = new ReplicationGroupAdmin(STARROCKS_JOURNAL_GROUP, newHelperNodes);
+        Set<InetSocketAddress> addrs = GlobalStateMgr.getCurrentState()
+                .getFrontends(FrontendNodeType.FOLLOWER)
+                .stream()
+                .filter(Frontend::isAlive)
+                .map(fe -> new InetSocketAddress(fe.getHost(), fe.getEditLogPort()))
+                .collect(Collectors.toSet());
+        return new ReplicationGroupAdmin(STARROCKS_JOURNAL_GROUP, addrs);
     }
 
     // Return a handle to the epochDB

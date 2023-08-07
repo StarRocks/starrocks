@@ -23,6 +23,8 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
@@ -37,11 +39,19 @@ public class ComputeNodeProcDir implements ProcDirInterface {
 
     private static final Logger LOG = LogManager.getLogger(ComputeNodeProcDir.class);
 
-    public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("ComputeNodeId").add("IP").add("HeartbeatPort")
-            .add("BePort").add("HttpPort").add("BrpcPort").add("LastStartTime").add("LastHeartbeat").add("Alive")
-            .add("SystemDecommissioned").add("ClusterDecommissioned").add("ErrMsg")
-            .add("Version").build();
+    public static final ImmutableList<String> TITLE_NAMES;
+    static {
+        ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
+                .add("ComputeNodeId").add("IP").add("HeartbeatPort")
+                .add("BePort").add("HttpPort").add("BrpcPort").add("LastStartTime").add("LastHeartbeat").add("Alive")
+                .add("SystemDecommissioned").add("ClusterDecommissioned").add("ErrMsg")
+                .add("Version")
+                .add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct").add("HasStoragePath");
+        if (RunMode.allowCreateLakeTable()) {
+            builder.add("StarletPort").add("WorkerId");
+        }
+        TITLE_NAMES = builder.build();
+    }
 
     private SystemInfoService clusterInfoService;
 
@@ -114,6 +124,21 @@ public class ComputeNodeProcDir implements ProcDirInterface {
 
             computeNodeInfo.add(computeNode.getHeartbeatErrMsg());
             computeNodeInfo.add(computeNode.getVersion());
+
+            computeNodeInfo.add(BackendCoreStat.getCoresOfBe(computeNodeId));
+
+            computeNodeInfo.add(computeNode.getNumRunningQueries());
+            double memUsedPct = computeNode.getMemUsedPct();
+            computeNodeInfo.add(String.format("%.2f", memUsedPct * 100) + " %");
+            computeNodeInfo.add(String.format("%.1f", computeNode.getCpuUsedPermille() / 10.0) + " %");
+
+            if (RunMode.allowCreateLakeTable()) {
+                computeNodeInfo.add(String.valueOf(computeNode.getStarletPort()));
+                long workerId = GlobalStateMgr.getCurrentStarOSAgent().getWorkerIdByBackendId(computeNodeId);
+                computeNodeInfo.add(String.valueOf(workerId));
+            }
+
+            computeNodeInfo.add(String.valueOf(computeNode.isSetStoragePath()));
 
             comparableComputeNodeInfos.add(computeNodeInfo);
         }

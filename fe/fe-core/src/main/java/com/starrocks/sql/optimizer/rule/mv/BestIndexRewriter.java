@@ -48,18 +48,10 @@ public class BestIndexRewriter extends OptExpressionVisitor<OptExpression, Long>
         LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) optExpression.getOp();
 
         if (olapScanOperator.equals(scanOperator)) {
-            LogicalOlapScanOperator newScanOperator = new LogicalOlapScanOperator(
-                    olapScanOperator.getTable(),
-                    olapScanOperator.getColRefToColumnMetaMap(),
-                    olapScanOperator.getColumnMetaToColRefMap(),
-                    olapScanOperator.getDistributionSpec(),
-                    olapScanOperator.getLimit(),
-                    olapScanOperator.getPredicate(),
-                    bestIndex,
-                    olapScanOperator.getSelectedPartitionId(),
-                    olapScanOperator.getPartitionNames(),
-                    olapScanOperator.getSelectedTabletId(),
-                    olapScanOperator.getHintsTabletIds());
+            LogicalOlapScanOperator newScanOperator = LogicalOlapScanOperator.builder()
+                    .withOperator(olapScanOperator)
+                    .setSelectedIndexId(bestIndex)
+                    .build();
 
             optExpression = OptExpression.create(newScanOperator);
         }

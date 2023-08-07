@@ -18,9 +18,9 @@ package com.starrocks.connector.hudi;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
-import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
@@ -37,6 +37,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.logging.log4j.LogManager;
@@ -85,6 +86,12 @@ public class HudiMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public List<String> listPartitionNamesByValue(String databaseName, String tableName,
+                                                  List<Optional<String>> partitionValues) {
+        return hmsOps.getPartitionKeysByValue(databaseName, tableName, partitionValues);
+    }
+
+    @Override
     public Database getDb(String dbName) {
         Database database;
         try {
@@ -111,14 +118,15 @@ public class HudiMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys) {
+    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
+                                                   long snapshotId, ScalarOperator predicate, List<String> fieldNames) {
         ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
 
         if (((HiveMetaStoreTable) table).isUnPartitioned()) {
             partitions.add(hmsOps.getPartition(hmsTbl.getDbName(), hmsTbl.getTableName(), Lists.newArrayList()));
         } else {
-            Map<String, Partition> existingPartitions = hmsOps.getPartitionByNames(table, partitionKeys);
+            Map<String, Partition> existingPartitions = hmsOps.getPartitionByPartitionKeys(table, partitionKeys);
             for (PartitionKey partitionKey : partitionKeys) {
                 String hivePartitionName = toHivePartitionName(hmsTbl.getPartitionColumnNames(), partitionKey);
                 Partition partition = existingPartitions.get(hivePartitionName);
@@ -137,12 +145,14 @@ public class HudiMetadata implements ConnectorMetadata {
     @Override
     public Statistics getTableStatistics(OptimizerContext session,
                                          Table table,
-                                         List<ColumnRefOperator> columns,
-                                         List<PartitionKey> partitionKeys) {
+                                         Map<ColumnRefOperator, Column> columns,
+                                         List<PartitionKey> partitionKeys,
+                                         ScalarOperator predicate) {
         Statistics statistics = null;
+        List<ColumnRefOperator> columnRefOperators = Lists.newArrayList(columns.keySet());
         try {
             if (session.getSessionVariable().enableHiveColumnStats()) {
-                statistics = statisticsProvider.getTableStatistics(session, table, columns, partitionKeys);
+                statistics = statisticsProvider.getTableStatistics(session, table, columnRefOperators, partitionKeys);
             } else {
                 statistics = Statistics.builder().build();
                 LOG.warn("Session variable {} is false when getting table statistics on table {}",
@@ -155,24 +165,26 @@ public class HudiMetadata implements ConnectorMetadata {
             Map<ColumnRefOperator, ColumnStatistic> columnStatistics = statistics.getColumnStatistics();
             if (columnStatistics.isEmpty()) {
                 double outputRowNums = statistics.getOutputRowCount();
-                statistics = statisticsProvider.createUnknownStatistics(table, columns, partitionKeys, outputRowNums);
+                statistics = statisticsProvider.createUnknownStatistics(table, columnRefOperators, partitionKeys, outputRowNums);
             }
         }
 
-        Preconditions.checkState(columns.size() == statistics.getColumnStatistics().size());
-        for (ColumnRefOperator column : columns) {
-            session.getDumpInfo().addTableStatistics(table, column.getName(), statistics.getColumnStatistic(column));
+        Preconditions.checkState(columnRefOperators.size() == statistics.getColumnStatistics().size());
+        if (session.getDumpInfo() != null) {
+            for (ColumnRefOperator column : columnRefOperators) {
+                session.getDumpInfo().addTableStatistics(table, column.getName(), statistics.getColumnStatistic(column));
+            }
         }
 
         return statistics;
     }
 
     @Override
-    public void refreshTable(String srDbName, Table table, List<String> partitionNames) {
+    public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
         if (partitionNames != null && partitionNames.size() > 0) {
             cacheUpdateProcessor.ifPresent(processor -> processor.refreshPartition(table, partitionNames));
         } else {
-            cacheUpdateProcessor.ifPresent(processor -> processor.refreshTable(srDbName, table));
+            cacheUpdateProcessor.ifPresent(processor -> processor.refreshTable(srDbName, table, onlyCachedPartitions));
         }
     }
 
@@ -181,9 +193,10 @@ public class HudiMetadata implements ConnectorMetadata {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
         if (isResourceMappingCatalog(catalogName)) {
-            HudiTable hudiTable = (HudiTable) GlobalStateMgr.getCurrentState().getMetadata().getTable(dbName, tableName);
+            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) GlobalStateMgr.getCurrentState()
+                    .getMetadata().getTable(dbName, tableName);
             cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTable(
-                    hudiTable.getDbName(), hudiTable.getTableName(), hudiTable.getTableLocation()));
+                    hmsTable.getDbName(), hmsTable.getTableName(), hmsTable.getTableLocation()));
         }
     }
 

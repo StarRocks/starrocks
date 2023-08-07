@@ -39,6 +39,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -60,11 +61,17 @@ public class DeleteStmt extends DmlStmt {
     private long jobId = -1;
 
     public DeleteStmt(TableName tableName, PartitionNames partitionNames, Expr wherePredicate) {
-        this(tableName, partitionNames, null, wherePredicate, null);
+        this(tableName, partitionNames, null, wherePredicate, null, NodePosition.ZERO);
     }
 
-    public DeleteStmt(TableName tableName, PartitionNames partitionNames, List<Relation> usingRelations, Expr wherePredicate,
-                      List<CTERelation> commonTableExpressions) {
+    public DeleteStmt(TableName tableName, PartitionNames partitionNames, List<Relation> usingRelations,
+                      Expr wherePredicate, List<CTERelation> commonTableExpressions) {
+        this(tableName, partitionNames, usingRelations, wherePredicate, commonTableExpressions, NodePosition.ZERO);
+    }
+
+    public DeleteStmt(TableName tableName, PartitionNames partitionNames, List<Relation> usingRelations,
+                      Expr wherePredicate, List<CTERelation> commonTableExpressions, NodePosition pos) {
+        super(pos);
         this.tblName = tableName;
         this.partitionNames = partitionNames;
         this.usingRelations = usingRelations;

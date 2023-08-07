@@ -41,6 +41,7 @@
 #include "common/compiler_util.h"
 #include "gen_cpp/persistent_index.pb.h"
 #include "storage/data_dir.h"
+#include "storage/delta_column_group.h"
 #include "storage/kv_store.h"
 #include "storage/olap_define.h"
 #include "storage/tablet_meta.h"
@@ -57,36 +58,37 @@ class TabletMetaPB;
 struct TabletMetaStats {
     TTabletId tablet_id = 0;
     TTableId table_id = 0;
-    size_t meta_bytes = 0;
-    // updatable related
-    size_t log_size = 0;
-    size_t log_bytes = 0;
-    size_t rowset_size = 0;
-    size_t rowset_bytes = 0;
-    size_t pending_rowset_size = 0;
-    size_t pending_rowset_bytes = 0;
-    size_t delvec_size = 0;
-    size_t delvec_bytes = 0;
+    size_t tablet_meta_bytes = 0;
+    // update tablet related
+    size_t log_count = 0;
+    size_t log_meta_bytes = 0;
+    size_t rowset_count = 0;
+    size_t rowset_meta_bytes = 0;
+    size_t pending_rowset_count = 0;
+    size_t pending_rowset_meta_bytes = 0;
+    size_t delvec_count = 0;
+    size_t delvec_meta_bytes = 0;
 };
 
 struct MetaStoreStats {
-    size_t tablet_size = 0;
-    size_t tablet_bytes = 0;
-    size_t rst_size = 0;
-    size_t rst_bytes = 0;
-    size_t update_tablet_size = 0;
-    size_t update_tablet_bytes = 0;
-    size_t log_size = 0;
-    size_t log_bytes = 0;
-    size_t delvec_size = 0;
-    size_t delvec_bytes = 0;
-    size_t rowset_size = 0;
-    size_t rowset_bytes = 0;
-    size_t pending_rowset_size = 0;
-    size_t pending_rowset_bytes = 0;
-    size_t total_size = 0;
-    size_t total_bytes = 0;
-    size_t error_size = 0;
+    size_t tablet_count = 0;
+    size_t tablet_meta_bytes = 0;
+    size_t rowset_count = 0;
+    size_t rowset_meta_bytes = 0;
+    // update tablet related
+    size_t update_tablet_count = 0;
+    size_t update_tablet_meta_bytes = 0;
+    size_t log_count = 0;
+    size_t log_meta_bytes = 0;
+    size_t delvec_count = 0;
+    size_t delvec_meta_bytes = 0;
+    size_t update_rowset_count = 0;
+    size_t update_rowset_meta_bytes = 0;
+    size_t pending_rowset_count = 0;
+    size_t pending_rowset_meta_bytes = 0;
+    size_t total_count = 0;
+    size_t total_meta_bytes = 0;
+    size_t error_count = 0;
     std::map<TTabletId, TabletMetaStats> tablets;
 };
 
@@ -105,13 +107,14 @@ public:
     static Status build_primary_meta(DataDir* store, rapidjson::Document& doc, rocksdb::ColumnFamilyHandle* cf,
                                      rocksdb::WriteBatch& batch);
 
-    static Status save(DataDir* store, const TabletMetaSharedPtr& tablet_meta);
-
     static Status save(DataDir* store, const TabletMetaPB& meta_pb);
 
     static Status remove(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash);
 
     static Status walk(KVStore* meta, std::function<bool(long, long, std::string_view)> const& func);
+
+    static Status walk_until_timeout(KVStore* meta, std::function<bool(long, long, std::string_view)> const& func,
+                                     int64_t limit_time);
 
     static Status load_json_meta(DataDir* store, const std::string& meta_path);
 
@@ -128,10 +131,6 @@ public:
     // commit a rowset into tablet
     static Status rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid, EditVersionMetaPB* edit,
                                 const RowsetMetaPB& rowset, const string& rowset_meta_key);
-    // write rowset_meta into rocksdb
-    // this function is used for partial update so far
-    static Status write_rowset_meta(DataDir* store, TTabletId tablet_id, const RowsetMetaPB& rowset,
-                                    const string& rowset_meta_key);
 
     static Status write_persistent_index_meta(DataDir* store, TTabletId tablet_id, const PersistentIndexMetaPB& meta);
 
@@ -163,6 +162,13 @@ public:
                                       const PersistentIndexMetaPB& index_meta, bool enable_persistent_index,
                                       const starrocks::RowsetMetaPB* rowset_meta);
 
+    // used in column mode partial update
+    static Status apply_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid, const EditVersion& version,
+                                      const std::map<uint32_t, DeltaColumnGroupPtr>& delta_column_groups,
+                                      const vector<std::pair<uint32_t, DelVectorPtr>>& delvecs,
+                                      const PersistentIndexMetaPB& index_meta, bool enable_persistent_index,
+                                      const starrocks::RowsetMetaPB* rowset_meta);
+
     // traverse all the op logs for a tablet
     static Status traverse_meta_logs(DataDir* store, TTabletId tablet_id,
                                      const std::function<bool(uint64_t, const TabletMetaLogPB&)>& func);
@@ -174,10 +180,29 @@ public:
     static Status get_del_vector(KVStore* meta, TTabletId tablet_id, uint32_t segment_id, int64_t version,
                                  DelVector* delvec, int64_t* latest_version);
 
+    static Status del_vector_iterate(KVStore* meta, TTabletId tablet_id, uint32_t lower, uint32_t upper,
+                                     const std::function<bool(uint32_t, int64_t, std::string_view)>& func);
     // The first element of pair is segment id, the second element of pair is version.
     using DeleteVectorList = std::vector<std::pair<uint32_t, int64_t>>;
 
     static StatusOr<DeleteVectorList> list_del_vector(KVStore* meta, TTabletId tablet_id, int64_t max_version);
+
+    static Status get_delta_column_group(KVStore* meta, TTabletId tablet_id, uint32_t segment_id, int64_t version,
+                                         DeltaColumnGroupList* dcgs);
+
+    static Status get_delta_column_group(KVStore* meta, TTabletId tablet_id, RowsetId rowsetid, uint32_t segment_id,
+                                         int64_t version, DeltaColumnGroupList* dcgs);
+
+    static Status scan_delta_column_group(KVStore* meta, TTabletId tablet_id, uint32_t segment_id,
+                                          int64_t begin_version, int64_t end_version, DeltaColumnGroupList* dcgs);
+
+    static Status scan_delta_column_group(KVStore* meta, TTabletId tablet_id, RowsetId rowsetid, uint32_t segment_id,
+                                          int64_t begin_version, int64_t end_version, DeltaColumnGroupList* dcgs);
+
+    static Status delete_delta_column_group(KVStore* meta, TTabletId tablet_id, uint32_t rowset_id, uint32_t segments);
+    static Status delete_delta_column_group(KVStore* meta, WriteBatch* batch, const TabletSegmentId& tsid,
+                                            int64_t version);
+    static Status delete_delta_column_group(KVStore* meta, TTabletId tablet_id, RowsetId rowsetid, uint32_t segments);
 
     // delete all delete vectors of a tablet not useful anymore for query version < `version`, for example
     // suppose we have delete vectors of version 1, 3, 5, 6, 7, 12, 16
@@ -195,6 +220,16 @@ public:
     static Status put_del_vector(DataDir* store, WriteBatch* batch, TTabletId tablet_id, uint32_t segment_id,
                                  const DelVector& delvec);
 
+    static Status put_delta_column_group(DataDir* store, WriteBatch* batch, TTabletId tablet_id, uint32_t segment_id,
+                                         const DeltaColumnGroupList& dcgs);
+
+    static Status put_delta_column_group(DataDir* store, WriteBatch* batch, TTabletId tablet_id, RowsetId rowsetid,
+                                         uint32_t segment_id, const DeltaColumnGroupList& dcgs);
+
+    static Status put_delta_column_group(DataDir* store, WriteBatch* batch, TTabletId tablet_id,
+                                         const std::string& rowsetid, uint32_t segment_id,
+                                         const DeltaColumnGroupList& dcgs);
+
     static Status put_tablet_meta(DataDir* store, WriteBatch* batch, const TabletMetaPB& tablet_meta);
 
     static Status delete_pending_rowset(DataDir* store, WriteBatch* batch, TTabletId tablet_id, int64_t version);
@@ -209,6 +244,8 @@ public:
     static Status clear_log(DataDir* store, WriteBatch* batch, TTabletId tablet_id);
 
     static Status clear_del_vector(DataDir* store, WriteBatch* batch, TTabletId tablet_id);
+
+    static Status clear_delta_column_group(DataDir* store, WriteBatch* batch, TTabletId tablet_id);
 
     static Status clear_persistent_index(DataDir* store, WriteBatch* batch, TTabletId tablet_id);
 

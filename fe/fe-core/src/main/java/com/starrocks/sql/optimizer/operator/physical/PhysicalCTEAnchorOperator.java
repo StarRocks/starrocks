@@ -17,10 +17,12 @@ package com.starrocks.sql.optimizer.operator.physical;
 
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 
+import java.util.List;
 import java.util.Objects;
 
 public class PhysicalCTEAnchorOperator extends PhysicalOperator {
@@ -43,6 +45,11 @@ public class PhysicalCTEAnchorOperator extends PhysicalOperator {
     }
 
     @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        return projectInputRow(inputs.get(1).getRowOutputInfo());
+    }
+
+    @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitPhysicalCTEAnchor(optExpression, context);
     }
@@ -57,12 +64,11 @@ public class PhysicalCTEAnchorOperator extends PhysicalOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
+
         if (!super.equals(o)) {
             return false;
         }
+
         PhysicalCTEAnchorOperator that = (PhysicalCTEAnchorOperator) o;
         return Objects.equals(cteId, that.cteId);
     }

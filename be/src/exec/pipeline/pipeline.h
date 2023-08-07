@@ -61,6 +61,10 @@ public:
         DCHECK(!_op_factories.empty());
         return down_cast<SourceOperatorFactory*>(_op_factories[0].get());
     }
+    OperatorFactory* sink_operator_factory() {
+        DCHECK(!_op_factories.empty());
+        return _op_factories[_op_factories.size() - 1].get();
+    }
     size_t degree_of_parallelism() const;
 
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
@@ -92,9 +96,12 @@ public:
         ss << "]";
         return ss.str();
     }
+
     // STREAM MV
     Status reset_epoch(RuntimeState* state);
     void count_down_epoch_finished_driver(RuntimeState* state);
+
+    size_t output_amplification_factor() const;
 
 private:
     uint32_t _id = 0;

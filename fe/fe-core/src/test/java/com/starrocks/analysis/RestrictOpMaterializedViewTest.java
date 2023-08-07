@@ -19,7 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.load.DeleteHandler;
+import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.LoadDataSourceType;
 import com.starrocks.qe.ConnectContext;
@@ -47,7 +47,7 @@ public class RestrictOpMaterializedViewTest {
     @BeforeClass
     public static void setUp() throws Exception {
         FeConstants.runningUnitTest = true;
-        FeConstants.default_scheduler_interval_millisecond = 100;
+        Config.alter_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
         Config.enable_experimental_mv = true;
@@ -78,7 +78,7 @@ public class RestrictOpMaterializedViewTest {
         starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase("db1").useDatabase("db1");
         starRocksAssert.withTable(createTblStmtStr);
-        starRocksAssert.withNewMaterializedView(createMvStmtStr);
+        starRocksAssert.withMaterializedView(createMvStmtStr);
 
     }
 
@@ -119,7 +119,7 @@ public class RestrictOpMaterializedViewTest {
         String sql1 = "delete from db1.mv1 where k2 = 3;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql1, ctx);
-            DeleteHandler deleteHandler = new DeleteHandler();
+            DeleteMgr deleteHandler = new DeleteMgr();
             deleteHandler.process((DeleteStmt) statementBase);
             Assert.fail();
         } catch (Exception e) {

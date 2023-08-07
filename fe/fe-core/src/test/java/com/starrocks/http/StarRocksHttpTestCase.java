@@ -108,10 +108,10 @@ public abstract class StarRocksHttpTestCase {
     private static long testReplicaId2 = 2001;
     private static long testReplicaId3 = 2002;
 
-    private static long testDbId = 100L;
-    private static long testTableId = 200L;
+    protected static final long TEST_DB_ID = 100L;
+    protected static final long TEST_TABLE_ID = 200L;
     private static long testPartitionId = 201L;
-    public static long testIndexId = testTableId; // the base indexid == tableid
+    public static long testIndexId = TEST_TABLE_ID; // the base indexid == tableid
     private static long tabletId = 400L;
 
     public static long testStartVersion = 12;
@@ -120,6 +120,7 @@ public abstract class StarRocksHttpTestCase {
     public static int HTTP_PORT;
 
     protected static String URI;
+    protected static String BASE_URL;
 
     protected String rootAuth = Credentials.basic("root", "");
 
@@ -153,7 +154,8 @@ public abstract class StarRocksHttpTestCase {
         // index
         MaterializedIndex baseIndex = new MaterializedIndex(testIndexId, MaterializedIndex.IndexState.NORMAL);
         TabletMeta tabletMeta =
-                new TabletMeta(testDbId, testTableId, testPartitionId, testIndexId, testSchemaHash, TStorageMedium.HDD);
+                new TabletMeta(TEST_DB_ID, TEST_TABLE_ID, testPartitionId, testIndexId, testSchemaHash,
+                        TStorageMedium.HDD);
         baseIndex.addTablet(tablet, tabletMeta);
 
         tablet.addReplica(replica1);
@@ -170,7 +172,8 @@ public abstract class StarRocksHttpTestCase {
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(testPartitionId, DataProperty.DEFAULT_DATA_PROPERTY);
         partitionInfo.setReplicationNum(testPartitionId, (short) 3);
-        OlapTable table = new OlapTable(testTableId, name, columns, KeysType.AGG_KEYS, partitionInfo,
+        partitionInfo.setIsInMemory(testPartitionId, false);
+        OlapTable table = new OlapTable(TEST_TABLE_ID, name, columns, KeysType.AGG_KEYS, partitionInfo,
                 distributionInfo);
         table.addPartition(partition);
         table.setIndexMeta(testIndexId, "testIndex", columns, 0, testSchemaHash, (short) 1,
@@ -190,13 +193,13 @@ public abstract class StarRocksHttpTestCase {
         partitionInfo.setReplicationNum(testPartitionId + 100, (short) 3);
         EsTable table = null;
         Map<String, String> props = new HashMap<>();
-        props.put(EsTable.HOSTS, "http://node-1:8080");
-        props.put(EsTable.USER, "root");
-        props.put(EsTable.PASSWORD, "root");
-        props.put(EsTable.INDEX, "test");
-        props.put(EsTable.TYPE, "doc");
+        props.put(EsTable.KEY_HOSTS, "http://node-1:8080");
+        props.put(EsTable.KEY_USER, "root");
+        props.put(EsTable.KEY_PASSWORD, "root");
+        props.put(EsTable.KEY_INDEX, "test");
+        props.put(EsTable.KEY_TYPE, "doc");
         try {
-            table = new EsTable(testTableId + 1, name, columns, props, partitionInfo);
+            table = new EsTable(TEST_TABLE_ID + 1, name, columns, props, partitionInfo);
         } catch (DdlException e) {
             e.printStackTrace();
         }
@@ -208,13 +211,13 @@ public abstract class StarRocksHttpTestCase {
             GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
             Auth auth = new Auth();
             //EasyMock.expect(globalStateMgr.getAuth()).andReturn(starrocksAuth).anyTimes();
-            Database db = new Database(testDbId, "testDb");
+            Database db = new Database(TEST_DB_ID, "testDb");
             OlapTable table = newTable(TABLE_NAME);
-            db.createTable(table);
+            db.registerTableUnlocked(table);
             OlapTable table1 = newTable(TABLE_NAME + 1);
-            db.createTable(table1);
+            db.registerTableUnlocked(table1);
             EsTable esTable = newEsTable("es_table");
-            db.createTable(esTable);
+            db.registerTableUnlocked(esTable);
             new Expectations(globalStateMgr) {
                 {
                     globalStateMgr.getAuth();
@@ -275,13 +278,13 @@ public abstract class StarRocksHttpTestCase {
             GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
             Auth auth = new Auth();
             //EasyMock.expect(globalStateMgr.getAuth()).andReturn(starrocksAuth).anyTimes();
-            Database db = new Database(testDbId, "testDb");
+            Database db = new Database(TEST_DB_ID, "testDb");
             OlapTable table = newTable(TABLE_NAME);
-            db.createTable(table);
+            db.registerTableUnlocked(table);
             OlapTable table1 = newTable(TABLE_NAME + 1);
-            db.createTable(table1);
+            db.registerTableUnlocked(table1);
             EsTable esTable = newEsTable("es_table");
-            db.createTable(esTable);
+            db.registerTableUnlocked(esTable);
             new Expectations(globalStateMgr) {
                 {
                     globalStateMgr.getAuth();
@@ -364,6 +367,7 @@ public abstract class StarRocksHttpTestCase {
             socket = new ServerSocket(0);
             socket.setReuseAddress(true);
             HTTP_PORT = socket.getLocalPort();
+            BASE_URL = "http://localhost:" + HTTP_PORT;
             URI = "http://localhost:" + HTTP_PORT + "/api/" + DB_NAME + "/" + TABLE_NAME;
         } catch (Exception e) {
             throw new IllegalStateException("Could not find a free TCP/IP port to start HTTP Server on");
@@ -415,6 +419,11 @@ public abstract class StarRocksHttpTestCase {
             TabletInvertedIndex getCurrentInvertedIndex() {
                 return tabletInvertedIndex;
             }
+
+            @Mock
+            public EditLog getEditLog() {
+                return new EditLog(null);
+            }
         };
         assignBackends();
         doSetUp();
@@ -464,7 +473,7 @@ public abstract class StarRocksHttpTestCase {
                 };
 
                 return new GlobalTransactionMgr(null);
-            } 
+            }
         };
         assignBackends();
         doSetUp();

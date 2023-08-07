@@ -16,28 +16,39 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.privilege.ObjectTypeDeprecate;
+import com.starrocks.privilege.PrivilegeEntry;
 import com.starrocks.privilege.UserPrivilegeCollection;
+import com.starrocks.privilege.UserPrivilegeCollectionV2;
+import com.starrocks.sql.ast.UserIdentity;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.List;
+import java.util.Map;
 
-public class CreateUserInfo  implements Writable {
+public class CreateUserInfo implements Writable {
     @SerializedName(value = "u")
     UserIdentity userIdentity;
     @SerializedName(value = "a")
     UserAuthenticationInfo authenticationInfo;
     @SerializedName(value = "p")
     UserProperty userProperty;
+
+    //Deprecated attribute, can be removed in version 3.2
     @SerializedName(value = "c")
+    @Deprecated
     UserPrivilegeCollection userPrivilegeCollection;
+
+    @SerializedName(value = "c2")
+    UserPrivilegeCollectionV2 userPrivilegeCollectionV2;
 
     @SerializedName(value = "i")
     short pluginId;
@@ -49,13 +60,13 @@ public class CreateUserInfo  implements Writable {
             UserIdentity userIdentity,
             UserAuthenticationInfo authenticationInfo,
             UserProperty userProperty,
-            UserPrivilegeCollection privilegeCollection,
+            UserPrivilegeCollectionV2 privilegeCollection,
             short pluginId,
             short pluginVersion) {
         this.userIdentity = userIdentity;
         this.authenticationInfo = authenticationInfo;
         this.userProperty = userProperty;
-        this.userPrivilegeCollection = privilegeCollection;
+        this.userPrivilegeCollectionV2 = privilegeCollection;
         this.pluginId = pluginId;
         this.pluginVersion = pluginVersion;
     }
@@ -72,8 +83,20 @@ public class CreateUserInfo  implements Writable {
         return userProperty;
     }
 
-    public UserPrivilegeCollection getUserPrivilegeCollection() {
-        return userPrivilegeCollection;
+    public UserPrivilegeCollectionV2 getUserPrivilegeCollection() {
+        if (userPrivilegeCollectionV2 == null) {
+            UserPrivilegeCollectionV2 collection = new UserPrivilegeCollectionV2();
+            collection.grantRoles(userPrivilegeCollection.getAllRoles());
+            collection.setDefaultRoleIds(userPrivilegeCollection.getDefaultRoleIds());
+
+            Map<ObjectTypeDeprecate, List<PrivilegeEntry>> m = userPrivilegeCollection.getTypeToPrivilegeEntryList();
+            for (Map.Entry<ObjectTypeDeprecate, List<PrivilegeEntry>> e : m.entrySet()) {
+                collection.getTypeToPrivilegeEntryList().put(e.getKey().toObjectType(), e.getValue());
+            }
+            return collection;
+        } else {
+            return userPrivilegeCollectionV2;
+        }
     }
 
     public short getPluginId() {

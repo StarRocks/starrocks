@@ -29,6 +29,7 @@
 #include "storage/tablet_updates.h"
 #include "util/stack_util.h"
 #include "util/starrocks_metrics.h"
+#include "util/xxh3.h"
 
 namespace starrocks {
 
@@ -99,7 +100,7 @@ template <typename Key>
 class HashIndexImpl : public HashIndex {
 private:
     phmap::parallel_flat_hash_map<Key, RowIdPack4, StdHashWithSeed<Key, PhmapSeed1>, phmap::priv::hash_default_eq<Key>,
-                                  TraceAlloc<phmap::priv::Pair<const Key, RowIdPack4>>, 4, phmap::NullMutex, false>
+                                  TraceAlloc<phmap::priv::Pair<const Key, RowIdPack4>>, 4, phmap::NullMutex, true>
             _map;
 
 public:
@@ -240,7 +241,7 @@ struct FixSlice {
 
 template <size_t S>
 struct FixSliceHash {
-    size_t operator()(const FixSlice<S>& v) const { return crc_hash_64(v.v, 4 * S, 0x811C9DC5); }
+    size_t operator()(const FixSlice<S>& v) const { return XXH3_64bits(v.v, 4 * S); }
 };
 
 template <size_t S>
@@ -248,7 +249,7 @@ class FixSliceHashIndex : public HashIndex {
 private:
     phmap::parallel_flat_hash_map<FixSlice<S>, RowIdPack4, FixSliceHash<S>, phmap::priv::hash_default_eq<FixSlice<S>>,
                                   TraceAlloc<phmap::priv::Pair<const FixSlice<S>, RowIdPack4>>, 4, phmap::NullMutex,
-                                  false>
+                                  true>
             _map;
 
 public:
@@ -533,7 +534,7 @@ public:
 };
 
 struct StringHasher1 {
-    size_t operator()(const string& v) const { return crc_hash_64(v.data(), v.length(), 0x811C9DC5); }
+    size_t operator()(const string& v) const { return XXH3_64bits(v.data(), v.length()); }
 };
 
 class SliceHashIndex : public HashIndex {
@@ -541,7 +542,7 @@ private:
     using StringMap =
             phmap::parallel_flat_hash_map<string, tablet_rowid_t, StringHasher1, phmap::priv::hash_default_eq<string>,
                                           TraceAlloc<phmap::priv::Pair<const string, tablet_rowid_t>>, 4,
-                                          phmap::NullMutex, false>;
+                                          phmap::NullMutex, true>;
     StringMap _map;
     size_t _total_length = 0;
 
@@ -922,11 +923,11 @@ PrimaryIndex::~PrimaryIndex() {
     }
 }
 
-PrimaryIndex::PrimaryIndex(const VectorizedSchema& pk_schema) {
+PrimaryIndex::PrimaryIndex(const Schema& pk_schema) {
     _set_schema(pk_schema);
 }
 
-void PrimaryIndex::_set_schema(const VectorizedSchema& pk_schema) {
+void PrimaryIndex::_set_schema(const Schema& pk_schema) {
     _pk_schema = pk_schema;
     std::vector<ColumnId> sort_key_idxes(pk_schema.num_fields());
     for (ColumnId i = 0; i < pk_schema.num_fields(); ++i) {
@@ -982,9 +983,9 @@ static string int_list_to_string(const vector<uint32_t>& l) {
     return ret;
 }
 
-Status PrimaryIndex::prepare(const EditVersion& version) {
+Status PrimaryIndex::prepare(const EditVersion& version, size_t n) {
     if (_persistent_index != nullptr) {
-        return _persistent_index->prepare(version);
+        return _persistent_index->prepare(version, n);
     }
     return Status::OK();
 }
@@ -1021,7 +1022,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     for (auto i = 0; i < tablet_schema.num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
     }
-    auto pkey_schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, pk_columns);
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
     _set_schema(pkey_schema);
 
     // load persistent index if enable persistent index meta
@@ -1039,7 +1040,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     int64_t apply_version = 0;
     std::vector<RowsetSharedPtr> rowsets;
     std::vector<uint32_t> rowset_ids;
-    RETURN_IF_ERROR(tablet->updates()->_get_apply_version_and_rowsets(&apply_version, &rowsets, &rowset_ids));
+    RETURN_IF_ERROR(tablet->updates()->get_apply_version_and_rowsets(&apply_version, &rowsets, &rowset_ids));
 
     size_t total_data_size = 0;
     size_t total_segments = 0;
@@ -1160,7 +1161,8 @@ Status PrimaryIndex::_build_persistent_values(uint32_t rssid, const vector<uint3
 const Slice* PrimaryIndex::_build_persistent_keys(const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                                                   std::vector<Slice>* key_slices) const {
     if (pks.is_binary()) {
-        return reinterpret_cast<const Slice*>(pks.raw_data());
+        const Slice* vkeys = reinterpret_cast<const Slice*>(pks.raw_data());
+        return vkeys + idx_begin;
     } else {
         const uint8_t* keys = pks.raw_data();
         for (size_t i = idx_begin; i < idx_end; i++) {
@@ -1181,32 +1183,37 @@ Status PrimaryIndex::_insert_into_persistent_index(uint32_t rssid, const vector<
     return Status::OK();
 }
 
-void PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                                 uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) {
+Status PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
+                                                   uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes,
+                                                   IOStat* stat) {
+    Status st;
     uint32_t n = idx_end - idx_begin;
     std::vector<Slice> keys;
     std::vector<uint64_t> values;
     values.reserve(n);
     std::vector<uint64_t> old_values(n, NullIndexValue);
     const Slice* vkeys = _build_persistent_keys(pks, idx_begin, idx_end, &keys);
-    _build_persistent_values(rssid, rowid_start, idx_begin, idx_end, &values);
-    _persistent_index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(values.data()),
-                              reinterpret_cast<IndexValue*>(old_values.data()));
+    RETURN_IF_ERROR(_build_persistent_values(rssid, rowid_start, idx_begin, idx_end, &values));
+    RETURN_IF_ERROR(_persistent_index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(values.data()),
+                                              reinterpret_cast<IndexValue*>(old_values.data()), stat));
     for (unsigned long old : old_values) {
         if ((old != NullIndexValue) && (old >> 32) == rssid) {
             LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid;
+            st = Status::InternalError("found duplicate in upsert data");
         }
         if (old != NullIndexValue) {
             (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
         }
     }
+    return st;
 }
 
-void PrimaryIndex::_erase_persistent_index(const Column& key_col, DeletesMap* deletes) {
+Status PrimaryIndex::_erase_persistent_index(const Column& key_col, DeletesMap* deletes) {
+    Status st;
     std::vector<Slice> keys;
     std::vector<uint64_t> old_values(key_col.size(), NullIndexValue);
     const Slice* vkeys = _build_persistent_keys(key_col, 0, key_col.size(), &keys);
-    Status st = _persistent_index->erase(key_col.size(), vkeys, reinterpret_cast<IndexValue*>(old_values.data()));
+    st = _persistent_index->erase(key_col.size(), vkeys, reinterpret_cast<IndexValue*>(old_values.data()));
     if (!st.ok()) {
         LOG(WARNING) << "erase persistent index failed";
     }
@@ -1215,42 +1222,46 @@ void PrimaryIndex::_erase_persistent_index(const Column& key_col, DeletesMap* de
             (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
         }
     }
+    return st;
 }
 
-void PrimaryIndex::_get_from_persistent_index(const Column& key_col, std::vector<uint64_t>* rowids) const {
+Status PrimaryIndex::_get_from_persistent_index(const Column& key_col, std::vector<uint64_t>* rowids) const {
     std::vector<Slice> keys;
     const Slice* vkeys = _build_persistent_keys(key_col, 0, key_col.size(), &keys);
     Status st = _persistent_index->get(key_col.size(), vkeys, reinterpret_cast<IndexValue*>(rowids->data()));
     if (!st.ok()) {
         LOG(WARNING) << "failed get value from persistent index";
     }
+    return st;
 }
 
-[[maybe_unused]] void PrimaryIndex::_replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                                              const vector<uint32_t>& src_rssid,
-                                                              vector<uint32_t>* deletes) {
+[[maybe_unused]] Status PrimaryIndex::_replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
+                                                                const vector<uint32_t>& src_rssid,
+                                                                vector<uint32_t>* deletes) {
     std::vector<Slice> keys;
     std::vector<uint64_t> values;
     values.reserve(pks.size());
-    _build_persistent_values(rssid, rowid_start, 0, pks.size(), &values);
+    RETURN_IF_ERROR(_build_persistent_values(rssid, rowid_start, 0, pks.size(), &values));
     Status st = _persistent_index->try_replace(pks.size(), _build_persistent_keys(pks, 0, pks.size(), &keys),
                                                reinterpret_cast<IndexValue*>(values.data()), src_rssid, deletes);
     if (!st.ok()) {
         LOG(WARNING) << "try replace persistent index failed";
     }
+    return st;
 }
 
-void PrimaryIndex::_replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                             const uint32_t max_src_rssid, vector<uint32_t>* deletes) {
+Status PrimaryIndex::_replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
+                                               const uint32_t max_src_rssid, vector<uint32_t>* deletes) {
     std::vector<Slice> keys;
     std::vector<uint64_t> values;
     values.reserve(pks.size());
-    _build_persistent_values(rssid, rowid_start, 0, pks.size(), &values);
+    RETURN_IF_ERROR(_build_persistent_values(rssid, rowid_start, 0, pks.size(), &values));
     Status st = _persistent_index->try_replace(pks.size(), _build_persistent_keys(pks, 0, pks.size(), &keys),
                                                reinterpret_cast<IndexValue*>(values.data()), max_src_rssid, deletes);
     if (!st.ok()) {
         LOG(WARNING) << "try replace persistent index failed";
     }
+    return st;
 }
 
 Status PrimaryIndex::insert(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks) {
@@ -1269,61 +1280,74 @@ Status PrimaryIndex::insert(uint32_t rssid, uint32_t rowid_start, const Column& 
     return insert(rssid, rids, pks);
 }
 
-void PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes) {
+Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes,
+                            IOStat* stat) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
+    Status st;
     if (_persistent_index != nullptr) {
-        _upsert_into_persistent_index(rssid, rowid_start, pks, 0, pks.size(), deletes);
+        st = _upsert_into_persistent_index(rssid, rowid_start, pks, 0, pks.size(), deletes, stat);
     } else {
         _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, 0, pks.size(), deletes);
     }
+    return st;
 }
 
-void PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                          DeletesMap* deletes) {
+Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
+                            uint32_t idx_end, DeletesMap* deletes) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
+    Status st;
     if (_persistent_index != nullptr) {
-        _upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, deletes);
+        st = _upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, deletes, nullptr);
     } else {
         _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes);
     }
+    return st;
 }
 
-[[maybe_unused]] void PrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                                const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes) {
+[[maybe_unused]] Status PrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
+                                                  const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
+    Status st;
     if (_persistent_index != nullptr) {
-        _replace_persistent_index(rssid, rowid_start, pks, src_rssid, deletes);
+        st = _replace_persistent_index(rssid, rowid_start, pks, src_rssid, deletes);
     } else {
         _pkey_to_rssid_rowid->try_replace(rssid, rowid_start, pks, src_rssid, 0, pks.size(), deletes);
     }
+    return st;
 }
 
-void PrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
-                               vector<uint32_t>* deletes) {
+Status PrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
+                                 vector<uint32_t>* deletes) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
+    Status st;
     if (_persistent_index != nullptr) {
-        _replace_persistent_index(rssid, rowid_start, pks, max_src_rssid, deletes);
+        st = _replace_persistent_index(rssid, rowid_start, pks, max_src_rssid, deletes);
     } else {
         _pkey_to_rssid_rowid->try_replace(rssid, rowid_start, pks, max_src_rssid, 0, pks.size(), deletes);
     }
+    return st;
 }
 
-void PrimaryIndex::erase(const Column& key_col, DeletesMap* deletes) {
+Status PrimaryIndex::erase(const Column& key_col, DeletesMap* deletes) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
+    Status st;
     if (_persistent_index != nullptr) {
-        _erase_persistent_index(key_col, deletes);
+        st = _erase_persistent_index(key_col, deletes);
     } else {
         _pkey_to_rssid_rowid->erase(key_col, 0, key_col.size(), deletes);
     }
+    return st;
 }
 
-void PrimaryIndex::get(const Column& key_col, std::vector<uint64_t>* rowids) const {
+Status PrimaryIndex::get(const Column& key_col, std::vector<uint64_t>* rowids) const {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
+    Status st;
     if (_persistent_index != nullptr) {
-        _get_from_persistent_index(key_col, rowids);
+        st = _get_from_persistent_index(key_col, rowids);
     } else {
         _pkey_to_rssid_rowid->get(key_col, 0, key_col.size(), rowids);
     }
+    return st;
 }
 
 std::size_t PrimaryIndex::memory_usage() const {
@@ -1357,7 +1381,7 @@ std::string PrimaryIndex::to_string() const {
     return strings::Substitute("PrimaryIndex tablet:$0", _tablet_id);
 }
 
-std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const VectorizedSchema& pk_schema) {
+std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const Schema& pk_schema) {
     return std::make_unique<PrimaryIndex>(pk_schema);
 }
 

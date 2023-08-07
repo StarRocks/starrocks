@@ -30,17 +30,19 @@ public class HdfsEnvironment {
         this.hdfsConfiguration = new HdfsConfiguration();
     }
 
-    public HdfsEnvironment(Map<String, String> properties, CloudConfiguration cloudConfiguration) {
-        this.hdfsConfiguration = new HdfsConfiguration();
+    public HdfsEnvironment(Map<String, String> properties) {
+        this();
+        if (properties != null) {
+            this.hdfsConfiguration.applyToCloudConfiguration(
+                    CloudConfigurationFactory.buildCloudConfigurationForStorage(properties));
+        }
+    }
+
+    public HdfsEnvironment(CloudConfiguration cloudConfiguration) {
+        this();
         if (cloudConfiguration != null) {
             this.hdfsConfiguration.applyToCloudConfiguration(cloudConfiguration);
-        } else if (properties != null) {
-            CloudConfiguration tmp = CloudConfigurationFactory.tryBuildForStorage(properties);
-            if (tmp != null) {
-                this.hdfsConfiguration.applyToCloudConfiguration(tmp);
-            }
         }
-        // If both is null, we just create a default HdfsEnvironment
     }
 
     public Configuration getConfiguration() {

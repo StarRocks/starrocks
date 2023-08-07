@@ -257,7 +257,7 @@ PARALLEL_TEST(NullableColumnTest, test_update_rows) {
     replace_col1->append_datum((int32_t)5);
 
     std::vector<uint32_t> replace_idxes = {1, 4};
-    ASSERT_TRUE(column->update_rows(*replace_col1.get(), replace_idxes.data()).ok());
+    column->update_rows(*replace_col1.get(), replace_idxes.data());
     ASSERT_EQ(5, column->size());
     ASSERT_TRUE(column->data_column().unique());
     ASSERT_TRUE(column->null_column().unique());
@@ -281,7 +281,7 @@ PARALLEL_TEST(NullableColumnTest, test_update_rows) {
     replace_col2->append_datum({});
     replace_col2->append_datum("jk");
 
-    ASSERT_TRUE(column1->update_rows(*replace_col2.get(), replace_idxes.data()).ok());
+    column1->update_rows(*replace_col2.get(), replace_idxes.data());
     ASSERT_EQ(5, column1->size());
     ASSERT_TRUE(column1->data_column().unique());
     ASSERT_TRUE(column1->null_column().unique());
@@ -325,11 +325,16 @@ PARALLEL_TEST(NullableColumnTest, test_compare_row) {
         auto rhs_column = NullableColumn::create(Int32Column::create(), NullColumn::create());
         rhs_column->append_datum(rhs_value);
 
+        auto desc = SortDesc(sort_order, null_first);
+
         for (size_t i = 0; i < c0->size(); i++) {
             if (c0->is_null(i) || rhs_value.is_null()) {
-                res.push_back(c0->compare_at(i, 0, *rhs_column, null_first));
+                auto cmp_res0 = c0->compare_at(i, 0, *rhs_column, desc.nan_direction());
+                auto cmp_res1 = c0->compare_at(i, 0, *rhs_column, desc.null_first) * sort_order;
+                EXPECT_EQ(cmp_res0, cmp_res1);
+                res.push_back(cmp_res0);
             } else {
-                res.push_back(c0->compare_at(i, 0, *rhs_column, null_first) * sort_order);
+                res.push_back(c0->compare_at(i, 0, *rhs_column, desc.null_first) * sort_order);
             }
         }
         return res;

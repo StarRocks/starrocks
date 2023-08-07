@@ -15,7 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.mysql.privilege.Auth;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 
@@ -24,12 +24,12 @@ public class SetUserPropertyAnalyzer {
     public static void analyze(SetUserPropertyStmt statement, ConnectContext context) {
         String user = statement.getUser();
         if (Strings.isNullOrEmpty(user)) {
-            // If param 'user' is not set, use the login user name.
-            // The login user name is full-qualified with cluster name.
+            // If param 'user' is not set, use the login username.
+            // The login username is full-qualified with cluster name.
             statement.setUser(ConnectContext.get().getQualifiedUser());
         } else {
-            // If param 'user' is set, check if it need to be full-qualified
-            if (!user.equals(Auth.ROOT_USER)) {
+            // If param 'user' is set, check if it needs to be full-qualified
+            if (!user.equals(AuthenticationMgr.ROOT_USER)) {
                 statement.setUser(user);
             }
         }

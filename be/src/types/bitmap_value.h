@@ -49,7 +49,9 @@
 
 #include "common/config.h"
 #include "common/logging.h"
+#include "types/bitmap_value_detail.h"
 #include "util/coding.h"
+#include "util/phmap/phmap.h"
 #include "util/phmap/phmap_fwd_decl.h"
 #include "util/slice.h"
 
@@ -66,7 +68,7 @@ public:
     // Construct an empty bitmap.
     BitmapValue();
 
-    BitmapValue(const BitmapValue& other);
+    BitmapValue(const BitmapValue& other, bool deep_copy = true);
     BitmapValue& operator=(const BitmapValue& other);
 
     BitmapValue(BitmapValue&& other) noexcept;
@@ -85,6 +87,8 @@ public:
     explicit BitmapValue(const std::vector<uint64_t>& bits);
 
     void add(uint64_t value);
+
+    void add_many(size_t n_args, const uint32_t* vals);
 
     // Note: rhs BitmapValue is only readable after this method
     // Compute the union between the current bitmap and the provided bitmap.
@@ -149,6 +153,11 @@ public:
 
     int64_t sub_bitmap_internal(const int64_t& offset, const int64_t& len, BitmapValue* ret_bitmap);
 
+    int64_t bitmap_subset_limit_internal(const int64_t& range_start, const int64_t& limit, BitmapValue* ret_bitmap);
+
+    int64_t bitmap_subset_in_range_internal(const int64_t& range_start, const int64_t& range_end,
+                                            BitmapValue* ret_bitmap);
+
 private:
     void _convert_to_smaller_type();
     void _from_set_to_bitmap();
@@ -166,5 +175,4 @@ private:
     uint64_t _sv = 0; // store the single value when _type == SINGLE
     BitmapDataType _type{EMPTY};
 };
-
 } // namespace starrocks

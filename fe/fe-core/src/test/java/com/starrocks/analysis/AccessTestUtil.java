@@ -119,7 +119,7 @@ public class AccessTestUtil {
                 TStorageType.COLUMN, KeysType.AGG_KEYS);
         table.addPartition(partition);
         table.setBaseIndexId(baseIndex.getId());
-        db.createTable(table);
+        db.registerTableUnlocked(table);
         return globalStateMgr;
     }
 

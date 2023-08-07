@@ -14,6 +14,20 @@
 
 package com.starrocks.pseudocluster;
 
+import com.staros.proto.AwsCredentialInfo;
+import com.staros.proto.AwsDefaultCredentialInfo;
+import com.staros.proto.FilePathInfo;
+import com.staros.proto.FileStoreInfo;
+import com.staros.proto.FileStoreType;
+import com.staros.proto.S3FileStoreInfo;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.lake.StarOSAgent;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.SharedNothingStorageVolumeMgr;
+import com.starrocks.storagevolume.StorageVolume;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -54,13 +68,64 @@ public class PseudoClusterTest {
 
     @Test
     public void testCreateLakeTable() throws Exception {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        FilePathInfo.Builder builder = FilePathInfo.newBuilder();
+        FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
+
+        S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
+        s3FsBuilder.setBucket("test-bucket");
+        s3FsBuilder.setRegion("test-region");
+        s3FsBuilder.setCredential(AwsCredentialInfo.newBuilder()
+                .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()));
+        S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
+
+        fsBuilder.setFsType(FileStoreType.S3);
+        fsBuilder.setFsKey("test-bucket");
+        fsBuilder.setFsName("test-fsname");
+        fsBuilder.setS3FsInfo(s3FsInfo);
+        FileStoreInfo fsInfo = fsBuilder.build();
+
+        builder.setFsInfo(fsInfo);
+        builder.setFullPath("s3://test-bucket/1/");
+        FilePathInfo pathInfo = builder.build();
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) {
+                return GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+            }
+
+            @Mock
+            public FilePathInfo allocateFilePath(String storageVolumeId, long tableId) {
+                return pathInfo;
+            }
+        };
+
+        new MockUp<SharedNothingStorageVolumeMgr>() {
+            @Mock
+            public StorageVolume getStorageVolume(String svKey) throws AnalysisException {
+                return StorageVolume.fromFileStoreInfo(fsInfo);
+            }
+
+            @Mock
+            public String getStorageVolumeIdOfTable(long tableId) {
+                return fsInfo.getFsKey();
+            }
+        };
+
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
         Statement stmt = connection.createStatement();
         try {
             stmt.execute("create database db_test_lake");
             stmt.execute("use db_test_lake");
             stmt.execute("create table test (k0 bigint NOT NULL, v0 string not null, v1 int not null ) " +
-                    "ENGINE=STARROCKS duplicate KEY(k0) DISTRIBUTED BY HASH(k0) BUCKETS 7");
+                    "duplicate KEY(k0) DISTRIBUTED BY HASH(k0) BUCKETS 7");
         } finally {
             stmt.close();
             connection.close();

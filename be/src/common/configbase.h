@@ -27,6 +27,14 @@ class Status;
 
 namespace config {
 
+struct ConfigInfo {
+    std::string name;
+    std::string value;
+    std::string type;
+    std::string defval;
+    bool valmutable;
+};
+
 class Register {
 public:
     struct Field {
@@ -37,6 +45,9 @@ public:
         bool valmutable = false;
         Field(const char* ftype, const char* fname, void* fstorage, const char* fdefval, bool fvalmutable)
                 : type(ftype), name(fname), storage(fstorage), defval(fdefval), valmutable(fvalmutable) {}
+
+        // Get the field value as string
+        std::string value() const;
     };
 
 public:
@@ -119,6 +130,8 @@ bool init(const char* filename, bool fillconfmap = false);
 Status set_config(const std::string& field, const std::string& value);
 
 std::mutex* get_mstring_conf_lock();
+
+std::vector<ConfigInfo> list_configs();
 
 } // namespace config
 } // namespace starrocks

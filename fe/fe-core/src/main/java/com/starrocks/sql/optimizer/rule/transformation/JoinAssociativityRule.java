@@ -12,255 +12,253 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.JoinOperator;
-import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
-import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
+import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.rule.join.JoinReorderHelper;
+import com.starrocks.sql.optimizer.rule.join.JoinReorderProperty;
+import org.apache.commons.lang3.StringUtils;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
-/*
- *        Join          Join
- *       /    \        /    \
- *    Join     C  =>  A     Join
- *   /    \                /    \
- *  A     B               B      C
- * */
-public class JoinAssociativityRule extends TransformationRule {
-    private JoinAssociativityRule() {
-        super(RuleType.TF_JOIN_ASSOCIATIVITY, Pattern.create(OperatorType.LOGICAL_JOIN)
+import static com.starrocks.sql.optimizer.rule.join.JoinReorderProperty.ASSOCIATIVITY_BOTTOM_MASK;
+import static com.starrocks.sql.optimizer.rule.join.JoinReorderProperty.ASSOCIATIVITY_TOP_MASK;
+import static com.starrocks.sql.optimizer.rule.join.JoinReorderProperty.LEFT_ASSCOM_BOTTOM_MASK;
+import static com.starrocks.sql.optimizer.rule.join.JoinReorderProperty.LEFT_ASSCOM_TOP_MASK;
+
+/*       Join            Join
+ *      /    \          /    \
+ *     Join   C  =>    A     Join
+ *    /    \                /    \
+ *   A      B              B      C
+ */
+
+public class JoinAssociativityRule extends JoinAssociateBaseRule {
+    public static final JoinAssociativityRule INNER_JOIN_ASSOCIATIVITY_RULE = new JoinAssociativityRule(
+            RuleType.TF_JOIN_ASSOCIATIVITY_INNER, true);
+
+    public static final JoinAssociativityRule OUTER_JOIN_ASSOCIATIVITY_RULE = new JoinAssociativityRule(
+            RuleType.TF_JOIN_ASSOCIATIVITY_OUTER, false);
+
+    private JoinAssociativityRule(RuleType ruleType, boolean isInnerMode) {
+        super(ruleType, Pattern.create(OperatorType.LOGICAL_JOIN)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_JOIN)
                         .addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF))
-                        .addChildren(Pattern.create(OperatorType.PATTERN_LEAF)))
-                .addChildren(Pattern.create(OperatorType.PATTERN_LEAF)));
-    }
-
-    private static final JoinAssociativityRule INSTANCE = new JoinAssociativityRule();
-
-    public static JoinAssociativityRule getInstance() {
-        return INSTANCE;
-    }
-
-    public boolean check(final OptExpression input, OptimizerContext context) {
-        LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
-        if (!joinOperator.getJoinHint().isEmpty() ||
-                !((LogicalJoinOperator) input.inputAt(0).getOp()).getJoinHint().isEmpty()) {
-            return false;
-        }
-
-        if (!joinOperator.getJoinType().isInnerJoin()) {
-            return false;
-        }
-
-        LogicalJoinOperator leftChildJoin = (LogicalJoinOperator) input.inputAt(0).getOp();
-        if (leftChildJoin.getProjection() != null) {
-            Projection projection = leftChildJoin.getProjection();
-            // 1. Forbidden expression column on join-reorder
-            // 2. Forbidden on-predicate use columns from two children at same time
-            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
-                if (!entry.getValue().isColumnRef() &&
-                        entry.getValue().getUsedColumns().isIntersect(input.inputAt(0).inputAt(0).getOutputColumns()) &&
-                        entry.getValue().getUsedColumns().isIntersect(input.inputAt(0).inputAt(1).getOutputColumns())) {
-                    return false;
-                }
-            }
-        }
-        return true;
+                        .addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF)))
+                .addChildren(Pattern.create(OperatorType.PATTERN_LEAF)), JoinAssociateBaseRule.ASSOCIATE_MODE,
+                isInnerMode);
     }
 
     @Override
-    public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        OptExpression leftChild = input.inputAt(0);
-        OptExpression rightChild = input.inputAt(1);
-
-        LogicalJoinOperator parentJoin = (LogicalJoinOperator) input.getOp();
-        LogicalJoinOperator leftChildJoin = (LogicalJoinOperator) leftChild.getOp();
-        // We do this check here not in check method, because check here is very simple
-        if (!leftChildJoin.getJoinType().isInnerJoin() && !leftChildJoin.getJoinType().isCrossJoin()) {
-            return Collections.emptyList();
+    public boolean check(final OptExpression input, OptimizerContext context) {
+        LogicalJoinOperator topJoin = (LogicalJoinOperator) input.getOp();
+        LogicalJoinOperator bottomJoin = (LogicalJoinOperator) input.inputAt(0).getOp();
+        if ((topJoin.getTransformMask() & (ASSOCIATIVITY_TOP_MASK | LEFT_ASSCOM_TOP_MASK)) > 0 &&
+                (bottomJoin.getTransformMask() & (ASSOCIATIVITY_BOTTOM_MASK | LEFT_ASSCOM_BOTTOM_MASK)) > 0) {
+            return false;
+        }
+        if (StringUtils.isNotEmpty(topJoin.getJoinHint()) || StringUtils.isNotEmpty(bottomJoin.getJoinHint())) {
+            return false;
         }
 
-        List<ScalarOperator> parentConjuncts = Utils.extractConjuncts(parentJoin.getOnPredicate());
-        List<ScalarOperator> childConjuncts = Utils.extractConjuncts(leftChildJoin.getOnPredicate());
+        if (bottomJoin.hasLimit()) {
+            return false;
+        }
 
-        List<ScalarOperator> allConjuncts = Lists.newArrayList();
-        allConjuncts.addAll(parentConjuncts);
-        allConjuncts.addAll(childConjuncts);
+        if (JoinReorderProperty.getAssociativityProperty(bottomJoin.getJoinType(), topJoin.getJoinType(), isInnerMode)
+                != JoinReorderProperty.SUPPORTED) {
+            return false;
+        }
 
-        OptExpression leftChild1 = leftChild.inputAt(0);
-        OptExpression leftChild2 = leftChild.inputAt(1);
-        // todo
-        //          join (b+c=a)                    join (b+c=a)
-        //        /      \                          /   \
-        //      join      C           ->           A    join
-        //      /  \                                    /   \
-        //     A    B                                  B     C
-        // cross join on predicate b+c=a transform to inner join predicate, and it's equals on predicate, but it need to
-        // generate projection xx = b+c on the new right join which we could not do now. so we just forbidden this
-        // transform easily.
-        for (ScalarOperator parentConjunct : parentConjuncts) {
-            if (parentConjunct.getUsedColumns().isIntersect(leftChild1.getOutputColumns()) &&
-                    parentConjunct.getUsedColumns().isIntersect(leftChild2.getOutputColumns()) &&
-                    parentConjunct.getUsedColumns().isIntersect(rightChild.getOutputColumns())) {
-                return Collections.emptyList();
+        return JoinReorderHelper.isAssoc(input.inputAt(0), input);
+    }
+
+    @Override
+    public ScalarOperator rewriteNewTopOnCondition(JoinOperator topJoinType, ProjectionSplitter splitter,
+                                                   ScalarOperator newTopOnCondition,
+                                                   ColumnRefSet newBotJoinOutputCols,
+                                                   ColumnRefFactory columnRefFactory) {
+        if (JoinOperator.INNER_JOIN == topJoinType && newTopOnCondition != null) {
+            // rewrite on condition like 'tblA.col = tblB.col + tblC.col' to 'tblA.col = add'
+            // and add the add->tblB.col + tblC.col map to projectMap
+            JoinOnConditionShuttle shuttle = new JoinOnConditionShuttle(newBotJoinOutputCols, columnRefFactory);
+            newTopOnCondition = shuttle.rewriteOnCondition(newTopOnCondition);
+            splitter.getBotJoinCols().addAll(shuttle.getColumnEntries());
+        }
+        return newTopOnCondition;
+    }
+
+    @Override
+    public OptExpression createNewTopJoinExpr(LogicalJoinOperator newTopJoin, OptExpression newTopJoinChild,
+                                              OptExpression newBotJoinExpr) {
+        return OptExpression.create(newTopJoin, newTopJoinChild, newBotJoinExpr);
+    }
+
+    @Override
+    public int createTransformMask(boolean isTop) {
+        return isTop ? ASSOCIATIVITY_TOP_MASK : ASSOCIATIVITY_BOTTOM_MASK;
+    }
+
+    /*
+     * JoinOnConditionShuttle is used for rewrite the join on condition when the expr in this condition can be
+     * pushed to its child. For example select t1.v1 from t1 join t2 joint t3 on t1.v1 = t2.v1 + t3.v1, we can rewrite
+     * this sql to select t1.v1 from t1 join (select t2.v1 + t3.v1 as add from t2, t3) t on t1.v1 = t.add
+     */
+    private class JoinOnConditionShuttle extends BaseScalarOperatorShuttle {
+        private final ColumnRefFactory columnRefFactory;
+
+        private final ColumnRefSet newBotJoinOutputCols;
+
+        private final Map<ScalarOperator, ColumnRefOperator> exprToColumnRefMap;
+
+        public JoinOnConditionShuttle(ColumnRefSet newBotJoinOutputCols, ColumnRefFactory columnRefFactory) {
+            this.columnRefFactory = columnRefFactory;
+            this.exprToColumnRefMap = Maps.newHashMap();
+            this.newBotJoinOutputCols = newBotJoinOutputCols;
+        }
+
+        public List<ColumnOutputInfo> getColumnEntries() {
+            List<ColumnOutputInfo> entryList = Lists.newArrayList();
+            exprToColumnRefMap.entrySet().stream()
+                    .forEach(e -> entryList.add(new ColumnOutputInfo(e.getValue(), e.getKey())));
+            return entryList;
+        }
+
+        public ScalarOperator rewriteOnCondition(ScalarOperator onCondition) {
+            ScalarOperator copy = onCondition.clone();
+            ScalarOperator newOnCondition = copy.accept(this, null);
+            ScalarOperatorRewriter scalarOperatorRewriter = new ScalarOperatorRewriter();
+            newOnCondition =
+                    scalarOperatorRewriter.rewrite(newOnCondition, ImmutableList.of(new NormalizePredicateRule()));
+            return newOnCondition;
+        }
+
+        @Override
+        public ScalarOperator visitArray(ArrayOperator array, Void context) {
+            return array;
+        }
+
+        @Override
+        public ScalarOperator visitCollectionElement(CollectionElementOperator collectionElementOp, Void context) {
+            return collectionElementOp;
+        }
+
+        @Override
+        public ScalarOperator visitArraySlice(ArraySliceOperator array, Void context) {
+            return array;
+        }
+
+        @Override
+        public ScalarOperator visitCall(CallOperator call, Void context) {
+            if (canDerivedFromNewBotJoinOutput(call.getUsedColumns())) {
+                return addExprToColumnRefMap(call);
             }
+            return super.visitCall(call, context);
         }
 
-        ColumnRefSet newRightChildColumns = new ColumnRefSet();
-        newRightChildColumns.union(rightChild.getOutputColumns());
-        newRightChildColumns.union(leftChild2.getOutputColumns());
+        @Override
+        public ScalarOperator visitCaseWhenOperator(CaseWhenOperator operator, Void context) {
+            return operator;
+        }
 
-        List<ScalarOperator> newChildConjuncts = Lists.newArrayList();
-        List<ScalarOperator> newParentConjuncts = Lists.newArrayList();
-        for (ScalarOperator conjunct : allConjuncts) {
-            if (newRightChildColumns.containsAll(conjunct.getUsedColumns())) {
-                newChildConjuncts.add(conjunct);
+        @Override
+        public ScalarOperator visitCastOperator(CastOperator operator, Void context) {
+            if (canDerivedFromNewBotJoinOutput(operator.getUsedColumns())) {
+                return addExprToColumnRefMap(operator);
+            }
+            return super.visitCastOperator(operator, context);
+        }
+
+        @Override
+        public ScalarOperator visitBetweenPredicate(BetweenPredicateOperator predicate, Void context) {
+            return predicate;
+        }
+
+        @Override
+        public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
+            if (predicate.getBinaryType() != BinaryType.EQ) {
+                return predicate;
             } else {
-                newParentConjuncts.add(conjunct);
+                return super.visitBinaryPredicate(predicate, context);
             }
         }
 
-        // Eliminate cross join
-        if (newChildConjuncts.isEmpty() || newParentConjuncts.isEmpty()) {
-            return Collections.emptyList();
+        @Override
+        public ScalarOperator visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
+            return predicate;
         }
 
-        LogicalJoinOperator.Builder topJoinBuilder = new LogicalJoinOperator.Builder();
-
-        // If left child join contains predicate, it's means the predicate must can't push down to child, it's
-        // will use columns which from all children, so we should add the predicate to new top join
-        ScalarOperator topJoinPredicate = parentJoin.getPredicate();
-        if (leftChildJoin.getPredicate() != null) {
-            topJoinPredicate = Utils.compoundAnd(topJoinPredicate, leftChildJoin.getPredicate());
+        @Override
+        public ScalarOperator visitExistsPredicate(ExistsPredicateOperator predicate, Void context) {
+            return predicate;
         }
 
-        LogicalJoinOperator topJoinOperator = topJoinBuilder.withOperator(parentJoin)
-                .setJoinType(JoinOperator.INNER_JOIN)
-                .setOnPredicate(Utils.compoundAnd(newParentConjuncts))
-                .setPredicate(topJoinPredicate)
-                .build();
+        @Override
+        public ScalarOperator visitInPredicate(InPredicateOperator predicate, Void context) {
+            return predicate;
+        }
 
-        ColumnRefSet parentJoinRequiredColumns = parentJoin.getOutputColumns(new ExpressionContext(input));
-        parentJoinRequiredColumns.union(topJoinOperator.getRequiredChildInputColumns());
-        List<ColumnRefOperator> newRightOutputColumns = newRightChildColumns.getStream()
-                .filter(parentJoinRequiredColumns::contains)
-                .mapToObj(id -> context.getColumnRefFactory().getColumnRef(id)).collect(Collectors.toList());
+        @Override
+        public ScalarOperator visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
+            return predicate;
+        }
 
-        Projection leftChildJoinProjection = leftChildJoin.getProjection();
-        HashMap<ColumnRefOperator, ScalarOperator> rightExpression = new HashMap<>();
-        HashMap<ColumnRefOperator, ScalarOperator> leftExpression = new HashMap<>();
-        if (leftChildJoinProjection != null) {
-            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : leftChildJoinProjection.getColumnRefMap()
-                    .entrySet()) {
-                // To handle mappings of expressions in projection, special processing is needed like
-                // ColumnRefOperator -> ColumnRefOperator mappings with name ("1: expr" -> "2: column_name", or "1: sum" -> "2: sum"),
-                // it needs to be handled like expression mapping.
-                String keyIdentifier = entry.getKey().toString();
-                String valueIdentifier = entry.getValue().toString();
-                boolean isProjectToColumnRef = Objects.equals(keyIdentifier, valueIdentifier);
-                if (!isProjectToColumnRef &&
-                        newRightChildColumns.containsAll(entry.getValue().getUsedColumns())) {
-                    rightExpression.put(entry.getKey(), entry.getValue());
-                } else if (!isProjectToColumnRef &&
-                        leftChild1.getOutputColumns().containsAll(entry.getValue().getUsedColumns())) {
-                    leftExpression.put(entry.getKey(), entry.getValue());
-                }
+        @Override
+        public ScalarOperator visitLikePredicateOperator(LikePredicateOperator predicate, Void context) {
+            return predicate;
+        }
+
+        private boolean canDerivedFromNewBotJoinOutput(ColumnRefSet columnRefSet) {
+            if (columnRefSet.isEmpty()) {
+                return false;
             }
+            return newBotJoinOutputCols.containsAll(columnRefSet);
         }
 
-        //build new right child join
-        OptExpression newRightChildJoin;
-        if (rightExpression.isEmpty()) {
-            LogicalJoinOperator.Builder rightChildJoinOperatorBuilder = new LogicalJoinOperator.Builder();
-            LogicalJoinOperator rightChildJoinOperator = rightChildJoinOperatorBuilder
-                    .setJoinType(JoinOperator.INNER_JOIN)
-                    .setOnPredicate(Utils.compoundAnd(newChildConjuncts))
-                    .setProjection(new Projection(newRightOutputColumns.stream()
-                            .collect(Collectors.toMap(Function.identity(), Function.identity())), new HashMap<>()))
-                    .build();
-            newRightChildJoin = OptExpression.create(rightChildJoinOperator, leftChild2, rightChild);
-        } else {
-            rightExpression.putAll(newRightOutputColumns.stream()
-                    .collect(Collectors.toMap(Function.identity(), Function.identity())));
-            LogicalJoinOperator.Builder rightChildJoinOperatorBuilder = new LogicalJoinOperator.Builder();
-            LogicalJoinOperator rightChildJoinOperator = rightChildJoinOperatorBuilder
-                    .setJoinType(JoinOperator.INNER_JOIN)
-                    .setOnPredicate(Utils.compoundAnd(newChildConjuncts))
-                    .setProjection(new Projection(rightExpression))
-                    .build();
-            newRightChildJoin = OptExpression.create(rightChildJoinOperator, leftChild2, rightChild);
-
-            newRightOutputColumns = new ArrayList<>(rightExpression.keySet());
-        }
-
-        //build left
-        if (!leftExpression.isEmpty()) {
-            OptExpression left;
-            Map<ColumnRefOperator, ScalarOperator> expressionProject;
-            if (leftChild1.getOp().getProjection() == null) {
-                expressionProject = leftChild1.getOutputColumns().getStream()
-                        .mapToObj(id -> context.getColumnRefFactory().getColumnRef(id))
-                        .collect(Collectors.toMap(Function.identity(), Function.identity()));
+        private ScalarOperator addExprToColumnRefMap(ScalarOperator operator) {
+            if (!exprToColumnRefMap.containsKey(operator)) {
+                ColumnRefOperator columnRefOperator = createColumnRefOperator(operator);
+                exprToColumnRefMap.put(operator, columnRefOperator);
+                return columnRefOperator;
             } else {
-                expressionProject = Maps.newHashMap(leftChild1.getOp().getProjection().getColumnRefMap());
+                return exprToColumnRefMap.get(operator);
             }
-            // Use leftChild1 projection to rewrite the leftExpression, it's like two project node merge.
-            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(expressionProject);
-            Map<ColumnRefOperator, ScalarOperator> rewriteMap = Maps.newHashMap(expressionProject);
-            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : leftExpression.entrySet()) {
-                rewriteMap.put(entry.getKey(), rewriter.rewrite(entry.getValue()));
-            }
+        }
 
-            Operator.Builder builder = OperatorBuilderFactory.build(leftChild1.getOp());
-            Operator newOp = builder.withOperator(leftChild1.getOp())
-                    .setProjection(new Projection(rewriteMap)).build();
-            left = OptExpression.create(newOp, leftChild1.getInputs());
-
-            //If all the columns in onPredicate come from one side, it means that it is CrossJoin, and give up this Plan
-            if (new ColumnRefSet(new ArrayList<>(expressionProject.keySet())).containsAll(
-                    topJoinOperator.getOnPredicate().getUsedColumns())
-                    || new ColumnRefSet(newRightOutputColumns).containsAll(
-                    topJoinOperator.getOnPredicate().getUsedColumns())) {
-                return Collections.emptyList();
-            }
-
-            OptExpression topJoin = OptExpression.create(topJoinOperator, left, newRightChildJoin);
-            return Lists.newArrayList(topJoin);
-        } else {
-
-            //If all the columns in onPredicate come from one side, it means that it is CrossJoin, and give up this Plan
-            if (leftChild1.getOutputColumns().containsAll(topJoinOperator.getOnPredicate().getUsedColumns())
-                    || new ColumnRefSet(newRightOutputColumns).containsAll(
-                    topJoinOperator.getOnPredicate().getUsedColumns())) {
-                return Collections.emptyList();
-            }
-
-            OptExpression topJoin = OptExpression.create(topJoinOperator, leftChild1, newRightChildJoin);
-            return Lists.newArrayList(topJoin);
+        private ColumnRefOperator createColumnRefOperator(ScalarOperator operator) {
+            return columnRefFactory.create(operator, operator.getType(), operator.isNullable());
         }
     }
 }

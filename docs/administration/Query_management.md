@@ -28,7 +28,7 @@ The session variables can be set by 'key' = 'value', which can limit the concurr
 
   The parallelism of the query with a default value of 1. It indicates the number of fragment instances on each BE. You can set this to half the number of CPU cores of the BE to improve query performance.
 
-- exec_mem_limit
+- query_mem_limit
 
   Memory limit of query, can be adjusted when a query reports insufficient memory.
 
@@ -40,7 +40,7 @@ Example 2:
 
 ```sql
 set parallel_fragment_exec_instance_num  = 8; 
-set exec_mem_limit  = 137438953472;
+set query_mem_limit  = 137438953472;
 ```
 
 ## capacity quota of database storage

@@ -132,9 +132,7 @@ public class Binder {
             groupExpressionIndex++;
         }
 
-        OptExpression result = new OptExpression(groupExpression);
-        result.getInputs().addAll(resultInputs);
-        return result;
+        return new OptExpression(groupExpression, resultInputs);
     }
 
     private void trace() {
@@ -148,7 +146,7 @@ public class Binder {
      * extract GroupExpression by groupExpressionIndex
      */
     private GroupExpression extractGroupExpression(Pattern pattern, Group group) {
-        if (pattern.isPatternLeaf() || pattern.isPatternMultiLeaf() || pattern.isPatternMultiJoin()) {
+        if (pattern.isPatternLeaf() || pattern.isPatternMultiLeaf()) {
             if (groupExpressionIndex.get(groupTraceKey) > 0) {
                 groupExpressionIndex.remove(groupTraceKey);
                 return null;

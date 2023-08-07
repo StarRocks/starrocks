@@ -56,7 +56,7 @@ class TColumnValue;
 class TExpr;
 class TExprNode;
 class Literal;
-class UserFunctionCacheEntry;
+struct UserFunctionCacheEntry;
 
 class Chunk;
 class ColumnRef;
@@ -202,6 +202,10 @@ public:
 
     // get the first column ref in expr
     ColumnRef* get_column_ref();
+
+#if BE_TEST
+    void set_type(TypeDescriptor t) { _type = t; }
+#endif
 
 protected:
     friend class MathFunctions;

@@ -53,9 +53,9 @@
 
 #pragma once
 
-#include <vector>
-#include <cstring>
 #include <boost/cstdint.hpp>
+#include <cstring>
+#include <vector>
 
 #include "common/logging.h"
 #include "runtime/string_value.h"
@@ -65,10 +65,9 @@ namespace starrocks {
 // TODO: This can be sped up with SIDD_CMP_EQUAL_ORDERED or at the very least rewritten
 // from published algorithms.
 class StringSearch {
-
 public:
     virtual ~StringSearch() = default;
-    StringSearch()  {}
+    StringSearch() {}
 
     // Initialize/Precompute a StringSearch object from the pattern
     StringSearch(const StringValue* pattern) : _pattern(pattern), _mask(0) {
@@ -157,17 +156,13 @@ public:
 private:
     static const int BLOOM_WIDTH = 64;
 
-    void bloom_add(char c) {
-        _mask |= (1UL << (c & (BLOOM_WIDTH - 1)));
-    }
+    void bloom_add(char c) { _mask |= (1UL << (c & (BLOOM_WIDTH - 1))); }
 
-    bool bloom_query(char c) const {
-        return _mask & (1UL << (c & (BLOOM_WIDTH - 1)));
-    }
+    bool bloom_query(char c) const { return _mask & (1UL << (c & (BLOOM_WIDTH - 1))); }
 
     const StringValue* _pattern{nullptr};
     int64_t _mask{0};
     int64_t _skip = 0;
 };
 
-}
+} // namespace starrocks

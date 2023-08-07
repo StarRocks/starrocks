@@ -29,13 +29,13 @@ namespace starrocks {
  */
 class MultiUnnest final : public TableFunction {
 public:
-    std::pair<Columns, ColumnPtr> process(TableFunctionState* state, bool* eos) const override {
-        *eos = true;
+    std::pair<Columns, UInt32Column::Ptr> process(TableFunctionState* state) const override {
         if (state->get_columns().empty()) {
             return {};
         }
 
         long row_count = state->get_columns()[0]->size();
+        state->set_processed_rows(row_count);
 
         std::vector<ColumnPtr> compacted_array_list;
         for (auto& col_idx : state->get_columns()) {

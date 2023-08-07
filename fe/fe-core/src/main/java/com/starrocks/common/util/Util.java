@@ -41,6 +41,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TimeoutException;
+import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -67,6 +68,8 @@ public class Util {
     private static final Map<PrimitiveType, String> TYPE_STRING_MAP = new HashMap<PrimitiveType, String>();
 
     private static final long DEFAULT_EXEC_CMD_TIMEOUT_MS = 600000L;
+
+    public static final String AUTO_GENERATED_EXPR_ALIAS_PREFIX = "EXPR$";
 
     private static final String[] ORDINAL_SUFFIX =
             new String[] {"th", "st", "nd", "rd", "th", "th", "th", "th", "th", "th"};
@@ -266,6 +269,10 @@ public class Util {
         for (Column column : columns) {
             adler32.update(column.getName().getBytes(StandardCharsets.UTF_8));
             String typeString = columnHashString(column);
+            if (typeString == null) {
+                throw new SemanticException("Type:%s of column:%s does not support",
+                        column.getType().toString(), column.getName());
+            }
             adler32.update(typeString.getBytes(StandardCharsets.UTF_8));
 
             String columnName = column.getName();
@@ -427,6 +434,10 @@ public class Util {
     }
 
     public static void validateMetastoreUris(String uris) {
+        if (uris == null) {
+            throw new IllegalArgumentException("Null hive.metastore.uris, " +
+                    "please check your property's key and value of catalog or resource.");
+        }
         URI[] parsedUris = Arrays.stream(uris.split(",")).map(URI::create).toArray(URI[]::new);
         for (URI uri : parsedUris) {
             if (Strings.isNullOrEmpty(uri.getScheme()) || !uri.getScheme().equals("thrift")) {
@@ -441,5 +452,8 @@ public class Util {
             }
         }
     }
-}
 
+    public static String deriveAliasFromOrdinal(int ordinal) {
+        return AUTO_GENERATED_EXPR_ALIAS_PREFIX + ordinal;
+    }
+}

@@ -2,19 +2,19 @@
 
 ## Description
 
-Views databases in your current StarRocks cluster or an external data source. Note that you can only view databases of an external data source in StarRocks 2.3 or later versions.
+Views databases in your current StarRocks cluster or an external data source. StarRocks supports viewing databases of an external data source from v2.3 onwards.
 
 ## Syntax
 
 ```SQL
-SHOW DATABASES [FROM catalog_name];
+SHOW DATABASES [FROM <catalog_name>]
 ```
 
 ## Parameters
 
 | **Parameter**     | **Required** | **Description**                                              |
 | ----------------- | ------------ | ------------------------------------------------------------ |
-| catalog_name      | No           | The name of the internal catalog or an external catalog.<ul><li>If you do not specified the parameter or set the value of the parameter to the name of the internal catalog, which is default_catalog, you can view databases in your current StarRocks cluster.</li><li>If you set the value of the parameter to the name of an external catalog, you can view databases in the corresponding external data source.</li></ul> |
+| catalog_name      | No           | The name of the internal catalog or an external catalog.<ul><li>If you do not specify the parameter or specify the name of the internal catalog, which is `default_catalog`, you can view databases in your current StarRocks cluster.</li><li>If you set the value of the parameter to the name of an external catalog, you can view databases in the corresponding external data source. You can run [SHOW CATALOGS](SHOW%20CATALOGS.md) to view internal and external catalogs.</li></ul> |
 
 ## Examples
 
@@ -55,3 +55,11 @@ SHOW DATABASES FROM hive1;
 | hive_db3  |
 +-----------+
 ```
+
+## References
+
+- [CREATE DATABASE](../data-definition/CREATE%20DATABASE.md)
+- [SHOW CREATE DATABASE](SHOW%20CREATE%20DATABASE.md)
+- [USE](../data-definition/USE.md)
+- [DESC](../Utility/DESCRIBE.md)
+- [DROP DATABASE](../data-definition/DROP%20DATABASE.md)

@@ -15,6 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#include <strings.h>
+
 #include <algorithm>
 #include <cerrno>
 #include <cstring>
@@ -23,6 +25,7 @@
 #include <list>
 #include <map>
 #include <regex>
+#include <string>
 
 #define __IN_CONFIGBASE_CPP__
 #include "common/config.h"
@@ -112,9 +115,9 @@ bool strtox(const std::string& valstr, std::vector<T>& retval) {
 }
 
 bool strtox(const std::string& valstr, bool& retval) {
-    if (valstr.compare("true") == 0) {
+    if (strcasecmp(valstr.c_str(), "true") == 0 || strcmp(valstr.c_str(), "1") == 0) {
         retval = true;
-    } else if (valstr.compare("false") == 0) {
+    } else if (strcasecmp(valstr.c_str(), "false") == 0 || strcmp(valstr.c_str(), "0") == 0) {
         retval = false;
     } else {
         return false;
@@ -213,6 +216,15 @@ bool Properties::load(const char* filename) {
 
         // compatible with doris_config
         key = std::regex_replace(key, doris_start, "");
+
+        if (key.compare("webserver_port") == 0) {
+            // Avoid overwriting the existing config.
+            if (file_conf_map.find("be_http_port") != file_conf_map.end()) {
+                continue;
+            }
+
+            key = "be_http_port";
+        }
 
         // Insert into 'file_conf_map'.
         file_conf_map[key] = value;
@@ -337,6 +349,51 @@ Status set_config(const std::string& field, const std::string& value) {
     // The other types are not thread safe to change dynamically.
     return Status::NotSupported(
             strings::Substitute("'$0' is type of '$1' which is not support to modify", field, it->second.type));
+}
+
+std::string Register::Field::value() const {
+    if (strcmp(type, "bool") == 0) {
+        return std::to_string(*reinterpret_cast<bool*>(storage));
+    }
+    if (strcmp(type, "int16_t") == 0) {
+        return std::to_string(*reinterpret_cast<int16_t*>(storage));
+    }
+    if (strcmp(type, "int32_t") == 0) {
+        return std::to_string(*reinterpret_cast<int32_t*>(storage));
+    }
+    if (strcmp(type, "int64_t") == 0) {
+        return std::to_string(*reinterpret_cast<int64_t*>(storage));
+    }
+    if (strcmp(type, "double") == 0) {
+        return std::to_string(*reinterpret_cast<double*>(storage));
+    }
+    if (strcmp(type, "std::string") == 0) {
+        if (valmutable) {
+            std::lock_guard lock(mstring_conf_lock);
+            return *reinterpret_cast<std::string*>(storage);
+        } else {
+            return *reinterpret_cast<std::string*>(storage);
+        }
+    }
+    if (strcmp(type, "std::vector<std::string>") == 0) {
+        std::stringstream ss;
+        ss << *reinterpret_cast<std::vector<std::string>*>(storage);
+        return ss.str();
+    }
+    return strings::Substitute("unsupported config type: $0", type);
+}
+
+std::vector<ConfigInfo> list_configs() {
+    std::vector<ConfigInfo> infos;
+    for (const auto& [name, field] : *Register::_s_field_map) {
+        auto& info = infos.emplace_back();
+        info.name = field.name;
+        info.value = field.value();
+        info.type = field.type;
+        info.defval = field.defval;
+        info.valmutable = field.valmutable;
+    }
+    return infos;
 }
 
 } // namespace starrocks::config

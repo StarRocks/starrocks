@@ -24,7 +24,8 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeNameFormat;
+import com.starrocks.sql.analyzer.FeNameFormat;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Map;
@@ -61,7 +62,13 @@ public class AddRollupClause extends AlterTableClause {
     public AddRollupClause(String rollupName, List<String> columnNames,
                            List<String> dupKeys, String baseRollupName,
                            Map<String, String> properties) {
-        super(AlterOpType.ADD_ROLLUP);
+        this(rollupName, columnNames, dupKeys, baseRollupName, properties, NodePosition.ZERO);
+    }
+
+    public AddRollupClause(String rollupName, List<String> columnNames,
+                           List<String> dupKeys, String baseRollupName,
+                           Map<String, String> properties, NodePosition pos) {
+        super(AlterOpType.ADD_ROLLUP, pos);
         this.rollupName = rollupName;
         this.columnNames = columnNames;
         this.dupKeys = dupKeys;

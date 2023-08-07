@@ -17,10 +17,12 @@ package com.starrocks.sql.optimizer.operator.physical;
 
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 
+import java.util.List;
 import java.util.Objects;
 
 public class PhysicalNoCTEOperator extends PhysicalOperator {
@@ -39,6 +41,11 @@ public class PhysicalNoCTEOperator extends PhysicalOperator {
 
     public int getCteId() {
         return cteId;
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        return projectInputRow(inputs.get(0).getRowOutputInfo());
     }
 
     @Override

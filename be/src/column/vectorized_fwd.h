@@ -31,9 +31,9 @@ class TimestampValue;
 typedef __int128 int128_t;
 
 class Chunk;
-class VectorizedField;
+class Field;
 class Column;
-class VectorizedSchema;
+class Schema;
 struct ProtobufChunkMeta;
 
 // We may change the Buffer implementation in the future.
@@ -100,14 +100,17 @@ using PercentileColumn = ObjectColumn<PercentileValue>;
 using JsonColumnBase = ObjectColumn<JsonValue>;
 class JsonColumn;
 
+class MapColumn;
+class StructColumn;
+
 using ChunkPtr = std::shared_ptr<Chunk>;
 using ChunkUniquePtr = std::unique_ptr<Chunk>;
 using Chunks = std::vector<ChunkPtr>;
 
-using VectorizedSchemaPtr = std::shared_ptr<VectorizedSchema>;
+using SchemaPtr = std::shared_ptr<Schema>;
 
-using VectorizedFields = std::vector<std::shared_ptr<VectorizedField>>;
-using VectorizedFieldPtr = std::shared_ptr<VectorizedField>;
+using Fields = std::vector<std::shared_ptr<Field>>;
+using FieldPtr = std::shared_ptr<Field>;
 
 using Filter = Buffer<uint8_t>;
 using FilterPtr = std::shared_ptr<Filter>;

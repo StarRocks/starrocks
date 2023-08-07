@@ -22,7 +22,7 @@
 #include "column/chunk.h"
 #include "column/column_pool.h"
 #include "column/fixed_length_column.h"
-#include "column/vectorized_schema.h"
+#include "column/schema.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
@@ -51,9 +51,9 @@ protected:
 
         void close() override {}
 
-        static VectorizedSchema schema() {
-            VectorizedFieldPtr f = std::make_shared<VectorizedField>(0, "c1", get_type_info(TYPE_INT), false);
-            return VectorizedSchema(std::vector<VectorizedFieldPtr>{f});
+        static Schema schema() {
+            FieldPtr f = std::make_shared<Field>(0, "c1", get_type_info(TYPE_INT), false);
+            return Schema(std::vector<FieldPtr>{f});
         }
 
     private:

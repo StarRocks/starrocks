@@ -121,7 +121,7 @@ public:
 
 inline uint32_t crc_hash_32(const void* data, int32_t bytes, uint32_t hash) {
 #if defined(__x86_64__) && !defined(__SSE4_2__)
-    return crc32(hash, (const unsigned char*)data, bytes);
+    return static_cast<uint32_t>(crc32(hash, (const unsigned char*)data, bytes));
 #else
     uint32_t words = bytes / sizeof(uint32_t);
     bytes = bytes % 4 /*sizeof(uint32_t)*/;
@@ -162,7 +162,7 @@ inline uint64_t crc_hash_64(const void* data, int32_t length, uint64_t hash) {
     return crc32(hash, (const unsigned char*)data, length);
 #else
     if (UNLIKELY(length < 8)) {
-        return crc_hash_32(data, length, hash);
+        return crc_hash_32(data, length, static_cast<uint32_t>(hash));
     }
 
     uint64_t words = length / sizeof(uint64_t);
@@ -227,10 +227,12 @@ public:
 
 #if defined(__SSE2__) && !defined(ADDRESS_SANITIZER)
 
-// NOTE: This function will access 15 excessive bytes after p1 and p2.
+// NOTE: This function will access 15 excessive bytes after p1 and p2, which should has padding bytes when allocating
+// memory. if withoud pad, please use memequal.
 // NOTE: typename T must be uint8_t or int8_t
 template <typename T>
-typename std::enable_if<sizeof(T) == 1, bool>::type memequal(const T* p1, size_t size1, const T* p2, size_t size2) {
+typename std::enable_if<sizeof(T) == 1, bool>::type memequal_padded(const T* p1, size_t size1, const T* p2,
+                                                                    size_t size2) {
     if (size1 != size2) {
         return false;
     }
@@ -249,7 +251,8 @@ typename std::enable_if<sizeof(T) == 1, bool>::type memequal(const T* p1, size_t
 #else
 
 template <typename T>
-typename std::enable_if<sizeof(T) == 1, bool>::type memequal(const T* p1, size_t size1, const T* p2, size_t size2) {
+typename std::enable_if<sizeof(T) == 1, bool>::type memequal_padded(const T* p1, size_t size1, const T* p2,
+                                                                    size_t size2) {
     return (size1 == size2) && (memcmp(p1, p2, size1) == 0);
 }
 #endif
@@ -257,7 +260,7 @@ typename std::enable_if<sizeof(T) == 1, bool>::type memequal(const T* p1, size_t
 static constexpr uint16_t SLICE_MEMEQUAL_OVERFLOW_PADDING = 15;
 class SliceEqual {
 public:
-    bool operator()(const Slice& x, const Slice& y) const { return memequal(x.data, x.size, y.data, y.size); }
+    bool operator()(const Slice& x, const Slice& y) const { return memequal_padded(x.data, x.size, y.data, y.size); }
 };
 
 class SliceNormalEqual {
@@ -314,8 +317,8 @@ inline void hash_combine(uint64_t& seed, const T& val) {
 }
 
 inline uint64_t hash_128(uint64_t seed, int128_t val) {
-    size_t low = val;
-    size_t high = val >> 64;
+    auto low = static_cast<size_t>(val);
+    auto high = static_cast<size_t>(val >> 64);
     hash_combine(seed, low);
     hash_combine(seed, high);
     return seed;

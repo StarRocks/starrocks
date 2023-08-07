@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
@@ -30,6 +31,7 @@ import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveRemoteFileIO;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
+import com.starrocks.credential.azure.AzureCloudConfigurationFactory;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TFileTable;
 import com.starrocks.thrift.TTableDescriptor;
@@ -46,8 +48,12 @@ import java.util.Optional;
 public class FileTable extends Table {
     private static final String JSON_KEY_FILE_PATH = "path";
     private static final String JSON_KEY_FORMAT = "format";
+    private static final String JSON_RECURSIVE_DIRECTORIES = "enable_recursive_listing";
     private static final String JSON_KEY_FILE_PROPERTIES = "fileProperties";
+
+    @SerializedName(value = "fp")
     private Map<String, String> fileProperties = Maps.newHashMap();
+
     public FileTable() {
         super(TableType.FILE);
     }
@@ -75,6 +81,8 @@ public class FileTable extends Table {
         if (!format.equalsIgnoreCase("parquet") && !format.equalsIgnoreCase("orc")) {
             throw new DdlException("not supported format: " + format);
         }
+        // Put path into fileProperties, so that we can get storage account in AzureStorageCloudConfiguration
+        fileProperties.put(AzureCloudConfigurationFactory.AZURE_PATH_KEY, path);
     }
 
     public String getTableLocation() {
@@ -96,10 +104,11 @@ public class FileTable extends Table {
     }
 
     public List<RemoteFileDesc> getFileDescs() throws DdlException {
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(fileProperties, null);
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(fileProperties);
         Configuration configuration = hdfsEnvironment.getConfiguration();
         HiveRemoteFileIO remoteFileIO = new HiveRemoteFileIO(configuration);
-        RemotePathKey pathKey = new RemotePathKey(getTableLocation(), false, Optional.empty());
+        boolean recursive = Boolean.parseBoolean(fileProperties.getOrDefault(JSON_RECURSIVE_DIRECTORIES, "false"));
+        RemotePathKey pathKey = new RemotePathKey(getTableLocation(), recursive, Optional.empty());
         try {
             Map<RemotePathKey, List<RemoteFileDesc>> result = remoteFileIO.getRemoteFiles(pathKey);
             if (result.isEmpty()) {
@@ -116,7 +125,7 @@ public class FileTable extends Table {
             }
             return remoteFileDescs;
         } catch (StarRocksConnectorException e) {
-            throw new DdlException("doesn't get file with path: " + getTableLocation());
+            throw new DdlException("doesn't get file with path: " + getTableLocation(), e);
         }
     }
 
@@ -173,7 +182,7 @@ public class FileTable extends Table {
     }
 
     @Override
-    public void onCreate() {
+    public void onReload() {
     }
 
     @Override

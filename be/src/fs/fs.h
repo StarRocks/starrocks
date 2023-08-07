@@ -10,6 +10,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -80,13 +81,6 @@ public:
     const TCloudConfiguration* cloud_configuration;
 };
 
-struct FileStatus {
-    FileStatus(std::string_view name, bool is_dir, int64_t size) : name(name), is_dir(is_dir), size(size) {}
-    std::string name;
-    bool is_dir;
-    int64_t size;
-};
-
 struct SequentialFileOptions {
     SequentialFileOptions() = default;
 
@@ -96,11 +90,23 @@ struct SequentialFileOptions {
 };
 
 struct RandomAccessFileOptions {
-    RandomAccessFileOptions() = default;
-
     // Don't cache remote file locally on read requests.
     // This options can be ignored if the underlying filesystem does not support local cache.
     bool skip_fill_local_cache = false;
+};
+
+struct DirEntry {
+    std::string_view name;
+    std::optional<int64_t> mtime;
+    std::optional<int64_t> size; // Undefined if "is_dir" is true
+    std::optional<bool> is_dir;
+};
+
+struct FileWriteStat {
+    int64_t open_time{0};
+    int64_t close_time{0};
+    int64_t size{0};
+    std::string path;
 };
 
 class FileSystem {
@@ -129,6 +135,10 @@ public:
     // system.  Sophisticated users may wish to provide their own FileSystem
     // implementation instead of relying on this default environment.
     static FileSystem* Default();
+
+    static void get_file_write_history(std::vector<FileWriteStat>* stats);
+    static void on_file_write_open(WritableFile* file);
+    static void on_file_write_close(WritableFile* file);
 
     virtual Type type() const = 0;
 
@@ -182,8 +192,6 @@ public:
     //         IOError if an IO Error was encountered
     virtual Status get_children(const std::string& dir, std::vector<std::string>* result) = 0;
 
-    virtual Status list_path(const std::string& dir, std::vector<FileStatus>* result) { return Status::OK(); }
-
     // Iterate the specified directory and call given callback function with child's
     // name. This function continues execution until all children have been iterated
     // or callback function return false.
@@ -198,6 +206,10 @@ public:
     //                  permission to access "dir", or if "dir" is invalid.
     //         IOError if an IO Error was encountered
     virtual Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) = 0;
+
+    // `iterate_dir2` is similar to `iterate_dir` but in addition to returning the directory entry name, it
+    // also returns some file statistics.
+    virtual Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) = 0;
 
     // Delete the named file.
     // FIXME: If the named file does not exist, OK or NOT_FOUND is returned, depend on the implementation.
@@ -242,6 +254,7 @@ public:
 
     // Get the last modification time by given 'fname'.
     virtual StatusOr<uint64_t> get_file_modified_time(const std::string& fname) = 0;
+
     // Rename file src to target.
     virtual Status rename_file(const std::string& src, const std::string& target) = 0;
 
@@ -291,13 +304,23 @@ public:
               _stream(std::move(stream)),
               _name(std::move(name)) {}
 
+    explicit RandomAccessFile(std::shared_ptr<io::SeekableInputStream> stream, std::string name, bool is_cache_hit)
+            : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership),
+              _stream(std::move(stream)),
+              _name(std::move(name)),
+              _is_cache_hit(is_cache_hit) {}
+
     std::shared_ptr<io::SeekableInputStream> stream() { return _stream; }
 
     const std::string& filename() const { return _name; }
 
+    bool is_cache_hit() const { return _is_cache_hit; }
+
 private:
     std::shared_ptr<io::SeekableInputStream> _stream;
     std::string _name;
+    // for cachefs in fs_starlet
+    bool _is_cache_hit{false};
 };
 
 // A file abstraction for sequential writing.  The implementation

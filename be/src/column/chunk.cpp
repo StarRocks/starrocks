@@ -69,7 +69,7 @@ bool Chunk::has_large_column() const {
     return false;
 }
 
-Chunk::Chunk(Columns columns, VectorizedSchemaPtr schema) : Chunk(std::move(columns), std::move(schema), nullptr) {}
+Chunk::Chunk(Columns columns, SchemaPtr schema) : Chunk(std::move(columns), std::move(schema), nullptr) {}
 
 // TODO: FlatMap don't support std::move
 Chunk::Chunk(Columns columns, SlotHashMap slot_map) : Chunk(std::move(columns), std::move(slot_map), nullptr) {}
@@ -78,7 +78,7 @@ Chunk::Chunk(Columns columns, SlotHashMap slot_map) : Chunk(std::move(columns), 
 Chunk::Chunk(Columns columns, SlotHashMap slot_map, TupleHashMap tuple_map)
         : Chunk(std::move(columns), std::move(slot_map), std::move(tuple_map), nullptr) {}
 
-Chunk::Chunk(Columns columns, VectorizedSchemaPtr schema, ChunkExtraDataPtr extra_data)
+Chunk::Chunk(Columns columns, SchemaPtr schema, ChunkExtraDataPtr extra_data)
         : _columns(std::move(columns)), _schema(std::move(schema)), _extra_data(std::move(extra_data)) {
     // bucket size cannot be 0.
     _cid_to_index.reserve(std::max<size_t>(1, columns.size() * 2));
@@ -128,12 +128,20 @@ void Chunk::set_num_rows(size_t count) {
     }
 }
 
+void Chunk::update_rows(const Chunk& src, const uint32_t* indexes) {
+    DCHECK(_columns.size() == src.num_columns());
+    for (int i = 0; i < _columns.size(); i++) {
+        ColumnPtr& c = _columns[i];
+        c->update_rows(*src.columns()[i], indexes);
+    }
+}
+
 std::string_view Chunk::get_column_name(size_t idx) const {
     DCHECK_LT(idx, _columns.size());
     return _schema->field(idx)->name();
 }
 
-void Chunk::append_column(ColumnPtr column, const VectorizedFieldPtr& field) {
+void Chunk::append_column(ColumnPtr column, const FieldPtr& field) {
     DCHECK(!_cid_to_index.contains(field->id()));
     _cid_to_index[field->id()] = _columns.size();
     _columns.emplace_back(std::move(column));
@@ -152,7 +160,12 @@ void Chunk::update_column(ColumnPtr column, SlotId slot_id) {
     check_or_die();
 }
 
-void Chunk::insert_column(size_t idx, ColumnPtr column, const VectorizedFieldPtr& field) {
+void Chunk::update_column_by_index(ColumnPtr column, size_t idx) {
+    _columns[idx] = std::move(column);
+    check_or_die();
+}
+
+void Chunk::insert_column(size_t idx, ColumnPtr column, const FieldPtr& field) {
     DCHECK_LT(idx, _columns.size());
     _columns.emplace(_columns.begin() + idx, std::move(column));
     _schema->insert(idx, field);
@@ -166,6 +179,12 @@ void Chunk::append_tuple_column(const ColumnPtr& column, TupleId tuple_id) {
     check_or_die();
 }
 
+void Chunk::append_default() {
+    for (const auto& column : _columns) {
+        column->append_default();
+    }
+}
+
 void Chunk::remove_column_by_index(size_t idx) {
     DCHECK_LT(idx, _columns.size());
     _columns.erase(_columns.begin() + idx);
@@ -177,11 +196,11 @@ void Chunk::remove_column_by_index(size_t idx) {
 
 [[maybe_unused]] void Chunk::remove_columns_by_index(const std::vector<size_t>& indexes) {
     DCHECK(std::is_sorted(indexes.begin(), indexes.end()));
-    for (int i = indexes.size(); i > 0; i--) {
+    for (size_t i = indexes.size(); i > 0; i--) {
         _columns.erase(_columns.begin() + indexes[i - 1]);
     }
     if (_schema != nullptr && !indexes.empty()) {
-        for (int i = indexes.size(); i > 0; i--) {
+        for (size_t i = indexes.size(); i > 0; i--) {
             _schema->remove(indexes[i - 1]);
         }
         rebuild_cid_index();
@@ -318,13 +337,13 @@ size_t Chunk::container_memory_usage() const {
     return container_memory_usage;
 }
 
-size_t Chunk::element_memory_usage(size_t from, size_t size) const {
+size_t Chunk::reference_memory_usage(size_t from, size_t size) const {
     DCHECK_LE(from + size, num_rows()) << "Range error";
-    size_t element_memory_usage = 0;
+    size_t reference_memory_usage = 0;
     for (const auto& column : _columns) {
-        element_memory_usage += column->element_memory_usage(from, size);
+        reference_memory_usage += column->reference_memory_usage(from, size);
     }
-    return element_memory_usage;
+    return reference_memory_usage;
 }
 
 size_t Chunk::bytes_usage() const {
@@ -366,7 +385,7 @@ void Chunk::check_or_die() {
 }
 #endif
 
-std::string Chunk::debug_row(uint32_t index) const {
+std::string Chunk::debug_row(size_t index) const {
     std::stringstream os;
     os << "[";
     for (size_t col = 0; col < _columns.size() - 1; ++col) {
@@ -374,6 +393,18 @@ std::string Chunk::debug_row(uint32_t index) const {
         os << ", ";
     }
     os << _columns[_columns.size() - 1]->debug_item(index) << "]";
+    return os.str();
+}
+
+std::string Chunk::rebuild_csv_row(size_t index, const std::string& delimiter) const {
+    std::stringstream os;
+    for (size_t col = 0; col < _columns.size() - 1; ++col) {
+        os << _columns[col]->debug_item(index);
+        os << delimiter;
+    }
+    if (_columns.size() > 0) {
+        os << _columns[_columns.size() - 1]->debug_item(index);
+    }
     return os.str();
 }
 

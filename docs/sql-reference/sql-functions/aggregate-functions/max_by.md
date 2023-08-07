@@ -2,9 +2,11 @@
 
 ## Description
 
-Returns the value of `x` associated with the maximum value of `y`. 
+Returns the value of `x` associated with the maximum value of `y`.
 
 For example, `SELECT max_by(subject, exam_result) FROM exam;` is to return the subject that has the highest exam score.
+
+This function is supported from v2.5.
 
 ## Syntax
 
@@ -36,7 +38,7 @@ Returns a value that has the same type as `x`.
         subject_id INT,
         subject STRING,
         exam_result INT
-    ) DISTRIBUTED BY HASH(`subject_id`) BUCKETS 1;
+    ) DISTRIBUTED BY HASH(`subject_id`);
     ```
 
 2. Insert values into this table and query data from this table.

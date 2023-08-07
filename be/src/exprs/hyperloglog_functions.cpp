@@ -77,4 +77,38 @@ StatusOr<ColumnPtr> HyperloglogFunctions::hll_empty(FunctionContext* context, co
     return ConstColumn::create(p, 1);
 }
 
+// hll_serialize
+DEFINE_UNARY_FN_WITH_IMPL(HllSerializeImpl, hll) {
+    size_t size = hll->serialize_size();
+    char data[size];
+    size = hll->serialize((uint8_t*)data);
+    return std::string(data, size);
+}
+
+StatusOr<ColumnPtr> HyperloglogFunctions::hll_serialize(FunctionContext* context, const Columns& columns) {
+    return VectorizedStringStrictUnaryFunction<HllSerializeImpl>::evaluate<TYPE_HLL, TYPE_VARCHAR>(columns[0]);
+}
+
+// hll_deserialize
+StatusOr<ColumnPtr> HyperloglogFunctions::hll_deserialize(FunctionContext* context, const Columns& columns) {
+    ColumnViewer<TYPE_VARCHAR> str_viewer(columns[0]);
+    auto hll_column = HyperLogLogColumn::create();
+    size_t size = columns[0]->size();
+    for (int row = 0; row < size; ++row) {
+        HyperLogLog hll;
+        if (!str_viewer.is_null(row)) {
+            Slice s = str_viewer.value(row);
+            hll.deserialize(s);
+        }
+
+        hll_column->append(&hll);
+    }
+
+    if (ColumnHelper::is_all_const(columns)) {
+        return ConstColumn::create(hll_column, columns[0]->size());
+    } else {
+        return hll_column;
+    }
+}
+
 } // namespace starrocks

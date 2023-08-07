@@ -171,9 +171,9 @@ public:
     template <typename SizeT>
     Status do_visit(const BinaryColumnBase<SizeT>& _) {
         using ColumnType = const BinaryColumnBase<SizeT>;
-        using Container = typename ColumnType::Container;
-        auto& left_data = down_cast<ColumnType*>(_left_col)->get_data();
-        auto& right_data = down_cast<ColumnType*>(_right_col)->get_data();
+        using Container = typename BinaryColumnBase<SizeT>::BinaryDataProxyContainer;
+        auto& left_data = down_cast<const ColumnType*>(_left_col)->get_proxy_data();
+        auto& right_data = down_cast<const ColumnType*>(_right_col)->get_proxy_data();
         return merge_ordinary_column<Container, Slice>(left_data, right_data);
     }
 
@@ -294,7 +294,7 @@ SortedRun::SortedRun(const ChunkPtr& ichunk, const std::vector<ExprContext*>* ex
 }
 
 void SortedRun::reset() {
-    chunk->reset();
+    chunk.reset();
     orderby.clear();
     range = {};
 }
@@ -340,7 +340,7 @@ ChunkUniquePtr SortedRun::clone_slice() const {
     }
 }
 
-ChunkPtr SortedRun::steal_chunk(size_t size, size_t skipped_rows) {
+std::pair<ChunkPtr, Columns> SortedRun::steal(bool steal_orderby, size_t size, size_t skipped_rows) {
     if (empty()) {
         return {};
     }
@@ -354,23 +354,50 @@ ChunkPtr SortedRun::steal_chunk(size_t size, size_t skipped_rows) {
     size_t reserved_rows = num_rows() - skipped_rows;
 
     if (size >= reserved_rows) {
-        ChunkPtr res;
+        ChunkPtr res_chunk;
+        Columns res_orderby;
         if (skipped_rows == 0 && range.first == 0 && range.second == chunk->num_rows()) {
             // No others reference this chunk
-            res = chunk;
+            res_chunk = chunk;
+
+            if (steal_orderby) {
+                res_orderby = std::move(orderby);
+            }
         } else {
-            res = chunk->clone_empty(reserved_rows);
-            res->append(*chunk, range.first + skipped_rows, reserved_rows);
+            res_chunk = chunk->clone_empty(reserved_rows);
+            res_chunk->append(*chunk, range.first + skipped_rows, reserved_rows);
+
+            if (steal_orderby) {
+                for (auto& column : orderby) {
+                    auto copy = column->clone_empty();
+                    copy->reserve(reserved_rows);
+                    copy->append(*column, range.first + skipped_rows, reserved_rows);
+                    res_orderby.push_back(std::move(copy));
+                }
+            }
         }
         range.first = range.second = 0;
         chunk.reset();
-        return res;
+        orderby.clear();
+        return std::make_pair(std::move(res_chunk), std::move(res_orderby));
     } else {
         size_t required_rows = std::min(size, reserved_rows);
-        ChunkPtr res = chunk->clone_empty(required_rows);
-        res->append(*chunk, range.first + skipped_rows, required_rows);
+        ChunkPtr res_chunk = chunk->clone_empty(required_rows);
+        Columns res_orderby;
+        res_chunk->append(*chunk, range.first + skipped_rows, required_rows);
+
+        if (steal_orderby) {
+            for (auto& column : orderby) {
+                auto copy = column->clone_empty();
+                copy->reserve(reserved_rows);
+                copy->append(*column, range.first + skipped_rows, required_rows);
+                res_orderby.push_back(std::move(copy));
+            }
+        }
+
         range.first += skipped_rows + required_rows;
-        return res;
+
+        return std::make_pair(std::move(res_chunk), std::move(res_orderby));
     }
 }
 
@@ -384,6 +411,16 @@ int SortedRun::compare_row(const SortDescs& desc, const SortedRun& rhs, size_t l
         }
     }
     return 0;
+}
+
+bool SortedRun::is_sorted(const SortDescs& desc) const {
+    for (size_t row = range.first; row + 1 < range.second; row++) {
+        if (compare_row(desc, *this, row, row + 1) > 0) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 int SortedRun::debug_dump() const {
@@ -425,17 +462,16 @@ void SortedRuns::clear() {
 bool SortedRuns::is_sorted(const SortDescs& sort_desc) const {
     for (int i = 0; i < chunks.size(); i++) {
         auto& run = chunks[i];
+        if (!run.is_sorted(sort_desc)) {
+            return false;
+        }
         if (i > 0) {
             auto& prev = chunks[i - 1];
-            int x = prev.compare_row(sort_desc, run, prev.end_index() - 1, run.start_index());
-            if (x > 0) {
-                return false;
-            }
-        }
-        for (int row = run.start_index() + 1; row < run.end_index(); row++) {
-            int x = run.compare_row(sort_desc, run, row - 1, row);
-            if (x > 0) {
-                return false;
+            if (!prev.empty()) {
+                int x = prev.compare_row(sort_desc, run, prev.end_index() - 1, run.start_index());
+                if (x > 0) {
+                    return false;
+                }
             }
         }
     }
@@ -468,7 +504,7 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& 
 }
 
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
-                           const std::vector<ChunkPtr>& chunks, SortedRuns* output) {
+                           std::vector<ChunkUniquePtr>& chunks, SortedRuns* output) {
     std::vector<std::unique_ptr<SimpleChunkSortCursor>> cursors;
     std::vector<size_t> chunk_index(chunks.size(), 0);
 
@@ -486,7 +522,7 @@ Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext
                         return false;
                     }
                     chunk_index[i]++;
-                    *output = chunks[i]->clone_unique();
+                    *output = std::move(chunks[i]);
                     return true;
                 },
                 sort_exprs));

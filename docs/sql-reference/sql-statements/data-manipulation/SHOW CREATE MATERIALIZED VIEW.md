@@ -2,12 +2,12 @@
 
 ## Description
 
-Shows the definition of a specific materialized view.
+Shows the definition of a specific asynchronous materialized view.
 
 ## Syntax
 
 ```SQL
-SHOW CREATE MATERIALIZED VIEW [database.]mv_name
+SHOW CREATE MATERIALIZED VIEW [database.]<mv_name>
 ```
 
 Parameters in brackets [] is optional.
@@ -35,7 +35,7 @@ MySQL > SHOW CREATE MATERIALIZED VIEW lo_mv1\G
        Materialized View: lo_mv1
 Create Materialized View: CREATE MATERIALIZED VIEW `lo_mv1`
 COMMENT "MATERIALIZED_VIEW"
-DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 10 
+DISTRIBUTED BY HASH(`lo_orderkey`) 
 REFRESH ASYNC
 PROPERTIES (
 "replication_num" = "3",

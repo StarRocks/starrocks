@@ -25,6 +25,7 @@
 #include "column/chunk.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
 #include "util/phmap/phmap.h"
 
 #if defined(__aarch64__)
@@ -126,8 +127,6 @@ struct JoinHashTableItems {
 
     std::unique_ptr<MemPool> build_pool = nullptr;
     std::vector<JoinKeyDesc> join_keys;
-
-    RuntimeProfile::Counter* output_build_column_timer = nullptr;
 };
 
 struct HashTableProbeState {
@@ -171,6 +170,7 @@ struct HashTableProbeState {
     RuntimeProfile::Counter* search_ht_timer = nullptr;
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
     RuntimeProfile::Counter* output_tuple_column_timer = nullptr;
+    RuntimeProfile::Counter* output_build_column_timer = nullptr;
 
     HashTableProbeState() = default;
     ~HashTableProbeState() = default;
@@ -296,11 +296,11 @@ public:
     }
 
     // combine keys into fixed size key by column.
-    template <LogicalType PT>
+    template <LogicalType LT>
     static void serialize_fixed_size_key_column(const Columns& key_columns, Column* fixed_size_key_column,
                                                 uint32_t start, uint32_t count) {
-        using CppType = typename RunTimeTypeTraits<PT>::CppType;
-        using ColumnType = typename RunTimeTypeTraits<PT>::ColumnType;
+        using CppType = typename RunTimeTypeTraits<LT>::CppType;
+        using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
 
         auto& data = reinterpret_cast<ColumnType*>(fixed_size_key_column)->get_data();
         auto* buf = reinterpret_cast<uint8_t*>(&data[start]);
@@ -314,11 +314,11 @@ public:
     }
 };
 
-template <LogicalType PT>
+template <LogicalType LT>
 class JoinBuildFunc {
 public:
-    using CppType = typename RunTimeTypeTraits<PT>::CppType;
-    using ColumnType = typename RunTimeTypeTraits<PT>::ColumnType;
+    using CppType = typename RunTimeTypeTraits<LT>::CppType;
+    using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
 
     static void prepare(RuntimeState* runtime, JoinHashTableItems* table_items);
     static const Buffer<CppType>& get_key_data(const JoinHashTableItems& table_items);
@@ -326,11 +326,11 @@ public:
                                      HashTableProbeState* probe_state);
 };
 
-template <LogicalType PT>
+template <LogicalType LT>
 class DirectMappingJoinBuildFunc {
 public:
-    using CppType = typename RunTimeTypeTraits<PT>::CppType;
-    using ColumnType = typename RunTimeTypeTraits<PT>::ColumnType;
+    using CppType = typename RunTimeTypeTraits<LT>::CppType;
+    using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
 
     static void prepare(RuntimeState* runtime, JoinHashTableItems* table_items);
     static const Buffer<CppType>& get_key_data(const JoinHashTableItems& table_items);
@@ -338,11 +338,11 @@ public:
                                      HashTableProbeState* probe_state);
 };
 
-template <LogicalType PT>
+template <LogicalType LT>
 class FixedSizeJoinBuildFunc {
 public:
-    using CppType = typename RunTimeTypeTraits<PT>::CppType;
-    using ColumnType = typename RunTimeTypeTraits<PT>::ColumnType;
+    using CppType = typename RunTimeTypeTraits<LT>::CppType;
+    using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
 
     static void prepare(RuntimeState* state, JoinHashTableItems* table_items);
 
@@ -377,11 +377,11 @@ private:
                                         uint32_t count, uint8_t** ptr);
 };
 
-template <LogicalType PT>
+template <LogicalType LT>
 class JoinProbeFunc {
 public:
-    using CppType = typename RunTimeTypeTraits<PT>::CppType;
-    using ColumnType = typename RunTimeTypeTraits<PT>::ColumnType;
+    using CppType = typename RunTimeTypeTraits<LT>::CppType;
+    using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
 
     static void prepare(RuntimeState* state, HashTableProbeState* probe_state) {}
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state);
@@ -389,11 +389,11 @@ public:
     static bool equal(const CppType& x, const CppType& y) { return x == y; }
 };
 
-template <LogicalType PT>
+template <LogicalType LT>
 class DirectMappingJoinProbeFunc {
 public:
-    using CppType = typename RunTimeTypeTraits<PT>::CppType;
-    using ColumnType = typename RunTimeTypeTraits<PT>::ColumnType;
+    using CppType = typename RunTimeTypeTraits<LT>::CppType;
+    using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
 
     static void prepare(RuntimeState* state, HashTableProbeState* probe_state) {}
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state);
@@ -401,11 +401,11 @@ public:
     static bool equal(const CppType& x, const CppType& y) { return true; }
 };
 
-template <LogicalType PT>
+template <LogicalType LT>
 class FixedSizeJoinProbeFunc {
 public:
-    using CppType = typename RunTimeTypeTraits<PT>::CppType;
-    using ColumnType = typename RunTimeTypeTraits<PT>::ColumnType;
+    using CppType = typename RunTimeTypeTraits<LT>::CppType;
+    using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
 
     static void prepare(RuntimeState* state, HashTableProbeState* probe_state) {
         probe_state->is_nulls.resize(state->chunk_size());
@@ -515,7 +515,7 @@ private:
         }
     }
     void _build_output(ChunkPtr* chunk) {
-        SCOPED_TIMER(_table_items->output_build_column_timer);
+        SCOPED_TIMER(_probe_state->output_build_column_timer);
         bool to_nullable = _table_items->right_to_nullable;
         for (size_t i = 0; i < _table_items->build_column_count; i++) {
             HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
@@ -540,10 +540,10 @@ private:
     HashTableProbeState* _probe_state = nullptr;
 };
 
-template <LogicalType PT, class BuildFunc, class ProbeFunc>
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
 class JoinHashMap {
 public:
-    using CppType = typename RunTimeTypeTraits<PT>::CppType;
+    using CppType = typename RunTimeTypeTraits<LT>::CppType;
 
     explicit JoinHashMap(JoinHashTableItems* table_items, HashTableProbeState* probe_state)
             : _table_items(table_items), _probe_state(probe_state) {}
@@ -663,10 +663,10 @@ private:
     HashTableProbeState* _probe_state = nullptr;
 };
 
-#define JoinHashMapForOneKey(PT) JoinHashMap<PT, JoinBuildFunc<PT>, JoinProbeFunc<PT>>
-#define JoinHashMapForDirectMapping(PT) JoinHashMap<PT, DirectMappingJoinBuildFunc<PT>, DirectMappingJoinProbeFunc<PT>>
-#define JoinHashMapForFixedSizeKey(PT) JoinHashMap<PT, FixedSizeJoinBuildFunc<PT>, FixedSizeJoinProbeFunc<PT>>
-#define JoinHashMapForSerializedKey(PT) JoinHashMap<PT, SerializedJoinBuildFunc, SerializedJoinProbeFunc>
+#define JoinHashMapForOneKey(LT) JoinHashMap<LT, JoinBuildFunc<LT>, JoinProbeFunc<LT>>
+#define JoinHashMapForDirectMapping(LT) JoinHashMap<LT, DirectMappingJoinBuildFunc<LT>, DirectMappingJoinProbeFunc<LT>>
+#define JoinHashMapForFixedSizeKey(LT) JoinHashMap<LT, FixedSizeJoinBuildFunc<LT>, FixedSizeJoinProbeFunc<LT>>
+#define JoinHashMapForSerializedKey(LT) JoinHashMap<LT, SerializedJoinBuildFunc, SerializedJoinProbeFunc>
 
 class JoinHashTable {
 public:
@@ -684,16 +684,20 @@ public:
     // and the different probe state from this.
     JoinHashTable clone_readable_table();
     void set_probe_profile(RuntimeProfile::Counter* search_ht_timer, RuntimeProfile::Counter* output_probe_column_timer,
-                           RuntimeProfile::Counter* output_tuple_column_timer);
+                           RuntimeProfile::Counter* output_tuple_column_timer,
+                           RuntimeProfile::Counter* output_build_column_timer);
 
     void create(const HashTableParam& param);
     void close();
 
     Status build(RuntimeState* state);
+    Status reset_probe_state(RuntimeState* state);
     Status probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk, bool* eos);
     Status probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos);
 
     void append_chunk(RuntimeState* state, const ChunkPtr& chunk, const Columns& key_columns);
+    // convert input column to spill schema order
+    StatusOr<ChunkPtr> convert_to_spill_schema(const ChunkPtr& chunk) const;
 
     const ChunkPtr& get_build_chunk() const { return _table_items->build_chunk; }
     Columns& get_key_columns() { return _table_items->key_columns; }
@@ -701,10 +705,11 @@ public:
     size_t get_probe_column_count() const { return _table_items->probe_column_count; }
     size_t get_build_column_count() const { return _table_items->build_column_count; }
     size_t get_bucket_size() const { return _table_items->bucket_size; }
+    size_t get_used_bucket_count() const;
 
-    void remove_duplicate_index(Column::Filter* filter);
+    void remove_duplicate_index(Filter* filter);
 
-    int64_t mem_usage();
+    int64_t mem_usage() const;
 
 private:
     JoinHashMapType _choose_join_hash_map();
@@ -712,13 +717,13 @@ private:
 
     Status _upgrade_key_columns_if_overflow();
 
-    void _remove_duplicate_index_for_left_outer_join(Column::Filter* filter);
-    void _remove_duplicate_index_for_left_semi_join(Column::Filter* filter);
-    void _remove_duplicate_index_for_left_anti_join(Column::Filter* filter);
-    void _remove_duplicate_index_for_right_outer_join(Column::Filter* filter);
-    void _remove_duplicate_index_for_right_semi_join(Column::Filter* filter);
-    void _remove_duplicate_index_for_right_anti_join(Column::Filter* filter);
-    void _remove_duplicate_index_for_full_outer_join(Column::Filter* filter);
+    void _remove_duplicate_index_for_left_outer_join(Filter* filter);
+    void _remove_duplicate_index_for_left_semi_join(Filter* filter);
+    void _remove_duplicate_index_for_left_anti_join(Filter* filter);
+    void _remove_duplicate_index_for_right_outer_join(Filter* filter);
+    void _remove_duplicate_index_for_right_semi_join(Filter* filter);
+    void _remove_duplicate_index_for_right_anti_join(Filter* filter);
+    void _remove_duplicate_index_for_full_outer_join(Filter* filter);
 
     std::unique_ptr<JoinHashMapForEmpty> _empty = nullptr;
     std::unique_ptr<JoinHashMapForDirectMapping(TYPE_BOOLEAN)> _keyboolean = nullptr;
@@ -745,7 +750,7 @@ private:
     bool _need_create_tuple_columns = true;
 
     std::shared_ptr<JoinHashTableItems> _table_items;
-    std::unique_ptr<HashTableProbeState> _probe_state;
+    std::unique_ptr<HashTableProbeState> _probe_state = std::make_unique<HashTableProbeState>();
 };
 } // namespace starrocks
 

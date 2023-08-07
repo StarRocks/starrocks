@@ -35,36 +35,45 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BinaryPredicate.Operator;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.MockedAuth;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
-import mockit.Mocked;
 import org.junit.Assert;
-import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.List;
 
 public class DataDescriptionTest {
+    private static StarRocksAssert starRocksAssert;
 
-    @Mocked
-    private Auth auth;
-    @Mocked
-    private ConnectContext ctx;
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.addMockBackend(10002);
+        UtFrameUtils.addMockBackend(10003);
+        starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
+        starRocksAssert.withDatabase("testDb");
+        List<String> tables = Arrays.asList("testTable", "testHiveTable");
+        String sql = "create table testDb.%s (k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) " +
+                "AGGREGATE KEY(k1, k2, k3, k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
 
-    @Before
-    public void setUp() {
-        MockedAuth.mockedAuth(auth);
-        MockedAuth.mockedConnectContext(ctx, "root", "192.168.1.1");
+        tables.forEach(t -> {
+            try {
+                starRocksAssert.withTable(String.format(sql, t));
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
     }
 
     @Test
@@ -87,7 +96,7 @@ public class DataDescriptionTest {
         desc = new DataDescription("testTable", null, Lists.newArrayList("abc.txt"),
                 Lists.newArrayList("col1", "col2"), null, null, null, true, null);
         desc.analyze("testDb");
-        Assert.assertEquals("DATA INFILE ('abc.txt') NEGATIVE INTO TABLE testTable (col1, col2)", desc.toString());
+        Assert.assertEquals("DATA INFILE ('abc.txt') NEGATIVE INTO TABLE testTable (`col1`, `col2`)", desc.toString());
         Assert.assertEquals("testTable", desc.getTableName());
         Assert.assertEquals("[col1, col2]", desc.getFileFieldNames().toString());
         Assert.assertEquals("[abc.txt]", desc.getFilePaths().toString());
@@ -98,8 +107,7 @@ public class DataDescriptionTest {
                 Lists.newArrayList("col1", "col2"), new ColumnSeparator("\t"),
                 null, null, true, null);
         desc.analyze("testDb");
-        Assert.assertEquals("DATA INFILE ('abc.txt', 'bcd.txt') NEGATIVE INTO TABLE testTable"
-                        + " COLUMNS TERMINATED BY '\t' (col1, col2)",
+        Assert.assertEquals("DATA INFILE ('abc.txt', 'bcd.txt') NEGATIVE INTO TABLE testTable COLUMNS TERMINATED BY '\t' (`col1`, `col2`)",
                 desc.toString());
 
         // hive \x01 column separator
@@ -107,8 +115,7 @@ public class DataDescriptionTest {
                 Lists.newArrayList("col1", "col2"), new ColumnSeparator("\\x01"),
                 null, null, true, null);
         desc.analyze("testDb");
-        Assert.assertEquals("DATA INFILE ('abc.txt', 'bcd.txt') NEGATIVE INTO TABLE testTable"
-                        + " COLUMNS TERMINATED BY '\\x01' (col1, col2)",
+        Assert.assertEquals("DATA INFILE ('abc.txt', 'bcd.txt') NEGATIVE INTO TABLE testTable COLUMNS TERMINATED BY '\\x01' (`col1`, `col2`)",
                 desc.toString());
 
         // with partition
@@ -122,56 +129,53 @@ public class DataDescriptionTest {
         List<Expr> params = Lists.newArrayList();
         params.add(new StringLiteral("day"));
         params.add(new SlotRef(null, "k2"));
-        BinaryPredicate predicate = new BinaryPredicate(Operator.EQ, new SlotRef(null, "k1"),
+        BinaryPredicate predicate = new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "k1"),
                 new FunctionCallExpr(FunctionSet.ALIGNMENT_TIMESTAMP, params));
         desc = new DataDescription("testTable", new PartitionNames(false, Lists.newArrayList("p1", "p2")),
                 Lists.newArrayList("abc.txt"),
                 Lists.newArrayList("k2", "k3"), null, null, null, false,
                 Lists.newArrayList((Expr) predicate));
         desc.analyze("testDb");
-        String sql = "DATA INFILE ('abc.txt') INTO TABLE testTable PARTITIONS (p1, p2) (k2, k3)"
-                + " SET (`k1` = alignment_timestamp('day', `k2`))";
+        String sql = "DATA INFILE ('abc.txt') INTO TABLE testTable PARTITIONS (p1, p2) (`k2`, `k3`) SET (`k1` = (alignment_timestamp('day', `k2`)))";
         Assert.assertEquals(sql, desc.toString());
 
         // replace_value func
         params.clear();
         params.add(new StringLiteral("-"));
         params.add(new StringLiteral("10"));
-        predicate = new BinaryPredicate(Operator.EQ, new SlotRef(null, "k1"),
+        predicate = new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "k1"),
                 new FunctionCallExpr(FunctionSet.REPLACE_VALUE, params));
         desc = new DataDescription("testTable", new PartitionNames(false, Lists.newArrayList("p1", "p2")),
                 Lists.newArrayList("abc.txt"),
                 Lists.newArrayList("k2", "k3"), null, null, null,
                 false, Lists.newArrayList((Expr) predicate));
         desc.analyze("testDb");
-        sql = "DATA INFILE ('abc.txt') INTO TABLE testTable PARTITIONS (p1, p2) (k2, k3)"
-                + " SET (`k1` = replace_value('-', '10'))";
+        sql = "DATA INFILE ('abc.txt') INTO TABLE testTable PARTITIONS (p1, p2) (`k2`, `k3`) SET (`k1` = (replace_value('-', '10')))";
         Assert.assertEquals(sql, desc.toString());
 
         // replace_value null
         params.clear();
         params.add(new StringLiteral(""));
         params.add(new NullLiteral());
-        predicate = new BinaryPredicate(Operator.EQ, new SlotRef(null, "k1"),
+        predicate = new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "k1"),
                 new FunctionCallExpr(FunctionSet.REPLACE_VALUE, params));
         desc = new DataDescription("testTable", new PartitionNames(false, Lists.newArrayList("p1", "p2")),
                 Lists.newArrayList("abc.txt"),
                 Lists.newArrayList("k2", "k3"), null, null, null, false,
                 Lists.newArrayList((Expr) predicate));
         desc.analyze("testDb");
-        sql = "DATA INFILE ('abc.txt') INTO TABLE testTable PARTITIONS (p1, p2) (k2, k3)"
-                + " SET (`k1` = replace_value('', NULL))";
+        sql = "DATA INFILE ('abc.txt') INTO TABLE testTable PARTITIONS (p1, p2) (`k2`, `k3`) SET (`k1` = (replace_value('', NULL)))";
         Assert.assertEquals(sql, desc.toString());
 
         // data from table and set bitmap_dict
         params.clear();
         params.add(new SlotRef(null, "k2"));
-        predicate = new BinaryPredicate(Operator.EQ, new SlotRef(null, "k1"),
+        predicate = new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "k1"),
                 new FunctionCallExpr("bitmap_dict", params));
         desc = new DataDescription("testTable", new PartitionNames(false, Lists.newArrayList("p1", "p2")),
                 "testHiveTable", false, Lists.newArrayList(predicate), null);
         desc.analyze("testDb");
-        sql = "DATA FROM TABLE testHiveTable INTO TABLE testTable PARTITIONS (p1, p2) SET (`k1` = bitmap_dict(`k2`))";
+        sql = "DATA FROM TABLE testHiveTable INTO TABLE testTable PARTITIONS (p1, p2) SET (`k1` = (bitmap_dict(`k2`)))";
         Assert.assertEquals(sql, desc.toString());
     }
 

@@ -15,8 +15,8 @@
 
 package com.starrocks.sql.optimizer;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Pair;
@@ -196,8 +196,12 @@ public class GroupExpression {
      * @return List of children input physical properties required
      */
     public List<PhysicalPropertySet> getInputProperties(PhysicalPropertySet require) {
-        Preconditions.checkState(lowestCostTable.containsKey(require));
-        return lowestCostTable.get(require).second;
+        Pair<Double, List<PhysicalPropertySet>> lowestInput = lowestCostTable.get(require);
+        if (lowestInput == null) {
+            String msg = "no best plan with this required property %s for this groupExpression %s";
+            throw new IllegalArgumentException(String.format(msg, require, this));
+        }
+        return lowestInput.second;
     }
 
     /**

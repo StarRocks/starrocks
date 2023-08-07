@@ -128,18 +128,17 @@ private:
     /// Pool backing fn_contexts_. Counts against the runtime state's UDF mem tracker.
     std::unique_ptr<MemPool> _pool;
 
+    RuntimeState* _runtime_state = nullptr;
     /// The expr tree this context is for.
     Expr* _root;
 
     /// True if this context came from a Clone() call. Used to manage FunctionStateScope.
-    bool _is_clone;
-
+    bool _is_clone{false};
     /// Variables keeping track of current state.
-    bool _prepared;
-    bool _opened;
-    RuntimeState* _runtime_state = nullptr;
+    bool _prepared{false};
+    bool _opened{false};
     // In operator, the ExprContext::close method will be called concurrently
-    std::atomic<bool> _closed;
+    std::atomic<bool> _closed{false};
 };
 
 #define RETURN_IF_HAS_ERROR(expr_ctxs)             \

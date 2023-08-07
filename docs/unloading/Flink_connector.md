@@ -1,219 +1,127 @@
 # Read data from StarRocks using Flink connector
 
-This topic describes how to use the source function of flink-connector-starrocks to read data from StarRocks.
+StarRocks provides a self-developed connector named StarRocks Connector for Apache Flink® (Flink connector for short) to help you read data in bulk from a StarRocks cluster by using Flink.
 
-> If you need to use the sink function of flink-connector-starrocks to write data into StarRocks, see [Flink connector](../loading/Flink-connector-starrocks.md) in the Data Loading chapter.
+The Flink connector supports two reading methods: Flink SQL and Flink DataStream. Flink SQL is recommended.
 
-## Introduction
+> **NOTE**
+>
+> The Flink connector also supports writing the data read by Flink to another StarRocks cluster or storage system. See [Continuously load data from Apache Flink®](../loading/Flink-connector-starrocks.md).
 
-You can use the source function of flink-connector-starrocks to read data from StarRocks. Different from the Flink JDBC connector, flink-connector-starrocks can read data from multiple StarRocks backends (BEs) in parallel, which significantly improves data reading efficiency.
-Difference between the two connectors:
+## Background information
 
-- flink-connector-starrocks: Flink first obtains the query plan from the frontend (FE), delivers the query plan as a parameter to BE nodes, and then obtains data results from BE nodes.
+Unlike the JDBC connector provided by Flink, the Flink connector of StarRocks supports reading data from multiple BEs of your StarRocks cluster in parallel, greatly accelerating read tasks. The following comparison shows the difference in implementation between the two connectors.
 
-![flink-connector](../assets/5.3.2-1.png)
+- Flink connector of StarRocks
 
-- Flink JDBC connector: Flink JDBC connector can only read data from the FE in a serial fashion. The data reading efficiency is low.
+  With the Flink connector of StarRocks, Flink can first obtain the query plan from the responsible FE, then distribute the obtained query plan as parameters to all the involved BEs, and finally obtain the data returned by the BEs.
 
-![JDBC connector](../assets/5.3.2-2.png)
+  ![- Flink connector of StarRocks](../assets/5.3.2-1.png)
 
-## Procedure
+- JDBC connector of Flink
 
-### Step 1: Install flink-connector-starrocks
+  With the JDBC connector of Flink, Flink can only read data from individual FEs, one at a time. Data reads are slow.
 
-1. Select a flink-connector-starrocks version based on your Flink version and download the JAR package of [flink-connector-starrocks](https://github.com/StarRocks/flink-connector-starrocks/releases).
-If you need to debug code, you can select the corresponding branch code and compile the code.
-2. Place the downloaded or compiled JAR package in the `lib` directory of Flink.
-3. Restart Flink.
+  ![JDBC connector of Flink](../assets/5.3.2-2.png)
 
-### Step 2: Use flink-connector-starrocks to read StarRocks data
+## Prerequisites
 
-> The source function of flink-connector-starrocks cannot guarantee exactly-once semantics. If the reading task fails, you must repeat this step to create another reading task.
+Flink has been deployed. If Flink has not been deployed, follow these steps to deploy it:
 
-- If you use a Flink SQL client (recommended), you can read data from StarRocks by referring to the following command. For more information about the parameters in this command, see [Parameter description](#parameter-description).
+1. Install Java 8 or Java 11 in your operating system to ensure Flink can run properly. You can use the following command to check the version of your Java installation:
 
-~~~SQL
--- Create a table in Flink based on the target StarRocks table and configure table properties (including information about flink-connector-starrocks, database, and table).
+   ```SQL
+   java -version
+   ```
 
-CREATE TABLE flink_test (
+   For example, if the following information is returned, Java 8 has been installed:
 
-    date_1 DATE,
+   ```SQL
+   openjdk version "1.8.0_322"
+   OpenJDK Runtime Environment (Temurin)(build 1.8.0_322-b06)
+   OpenJDK 64-Bit Server VM (Temurin)(build 25.322-b06, mixed mode)
+   ```
 
-    datetime_1 TIMESTAMP(6),
+2. Download and unzip the [Flink package](https://flink.apache.org/downloads.html) of your choice.
 
-    char_1 CHAR(20),
+   > **NOTE**
+   >
+   > We recommend that you use Flink v1.14 or later. The minimum Flink version supported is v1.11.
 
-    varchar_1 VARCHAR,
+   ```SQL
+   # Download the Flink package.
+   wget https://dlcdn.apache.org/flink/flink-1.14.5/flink-1.14.5-bin-scala_2.11.tgz
+   # Unzip the Flink package.
+   tar -xzf flink-1.14.5-bin-scala_2.11.tgz
+   # Go to the Flink directory.
+   cd flink-1.14.5
+   ```
 
-    boolean_1 BOOLEAN,
+3. Start your Flink cluster.
 
-    tinyint_1 TINYINT,
+   ```SQL
+   # Start your Flink cluster.
+   ./bin/start-cluster.sh
+         
+   # When the following information is displayed, your Flink cluster has successfully started:
+   Starting cluster.
+   Starting standalonesession daemon on host.
+   Starting taskexecutor daemon on host.
+   ```
 
-    smallint_1 SMALLINT,
+You can also deploy Flink by following the instructions provided in [Flink documentation](https://nightlies.apache.org/flink/flink-docs-release-1.13/docs/try-flink/local_installation/).
 
-    int_1 INT,
+## Before you begin
 
-    bigint_1 BIGINT,
+Follow these steps to deploy the Flink connector:
 
-    largeint_1 STRING,
+1. Select and download the [flink-connector-starrocks](https://github.com/StarRocks/flink-connector-starrocks/releases) JAR package matching the Flink version that you are using.
 
-    float_1 FLOAT,
+   > **NOTICE**
+   >
+   > We recommend that you download the Flink connector package whose version is 1.2.x or later and whose matching Flink version has the same first two digits as the Flink version that you are using. For example, if you use Flink v1.14.x, you can download `flink-connector-starrocks-1.2.4_flink-1.14_x.yy.jar`.
 
-    double_1 DOUBLE,FLI
+2. If code debugging is needed, compile the Flink connector package to suit your business requirements.
 
-    decimal_1 DECIMAL(27,9)
+3. Place the Flink connector package you downloaded or compiled into the `lib` directory of Flink.
 
-) WITH (
+4. Restart your Flink cluster.
 
-   'connector'='starrocks',
+## Parameters
 
-   'scan-url'='192.168.xxx.xxx:8030,192.168.xxx.xxx:8030',
+### Common parameters
 
-   'jdbc-url'='jdbc:mysql://192.168.xxx.xxx:9030',
-
-   'username'='root',
-
-   'password'='xxxxxx',
-
-   'database-name'='flink_test',
-
-   'table-name'='flink_test'
-
-);
-
--- Execute an SQL statement to read data from StarRocks.
-
-select date_1, smallint_1 from flink_test where char_1 `<>` 'A' and int_1 = -126;
-~~~
-
-- > Only some of the SQL statements can be used to read StarRocks data, such as
-
-`select ... from table_name where ...`. Aggregate functions except for COUNT are not supported.
-
-- > Predicate pushdown is supported. Predicates can be automatically pushed down when you execute SQL statements, such as the filter conditions in the preceding example.
-
-> `char_1 < > 'A' and int_1 = -126` will be pushed down to the connector and converted into a statement suitable for querying StarRocks data. Additional configuration is not required.
-
-- If you use Flink DataStream, you must add a dependency before you use flash-connector-starrocks to read StarRocks data.
-
-Add the following dependency to the `pom.xml` file.
-
-> Replace x.x.x with the latest version number of flink-connector-starrocks. You can click [version information](https://search.maven.org/search?q=g:com.starrocks)to obtain the latest version number.
-
-~~~SQL
-<dependency>    
-
-    <groupId>com.starrocks</groupId>
-
-    <artifactId>flink-connector-starrocks</artifactId>
-
-    <!-- for flink-1.14 -->
-
-    <version>x.x.x_flink-1.14_2.11</version>
-
-    <version>x.x.x_flink-1.14_2.12</version>
-
-    <!-- for flink-1.13 -->
-
-    <version>x.x.x_flink-1.13_2.11</version>
-
-    <version>x.x.x_flink-1.13_2.12</version>
-
-    <!-- for flink-1.12 -->
-
-    <version>x.x.x_flink-1.12_2.11</version>
-
-    <version>x.x.x_flink-1.12_2.12</version>
-
-    <!-- for flink-1.11 -->
-
-    <version>x.x.x_flink-1.11_2.11</version>
-
-    <version>x.x.x_flink-1.11_2.12</version>
-
-</dependency>
-~~~
-
-Use flink-connector-starrocks to read data from StarRocks by referring to the following sample code. The following table describes the parameters in these commands.
-
-~~~Java
-StarRocksSourceOptions options = StarRocksSourceOptions.builder()
-
-        .withProperty("scan-url", "192.168.xxx.xxx:8030,192.168.xxx.xxx:8030")
-
-        .withProperty("jdbc-url", "jdbc:mysql://192.168.xxx.xxx:9030")
-
-        .withProperty("username", "root")
-
-        .withProperty("password", "xxxxxx")
-
-        .withProperty("table-name", "flink_test")
-
-        .withProperty("database-name", "test")
-
-        .withProperty("cloumns", "char_1, date_1")        
-
-        .withProperty("filters", "int_1 = 10")
-
-        .build();
-
-TableSchema tableSchema = TableSchema.builder()
-
-        .field("date_1", DataTypes.DATE())
-
-        .field("datetime_1", DataTypes.TIMESTAMP(6))
-
-        .field("char_1", DataTypes.CHAR(20))
-
-        .field("varchar_1", DataTypes.STRING())
-
-        .field("boolean_1", DataTypes.BOOLEAN())
-
-        .field("tinyint_1", DataTypes.TINYINT())
-
-        .field("smallint_1", DataTypes.SMALLINT())
-
-        .field("int_1", DataTypes.INT())
-
-        .field("bigint_1", DataTypes.BIGINT())
-
-        .field("largeint_1", DataTypes.STRING())
-
-        .field("float_1", DataTypes.FLOAT())
-
-        .field("double_1", DataTypes.DOUBLE())
-
-        .field("decimal_1", DataTypes.DECIMAL(27, 9))
-
-        .build();
-
-StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-
-env.addSource(StarRocksSource.source(options, tableSchema)).setParallelism(5).print();
-
-env.execute("StarRocks flink source");
-~~~
-
-## Parameter description
+The following parameters apply to both the Flink SQL and Flink DataStream reading methods.
 
 | Parameter                   | Required | Data type | Description                                                  |
 | --------------------------- | -------- | --------- | ------------------------------------------------------------ |
-| connector                   | Yes      | String    | The connector. Set the value to starrocks.                   |
-| scan-url                    | Yes      | String    | The scan URL of the FE node. The URL is used to access the FE node through the web server. The format is < FE IP address >: < FE HTTP port >. The port number defaults to 8030. Separate multiple addresses with commas, for example, 192.168.xxx.xxx:8030, 192.168.xxx.xxx:8030. |
-| jdbc-url                    | Yes      | String    | The JDBC URL of the FE node. This URL is used to access the MySQL client on the FE node. The format is jdbc:mysql://< FE IP address >:< FE query port >. The port number defaults to 9030. |
-| username                    | Yes      | String    | The username in StarRocks. The username must have read permissions to the target database and table. For more information, see [User permissions](../administration/User_privilege.md). |
-| password                    | Yes      | String    | The password of the username.                                |
-| database-name               | Yes      | String    | The name of the StarRocks database.                          |
-| table-name                  | Yes      | String    | The name of the StarRocks table.                             |
-| scan.connect.timeout-ms     | No       | String    | The maximum duration for flink-connector-starrocks to connect to StarRocks, in milliseconds. The default value is 1000. If this duration is exceeded, the connection times out and an error occurs. |
-| scan.params.keep-alive-min  | No       | String    | The keep-alive duration of the query task, in minutes. The default value is 10. we recommend that you set this parameter to a value greater than or equal to 5. |
-| scan.params.query-timeout-s | No       | String    | The timeout duration of the query task, in seconds. The default value is 600. If the query result is not returned within this duration, the query task is stopped. |
-| scan.params.mem-limit-byte  | No       | String    | The maximum memory space allowed for a single query in the BE node, in bytes. The default value is 1073741824 (1 GB). |
-| scan.max-retries            | No       | String    | The maximum number of retries when a query fails. The default value is 1. An error occurs if this value is exceeded. |
+| connector                   | Yes      | STRING    | The type of connector that you want to use to read data. Set the value to `starrocks`.                                |
+| scan-url                    | Yes      | STRING    | The address that is used to connect the FE from the web server. Format: `<fe_host>:<fe_http_port>`. The default port is `8030`. You can specify multiple addresses, which must be separated with a comma (,). Example: `192.168.xxx.xxx:8030,192.168.xxx.xxx:8030`. |
+| jdbc-url                    | Yes      | STRING    | The address that is used to connect the MySQL client of the FE. Format: `jdbc:mysql://<fe_host>:<fe_query_port>`. The default port number is `9030`. |
+| username                    | Yes      | STRING    | The username of your StarRocks cluster account. The account must have read permissions on the StarRocks table you want to read. See [User privileges](../administration/User_privilege.md). |
+| password                    | Yes      | STRING    | The password of your StarRocks cluster account.              |
+| database-name               | Yes      | STRING    | The name of the StarRocks database to which the StarRocks table you want to read belongs. |
+| table-name                  | Yes      | STRING    | The name of the StarRocks table you want to read.            |
+| scan.connect.timeout-ms     | No       | STRING    | The maximum amount of time after which the connection from the Flink connector to your StarRocks cluster times out. Unit: milliseconds. Default value: `1000`. If the amount of time taken to establish the connection exceeds this limit, the read task fails. |
+| scan.params.keep-alive-min  | No       | STRING    | The maximum amount of time during which the read task keeps alive. The keep-alive time is checked on a regular basis by using a polling mechanism. Unit: minutes. Default value: `10`. We recommend that you set this parameter to a value that is greater than or equal to `5`. |
+| scan.params.query-timeout-s | No       | STRING    | The maximum amount of time after which the read task times out. The timeout duration is checked during task execution. Unit: seconds. Default value: `600`. If no read result is returned after the time duration elapses, the read task stops. |
+| scan.params.mem-limit-byte  | No       | STRING    | The maximum amount of memory allowed per query on each BE. Unit: bytes. Default value: `1073741824`, equal to 1 GB. |
+| scan.max-retries            | No       | STRING    | The maximum number of times that the read task can be retried upon failures. Default value: `1`. If the number of times that the read task is retried exceeds this limit, the read task returns errors. |
 
-## Data type mapping between Flink and StarRocks
+### Parameters for Flink DataStream
 
-> The data type mapping in the following table applies only to reading StarRocks data from Flink. For the data type mapping for writing Flink data to StarRocks, see [Flink connector](../loading/Flink-connector-starrocks.md) in the Data Loading chapter.
+The following parameters apply only to the Flink DataStream reading method.
+
+| Parameter    | Required | Data type | Description                                                  |
+| ------------ | -------- | --------- | ------------------------------------------------------------ |
+| scan.columns | No       | STRING    | The column that you want to read. You can specify multiple columns, which must be separated by a comma (,). |
+| scan.filter  | No       | STRING    | The filter condition based on which you want to filter data. |
+
+Assume that in Flink you create a table that consists of three columns, which are `c1`, `c2`, `c3`. To read the rows whose values in the `c1` column of this Flink table are equal to `100`, you can specify two filter conditions `"scan.columns, "c1"` and `"scan.filter, "c1 = 100"`.
+
+## Data type mapping between StarRocks and Flink
+
+The following data type mapping is valid only for Flink reading data from StarRocks. For the data type mapping used for Flink writing data into StarRocks, see [Continuously load data from Apache Flink®](../loading/Flink-connector-starrocks.md).
 
 | StarRocks  | Flink     |
 | ---------- | --------- |
@@ -236,6 +144,190 @@ env.execute("StarRocks flink source");
 | CHAR       | CHAR      |
 | VARCHAR    | STRING    |
 
-## What to do next
+## Examples
 
-After data is read from StarRocks, you can use [Flink WEBUI](https://nightlies.apache.org/flink/flink-docs-master/docs/try-flink/flink-operations-playground/#flink-webui) to observe the details of the reading task. For example, the **Metrics** page of Flink WEBUI displays the number of data rows that are read (`totalScannedRows`).
+The following examples assume you have created a database named `test` in your StarRocks cluster and you have the permissions of user `root`.
+
+> **NOTE**
+>
+> If a read task fails, you must re-create it.
+
+### Data example
+
+1. Go to the `test` database and create a table named `score_board`.
+
+   ```SQL
+   MySQL [test]> CREATE TABLE `score_board`
+   (
+       `id` int(11) NOT NULL COMMENT "",
+       `name` varchar(65533) NULL DEFAULT "" COMMENT "",
+       `score` int(11) NOT NULL DEFAULT "0" COMMENT ""
+   )
+   ENGINE=OLAP
+   PRIMARY KEY(`id`)
+   COMMENT "OLAP"
+   DISTRIBUTED BY HASH(`id`)
+   PROPERTIES
+   (
+       "replication_num" = "3"
+   );
+   ```
+
+2. Insert data into the `score_board` table.
+
+   ```SQL
+   MySQL [test]> INSERT INTO score_board
+   VALUES
+       (1, 'Bob', 21),
+       (2, 'Stan', 21),
+       (3, 'Sam', 22),
+       (4, 'Tony', 22),
+       (5, 'Alice', 22),
+       (6, 'Lucy', 23),
+       (7, 'Polly', 23),
+       (8, 'Tom', 23),
+       (9, 'Rose', 24),
+       (10, 'Jerry', 24),
+       (11, 'Jason', 24),
+       (12, 'Lily', 25),
+       (13, 'Stephen', 25),
+       (14, 'David', 25),
+       (15, 'Eddie', 26),
+       (16, 'Kate', 27),
+       (17, 'Cathy', 27),
+       (18, 'Judy', 27),
+       (19, 'Julia', 28),
+       (20, 'Robert', 28),
+       (21, 'Jack', 29);
+   ```
+
+3. Query the `score_board` table.
+
+   ```SQL
+   MySQL [test]> SELECT * FROM score_board;
+   +------+---------+-------+
+   | id   | name    | score |
+   +------+---------+-------+
+   |    1 | Bob     |    21 |
+   |    2 | Stan    |    21 |
+   |    3 | Sam     |    22 |
+   |    4 | Tony    |    22 |
+   |    5 | Alice   |    22 |
+   |    6 | Lucy    |    23 |
+   |    7 | Polly   |    23 |
+   |    8 | Tom     |    23 |
+   |    9 | Rose    |    24 |
+   |   10 | Jerry   |    24 |
+   |   11 | Jason   |    24 |
+   |   12 | Lily    |    25 |
+   |   13 | Stephen |    25 |
+   |   14 | David   |    25 |
+   |   15 | Eddie   |    26 |
+   |   16 | Kate    |    27 |
+   |   17 | Cathy   |    27 |
+   |   18 | Judy    |    27 |
+   |   19 | Julia   |    28 |
+   |   20 | Robert  |    28 |
+   |   21 | Jack    |    29 |
+   +------+---------+-------+
+   21 rows in set (0.00 sec)
+   ```
+
+### Read data using Flink SQL
+
+1. In your Flink cluster, create a table named `flink_test` based on the schema of the source StarRocks table (which is `score_board` in this example). In the table creation command, you must configure the read task properties, including the information about the Flink connector, the source StarRock database, and the source StarRocks table.
+
+   ```SQL
+   CREATE TABLE flink_test
+   (
+       `id` INT,
+       `name` STRING,
+       `score` INT
+   )
+   WITH
+   (
+       'connector'='starrocks',
+       'scan-url'='192.168.xxx.xxx:8030',
+       'jdbc-url'='jdbc:mysql://192.168.xxx.xxx:9030',
+       'username'='xxxxxx',
+       'password'='xxxxxx',
+       'database-name'='test',
+       'table-name'='score_board'
+   );
+   ```
+
+2. Use SELECT to read data from StarRocks.
+
+   ```SQL
+   SELECT id, name FROM flink_test WHERE score > 20;
+   ```
+
+When you read data by using Flink SQL, take note of the following points:
+
+- You can use only SQL statements like `SELECT ... FROM <table_name> WHERE ...` to read data from StarRocks. Of all aggregate functions, only `count` is supported.
+- Predicate pushdown is supported. For example, if your query contains a filter condition `char_1 <> 'A' and int_1 = -126`, the filter condition will be pushed down to the Flink connector and transformed into a statement that can be executed by StarRocks before the query is run. You do not need to perform extra configurations.
+- The LIMIT statement is not supported.
+- StarRocks does not support the checkpointing mechanism. As a result, data consistency cannot be guaranteed if the read task fails.
+
+### Read data using Flink DataStream
+
+1. Add the following dependencies to the `pom.xml` file:
+
+   ```SQL
+   <dependency>
+       <groupId>com.starrocks</groupId>
+       <artifactId>flink-connector-starrocks</artifactId>
+       <!-- for Apache Flink® 1.15 -->
+       <version>x.x.x_flink-1.15</version>
+       <!-- for Apache Flink® 1.14 -->
+       <version>x.x.x_flink-1.14_2.11</version>
+       <version>x.x.x_flink-1.14_2.12</version>
+       <!-- for Apache Flink® 1.13 -->
+       <version>x.x.x_flink-1.13_2.11</version>
+       <version>x.x.x_flink-1.13_2.12</version>
+       <!-- for Apache Flink® 1.12 -->
+       <version>x.x.x_flink-1.12_2.11</version>
+       <version>x.x.x_flink-1.12_2.12</version>
+       <!-- for Apache Flink® 1.11 -->
+       <version>x.x.x_flink-1.11_2.11</version>
+       <version>x.x.x_flink-1.11_2.12</version>
+   </dependency>
+   ```
+
+   You must replace `x.x.x` in the preceding code example with the latest Flink connector version that you are using. See [Version information](https://search.maven.org/search?q=g:com.starrocks).
+
+2. Call the Flink connector to read data from StarRocks:
+
+   ```Java
+   import com.starrocks.connector.flink.StarRocksSource;
+   import com.starrocks.connector.flink.table.source.StarRocksSourceOptions;
+   import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+   import org.apache.flink.table.api.DataTypes;
+   import org.apache.flink.table.api.TableSchema;
+   
+   public class StarRocksSourceApp {
+           public static void main(String[] args) throws Exception {
+               StarRocksSourceOptions options = StarRocksSourceOptions.builder()
+                      .withProperty("scan-url", "192.168.xxx.xxx:8030")
+                      .withProperty("jdbc-url", "jdbc:mysql://192.168.xxx.xxx:9030")
+                      .withProperty("username", "root")
+                      .withProperty("password", "")
+                      .withProperty("table-name", "score_board")
+                      .withProperty("database-name", "test")
+                      .build();
+               TableSchema tableSchema = TableSchema.builder()
+                      .field("id", DataTypes.INT())
+                      .field("name", DataTypes.STRING())
+                      .field("score", DataTypes.INT())
+                      .build();
+               StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+               env.addSource(StarRocksSource.source(tableSchema, options)).setParallelism(5).print();
+               env.execute("StarRocks flink source");
+           }
+
+       }
+   ```
+
+## What's next
+
+After Flink successfully reads data from StarRocks, you can use the [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-master/docs/try-flink/flink-operations-playground/#flink-webui) to monitor the read task. For example, you can view the `totalScannedRows` metric on the **Metrics** page of the WebUI to obtain the number of rows that are successfully read. You can also use Flink SQL to perform calculations such as joins on the data you have read.

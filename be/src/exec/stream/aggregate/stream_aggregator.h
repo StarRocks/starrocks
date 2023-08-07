@@ -17,16 +17,10 @@
 
 #pragma once
 
-#include <algorithm>
-#include <utility>
-
 #include "exec/aggregator.h"
-#include "exec/stream/aggregate/agg_state_data.h"
-#include "exec/stream/state/mem_state_table.h"
-#include "exec/stream/state/state_table.h"
+#include "exec/stream/aggregate/agg_group_state.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
 
 namespace starrocks::stream {
 
@@ -50,7 +44,7 @@ namespace starrocks::stream {
  */
 class StreamAggregator final : public Aggregator {
 public:
-    StreamAggregator(AggregatorParamsPtr&& params);
+    StreamAggregator(AggregatorParamsPtr params);
 
     static constexpr StreamRowOp INSERT_OP = StreamRowOp::OP_INSERT;
     static constexpr StreamRowOp DELETE_OP = StreamRowOp::OP_DELETE;
@@ -63,14 +57,9 @@ public:
         }
     }
 
-    Status open(RuntimeState* state) { return Aggregator::open(state); }
+    Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
 
-    Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile,
-                   MemTracker* mem_tracker) override {
-        RETURN_IF_ERROR(Aggregator::prepare(state, pool, runtime_profile, mem_tracker));
-        RETURN_IF_ERROR(_prepare_state_tables(state));
-        return Status::OK();
-    }
+    Status open(RuntimeState* state);
 
     // Process input's chunks util `Epoch` chunk is received.
     Status process_chunk(StreamChunk* chunk);
@@ -78,24 +67,21 @@ public:
     // Called when need to generate incremental outputs and Output agg_states for the next batch.
     Status output_changes(int32_t chunk_size, StreamChunkPtr* result_chunk);
 
-    // Used to check result/intermediate/detail result for testing.
     // Called when need to generate incremental outputs and Output agg_states for the next batch.
     Status output_changes(int32_t chunk_size, StreamChunkPtr* result_chunk, ChunkPtr* intermediate_chunk,
                           std::vector<ChunkPtr>& detail_chunks);
 
-    // Reset hashmap(like Cache's evict) when the transaction is over.
+    // Reset the aggregator's state to avoid hashmap too large.
     Status reset_state(RuntimeState* state);
 
-    void close(RuntimeState* state) override;
+    // When the epoch is finished, commit the state table.
+    Status commit_epoch(RuntimeState* state);
+
+    // When the epoch starts, reset stream aggreator's state in the new epoch.
+    Status reset_epoch(RuntimeState* state);
 
 private:
     Status _prepare_state_tables(RuntimeState* state);
-
-    DatumRow _convert_to_datum_row(const Columns& columns, size_t row_idx);
-
-    template <typename HashMapWithKey>
-    Status _output_changes(HashMapWithKey& hash_map_with_key, int32_t chunk_size, StreamChunkPtr* result_chunk,
-                           ChunkPtr* intermediate_chunk, std::vector<ChunkPtr>* detail_chunks);
 
     // Output intermediate(same to OLAP's agg_state) chunks.
     Status _output_intermediate_changes(int32_t chunk_size, const Columns& group_by_columns,
@@ -121,26 +107,10 @@ private:
 private:
     // Store buffers which can be reused in the incremental compute.
     std::unique_ptr<MemPool> _mem_pool;
-
     // Store group by keys to agg state map.
-    std::unique_ptr<StateTable> _result_state_table;
-    std::unique_ptr<StateTable> _intermediate_state_table;
-    // TODO: support merge into one detail table later.
-    std::vector<std::unique_ptr<StateTable>> _detail_state_tables;
     int32_t _count_agg_idx{0};
-
-    // store all agg states
-    std::vector<std::unique_ptr<AggStateData>> _agg_func_states;
-    // output intermediate columns.
-    std::vector<int32_t> _intermediate_agg_func_ids;
-
-    std::unique_ptr<IntermediateAggGroupState> _result_agg_group;
-    std::unique_ptr<IntermediateAggGroupState> _intermediate_agg_group;
-    std::unique_ptr<DetailAggGroupState> _detail_agg_group;
-
-    std::vector<DatumRow> _non_found_keys;
-    // Changed group by keys to generate outputs
-    SliceHashSet _changed_keys;
+    // Store AggState group.
+    std::unique_ptr<AggGroupState> _agg_group_state;
 };
 
 } // namespace starrocks::stream

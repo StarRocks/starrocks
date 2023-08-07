@@ -21,8 +21,18 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 public class ShowBrokerStmt extends ShowStmt {
+
+    public ShowBrokerStmt() {
+        this(NodePosition.ZERO);
+    }
+
+    public ShowBrokerStmt(NodePosition pos) {
+        super(pos);
+    }
+
     @Override
     public ShowResultSetMetaData getMetaData() {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();

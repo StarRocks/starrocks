@@ -20,7 +20,7 @@ Sample data:
 Example:
 
 ~~~shell
-curl -v --location-trusted -u root: \
+curl -v --location-trusted -u <username>:<password> \
     -H "format: json" -H "jsonpaths: [\"$.id\", \"$.city\"]" \
     -T example.json \
     http://FE_HOST:HTTP_PORT/api/DATABASE/TABLE/_stream_load
@@ -46,7 +46,7 @@ Sample data:
 Import example:
 
 ~~~bash
-curl -v --location-trusted -u root: \
+curl -v --location-trusted -u <username>:<password> \
     -H "format: json" -H "jsonpaths: [\"$.k2\", \"$.k1\"]" \
     -H "columns: k2, tmp_k1, k1 = tmp_k1 * 100" \
     -T example.json \
@@ -80,7 +80,7 @@ Sample data:
 Import Example-1:
 
 ~~~shell
-curl -v --location-trusted -u root: \
+curl -v --location-trusted -u <username>:<password> \
     -H "format: json" -H "strip_outer_array: true" \
     -T example.json \
     http://127.0.0.1:8030/api/db1/tbl1/_stream_load
@@ -103,7 +103,7 @@ The import results are as follows:
 Import Example-2:
 
 ~~~shell
-curl -v --location-trusted -u root: \
+curl -v --location-trusted -u <username>:<password> \
     -H "format: json" -H "strip_outer_array: true" \
     -H "jsonpaths: [\"$.k1\", \"$.k2\"]" \
     -H "columns: k1, tmp_k2, k2 = ifnull(tmp_k2, 'x')" \
@@ -192,7 +192,7 @@ tar zxvf canal.deployer-$version.tar.gz -C /tmp/canal
 ~~~bash
 ## mysql serverId
 canal.instance.mysql.slaveId = 1234
-#position info，need to change to your own database information
+#position info, need to change to your own database information
 canal.instance.master.address = 127.0.0.1:3306
 canal.instance.master.journal.name =
 canal.instance.master.position =
@@ -201,7 +201,7 @@ canal.instance.master.timestamp =
 #canal.instance.standby.journal.name =
 #canal.instance.standby.position =
 #canal.instance.standby.timestamp =
-#username/password，need to change to your own database information
+#username/password, need to change to your own database information
 canal.instance.dbUsername = canal  
 canal.instance.dbPassword = canal
 canal.instance.defaultDatabaseName =

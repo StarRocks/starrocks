@@ -124,7 +124,7 @@ private:
 template <LogicalType Type>
 class PlainPageDecoder : public PageDecoder {
 public:
-    PlainPageDecoder(Slice data, const PageDecoderOptions& options) : _data(data), _options(options) {}
+    PlainPageDecoder(Slice data) : _data(data) {}
 
     Status init() override {
         CHECK(!_parsed);
@@ -204,15 +204,15 @@ public:
     }
 
     Status next_batch(size_t* count, Column* dst) override {
-        SparseRange read_range;
+        SparseRange<> read_range;
         uint32_t begin = current_index();
-        read_range.add(Range(begin, begin + *count));
+        read_range.add(Range<>(begin, begin + *count));
         RETURN_IF_ERROR(next_batch(read_range, dst));
         *count = current_index() - begin;
         return Status::OK();
     }
 
-    Status next_batch(const SparseRange& range, Column* dst) override {
+    Status next_batch(const SparseRange<>& range, Column* dst) override {
         DCHECK(_parsed);
 
         size_t to_read = range.span_size();
@@ -220,10 +220,10 @@ public:
             return Status::OK();
         }
 
-        SparseRangeIterator iter = range.new_iterator();
+        SparseRangeIterator<> iter = range.new_iterator();
         while (iter.has_more() && _cur_idx < _num_elems) {
             _cur_idx = iter.begin();
-            Range r = iter.next(to_read);
+            Range<> r = iter.next(to_read);
             uint32_t max_fetch = std::min(r.span_size(), _num_elems - _cur_idx);
             int n = dst->append_numbers(&_data[PLAIN_PAGE_HEADER_SIZE + _cur_idx * SIZE_OF_TYPE],
                                         max_fetch * SIZE_OF_TYPE);
@@ -247,7 +247,6 @@ public:
 
 private:
     Slice _data;
-    PageDecoderOptions _options;
     bool _parsed{false};
     uint32_t _num_elems{0};
     uint32_t _cur_idx{0};

@@ -35,8 +35,6 @@
 package com.starrocks.http.action;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.CompoundPredicate.Operator;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.proc.ProcNodeInterface;
@@ -48,13 +46,12 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.HttpAuthManager;
 import com.starrocks.http.HttpAuthManager.SessionValue;
-import com.starrocks.http.UnauthorizedException;
 import com.starrocks.http.rest.RestBaseResult;
-import com.starrocks.mysql.privilege.PrivBitSet;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.mysql.privilege.Privilege;
+import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -87,7 +84,7 @@ public class WebBaseAction extends BaseAction {
             + "  <script type=\"text/javascript\" src=\"/static?res=jquery.js\"></script>"
             + "  <script type=\"text/javascript\" src=\"/static?res=jquery.dataTables.js\"></script>"
             + "  <script type=\"text/javascript\" src=\"/static?res=datatables_bootstrap.js\"></script>"
-
+            + "  <script type=\"text/javascript\" src=\"/static?res=starrocks.js\"></script>"
             + "  <script type=\"text/javascript\"> "
             + "    $(document).ready(function() { "
             + "      $('#table_id').dataTable({ "
@@ -179,8 +176,8 @@ public class WebBaseAction extends BaseAction {
             authInfo = getAuthorizationInfo(request);
             UserIdentity currentUser = checkPassword(authInfo);
             if (needAdmin()) {
-                checkGlobalAuth(currentUser, PrivPredicate.of(PrivBitSet.of(Privilege.ADMIN_PRIV,
-                        Privilege.NODE_PRIV), Operator.OR));
+                checkUserOwnsAdminRole(currentUser);
+                checkActionOnSystem(currentUser, PrivilegeType.NODE);
             }
             request.setAuthorized(true);
             SessionValue value = new SessionValue();
@@ -193,10 +190,12 @@ public class WebBaseAction extends BaseAction {
             ctx.setRemoteIP(authInfo.remoteIp);
             ctx.setCurrentUserIdentity(currentUser);
             ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+            ctx.setCurrentRoleIds(currentUser);
+
             ctx.setThreadLocalInfo();
 
             return true;
-        } catch (UnauthorizedException e) {
+        } catch (AccessDeniedException e) {
             response.appendContent("Authentication Failed. <br/> " + e.getMessage());
             writeAuthResponse(request, response);
             return false;
@@ -211,10 +210,18 @@ public class WebBaseAction extends BaseAction {
             if (sessionValue == null) {
                 return false;
             }
-            if (GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(sessionValue.currentUser,
-                    PrivPredicate.of(PrivBitSet.of(Privilege.ADMIN_PRIV,
-                                    Privilege.NODE_PRIV),
-                            Operator.OR))) {
+
+            boolean authorized = false;
+
+            try {
+                checkUserOwnsAdminRole(sessionValue.currentUser);
+                checkActionOnSystem(sessionValue.currentUser, PrivilegeType.NODE);
+                authorized = true;
+            } catch (AccessDeniedException e) {
+                // ignore
+            }
+
+            if (authorized) {
                 response.updateCookieAge(request, STARROCKS_SESSION_ID, STARROCKS_SESSION_EXPIRED_TIME);
                 request.setAuthorized(true);
 
@@ -224,6 +231,8 @@ public class WebBaseAction extends BaseAction {
                 ctx.setRemoteIP(request.getHostString());
                 ctx.setCurrentUserIdentity(sessionValue.currentUser);
                 ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+                ctx.setCurrentRoleIds(sessionValue.currentUser);
+
                 ctx.setThreadLocalInfo();
                 return true;
             }

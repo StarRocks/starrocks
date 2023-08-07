@@ -69,7 +69,8 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
             String aggFuncName = aggCall.getFnName();
             if (!aggFuncName.equalsIgnoreCase(FunctionSet.DICT_MERGE)
                     && !aggFuncName.equalsIgnoreCase(FunctionSet.MAX)
-                    && !aggFuncName.equalsIgnoreCase(FunctionSet.MIN)) {
+                    && !aggFuncName.equalsIgnoreCase(FunctionSet.MIN)
+                    && !aggFuncName.equalsIgnoreCase(FunctionSet.COUNT)) {
                 return false;
             }
         }
@@ -91,12 +92,22 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
         Map<ColumnRefOperator, Column> newScanColumnRefs = Maps.newHashMap();
 
         Map<ColumnRefOperator, CallOperator> aggs = agg.getAggregations();
+        // this variable is introduced to solve compatibility issues,
+        // see more details in the description of https://github.com/StarRocks/starrocks/pull/17619
+        boolean hasCountAgg = aggs.values().stream().anyMatch(aggCall -> aggCall.getFnName().equals(FunctionSet.COUNT));
+
+        ColumnRefOperator countPlaceHolderColumn = null;
         for (Map.Entry<ColumnRefOperator, CallOperator> kv : aggs.entrySet()) {
             CallOperator aggCall = kv.getValue();
-            ColumnRefSet usedColumns = aggCall.getUsedColumns();
-            Preconditions.checkArgument(usedColumns.cardinality() == 1);
-            ColumnRefOperator usedColumn = columnRefFactory.getColumnRef(usedColumns.getFirstId());
-
+            ColumnRefOperator usedColumn;
+            if (!aggCall.getFnName().equals(FunctionSet.COUNT)) {
+                ColumnRefSet usedColumns = aggCall.getUsedColumns();
+                Preconditions.checkArgument(usedColumns.cardinality() == 1);
+                usedColumn = columnRefFactory.getColumnRef(usedColumns.getFirstId());
+            } else {
+                // for count, just use the first output column as a placeholder, BE won't read this column.
+                usedColumn = metaScan.getOutputColumns().get(0);
+            }
             String metaColumnName = aggCall.getFnName() + "_" + usedColumn.getName();
 
             Type columnType = aggCall.getType();
@@ -106,12 +117,31 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
                 columnType = Type.ARRAY_VARCHAR;
             }
 
-            ColumnRefOperator metaColumn = columnRefFactory.create(metaColumnName,
-                    columnType, aggCall.isNullable());
+            ColumnRefOperator metaColumn;
+            if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
+                if (countPlaceHolderColumn != null) {
+                    metaColumn = countPlaceHolderColumn;
+                } else {
+                    metaColumn = columnRefFactory.create(metaColumnName, columnType, aggCall.isNullable());
+                    countPlaceHolderColumn = metaColumn;
+                }
+            } else {
+                metaColumn = columnRefFactory.create(metaColumnName, columnType, aggCall.isNullable());
+            }
+
             aggColumnIdToNames.put(metaColumn.getId(), metaColumnName);
-            newScanColumnRefs.put(metaColumn, metaScan.getColRefToColumnMetaMap().get(usedColumn));
+            Column c = metaScan.getColRefToColumnMetaMap().get(usedColumn);
+            if (hasCountAgg) {
+                Column copiedColumn = new Column(c);
+                copiedColumn.setIsAllowNull(true);
+                newScanColumnRefs.put(metaColumn, copiedColumn);
+            } else {
+                newScanColumnRefs.put(metaColumn, c);
+            }
 
             Function aggFunction = aggCall.getFunction();
+            String newAggFnName = aggCall.getFnName();
+            Type newAggReturnType = aggCall.getType();
             // DictMerge meta aggregate function is special, need change their types from
             // VARCHAR to ARRAY_VARCHAR
             if (aggCall.getFnName().equals(FunctionSet.DICT_MERGE)) {
@@ -119,7 +149,14 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
                         new Type[] {Type.ARRAY_VARCHAR}, Function.CompareMode.IS_IDENTICAL);
             }
 
-            CallOperator newAggCall = new CallOperator(aggCall.getFnName(), aggCall.getType(),
+            // rewrite count to sum
+            if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
+                aggFunction = Expr.getBuiltinFunction(FunctionSet.SUM,
+                        new Type[] {Type.BIGINT}, Function.CompareMode.IS_IDENTICAL);
+                newAggFnName = FunctionSet.SUM;
+                newAggReturnType = Type.BIGINT;
+            }
+            CallOperator newAggCall = new CallOperator(newAggFnName, newAggReturnType,
                     Collections.singletonList(metaColumn), aggFunction);
             newAggCalls.put(kv.getKey(), newAggCall);
         }

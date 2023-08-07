@@ -39,6 +39,7 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -46,22 +47,28 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Set;
 
-@Deprecated
 public class RandomDistributionDesc extends DistributionDesc {
     int numBucket;
 
     public RandomDistributionDesc() {
-        type = DistributionInfoType.RANDOM;
+        this(0, NodePosition.ZERO);
     }
 
     public RandomDistributionDesc(int numBucket) {
+        this(numBucket, NodePosition.ZERO);
+    }
+
+    public RandomDistributionDesc(int numBucket, NodePosition pos) {
+        super(pos);
         type = DistributionInfoType.RANDOM;
         this.numBucket = numBucket;
     }
 
     @Override
     public void analyze(Set<String> colSet) {
-        throw new SemanticException("Random distribution is deprecated now, use Hash distribution instead");
+        if (numBucket < 0) {
+            throw new SemanticException("Number of random distribution is zero.");
+        }
     }
 
     @Override

@@ -15,10 +15,10 @@ For example, you create a bloom filter index on a `column1` of a given table `ta
 
 ## Usage notes
 
-- You can create bloom filter indexes for all columns of a table that uses the Duplicate Key Model or Primary Key Model. For a table that uses the Aggregate Key Model or Unique Key model, you can only create bloom filter indexes for key columns.
-- The columns of the TINYINT, FLOAT, DOUBLE, and DECIMAL types do not support creating bloom filter indexes.
+- You can create bloom filter indexes for all columns of a Duplicate Key or Primary Key table. For an Aggregate table or Unique Key table, you can only create bloom filter indexes for key columns.
+- TINYINT, FLOAT, DOUBLE, and DECIMAL columns do not support creating bloom filter indexes.
 - Bloom filter indexes can only improve the performance of queries that contain the `in` and `=` operators, such as `Select xxx from table where x in {}` and `Select xxx from table where column = xxx`.
-- You can check whether a query uses bitmap indexes by viewing the `BloomFilterFilterRows` field of the query's profile.
+- You can check whether a query uses bloom filter indexes by viewing the `BloomFilterFilterRows` field of the query's profile.
 
 ## Create bloom filter indexes
 
@@ -34,7 +34,7 @@ CREATE TABLE table1
 )
 ENGINE = olap
 PRIMARY KEY(k1, k2)
-DISTRIBUTED BY HASH (k1, k2) BUCKETS 10
+DISTRIBUTED BY HASH (k1, k2)
 PROPERTIES("bloom_filter_columns" = "k1,k2");
 ```
 
@@ -69,3 +69,5 @@ You can add, reduce, and delete bloom filter indexes by using the [ALTER TABLE](
     ```SQL
     ALTER TABLE table1 SET ("bloom_filter_columns" = "");
     ```
+
+> Note: Altering an index is an asynchronous operation. You can view the progress of this operation by executing [SHOW ALTER TABLE](../sql-reference/sql-statements/data-manipulation/SHOW%20ALTER.md). You can run only one alter index task on a table each time.

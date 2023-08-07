@@ -17,6 +17,11 @@ package com.starrocks.catalog;
 
 public class AnyArrayType extends PseudoType {
     @Override
+    public boolean equals(Object t) {
+        return t instanceof AnyArrayType;
+    }
+
+    @Override
     public boolean matchesType(Type t) {
         return t instanceof AnyArrayType || t instanceof AnyElementType || t.isArrayType();
     }

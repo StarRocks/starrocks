@@ -34,6 +34,7 @@
 
 package com.starrocks.load.loadv2;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
@@ -71,6 +72,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.thrift.TBrokerFileStatus;
+import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
@@ -100,6 +102,7 @@ public class LoadingTaskPlanner {
     private final int parallelInstanceNum;
     private final long startTime;
     private String mergeConditionStr;
+    private TPartialUpdateMode partialUpdateMode;
 
     // Something useful
     // ConnectContext here is just a dummy object to avoid some NPE problem, like ctx.getDatabase()
@@ -118,10 +121,13 @@ public class LoadingTaskPlanner {
     private Map<String, String> sessionVariables = null;
     ConnectContext context = null;
 
+    private Boolean missAutoIncrementColumn = Boolean.FALSE;
+
     public LoadingTaskPlanner(Long loadJobId, long txnId, long dbId, OlapTable table,
             BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
             boolean strictMode, String timezone, long timeoutS,
-            long startTime, boolean partialUpdate, Map<String, String> sessionVariables, String mergeConditionStr) {
+            long startTime, boolean partialUpdate, Map<String, String> sessionVariables, String mergeConditionStr, 
+            TPartialUpdateMode partialUpdateMode) {
         this.loadJobId = loadJobId;
         this.txnId = txnId;
         this.dbId = dbId;
@@ -136,10 +142,26 @@ public class LoadingTaskPlanner {
         this.parallelInstanceNum = Config.load_parallel_instance_num;
         this.startTime = startTime;
         this.sessionVariables = sessionVariables;
+        this.partialUpdateMode = partialUpdateMode;
     }
 
     public void setConnectContext(ConnectContext context) {
         this.context = context;
+    }
+
+    private boolean checkNullExprInAutoIncrement() {
+        boolean nullExprInAutoIncrement = false;
+        for (ScanNode node : scanNodes) {
+            if (((FileScanNode) node).nullExprInAutoIncrement()) {
+                nullExprInAutoIncrement = true;
+            }
+
+            if (nullExprInAutoIncrement) {
+                break;
+            }
+        }
+
+        return nullExprInAutoIncrement;
     }
 
     public void plan(TUniqueId loadId, List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded)
@@ -155,7 +177,13 @@ public class LoadingTaskPlanner {
                 if (fileGroups.get(0).isNegative()) {
                     throw new DdlException("Primary key table does not support negative load");
                 }
-                destColumns = Load.getPartialUpateColumns(table, fileGroups.get(0).getColumnExprList());
+                List<Boolean> isMissAutoIncrementColumn = Lists.newArrayList();
+                destColumns = Load.getPartialUpateColumns(table, fileGroups.get(0).getColumnExprList(),
+                    isMissAutoIncrementColumn);
+
+                if (isMissAutoIncrementColumn.size() != 0) {
+                    this.missAutoIncrementColumn = isMissAutoIncrementColumn.get(0);
+                }
             } else {
                 throw new DdlException("filegroup number=" + fileGroups.size() + " is illegal");
             }
@@ -185,13 +213,18 @@ public class LoadingTaskPlanner {
         }
 
         if (Config.enable_shuffle_load && needShufflePlan()) {
-            buildShufflePlan(loadId, fileStatusesList, filesAdded);
+            if (Config.eliminate_shuffle_load_by_replicated_storage) {
+                buildDirectPlan(loadId, fileStatusesList, filesAdded, true);
+            } else {
+                buildShufflePlan(loadId, fileStatusesList, filesAdded);
+            }
         } else {
-            buildDirectPlan(loadId, fileStatusesList, filesAdded);
+            buildDirectPlan(loadId, fileStatusesList, filesAdded, false);
         }
     }
 
-    public void buildDirectPlan(TUniqueId loadId, List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded)
+    public void buildDirectPlan(TUniqueId loadId, List<List<TBrokerFileStatus>> fileStatusesList,
+            int filesAdded, boolean forceReplicatedStorage)
             throws UserException {
         // Generate plan trees
         // 1. Broker scan node
@@ -206,10 +239,19 @@ public class LoadingTaskPlanner {
 
         // 2. Olap table sink
         List<Long> partitionIds = getAllPartitionIds();
+        boolean enableAutomaticPartition;
+        if (fileGroups.stream().anyMatch(BrokerFileGroup::isSpecifyPartition)) {
+            enableAutomaticPartition = false;
+        } else {
+            enableAutomaticPartition = table.supportedAutomaticPartition();
+        }
+        Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
         OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true,
-                table.writeQuorum(), table.enableReplicatedStorage());
+                table.writeQuorum(), forceReplicatedStorage ? true : table.enableReplicatedStorage(),
+                checkNullExprInAutoIncrement(), enableAutomaticPartition);
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
-        Load.checkMergeCondition(mergeConditionStr, table);
+        Load.checkMergeCondition(mergeConditionStr, table, false);
+        olapTableSink.setPartialUpdateMode(partialUpdateMode);
         olapTableSink.complete(mergeConditionStr);
 
         // 3. Plan fragment
@@ -280,10 +322,18 @@ public class LoadingTaskPlanner {
 
         // 4. Olap table sink
         List<Long> partitionIds = getAllPartitionIds();
+        boolean enableAutomaticPartition;
+        if (fileGroups.stream().anyMatch(BrokerFileGroup::isSpecifyPartition)) {
+            enableAutomaticPartition = false;
+        } else {
+            enableAutomaticPartition = table.supportedAutomaticPartition();
+        }
         OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true,
-                table.writeQuorum(), table.enableReplicatedStorage());
+                table.writeQuorum(), table.enableReplicatedStorage(),
+                checkNullExprInAutoIncrement(), enableAutomaticPartition);
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
-        Load.checkMergeCondition(mergeConditionStr, table);
+        Load.checkMergeCondition(mergeConditionStr, table, false);
+        olapTableSink.setPartialUpdateMode(partialUpdateMode);
         olapTableSink.complete(mergeConditionStr);
 
         // 6. Sink plan fragment

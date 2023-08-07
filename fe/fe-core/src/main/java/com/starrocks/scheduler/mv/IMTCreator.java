@@ -17,7 +17,6 @@ package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
@@ -30,11 +29,12 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.CreateTableAnalyzer;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -86,7 +86,7 @@ class IMTCreator {
         // Duplicate/Primary Key
         Map<Integer, String> columnNames = plan.getOutputColumns().stream().collect(
                 Collectors.toMap(ColumnRefOperator::getId, ColumnRefOperator::getName));
-        Set<String> keyColumns = key.columns.getStream().mapToObj(columnNames::get).collect(Collectors.toSet());
+        Set<String> keyColumns = key.columns.getStream().map(columnNames::get).collect(Collectors.toSet());
         for (Column col : columns) {
             col.setIsKey(keyColumns.contains(col.getName()));
         }
@@ -232,7 +232,7 @@ class IMTCreator {
             String comment = "IMT for MV StreamAggOperator";
 
             result.add(new CreateTableStmt(false, false, canonicalName, columnDefs,
-                    CreateTableAnalyzer.EngineType.OLAP.name(), keyDesc, partitionDesc, distributionDesc, properties,
+                    EngineType.defaultEngine().name(), keyDesc, partitionDesc, distributionDesc, properties,
                     extProperties, comment));
             return null;
         }

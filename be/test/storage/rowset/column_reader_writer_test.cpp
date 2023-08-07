@@ -226,11 +226,11 @@ protected:
                     ASSERT_TRUE(st.ok());
 
                     ColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
-                    SparseRange read_range;
+                    SparseRange<> read_range;
                     size_t write_num = src.size();
-                    read_range.add(Range(0, write_num / 3));
-                    read_range.add(Range(write_num / 2, (write_num * 2 / 3)));
-                    read_range.add(Range((write_num * 3 / 4), write_num));
+                    read_range.add(Range<>(0, write_num / 3));
+                    read_range.add(Range<>(write_num / 2, (write_num * 2 / 3)));
+                    read_range.add(Range<>((write_num * 3 / 4), write_num));
                     size_t read_num = read_range.span_size();
 
                     st = iter->next_batch(read_range, dst.get());
@@ -238,9 +238,9 @@ protected:
                     ASSERT_EQ(read_num, dst->size());
 
                     size_t offset = 0;
-                    SparseRangeIterator read_iter = read_range.new_iterator();
+                    SparseRangeIterator<> read_iter = read_range.new_iterator();
                     while (read_iter.has_more()) {
-                        Range r = read_iter.next(read_num);
+                        Range<> r = read_iter.next(read_num);
                         for (int i = 0; i < r.span_size(); ++i) {
                             ASSERT_EQ(0, type_info->cmp(src.get(r.begin() + i), dst->get(i + offset)))
                                     << " row " << r.begin() + i << ": "
@@ -330,18 +330,18 @@ protected:
         array_column.add_sub_column(int_column);
 
         auto src_offsets = UInt32Column::create();
-        auto src_elements = Int32Column::create();
+        auto src_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
         ColumnPtr src_column = ArrayColumn::create(src_elements, src_offsets);
 
         // insert [1, 2, 3], [4, 5, 6]
-        src_elements->append(1);
-        src_elements->append(2);
-        src_elements->append(3);
+        src_elements->append_datum(1);
+        src_elements->append_datum(2);
+        src_elements->append_datum(3);
         src_offsets->append(3);
 
-        src_elements->append(4);
-        src_elements->append(5);
-        src_elements->append(6);
+        src_elements->append_datum(4);
+        src_elements->append_datum(5);
+        src_elements->append_datum(6);
         src_offsets->append(6);
 
         TypeInfoPtr type_info = get_type_info(array_column);
@@ -410,7 +410,7 @@ protected:
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
                 auto dst_offsets = UInt32Column::create();
-                auto dst_elements = Int32Column::create();
+                auto dst_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
                 auto dst_column = ArrayColumn::create(dst_elements, dst_offsets);
                 size_t rows_read = src_column->size();
                 st = iter->next_batch(&rows_read, dst_column.get());
@@ -422,7 +422,7 @@ protected:
             }
 
             ASSERT_EQ(2, meta.num_rows());
-            ASSERT_EQ(36, reader->total_mem_footprint());
+            ASSERT_EQ(42, reader->total_mem_footprint());
         }
     }
 

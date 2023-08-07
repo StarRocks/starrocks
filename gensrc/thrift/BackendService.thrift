@@ -63,6 +63,7 @@ struct TKafkaLoadInfo {
     2: required string topic;
     3: required map<i32, i64> partition_begin_offset;
     4: optional map<string, string> properties;
+    5: optional string confluent_schema_registry_url;
 }
 
 struct TPulsarLoadInfo {
@@ -90,6 +91,7 @@ struct TRoutineLoadTask {
     13: optional InternalService.TExecPlanFragmentParams params
     14: optional PlanNodes.TFileFormatType format
     15: optional TPulsarLoadInfo pulsar_load_info
+    16: optional double max_filter_ratio
 }
 
 struct TKafkaMetaProxyRequest {

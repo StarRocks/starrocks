@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.cost;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -30,9 +31,11 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -49,12 +52,14 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 import com.starrocks.statistic.StatisticUtils;
-import com.starrocks.statistic.StatsConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -94,7 +99,8 @@ public class CostModel {
         LOG.debug("operator: {}, group id: {}, child group id: {}, " +
                         "inputProperties: {}, outputRowCount: {}, outPutSize: {}, costEstimate: {}, realCost: {}",
                 expressionContext.getOp(), expression.getGroup().getId(),
-                expression.getInputs().stream().map(Group::getId).collect(Collectors.toList()), childrenOutputProperties,
+                expression.getInputs().stream().map(Group::getId).collect(Collectors.toList()),
+                childrenOutputProperties,
                 expressionContext.getStatistics().getOutputRowCount(),
                 expressionContext.getStatistics().getComputeSize(),
                 costEstimate, realCost);
@@ -123,11 +129,53 @@ public class CostModel {
             return CostEstimate.zero();
         }
 
+        private CostEstimate adjustCostForMV(ExpressionContext context) {
+            Statistics mvStatistics = context.getStatistics();
+            Group group = context.getGroupExpression().getGroup();
+            List<Double> costs = Lists.newArrayList();
+            // get the costs of all expression in this group
+            for (Pair<Double, GroupExpression> pair : group.getAllBestExpressionWithCost()) {
+                if (!(pair.second.getOp() instanceof PhysicalOlapScanOperator)) {
+                    costs.add(pair.first);
+                }
+            }
+            double groupMinCost = Double.MAX_VALUE;
+            if (costs.size() > 0) {
+                groupMinCost = Collections.min(costs);
+            }
+            // use row count as the adjust cost
+            double adjustCost = mvStatistics.getOutputRowCount();
+            return CostEstimate.of(Math.min(Math.max(groupMinCost - 1, 0), adjustCost), 0, 0);
+        }
+
         @Override
         public CostEstimate visitPhysicalOlapScan(PhysicalOlapScanOperator node, ExpressionContext context) {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
-
+            if (node.getTable().isMaterializedView()) {
+                Statistics groupStatistics = context.getGroupStatistics();
+                Statistics mvStatistics = context.getStatistics();
+                // only adjust cost for mv scan operator when group statistics is unknown and mv group expression
+                // statistics is not unknown
+                if (groupStatistics != null && groupStatistics.getColumnStatistics().values().stream().
+                        anyMatch(ColumnStatistic::isUnknown) && mvStatistics.getColumnStatistics().values().stream().
+                        noneMatch(ColumnStatistic::isUnknown)) {
+                    return adjustCostForMV(context);
+                } else {
+                    ColumnRefSet usedColumns = statistics.getUsedColumns();
+                    Projection projection = node.getProjection();
+                    if (projection != null) {
+                        // we will add a projection on top of rewritten mv plan to keep the output columns the same as
+                        // original query.
+                        // excludes this projection keys when costing mv,
+                        // or the cost of mv may be larger than original query,
+                        // which will lead to mismatch of mv
+                        usedColumns.except(projection.getColumnRefMap().keySet());
+                    }
+                    // use the used columns to calculate the cost of mv
+                    return CostEstimate.of(statistics.getOutputSize(usedColumns), 0, 0);
+                }
+            }
             return CostEstimate.of(statistics.getComputeSize(), 0, 0);
         }
 
@@ -221,13 +269,68 @@ public class CostModel {
 
         @Override
         public CostEstimate visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, ExpressionContext context) {
-            if (!needGenerateOneStageAggNode(context) && !node.isSplit() && node.getType().isGlobal()) {
+            if (!needGenerateOneStageAggNode(context) && node.getDistinctColumnDataSkew() == null && !node.isSplit() &&
+                    node.getType().isGlobal()) {
                 return CostEstimate.infinite();
             }
 
             Statistics statistics = context.getStatistics();
             Statistics inputStatistics = context.getChildStatistics(0);
-            return CostEstimate.of(inputStatistics.getComputeSize(), statistics.getComputeSize(), 0);
+            double penalty = 1.0;
+            if (node.getDistinctColumnDataSkew() != null) {
+                penalty = computeDataSkewPenaltyOfGroupByCountDistinct(node, inputStatistics);
+            }
+
+            return CostEstimate.of(inputStatistics.getComputeSize() * penalty, statistics.getComputeSize() * penalty,
+                    0);
+        }
+
+        // Compute penalty factor for GroupByCountDistinctDataSkewEliminateRule
+        // Reward good cases(give a penaltyFactor=0.5) while punish bad cases(give a penaltyFactor=1.5)
+        // Good cases as follows:
+        // 1. distinct cardinality of group-by column is less than 100
+        // 2. distinct cardinality of group-by column is less than 10000 and avgDistValuesPerGroup > 100
+        // Bad cases as follows: this Rule is conservative, the cases except good cases are all bad cases.
+        private double computeDataSkewPenaltyOfGroupByCountDistinct(PhysicalHashAggregateOperator node,
+                                                                    Statistics inputStatistics) {
+            DataSkewInfo skewInfo = node.getDistinctColumnDataSkew();
+            if (skewInfo.getStage() != 1) {
+                return skewInfo.getPenaltyFactor();
+            }
+
+            if (inputStatistics.isTableRowCountMayInaccurate()) {
+                return 1.5;
+            }
+
+            ColumnStatistic distColStat = inputStatistics.getColumnStatistic(skewInfo.getSkewColumnRef());
+            List<ColumnStatistic> groupByStats = node.getGroupBys().subList(0, node.getGroupBys().size() - 1)
+                    .stream().map(inputStatistics::getColumnStatistic).collect(Collectors.toList());
+
+            if (distColStat.isUnknownValue() || distColStat.isUnknown() ||
+                    groupByStats.stream().anyMatch(groupStat -> groupStat.isUnknown() || groupStat.isUnknownValue())) {
+                return 1.5;
+            }
+            double groupByColDistinctValues = 1.0;
+            for (ColumnStatistic groupStat : groupByStats) {
+                groupByColDistinctValues *= groupStat.getDistinctValuesCount();
+            }
+            groupByColDistinctValues =
+                    Math.max(1.0, Math.min(groupByColDistinctValues, inputStatistics.getOutputRowCount()));
+
+            final double groupByColDistinctHighWaterMark = 10000;
+            final double groupByColDistinctLowWaterMark = 100;
+            final double distColDistinctValuesCountWaterMark = 10000000;
+            final double distColDistinctValuesCount = distColStat.getDistinctValuesCount();
+            final double avgDistValuesPerGroup = distColDistinctValuesCount / groupByColDistinctValues;
+
+            if (distColDistinctValuesCount > distColDistinctValuesCountWaterMark &&
+                    ((groupByColDistinctValues <= groupByColDistinctLowWaterMark) ||
+                            (groupByColDistinctValues < groupByColDistinctHighWaterMark &&
+                                    avgDistValuesPerGroup > 100))) {
+                return 0.5;
+            } else {
+                return 1.5;
+            }
         }
 
         @Override
@@ -242,6 +345,15 @@ public class CostModel {
             SessionVariable sessionVariable = ctx.getSessionVariable();
             DistributionSpec distributionSpec = node.getDistributionSpec();
             double outputSize = statistics.getOutputSize(outputColumns);
+            double penalty = 1.0;
+            Operator childOp = context.getChildOperator(0);
+            if (childOp instanceof PhysicalHashAggregateOperator) {
+                PhysicalHashAggregateOperator childAggOp = (PhysicalHashAggregateOperator) childOp;
+                DataSkewInfo skewInfo = childAggOp.getDistinctColumnDataSkew();
+                if (skewInfo != null && skewInfo.getStage() == 3) {
+                    penalty = skewInfo.getPenaltyFactor();
+                }
+            }
             // set network start cost 1 at least
             // avoid choose network plan when the cost is same as colocate plans
             switch (distributionSpec.getType()) {
@@ -257,7 +369,7 @@ public class CostModel {
                             outputSize * beNum,
                             Math.max(outputSize * beNum, 1));
                     if (outputSize > sessionVariable.getMaxExecMemByte()) {
-                        result = result.multiplyBy(StatsConstants.BROADCAST_JOIN_MEM_EXCEED_PENALTY);
+                        result = result.multiplyBy(StatisticsEstimateCoefficient.BROADCAST_JOIN_MEM_EXCEED_PENALTY);
                     }
                     LOG.debug("beNum: {}, aliveBeNum: {}, outputSize: {}.", aliveBackendNumber, beNum, outputSize);
                     break;
@@ -271,7 +383,7 @@ public class CostModel {
                             && GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
                     double networkCost = ignoreNetworkCost ? 0 : Math.max(outputSize, 1);
 
-                    result = CostEstimate.of(outputSize, 0, networkCost);
+                    result = CostEstimate.of(outputSize * penalty, 0, networkCost * penalty);
                     break;
                 case GATHER:
                     result = CostEstimate.of(outputSize, 0,
@@ -302,7 +414,7 @@ public class CostModel {
 
             Preconditions.checkState(!(join.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()),
                     "should be handled by nestloopjoin");
-            HashJoinCostModel joinCostModel = new HashJoinCostModel(context, inputProperties, eqOnPredicates);
+            HashJoinCostModel joinCostModel = new HashJoinCostModel(context, inputProperties, eqOnPredicates, statistics);
             return CostEstimate.of(joinCostModel.getCpuCost(), joinCostModel.getMemCost(), 0);
         }
 
@@ -323,7 +435,7 @@ public class CostModel {
                 return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
                                 + rightStatistics.getOutputSize(context.getChildOutputColumns(1)),
                         rightStatistics.getOutputSize(context.getChildOutputColumns(1))
-                                * StatsConstants.CROSS_JOIN_COST_PENALTY * 2, 0);
+                                * StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY * 100D, 0);
             } else {
                 return CostEstimate.of((leftStatistics.getOutputSize(context.getChildOutputColumns(0))
                                 + rightStatistics.getOutputSize(context.getChildOutputColumns(1)) / 2),
@@ -339,17 +451,23 @@ public class CostModel {
 
             double leftSize = leftStatistics.getOutputSize(context.getChildOutputColumns(0));
             double rightSize = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
-            double cpuCost = StatisticUtils.multiplyOutputSize(leftSize, rightSize)
-                    + StatsConstants.CROSS_JOIN_COST_PENALTY;
+            double cpuCost = StatisticUtils.multiplyOutputSize(StatisticUtils.multiplyOutputSize(leftSize, rightSize),
+                    StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY);
             double memCost = StatisticUtils.multiplyOutputSize(rightSize,
-                    StatsConstants.CROSS_JOIN_COST_PENALTY * 2D);
+                    StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY * 100D);
 
             // Right cross join could not be parallelized, so apply more punishment
             if (join.getJoinType().isRightJoin()) {
-                cpuCost += StatsConstants.CROSS_JOIN_RIGHT_COST_PENALTY;
+                // Add more punishment when right size is 10x greater than left size.
+                if (rightSize > 10 * leftSize) {
+                    cpuCost *= StatisticsEstimateCoefficient.CROSS_JOIN_RIGHT_COST_PENALTY;
+                } else {
+                    cpuCost += StatisticsEstimateCoefficient.CROSS_JOIN_RIGHT_COST_PENALTY;
+                }
                 memCost += rightSize;
             }
-            if (join.getJoinType().isOuterJoin() || join.getJoinType().isSemiJoin() || join.getJoinType().isAntiJoin()) {
+            if (join.getJoinType().isOuterJoin() || join.getJoinType().isSemiJoin() ||
+                    join.getJoinType().isAntiJoin()) {
                 cpuCost += leftSize;
             }
 

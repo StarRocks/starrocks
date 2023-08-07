@@ -19,6 +19,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.MockTPCHHistogramStatisticStorage;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -28,6 +29,7 @@ public class TPCHPlanWithHistogramCostTest extends DistributedEnvPlanTestBase {
     public static void beforeClass() throws Exception {
         DistributedEnvPlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
+        FeConstants.showLocalShuffleColumnsInExplain = false;
         connectContext.getSessionVariable().setEnableGlobalRuntimeFilter(true);
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
@@ -56,6 +58,11 @@ public class TPCHPlanWithHistogramCostTest extends DistributedEnvPlanTestBase {
 
         OlapTable t7 = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem");
         setTableStatistics(t7, 6000000 * scale);
+    }
+
+    @AfterClass
+    public static void afterClass() {
+        FeConstants.showLocalShuffleColumnsInExplain = true;
     }
 
     @Test

@@ -15,6 +15,10 @@
 
 package com.starrocks.connector.hive;
 
+import com.google.gson.JsonObject;
+import com.starrocks.connector.PartitionInfo;
+import com.starrocks.persist.gson.GsonUtils;
+
 import java.util.Map;
 import java.util.Objects;
 
@@ -23,12 +27,14 @@ import java.util.Objects;
  * such as in the cbo and building scan range stage. The purpose of caching partition instance
  * is to reduce repeated calls to the hive metastore rpc interface at each stage.
  */
-public class Partition {
+public class Partition implements PartitionInfo {
     private final Map<String, String> parameters;
     private final RemoteFileInputFormat inputFormat;
     private final TextFileFormatDesc textFileFormatDesc;
     private final String fullPath;
     private final boolean isSplittable;
+
+    public static final String TRANSIENT_LAST_DDL_TIME = "transient_lastDdlTime";
 
     public Partition(Map<String, String> parameters,
                      RemoteFileInputFormat inputFormat,
@@ -60,6 +66,12 @@ public class Partition {
 
     public boolean isSplittable() {
         return isSplittable;
+    }
+
+    @Override
+    public long getModifiedTime() {
+        String ddlTime = parameters.get(TRANSIENT_LAST_DDL_TIME);
+        return Long.parseLong(ddlTime != null ? ddlTime : "0");
     }
 
     @Override
@@ -95,6 +107,16 @@ public class Partition {
         sb.append(", isSplittable=").append(isSplittable);
         sb.append('}');
         return sb.toString();
+    }
+
+    public JsonObject toJson() {
+        JsonObject obj = new JsonObject();
+        obj.add("parameters", (GsonUtils.GSON.toJsonTree(parameters)));
+        obj.add("inputFormat", (GsonUtils.GSON.toJsonTree(inputFormat)));
+        obj.add("textFileFormatDesc", (GsonUtils.GSON.toJsonTree(textFileFormatDesc)));
+        obj.add("fullPath", GsonUtils.GSON.toJsonTree(fullPath));
+        obj.add("isSplittable", GsonUtils.GSON.toJsonTree(isSplittable));
+        return obj;
     }
 
     public static Builder builder() {

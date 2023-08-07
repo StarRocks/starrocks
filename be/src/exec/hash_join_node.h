@@ -16,6 +16,7 @@
 
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
+#include "column/vectorized_fwd.h"
 #include "exec/exec_node.h"
 #include "exec/join_hash_map.h"
 #include "util/phmap/phmap.h"
@@ -45,10 +46,13 @@ public:
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
     pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
 private:
+    template <class HashJoinerFactory, class HashJoinBuilderFactory, class HashJoinProbeFactory>
+    pipeline::OpFactories _decompose_to_pipeline(pipeline::PipelineBuilderContext* context);
+
     static bool _has_null(const ColumnPtr& column);
 
     void _init_hash_table_param(HashTableParam* param);
@@ -72,9 +76,9 @@ private:
 
     Status _evaluate_build_keys(const ChunkPtr& chunk);
 
-    Status _calc_filter_for_other_conjunct(ChunkPtr* chunk, Column::Filter& filter, bool& filter_all, bool& hit_all);
+    Status _calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& filter, bool& filter_all, bool& hit_all);
     static void _process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count,
-                                                bool filter_all, bool hit_all, const Column::Filter& filter);
+                                                bool filter_all, bool hit_all, const Filter& filter);
 
     Status _process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count);
     Status _process_semi_join_with_other_conjunct(ChunkPtr* chunk);
@@ -125,8 +129,7 @@ private:
     // hash table doesn't have reserved data
     bool _ht_has_remain = false;
     // right table have not output data for right outer join/right semi join/right anti join/full outer join
-    bool _right_table_has_remain = false;
-    bool _build_eos = false;
+    bool _right_table_has_remain = true;
     bool _probe_eos = false; // probe table scan finished;
     size_t _runtime_join_filter_pushdown_limit = 1024000;
 

@@ -47,7 +47,7 @@ public:
         _is_epoch_finished = true;
         return Status::OK();
     }
-    Status set_epoch_finished(RuntimeState* state) {
+    Status set_epoch_finished(RuntimeState* state) override {
         _exchanger->epoch_finish(state);
         return Status::OK();
     }
@@ -65,7 +65,7 @@ public:
 private:
     bool _is_finished = false;
     const std::shared_ptr<LocalExchanger>& _exchanger;
-
+    RuntimeProfile::HighWaterMarkCounter* _peak_memory_usage_counter = nullptr;
     // STREAM MV
     bool _is_epoch_finished = false;
 };

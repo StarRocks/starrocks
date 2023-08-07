@@ -35,13 +35,12 @@
 package com.starrocks.analysis;
 
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.FeMetaVersion;
-import com.starrocks.common.FeNameFormat;
+import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 
 import java.io.DataInput;
@@ -49,15 +48,22 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 // label name used to identify a load job
-public class LabelName implements Writable {
+public class LabelName implements ParseNode, Writable {
     private String dbName;
     private String labelName;
 
-    public LabelName() {
+    private final NodePosition pos;
 
+    public LabelName() {
+        pos = NodePosition.ZERO;
     }
 
     public LabelName(String dbName, String labelName) {
+        this(dbName, labelName, NodePosition.ZERO);
+    }
+
+    public LabelName(String dbName, String labelName, NodePosition pos) {
+        this.pos = pos;
         this.dbName = dbName;
         this.labelName = labelName;
     }
@@ -110,11 +116,12 @@ public class LabelName implements Writable {
     }
 
     public void readFields(DataInput in) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
-            dbName = Text.readString(in);
-        } else {
-            dbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
-        }
+        dbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
         labelName = Text.readString(in);
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 }

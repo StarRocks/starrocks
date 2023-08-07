@@ -21,10 +21,11 @@ import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 // SHOW COLUMNS
 public class ShowColumnStmt extends ShowStmt {
@@ -60,18 +61,25 @@ public class ShowColumnStmt extends ShowStmt {
     private Expr where;
 
     public ShowColumnStmt(TableName tableName, String db, String pattern, boolean isVerbose) {
-        this.tableName = tableName;
-        this.db = db;
-        this.pattern = pattern;
-        this.isVerbose = isVerbose;
+        this(tableName, db, pattern, isVerbose, null, NodePosition.ZERO);
     }
 
     public ShowColumnStmt(TableName tableName, String db, String pattern, boolean isVerbose, Expr where) {
+        this(tableName, db, pattern, isVerbose, where, NodePosition.ZERO);
+    }
+
+    public ShowColumnStmt(TableName tableName, String db, String pattern, boolean isVerbose,
+                          Expr where, NodePosition pos) {
+        super(pos);
         this.tableName = tableName;
         this.db = db;
         this.pattern = pattern;
         this.isVerbose = isVerbose;
         this.where = where;
+    }
+
+    public String getCatalog() {
+        return tableName.getCatalog();
     }
 
     public String getDb() {
@@ -159,7 +167,7 @@ public class ShowColumnStmt extends ShowStmt {
         where = where.substitute(aliasMap);
 
         return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
-                where, null, null));
+                where, null, null), this.origStmt);
     }
 
     @Override

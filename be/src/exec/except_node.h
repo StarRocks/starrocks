@@ -37,7 +37,7 @@ class TupleDescriptor;
 } // namespace starrocks
 
 namespace starrocks {
-class ExceptNode : public ExecNode {
+class ExceptNode final : public ExecNode {
 public:
     ExceptNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
 
@@ -51,14 +51,14 @@ public:
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* row_batch, bool* eos) override;
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
     int64_t mem_usage() const {
         int64_t usage = 0;
         if (_hash_set != nullptr) {
-            usage += _hash_set->mem_usage();
+            usage += _hash_set->mem_usage(_buffer_state.get());
         }
         if (_build_pool != nullptr) {
             usage += _build_pool->total_reserved_bytes();
@@ -81,7 +81,8 @@ private:
     };
     std::vector<ExceptColumnTypes> _types;
 
-    std::unique_ptr<ExceptHashSerializeSet> _hash_set;
+    std::unique_ptr<ExceptHashSerializeSet> _hash_set = nullptr;
+    std::unique_ptr<ExceptBufferState> _buffer_state = nullptr;
     ExceptHashSerializeSet::Iterator _hash_set_iterator;
     ExceptHashSerializeSet::KeyVector _remained_keys;
 

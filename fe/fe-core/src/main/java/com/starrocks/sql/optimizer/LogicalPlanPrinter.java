@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
@@ -26,7 +27,9 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -55,6 +58,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class LogicalPlanPrinter {
@@ -62,9 +66,19 @@ public class LogicalPlanPrinter {
     }
 
     public static String print(OptExpression root) {
-        OperatorStr optStrings = new OperatorPrinter().visit(root);
+        return print(root, false);
+
+    }
+
+    public static String print(OptExpression root, boolean isPrintTableName) {
+        OperatorStr optStrings = new OperatorPrinter(isPrintTableName).visit(root);
         return optStrings.toString();
     }
+    public static String print(OptExpression root, boolean isPrintTableName, boolean isPrintColumnRef) {
+        OperatorStr optStrings = new OperatorPrinter(isPrintTableName, isPrintColumnRef).visit(root);
+        return optStrings.toString();
+    }
+
 
     private static class OperatorStr {
         private final String operatorString;
@@ -90,6 +104,21 @@ public class LogicalPlanPrinter {
 
     private static class OperatorPrinter
             extends OptExpressionVisitor<OperatorStr, Integer> {
+        // To not disturb old tests, add a flag to determine whether to print table/mv names.
+        private final boolean isPrintTableName;
+        private final boolean isPrintColumnRef;
+        private Function<ScalarOperator, String> scalarOperatorStringFunction;
+
+        public OperatorPrinter(boolean printTableName, boolean isPrintColumnRef) {
+            this.isPrintTableName = printTableName;
+            this.isPrintColumnRef = isPrintColumnRef;
+            this.scalarOperatorStringFunction =
+                    isPrintColumnRef ? ScalarOperator::toString : ScalarOperator::debugString;
+        }
+
+        public OperatorPrinter(boolean isPrintTableName) {
+            this(isPrintTableName, false);
+        }
 
         public OperatorStr visit(OptExpression optExpression) {
             return visit(optExpression, 0);
@@ -131,7 +160,24 @@ public class LogicalPlanPrinter {
 
         @Override
         public OperatorStr visitLogicalTableScan(OptExpression optExpression, Integer step) {
-            return new OperatorStr("logical scan", step, Collections.emptyList());
+            if (!isPrintColumnRef) {
+                return new OperatorStr("logical scan", step, Collections.emptyList());
+            }
+            LogicalScanOperator scanOperator = optExpression.getOp().cast();
+            return new OperatorStr("logical scan(" +
+                    scanOperator.getColRefToColumnMetaMap().keySet().stream().map(col -> "" + col).collect(
+                            Collectors.joining(", ")) + ")", step, Collections.emptyList());
+        }
+
+        @Override
+        public OperatorStr visitLogicalValues(OptExpression optExpression, Integer step) {
+            if (!isPrintColumnRef) {
+                return new OperatorStr("logical values", step, Collections.emptyList());
+            }
+            LogicalValuesOperator valuesOperator = optExpression.getOp().cast();
+            return new OperatorStr("logical value(" + valuesOperator.getColumnRefSet()
+                    .stream().map(col -> "" + col).collect(Collectors.joining(", ")) + ")",
+                    step, Collections.emptyList());
         }
 
         @Override
@@ -139,9 +185,8 @@ public class LogicalPlanPrinter {
             OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
 
             LogicalProjectOperator project = (LogicalProjectOperator) optExpression.getOp();
-
             return new OperatorStr("logical project (" +
-                    project.getColumnRefMap().values().stream().map(ScalarOperator::debugString)
+                    project.getColumnRefMap().values().stream().map(scalarOperatorStringFunction::apply)
                             .collect(Collectors.joining(",")) + ")",
                     step, Collections.singletonList(child));
         }
@@ -198,7 +243,7 @@ public class LogicalPlanPrinter {
             StringBuilder sb = new StringBuilder();
             sb.append("logical ").append(join.getJoinType().toString().toLowerCase());
             if (join.getOnPredicate() != null) {
-                sb.append(" (").append(join.getOnPredicate().debugString()).append(")");
+                sb.append(" (").append(scalarOperatorStringFunction.apply(join.getOnPredicate())).append(")");
             }
 
             return new OperatorStr(sb.toString(), step, Arrays.asList(leftChild, rightChild));
@@ -231,6 +276,15 @@ public class LogicalPlanPrinter {
         public OperatorStr visitPhysicalOlapScan(OptExpression optExpression, Integer step) {
             PhysicalOlapScanOperator scan = (PhysicalOlapScanOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("SCAN (");
+            if (isPrintTableName) {
+                Table scanTable = scan.getTable();
+                String tableName = scan.getTable().getName();
+                if (scanTable.isMaterializedView()) {
+                    sb.append("mv[").append(tableName).append("] ");
+                } else {
+                    sb.append("table[").append(tableName).append("] ");
+                }
+            }
             sb.append("columns").append(scan.getColRefToColumnMetaMap().keySet());
             sb.append(" predicate[").append(scan.getPredicate()).append("]");
             sb.append(")");
@@ -332,7 +386,7 @@ public class LogicalPlanPrinter {
                 HashDistributionDesc desc =
                         ((HashDistributionSpec) exchange.getDistributionSpec()).getHashDistributionDesc();
                 String s = desc.getSourceType() == HashDistributionDesc.SourceType.LOCAL ? "LOCAL" : "SHUFFLE";
-                return new OperatorStr("EXCHANGE " + s + desc.getColumns(), step, Collections.singletonList(child));
+                return new OperatorStr("EXCHANGE " + s + desc.getExplainInfo(), step, Collections.singletonList(child));
             }
 
             return new OperatorStr("EXCHANGE " + exchange.getDistributionSpec(), step,

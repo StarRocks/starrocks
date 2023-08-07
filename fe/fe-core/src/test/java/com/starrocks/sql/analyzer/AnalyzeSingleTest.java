@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.QueryRelation;
@@ -73,13 +74,23 @@ public class AnalyzeSingleTest {
                 + "FORMAT AS PARQUET PROPERTIES" +
                 "(\"broker.name\" = \"my_broker\"," +
                 "\"broker.hadoop.security.authentication\" = \"kerberos\"," +
-                "\"line_delimiter\" = \"\n\", \"max_file_size\" = \"100MB\");", "Only support CSV format");
+                "\"line_delimiter\" = \"\n\", \"max_file_size\" = \"100MB\");", "line_delimiter is only for CSV format");
 
         analyzeSuccess("SELECT v1,v2,v3 FROM t0  INTO OUTFILE \"hdfs://path/to/result_\""
                 + "FORMAT AS CSV PROPERTIES" +
                 "(\"broker.name\" = \"my_broker\"," +
                 "\"broker.hadoop.security.authentication\" = \"kerberos\"," +
                 "\"line_delimiter\" = \"\n\", \"max_file_size\" = \"100MB\");");
+
+        analyzeSuccess("SELECT v1,v2,v3 FROM t0  INTO OUTFILE \"hdfs://path/to/result_\" FORMAT AS CSV");
+
+        analyzeFail("SELECT b1 FROM test_object INTO OUTFILE \"hdfs://path/to/result_\" FORMAT AS PARQUET");
+
+        analyzeFail("SELECT b1 FROM test_object INTO OUTFILE \"hdfs://path/to/result_\" FORMAT AS CSV");
+
+        analyzeSuccess("select v1 as location from t0");
+
+        analyzeSuccess("select v1 as rank from t0");
     }
 
     @Test
@@ -141,11 +152,11 @@ public class AnalyzeSingleTest {
         analyzeSuccess("select v1 from t0 where v1 = 1");
         analyzeSuccess("select v1 from t0 where v2 = 1 and v3 = 5");
         analyzeSuccess("select v1 from t0 where v1 = v2");
+        analyzeSuccess("select v1 from t0 where v2");
 
         analyzeFail("select v1 from t0 where sum(v2) > 1");
         analyzeFail("select v1 from t0 where error = 5");
         analyzeFail("select v1 from t0 where error = v1");
-        analyzeFail("select v1 from t0 where v2");
     }
 
     @Test
@@ -351,11 +362,12 @@ public class AnalyzeSingleTest {
         statement = (QueryStatement) analyzeSuccess("select '0ABC' ");
         Assert.assertEquals("\'0ABC\'", AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
 
-        analyzeFail("select x'0AB' ", "Binary literal must contain an even number of digits");
-        analyzeFail("select x\"0AB\" ", "Binary literal must contain an even number of digits");
-        analyzeFail("select x'0,AB' ", "Binary literal can only contain hexadecimal digits");
-        analyzeFail("select x\"0,AB\" ", "Binary literal can only contain hexadecimal digits");
-        analyzeFail("select x\"0AX\" ", "Binary literal can only contain hexadecimal digits");
+        String expectMsg = "Binary literal can only contain hexadecimal digits and an even number of digits";
+        analyzeFail("select x'0AB' ", expectMsg);
+        analyzeFail("select x\"0AB\" ", expectMsg);
+        analyzeFail("select x'0,AB' ", expectMsg);
+        analyzeFail("select x\"0,AB\" ", expectMsg);
+        analyzeFail("select x\"0AX\" ", expectMsg);
     }
 
     @Test
@@ -458,8 +470,7 @@ public class AnalyzeSingleTest {
     @Test
     public void testSqlMode() {
         ConnectContext connectContext = getConnectContext();
-        analyzeFail("select 'a' || 'b' from t0",
-                "Operand ''a' OR 'b'' part of predicate ''a'' should return type 'BOOLEAN'");
+        analyzeSuccess("select 'a' || 'b' from t0");
 
         StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse("select true || false from t0",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
@@ -489,8 +500,7 @@ public class AnalyzeSingleTest {
                 "SELECT * FROM test.tall WHERE (test.tall.ta LIKE (concat('h', 'a', 'i'))) OR TRUE",
                 AstToStringBuilder.toString(statementBase));
 
-        analyzeFail("select * from  tall where ta like concat(\"h\", \"a\", \"i\")||'%'",
-                "LIKE (concat('h', 'a', 'i'))) OR '%'' part of predicate ''%'' should return type 'BOOLEAN'");
+        analyzeSuccess("select * from  tall where ta like concat(\"h\", \"a\", \"i\")||'%'");
 
         connectContext.getSessionVariable().setSqlMode(SqlModeHelper.MODE_SORT_NULLS_LAST);
         statementBase = SqlParser.parse("select * from  tall order by ta",
@@ -600,17 +610,28 @@ public class AnalyzeSingleTest {
         analyzeSuccess("select * from test.t0 where v1 in (1,2,3,4)");
 
         analyzeFail("select * from test.t0 where v1 in (1,2,3,4,5,6)",
-                "Expression child number 6 exceeded the maximum 5");
+                "Getting syntax error from line 1, column 35 to line 1, column 45. " +
+                        "Detail message: The number of exprs are 6 exceeded the maximum limit 5");
+
         analyzeFail("select [1,2,3,4,5,6]",
-                "Expression child number 6 exceeded the maximum 5");
+                "Getting syntax error from line 1, column 8 to line 1, column 18. " +
+                        "Detail message: The number of exprs are 6 exceeded the maximum limit 5");
+
         analyzeFail("select array<int>[1,2,3,4,5,6]",
-                "Expression child number 6 exceeded the maximum 5");
+                "Getting syntax error from line 1, column 18 to line 1, column 28. " +
+                        "Detail message: The number of exprs are 6 exceeded the maximum limit 5");
+
         analyzeFail("select * from (values(1,2,3,4,5,6)) t",
-                "Expression child number 6 exceeded the maximum 5");
+                "Getting syntax error from line 1, column 22 to line 1, column 32. " +
+                        "Detail message: The number of exprs are 6 exceeded the maximum limit 5");
+
         analyzeFail("insert into t0 values(1,2,3),(1,2,3),(1,2,3),(1,2,3),(1,2,3),(1,2,3)",
-                "Expression child number 6 exceeded the maximum 5");
+                "Getting syntax error from line 1, column 0 to line 1, column 67. " +
+                        "Detail message: The inserted rows are 6 exceeded the maximum limit 5");
+
         analyzeFail("insert into t0 values(1,2,3,4,5,6)",
-                "Expression child number 6 exceeded the maximum 5");
+                "Getting syntax error from line 1, column 21 to line 1, column 33. " +
+                        "Detail message: The number of children in expr are 6 exceeded the maximum limit 5");
 
         Config.expr_children_limit = 100000;
         analyzeSuccess("select * from test.t0 where v1 in (1,2,3,4,5,6)");
@@ -654,5 +675,58 @@ public class AnalyzeSingleTest {
                 "Column '`test`.`v`' cannot be resolved");
 
         analyzeFail("create view v as select * from t0,tnotnull", "Duplicate column name 'v1'");
+    }
+
+    @Test
+    public void testColumnAlias() {
+        analyzeFail("select * from test.t0 as t(a,b,c)", "Getting syntax error at line 1, column 26. " +
+                "Detail message: Unexpected input '(', the most similar input is {<EOF>, ';'}");
+        analyzeSuccess("select * from (select * from test.t0) as t(a,b,c)");
+        QueryRelation query = ((QueryStatement) analyzeSuccess("select t.a from (select * from test.t0) as t(a,b,c)"))
+                .getQueryRelation();
+        Assert.assertEquals("a", String.join(",", query.getColumnOutputNames()));
+
+        query = ((QueryStatement) analyzeSuccess("select t.a,* from (select * from test.t0) as t(a,b,c)"))
+                .getQueryRelation();
+        Assert.assertEquals("a,a,b,c", String.join(",", query.getColumnOutputNames()));
+
+        query = ((QueryStatement) analyzeSuccess("select t0.column_0, * from (values(1,2,3)) t0")).getQueryRelation();
+        Assert.assertEquals("column_0,column_0,column_1,column_2",
+                String.join(",", query.getColumnOutputNames()));
+
+        query = ((QueryStatement) analyzeSuccess("select t0.a, * from (values(1,2,3)) t0(a,b,c)")).getQueryRelation();
+        Assert.assertEquals("a,a,b,c", String.join(",", query.getColumnOutputNames()));
+    }
+
+    @Test
+    public void testRemoveCommentAndLineSeparator1() {
+        String sql = "#comment\nselect /* comment */ /*+SET_VAR(disable_join_reorder=true)*/* from    " +
+                "tbl where-- comment\n" +
+                "col = 1 #comment\r\n" +
+                "\tand /*\n" +
+                "comment\n" +
+                "comment\n" +
+                "*/ col = \"con   tent\n" +
+                "contend\" and col = \"''```中\t文  \\\"\r\n\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\\'';";
+        String res = LogUtil.removeCommentAndLineSeparator(sql);
+        Assert.assertEquals("select /*+SET_VAR(disable_join_reorder=true)*/* from tbl where col = 1 " +
+                "and col = \"con   tent\n" +
+                "contend\" and col = \"''```中\t文  \\\"\r\n\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\'';", res);
+    }
+
+    @Test
+    public void testRemoveCommentAndLineSeparator2() {
+        String invalidSql = "#comment\nselect /* comment */ /*+SET_VAR(disable_join_reorder=true)*/* from    " +
+                "tbl where-- comment\n" +
+                "col = 1 #comment\r\n" +
+                "\tand /*\n" +
+                "comment\n" +
+                "comment\n" +
+                "*/ col = \"con   tent\n" +
+                "contend and col = \"''```中\t文  \\\"\r\n\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\\'';";
+        String res = LogUtil.removeCommentAndLineSeparator(invalidSql);
+        Assert.assertEquals("select /*+SET_VAR(disable_join_reorder=true)*/* from tbl where col = 1 " +
+                "and col = \"con   tent\n" +
+                "contend and col = \"''```中\t文  \\\"\r\n\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\'';`", res);
     }
 }

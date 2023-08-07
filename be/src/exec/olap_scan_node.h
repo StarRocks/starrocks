@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "column/chunk.h"
+#include "column/column_access_path.h"
 #include "exec/olap_common.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/scan_node.h"
@@ -62,7 +63,7 @@ public:
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
-    Status close(RuntimeState* statue) override;
+    void close(RuntimeState* statue) override;
 
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
     StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
@@ -165,7 +166,7 @@ private:
     TupleDescriptor* _tuple_desc = nullptr;
     OlapScanConjunctsManager _conjuncts_manager;
     DictOptimizeParser _dict_optimize_parser;
-    const VectorizedSchema* _chunk_schema = nullptr;
+    const Schema* _chunk_schema = nullptr;
 
     int32_t _num_scanners = 0;
     int32_t _chunks_per_scanner = 10;
@@ -219,6 +220,7 @@ private:
     RuntimeProfile::Counter* _chunk_copy_timer = nullptr;
     RuntimeProfile::Counter* _get_rowsets_timer = nullptr;
     RuntimeProfile::Counter* _get_delvec_timer = nullptr;
+    RuntimeProfile::Counter* _get_delta_column_group_timer = nullptr;
     RuntimeProfile::Counter* _seg_init_timer = nullptr;
     RuntimeProfile::Counter* _seg_zm_filtered_counter = nullptr;
     RuntimeProfile::Counter* _seg_rt_filtered_counter = nullptr;

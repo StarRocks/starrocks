@@ -12,34 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.service;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.lake.LakeTable;
-import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TGetTablesConfigRequest;
@@ -51,6 +50,7 @@ import com.starrocks.thrift.TTableInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -59,26 +59,25 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-
 public class InformationSchemaDataSource {
-    
+
     private static final Logger LOG = LogManager.getLogger(InformationSchemaDataSource.class);
 
     private static final String DEF = "def";
-    private static final String DEF_NULL = "NULL";
-    // If a column uses this as a default value means that the column will be displayed as NULL
-    private static final long DEF_NULL_NUM = -1L;
-    private static final String UTF8_GENERAL_CI = "utf8_general_ci";
+    private static final String DEFAULT_EMPTY_STRING = "";
+    private static final long DEFAULT_EMPTY_NUM = -1L;
+    public static final String UTF8_GENERAL_CI = "utf8_general_ci";
 
-    private static List<String> getAuthorizedDbs(TAuthInfo authInfo) throws TException {
+    @NotNull
+    private static AuthDbRequestResult getAuthDbRequestResult(TAuthInfo authInfo) throws TException {
 
-        List<String> dbs = Lists.newArrayList();
+        List<String> authorizedDbs = Lists.newArrayList();
         PatternMatcher matcher = null;
         if (authInfo.isSetPattern()) {
             try {
                 matcher = PatternMatcher.createMysqlPattern(authInfo.getPattern(),
                         CaseSensibility.DATABASE.getCaseSensibility());
-            } catch (AnalysisException e) {
+            } catch (SemanticException e) {
                 throw new TException("Pattern is in bad format: " + authInfo.getPattern());
             }
         }
@@ -87,87 +86,103 @@ public class InformationSchemaDataSource {
         List<String> dbNames = globalStateMgr.getDbNames();
         LOG.debug("get db names: {}", dbNames);
 
-        UserIdentity currentUser = null;
+        UserIdentity currentUser;
         if (authInfo.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(authInfo.current_user_ident);
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip);
         }
         for (String fullName : dbNames) {
-            if (!globalStateMgr.getAuth().checkDbPriv(currentUser, fullName, PrivPredicate.SHOW)) {
+
+            try {
+                Authorizer.checkAnyActionOnOrInDb(currentUser, null,
+                        InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, fullName);
+            } catch (AccessDeniedException e) {
                 continue;
             }
 
-            final String db = ClusterNamespace.getNameFromFullName(fullName);
-            if (matcher != null && !matcher.match(db)) {
+            final String db1 = ClusterNamespace.getNameFromFullName(fullName);
+            if (matcher != null && !matcher.match(db1)) {
                 continue;
             }
-            dbs.add(fullName);
+            authorizedDbs.add(fullName);
         }
-        return dbs;
+        return new AuthDbRequestResult(authorizedDbs, currentUser);
+    }
+
+    private static class AuthDbRequestResult {
+        public final List<String> authorizedDbs;
+        public final UserIdentity currentUser;
+
+        public AuthDbRequestResult(List<String> authorizedDbs, UserIdentity currentUser) {
+            this.authorizedDbs = authorizedDbs;
+            this.currentUser = currentUser;
+        }
     }
 
     // tables_config
-    public static TGetTablesConfigResponse generateTablesConfigResponse(TGetTablesConfigRequest request) throws TException {
-        
+    public static TGetTablesConfigResponse generateTablesConfigResponse(TGetTablesConfigRequest request)
+            throws TException {
+
         TGetTablesConfigResponse resp = new TGetTablesConfigResponse();
         List<TTableConfigInfo> tList = new ArrayList<>();
 
-        List<String> authorizedDbs = getAuthorizedDbs(request.getAuth_info());
-        authorizedDbs.forEach(dbName -> {
+        AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
+
+        for (String dbName : result.authorizedDbs) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db != null) {
                 db.readLock();
                 try {
                     List<Table> allTables = db.getTables();
-                    allTables.forEach(table -> {
+                    for (Table table : allTables) {
+                        try {
+                            Authorizer.checkAnyActionOnTableLikeObject(result.currentUser,
+                                    null, dbName, table);
+                        } catch (AccessDeniedException e) {
+                            continue;
+                        }
+
                         TTableConfigInfo tableConfigInfo = new TTableConfigInfo();
                         tableConfigInfo.setTable_schema(dbName);
                         tableConfigInfo.setTable_name(table.getName());
-                        
-                        if (table.isOlapOrLakeTable() || 
-                                table.getType() == TableType.OLAP_EXTERNAL ||
-                                table.getType() == TableType.MATERIALIZED_VIEW) {
+
+                        if (table.isNativeTableOrMaterializedView() || table.getType() == TableType.OLAP_EXTERNAL) {
                             // OLAP (done)
                             // OLAP_EXTERNAL (done)
                             // MATERIALIZED_VIEW (done)
                             // LAKE (done)
-                            tableConfigInfo = genNormalTableConfigInfo(table, tableConfigInfo);
-                        } else {
-                            // SCHEMA (use default)
-                            // INLINE_VIEW (use default)
-                            // VIEW (use default)
-                            // BROKER (use default)                           
-                            tableConfigInfo = genDefaultConfigInfo(tableConfigInfo);
+                            // LAKE_MATERIALIZED_VIEW (done)
+                            genNormalTableConfigInfo(table, tableConfigInfo);
                         }
                         // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
                         tList.add(tableConfigInfo);
-                    });
+                    }
                 } finally {
                     db.readUnlock();
-                }                
-            }            
-        });
+                }
+            }
+        }
         resp.tables_config_infos = tList;
         return resp;
     }
 
     private static Map<String, String> genProps(Table table) {
-
-        if (table.getType() == TableType.MATERIALIZED_VIEW) {
+        if (table.isMaterializedView()) {
             MaterializedView mv = (MaterializedView) table;
             return mv.getMaterializedViewPropMap();
         }
 
         OlapTable olapTable = (OlapTable) table;
-        Map<String, String> propsMap = new HashMap<>(); 
-        
+        Map<String, String> propsMap = new HashMap<>();
+
         propsMap.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, String.valueOf(olapTable.getDefaultReplicationNum()));
-        
+
         // bloom filter
         Set<String> bfColumnNames = olapTable.getCopiedBfColumns();
         if (bfColumnNames != null) {
-            propsMap.put(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, Joiner.on(", ").join(olapTable.getCopiedBfColumns()));
+            propsMap.put(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, Joiner.on(", ")
+                    .join(olapTable.getCopiedBfColumns()));
         }
 
         // colocateTable
@@ -178,31 +193,27 @@ public class InformationSchemaDataSource {
 
         // dynamic partition
         if (olapTable.dynamicPartitionExists()) {
-            propsMap.put("dynamic_partition", olapTable.getTableProperty().getDynamicPartitionProperty().getPropString());
+            propsMap.put("dynamic_partition", olapTable.getTableProperty()
+                    .getDynamicPartitionProperty().getPropString());
         }
 
         // in memory
         propsMap.put(PropertyAnalyzer.PROPERTIES_INMEMORY, String.valueOf(olapTable.isInMemory()));
 
-        // enable storage cache && cache ttl
-        if (table.isLakeTable()) {
-            Map<String, String> storageProperties = ((LakeTable) olapTable).getProperties();
-            propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, 
-                    storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE));
-            propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, 
-                    storageProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL));
-            propsMap.put(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK, 
-                    storageProperties.get(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK));
+        if (table.isCloudNativeTable()) {
+            Map<String, String> storageProperties = olapTable.getProperties();
+            propsMap.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE,
+                    storageProperties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE));
+            propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK,
+                    storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK));
         }
 
-        // storage type
-        propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT, olapTable.getStorageFormat().name());
-        
         // enable_persistent_index
-        propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, String.valueOf(olapTable.enablePersistentIndex()));
+        propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
+                String.valueOf(olapTable.enablePersistentIndex()));
 
         // compression type
-        if (olapTable.getCompressionType() == TCompressionType.LZ4_FRAME || 
+        if (olapTable.getCompressionType() == TCompressionType.LZ4_FRAME ||
                 olapTable.getCompressionType() == TCompressionType.LZ4) {
             propsMap.put(PropertyAnalyzer.PROPERTIES_COMPRESSION, "LZ4");
         } else {
@@ -212,7 +223,7 @@ public class InformationSchemaDataSource {
         // storage media
         Map<String, String> properties = olapTable.getTableProperty().getProperties();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
-            propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, 
+            propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
                     properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
         }
         return propsMap;
@@ -228,7 +239,7 @@ public class InformationSchemaDataSource {
         // Partition info
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         StringBuilder partitionKeySb = new StringBuilder();
-        if (partitionInfo.getType().equals(PartitionType.RANGE)) {
+        if (partitionInfo.isRangePartition()) {
             int idx = 0;
             try {
                 for (Column column : partitionInfo.getPartitionColumns()) {
@@ -239,11 +250,11 @@ public class InformationSchemaDataSource {
                     idx++;
                 }
             } catch (NotImplementedException e) {
-                partitionKeySb.append(DEF_NULL);
+                partitionKeySb.append(DEFAULT_EMPTY_STRING);
                 LOG.warn("The partition of type range seems not implement getPartitionColumns");
-            }            
+            }
         } else {
-            partitionKeySb.append(DEF_NULL);
+            partitionKeySb.append(DEFAULT_EMPTY_STRING);
         }
 
         // PRIMARY KEYS
@@ -255,132 +266,99 @@ public class InformationSchemaDataSource {
         }
         String pkSb = Joiner.on(", ").join(keysColumnNames);
         tableConfigInfo.setPrimary_key(olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS)
-                                       || olapTable.getKeysType().equals(KeysType.UNIQUE_KEYS) ? pkSb : DEF_NULL);
+                || olapTable.getKeysType().equals(KeysType.UNIQUE_KEYS) ? pkSb : DEFAULT_EMPTY_STRING);
         tableConfigInfo.setPartition_key(partitionKeySb.toString());
         tableConfigInfo.setDistribute_bucket(distributionInfo.getBucketNum());
         tableConfigInfo.setDistribute_type("HASH");
         tableConfigInfo.setDistribute_key(distributeKey);
-        
+
         // SORT KEYS
         MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
-        if (index.getSortKeyIdxes() != null) {
+        if (index.getSortKeyIdxes() == null) {
+            tableConfigInfo.setSort_key(pkSb);
+        } else {
             List<String> sortKeysColumnNames = Lists.newArrayList();
             for (Integer i : index.getSortKeyIdxes()) {
                 sortKeysColumnNames.add("`" + table.getBaseSchema().get(i).getName() + "`");
             }
             tableConfigInfo.setSort_key(Joiner.on(", ").join(sortKeysColumnNames));
-        } else {
-            tableConfigInfo.setSort_key(DEF_NULL);
         }
         tableConfigInfo.setProperties(new Gson().toJson(genProps(table)));
-        return tableConfigInfo;
-    }
-
-
-    private static TTableConfigInfo genDefaultConfigInfo(TTableConfigInfo tableConfigInfo) {
-        tableConfigInfo.setTable_engine(DEF);
-        tableConfigInfo.setTable_model(DEF);
-        tableConfigInfo.setPrimary_key(DEF);
-        tableConfigInfo.setPartition_key(DEF);
-        tableConfigInfo.setDistribute_bucket(0);
-        tableConfigInfo.setDistribute_type(DEF);
-        tableConfigInfo.setDistribute_key(DEF);
-        tableConfigInfo.setSort_key(DEF);
-        tableConfigInfo.setProperties(DEF);
+        tableConfigInfo.setTable_id(table.getId());
         return tableConfigInfo;
     }
 
     // tables
     public static TGetTablesInfoResponse generateTablesInfoResponse(TGetTablesInfoRequest request) throws TException {
-        
+
         TGetTablesInfoResponse response = new TGetTablesInfoResponse();
         List<TTableInfo> infos = new ArrayList<>();
-        List<String> authorizedDbs = getAuthorizedDbs(request.getAuth_info());
-        authorizedDbs.forEach(dbName -> {
+
+        AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
+
+        for (String dbName : result.authorizedDbs) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db != null) {
                 db.readLock();
                 try {
                     List<Table> allTables = db.getTables();
-                    allTables.forEach(table -> {
+                    for (Table table : allTables) {
+                        try {
+                            Authorizer.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table);
+                        } catch (AccessDeniedException e) {
+                            continue;
+                        }
+
                         TTableInfo info = new TTableInfo();
 
                         info.setTable_catalog(DEF);
                         info.setTable_schema(dbName);
                         info.setTable_name(table.getName());
-                        info.setTable_type(transferTableTypeToAdaptMysql(table.getType()));
+                        info.setTable_type(table.getMysqlType());
                         info.setEngine(table.getEngine());
-                        info.setVersion(DEF_NULL_NUM);
-                        info.setRow_format(DEF_NULL);
+                        info.setVersion(DEFAULT_EMPTY_NUM);
                         // TABLE_ROWS (depend on the table type)
                         // AVG_ROW_LENGTH (depend on the table type)
                         // DATA_LENGTH (depend on the table type)
-                        info.setMax_data_length(DEF_NULL_NUM);
-                        info.setIndex_length(DEF_NULL_NUM);
-                        info.setData_free(DEF_NULL_NUM);
-                        info.setAuto_increment(DEF_NULL_NUM);
+                        info.setMax_data_length(DEFAULT_EMPTY_NUM);
+                        info.setIndex_length(DEFAULT_EMPTY_NUM);
+                        info.setData_free(DEFAULT_EMPTY_NUM);
+                        info.setAuto_increment(DEFAULT_EMPTY_NUM);
                         info.setCreate_time(table.getCreateTime());
                         // UPDATE_TIME (depend on the table type)
                         info.setCheck_time(table.getLastCheckTime() / 1000);
                         info.setTable_collation(UTF8_GENERAL_CI);
-                        info.setChecksum(DEF_NULL_NUM);
-                        info.setCreate_options(DEF_NULL);
+                        info.setChecksum(DEFAULT_EMPTY_NUM);
                         info.setTable_comment(table.getComment());
 
-                        if (table.isOlapOrLakeTable() || 
-                                table.getType() == TableType.OLAP_EXTERNAL ||
-                                table.getType() == TableType.MATERIALIZED_VIEW) {
+                        if (table.isNativeTableOrMaterializedView() || table.getType() == TableType.OLAP_EXTERNAL) {
                             // OLAP (done)
                             // OLAP_EXTERNAL (done)
                             // MATERIALIZED_VIEW (done)
                             // LAKE (done)
-                            info = genNormalTableInfo(table, info);
+                            // LAKE_MATERIALIZED_VIEW (done)
+                            genNormalTableInfo(table, info);
                         } else {
                             // SCHEMA (use default)
                             // INLINE_VIEW (use default)
                             // VIEW (use default)
-                            // BROKER (use default)                           
-                            info = genDefaultConfigInfo(info);
+                            // BROKER (use default)
+                            genDefaultConfigInfo(info);
                         }
                         // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
                         infos.add(info);
-                    });
+                    }
                 } finally {
                     db.readUnlock();
-                }                
-            }            
-        });    
+                }
+            }
+        }
         response.setTables_infos(infos);
         return response;
     }
 
-    private static String transferTableTypeToAdaptMysql(TableType tableType) {
-        // 'BASE TABLE','SYSTEM VERSIONED','PARTITIONED TABLE','VIEW','FOREIGN TABLE','MATERIALIZED VIEW','EXTERNAL TABLE'
-        switch (tableType) {
-            case MYSQL:
-            case HIVE:
-            case ICEBERG:
-            case HUDI:
-            case LAKE:
-            case ELASTICSEARCH:
-            case JDBC:
-                return "EXTERNAL TABLE";
-            case OLAP:
-            case OLAP_EXTERNAL:
-                return "BASE TABLE";
-            case MATERIALIZED_VIEW:
-            case VIEW:
-                return "VIEW";
-            default:
-                // SCHEMA
-                // INLINE_VIEW
-                // BROKER
-                return "BASE TABLE";
-        }
-    }
+    public static TTableInfo genNormalTableInfo(Table table, TTableInfo info) {
 
-    private static TTableInfo genNormalTableInfo(Table table, TTableInfo info) {
-        
         OlapTable olapTable = (OlapTable) table;
         Collection<Partition> partitions = table.getPartitions();
         long lastUpdateTime = 0L;
@@ -397,7 +375,7 @@ public class InformationSchemaDataSource {
         info.setTable_rows(totalRowsOfTable);
         // AVG_ROW_LENGTH
         if (totalRowsOfTable == 0) {
-            info.setAvg_row_length(0L);    
+            info.setAvg_row_length(0L);
         } else {
             info.setAvg_row_length(totalBytesOfTable / totalRowsOfTable);
         }
@@ -408,11 +386,11 @@ public class InformationSchemaDataSource {
         return info;
     }
 
-    private static TTableInfo genDefaultConfigInfo(TTableInfo info) {
-        info.setTable_rows(DEF_NULL_NUM);
-        info.setAvg_row_length(DEF_NULL_NUM);
-        info.setData_length(DEF_NULL_NUM);
-        info.setUpdate_time(DEF_NULL_NUM);
+    public static TTableInfo genDefaultConfigInfo(TTableInfo info) {
+        info.setTable_rows(DEFAULT_EMPTY_NUM);
+        info.setAvg_row_length(DEFAULT_EMPTY_NUM);
+        info.setData_length(DEFAULT_EMPTY_NUM);
+        info.setUpdate_time(DEFAULT_EMPTY_NUM);
         return info;
     }
 }

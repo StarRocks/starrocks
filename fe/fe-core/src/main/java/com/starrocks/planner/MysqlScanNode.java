@@ -183,8 +183,6 @@ public class MysqlScanNode extends ScanNode {
     @Override
     public void computeStats(Analyzer analyzer) {
         super.computeStats(analyzer);
-        // even if current node scan has no data,at least on backend will be assigned when the fragment actually execute
-        numNodes = numNodes <= 0 ? 1 : numNodes;
         // this is just to avoid mysql scan node's cardinality being -1. So that we can calculate the join cost
         // normally.
         // We assume that the data volume of all mysql tables is very small, so set cardinality directly to 1.
@@ -193,6 +191,11 @@ public class MysqlScanNode extends ScanNode {
 
     @Override
     public boolean canUsePipeLine() {
+        return true;
+    }
+
+    @Override
+    public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }
 }

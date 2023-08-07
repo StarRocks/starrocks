@@ -26,8 +26,8 @@
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
 #include "glog/logging.h"
-#include "runtime/primitive_type.h"
 #include "simd/selector.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -91,6 +91,8 @@ public:
         // 2. Mask notnull values, and compare not-null values
         const NullData& null_data = column.immutable_null_column_data();
 
+        int nan_direction = _sort_order * _null_first;
+
         // Set byte to 0 when it's null/null byte is 1
         CompareVector null_vector(null_data.size());
         for (size_t i = 0; i < null_data.size(); i++) {
@@ -98,7 +100,7 @@ public:
         }
         auto null_cmp = [&](int lhs_row) -> int {
             DCHECK(null_data[lhs_row] == 1);
-            return _rhs_value.is_null() ? 0 : _null_first;
+            return _rhs_value.is_null() ? 0 : nan_direction;
         };
         size_t null_equal_count = compare_column_helper(null_vector, null_cmp);
 
@@ -112,7 +114,7 @@ public:
         if (_rhs_value.is_null()) {
             for (size_t i = 0; i < null_data.size(); i++) {
                 if (null_data[i] == 0) {
-                    cmp_vector[i] = -_null_first;
+                    cmp_vector[i] = -nan_direction;
                 } else {
                     cmp_vector[i] = null_vector[i];
                 }

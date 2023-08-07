@@ -34,12 +34,12 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ColumnDef;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -50,9 +50,9 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 
-import static com.starrocks.analysis.ColumnDef.DefaultValueDef.CURRENT_TIMESTAMP_VALUE;
-import static com.starrocks.analysis.ColumnDef.DefaultValueDef.NOT_SET;
-import static com.starrocks.analysis.ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE;
+import static com.starrocks.sql.ast.ColumnDef.DefaultValueDef.CURRENT_TIMESTAMP_VALUE;
+import static com.starrocks.sql.ast.ColumnDef.DefaultValueDef.NOT_SET;
+import static com.starrocks.sql.ast.ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE;
 
 public class ColumnTest {
 
@@ -66,7 +66,7 @@ public class ColumnTest {
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
         FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
-        FakeGlobalStateMgr.setMetaVersion(FeConstants.meta_version);
+        FakeGlobalStateMgr.setMetaVersion(FeConstants.META_VERSION);
     }
 
     @Test
@@ -250,6 +250,14 @@ public class ColumnTest {
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
         oldColumn.checkSchemaChangeAllowed(newColumn);
         Assert.fail("No exception throws.");
+    }
+
+    @Test
+    public void testAutoIncrement() {
+        Column col = new Column("col", ScalarType.createType(PrimitiveType.BIGINT), true, null, Boolean.FALSE,
+                ColumnDef.DefaultValueDef.NOT_SET, "");
+        col.setIsAutoIncrement(true);
+        Assert.assertTrue(col.isAutoIncrement() == true);
     }
 
     @Test

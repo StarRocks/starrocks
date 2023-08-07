@@ -15,6 +15,8 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 // DROP DB Statement
 public class DropDbStmt extends DdlStmt {
     private final boolean ifExists;
@@ -23,10 +25,21 @@ public class DropDbStmt extends DdlStmt {
     private final boolean forceDrop;
 
     public DropDbStmt(boolean ifExists, String dbName, boolean forceDrop) {
+        this(ifExists, dbName, forceDrop, NodePosition.ZERO);
+    }
+
+    public DropDbStmt(boolean ifExists, String dbName, boolean forceDrop, NodePosition pos) {
+        this(ifExists, "", dbName, forceDrop, pos);
+    }
+
+    public DropDbStmt(boolean ifExists, String catalog, String dbName, boolean forceDrop, NodePosition pos) {
+        super(pos);
         this.ifExists = ifExists;
+        this.catalog = catalog;
         this.dbName = dbName;
         this.forceDrop = forceDrop;
     }
+
 
     public boolean isSetIfExists() {
         return ifExists;

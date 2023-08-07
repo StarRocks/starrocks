@@ -25,11 +25,13 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TResultSinkType;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.awaitility.Awaitility;
 import org.junit.After;
@@ -41,10 +43,11 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
 public class QueryQueueManagerTest {
     @Mocked
-    private Coordinator coordinator;
+    private DefaultCoordinator coordinator;
 
     private boolean taskQueueEnable;
     private int taskQueueConcurrencyHardLimit;
@@ -100,7 +103,7 @@ public class QueryQueueManagerTest {
         QueryQueueManager manager = QueryQueueManager.getInstance();
         new Expectations(manager) {
             {
-                manager.needCheckQueue((Coordinator) any);
+                manager.needCheckQueue((DefaultCoordinator) any);
                 result = true;
             }
         };
@@ -110,7 +113,7 @@ public class QueryQueueManagerTest {
         QueryQueueManager manager = QueryQueueManager.getInstance();
         new Expectations(manager) {
             {
-                manager.needCheckQueue((Coordinator) any);
+                manager.needCheckQueue((DefaultCoordinator) any);
                 result = false;
             }
         };
@@ -120,7 +123,7 @@ public class QueryQueueManagerTest {
         QueryQueueManager manager = QueryQueueManager.getInstance();
         new Expectations(manager) {
             {
-                manager.enableCheckQueue((Coordinator) any);
+                manager.enableCheckQueue((DefaultCoordinator) any);
                 result = true;
             }
         };
@@ -130,7 +133,7 @@ public class QueryQueueManagerTest {
         QueryQueueManager manager = QueryQueueManager.getInstance();
         new Expectations(manager) {
             {
-                manager.enableCheckQueue((Coordinator) any);
+                manager.enableCheckQueue((DefaultCoordinator) any);
                 result = false;
             }
         };
@@ -230,22 +233,28 @@ public class QueryQueueManagerTest {
     @Test
     public void testCanRunMore() {
         QueryQueueManager manager = QueryQueueManager.getInstance();
-        SystemInfoService service = GlobalStateMgr.getCurrentSystemInfo();
-        Backend be1 = new Backend();
+        ComputeNode be1 = new Backend();
         be1.setAlive(true);
         be1.setId(1);
-        Backend be2 = new Backend();
+        ComputeNode be2 = new ComputeNode();
         be2.setAlive(true);
         be2.setId(2);
-        new Expectations(service) {
-            {
-                service.getBackends();
-                result = ImmutableList.of(be1, be2);
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public Stream<ComputeNode> backendAndComputeNodeStream() {
+                return ImmutableList.of(be1, be2).stream();
             }
 
-            {
-                service.getBackend(be2.getId());
-                result = be2;
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long idx) {
+                if (idx == be2.getId()) {
+                    return be2;
+                }
+                if (idx == be1.getId()) {
+                    return be1;
+                }
+                return null;
             }
         };
 

@@ -12,100 +12,39 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.google.common.base.Joiner;
-import com.google.common.collect.Maps;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeConstants;
-import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.util.PrintableMap;
-import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.lake.StorageCacheInfo;
-import com.starrocks.thrift.TTabletType;
+import com.starrocks.sql.analyzer.FeNameFormat;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
-public class SingleItemListPartitionDesc extends PartitionDesc {
-
-    private final boolean ifNotExists;
-    private final String partitionName;
+public class SingleItemListPartitionDesc extends SinglePartitionDesc {
     private final List<String> values;
-    private final Map<String, String> partitionProperties;
-    private DataProperty partitionDataProperty;
-    private Short replicationNum;
-    private Boolean isInMemory;
-    private TTabletType tabletType;
-    private Long versionInfo;
     private List<ColumnDef> columnDefList;
 
     public SingleItemListPartitionDesc(boolean ifNotExists, String partitionName, List<String> values,
-                                       Map<String, String> partitionProperties) {
-        super.type = PartitionType.LIST;
-        this.ifNotExists = ifNotExists;
-        this.partitionName = partitionName;
+                                       Map<String, String> properties) {
+        this(ifNotExists, partitionName, values, properties, NodePosition.ZERO);
+    }
+
+    public SingleItemListPartitionDesc(boolean ifNotExists, String partitionName, List<String> values,
+                                       Map<String, String> properties, NodePosition pos) {
+        super(ifNotExists, partitionName, properties, pos);
+        this.type = PartitionType.LIST;
         this.values = values;
-        this.partitionProperties = partitionProperties;
-    }
-
-    @Override
-    public Map<String, String> getProperties() {
-        return this.partitionProperties;
-    }
-
-    @Override
-    public short getReplicationNum() {
-        return this.replicationNum;
-    }
-
-    @Override
-    public DataProperty getPartitionDataProperty() {
-        return this.partitionDataProperty;
-    }
-
-    @Override
-    public Long getVersionInfo() {
-        return versionInfo;
-    }
-
-    @Override
-    public TTabletType getTabletType() {
-        return this.tabletType;
-    }
-
-    @Override
-    public boolean isInMemory() {
-        return this.isInMemory;
     }
 
     public List<String> getValues() {
         return this.values;
-    }
-
-    @Override
-    public String getPartitionName() {
-        return this.partitionName;
-    }
-
-    @Override
-    public boolean isSetIfNotExists() {
-        return ifNotExists;
-    }
-
-    @Override
-    public StorageCacheInfo getStorageCacheInfo() {
-        return null;
     }
 
     public List<LiteralExpr> getLiteralExprValues() throws AnalysisException {
@@ -120,63 +59,39 @@ public class SingleItemListPartitionDesc extends PartitionDesc {
     }
 
     public void analyze(List<ColumnDef> columnDefList, Map<String, String> tableProperties) throws AnalysisException {
+        if (isAnalyzed) {
+            return;
+        }
+
         FeNameFormat.checkPartitionName(this.getPartitionName());
+        analyzeProperties(tableProperties);
+
         if (columnDefList.size() != 1) {
             throw new AnalysisException("Partition column size should be one when use single list partition ");
         }
-        this.analyzeProperties(tableProperties);
         this.columnDefList = columnDefList;
-    }
 
-    private void analyzeProperties(Map<String, String> tableProperties) throws AnalysisException {
-        // copy one. because ProperAnalyzer will remove entry after analyze
-        Map<String, String> copiedTableProperties = Optional.ofNullable(tableProperties)
-                .map(properties -> Maps.newHashMap(properties))
-                .orElseGet(() -> new HashMap<>());
-        Map<String, String> copiedPartitionProperties = Optional.ofNullable(this.partitionProperties)
-                .map(properties -> Maps.newHashMap(properties))
-                .orElseGet(() -> new HashMap<>());
-
-        // The priority of the partition attribute is higher than that of the table
-        Map<String, String> allProperties = new HashMap<>();
-        copiedTableProperties.forEach((k, v) -> allProperties.put(k, v));
-        copiedPartitionProperties.forEach((k, v) -> allProperties.put(k, v));
-
-        // analyze data property
-        this.partitionDataProperty = PropertyAnalyzer.analyzeDataProperty(allProperties,
-                DataProperty.getInferredDefaultDataProperty());
-
-        // analyze replication num
-        this.replicationNum =
-                PropertyAnalyzer.analyzeReplicationNum(allProperties, FeConstants.default_replication_num);
-
-        // analyze version info
-        this.versionInfo = PropertyAnalyzer.analyzeVersionInfo(allProperties);
-
-        // analyze in memory
-        this.isInMemory =
-                PropertyAnalyzer.analyzeBooleanProp(allProperties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
-
-        // analyze tabletType
-        this.tabletType = PropertyAnalyzer.analyzeTabletType(allProperties);
-
-        // check unknown properties
-        if (copiedTableProperties.isEmpty() && !allProperties.isEmpty()) {
-            Joiner.MapJoiner mapJoiner = Joiner.on(", ").withKeyValueSeparator(" = ");
-            throw new AnalysisException("Unknown properties: " + mapJoiner.join(allProperties));
-        }
+        isAnalyzed = true;
     }
 
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append("PARTITION ").append(this.partitionName).append(" VALUES IN (");
+        sb.append("PARTITION ");
+        if (isSetIfNotExists()) {
+            sb.append("IF NOT EXISTS ");
+        }
+        sb.append(getPartitionName());
+
+        sb.append(" VALUES IN (");
         sb.append(this.values.stream().map(value -> "\'" + value + "\'")
                 .collect(Collectors.joining(",")));
         sb.append(")");
-        if (partitionProperties != null && !partitionProperties.isEmpty()) {
+
+        Map<String, String> properties = getProperties();
+        if (properties != null && !properties.isEmpty()) {
             sb.append(" (");
-            sb.append(new PrintableMap(partitionProperties, "=", true, false));
+            sb.append(new PrintableMap(properties, "=", true, false));
             sb.append(")");
         }
         return sb.toString();

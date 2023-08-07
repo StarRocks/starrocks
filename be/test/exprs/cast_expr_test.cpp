@@ -21,13 +21,19 @@
 
 #include "butil/time.h"
 #include "column/fixed_length_column.h"
+#include "column/map_column.h"
+#include "column/nullable_column.h"
+#include "column/struct_column.h"
 #include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/primitive_type.h"
+#include "runtime/datetime_value.h"
 #include "runtime/time_types.h"
+#include "types/date_value.h"
 #include "types/logical_type.h"
+#include "types/timestamp_value.h"
 #include "util/json.h"
 #include "util/slice.h"
 
@@ -1837,6 +1843,12 @@ TEST_F(VectorizedCastExprTest, sqlToJson) {
         JsonValue json = JsonValue::from_int(1);
         EXPECT_EQ(R"(1)", evaluateCastToJson<TYPE_JSON>(cast_expr, &json));
     }
+    // temporal
+    {
+        EXPECT_EQ(R"("2023-03-14")", evaluateCastToJson<TYPE_DATE>(cast_expr, DateValue::create(2023, 3, 14)));
+        EXPECT_EQ(R"("2023-03-14 01:02:03")",
+                  evaluateCastToJson<TYPE_DATETIME>(cast_expr, TimestampValue::create(2023, 3, 14, 1, 2, 3)));
+    }
 }
 
 TTypeDesc gen_multi_array_type_desc(const TPrimitiveType::type field_type, size_t dim) {
@@ -1870,7 +1882,6 @@ static std::string cast_string_to_array(TExprNode& cast_expr, TTypeDesc type_des
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
     MockVectorizedExpr<TYPE_VARCHAR> col1(cast_expr, 1, str);
     expr->_children.push_back(&col1);
-
     ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
     if (ptr->size() != 1) {
         return "EMPTY";
@@ -1878,9 +1889,42 @@ static std::string cast_string_to_array(TExprNode& cast_expr, TTypeDesc type_des
     return ptr->debug_item(0);
 }
 
+TTypeDesc gen_array_type_desc(const TPrimitiveType::type field_type) {
+    std::vector<TTypeNode> types_list;
+    TTypeDesc type_desc;
+
+    TTypeNode type_array;
+    type_array.type = TTypeNodeType::ARRAY;
+    types_list.push_back(type_array);
+
+    TTypeNode type_scalar;
+    TScalarType scalar_type;
+    scalar_type.__set_type(field_type);
+    scalar_type.__set_precision(0);
+    scalar_type.__set_scale(0);
+    scalar_type.__set_len(0);
+    type_scalar.__set_scalar_type(scalar_type);
+    types_list.push_back(type_scalar);
+
+    type_desc.__set_types(types_list);
+    return type_desc;
+}
+
 static std::string cast_string_to_array(TExprNode& cast_expr, LogicalType element_type, const std::string& str) {
     auto type_desc = gen_array_type_desc(to_thrift(element_type));
     return cast_string_to_array(cast_expr, type_desc, str);
+}
+
+static ColumnPtr cast_string_to_array_ptr(TExprNode& cast_expr, LogicalType element_type, const ColumnPtr& src) {
+    auto type_desc = gen_array_type_desc(to_thrift(element_type));
+    cast_expr.child_type = to_thrift(TYPE_VARCHAR);
+    cast_expr.type = type_desc;
+
+    ObjectPool pool;
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
+    std::unique_ptr<starrocks::Expr> child_expr = std::make_unique<MockExpr>(cast_expr, src);
+    expr->_children.push_back(child_expr.get());
+    return expr->evaluate(nullptr, nullptr);
 }
 
 TEST_F(VectorizedCastExprTest, string_to_array) {
@@ -1892,23 +1936,28 @@ TEST_F(VectorizedCastExprTest, string_to_array) {
     cast_expr.__isset.child_type = true;
 
     EXPECT_EQ("[1,2,3]", cast_string_to_array(cast_expr, TYPE_INT, "[1,2,3]"));
-    EXPECT_EQ("[1,2,3]", cast_string_to_array(cast_expr, TYPE_INT, "1,2,3"));
     EXPECT_EQ("[1,2,3]", cast_string_to_array(cast_expr, TYPE_INT, "[1,   2,  3]"));
     EXPECT_EQ("[]", cast_string_to_array(cast_expr, TYPE_INT, "[]"));
-    EXPECT_EQ("[]", cast_string_to_array(cast_expr, TYPE_INT, ""));
     EXPECT_EQ("[NULL,NULL,NULL]", cast_string_to_array(cast_expr, TYPE_INT, "[a,b,c]"));
     EXPECT_EQ("[NULL,NULL]", cast_string_to_array(cast_expr, TYPE_INT, "[\"a\",\"b\"]"));
 
     EXPECT_EQ("[1.1,2.2,3.3]", cast_string_to_array(cast_expr, TYPE_DOUBLE, "[1.1,2.2,3.3]"));
 
     // test invalid input
+    EXPECT_EQ("NULL", cast_string_to_array(cast_expr, TYPE_INT, ""));
+    EXPECT_EQ("NULL", cast_string_to_array(cast_expr, TYPE_INT, "1,2,3"));
     EXPECT_EQ("NULL", cast_string_to_array(cast_expr, TYPE_INT, "[[1,2,3]"));
     EXPECT_EQ("NULL", cast_string_to_array(cast_expr, TYPE_INT, "[]]"));
     EXPECT_EQ("NULL", cast_string_to_array(cast_expr, TYPE_INT, "[\"\']"));
     EXPECT_EQ("NULL", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(['"'"])"));
+    EXPECT_EQ("NULL", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"( 1 )"));
+    EXPECT_EQ("NULL", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"( {} )"));
+    EXPECT_EQ("NULL", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"( {"a": 1} )"));
+    EXPECT_EQ("NULL", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"( "a" )"));
+    EXPECT_EQ("NULL", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"( ]]]] )"));
+    EXPECT_EQ("NULL", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(1,2,3)"));
 
     // test cast to string array
-    EXPECT_EQ(R"(['1','2','3'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(1,2,3)"));
     EXPECT_EQ(R"(['a','b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a","b"])"));
     EXPECT_EQ(R"(['a','b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"([a,b])"));
     EXPECT_EQ(R"(['"a,"b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a,"b])"));
@@ -1932,6 +1981,43 @@ TEST_F(VectorizedCastExprTest, string_to_array) {
         //  select cast('[[4],[[1, 2]]]' as array<array<array<string>>>);
         EXPECT_EQ(R"([[['4']],[['1','2']]])", cast_string_to_array(cast_expr, type, R"([[[4]],[[1, 2]]])"));
     }
+}
+
+// Test string to array with const input
+TEST_F(VectorizedCastExprTest, string_to_array_with_const_input) {
+    TExprNode cast_expr;
+    cast_expr.opcode = TExprOpcode::CAST;
+    cast_expr.node_type = TExprNodeType::CAST_EXPR;
+    cast_expr.num_children = 2;
+    cast_expr.__isset.opcode = true;
+    cast_expr.__isset.child_type = true;
+
+    // const null
+    auto src = ColumnHelper::create_const_null_column(2);
+    auto result = cast_string_to_array_ptr(cast_expr, TYPE_VARCHAR, src);
+    DCHECK_EQ(result->size(), 2);
+    DCHECK(result->is_constant());
+    DCHECK(result->only_null());
+
+    // const string
+    src = ColumnHelper::create_const_column<TYPE_VARCHAR>(R"(["a","b"])", 2);
+    result = cast_string_to_array_ptr(cast_expr, TYPE_VARCHAR, src);
+    DCHECK(result->is_constant());
+    DCHECK_EQ(result->size(), 2);
+    EXPECT_EQ("CONST: ['a','b']", result->debug_item(0));
+
+    // const string: multi-dims
+    src = ColumnHelper::create_const_column<TYPE_VARCHAR>(R"([[[4]],[[1, 2]]])", 2);
+    result = cast_string_to_array_ptr(cast_expr, TYPE_VARCHAR, src);
+    DCHECK(result->is_constant());
+    DCHECK_EQ(result->size(), 2);
+    EXPECT_EQ("CONST: ['[[4]]','[[1, 2]]']", result->debug_item(0));
+
+    src = ColumnHelper::create_const_column<TYPE_VARCHAR>(R"([[1, 2, 3], [1, 2, 3]])", 2);
+    result = cast_string_to_array_ptr(cast_expr, TYPE_VARCHAR, src);
+    DCHECK(result->is_constant());
+    DCHECK_EQ(result->size(), 2);
+    EXPECT_EQ("CONST: ['[1, 2, 3]','[1, 2, 3]']", result->debug_item(0));
 }
 
 void array_delimeter_split(const Slice& src, std::vector<Slice>& res, std::vector<char>& stack);
@@ -2008,6 +2094,7 @@ TEST_F(VectorizedCastExprTest, json_to_array) {
     EXPECT_EQ("[1,2,3]", cast_json_to_array(cast_expr, TYPE_INT, "[1,   2,  3]"));
     EXPECT_EQ("[]", cast_json_to_array(cast_expr, TYPE_INT, "[]"));
     EXPECT_EQ("[]", cast_json_to_array(cast_expr, TYPE_INT, ""));
+    EXPECT_EQ("[]", cast_json_to_array(cast_expr, TYPE_INT, "a"));
     EXPECT_EQ("[NULL,NULL]", cast_json_to_array(cast_expr, TYPE_INT, "[\"a\",\"b\"]"));
 
     EXPECT_EQ("[1.1,2.2,3.3]", cast_json_to_array(cast_expr, TYPE_DOUBLE, "[1.1,2.2,3.3]"));
@@ -2020,6 +2107,74 @@ TEST_F(VectorizedCastExprTest, json_to_array) {
     EXPECT_EQ(R"([{"a": 1},{"a": 2}])", cast_json_to_array(cast_expr, TYPE_JSON, R"([{"a": 1}, {"a": 2}])"));
     EXPECT_EQ(R"([null,{"a": 2}])", cast_json_to_array(cast_expr, TYPE_JSON, R"( [null, {"a": 2}] )"));
     EXPECT_EQ(R"([])", cast_json_to_array(cast_expr, TYPE_JSON, R"( {"a": 1} )"));
+}
+
+static ColumnPtr cast_json_to_array_ptr(TExprNode& cast_expr, LogicalType element_type, const ColumnPtr& src) {
+    cast_expr.child_type = to_thrift(TYPE_JSON);
+    cast_expr.type = gen_array_type_desc(to_thrift(element_type));
+
+    ObjectPool pool;
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
+    std::unique_ptr<starrocks::Expr> json_col = std::make_unique<MockExpr>(cast_expr, src);
+    expr->_children.push_back(json_col.get());
+
+    return expr->evaluate(nullptr, nullptr);
+}
+
+static ColumnPtr create_json_const_column(const std::string& str, size_t size) {
+    auto json = JsonValue::parse(str);
+    if (!json.ok()) {
+        return nullptr;
+    }
+    return ColumnHelper::create_const_column<TYPE_JSON>(&json.value(), size);
+}
+
+// Test json to array with const input
+TEST_F(VectorizedCastExprTest, json_to_array_with_const_input) {
+    TExprNode cast_expr;
+    cast_expr.opcode = TExprOpcode::CAST;
+    cast_expr.node_type = TExprNodeType::CAST_EXPR;
+    cast_expr.num_children = 2;
+    cast_expr.__isset.opcode = true;
+    cast_expr.__isset.child_type = true;
+
+    // const null
+    auto src = ColumnHelper::create_const_null_column(2);
+    auto result = cast_json_to_array_ptr(cast_expr, TYPE_JSON, src);
+    DCHECK_EQ(result->size(), 2);
+    DCHECK(result->is_constant());
+    DCHECK(result->only_null());
+
+    // const json
+    src = create_json_const_column(R"(["a","b"])", 2);
+    result = cast_json_to_array_ptr(cast_expr, TYPE_JSON, src);
+    DCHECK(result->is_constant());
+    DCHECK_EQ(result->size(), 2);
+    EXPECT_EQ("CONST: [\"a\",\"b\"]", result->debug_item(0));
+
+    // const json: multi-dims
+    src = create_json_const_column(R"([{"a": 1}, {"a": 2}])", 2);
+    result = cast_json_to_array_ptr(cast_expr, TYPE_JSON, src);
+    DCHECK(result->is_constant());
+    DCHECK_EQ(result->size(), 2);
+    EXPECT_EQ("CONST: [{\"a\": 1},{\"a\": 2}]", result->debug_item(0));
+
+    src = create_json_const_column(R"( [null, {"a": 2}] )", 2);
+    result = cast_json_to_array_ptr(cast_expr, TYPE_JSON, src);
+    DCHECK(result->is_constant());
+    DCHECK_EQ(result->size(), 2);
+    EXPECT_EQ("CONST: [null,{\"a\": 2}]", result->debug_item(0));
+}
+
+TEST_F(VectorizedCastExprTest, unsupported_test) {
+    // can't cast arry<array<int>> to array<bool> rather than crash
+    expr_node.child_type = to_thrift(LogicalType::TYPE_ARRAY);
+    expr_node.child_type_desc = gen_multi_array_type_desc(to_thrift(TYPE_INT), 2);
+    expr_node.type = gen_multi_array_type_desc(to_thrift(TYPE_BOOLEAN), 1);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    ASSERT_TRUE(expr == nullptr);
 }
 
 } // namespace starrocks

@@ -16,6 +16,8 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.parser.NodePosition;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 
@@ -35,6 +37,12 @@ public class JoinRelation extends Relation {
     private List<String> usingColNames;
 
     public JoinRelation(JoinOperator joinOp, Relation left, Relation right, Expr onPredicate, boolean isLateral) {
+        this(joinOp, left, right, onPredicate, isLateral, NodePosition.ZERO);
+    }
+
+    public JoinRelation(JoinOperator joinOp, Relation left, Relation right, Expr onPredicate,
+                        boolean isLateral, NodePosition pos) {
+        super(pos);
         if (joinOp == null) {
             this.joinOp = JoinOperator.CROSS_JOIN;
             isImplicit = true;
@@ -76,7 +84,7 @@ public class JoinRelation extends Relation {
     }
 
     public void setJoinHint(String joinHint) {
-        this.joinHint = joinHint;
+        this.joinHint = StringUtils.upperCase(joinHint);
     }
 
     public String getJoinHint() {

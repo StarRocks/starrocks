@@ -36,9 +36,10 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Replica.ReplicaState;
-import com.starrocks.common.FeConstants;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -61,6 +62,8 @@ public class LocalTabletTest {
 
     private TabletInvertedIndex invertedIndex;
 
+    private SystemInfoService infoService;
+
     @Mocked
     private GlobalStateMgr globalStateMgr;
 
@@ -69,10 +72,6 @@ public class LocalTabletTest {
         invertedIndex = new TabletInvertedIndex();
         new Expectations(globalStateMgr) {
             {
-                GlobalStateMgr.getCurrentStateJournalVersion();
-                minTimes = 0;
-                result = FeConstants.meta_version;
-
                 GlobalStateMgr.getCurrentInvertedIndex();
                 minTimes = 0;
                 result = invertedIndex;
@@ -92,6 +91,11 @@ public class LocalTabletTest {
         tablet.addReplica(replica1);
         tablet.addReplica(replica2);
         tablet.addReplica(replica3);
+
+        infoService = GlobalStateMgr.getCurrentSystemInfo();
+        infoService.addBackend(new Backend(10001L, "host1", 9050));
+        infoService.addBackend(new Backend(10002L, "host2", 9050));
+
     }
 
     @Test
@@ -190,5 +194,21 @@ public class LocalTabletTest {
         tablet.addReplica(normalReplica, false);
         Assert.assertEquals(LocalTablet.TabletStatus.COLOCATE_REDUNDANT,
                 tablet.getColocateHealthStatus(9, 1, Sets.newHashSet(10002L)));
+    }
+
+
+    @Test
+    public void testGetBackends() throws Exception {
+        LocalTablet tablet = new LocalTablet();
+
+        Replica replica1 = new Replica(1L, 10001L, 8,
+                -1, 10, 10, ReplicaState.NORMAL, 9, 8);
+        Replica replica2 = new Replica(1L, 10002L, 9,
+                -1, 10, 10, ReplicaState.NORMAL, -1, 9);
+        tablet.addReplica(replica1, false);
+        tablet.addReplica(replica2, false);
+
+        Assert.assertEquals(tablet.getBackends().size(), 2);
+
     }
 }

@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.planner;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.thrift.TResultSinkType;
 
 import java.util.List;
@@ -94,12 +93,6 @@ public class MultiCastPlanFragment extends PlanFragment {
     }
 
     @Override
-    public int getNumNodes() {
-        Preconditions.checkState(false);
-        return 0;
-    }
-
-    @Override
     public void setOutputPartition(DataPartition outputPartition) {
         Preconditions.checkState(false);
     }
@@ -109,4 +102,9 @@ public class MultiCastPlanFragment extends PlanFragment {
         Preconditions.checkState(false);
     }
 
+    @Override
+    public void reset() {
+        MultiCastDataSink multiSink = (MultiCastDataSink) getSink();
+        multiSink.getDestinations().forEach(List::clear);
+    }
 }

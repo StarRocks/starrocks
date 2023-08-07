@@ -29,10 +29,10 @@
 #include "common/object_pool.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
-#include "runtime/primitive_type.h"
-#include "runtime/primitive_type_infra.h"
 #include "runtime/types.h"
 #include "testutil/assert.h"
+#include "types/logical_type.h"
+#include "types/logical_type_infra.h"
 #include "util/value_generator.h"
 
 namespace starrocks {
@@ -70,7 +70,7 @@ template <LogicalType TYPE>
 struct ColumnRandomAppender {
     static bool append(ColumnPtr& col, int sz) {
         auto* spec_col = ColumnHelper::cast_to_raw<TYPE>(col);
-        if constexpr (isArithmeticPT<TYPE>) {
+        if constexpr (isArithmeticLT<TYPE>) {
             auto& container = spec_col->get_data();
             container.resize(sz);
             for (int i = 0; i < sz; ++i) {
@@ -178,7 +178,8 @@ TEST_F(ChunksSorterHeapSortTest, single_column_order_by_notnull_test) {
             ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
             ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
             ChunksSorterHeapSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, 1024);
-            sorter.setup_runtime(_pool.add(new RuntimeProfile("")));
+            sorter.setup_runtime(_runtime_state.get(), _pool.add(new RuntimeProfile("")),
+                                 _pool.add(new MemTracker(1L << 62, "parent", nullptr)));
             sorter.update(nullptr, fake_chunks.next_chunk(1024));
             sorter.done(nullptr);
 
@@ -198,7 +199,8 @@ TEST_F(ChunksSorterHeapSortTest, single_column_order_by_notnull_test) {
             ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
             ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
             ChunksSorterHeapSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, 1024);
-            sorter.setup_runtime(_pool.add(new RuntimeProfile("")));
+            sorter.setup_runtime(_runtime_state.get(), _pool.add(new RuntimeProfile("")),
+                                 _pool.add(new MemTracker(1L << 62, "parent", nullptr)));
             sorter.update(nullptr, fake_chunks.next_chunk(1023));
             sorter.update(nullptr, fake_chunks.next_chunk(1023));
             sorter.done(nullptr);
@@ -221,7 +223,8 @@ TEST_F(ChunksSorterHeapSortTest, single_column_order_by_notnull_test) {
             ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
             ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
             ChunksSorterHeapSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, 1024);
-            sorter.setup_runtime(_pool.add(new RuntimeProfile("")));
+            sorter.setup_runtime(_runtime_state.get(), _pool.add(new RuntimeProfile("")),
+                                 _pool.add(new MemTracker(1L << 62, "parent", nullptr)));
             sorter.update(nullptr, fake_chunks.next_chunk(1024));
             sorter.update(nullptr, fake_chunks.next_chunk(1023));
             sorter.done(nullptr);
@@ -256,7 +259,8 @@ TEST_F(ChunksSorterHeapSortTest, single_column_order_by_nullable_test) {
             // limit 5
             int limit_sz = 5;
             ChunksSorterHeapSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, limit_sz);
-            sorter.setup_runtime(_pool.add(new RuntimeProfile("")));
+            sorter.setup_runtime(_runtime_state.get(), _pool.add(new RuntimeProfile("")),
+                                 _pool.add(new MemTracker(1L << 62, "parent", nullptr)));
             sorter.update(nullptr, fake_chunks.next_chunk(10));
             sorter.done(nullptr);
 
@@ -281,7 +285,8 @@ TEST_F(ChunksSorterHeapSortTest, single_column_order_by_nullable_test) {
             // limit 5
             int limit_sz = 10;
             ChunksSorterHeapSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, limit_sz);
-            sorter.setup_runtime(_pool.add(new RuntimeProfile("")));
+            sorter.setup_runtime(_runtime_state.get(), _pool.add(new RuntimeProfile("")),
+                                 _pool.add(new MemTracker(1L << 62, "parent", nullptr)));
             sorter.update(nullptr, fake_chunks.next_chunk(10));
             sorter.done(nullptr);
 
@@ -307,7 +312,8 @@ TEST_F(ChunksSorterHeapSortTest, single_column_order_by_nullable_test) {
             // limit 5
             int limit_sz = 5;
             ChunksSorterHeapSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, limit_sz);
-            sorter.setup_runtime(_pool.add(new RuntimeProfile("")));
+            sorter.setup_runtime(_runtime_state.get(), _pool.add(new RuntimeProfile("")),
+                                 _pool.add(new MemTracker(1L << 62, "parent", nullptr)));
             sorter.update(nullptr, fake_chunks.next_chunk(10));
             sorter.done(nullptr);
 

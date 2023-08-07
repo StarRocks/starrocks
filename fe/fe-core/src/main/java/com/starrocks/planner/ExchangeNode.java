@@ -46,6 +46,7 @@ import com.starrocks.analysis.SortInfo;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.thrift.TExchangeNode;
@@ -191,6 +192,8 @@ public class ExchangeNode extends PlanNode {
         if (partitionType != null) {
             msg.exchange_node.setPartition_type(partitionType);
         }
+        SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+        msg.exchange_node.setEnable_parallel_merge(sessionVariable.isEnableParallelMerge());
     }
 
     @Override
@@ -238,6 +241,11 @@ public class ExchangeNode extends PlanNode {
     @Override
     public boolean canUsePipeLine() {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
+    }
+
+    @Override
+    public boolean canUseRuntimeAdaptiveDop() {
+        return true;
     }
 
     @Override

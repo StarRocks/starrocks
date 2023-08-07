@@ -14,10 +14,13 @@
 
 #pragma once
 
+#include "column/chunk.h"
 #include "column/column.h"
+#include "column/stream_chunk.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
+#include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/PlanNodes_constants.h"
 #include "storage/tablet.h"
 
@@ -47,18 +50,16 @@ public:
 
     bool stream_data_source() const override { return true; }
 
+    const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
+
 protected:
     ConnectorScanNode* _scan_node;
     const TBinlogScanNode _binlog_scan_node;
 };
 
-using BinlogMetaFieldMap = std::unordered_map<std::string, VectorizedFieldPtr>;
-const std::string BINLOG_OP = g_PlanNodes_constants.BINLOG_OP_COLUMN_NAME;
-const std::string BINLOG_VERSION = g_PlanNodes_constants.BINLOG_VERSION_COLUMN_NAME;
-const std::string BINLOG_SEQ_ID = g_PlanNodes_constants.BINLOG_SEQ_ID_COLUMN_NAME;
-const std::string BINLOG_TIMESTAMP = g_PlanNodes_constants.BINLOG_TIMESTAMP_COLUMN_NAME;
+using BinlogMetaFieldMap = std::unordered_map<std::string, FieldPtr>;
 
-class BinlogDataSource final : public DataSource {
+class BinlogDataSource final : public StreamDataSource {
 public:
     ~BinlogDataSource() override = default;
 
@@ -67,30 +68,52 @@ public:
     void close(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
 
+    Status set_offset(int64_t table_version, int64_t changelog_id) override;
+    Status reset_status() override;
+
     int64_t raw_rows_read() const override;
     int64_t num_rows_read() const override;
     int64_t num_bytes_read() const override;
     int64_t cpu_time_spent() const override;
 
+    int64_t num_rows_read_in_epoch() const override;
+
+    // CPU time of this data source in the current epoch.
+    int64_t cpu_time_spent_in_epoch() const override;
+
 private:
     StatusOr<TabletSharedPtr> _get_tablet();
     BinlogMetaFieldMap _build_binlog_meta_fields(ColumnId start_cid);
-    StatusOr<VectorizedSchema> _build_binlog_schema();
+    StatusOr<Schema> _build_binlog_schema();
+    Status _prepare_non_stream_pipeline();
 
+    const PlanNodesConstants _column_name_constants;
     const BinlogDataSourceProvider* _provider;
     const TBinlogScanRange _scan_range;
     RuntimeState* _runtime_state = nullptr;
+    bool _is_stream_pipeline = false;
+
     TabletSharedPtr _tablet;
-    // TODO this will be used by BinlogReader
-    VectorizedSchema _binlog_read_schema;
+    Schema _binlog_read_schema;
+    BinlogReaderSharedPtr _binlog_reader;
+
+    // whether to need do a seek before read data
+    std::atomic<bool> _need_seek_binlog{true};
+    std::atomic<int64_t> _start_version;
+    std::atomic<int64_t> _start_seq_id;
+    std::atomic<int64_t> _max_version_exclusive;
 
     int64_t _rows_read_number = 0;
     int64_t _bytes_read = 0;
     int64_t _cpu_time_ns = 0;
 
+    int64_t _rows_read_in_epoch = 0;
+    int64_t _cpu_time_spent_in_epoch = 0;
+
     // Mock data for testing
     Status _mock_chunk(Chunk* chunk);
-    std::atomic<int32_t> _chunk_num;
+    Status _mock_chunk_test(ChunkPtr* chunk);
+    std::atomic<int32_t> _mock_chunk_num = 0;
 };
 
 } // namespace starrocks::connector

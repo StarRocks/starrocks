@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/sort/sort_context.h"
 
+#include <algorithm>
 #include <mutex>
 #include <utility>
 
@@ -22,6 +23,8 @@
 #include "exec/sorting/sorting.h"
 #include "exprs/runtime_filter_bank.h"
 #include "runtime/chunk_cursor.h"
+#include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks::pipeline {
 
@@ -46,6 +49,15 @@ bool SortContext::is_output_finished() const {
     return is_partition_sort_finished() && _merger_inited && _required_rows == 0;
 }
 
+// TODO: optimize this
+bool SortContext::is_partition_ready() const {
+    return std::all_of(_chunks_sorter_partitions.begin(), _chunks_sorter_partitions.end(), [](const auto& sorter) {
+        return !sorter->spiller() || !sorter->spiller()->spilled() || sorter->spiller()->has_output_data();
+    });
+}
+
+void SortContext::cancel() {}
+
 StatusOr<ChunkPtr> SortContext::pull_chunk() {
     _init_merger();
 
@@ -54,7 +66,9 @@ StatusOr<ChunkPtr> SortContext::pull_chunk() {
             auto chunk = _merger.try_get_next();
             // Input cursor maye short circuit
             if (!chunk) {
-                _required_rows = 0;
+                if (_merger.is_eos()) {
+                    _required_rows = 0;
+                }
                 return nullptr;
             }
             _current_chunk.reset(std::move(chunk));
@@ -121,8 +135,11 @@ Status SortContext::_init_merger() {
 }
 
 SortContextFactory::SortContextFactory(RuntimeState* state, const TTopNType::type topn_type, bool is_merging,
-                                       int64_t offset, int64_t limit, std::vector<ExprContext*> sort_exprs,
-                                       const std::vector<bool>& is_asc_order, const std::vector<bool>& is_null_first,
+                                       std::vector<ExprContext*> sort_exprs, const std::vector<bool>& is_asc_order,
+                                       const std::vector<bool>& is_null_first,
+                                       [[maybe_unused]] const std::vector<TExpr>& partition_exprs, int64_t offset,
+                                       int64_t limit, const std::string& sort_keys,
+                                       const std::vector<OrderByType>& order_by_types,
                                        const std::vector<RuntimeFilterBuildDescriptor*>& build_runtime_filters)
         : _state(state),
           _topn_type(topn_type),

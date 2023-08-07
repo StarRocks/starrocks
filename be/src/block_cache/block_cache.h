@@ -30,8 +30,8 @@ public:
     Status init(const CacheOptions& options);
 
     // Write data to cache, the offset must be aligned by block size
-    Status write_cache(const CacheKey& cache_key, off_t offset, size_t size, const char* buffer,
-                       size_t ttl_seconds = 0);
+    Status write_cache(const CacheKey& cache_key, off_t offset, size_t size, const char* buffer, size_t ttl_seconds = 0,
+                       bool overwrite = true);
 
     // Read data from cache, it returns the data size if successful; otherwise the error status
     // will be returned. The offset and size must be aligned by block size.
@@ -49,8 +49,12 @@ public:
 
     size_t block_size() const { return _block_size; }
 
+    static const size_t MAX_BLOCK_SIZE;
+
 private:
-    BlockCache();
+#ifndef BE_TEST
+    BlockCache() = default;
+#endif
 
     size_t _block_size = 0;
     std::unique_ptr<KvCache> _kv_cache;

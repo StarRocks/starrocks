@@ -12,25 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Table;
-import com.starrocks.sql.common.ErrorType;
-import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.ArrayList;
@@ -65,50 +61,37 @@ public class PruneScanColumnRule extends TransformationRule {
                 scanOperator.getColRefToColumnMetaMap().keySet().stream().filter(requiredOutputColumns::contains)
                         .collect(Collectors.toSet());
         outputColumns.addAll(Utils.extractColumnRef(scanOperator.getPredicate()));
-
+        boolean canUseAnyColumn = false;
         if (outputColumns.size() == 0) {
             outputColumns.add(Utils.findSmallestColumnRef(
                     new ArrayList<>(scanOperator.getColRefToColumnMetaMap().keySet())));
+            canUseAnyColumn = true;
+        }
+
+        if (!context.getSessionVariable().isEnableCountStarOptimization()) {
+            canUseAnyColumn = false;
         }
 
         if (scanOperator.getColRefToColumnMetaMap().keySet().equals(outputColumns)) {
+            scanOperator.setCanUseAnyColumn(canUseAnyColumn);
             return Collections.emptyList();
         } else {
             Map<ColumnRefOperator, Column> newColumnRefMap = outputColumns.stream()
                     .collect(Collectors.toMap(identity(), scanOperator.getColRefToColumnMetaMap()::get));
             if (scanOperator instanceof LogicalOlapScanOperator) {
                 LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) scanOperator;
-                LogicalOlapScanOperator newScanOperator = new LogicalOlapScanOperator(
-                        olapScanOperator.getTable(),
-                        newColumnRefMap,
-                        olapScanOperator.getColumnMetaToColRefMap(),
-                        olapScanOperator.getDistributionSpec(),
-                        olapScanOperator.getLimit(),
-                        olapScanOperator.getPredicate(),
-                        olapScanOperator.getSelectedIndexId(),
-                        olapScanOperator.getSelectedPartitionId(),
-                        olapScanOperator.getPartitionNames(),
-                        olapScanOperator.getSelectedTabletId(),
-                        olapScanOperator.getHintsTabletIds());
 
+                LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
+                LogicalOlapScanOperator newScanOperator = builder.withOperator(olapScanOperator)
+                        .setColRefToColumnMetaMap(newColumnRefMap).build();
+                newScanOperator.setCanUseAnyColumn(canUseAnyColumn);
                 return Lists.newArrayList(new OptExpression(newScanOperator));
             } else {
-                try {
-                    Class<? extends LogicalScanOperator> classType = scanOperator.getClass();
-                    LogicalScanOperator newScanOperator =
-                            classType.getConstructor(Table.class, Map.class, Map.class, long.class,
-                                    ScalarOperator.class, Projection.class).newInstance(
-                                    scanOperator.getTable(),
-                                    newColumnRefMap,
-                                    scanOperator.getColumnMetaToColRefMap(),
-                                    scanOperator.getLimit(),
-                                    scanOperator.getPredicate(),
-                                    scanOperator.getProjection());
-
-                    return Lists.newArrayList(new OptExpression(newScanOperator));
-                } catch (Exception e) {
-                    throw new StarRocksPlannerException(e.getMessage(), ErrorType.INTERNAL_ERROR);
-                }
+                LogicalScanOperator.Builder builder = OperatorBuilderFactory.build(scanOperator);
+                scanOperator.setCanUseAnyColumn(canUseAnyColumn);
+                Operator newScanOperator =
+                        builder.withOperator(scanOperator).setColRefToColumnMetaMap(newColumnRefMap).build();
+                return Lists.newArrayList(new OptExpression(newScanOperator));
             }
         }
     }

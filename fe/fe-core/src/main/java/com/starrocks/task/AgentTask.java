@@ -53,10 +53,11 @@ public abstract class AgentTask {
 
     protected int failedTimes;
     protected String errorMsg;
-    // some of process may use this member to check if the task is finished.
-    // some of are not.
+    // some process may use this member to check if the task is finished.
+    // some are not.
     // so whether the task is finished depends on caller's logic, not the value of this member.
     protected boolean isFinished = false;
+    protected boolean isFailed = false;
     protected long createTime;
     protected String traceParent;
 
@@ -155,6 +156,14 @@ public abstract class AgentTask {
 
     public boolean isFinished() {
         return isFinished;
+    }
+
+    public boolean isFailed() {
+        return isFailed;
+    }
+
+    public void setFailed(boolean isFailed) {
+        this.isFailed = isFailed;
     }
 
     public boolean shouldResend(long currentTimeMillis) {

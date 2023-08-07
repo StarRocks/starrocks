@@ -15,33 +15,18 @@
 #include "storage/column_aggregate_func.h"
 
 #include "column/array_column.h"
+#include "column/map_column.h"
+#include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
+#include "exprs/agg/aggregate.h"
+#include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "storage/column_aggregator.h"
 #include "util/percentile_value.h"
 
 namespace starrocks {
 
-// SUM
-template <typename ColumnType, typename StateType>
-class SumAggregator final : public ValueColumnAggregator<ColumnType, StateType> {
-public:
-    void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* data = down_cast<ColumnType*>(src.get())->get_data().data();
-        this->data() += data[row];
-    }
-
-    void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override {
-        auto* data = down_cast<ColumnType*>(src.get())->get_data().data();
-        for (int i = start; i < end; ++i) {
-            this->data() += data[i];
-        }
-    }
-
-    void append_data(Column* agg) override { down_cast<ColumnType*>(agg)->append(this->data()); }
-};
-
 struct SliceState {
-    std::vector<uint8_t> data;
+    raw::RawVector<uint8_t> data;
     bool has_value = false;
 
     Slice slice() { return {data.data(), data.size()}; }
@@ -55,159 +40,6 @@ struct SliceState {
     void reset() {
         has_value = false;
         data.clear();
-    }
-};
-
-template <typename T>
-struct MinMaxAggregateData {
-    static T min() { return std::numeric_limits<T>::lowest(); }
-    static T max() { return std::numeric_limits<T>::max(); }
-};
-
-template <>
-struct MinMaxAggregateData<DecimalV2Value> {
-    static DecimalV2Value min() { return DecimalV2Value::get_min_decimal(); }
-    static DecimalV2Value max() { return DecimalV2Value::get_max_decimal(); }
-};
-
-template <>
-struct MinMaxAggregateData<DateValue> {
-    static DateValue min() { return DateValue::MIN_DATE_VALUE; }
-    static DateValue max() { return DateValue::MAX_DATE_VALUE; }
-};
-
-template <>
-struct MinMaxAggregateData<TimestampValue> {
-    static TimestampValue min() { return TimestampValue::MIN_TIMESTAMP_VALUE; }
-    static TimestampValue max() { return TimestampValue::MAX_TIMESTAMP_VALUE; }
-};
-
-// MAX
-template <typename ColumnType, typename StateType>
-class MaxAggregator final : public ValueColumnAggregator<ColumnType, StateType> {
-public:
-    void reset() override { this->data() = MinMaxAggregateData<StateType>::min(); }
-
-    void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* data = down_cast<ColumnType*>(src.get())->get_data().data();
-        this->data() = std::max<StateType>(this->data(), data[row]);
-    }
-
-    void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override {
-        auto* data = down_cast<ColumnType*>(src.get())->get_data().data();
-        for (int i = start; i < end; ++i) {
-            this->data() = std::max<StateType>(this->data(), data[i]);
-        }
-    }
-
-    void append_data(Column* agg) override { down_cast<ColumnType*>(agg)->append(this->data()); }
-};
-
-template <>
-class MaxAggregator<BinaryColumn, SliceState> final : public ValueColumnAggregator<BinaryColumn, SliceState> {
-public:
-    void reset() override { this->data().reset(); }
-
-    void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* col = down_cast<BinaryColumn*>(src.get());
-
-        Slice data = col->get_slice(row);
-        if (!this->data().has_value || this->data().slice() < data) {
-            this->data().update(data);
-        }
-    }
-
-    void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override {
-        auto* col = down_cast<BinaryColumn*>(src.get());
-        Slice data = col->get_slice(start);
-
-        for (int i = start + 1; i < end; ++i) {
-            data = std::max<Slice>(data, col->get_slice(i));
-        }
-
-        if (!this->data().has_value || this->data().slice() < data) {
-            this->data().update(data);
-        }
-    }
-
-    void append_data(Column* agg) override {
-        auto* col = down_cast<BinaryColumn*>(agg);
-        col->append(this->data().slice());
-    }
-};
-
-// MIN
-template <typename ColumnType, typename StateType>
-class MinAggregator final : public ValueColumnAggregator<ColumnType, StateType> {
-public:
-    void reset() override { this->data() = MinMaxAggregateData<StateType>::max(); }
-
-    void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* data = down_cast<ColumnType*>(src.get())->get_data().data();
-        this->data() = std::min<StateType>(this->data(), data[row]);
-    }
-
-    void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override {
-        auto* data = down_cast<ColumnType*>(src.get())->get_data().data();
-        for (int i = start; i < end; ++i) {
-            this->data() = std::min<StateType>(this->data(), data[i]);
-        }
-    }
-
-    void append_data(Column* agg) override { down_cast<ColumnType*>(agg)->append(this->data()); }
-};
-
-template <>
-class MinAggregator<BooleanColumn, uint8_t> final : public ValueColumnAggregator<BooleanColumn, uint8_t> {
-public:
-    // The max value of boolean type is 1 (not uint8_t max).
-    void reset() override { this->data() = 1; }
-
-    void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* data = down_cast<BooleanColumn*>(src.get())->get_data().data();
-        this->data() = std::min<uint8_t>(this->data(), data[row]);
-    }
-
-    void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override {
-        auto* data = down_cast<BooleanColumn*>(src.get())->get_data().data();
-        for (int i = start; i < end; ++i) {
-            this->data() = std::min<uint8_t>(this->data(), data[i]);
-        }
-    }
-
-    void append_data(Column* agg) override { down_cast<BooleanColumn*>(agg)->append(this->data()); }
-};
-
-template <>
-class MinAggregator<BinaryColumn, SliceState> final : public ValueColumnAggregator<BinaryColumn, SliceState> {
-public:
-    void reset() override { this->data().reset(); }
-
-    void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* col = down_cast<BinaryColumn*>(src.get());
-
-        Slice data = col->get_slice(row);
-        if (!this->data().has_value || this->data().slice() > data) {
-            this->data().update(data);
-        }
-    }
-
-    void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override {
-        auto* col = down_cast<BinaryColumn*>(src.get());
-        Slice data = col->get_slice(start);
-
-        for (int i = start + 1; i < end; ++i) {
-            data = std::min<Slice>(data, col->get_slice(i));
-        }
-
-        if (!this->data().has_value || this->data().slice() > data) {
-            this->data().update(data);
-        }
-    }
-
-    void append_data(Column* agg) override {
-        auto* col = down_cast<BinaryColumn*>(agg);
-        col->append(this->data().slice());
     }
 };
 
@@ -329,7 +161,7 @@ public:
     }
 };
 
-struct ArrayState {
+struct ColumnRefState {
     ColumnPtr column;
     int row = 0;
 
@@ -339,8 +171,9 @@ struct ArrayState {
     }
 };
 
-template <>
-class ReplaceAggregator<ArrayColumn, ArrayState> final : public ValueColumnAggregator<ArrayColumn, ArrayState> {
+// Array/Map/Struct
+template <typename ColumnType>
+class ReplaceAggregator<ColumnType, ColumnRefState> final : public ValueColumnAggregator<ColumnType, ColumnRefState> {
 public:
     void reset() override { this->data().reset(); }
 
@@ -352,7 +185,7 @@ public:
     void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override { aggregate_impl(end - 1, src); }
 
     void append_data(Column* agg) override {
-        auto* col = down_cast<ArrayColumn*>(agg);
+        auto* col = down_cast<ColumnType*>(agg);
         if (this->data().column) {
             col->append(*this->data().column, this->data().row, 1);
         } else {
@@ -425,107 +258,72 @@ private:
     ValueColumnAggregatorPtr _child;
 };
 
-// HLL_UNION
-class HllUnionAggregator final : public ValueColumnAggregator<HyperLogLogColumn, HyperLogLog> {
+class AggFuncBasedValueAggregator : public ValueColumnAggregatorBase {
 public:
+    AggFuncBasedValueAggregator(const AggregateFunction* agg_func) : _agg_func(agg_func) {
+        _state = static_cast<AggDataPtr>(std::aligned_alloc(_agg_func->alignof_size(), _agg_func->size()));
+        _agg_func->create(nullptr, _state);
+    }
+
+    ~AggFuncBasedValueAggregator() override {
+        if (_state != nullptr) {
+            _agg_func->destroy(nullptr, _state);
+            std::free(_state);
+        }
+    }
+
     void reset() override {
-        this->data().clear();
-        _inited = false;
+        _agg_func->destroy(nullptr, _state);
+        _agg_func->create(nullptr, _state);
     }
 
-    void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* col = down_cast<HyperLogLogColumn*>(src.get());
-        if (!_inited) {
-            // First value, directly move it
-            _inited = true;
-            this->data() = std::move(*col->get_object(row));
-        } else {
-            this->data().merge(*(col->get_object(row)));
+    void update_aggregate(Column* agg) override {
+        _aggregate_column = agg;
+        reset();
+    }
+
+    void append_data(Column* agg) override { _agg_func->finalize_to_column(nullptr, _state, agg); }
+
+    // |data| is readonly.
+    void aggregate_impl(int row, const ColumnPtr& data) override { _agg_func->merge(nullptr, data.get(), _state, row); }
+
+    // |data| is readonly.
+    void aggregate_batch_impl(int start, int end, const ColumnPtr& input) override {
+        _agg_func->merge_batch_single_state(nullptr, _state, input.get(), start, end - start);
+    }
+
+    bool need_deep_copy() const override { return false; };
+
+    void aggregate_values(int start, int nums, const uint32* aggregate_loops, bool previous_neq) override {
+        if (nums <= 0) {
+            return;
+        }
+
+        // if different with last row in previous chunk
+        if (previous_neq) {
+            append_data(_aggregate_column);
+            reset();
+        }
+
+        for (int i = 0; i < nums; ++i) {
+            aggregate_batch_impl(start, start + aggregate_loops[i], _source_column);
+            start += aggregate_loops[i];
+            // If there is another loop, append current state to result column
+            if (i < nums - 1) {
+                append_data(_aggregate_column);
+                reset();
+            }
         }
     }
 
-    void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override {
-        auto* col = down_cast<HyperLogLogColumn*>(src.get());
-        if (!_inited) {
-            // First value, directly move it
-            _inited = true;
-            this->data() = std::move(*col->get_object(start));
-            for (int i = start + 1; i < end; ++i) {
-                this->data().merge(*(col->get_object(i)));
-            }
-        } else {
-            for (int i = start; i < end; ++i) {
-                this->data().merge(*(col->get_object(i)));
-            }
-        }
+    void finalize() override {
+        append_data(_aggregate_column);
+        _aggregate_column = nullptr;
     }
-
-    void append_data(Column* agg) override { down_cast<HyperLogLogColumn*>(agg)->append(std::move(this->data())); }
 
 private:
-    // The aggregate state whether initialized
-    bool _inited = false;
-};
-
-// BITMAP_UNION
-class BitmapUnionAggregator final : public ValueColumnAggregator<BitmapColumn, BitmapValue> {
-public:
-    void reset() override {
-        this->data().clear();
-        _inited = false;
-    }
-
-    void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* col = down_cast<BitmapColumn*>(src.get());
-        if (!_inited) {
-            // First value, directly move it
-            _inited = true;
-            this->data() = std::move(*col->get_object(row));
-        } else {
-            this->data() |= *(col->get_object(row));
-        }
-    }
-
-    void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override {
-        auto* col = down_cast<BitmapColumn*>(src.get());
-        if (!_inited) {
-            // First value, directly move it
-            _inited = true;
-            this->data() = std::move(*col->get_object(start));
-            for (int i = start + 1; i < end; ++i) {
-                this->data() |= *(col->get_object(i));
-            }
-        } else {
-            for (int i = start; i < end; ++i) {
-                this->data() |= *(col->get_object(i));
-            }
-        }
-    }
-
-    void append_data(Column* agg) override { down_cast<BitmapColumn*>(agg)->append(std::move(this->data())); }
-
-private:
-    // The aggregate state whether initialized
-    bool _inited = false;
-};
-
-// PERCENTILE_UNION
-class PercentileUnionAggregator final : public ValueColumnAggregator<PercentileColumn, PercentileValue> {
-public:
-    void reset() override { this->data() = PercentileValue(); }
-
-    void aggregate_impl(int row, const ColumnPtr& src) override {
-        this->data().merge(down_cast<PercentileColumn*>(src.get())->get_object(row));
-    }
-
-    void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override {
-        auto* col = down_cast<PercentileColumn*>(src.get());
-        for (int i = start; i < end; ++i) {
-            this->data().merge(col->get_object(i));
-        }
-    }
-
-    void append_data(Column* agg) override { down_cast<PercentileColumn*>(agg)->append(&this->data()); }
+    const AggregateFunction* _agg_func;
+    AggDataPtr _state{nullptr};
 };
 
 #define CASE_DEFAULT_WARNING(TYPE)                                             \
@@ -543,87 +341,11 @@ public:
     case CASE_TYPE: {                                                        \
         return std::make_unique<CLASS<COLUMN_TYPE, STATE_TYPE>>();           \
     }
-
-#define CASE_SUM(CASE_TYPE, COLUMN_TYPE, STATE_TYPE) \
-    CASE_NEW_VALUE_AGGREGATOR(CASE_TYPE, COLUMN_TYPE, STATE_TYPE, SumAggregator)
-
-#define CASE_MAX(CASE_TYPE, COLUMN_TYPE, STATE_TYPE) \
-    CASE_NEW_VALUE_AGGREGATOR(CASE_TYPE, COLUMN_TYPE, STATE_TYPE, MaxAggregator)
-
-#define CASE_MIN(CASE_TYPE, COLUMN_TYPE, STATE_TYPE) \
-    CASE_NEW_VALUE_AGGREGATOR(CASE_TYPE, COLUMN_TYPE, STATE_TYPE, MinAggregator)
-
 #define CASE_REPLACE(CASE_TYPE, COLUMN_TYPE, STATE_TYPE) \
     CASE_NEW_VALUE_AGGREGATOR(CASE_TYPE, COLUMN_TYPE, STATE_TYPE, ReplaceAggregator)
 
 ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, StorageAggregateType method) {
     switch (method) {
-    case STORAGE_AGGREGATE_SUM: {
-        switch (type) {
-            CASE_SUM(TYPE_TINYINT, Int8Column, int8_t)
-            CASE_SUM(TYPE_SMALLINT, Int16Column, int16_t)
-            CASE_SUM(TYPE_INT, Int32Column, int32_t)
-            CASE_SUM(TYPE_BIGINT, Int64Column, int64_t)
-            CASE_SUM(TYPE_LARGEINT, Int128Column, int128_t)
-            CASE_SUM(TYPE_FLOAT, FloatColumn, float)
-            CASE_SUM(TYPE_DOUBLE, DoubleColumn, double)
-            CASE_SUM(TYPE_DECIMAL, DecimalColumn, DecimalV2Value)
-            CASE_SUM(TYPE_DECIMALV2, DecimalColumn, DecimalV2Value)
-            CASE_SUM(TYPE_DECIMAL32, Decimal32Column, int32_t)
-            CASE_SUM(TYPE_DECIMAL64, Decimal64Column, int64_t)
-            CASE_SUM(TYPE_DECIMAL128, Decimal128Column, int128_t)
-            CASE_SUM(TYPE_BOOLEAN, BooleanColumn, uint8_t)
-            CASE_DEFAULT_WARNING(type)
-        }
-    }
-    case STORAGE_AGGREGATE_MAX: {
-        switch (type) {
-            CASE_MAX(TYPE_TINYINT, Int8Column, int8_t)
-            CASE_MAX(TYPE_SMALLINT, Int16Column, int16_t)
-            CASE_MAX(TYPE_INT, Int32Column, int32_t)
-            CASE_MAX(TYPE_BIGINT, Int64Column, int64_t)
-            CASE_MAX(TYPE_LARGEINT, Int128Column, int128_t)
-            CASE_MAX(TYPE_FLOAT, FloatColumn, float)
-            CASE_MAX(TYPE_DOUBLE, DoubleColumn, double)
-            CASE_MAX(TYPE_DECIMAL, DecimalColumn, DecimalV2Value)
-            CASE_MAX(TYPE_DECIMALV2, DecimalColumn, DecimalV2Value)
-            CASE_MAX(TYPE_DECIMAL32, Decimal32Column, int32_t)
-            CASE_MAX(TYPE_DECIMAL64, Decimal64Column, int64_t)
-            CASE_MAX(TYPE_DECIMAL128, Decimal128Column, int128_t)
-            CASE_MAX(TYPE_DATE_V1, DateColumn, DateValue)
-            CASE_MAX(TYPE_DATE, DateColumn, DateValue)
-            CASE_MAX(TYPE_DATETIME_V1, TimestampColumn, TimestampValue)
-            CASE_MAX(TYPE_DATETIME, TimestampColumn, TimestampValue)
-            CASE_MAX(TYPE_CHAR, BinaryColumn, SliceState)
-            CASE_MAX(TYPE_VARCHAR, BinaryColumn, SliceState)
-            CASE_MAX(TYPE_BOOLEAN, BooleanColumn, uint8_t)
-            CASE_DEFAULT_WARNING(type)
-        }
-    }
-    case STORAGE_AGGREGATE_MIN: {
-        switch (type) {
-            CASE_MIN(TYPE_TINYINT, Int8Column, int8_t)
-            CASE_MIN(TYPE_SMALLINT, Int16Column, int16_t)
-            CASE_MIN(TYPE_INT, Int32Column, int32_t)
-            CASE_MIN(TYPE_BIGINT, Int64Column, int64_t)
-            CASE_MIN(TYPE_LARGEINT, Int128Column, int128_t)
-            CASE_MIN(TYPE_FLOAT, FloatColumn, float)
-            CASE_MIN(TYPE_DOUBLE, DoubleColumn, double)
-            CASE_MIN(TYPE_DECIMAL, DecimalColumn, DecimalV2Value)
-            CASE_MIN(TYPE_DECIMAL32, Decimal32Column, int32_t)
-            CASE_MIN(TYPE_DECIMAL64, Decimal64Column, int64_t)
-            CASE_MIN(TYPE_DECIMAL128, Decimal128Column, int128_t)
-            CASE_MIN(TYPE_DECIMALV2, DecimalColumn, DecimalV2Value)
-            CASE_MIN(TYPE_DATE_V1, DateColumn, DateValue)
-            CASE_MIN(TYPE_DATE, DateColumn, DateValue)
-            CASE_MIN(TYPE_DATETIME_V1, TimestampColumn, TimestampValue)
-            CASE_MIN(TYPE_DATETIME, TimestampColumn, TimestampValue)
-            CASE_MIN(TYPE_CHAR, BinaryColumn, SliceState)
-            CASE_MIN(TYPE_VARCHAR, BinaryColumn, SliceState)
-            CASE_MIN(TYPE_BOOLEAN, BooleanColumn, uint8_t)
-            CASE_DEFAULT_WARNING(type)
-        }
-    }
     case STORAGE_AGGREGATE_REPLACE:
     case STORAGE_AGGREGATE_REPLACE_IF_NOT_NULL: {
         switch (type) {
@@ -647,7 +369,9 @@ ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, StorageAggreg
             CASE_REPLACE(TYPE_VARCHAR, BinaryColumn, SliceState)
             CASE_REPLACE(TYPE_VARBINARY, BinaryColumn, SliceState)
             CASE_REPLACE(TYPE_BOOLEAN, BooleanColumn, uint8_t)
-            CASE_REPLACE(TYPE_ARRAY, ArrayColumn, ArrayState)
+            CASE_REPLACE(TYPE_ARRAY, ArrayColumn, ColumnRefState)
+            CASE_REPLACE(TYPE_MAP, MapColumn, ColumnRefState)
+            CASE_REPLACE(TYPE_STRUCT, StructColumn, ColumnRefState)
             CASE_REPLACE(TYPE_HLL, HyperLogLogColumn, HyperLogLog)
             CASE_REPLACE(TYPE_OBJECT, BitmapColumn, BitmapValue)
             CASE_REPLACE(TYPE_PERCENTILE, PercentileColumn, PercentileValue)
@@ -655,30 +379,7 @@ ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, StorageAggreg
             CASE_DEFAULT_WARNING(type)
         }
     }
-    case STORAGE_AGGREGATE_HLL_UNION: {
-        switch (type) {
-        case TYPE_HLL: {
-            return std::make_unique<HllUnionAggregator>();
-        }
-            CASE_DEFAULT_WARNING(type)
-        }
-    }
-    case STORAGE_AGGREGATE_BITMAP_UNION: {
-        switch (type) {
-        case TYPE_OBJECT: {
-            return std::make_unique<BitmapUnionAggregator>();
-        }
-            CASE_DEFAULT_WARNING(type)
-        }
-    }
-    case STORAGE_AGGREGATE_PERCENTILE_UNION: {
-        switch (type) {
-        case TYPE_PERCENTILE: {
-            return std::make_unique<PercentileUnionAggregator>();
-        }
-            CASE_DEFAULT_WARNING(type)
-        }
-    }
+    default:
     case STORAGE_AGGREGATE_NONE:
         CHECK(false) << "invalid aggregate method: STORAGE_AGGREGATE_NONE";
     case STORAGE_AGGREGATE_UNKNOWN:
@@ -687,7 +388,7 @@ ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, StorageAggreg
     return nullptr;
 }
 
-ColumnAggregatorPtr ColumnAggregatorFactory::create_key_column_aggregator(const starrocks::VectorizedFieldPtr& field) {
+ColumnAggregatorPtr ColumnAggregatorFactory::create_key_column_aggregator(const starrocks::FieldPtr& field) {
     LogicalType type = field->type()->type();
     starrocks::StorageAggregateType method = field->aggregate_method();
     if (method != STORAGE_AGGREGATE_NONE) {
@@ -712,8 +413,7 @@ ColumnAggregatorPtr ColumnAggregatorFactory::create_key_column_aggregator(const 
     }
 }
 
-ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(
-        const starrocks::VectorizedFieldPtr& field) {
+ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(const starrocks::FieldPtr& field) {
     LogicalType type = field->type()->type();
     starrocks::StorageAggregateType method = field->aggregate_method();
     if (method == STORAGE_AGGREGATE_NONE) {
@@ -726,13 +426,37 @@ ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(
         } else {
             return p;
         }
-    } else {
+    } else if (method == STORAGE_AGGREGATE_REPLACE_IF_NOT_NULL) {
         auto p = create_value_aggregator(type, method);
         if (field->is_nullable()) {
             return std::make_unique<ValueNullableColumnAggregator>(std::move(p));
         } else {
             return p;
         }
+    } else {
+        auto func_name = get_string_by_aggregation_type(method);
+        // TODO(alvin): To keep compatible with old code, when type must not be the legacy type,
+        // the following convert can be deleted.
+        auto normalized_tpe = type;
+        switch (type) {
+        case TYPE_DATE_V1:
+            normalized_tpe = TYPE_DATE;
+            break;
+        case TYPE_DATETIME_V1:
+            normalized_tpe = TYPE_DATETIME;
+            break;
+        case TYPE_DECIMAL:
+            normalized_tpe = TYPE_DECIMALV2;
+            break;
+        default:
+            break;
+        }
+
+        auto agg_func = AggregateFuncResolver::instance()->get_aggregate_info(func_name, normalized_tpe, normalized_tpe,
+                                                                              false, field->is_nullable());
+        CHECK(agg_func != nullptr) << "Unknown aggregate function, name=" << func_name << ", type=" << type
+                                   << ", is_nullable=" << field->is_nullable();
+        return std::make_unique<AggFuncBasedValueAggregator>(agg_func);
     }
 }
 } // namespace starrocks

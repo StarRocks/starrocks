@@ -27,6 +27,7 @@ import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 
 import java.nio.ByteBuffer;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -51,6 +52,11 @@ public class DecodeNode extends PlanNode {
     @Override
     public boolean canUsePipeLine() {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
+    }
+
+    @Override
+    public boolean canUseRuntimeAdaptiveDop() {
+        return getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
     }
 
     @Override
@@ -91,9 +97,12 @@ public class DecodeNode extends PlanNode {
     @Override
     protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
         TNormalDecodeNode decodeNode = new TNormalDecodeNode();
-        List<Integer> fromDictIds = dictIdToStringIds.keySet().stream().sorted(Integer::compareTo)
+        List<Pair<SlotId, SlotId>> dictIdAndStrIdPairs = dictIdToStringIds.entrySet().stream().map(
+                e -> Pair.create(normalizer.remapSlotId(new SlotId(e.getKey())), new SlotId(e.getValue()))
+        ).sorted(Comparator.comparing(p -> p.first.asInt())).collect(Collectors.toList());
+        List<Integer> fromDictIds = dictIdAndStrIdPairs.stream().map(p -> p.first.asInt())
                 .collect(Collectors.toList());
-        List<Integer> toStringIds = fromDictIds.stream().map(dictIdToStringIds::get)
+        List<Integer> toStringIds = dictIdAndStrIdPairs.stream().map(p -> normalizer.remapSlotId(p.second).asInt())
                 .collect(Collectors.toList());
         decodeNode.setFrom_dict_ids(fromDictIds);
         decodeNode.setTo_string_ids(toStringIds);

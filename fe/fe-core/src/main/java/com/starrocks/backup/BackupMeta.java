@@ -86,10 +86,9 @@ public class BackupMeta implements Writable, GsonPostProcessable {
         return tblIdMap.get(tblId);
     }
 
-    public static BackupMeta fromFile(String filePath, int metaVersion, int starrocksMetaVersion) throws IOException {
+    public static BackupMeta fromFile(String filePath, int starrocksMetaVersion) throws IOException {
         File file = new File(filePath);
         MetaContext metaContext = new MetaContext();
-        metaContext.setMetaVersion(metaVersion);
         metaContext.setStarRocksMetaVersion(starrocksMetaVersion);
         metaContext.setThreadLocalInfo();
         try (DataInputStream dis = new DataInputStream(new FileInputStream(file))) {

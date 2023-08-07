@@ -23,6 +23,7 @@
 #include "gen_cpp/data.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "storage/delta_writer.h"
 #include "util/brpc_stub_cache.h"
 #include "util/raw_container.h"
@@ -77,6 +78,12 @@ Status ReplicateChannel::_init() {
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
     }
+    _mem_tracker = GlobalEnv::GetInstance()->load_mem_tracker();
+    if (!_mem_tracker) {
+        auto msg = fmt::format("Failed to get load mem tracker for {} failed.", debug_string().c_str());
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
     return Status::OK();
 }
 
@@ -120,7 +127,7 @@ Status ReplicateChannel::async_segment(SegmentPB* segment, butil::IOBuf& data, b
     _send_request(segment, data, eos);
 
     // 4. wait if eos=true
-    if (eos) {
+    if (eos || _mem_tracker->limit_exceeded()) {
         RETURN_IF_ERROR(_wait_response(replicate_tablet_infos, failed_tablet_infos));
     }
 
@@ -142,11 +149,15 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
     _closure->ref();
     _closure->reset();
     _closure->cntl.set_timeout_ms(_opt->timeout_ms);
+    _closure->cntl.ignore_eovercrowded();
 
     if (segment != nullptr) {
         request.set_allocated_segment(segment);
         _closure->cntl.request_attachment().append(data);
     }
+    _closure->request_size = _closure->cntl.request_attachment().size();
+    // brpc send buffer is also considered as part of the memory used by load
+    _mem_tracker->consume(_closure->request_size);
 
     _stub->tablet_writer_add_segment(&_closure->cntl, &request, &_closure->result, _closure);
 
@@ -159,6 +170,7 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
 Status ReplicateChannel::_wait_response(std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
                                         std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos) {
     if (_closure->join()) {
+        _mem_tracker->release(_closure->request_size);
         if (_closure->cntl.Failed()) {
             _st = Status::InternalError(_closure->cntl.ErrorText());
             LOG(WARNING) << "Failed to send rpc to " << debug_string() << " err=" << _st;
@@ -200,6 +212,7 @@ ReplicateToken::ReplicateToken(std::unique_ptr<ThreadPoolToken> replicate_pool_t
     for (size_t i = 1; i < opt->replicas.size(); ++i) {
         _replicate_channels.emplace_back(std::make_unique<ReplicateChannel>(
                 opt, opt->replicas[i].host(), opt->replicas[i].port(), opt->replicas[i].node_id()));
+        _replica_node_ids.emplace_back(opt->replicas[i].node_id());
     }
     if (opt->write_quorum == WriteQuorumTypePB::ONE) {
         _max_fail_replica_num = opt->replicas.size();
@@ -220,9 +233,6 @@ Status ReplicateToken::submit(std::unique_ptr<SegmentPB> segment, bool eos) {
 }
 
 void ReplicateToken::cancel(const Status& st) {
-    for (auto& channel : _replicate_channels) {
-        channel->cancel();
-    }
     set_status(st);
 }
 
@@ -282,6 +292,23 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
                 return set_status(st);
             }
         }
+        if (segment->has_update_path()) {
+            auto res = _fs->new_random_access_file(segment->update_path());
+            if (!res.ok()) {
+                LOG(WARNING) << "Failed to open update file " << segment->DebugString() << " by " << debug_string()
+                             << " err " << res.status();
+                return set_status(res.status());
+            }
+            auto rfile = std::move(res.value());
+            auto buf = new uint8[segment->update_data_size()];
+            data.append_user_data(buf, segment->update_data_size(), [](void* buf) { delete[](uint8*) buf; });
+            auto st = rfile->read_fully(buf, segment->update_data_size());
+            if (!st.ok()) {
+                LOG(WARNING) << "Failed to read delete file " << segment->DebugString() << " by " << debug_string()
+                             << " err " << st;
+                return set_status(st);
+            }
+        }
     }
 
     // 2. send segment to secondary replica
@@ -312,7 +339,7 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
 Status SegmentReplicateExecutor::init(const std::vector<DataDir*>& data_dirs) {
     int data_dir_num = static_cast<int>(data_dirs.size());
     int min_threads = std::max<int>(1, config::flush_thread_num_per_store);
-    int max_threads = data_dir_num * min_threads;
+    int max_threads = std::max(data_dir_num * min_threads, min_threads);
     return ThreadPoolBuilder("segment_replicate")
             .set_min_threads(min_threads)
             .set_max_threads(max_threads)

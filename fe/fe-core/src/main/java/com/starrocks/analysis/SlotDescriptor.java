@@ -36,14 +36,10 @@ package com.starrocks.analysis;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnStats;
-import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TSlotDescriptor;
@@ -77,7 +73,6 @@ public class SlotDescriptor {
     private int nullIndicatorByte;  // index into byte array
     private int nullIndicatorBit; // index within byte
     private int slotIdx;          // index within tuple struct
-    private int slotOffset;       // index within slot array list
 
     private ColumnStats stats;  // only set if 'column' isn't set
     // used for load to get more information of varchar and decimal
@@ -118,14 +113,6 @@ public class SlotDescriptor {
     public void setMultiRef(boolean isMultiRef) {
     }
 
-    public void setNullIndicatorByte(int nullIndicatorByte) {
-        this.nullIndicatorByte = nullIndicatorByte;
-    }
-
-    public void setNullIndicatorBit(int nullIndicatorBit) {
-        this.nullIndicatorBit = nullIndicatorBit;
-    }
-
     public SlotId getId() {
         return id;
     }
@@ -145,43 +132,12 @@ public class SlotDescriptor {
         this.type = type;
     }
 
-    public void setUsedSubfieldPosGroup(List<ImmutableList<Integer>> usedSubfieldPosGroup) {
-        Preconditions.checkArgument(type.isComplexType());
-        // type should be cloned from originType!
-        if (usedSubfieldPosGroup.isEmpty()) {
-            type.selectAllFields();
-            return;
-        }
-
-        for (List<Integer> usedSubfieldPos : usedSubfieldPosGroup) {
-            if (usedSubfieldPos.isEmpty()) {
-                type.selectAllFields();
-                return;
-            }
-            Type tmpType = type;
-            for (int i = 0; i < usedSubfieldPos.size(); i++) {
-                // we will always select the ItemType of ArrayType, so we don't mark it and skip it.
-                while (tmpType.isArrayType()) {
-                    tmpType = ((ArrayType)tmpType).getItemType();
-                }
-                int pos = usedSubfieldPos.get(i);
-                if (i == usedSubfieldPos.size() -1) {
-                    // last one, select children's all subfields
-                    tmpType.setSelectedField(pos, true);
-                } else {
-                    tmpType.setSelectedField(pos, false);
-                    if (tmpType.isStructType()) {
-                        tmpType = ((StructType)tmpType).getField(pos).getType();
-                    } else if (tmpType.isMapType()) {
-                        tmpType = pos == 0 ? ((MapType)tmpType).getKeyType() : ((MapType)tmpType).getValueType();
-                    }
-                }
-            }
-        }
-    }
-
     public Type getOriginType() {
         return originType;
+    }
+
+    public void setOriginType(Type type) {
+        this.originType = type;
     }
 
     public Column getColumn() {
@@ -222,18 +178,6 @@ public class SlotDescriptor {
         isNullable = value;
     }
 
-    public void setByteSize(int byteSize) {
-        this.byteSize = byteSize;
-    }
-
-    public void setByteOffset(int byteOffset) {
-        this.byteOffset = byteOffset;
-    }
-
-    public void setSlotIdx(int slotIdx) {
-        this.slotIdx = slotIdx;
-    }
-
     public void setStats(ColumnStats stats) {
         this.stats = stats;
     }
@@ -249,14 +193,6 @@ public class SlotDescriptor {
         return stats;
     }
 
-    public void setSlotOffset(int slotOffset) {
-        this.slotOffset = slotOffset;
-    }
-
-    public int getSlotOffset() {
-        return slotOffset;
-    }
-
     public String getLabel() {
         return label_;
     }
@@ -267,10 +203,6 @@ public class SlotDescriptor {
 
     public void setSourceExpr(Expr expr) {
         sourceExprs_ = Collections.singletonList(expr);
-    }
-
-    public void addSourceExpr(Expr expr) {
-        sourceExprs_.add(expr);
     }
 
     public List<Expr> getSourceExprs() {
@@ -293,11 +225,18 @@ public class SlotDescriptor {
 
     // TODO
     public TSlotDescriptor toThrift() {
-        if (originType != null && !originType.isComplexType()) {
+        if (isNullable) {
+            nullIndicatorBit = 1;
+        } else {
+            nullIndicatorBit = -1;
+        }
+        Preconditions.checkState(isMaterialized, "isMaterialized must be true");
+
+        if (originType != null) {
             return new TSlotDescriptor(id.asInt(), parent.getId().asInt(), originType.toThrift(), -1,
-                    byteOffset, nullIndicatorByte,
+                    -1, -1,
                     nullIndicatorBit, ((column != null) ? column.getName() : ""),
-                    slotIdx, isMaterialized);
+                    -1, true);
         } else {
             /**
              * Refer to {@link Expr#treeToThrift}
@@ -306,9 +245,9 @@ public class SlotDescriptor {
                 type = ScalarType.BOOLEAN;
             }
             return new TSlotDescriptor(id.asInt(), parent.getId().asInt(), type.toThrift(), -1,
-                    byteOffset, nullIndicatorByte,
+                    -1, -1,
                     nullIndicatorBit, ((column != null) ? column.getName() : ""),
-                    slotIdx, isMaterialized);
+                    -1, true);
         }
     }
 
@@ -327,26 +266,5 @@ public class SlotDescriptor {
     @Override
     public String toString() {
         return debugString();
-    }
-
-    public String getExplainString(String prefix) {
-        StringBuilder builder = new StringBuilder();
-        String colStr = (column == null ? "null" : column.getName());
-        String typeStr = (type == null ? "null" : type.toString());
-        String parentTupleId = (parent == null) ? "null" : parent.getId().toString();
-        builder.append(prefix).append("SlotDescriptor{")
-                .append("id=").append(id)
-                .append(", col=").append(colStr)
-                .append(", type=").append(typeStr).append("}\n");
-
-        prefix += "  ";
-        builder.append(prefix).append("parent=").append(parentTupleId).append("\n");
-        builder.append(prefix).append("materialized=").append(isMaterialized).append("\n");
-        builder.append(prefix).append("byteSize=").append(byteSize).append("\n");
-        builder.append(prefix).append("byteOffset=").append(byteOffset).append("\n");
-        builder.append(prefix).append("nullIndicatorByte=").append(nullIndicatorByte).append("\n");
-        builder.append(prefix).append("nullIndicatorBit=").append(nullIndicatorBit).append("\n");
-        builder.append(prefix).append("slotIdx=").append(slotIdx).append("\n");
-        return builder.toString();
     }
 }

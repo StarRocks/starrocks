@@ -21,6 +21,8 @@
 
 namespace starrocks {
 
+using Roaring = roaring::Roaring;
+
 // A bitmap(uint32_t set) to store all the deleted rows' ids of a segment.
 // Each DelVector is associated with a version, which is EditVersion's majar version.
 // Serialization format:
@@ -59,6 +61,8 @@ public:
 
     Roaring* roaring() { return _roaring.get(); }
 
+    void copy_from(const DelVector& delvec);
+
 private:
     void _add_dels(const std::vector<uint32_t>& dels);
 
@@ -72,5 +76,12 @@ private:
 };
 
 typedef std::shared_ptr<DelVector> DelVectorPtr;
+
+class DelvecLoader {
+public:
+    DelvecLoader() = default;
+    virtual ~DelvecLoader() = default;
+    virtual Status load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec) = 0;
+};
 
 } // namespace starrocks

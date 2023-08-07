@@ -22,6 +22,7 @@ core.*
 extension/spark-doris-connector/.classpath
 extension/spark-doris-connector/target
 fe/log
+**/ut_ports
 custom_env.sh
 ut_dir
 log/
@@ -32,9 +33,14 @@ fe/ut_ports
 fe/*/target
 fe/fe-core/gen
 fe/fe-common/.classpath
+fe/fe-core/src/main/java/com/starrocks/sql/parser/gen
 fs_brokers/apache_hdfs_broker/src/main/resources/
 fs_brokers/apache_hdfs_broker/src/main/thrift/
+fs_brokers/apache_hdfs_broker/jindosdk-4.6.2
 dependency-reduced-pom.xml
+test/conf/
+test/conf/sr.conf
+test/nosetests.xml
 tags
 .tags
 .cache
@@ -44,6 +50,7 @@ compile_commands.json
 .factorypath
 .classpath
 .vimspector.json
+.gdb_history
 
 # ignore generated files
 StarRocksLex.tokens
@@ -54,6 +61,7 @@ StarRocksLex.tokens
 .project
 .settings/
 .idea/
+.gradle/
 /Default/
 be/cmake-build*
 be/.vscode
@@ -61,6 +69,7 @@ be/src/gen_cpp/*.cc
 be/src/gen_cpp/*.cpp
 be/src/gen_cpp/*.h
 be/src/gen_cpp/opcode
+be/src/thirdparty/starcache/
 be/ut_build_ASAN/
 be/tags
 

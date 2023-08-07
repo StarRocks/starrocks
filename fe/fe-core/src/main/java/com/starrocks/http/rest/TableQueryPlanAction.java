@@ -34,6 +34,7 @@
 
 package com.starrocks.http.rest;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
@@ -44,8 +45,8 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
@@ -72,7 +73,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
-import org.codehaus.jackson.map.ObjectMapper;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -139,7 +139,7 @@ public class TableQueryPlanAction extends RestBaseAction {
                     sql, ConnectContext.get().getCurrentUserIdentity(), dbName, tableName);
 
             // check privilege for select, otherwise return HTTP 401
-            checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), dbName, tableName, PrivPredicate.SELECT);
+            checkTableAction(ConnectContext.get(), dbName, tableName, PrivilegeType.SELECT);
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db == null) {
                 throw new StarRocksHttpException(HttpResponseStatus.NOT_FOUND,
@@ -153,12 +153,11 @@ public class TableQueryPlanAction extends RestBaseAction {
                     throw new StarRocksHttpException(HttpResponseStatus.NOT_FOUND,
                             "Table [" + tableName + "] " + "does not exists");
                 }
-                // just only support OlapTable, ignore others such as ESTable
-                if (table.getType() != Table.TableType.OLAP) {
+                // just only support OlapTable, CloudNativeTable and MaterializedView, ignore others such as ESTable
+                if (!table.isNativeTableOrMaterializedView()) {
                     // Forbidden
                     throw new StarRocksHttpException(HttpResponseStatus.FORBIDDEN,
-                            "only support OlapTable currently, but Table [" + tableName + "] "
-                                    + "is not a OlapTable");
+                            "Only support OlapTable, CloudNativeTable and MaterializedView currently");
                 }
                 // parse/analysis/plan the sql and acquire tablet distributions
                 handleQuery(ConnectContext.get(), db.getFullName(), tableName, sql, resultMap);

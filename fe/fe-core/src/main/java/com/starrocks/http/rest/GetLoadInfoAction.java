@@ -41,8 +41,9 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.load.Load;
-import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.Authorizer;
 import io.netty.handler.codec.http.HttpMethod;
 
 // Get load information of one load job
@@ -74,14 +75,14 @@ public class GetLoadInfoAction extends RestBaseAction {
         }
 
         if (info.tblNames.isEmpty()) {
-            checkDbAuth(ConnectContext.get().getCurrentUserIdentity(), info.dbName, PrivPredicate.LOAD);
+            Authorizer.checkActionInDb(ConnectContext.get().getCurrentUserIdentity(),
+                    ConnectContext.get().getCurrentRoleIds(), info.dbName, PrivilegeType.INSERT);
         } else {
             for (String tblName : info.tblNames) {
-                checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), info.dbName, tblName,
-                        PrivPredicate.LOAD);
+                checkTableAction(ConnectContext.get(), info.dbName, tblName, PrivilegeType.INSERT);
             }
         }
-        globalStateMgr.getLoadManager().getLoadJobInfo(info);
+        globalStateMgr.getLoadMgr().getLoadJobInfo(info);
 
         sendResult(request, response, new Result(info));
     }

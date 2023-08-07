@@ -69,7 +69,8 @@ public:
         _query_ctx->set_query_expire_seconds(60);
         _query_ctx->extend_delivery_lifetime();
         _query_ctx->extend_query_lifetime();
-        _query_ctx->init_mem_tracker(_exec_env->query_pool_mem_tracker()->limit(), _exec_env->query_pool_mem_tracker());
+        _query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
+                                     GlobalEnv::GetInstance()->query_pool_mem_tracker());
         _query_ctx->set_query_trace(std::make_shared<starrocks::debug::QueryTrace>(query_id, false));
 
         _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
@@ -89,7 +90,7 @@ public:
         _runtime_state->set_fragment_ctx(_fragment_ctx);
         _pool = _runtime_state->obj_pool();
 
-        _context = _pool->add(new PipelineBuilderContext(_fragment_ctx, degree_of_parallelism));
+        _context = _pool->add(new PipelineBuilderContext(_fragment_ctx, degree_of_parallelism, false));
         _builder = _pool->add(new PipelineBuilder(*_context));
     }
 
@@ -194,7 +195,6 @@ std::shared_ptr<TPlanNode> PipeLineFileScanNodeTest::_create_tplan_node() {
     tnode->__set_node_type(TPlanNodeType::FILE_SCAN_NODE);
     tnode->__set_row_tuples(tuple_ids);
     tnode->__set_nullable_tuples(nullable_tuples);
-    tnode->__set_use_vectorized(true);
     tnode->__set_limit(-1);
 
     TConnectorScanNode connector_scan_node;
@@ -252,7 +252,7 @@ void PipeLineFileScanNodeTest::execute_pipeline() {
     ASSERT_TRUE(prepare_status.ok());
 
     _fragment_ctx->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {
-        exec_env->driver_executor()->submit(driver.get());
+        exec_env->wg_driver_executor()->submit(driver.get());
         return Status::OK();
     });
 }
@@ -398,13 +398,13 @@ TEST_F(PipeLineFileScanNodeTest, CSVBasic) {
 
     auto tnode = _create_tplan_node();
     auto* descs = _create_table_desc(types);
-    auto file_scan_node = std::make_shared<starrocks::ConnectorScanNode>(_pool, *tnode, *descs);
+    auto file_scan_node = _pool->add(new starrocks::ConnectorScanNode(_pool, *tnode, *descs));
 
     Status status = file_scan_node->init(*tnode, _runtime_state);
     ASSERT_TRUE(status.ok());
 
     auto scan_ranges = _create_csv_scan_ranges(types);
-    generate_morse_queue({file_scan_node.get()}, scan_ranges);
+    generate_morse_queue({file_scan_node}, scan_ranges);
 
     starrocks::pipeline::CounterPtr sinkCounter = std::make_shared<starrocks::pipeline::FileScanCounter>();
 

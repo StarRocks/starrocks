@@ -16,6 +16,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -25,12 +26,14 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.io.Text;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.THdfsPartition;
@@ -92,16 +95,20 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         COW, MOR, UNKNOWN
     }
 
-    private String resourceName;
     private String catalogName;
+    @SerializedName(value = "dn")
     private String hiveDbName;
+    @SerializedName(value = "tn")
     private String hiveTableName;
-
+    @SerializedName(value = "rn")
+    private String resourceName;
+    @SerializedName(value = "pcn")
     private List<String> partColumnNames = Lists.newArrayList();
     // dataColumnNames stores all the non-partition columns of the hudi table,
     // consistent with the order defined in the hudi table
+    @SerializedName(value = "dcn")
     private List<String> dataColumnNames = Lists.newArrayList();
-
+    @SerializedName(value = "prop")
     private Map<String, String> hudiProperties = Maps.newHashMap();
 
     public HudiTable() {
@@ -153,6 +160,15 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
+    public String getUUID() {
+        if (CatalogMgr.isExternalCatalog(catalogName)) {
+            return String.join(".", catalogName, hiveDbName, hiveTableName, Long.toString(createTime));
+        } else {
+            return Long.toString(id);
+        }
+    }
+
+    @Override
     public List<Column> getPartitionColumns() {
         return partColumnNames.stream()
                 .map(name -> nameToColumn.get(name))
@@ -175,7 +191,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public String getTableIdentifier() {
-        return Joiner.on(":").join(hiveTableName, createTime);
+        return Joiner.on(":").join(name, createTime);
     }
 
     public static HudiTableType fromInputFormat(String inputFormat) {
@@ -268,7 +284,6 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         tHudiTable.setHive_column_types(hudiProperties.get(HUDI_TABLE_COLUMN_TYPES));
         tHudiTable.setInput_format(hudiProperties.get(HUDI_TABLE_INPUT_FOAMT));
         tHudiTable.setSerde_lib(hudiProperties.get(HUDI_TABLE_SERDE_LIB));
-        tHudiTable.setIs_mor_table(getTableType() == HoodieTableType.MERGE_ON_READ);
 
         TTableDescriptor tTableDescriptor =
                 new TTableDescriptor(id, TTableType.HUDI_TABLE, fullSchema.size(), 0, hiveTableName, hiveDbName);
@@ -379,6 +394,25 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         sb.append(", createTime=").append(createTime);
         sb.append('}');
         return sb.toString();
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(getCatalogName(), hiveDbName, getTableIdentifier());
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        if (!(other instanceof HudiTable)) {
+            return false;
+        }
+
+        HudiTable otherTable = (HudiTable) other;
+        String catalogName = getCatalogName();
+        String tableIdentifier = getTableIdentifier();
+        return Objects.equal(catalogName, otherTable.getCatalogName()) &&
+                Objects.equal(hiveDbName, otherTable.hiveDbName) &&
+                Objects.equal(tableIdentifier, otherTable.getTableIdentifier());
     }
 
     public static Builder builder() {

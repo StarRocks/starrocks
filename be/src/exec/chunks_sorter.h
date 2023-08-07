@@ -14,15 +14,21 @@
 
 #pragma once
 
+#include <memory>
+
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
+#include "exec/pipeline/spill_process_channel.h"
 #include "exec/sort_exec_exprs.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
+#include "exec/spill/executor.h"
+#include "exec/spill/spiller.h"
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -105,28 +111,46 @@ public:
                                                             const SortExecExprs& sort_exec_exprs,
                                                             const std::vector<OrderByType>& order_by_types);
 
-    virtual void setup_runtime(RuntimeProfile* profile);
+    virtual void setup_runtime(RuntimeState* state, RuntimeProfile* profile, MemTracker* parent_mem_tracker);
+
+    void set_spiller(std::shared_ptr<spill::Spiller> spiller) { _spiller = std::move(spiller); }
+
+    void set_spill_channel(SpillProcessChannelPtr channel) { _spill_channel = std::move(channel); }
+    const SpillProcessChannelPtr& spill_channel() { return _spill_channel; }
+    auto& io_executor() { return *spill_channel()->io_executor(); }
 
     // Append a Chunk for sort.
     virtual Status update(RuntimeState* state, const ChunkPtr& chunk) = 0;
     // Finish seeding Chunk, and get sorted data with top OFFSET rows have been skipped.
-    virtual Status done(RuntimeState* state) = 0;
+    virtual Status do_done(RuntimeState* state) = 0;
+
+    Status done(RuntimeState* state);
+
     // get_next only works after done().
     virtual Status get_next(ChunkPtr* chunk, bool* eos) = 0;
 
+    // RuntimeFilter generate by ChunkSorter only works in TopNSorter and HeapSorter
     virtual std::vector<JoinRuntimeFilter*>* runtime_filters(ObjectPool* pool) { return nullptr; }
-
-    // Return sorted data in multiple runs(Avoid merge them into a big chunk)
-    virtual SortedRuns get_sorted_runs() = 0;
 
     // Return accurate output rows of this operator
     virtual size_t get_output_rows() const = 0;
 
-    Status finish(RuntimeState* state);
-
-    bool sink_complete();
-
     virtual int64_t mem_usage() const = 0;
+
+    virtual bool is_full() { return false; }
+
+    virtual bool has_pending_data() { return false; }
+
+    bool has_output() { return spiller() == nullptr || !spiller()->spilled() || spiller()->has_output_data(); }
+
+    const std::shared_ptr<spill::Spiller>& spiller() const { return _spiller; }
+
+    size_t revocable_mem_bytes() const { return _revocable_mem_bytes; }
+    void set_spill_stragety(spill::SpillStrategy stragety) { _spill_strategy = stragety; }
+
+    virtual size_t reserved_bytes(const ChunkPtr& chunk) { return chunk != nullptr ? chunk->memory_usage() : 0; }
+
+    virtual void cancel() {}
 
 protected:
     size_t _get_number_of_order_by_columns() const { return _sort_exprs->size(); }
@@ -146,34 +170,38 @@ protected:
     RuntimeProfile::Counter* _merge_timer = nullptr;
     RuntimeProfile::Counter* _output_timer = nullptr;
 
-    std::atomic<bool> _is_sink_complete = false;
+    size_t _revocable_mem_bytes = 0;
+    spill::SpillStrategy _spill_strategy = spill::SpillStrategy::NO_SPILL;
+    std::shared_ptr<spill::Spiller> _spiller;
+    SpillProcessChannelPtr _spill_channel;
 };
 
 namespace detail {
 struct SortRuntimeFilterBuilder {
-    template <LogicalType ptype>
-    JoinRuntimeFilter* operator()(ObjectPool* pool, const ColumnPtr& column, int rid, bool asc) {
+    template <LogicalType ltype>
+    JoinRuntimeFilter* operator()(ObjectPool* pool, const ColumnPtr& column, int rid, bool asc,
+                                  bool is_close_interval) {
         auto data_column = ColumnHelper::get_data_column(column.get());
-        auto runtime_data_column = down_cast<RunTimeColumnType<ptype>*>(data_column);
+        auto runtime_data_column = down_cast<RunTimeColumnType<ltype>*>(data_column);
         auto data = runtime_data_column->get_data()[rid];
         if (asc) {
-            return RuntimeBloomFilter<ptype>::template create_with_range<false>(pool, data);
+            return RuntimeBloomFilter<ltype>::template create_with_range<false>(pool, data, is_close_interval);
         } else {
-            return RuntimeBloomFilter<ptype>::template create_with_range<true>(pool, data);
+            return RuntimeBloomFilter<ltype>::template create_with_range<true>(pool, data, is_close_interval);
         }
     }
 };
 
 struct SortRuntimeFilterUpdater {
-    template <LogicalType ptype>
+    template <LogicalType ltype>
     std::nullptr_t operator()(JoinRuntimeFilter* filter, const ColumnPtr& column, int rid, bool asc) {
         auto data_column = ColumnHelper::get_data_column(column.get());
-        auto runtime_data_column = down_cast<RunTimeColumnType<ptype>*>(data_column);
+        auto runtime_data_column = down_cast<RunTimeColumnType<ltype>*>(data_column);
         auto data = runtime_data_column->get_data()[rid];
         if (asc) {
-            down_cast<RuntimeBloomFilter<ptype>*>(filter)->template update_min_max<false>(data);
+            down_cast<RuntimeBloomFilter<ltype>*>(filter)->template update_min_max<false>(data);
         } else {
-            down_cast<RuntimeBloomFilter<ptype>*>(filter)->template update_min_max<true>(data);
+            down_cast<RuntimeBloomFilter<ltype>*>(filter)->template update_min_max<true>(data);
         }
         return nullptr;
     }

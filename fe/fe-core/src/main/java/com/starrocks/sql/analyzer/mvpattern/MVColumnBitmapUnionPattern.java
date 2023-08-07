@@ -64,13 +64,7 @@ public class MVColumnBitmapUnionPattern implements MVColumnPattern {
             if (!child0FnExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.TO_BITMAP)) {
                 return false;
             }
-            SlotRef slotRef = child0FnExpr.getChild(0).unwrapSlotRef();
-            if (slotRef == null) {
-                return false;
-            } else if (slotRef.getType().isIntegerType()) {
-                return true;
-            }
-            return false;
+            return true;
         } else {
             return false;
         }

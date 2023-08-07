@@ -15,8 +15,7 @@
 
 package com.starrocks.connector.hudi;
 
-import com.google.common.base.Preconditions;
-import com.starrocks.common.util.Util;
+import com.google.common.collect.Lists;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -25,11 +24,15 @@ import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.hive.IHiveMetastore;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.server.GlobalStateMgr;
 
+import java.util.List;
 import java.util.Map;
 
 public class HudiConnector implements Connector {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
+    public static final String HIVE_METASTORE_TYPE = "hive.metastore.type";
+    public static final List<String> SUPPORTED_METASTORE_TYPE = Lists.newArrayList("hive", "glue", "dlf");
     private final Map<String, String> properties;
     private final CloudConfiguration cloudConfiguration;
     private final String catalogName;
@@ -38,19 +41,12 @@ public class HudiConnector implements Connector {
 
     public HudiConnector(ConnectorContext context) {
         this.properties = context.getProperties();
-        this.cloudConfiguration = CloudConfigurationFactory.tryBuildForStorage(properties);
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(null, cloudConfiguration);
+        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.catalogName = context.getCatalogName();
         this.internalMgr = new HudiConnectorInternalMgr(catalogName, properties, hdfsEnvironment);
-        this.metadataFactory = createMetadataFactory();
-        validate();
+        this.metadataFactory = createMetadataFactory(hdfsEnvironment);
         onCreate();
-    }
-
-    public void validate() {
-        String hiveMetastoreUris = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
-                "%s must be set in properties when creating hudi catalog", HIVE_METASTORE_URIS);
-        Util.validateMetastoreUris(hiveMetastoreUris);
     }
 
     @Override
@@ -58,7 +54,7 @@ public class HudiConnector implements Connector {
         return metadataFactory.create();
     }
 
-    private HudiMetadataFactory createMetadataFactory() {
+    private HudiMetadataFactory createMetadataFactory(HdfsEnvironment hdfsEnvironment) {
         IHiveMetastore metastore = internalMgr.createHiveMetastore();
         RemoteFileIO remoteFileIO = internalMgr.createRemoteFileIO();
         return new HudiMetadataFactory(
@@ -68,7 +64,9 @@ public class HudiConnector implements Connector {
                 internalMgr.getHiveMetastoreConf(),
                 internalMgr.getRemoteFileConf(),
                 internalMgr.getPullRemoteFileExecutor(),
-                internalMgr.isSearchRecursive()
+                internalMgr.isSearchRecursive(),
+                hdfsEnvironment.getConfiguration(),
+                internalMgr.getMetastoreType()
         );
     }
 
@@ -82,5 +80,6 @@ public class HudiConnector implements Connector {
     @Override
     public void shutdown() {
         internalMgr.shutdown();
+        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogName);
     }
 }

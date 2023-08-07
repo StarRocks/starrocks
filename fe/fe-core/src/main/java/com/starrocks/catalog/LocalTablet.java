@@ -34,7 +34,7 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.collect.HashMultimap;
+import com.google.common.collect.LinkedHashMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
@@ -73,9 +73,8 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         HEALTHY,
         REPLICA_MISSING, // not enough alive replica num.
         VERSION_INCOMPLETE, // alive replica num is enough, but version is missing.
-        REPLICA_RELOCATING, // replica is healthy, but is under relocating (eg. BE is decommission).
+        REPLICA_RELOCATING, // replica is healthy, but is under relocating (e.g. BE is decommission).
         REDUNDANT, // too much replicas.
-        REPLICA_MISSING_IN_CLUSTER, // not enough healthy replicas in correct cluster.
         FORCE_REDUNDANT, // some replica is missing or bad, but there is no other backends for repair,
         // at least one replica has to be deleted first to make room for new replica.
         COLOCATE_MISMATCH, // replicas do not all locate in right colocate backends set.
@@ -97,7 +96,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     @SerializedName(value = "isConsistent")
     private boolean isConsistent;
 
-    // last time that the tablet checker checks this tablet.
+    // last time that the TabletChecker checks this tablet.
     // no need to persist
     private long lastStatusCheckTime = -1;
 
@@ -171,6 +170,18 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         addReplica(replica, true);
     }
 
+    public int getErrorStateReplicaNum() {
+        int num = 0;
+        Iterator<Replica> iterator = replicas.iterator();
+        while (iterator.hasNext()) {
+            Replica replica = iterator.next();
+            if (replica.isErrorState()) {
+                num++;
+            }
+        }
+        return num;
+    }
+
     /**
      * @return Immutable list of replicas
      * notice: the list is immutable, not replica
@@ -196,7 +207,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         List<String> backends = new ArrayList<String>();
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
         for (Replica replica : replicas) {
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+            Backend backend = infoService.getBackend(replica.getBackendId());
             if (backend == null) {
                 continue;
             }
@@ -224,7 +235,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
     // return map of (BE id -> path hash) of normal replicas
     public Multimap<Replica, Long> getNormalReplicaBackendPathMap(int clusterId) {
-        Multimap<Replica, Long> map = HashMultimap.create();
+        Multimap<Replica, Long> map = LinkedHashMultimap.create();
         SystemInfoService infoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(clusterId);
         for (Replica replica : replicas) {
             if (replica.isBad()) {
@@ -242,7 +253,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
     // for query
     @Override
-    public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
+    public void getQueryableReplicas(List<Replica> allQueryableReplicas, List<Replica> localReplicas,
                                      long visibleVersion, long localBeId, int schemaHash) {
         for (Replica replica : replicas) {
             if (replica.isBad()) {
@@ -260,7 +271,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                 if (replica.checkVersionCatchUp(visibleVersion, false)
                         && replica.getMinReadableVersion() <= visibleVersion
                         && (replica.getSchemaHash() == -1 || replica.getSchemaHash() == schemaHash)) {
-                    allQuerableReplicas.add(replica);
+                    allQueryableReplicas.add(replica);
                     if (localBeId != -1 && replica.getBackendId() == localBeId) {
                         localReplicas.add(replica);
                     }
@@ -338,22 +349,6 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         }
     }
 
-    @Deprecated
-    public Replica deleteReplicaById(long replicaId) {
-        synchronized (replicas) {
-            Iterator<Replica> iterator = replicas.iterator();
-            while (iterator.hasNext()) {
-                Replica replica = iterator.next();
-                if (replica.getId() == replicaId) {
-                    LOG.info("delete replica[" + replica.getId() + "]");
-                    iterator.remove();
-                    return replica;
-                }
-            }
-            return null;
-        }
-    }
-
     // for test,
     // and for some replay cases
     public void clearReplica() {
@@ -392,11 +387,9 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             }
         }
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= 6) {
-            checkedVersion = in.readLong();
-            in.readLong(); // read a version_hash for compatibility
-            isConsistent = in.readBoolean();
-        }
+        checkedVersion = in.readLong();
+        in.readLong(); // read a version_hash for compatibility
+        isConsistent = in.readBoolean();
     }
 
     public static LocalTablet read(DataInput in) throws IOException {
@@ -483,6 +476,41 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     /**
+     * For certain deployment, like k8s pods + pvc, the replica is not lost even the
+     * corresponding backend is detected as dead, because the replica data is persisted
+     * on a pvc which is backed by a remote storage service, such as AWS EBS. And later,
+     * k8s control place will schedule a new pod and attach the pvc to it which will
+     * restore the replica to a {@link ReplicaState#NORMAL} state immediately. But normally
+     * the {@link com.starrocks.clone.TabletScheduler} of Starrocks will start to schedule
+     * {@link TabletStatus#REPLICA_MISSING} tasks and create new replicas in a short time.
+     * After new pod scheduling is completed, {@link com.starrocks.clone.TabletScheduler} has
+     * to delete the redundant healthy replica which cause resource waste and may also affect
+     * the loading process.
+     *
+     * <p>This method checks whether the corresponding backend of tablet replica is dead or not.
+     * Only when the backend has been dead for {@link Config#tablet_sched_be_down_tolerate_time_s}
+     * seconds, will this method returns true.
+     */
+    private boolean isReplicaBackendDead(Backend backend) {
+        long currentTimeMs = System.currentTimeMillis();
+        assert backend != null;
+        return !backend.isAlive() &&
+                (currentTimeMs - backend.getLastUpdateMs() > Config.tablet_sched_be_down_tolerate_time_s * 1000);
+    }
+
+    private boolean isReplicaBackendDropped(Backend backend) {
+        return backend == null;
+    }
+
+    private boolean isReplicaStateAbnormal(Replica replica, Backend backend, Set<String> replicaHostSet) {
+        assert backend != null && replica != null;
+        return replica.getState() == ReplicaState.CLONE
+                || replica.getState() == ReplicaState.DECOMMISSION
+                || replica.isBad()
+                || !replicaHostSet.add(backend.getHost());
+    }
+
+    /**
      * A replica is healthy only if
      * 1. the backend is available
      * 2. replica version is caught up, and last failed version is -1
@@ -499,15 +527,14 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         int alive = 0;
         int aliveAndVersionComplete = 0;
         int stable = 0;
-        int availableInCluster = 0;
 
         Replica needFurtherRepairReplica = null;
         Set<String> hosts = Sets.newHashSet();
         for (Replica replica : replicas) {
             Backend backend = systemInfoService.getBackend(replica.getBackendId());
-            if (backend == null || !backend.isAlive() || replica.getState() == ReplicaState.CLONE
-                    || replica.getState() == ReplicaState.DECOMMISSION
-                    || replica.isBad() || !hosts.add(backend.getHost())) {
+            if (isReplicaBackendDropped(backend)
+                    || isReplicaBackendDead(backend)
+                    || isReplicaStateAbnormal(replica, backend, hosts)) {
                 // this replica is not alive,
                 // or if this replica is on same host with another replica, we also treat it as 'dead',
                 // so that Tablet Scheduler will create a new replica on different host.
@@ -526,13 +553,11 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             }
             aliveAndVersionComplete++;
 
-            if (!backend.isAvailable()) {
+            if (backend.isDecommissioned()) {
                 // this replica is alive, version complete, but backend is not available
                 continue;
             }
             stable++;
-
-            availableInCluster++;
         }
 
         // 1. alive replicas are not enough
@@ -545,8 +570,10 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             // condition explain:
             // 1. alive < replicationNum: replica is missing or bad
             // 2. replicas.size() >= aliveBackendsNum: the existing replicas occupies all available backends
-            // 3. aliveBackendsNum >= replicationNum: make sure after deleting, there will be at least one backend for new replica.
+            // 3. aliveBackendsNum >= replicationNum: make sure after deleting, there will be
+            //    at least one backend for new replica.
             // 4. replicationNum > 1: if replication num is set to 1, do not delete any replica, for safety reason
+            // For example: 3 replica, 3 be, one set bad, we need to forcefully delete one first
             return createRedundantSchedCtx(TabletStatus.FORCE_REDUNDANT, TabletSchedCtx.Priority.VERY_HIGH,
                     needFurtherRepairReplica);
         } else {
@@ -584,7 +611,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                     .collect(Collectors.toList());
             if (replicaBeIds.containsAll(availableBeIds)
                     && availableBeIds.size() >= replicationNum
-                    && replicationNum > 1) { // No BE can be choose to create a new replica
+                    && replicationNum > 1) { // Doesn't have any BE that can be chosen to create a new replica
                 return createRedundantSchedCtx(TabletStatus.FORCE_REDUNDANT,
                         stable < (replicationNum / 2) + 1 ? TabletSchedCtx.Priority.NORMAL :
                                 TabletSchedCtx.Priority.LOW, needFurtherRepairReplica);
@@ -596,10 +623,8 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             }
         }
 
-        // 4. healthy replicas in cluster are not enough
-        if (availableInCluster < replicationNum) {
-            return Pair.create(TabletStatus.REPLICA_MISSING_IN_CLUSTER, TabletSchedCtx.Priority.LOW);
-        } else if (replicas.size() > replicationNum) {
+        // 4. replica redundant
+        if (replicas.size() > replicationNum) {
             // we set REDUNDANT as VERY_HIGH, because delete redundant replicas can free the space quickly.
             return createRedundantSchedCtx(TabletStatus.REDUNDANT, TabletSchedCtx.Priority.VERY_HIGH,
                     needFurtherRepairReplica);
@@ -644,7 +669,8 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         // 1. check if replicas' backends are mismatch
         Set<Long> replicaBackendIds = getBackendIds();
         for (Long backendId : backendsSet) {
-            if (!replicaBackendIds.contains(backendId)) {
+            if (!replicaBackendIds.contains(backendId)
+                    && containsAnyHighPrioBackend(replicaBackendIds, Config.tablet_sched_colocate_balance_high_prio_backends)) {
                 return TabletStatus.COLOCATE_MISMATCH;
             }
         }
@@ -652,13 +678,16 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         // 2. check version completeness
         for (Replica replica : replicas) {
             // do not check the replica that is not in the colocate backend set,
-            // this kind of replica should be drooped.
+            // this kind of replica should be dropped.
             if (!backendsSet.contains(replica.getBackendId())) {
                 continue;
             }
 
             if (replica.isBad()) {
-                return TabletStatus.COLOCATE_MISMATCH;
+                LOG.debug("colocate tablet {} has bad replica, need to drop-then-repair, " +
+                        "current backend set: {}, visible version: {}", id, backendsSet, visibleVersion);
+                // we use `TabletScheduler#handleColocateRedundant()` to drop bad replica forcefully.
+                return TabletStatus.COLOCATE_REDUNDANT;
             }
 
             if (replica.getLastFailedVersion() > 0 || replica.getVersion() < visibleVersion) {
@@ -675,11 +704,25 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         return TabletStatus.HEALTHY;
     }
 
+    private boolean containsAnyHighPrioBackend(Set<Long> backendIds, long[] highPriorityBackendIds) {
+        if (highPriorityBackendIds == null || highPriorityBackendIds.length == 0) {
+            return true;
+        }
+
+        for (long beId : highPriorityBackendIds) {
+            if (backendIds.contains(beId)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * check if this tablet is ready to be repaired, based on priority.
      * VERY_HIGH: repair immediately
      * HIGH:    delay Config.tablet_repair_delay_factor_second * 1;
-     * NORNAL:  delay Config.tablet_repair_delay_factor_second * 2;
+     * NORMAL:  delay Config.tablet_repair_delay_factor_second * 2;
      * LOW:     delay Config.tablet_repair_delay_factor_second * 3;
      */
     public boolean readyToBeRepaired(TabletStatus status, TabletSchedCtx.Priority priority) {
@@ -722,8 +765,9 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     public String getReplicaInfos() {
         StringBuilder sb = new StringBuilder();
         for (Replica replica : replicas) {
-            sb.append(String.format("%d:%d/%d/%d,", replica.getBackendId(), replica.getVersion(),
-                    replica.getLastFailedVersion(), replica.getLastSuccessVersion()));
+            sb.append(String.format("%d:%d/%d/%d/%d:%s,", replica.getBackendId(), replica.getVersion(),
+                    replica.getLastFailedVersion(), replica.getLastSuccessVersion(), replica.getMinReadableVersion(),
+                    replica.getState()));
         }
         return sb.toString();
     }

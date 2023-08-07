@@ -27,6 +27,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -45,6 +46,9 @@ public class ResourceGroup implements Writable {
     public static final String BIG_QUERY_CPU_SECOND_LIMIT = "big_query_cpu_second_limit";
     public static final String CONCURRENCY_LIMIT = "concurrency_limit";
     public static final String DEFAULT_RESOURCE_GROUP_NAME = "default_wg";
+    public static final String DEFAULT_MV_RESOURCE_GROUP_NAME = "default_mv_wg";
+    public static final long DEFAULT_MV_WG_ID = 1;
+    public static final long DEFAULT_MV_VERSION = 1;
 
     public static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
@@ -117,8 +121,8 @@ public class ResourceGroup implements Writable {
         return row;
     }
 
-    public List<List<String>> showVisible(String user, String roleName, String ip) {
-        return classifiers.stream().filter(c -> c.isVisible(user, roleName, ip))
+    public List<List<String>> showVisible(String user, List<String> activeRoles, String ip) {
+        return classifiers.stream().filter(c -> c.isVisible(user, activeRoles, ip))
                 .map(this::showClassifier).collect(Collectors.toList());
     }
 
@@ -136,7 +140,10 @@ public class ResourceGroup implements Writable {
     }
 
     public List<List<String>> show() {
-        return classifiers.stream().map(c -> this.showClassifier(c)).collect(Collectors.toList());
+        if (classifiers.isEmpty()) {
+            return Collections.singletonList(showClassifier(new ResourceGroupClassifier()));
+        }
+        return classifiers.stream().map(this::showClassifier).collect(Collectors.toList());
     }
 
     public String getName() {

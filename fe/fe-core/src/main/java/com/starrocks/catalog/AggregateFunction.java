@@ -37,9 +37,10 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.HdfsURI;
 import com.starrocks.sql.ast.CreateFunctionStmt;
+import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.thrift.TAggregateFunction;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
@@ -60,11 +61,19 @@ import static com.starrocks.common.io.IOUtils.writeOptionString;
  */
 public class AggregateFunction extends Function {
     // Set if different from retType_, null otherwise.
+    @SerializedName(value = "intermediateType")
     private Type intermediateType;
+
+    // The name inside the binary at location_ that contains this particular
+    // function. e.g. org.example.MyUdf.class.
+    @SerializedName(value = "symbolName")
+    private String symbolName;
+
     // If true, this aggregate function should ignore distinct.
     // e.g. min(distinct col) == min(col).
     // TODO: currently it is not possible for user functions to specify this. We should
     // extend the create aggregate function stmt to allow additional metadata like this.
+    @SerializedName(value = "ignoresDistinct")
     private boolean ignoresDistinct;
 
     // True if this function can appear within an analytic expr (fn() OVER(...)).
@@ -72,9 +81,11 @@ public class AggregateFunction extends Function {
     // we should identify this property from the function itself (e.g., based on which
     // functions of the UDA API are implemented).
     // Currently, there is no reliable way of doing that.
+    @SerializedName(value = "isAnalyticFn")
     private boolean isAnalyticFn;
 
     // True if this function can be used for aggregation (without an OVER() clause).
+    @SerializedName(value = "isAggregateFn")
     private boolean isAggregateFn;
 
     // True if this function returns a non-null value on an empty input. It is used
@@ -82,11 +93,29 @@ public class AggregateFunction extends Function {
     // TODO: Instead of manually setting this flag, we should identify this
     // property from the function itself (e.g. evaluating the function on an
     // empty input in BE).
+    @SerializedName(value = "returnsNonNullOnEmpty")
     private boolean returnsNonNullOnEmpty;
 
-    // The name inside the binary at location_ that contains this particular
-    // function. e.g. org.example.MyUdf.class.
-    private String symbolName;
+    public List<Boolean> getIsAscOrder() {
+        return isAscOrder;
+    }
+
+    public void setIsAscOrder(List<Boolean> isAscOrder) {
+        this.isAscOrder = isAscOrder;
+    }
+
+    private List<Boolean> isAscOrder;
+
+    public List<Boolean> getNullsFirst() {
+        return nullsFirst;
+    }
+
+    public void setNullsFirst(List<Boolean> nullsFirst) {
+        this.nullsFirst = nullsFirst;
+    }
+
+    // True if "NULLS FIRST", false if "NULLS LAST", null if not specified.
+    private List<Boolean> nullsFirst;
 
     // only used for serialization
     protected AggregateFunction() {
@@ -163,6 +192,16 @@ public class AggregateFunction extends Function {
         returnsNonNullOnEmpty = false;
     }
 
+    public AggregateFunction(AggregateFunction other) {
+        super(other);
+        intermediateType = other.intermediateType;
+        ignoresDistinct = other.ignoresDistinct;
+        isAnalyticFn = other.isAnalyticFn;
+        isAggregateFn = other.isAggregateFn;
+        returnsNonNullOnEmpty = other.returnsNonNullOnEmpty;
+        symbolName = other.symbolName;
+    }
+
     public String getSymbolName() {
         return symbolName == null ? Strings.EMPTY : symbolName;
     }
@@ -224,6 +263,10 @@ public class AggregateFunction extends Function {
         public AggregateFunctionBuilder symbolName(String symbolName) {
             this.symbolName = symbolName;
             return this;
+        }
+
+        public void setIntermediateType(Type intermediateType) {
+            this.intermediateType = intermediateType;
         }
 
         public AggregateFunction build() {
@@ -288,6 +331,12 @@ public class AggregateFunction extends Function {
         } else {
             aggFn.setIntermediate_type(getReturnType().toThrift());
         }
+        if (isAscOrder != null && !isAscOrder.isEmpty()) {
+            aggFn.setIs_asc_order(isAscOrder);
+        }
+        if (nullsFirst != null && !nullsFirst.isEmpty()) {
+            aggFn.setNulls_first(nullsFirst);
+        }
         aggFn.setSymbol(getSymbolName());
         fn.setAggregate_fn(aggFn);
         return fn;
@@ -347,6 +396,11 @@ public class AggregateFunction extends Function {
         properties.put(CreateFunctionStmt.SYMBOL_KEY, symbolName == null ? "" : symbolName);
         properties.put(CreateFunctionStmt.TYPE_KEY, getBinaryType().name());
         return new Gson().toJson(properties);
+    }
+
+    @Override
+    public Function copy() {
+        return new AggregateFunction(this);
     }
 }
 

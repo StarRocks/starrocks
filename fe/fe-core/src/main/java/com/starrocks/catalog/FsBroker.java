@@ -36,11 +36,9 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.BrokerHbResponse;
 import com.starrocks.system.HeartbeatResponse;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
@@ -54,15 +52,14 @@ public class FsBroker implements Writable, Comparable<FsBroker> {
     public String ip;
     @SerializedName(value = "port")
     public int port;
-    // msg for ping result
-    public String heartbeatErrMsg = "";
-    public long lastUpdateTime = -1;
-
     @SerializedName(value = "lastStartTime")
     public long lastStartTime = -1;
     @SerializedName(value = "isAlive")
     public boolean isAlive;
 
+    // msg for ping result
+    public String heartbeatErrMsg = "";
+    public long lastUpdateTime = -1;
     private int heartbeatRetryTimes = 0;
 
     public FsBroker() {
@@ -108,7 +105,7 @@ public class FsBroker implements Writable, Comparable<FsBroker> {
         }
         if (!isReplay) {
             hbResponse.aliveStatus = isAlive ?
-                HeartbeatResponse.AliveStatus.ALIVE : HeartbeatResponse.AliveStatus.NOT_ALIVE;
+                    HeartbeatResponse.AliveStatus.ALIVE : HeartbeatResponse.AliveStatus.NOT_ALIVE;
         } else {
             if (hbResponse.aliveStatus != null) {
                 // The metadata before the upgrade does not contain hbResponse.aliveStatus,
@@ -160,25 +157,14 @@ public class FsBroker implements Writable, Comparable<FsBroker> {
         Text.writeString(out, json);
     }
 
-    private void readFields(DataInput in) throws IOException {
-        ip = Text.readString(in);
-        port = in.readInt();
-    }
-
     @Override
     public String toString() {
         return ip + ":" + port;
     }
 
     public static FsBroker readIn(DataInput in) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_73) {
-            FsBroker broker = new FsBroker();
-            broker.readFields(in);
-            return broker;
-        } else {
-            String json = Text.readString(in);
-            return GsonUtils.GSON.fromJson(json, FsBroker.class);
-        }
+        String json = Text.readString(in);
+        return GsonUtils.GSON.fromJson(json, FsBroker.class);
     }
 }
 

@@ -18,6 +18,7 @@
 
 #include "column/column_helper.h"
 #include "column/const_column.h"
+#include "column/vectorized_fwd.h"
 #include "exprs/percentile_functions.h"
 #include "runtime/types.h"
 #include "types/hll.h"
@@ -34,7 +35,7 @@ TEST(ObjectColumnTest, HLL_test_filter) {
         c->resize(100);
         ASSERT_EQ(100, c->size());
 
-        Column::Filter filter(100, 1);
+        Filter filter(100, 1);
         c->filter(filter);
         ASSERT_EQ(100, c->size());
     }
@@ -43,7 +44,7 @@ TEST(ObjectColumnTest, HLL_test_filter) {
         auto c = HyperLogLogColumn::create();
         c->resize(100);
 
-        Column::Filter filter(100, 0);
+        Filter filter(100, 0);
         c->filter(filter);
         ASSERT_EQ(0, c->size());
     }
@@ -53,7 +54,7 @@ TEST(ObjectColumnTest, HLL_test_filter) {
         c->resize(100);
         ASSERT_EQ(100, c->size());
 
-        Column::Filter filter(100, 1);
+        Filter filter(100, 1);
         for (int i = 90; i < 100; i++) {
             filter[i] = 0;
         }
@@ -66,7 +67,7 @@ TEST(ObjectColumnTest, HLL_test_filter) {
         c->resize(100);
         ASSERT_EQ(100, c->size());
 
-        Column::Filter filter(100, 1);
+        Filter filter(100, 1);
         for (int i = 0; i < 10; i++) {
             filter[i] = 0;
         }
@@ -79,7 +80,7 @@ TEST(ObjectColumnTest, HLL_test_filter) {
         c->resize(100);
         ASSERT_EQ(100, c->size());
 
-        Column::Filter filter(100, 1);
+        Filter filter(100, 1);
         for (int i = 0; i < 100; i++) {
             filter[i] = i % 2;
         }
@@ -96,7 +97,7 @@ TEST(ObjectColumnTest, HLL_test_filter_range) {
         c->resize(100);
         ASSERT_EQ(100, c->size());
 
-        Column::Filter filter(100, 1);
+        Filter filter(100, 1);
         c->filter_range(filter, 0, 100);
         ASSERT_EQ(100, c->size());
     }
@@ -105,7 +106,7 @@ TEST(ObjectColumnTest, HLL_test_filter_range) {
         auto c = HyperLogLogColumn::create();
         c->resize(100);
 
-        Column::Filter filter(100, 0);
+        Filter filter(100, 0);
         c->filter_range(filter, 0, 100);
         ASSERT_EQ(0, c->size());
     }
@@ -115,7 +116,7 @@ TEST(ObjectColumnTest, HLL_test_filter_range) {
         c->resize(100);
         ASSERT_EQ(100, c->size());
 
-        Column::Filter filter(100, 0);
+        Filter filter(100, 0);
         c->filter_range(filter, 90, 100);
         ASSERT_EQ(90, c->size());
     }
@@ -125,7 +126,7 @@ TEST(ObjectColumnTest, HLL_test_filter_range) {
         c->resize(100);
         ASSERT_EQ(100, c->size());
 
-        Column::Filter filter(100, 0);
+        Filter filter(100, 0);
         c->filter_range(filter, 0, 10);
         ASSERT_EQ(90, c->size());
     }
@@ -135,7 +136,7 @@ TEST(ObjectColumnTest, HLL_test_filter_range) {
         c->resize(100);
         ASSERT_EQ(100, c->size());
 
-        Column::Filter filter(100, 0);
+        Filter filter(100, 0);
         c->filter_range(filter, 20, 32);
         ASSERT_EQ(88, c->size());
     }
@@ -149,6 +150,28 @@ TEST(ObjectColumnTest, test_object_column_upgrade_if_overflow) {
     auto ret = c->upgrade_if_overflow();
     ASSERT_TRUE(ret.ok());
     ASSERT_TRUE(ret.value() == nullptr);
+}
+
+// NOLINTNEXTLINE
+TEST(ObjectColumnTest, test_append_value_multiple_times) {
+    auto src_col = BitmapColumn::create();
+    auto deep_copy_col = BitmapColumn::create();
+    auto shallow_copy_col = BitmapColumn::create();
+
+    BitmapValue bitmap;
+    for (size_t i = 0; i < 64; i++) {
+        bitmap.add(i);
+    }
+    src_col->append(&bitmap);
+
+    deep_copy_col->append_value_multiple_times(*src_col, 0, 4, true);
+    shallow_copy_col->append_value_multiple_times(*src_col, 0, 4, false);
+    src_col->get_object(0)->add(64);
+
+    for (size_t i = 0; i < 4; i++) {
+        ASSERT_EQ(deep_copy_col->get_object(0)->cardinality(), 64);
+        ASSERT_EQ(shallow_copy_col->get_object(0)->cardinality(), 65);
+    }
 }
 
 // NOLINTNEXTLINE
@@ -231,7 +254,7 @@ TEST(ObjectColumnTest, Percentile_test_swap_column) {
     ASSERT_TRUE(column1->is_object());
 
     std::vector<uint32_t> idx = {1};
-    ASSERT_TRUE(column->update_rows(*column1.get(), idx.data()).ok());
+    column->update_rows(*column1.get(), idx.data());
 
     percentile = ColumnHelper::cast_to<TYPE_PERCENTILE>(column);
     ASSERT_EQ(1, percentile->get_object(0)->quantile(1));

@@ -18,10 +18,14 @@ package com.starrocks.ha;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Test;
 
 public class StateChangeExecutorTest {
+    private static final Logger LOG = LogManager.getLogger(StateChangeExecutorTest.class);
+
     private class StateChangeExecutionTest implements StateChangeExecution {
         private FrontendNodeType type;
         @Override
@@ -40,7 +44,7 @@ public class StateChangeExecutorTest {
         }
     }
 
-    private void runOne(FrontendNodeType oldType, FrontendNodeType newType) {
+    private void runOne(String name, FrontendNodeType oldType, FrontendNodeType newType) {
         StateChangeExecutionTest execution = new StateChangeExecutionTest();
         execution.setType(oldType);
         Assert.assertEquals(oldType, execution.getType());
@@ -48,14 +52,16 @@ public class StateChangeExecutorTest {
         new MockUp<GlobalStateMgr>() {
             @Mock
             public FrontendNodeType getFeType() {
-                return execution.getType();
+                LOG.info("{}: get mock fe type {}.", name, oldType);
+                return oldType;
             }
         };
 
-        StateChangeExecutor executor = new StateChangeExecutor();
+        StateChangeExecutor executor = new StateChangeExecutor(name);
         executor.registerStateChangeExecution(execution);
         executor.start();
 
+        LOG.info("{}: notify new type {}.", name, newType);
         executor.notifyNewFETypeTransfer(newType);
         int i = 0;
         for (; i < 4; ++i) {
@@ -77,24 +83,24 @@ public class StateChangeExecutorTest {
     @Test
     public void testStateChangeExecutor() {
         // INIT -> LEADER
-        runOne(FrontendNodeType.INIT, FrontendNodeType.LEADER);
+        runOne("StateChangeExecutor_initTOleader", FrontendNodeType.INIT, FrontendNodeType.LEADER);
 
         // INIT -> FOLLOWER
-        runOne(FrontendNodeType.INIT, FrontendNodeType.FOLLOWER);
+        runOne("StateChangeExecutor_initTOfollower", FrontendNodeType.INIT, FrontendNodeType.FOLLOWER);
 
         // UNKNOWN -> LEADER
-        runOne(FrontendNodeType.UNKNOWN, FrontendNodeType.LEADER);
+        runOne("StateChangeExecutor_unknownTOleader", FrontendNodeType.UNKNOWN, FrontendNodeType.LEADER);
 
         // UNKNOWN -> FOLLOWER
-        runOne(FrontendNodeType.UNKNOWN, FrontendNodeType.FOLLOWER);
+        runOne("StateChangeExecutor_unknownTOfollower", FrontendNodeType.UNKNOWN, FrontendNodeType.FOLLOWER);
 
         // FOLLOWER -> LEADER
-        runOne(FrontendNodeType.FOLLOWER, FrontendNodeType.LEADER);
+        runOne("StateChangeExecutor_followerTOleader", FrontendNodeType.FOLLOWER, FrontendNodeType.LEADER);
 
         // FOLLOWER -> UNKNOWN
-        runOne(FrontendNodeType.FOLLOWER, FrontendNodeType.UNKNOWN);
+        runOne("StateChangeExecutor_followerTOunknown", FrontendNodeType.FOLLOWER, FrontendNodeType.UNKNOWN);
 
         // OBSERVER -> UNKNOWN
-        runOne(FrontendNodeType.OBSERVER, FrontendNodeType.UNKNOWN);
+        runOne("StateChangeExecutor_observerTOunknown", FrontendNodeType.OBSERVER, FrontendNodeType.UNKNOWN);
     }
 }

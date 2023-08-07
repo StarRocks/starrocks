@@ -40,17 +40,21 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.server.RunMode;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.warehouse.Warehouse;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class LoadAction extends RestBaseAction {
@@ -68,6 +72,19 @@ public class LoadAction extends RestBaseAction {
 
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
+        try {
+            executeWithoutPasswordInternal(request, response);
+        } catch (DdlException e) {
+            TransactionResult resp = new TransactionResult();
+            resp.status = ActionStatus.FAILED;
+            resp.msg = e.getClass().toString() + ": " + e.getMessage();
+            LOG.warn(e);
+
+            sendResult(request, response, resp);
+        }
+    }
+
+    public void executeWithoutPasswordInternal(BaseRequest request, BaseResponse response) throws DdlException {
 
         // A 'Load' request must have 100-continue header
         if (!request.getRequest().headers().contains(HttpHeaders.Names.EXPECT)) {
@@ -86,21 +103,34 @@ public class LoadAction extends RestBaseAction {
 
         String label = request.getRequest().headers().get(LABEL_KEY);
 
-        // check auth
-        checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), dbName, tableName, PrivPredicate.LOAD);
+        checkTableAction(ConnectContext.get(), dbName, tableName, PrivilegeType.INSERT);
 
-        // Choose a backend sequentially.
-        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
-        if (CollectionUtils.isEmpty(backendIds)) {
+        // Choose a backend sequentially, or choose a cn in shared_data mode
+        List<Long> nodeIds = new ArrayList<>();
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+            for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+                ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+                if (node != null && node.isAvailable()) {
+                    nodeIds.add(nodeId);
+                }
+            }
+            Collections.shuffle(nodeIds);
+        } else {
+            nodeIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
+        }
+        
+        if (CollectionUtils.isEmpty(nodeIds)) {
             throw new DdlException("No backend alive.");
         }
 
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendIds.get(0));
-        if (backend == null) {
-            throw new DdlException("No backend alive.");
+        // TODO: need to refactor after be split into cn + dn
+        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeIds.get(0));
+        if (node == null) {
+            throw new DdlException("No backend or compute node alive.");
         }
 
-        TNetworkAddress redirectAddr = new TNetworkAddress(backend.getHost(), backend.getHttpPort());
+        TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), node.getHttpPort());
 
         LOG.info("redirect load action to destination={}, db: {}, tbl: {}, label: {}",
                 redirectAddr.toString(), dbName, tableName, label);

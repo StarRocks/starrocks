@@ -16,6 +16,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "gen_cpp/Types_types.h"
 namespace starrocks::query_cache {
@@ -34,5 +35,6 @@ struct CacheParam {
     size_t entry_max_rows;
     bool can_use_multiversion;
     TKeysType::type keys_type;
+    std::unordered_set<int32_t> cached_plan_node_ids;
 };
 } // namespace starrocks::query_cache

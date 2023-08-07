@@ -35,17 +35,14 @@
 #include "common/daemon.h"
 
 #include <gflags/gflags.h>
-#ifdef USE_JEMALLOC
-#include "jemalloc/jemalloc.h"
-#else
-#include <gperftools/malloc_extension.h>
-#endif
 
 #include "column/column_helper.h"
 #include "column/column_pool.h"
 #include "common/config.h"
 #include "common/minidump.h"
 #include "exec/workgroup/work_group.h"
+#include "gutil/cpu.h"
+#include "jemalloc/jemalloc.h"
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
@@ -73,6 +70,14 @@ DEFINE_bool(cn, false, "start as compute node");
 // After all existing fragments executed, BE will exit.
 std::atomic<bool> k_starrocks_exit = false;
 
+// NOTE: when call `/api/_stop_be` http interface, this flag will be set to true. Then BE will reject
+// all ExecPlanFragments call by returning a fail status(brpc::EINTERNAL).
+// After all existing fragments executed, BE will exit.
+// The difference between k_starrocks_exit and the flag is that
+// k_starrocks_exit not only require waiting for all existing fragment to complete,
+// but also waiting for all threads to exit gracefully.
+std::atomic<bool> k_starrocks_exit_quick = false;
+
 class ReleaseColumnPool {
 public:
     explicit ReleaseColumnPool(double ratio) : _ratio(ratio) {}
@@ -92,44 +97,14 @@ private:
 void gc_memory(void* arg_this) {
     using namespace starrocks;
     const static float kFreeRatio = 0.5;
-    GCHelper gch(config::tc_gc_period, config::memory_maintenance_sleep_time_s, MonoTime::Now());
 
     auto* daemon = static_cast<Daemon*>(arg_this);
     while (!daemon->stopped()) {
         sleep(static_cast<unsigned int>(config::memory_maintenance_sleep_time_s));
-#if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(USE_JEMALLOC)
-        MallocExtension::instance()->MarkThreadBusy();
-#endif
+
         ReleaseColumnPool releaser(kFreeRatio);
         ForEach<ColumnPoolList>(releaser);
         LOG_IF(INFO, releaser.freed_bytes() > 0) << "Released " << releaser.freed_bytes() << " bytes from column pool";
-
-#if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(USE_JEMALLOC)
-        size_t used_size = 0;
-        size_t free_size = 0;
-        MallocExtension::instance()->GetNumericProperty("generic.current_allocated_bytes", &used_size);
-        MallocExtension::instance()->GetNumericProperty("tcmalloc.pageheap_free_bytes", &free_size);
-        size_t phy_size = used_size + free_size; // physical memory usage
-        size_t total_bytes_to_gc = 0;
-        if (phy_size > config::tc_use_memory_min) {
-            size_t max_free_size = phy_size * config::tc_free_memory_rate / 100;
-            if (free_size > max_free_size) {
-                total_bytes_to_gc = free_size - max_free_size;
-            }
-        }
-        size_t bytes_to_gc = gch.bytes_should_gc(MonoTime::Now(), total_bytes_to_gc);
-        if (bytes_to_gc > 0) {
-            size_t bytes = bytes_to_gc;
-            while (bytes >= GCBYTES_ONE_STEP) {
-                MallocExtension::instance()->ReleaseToSystem(GCBYTES_ONE_STEP);
-                bytes -= GCBYTES_ONE_STEP;
-            }
-            if (bytes > 0) {
-                MallocExtension::instance()->ReleaseToSystem(bytes);
-            }
-        }
-        MallocExtension::instance()->MarkThreadIdle();
-#endif
     }
 }
 
@@ -237,14 +212,15 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
     StarRocksMetrics::instance()->initialize(paths, init_system_metrics, disk_devices, network_interfaces);
 }
 
-void sigterm_handler(int signo) {
+void sigterm_handler(int signo, siginfo_t* info, void* context) {
+    LOG(ERROR) << "got signal: " << strsignal(signo) << " from pid: " << info->si_pid << ", is going to exit";
     k_starrocks_exit.store(true);
 }
 
-int install_signal(int signo, void (*handler)(int)) {
+int install_signal(int signo, void (*handler)(int sig, siginfo_t* info, void* context)) {
     struct sigaction sa;
     memset(&sa, 0, sizeof(struct sigaction));
-    sa.sa_handler = handler;
+    sa.sa_sigaction = handler;
     sigemptyset(&sa.sa_mask);
     auto ret = sigaction(signo, &sa, nullptr);
     if (ret != 0) {
@@ -277,11 +253,8 @@ void init_minidump() {
 #endif
 }
 
-void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
-    // google::SetVersionString(get_build_version(false));
-    // google::ParseCommandLineFlags(&argc, &argv, true);
-    google::ParseCommandLineFlags(&argc, &argv, true);
-    if (FLAGS_cn) {
+void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
+    if (as_cn) {
         init_glog("cn", true);
     } else {
         init_glog("be", true);
@@ -296,6 +269,7 @@ void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
     LOG(INFO) << CpuInfo::debug_string();
     LOG(INFO) << DiskInfo::debug_string();
     LOG(INFO) << MemInfo::debug_string();
+    LOG(INFO) << base::CPU::instance()->debug_string();
 
     UserFunctionCache::instance()->init(config::user_function_dir);
 

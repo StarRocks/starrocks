@@ -14,8 +14,10 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.google.common.base.Objects;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
@@ -24,6 +26,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public class PhysicalValuesOperator extends PhysicalOperator {
     private final List<ColumnRefOperator> columnRefSet;
@@ -50,6 +54,11 @@ public class PhysicalValuesOperator extends PhysicalOperator {
     }
 
     @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        return new RowOutputInfo(columnRefSet.stream().collect(Collectors.toMap(Function.identity(), Function.identity())));
+    }
+
+    @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitPhysicalValues(this, context);
     }
@@ -61,12 +70,22 @@ public class PhysicalValuesOperator extends PhysicalOperator {
 
     @Override
     public boolean equals(Object o) {
-        return this == o;
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        if (!super.equals(o)) {
+            return false;
+        }
+        PhysicalValuesOperator that = (PhysicalValuesOperator) o;
+        return Objects.equal(columnRefSet, that.columnRefSet) && Objects.equal(rows, that.rows);
     }
 
     @Override
     public int hashCode() {
-        return System.identityHashCode(this);
+        return Objects.hashCode(super.hashCode(), columnRefSet);
     }
 
     @Override

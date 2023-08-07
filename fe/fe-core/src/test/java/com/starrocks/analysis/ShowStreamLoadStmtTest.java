@@ -46,7 +46,7 @@ public class ShowStreamLoadStmtTest {
         Assert.assertEquals("label", stmt.getName());
         Assert.assertEquals("testDb", stmt.getDbFullName());
         Assert.assertFalse(stmt.isIncludeHistory());
-        Assert.assertEquals(23, stmt.getMetaData().getColumnCount());
+        Assert.assertEquals(25, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("Label", stmt.getMetaData().getColumn(0).getName());
     }
 
@@ -69,5 +69,14 @@ public class ShowStreamLoadStmtTest {
         ShowStreamLoadStmt stmt = (ShowStreamLoadStmt) stmts.get(0);
         Assert.assertEquals("db_test", stmt.getDbFullName());
         Assert.assertEquals("rl_test", stmt.getName());
+    }
+
+    @Test
+    public void testWithoutLabel() {
+        String sql = "show stream load";
+        List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable());
+        ShowStreamLoadStmt stmt = (ShowStreamLoadStmt) stmts.get(0);
+        Assert.assertNull(stmt.getName());
+        Assert.assertNull(stmt.getDbFullName());
     }
 }

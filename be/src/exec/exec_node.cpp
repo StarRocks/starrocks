@@ -40,6 +40,7 @@
 #include <sstream>
 
 #include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/object_pool.h"
 #include "common/status.h"
@@ -61,8 +62,8 @@
 #include "exec/lake_meta_scan_node.h"
 #include "exec/olap_meta_scan_node.h"
 #include "exec/olap_scan_node.h"
+#include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exec/pipeline/runtime_filter_types.h"
 #include "exec/project_node.h"
 #include "exec/repeat_node.h"
 #include "exec/schema_scan_node.h"
@@ -75,7 +76,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
-#include "runtime/mem_pool.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
 #include "simd/simd.h"
@@ -100,7 +100,6 @@ ExecNode::ExecNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
           _rows_returned_counter(nullptr),
           _rows_returned_rate(nullptr),
           _memory_used_counter(nullptr),
-          _use_vectorized(tnode.use_vectorized),
           _runtime_state(nullptr),
           _is_closed(false) {
     init_runtime_profile(print_plan_node_type(tnode.node_type));
@@ -217,7 +216,8 @@ Status ExecNode::prepare(RuntimeState* state) {
                 return RuntimeProfile::units_per_second(capture0, capture1);
             },
             "");
-    _mem_tracker.reset(new MemTracker(_runtime_profile.get(), -1, _runtime_profile->name(), nullptr));
+    _mem_tracker.reset(new MemTracker(_runtime_profile.get(), std::make_tuple(true, false, false), "", -1,
+                                      _runtime_profile->name(), nullptr));
     RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
     RETURN_IF_ERROR(_runtime_filter_collector.prepare(state, row_desc(), _runtime_profile.get()));
 
@@ -262,6 +262,7 @@ Status ExecNode::get_next_big_chunk(RuntimeState* state, ChunkPtr* chunk, bool* 
         ChunkPtr cur_chunk = nullptr;
 
         RETURN_IF_ERROR(specific_get_next(state, &cur_chunk, &cur_eos));
+        TRY_CATCH_ALLOC_SCOPE_START()
         if (cur_eos) {
             if (pre_output_chunk != nullptr) {
                 *eos = false;
@@ -305,6 +306,7 @@ Status ExecNode::get_next_big_chunk(RuntimeState* state, ChunkPtr* chunk, bool* 
                 }
             }
         }
+        TRY_CATCH_ALLOC_SCOPE_END()
     }
 }
 
@@ -324,9 +326,9 @@ Status ExecNode::collect_query_statistics(QueryStatistics* statistics) {
     return Status::OK();
 }
 
-Status ExecNode::close(RuntimeState* state) {
+void ExecNode::close(RuntimeState* state) {
     if (_is_closed) {
-        return Status::OK();
+        return;
     }
     _is_closed = true;
     exec_debug_action(TExecNodePhase::CLOSE);
@@ -335,18 +337,12 @@ Status ExecNode::close(RuntimeState* state) {
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     }
 
-    Status result;
     for (auto& i : _children) {
-        auto st = i->close(state);
-        if (result.ok() && !st.ok()) {
-            result = st;
-        }
+        i->close(state);
     }
 
     Expr::close(_conjunct_ctxs, state);
     _runtime_filter_collector.close(state);
-
-    return result;
 }
 
 Status ExecNode::create_tree(RuntimeState* state, ObjectPool* pool, const TPlan& plan, const DescriptorTbl& descs,
@@ -555,7 +551,7 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         }
         default:
             return Status::InternalError(fmt::format("Stream scan node does not support source type {}", source_type));
-        };
+        }
         TConnectorScanNode connector_scan_node;
         connector_scan_node.connector_name = connector_name;
         new_node.connector_scan_node = connector_scan_node;
@@ -594,8 +590,8 @@ void ExecNode::debug_string(int indentation_level, std::stringstream* out) const
 }
 
 Status eager_prune_eval_conjuncts(const std::vector<ExprContext*>& ctxs, Chunk* chunk) {
-    Column::Filter filter(chunk->num_rows(), 1);
-    Column::Filter* raw_filter = &filter;
+    Filter filter(chunk->num_rows(), 1);
+    Filter* raw_filter = &filter;
 
     // prune chunk when pruned size is large enough
     // these constants are just came up without any specific reason.
@@ -612,7 +608,7 @@ Status eager_prune_eval_conjuncts(const std::vector<ExprContext*>& ctxs, Chunk* 
     int zero_count = 0;
 
     for (auto* ctx : ctxs) {
-        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk));
+        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk))
         size_t true_count = ColumnHelper::count_true_with_notnull(column);
 
         if (true_count == column->size()) {
@@ -669,14 +665,14 @@ Status ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, Chunk* ch
     if (!apply_filter) {
         DCHECK(filter_ptr) << "Must provide a filter if not apply it directly";
     }
-    FilterPtr filter(new Column::Filter(chunk->num_rows(), 1));
+    FilterPtr filter(new Filter(chunk->num_rows(), 1));
     if (filter_ptr != nullptr) {
         *filter_ptr = filter;
     }
-    Column::Filter* raw_filter = filter.get();
+    Filter* raw_filter = filter.get();
 
     for (auto* ctx : ctxs) {
-        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk));
+        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk))
         size_t true_count = ColumnHelper::count_true_with_notnull(column);
 
         if (true_count == column->size()) {
@@ -719,7 +715,7 @@ StatusOr<size_t> ExecNode::eval_conjuncts_into_filter(const std::vector<ExprCont
         return 0;
     }
     for (auto* ctx : ctxs) {
-        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk, filter->data()));
+        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk, filter->data()))
         size_t true_count = ColumnHelper::count_true_with_notnull(column);
 
         if (true_count == column->size()) {
@@ -846,6 +842,15 @@ Status ExecNode::exec_debug_action(TExecNodePhase::type phase) {
     }
 
     return Status::OK();
+}
+
+void ExecNode::may_add_chunk_accumulate_operator(OpFactories& ops, pipeline::PipelineBuilderContext* context, int id) {
+    // TODO(later): Need to rewrite ChunkAccumulateOperator to support StreamPipelines,
+    // for now just disable it in stream pipelines:
+    // - make sure UPDATE_BEFORE/UPDATE_AFTER are in the same chunk.
+    if (!context->is_stream_pipeline()) {
+        ops.emplace_back(std::make_shared<pipeline::ChunkAccumulateOperatorFactory>(context->next_operator_id(), id));
+    }
 }
 
 } // namespace starrocks

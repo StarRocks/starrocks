@@ -18,7 +18,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.StringLiteral;
@@ -36,14 +35,13 @@ import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.load.BrokerFileGroup;
-import com.starrocks.load.Load;
 import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.system.Backend;
@@ -82,7 +80,6 @@ public class LoadPlannerTest {
 
     // config
     private int loadParallelInstanceNum;
-    private int maxBrokerConcurrency;
 
     // backends
     private ImmutableMap<Long, Backend> idToBackend;
@@ -111,7 +108,7 @@ public class LoadPlannerTest {
         brokerDesc = new BrokerDesc("broker0", null);
 
         loadParallelInstanceNum = Config.load_parallel_instance_num;
-        maxBrokerConcurrency = Config.max_broker_concurrency;
+        Config.eliminate_shuffle_load_by_replicated_storage = false;
 
         // backends
         Map<Long, Backend> idToBackendTmp = Maps.newHashMap();
@@ -128,7 +125,7 @@ public class LoadPlannerTest {
     @After
     public void tearDown() {
         Config.load_parallel_instance_num = loadParallelInstanceNum;
-        Config.max_broker_concurrency = maxBrokerConcurrency;
+        Config.eliminate_shuffle_load_by_replicated_storage = true;
     }
 
     @Test
@@ -205,26 +202,24 @@ public class LoadPlannerTest {
         locationsList = scanNode.getScanRangeLocations(0);
         Assert.assertEquals(4, locationsList.size());
 
-        // load_parallel_instance_num: 2, max_broker_concurrency: 3, non pipeline
+        // load_parallel_instance_num: 2, non pipeline
         Config.enable_pipeline_load = false;
         ctx.getSessionVariable().setEnablePipelineEngine(false);
         Config.load_parallel_instance_num = 2;
-        Config.max_broker_concurrency = 3;
         planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
                 timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
                 brokerDesc, fileGroups, fileStatusesList, 2);
         planner.plan();
         scanNode = (FileScanNode) planner.getScanNodes().get(0);
         locationsList = scanNode.getScanRangeLocations(0);
-        Assert.assertEquals(3, locationsList.size());
+        Assert.assertEquals(4, locationsList.size());
         Assert.assertEquals(1, planner.getFragments().get(0).getPipelineDop());
         Assert.assertEquals(2, planner.getFragments().get(0).getParallelExecNum());
 
-        // load_parallel_instance_num: 2, max_broker_concurrency: 3, pipeline
+        // load_parallel_instance_num: 2, pipeline
         ctx.getSessionVariable().setEnablePipelineEngine(true);
         Config.enable_pipeline_load = true;
         Config.load_parallel_instance_num = 2;
-        Config.max_broker_concurrency = 3;
         planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
                 timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
                 brokerDesc, fileGroups, fileStatusesList, 2);
@@ -232,7 +227,7 @@ public class LoadPlannerTest {
         planner.plan();
         scanNode = (FileScanNode) planner.getScanNodes().get(0);
         locationsList = scanNode.getScanRangeLocations(0);
-        Assert.assertEquals(3, locationsList.size());
+        Assert.assertEquals(4, locationsList.size());
         Assert.assertEquals(2, planner.getFragments().get(0).getPipelineDop());
         Assert.assertEquals(1, planner.getFragments().get(0).getParallelExecNum());
     }
@@ -296,7 +291,7 @@ public class LoadPlannerTest {
         List<String> columnNames = Lists.newArrayList("k1", "k33", "v");
         DataDescription desc = new DataDescription("t2", null, files, columnNames,
                 null, null, "ORC", Lists.newArrayList("k2"),
-                false, columnMappingList, null);
+                false, columnMappingList, null, null);
         Deencapsulation.invoke(desc, "analyzeColumns");
         BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
         Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
@@ -434,7 +429,7 @@ public class LoadPlannerTest {
         List<String> columnNames = Lists.newArrayList("k1", "k33", "v");
         DataDescription desc = new DataDescription("t2", null, files, columnNames,
                 null, null, "ORC", Lists.newArrayList("k2"),
-                false, columnMappingList, null);
+                false, columnMappingList, null, null);
         Deencapsulation.invoke(desc, "analyzeColumns");
         BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
         Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
@@ -519,7 +514,7 @@ public class LoadPlannerTest {
         List<String> columnNames = Lists.newArrayList("pk", "v1", "v2");
         DataDescription desc = new DataDescription("t2", null, files, columnNames,
                 null, null, "CSV", Lists.newArrayList(),
-                false, columnMappingList, null);
+                false, columnMappingList, null, null);
         Deencapsulation.invoke(desc, "analyzeColumns");
         BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
         Deencapsulation.setField(brokerFileGroup, "columnSeparator", ",");
@@ -607,7 +602,7 @@ public class LoadPlannerTest {
         List<String> columnNames = Lists.newArrayList("pk", "v1", "v2");
         DataDescription desc = new DataDescription("t2", null, files, columnNames,
                 null, null, "CSV", Lists.newArrayList(),
-                false, columnMappingList, null);
+                false, columnMappingList, null, null);
         Deencapsulation.invoke(desc, "analyzeColumns");
         BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
         Deencapsulation.setField(brokerFileGroup, "columnSeparator", ",");
@@ -714,7 +709,7 @@ public class LoadPlannerTest {
         List<String> columnNames = Lists.newArrayList("c0", "c1", "c2", "c3");
         DataDescription desc = new DataDescription("t2", null, files, columnNames,
                 null, null, "CSV", Lists.newArrayList(),
-                false, columnMappingList, null);
+                false, columnMappingList, null, null);
         Deencapsulation.invoke(desc, "analyzeColumns");
         BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
         Deencapsulation.setField(brokerFileGroup, "columnSeparator", ",");
@@ -811,7 +806,7 @@ public class LoadPlannerTest {
         List<String> columnNames = Lists.newArrayList("pk", "v1", "v2", "__op");
         DataDescription desc = new DataDescription("t2", null, files, columnNames,
                 null, null, "CSV", Lists.newArrayList(),
-                false, columnMappingList, null);
+                false, columnMappingList, null, null);
         Deencapsulation.invoke(desc, "analyzeColumns");
         BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
         Deencapsulation.setField(brokerFileGroup, "columnSeparator", ",");
@@ -917,7 +912,7 @@ public class LoadPlannerTest {
         List<String> columnNames = Lists.newArrayList("k1", "k33", "v");
         DataDescription desc = new DataDescription("t2", null, files, columnNames,
                 null, null, "ORC", Lists.newArrayList("k2"),
-                false, columnMappingList, null);
+                false, columnMappingList, null, null);
         Deencapsulation.invoke(desc, "analyzeColumns");
         BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
         Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
@@ -931,15 +926,29 @@ public class LoadPlannerTest {
         fileStatusList.add(new TBrokerFileStatus("path/k2=1/file1", false, 268435456, true));
         fileStatusesList.add(fileStatusList);
 
-        // plan
-        LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
-                timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
-                brokerDesc, fileGroups, fileStatusesList, 1);
-        planner.plan();
+        {
+            // plan
+            LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
+                    timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
+                    brokerDesc, fileGroups, fileStatusesList, 1);
+            planner.plan();
 
-        // check fragment
-        List<PlanFragment> fragments = planner.getFragments();
-        Assert.assertEquals(2, fragments.size());
+            // check fragment
+            List<PlanFragment> fragments = planner.getFragments();
+            Assert.assertEquals(2, fragments.size());
+        }
+        {
+            Config.eliminate_shuffle_load_by_replicated_storage = true;
+            // plan
+            LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
+                    timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
+                    brokerDesc, fileGroups, fileStatusesList, 1);
+            planner.plan();
+
+            // check fragment
+            List<PlanFragment> fragments = planner.getFragments();
+            Assert.assertEquals(1, fragments.size());
+        }
     }
 
     @Test
@@ -1019,7 +1028,7 @@ public class LoadPlannerTest {
         List<String> columnNames = Lists.newArrayList("k1", "k33", "v");
         DataDescription desc = new DataDescription("t2", null, files, columnNames,
                 null, null, "ORC", Lists.newArrayList("k2"),
-                false, columnMappingList, null);
+                false, columnMappingList, null, null);
         Deencapsulation.invoke(desc, "analyzeColumns");
         BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
         Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
@@ -1033,14 +1042,28 @@ public class LoadPlannerTest {
         fileStatusList.add(new TBrokerFileStatus("path/k2=1/file1", false, 268435456, true));
         fileStatusesList.add(fileStatusList);
 
-        // plan
-        LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
-                timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
-                brokerDesc, fileGroups, fileStatusesList, 1);
-        planner.plan();
+        {
+            // plan
+            LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
+                    timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
+                    brokerDesc, fileGroups, fileStatusesList, 1);
+            planner.plan();
 
-        // check fragment
-        List<PlanFragment> fragments = planner.getFragments();
-        Assert.assertEquals(2, fragments.size());
+            // check fragment
+            List<PlanFragment> fragments = planner.getFragments();
+            Assert.assertEquals(2, fragments.size());
+        }
+        {
+            Config.eliminate_shuffle_load_by_replicated_storage = true;
+            // plan
+            LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
+                    timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
+                    brokerDesc, fileGroups, fileStatusesList, 1);
+            planner.plan();
+
+            // check fragment
+            List<PlanFragment> fragments = planner.getFragments();
+            Assert.assertEquals(1, fragments.size());
+        }
     }
 }

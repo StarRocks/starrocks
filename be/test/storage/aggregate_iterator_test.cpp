@@ -43,15 +43,15 @@ protected:
 TEST_F(AggregateIteratorTest, agg_max) {
     config::vector_chunk_size = 1024;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_BIGINT, false);
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
-    auto c2 = std::make_shared<VectorizedField>(2, "c2", TYPE_LARGEINT, false);
-    auto c3 = std::make_shared<VectorizedField>(3, "c3", TYPE_FLOAT, false);
-    auto c4 = std::make_shared<VectorizedField>(4, "c4", TYPE_DOUBLE, false);
-    auto c5 = std::make_shared<VectorizedField>(5, "c5", TYPE_DECIMALV2, false);
-    auto c6 = std::make_shared<VectorizedField>(6, "c6", TYPE_DATE, false);
-    auto c7 = std::make_shared<VectorizedField>(7, "c7", TYPE_DATETIME, false);
-    auto c8 = std::make_shared<VectorizedField>(8, "c8", TYPE_VARCHAR, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_BIGINT, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
+    auto c2 = std::make_shared<Field>(2, "c2", TYPE_LARGEINT, false);
+    auto c3 = std::make_shared<Field>(3, "c3", TYPE_FLOAT, false);
+    auto c4 = std::make_shared<Field>(4, "c4", TYPE_DOUBLE, false);
+    auto c5 = std::make_shared<Field>(5, "c5", TYPE_DECIMALV2, false);
+    auto c6 = std::make_shared<Field>(6, "c6", TYPE_DATE, false);
+    auto c7 = std::make_shared<Field>(7, "c7", TYPE_DATETIME, false);
+    auto c8 = std::make_shared<Field>(8, "c8", TYPE_VARCHAR, false);
 
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
@@ -64,7 +64,7 @@ TEST_F(AggregateIteratorTest, agg_max) {
     c7->set_aggregate_method(STORAGE_AGGREGATE_MAX);
     c8->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
-    VectorizedSchema schema({k1, c1, c2, c3, c4, c5, c6, c7, c8});
+    Schema schema({k1, c1, c2, c3, c4, c5, c6, c7, c8});
 
     // clang-format off
     auto pk = std::vector<int64_t>{1, 1, 1, 2, 2};
@@ -122,15 +122,15 @@ TEST_F(AggregateIteratorTest, agg_max) {
 TEST_F(AggregateIteratorTest, agg_min) {
     config::vector_chunk_size = 1024;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_BIGINT, false);
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
-    auto c2 = std::make_shared<VectorizedField>(2, "c2", TYPE_LARGEINT, false);
-    auto c3 = std::make_shared<VectorizedField>(3, "c3", TYPE_FLOAT, false);
-    auto c4 = std::make_shared<VectorizedField>(4, "c4", TYPE_DOUBLE, false);
-    auto c5 = std::make_shared<VectorizedField>(5, "c5", TYPE_DECIMALV2, false);
-    auto c6 = std::make_shared<VectorizedField>(6, "c6", TYPE_DATE, false);
-    auto c7 = std::make_shared<VectorizedField>(7, "c7", TYPE_DATETIME, false);
-    auto c8 = std::make_shared<VectorizedField>(8, "c8", TYPE_VARCHAR, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_BIGINT, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
+    auto c2 = std::make_shared<Field>(2, "c2", TYPE_LARGEINT, false);
+    auto c3 = std::make_shared<Field>(3, "c3", TYPE_FLOAT, false);
+    auto c4 = std::make_shared<Field>(4, "c4", TYPE_DOUBLE, false);
+    auto c5 = std::make_shared<Field>(5, "c5", TYPE_DECIMALV2, false);
+    auto c6 = std::make_shared<Field>(6, "c6", TYPE_DATE, false);
+    auto c7 = std::make_shared<Field>(7, "c7", TYPE_DATETIME, false);
+    auto c8 = std::make_shared<Field>(8, "c8", TYPE_VARCHAR, false);
 
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
@@ -143,7 +143,7 @@ TEST_F(AggregateIteratorTest, agg_min) {
     c7->set_aggregate_method(STORAGE_AGGREGATE_MIN);
     c8->set_aggregate_method(STORAGE_AGGREGATE_MIN);
 
-    VectorizedSchema schema({k1, c1, c2, c3, c4, c5, c6, c7, c8});
+    Schema schema({k1, c1, c2, c3, c4, c5, c6, c7, c8});
 
     // clang-format off
     auto pk = std::vector<int64_t>{1, 1, 1, 2, 2};
@@ -201,15 +201,15 @@ TEST_F(AggregateIteratorTest, agg_min) {
 TEST_F(AggregateIteratorTest, agg_sum) {
     config::vector_chunk_size = 1024;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_BIGINT, false);
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_TINYINT, false);
-    auto c2 = std::make_shared<VectorizedField>(2, "c2", TYPE_SMALLINT, false);
-    auto c3 = std::make_shared<VectorizedField>(3, "c3", TYPE_INT, false);
-    auto c4 = std::make_shared<VectorizedField>(4, "c4", TYPE_BIGINT, false);
-    auto c5 = std::make_shared<VectorizedField>(5, "c5", TYPE_LARGEINT, false);
-    auto c6 = std::make_shared<VectorizedField>(6, "c6", TYPE_FLOAT, false);
-    auto c7 = std::make_shared<VectorizedField>(7, "c7", TYPE_DOUBLE, false);
-    auto c8 = std::make_shared<VectorizedField>(8, "c8", TYPE_DECIMALV2, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_BIGINT, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_TINYINT, false);
+    auto c2 = std::make_shared<Field>(2, "c2", TYPE_SMALLINT, false);
+    auto c3 = std::make_shared<Field>(3, "c3", TYPE_INT, false);
+    auto c4 = std::make_shared<Field>(4, "c4", TYPE_BIGINT, false);
+    auto c5 = std::make_shared<Field>(5, "c5", TYPE_LARGEINT, false);
+    auto c6 = std::make_shared<Field>(6, "c6", TYPE_FLOAT, false);
+    auto c7 = std::make_shared<Field>(7, "c7", TYPE_DOUBLE, false);
+    auto c8 = std::make_shared<Field>(8, "c8", TYPE_DECIMALV2, false);
 
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
@@ -222,7 +222,7 @@ TEST_F(AggregateIteratorTest, agg_sum) {
     c7->set_aggregate_method(STORAGE_AGGREGATE_SUM);
     c8->set_aggregate_method(STORAGE_AGGREGATE_SUM);
 
-    VectorizedSchema schema({k1, c1, c2, c3, c4, c5, c6, c7, c8});
+    Schema schema({k1, c1, c2, c3, c4, c5, c6, c7, c8});
     auto pk = std::vector<int64_t>{1, 1, 1, 2, 2};
     auto v1 = std::vector<int64_t>{1, 2, 3, 1, -1};
     auto v2 = std::vector<const char*>{"1", "2", "3", "1", "-1"};
@@ -275,15 +275,15 @@ TEST_F(AggregateIteratorTest, agg_sum) {
 TEST_F(AggregateIteratorTest, agg_replace) {
     config::vector_chunk_size = 1024;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_BIGINT, false);
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
-    auto c2 = std::make_shared<VectorizedField>(2, "c2", TYPE_LARGEINT, false);
-    auto c3 = std::make_shared<VectorizedField>(3, "c3", TYPE_FLOAT, false);
-    auto c4 = std::make_shared<VectorizedField>(4, "c4", TYPE_DOUBLE, false);
-    auto c5 = std::make_shared<VectorizedField>(5, "c5", TYPE_DECIMALV2, false);
-    auto c6 = std::make_shared<VectorizedField>(6, "c6", TYPE_DATE, false);
-    auto c7 = std::make_shared<VectorizedField>(7, "c7", TYPE_DATETIME, false);
-    auto c8 = std::make_shared<VectorizedField>(8, "c8", TYPE_VARCHAR, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_BIGINT, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
+    auto c2 = std::make_shared<Field>(2, "c2", TYPE_LARGEINT, false);
+    auto c3 = std::make_shared<Field>(3, "c3", TYPE_FLOAT, false);
+    auto c4 = std::make_shared<Field>(4, "c4", TYPE_DOUBLE, false);
+    auto c5 = std::make_shared<Field>(5, "c5", TYPE_DECIMALV2, false);
+    auto c6 = std::make_shared<Field>(6, "c6", TYPE_DATE, false);
+    auto c7 = std::make_shared<Field>(7, "c7", TYPE_DATETIME, false);
+    auto c8 = std::make_shared<Field>(8, "c8", TYPE_VARCHAR, false);
 
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
@@ -296,7 +296,7 @@ TEST_F(AggregateIteratorTest, agg_replace) {
     c7->set_aggregate_method(STORAGE_AGGREGATE_REPLACE);
     c8->set_aggregate_method(STORAGE_AGGREGATE_REPLACE);
 
-    VectorizedSchema schema({k1, c1, c2, c3, c4, c5, c6, c7, c8});
+    Schema schema({k1, c1, c2, c3, c4, c5, c6, c7, c8});
 
     // clang-format off
     auto pk = std::vector<int64_t>{1, 1, 1, 2, 2};
@@ -354,14 +354,14 @@ TEST_F(AggregateIteratorTest, agg_replace) {
 TEST_F(AggregateIteratorTest, agg_max_no_duplicate) {
     config::vector_chunk_size = 1024;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_BIGINT, false);
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_BIGINT, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
     c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
-    VectorizedSchema schema({k1, c1});
+    Schema schema({k1, c1});
 
     // clang-format off
     auto pk = std::vector<int64_t>{1, 2, 3, 4, 5};
@@ -405,14 +405,14 @@ TEST_F(AggregateIteratorTest, agg_max_no_duplicate) {
 TEST_F(AggregateIteratorTest, agg_max_empty) {
     config::vector_chunk_size = 1024;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_BIGINT, false);
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_BIGINT, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
     c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
-    VectorizedSchema schema({k1, c1});
+    Schema schema({k1, c1});
 
     // clang-format off
     auto pk = std::vector<int64_t>{};
@@ -434,14 +434,14 @@ TEST_F(AggregateIteratorTest, agg_max_empty) {
 TEST_F(AggregateIteratorTest, agg_max_small_chunk) {
     config::vector_chunk_size = 2;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_BIGINT, false);
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_BIGINT, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
     c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
-    VectorizedSchema schema({k1, c1});
+    Schema schema({k1, c1});
 
     // clang-format off
     auto pk = std::vector<int64_t>{+1, +2, +3, +4, +5, +6, +7, +8, +9};
@@ -479,14 +479,14 @@ TEST_F(AggregateIteratorTest, agg_max_small_chunk) {
 TEST_F(AggregateIteratorTest, agg_max_all_duplicate) {
     config::vector_chunk_size = 2;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_BIGINT, false);
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_BIGINT, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
     c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
-    VectorizedSchema schema({k1, c1});
+    Schema schema({k1, c1});
 
     // clang-format off
     auto pk = std::vector<int64_t>{+1, +1, +1, +1, +1, +1, +1, +1, +1};
@@ -522,14 +522,14 @@ TEST_F(AggregateIteratorTest, agg_max_all_duplicate) {
 TEST_F(AggregateIteratorTest, agg_boolean_key) {
     config::vector_chunk_size = 2;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_BOOLEAN, false);
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_BOOLEAN, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
     c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
-    VectorizedSchema schema({k1, c1});
+    Schema schema({k1, c1});
 
     // clang-format off
     auto pk = std::vector<uint8_t>{0, 0, 0, 1, 1, 1, 1, 1, 1};
@@ -566,14 +566,14 @@ TEST_F(AggregateIteratorTest, agg_boolean_key) {
 TEST_F(AggregateIteratorTest, agg_varchar_key) {
     config::vector_chunk_size = 2;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_VARCHAR, false);
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_VARCHAR, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
     c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
-    VectorizedSchema schema({k1, c1});
+    Schema schema({k1, c1});
 
     {
         auto pk = std::vector<std::string>{"a", "b", "c", "d", "e", "f"};
@@ -664,14 +664,14 @@ TEST_F(AggregateIteratorTest, agg_varchar_key) {
 TEST_F(AggregateIteratorTest, agg_date_key) {
     config::vector_chunk_size = 2;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_DATE, false);
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_DATE, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
     c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
-    VectorizedSchema schema({k1, c1});
+    Schema schema({k1, c1});
 
     {
         auto pk = std::vector<std::string>{"1990-01-01", "1991-01-01", "1992-01-01", "1993-01-01"};
@@ -759,14 +759,14 @@ TEST_F(AggregateIteratorTest, agg_date_key) {
 TEST_F(AggregateIteratorTest, agg_decimal_key) {
     config::vector_chunk_size = 2;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_DECIMALV2, false);
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_DECIMALV2, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
     c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
-    VectorizedSchema schema({k1, c1});
+    Schema schema({k1, c1});
 
     {
         auto pk = std::vector<std::string>{"0.0001", "0.0002", "0.0003", "0.0004"};
@@ -854,9 +854,9 @@ TEST_F(AggregateIteratorTest, agg_decimal_key) {
 TEST_F(AggregateIteratorTest, agg_varchar_date_key) {
     config::vector_chunk_size = 2;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_VARCHAR, false);
-    auto k2 = std::make_shared<VectorizedField>(1, "k2", TYPE_DATE, false);
-    auto c1 = std::make_shared<VectorizedField>(2, "c1", TYPE_SMALLINT, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_VARCHAR, false);
+    auto k2 = std::make_shared<Field>(1, "k2", TYPE_DATE, false);
+    auto c1 = std::make_shared<Field>(2, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
     k2->set_is_key(true);
@@ -864,7 +864,7 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key) {
     k2->set_aggregate_method(STORAGE_AGGREGATE_NONE);
     c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
-    VectorizedSchema schema({k1, k2, c1});
+    Schema schema({k1, k2, c1});
 
     {
         auto pk1 = std::vector<std::string>{"aaa", "aaa", "aaa", "aaa"};
@@ -987,9 +987,9 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key) {
 TEST_F(AggregateIteratorTest, agg_varchar_date_key_with_null) {
     config::vector_chunk_size = 2;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_VARCHAR, true);
-    auto k2 = std::make_shared<VectorizedField>(1, "k2", TYPE_DATE, true);
-    auto c1 = std::make_shared<VectorizedField>(2, "c1", TYPE_SMALLINT, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_VARCHAR, true);
+    auto k2 = std::make_shared<Field>(1, "k2", TYPE_DATE, true);
+    auto c1 = std::make_shared<Field>(2, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
     k2->set_is_key(true);
@@ -997,7 +997,7 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key_with_null) {
     k2->set_aggregate_method(STORAGE_AGGREGATE_NONE);
     c1->set_aggregate_method(STORAGE_AGGREGATE_SUM);
 
-    VectorizedSchema schema({k1, k2, c1});
+    Schema schema({k1, k2, c1});
 
     {
         auto pk1 = std::vector<std::string>{"aaa", "aaa", "aaa", "aaa"};
@@ -1043,11 +1043,11 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key_with_null) {
 TEST_F(AggregateIteratorTest, gen_source_masks) {
     config::vector_chunk_size = 2;
 
-    auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_BIGINT, false);
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_BIGINT, false);
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
 
-    VectorizedSchema schema({k1});
+    Schema schema({k1});
 
     auto pk = std::vector<int64_t>{1, 1, 2, 3, 3, 3, 4, 5, 5};
     auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_BIGINT(pk));
@@ -1080,10 +1080,10 @@ TEST_F(AggregateIteratorTest, gen_source_masks) {
 TEST_F(AggregateIteratorTest, sum_from_source_masks) {
     config::vector_chunk_size = 2;
 
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
     c1->set_aggregate_method(STORAGE_AGGREGATE_SUM);
 
-    VectorizedSchema schema({c1});
+    Schema schema({c1});
 
     auto v1 = std::vector<int16_t>{1, 2, 3, 4, 5, 6, 7, 8, 9};
     auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_SMALLINT(v1));
@@ -1125,10 +1125,10 @@ TEST_F(AggregateIteratorTest, sum_from_source_masks) {
 TEST_F(AggregateIteratorTest, max_from_source_masks) {
     config::vector_chunk_size = 2;
 
-    auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
     c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
-    VectorizedSchema schema({c1});
+    Schema schema({c1});
 
     auto v1 = std::vector<int16_t>{2, 1, 3, 4, 6, 5, 7, 8, 9};
     auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_SMALLINT(v1));

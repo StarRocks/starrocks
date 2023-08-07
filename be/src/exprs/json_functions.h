@@ -36,7 +36,7 @@ enum JsonFunctionType {
     JSON_FUN_UNKOWN //The last
 };
 
-template <LogicalType primitive_type>
+template <LogicalType logical_type>
 struct JsonTypeTraits {};
 
 template <>
@@ -201,6 +201,11 @@ public:
      */
     DEFINE_VECTORIZED_FN(json_keys);
 
+    /**
+     * Return json built from struct/map
+     */
+    DEFINE_VECTORIZED_FN(to_json);
+
     static Status native_json_path_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status native_json_path_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
@@ -210,6 +215,9 @@ public:
                                       simdjson::ondemand::value* value) noexcept;
 
     static void parse_json_paths(const std::string& path_strings, std::vector<SimpleJsonPath>* parsed_paths);
+
+    // jsonpaths_to_string serializes json patsh to std::string. Setting sub_index to serializes paritially json paths.
+    static std::string jsonpaths_to_string(const std::vector<SimpleJsonPath>& jsonpaths, size_t sub_index = -1);
 
     template <typename ValueType>
     static std::string_view to_json_string(ValueType&& val, size_t limit) {

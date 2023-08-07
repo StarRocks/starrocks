@@ -21,27 +21,19 @@ import java.net.InetSocketAddress;
 import java.util.List;
 
 public interface HAProtocol {
-    // get current epoch number
-    public long getEpochNumber();
-
     // increase epoch number by one
-    public boolean fencing();
+    boolean fencing();
+
+    InetSocketAddress getLeader();
+
+    String getLeaderNodeName();
 
     // get observer nodes in the current group
-    public List<InetSocketAddress> getObserverNodes();
+    List<InetSocketAddress> getObserverNodes();
 
     // get replica nodes in the current group
-    public List<InetSocketAddress> getElectableNodes(boolean leaderIncluded);
-
-    // get the leader of current group
-    public InetSocketAddress getLeader();
-
-    // get all the nodes except leader in the current group
-    public List<InetSocketAddress> getNoneLeaderNodes();
-
-    // check if the current node is leader
-    public boolean isLeader();
+    List<InetSocketAddress> getElectableNodes(boolean leaderIncluded);
 
     // remove a node from the group
-    public boolean removeElectableNode(String nodeName);
+    boolean removeElectableNode(String nodeName);
 }

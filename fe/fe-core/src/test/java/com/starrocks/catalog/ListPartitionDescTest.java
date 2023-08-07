@@ -16,10 +16,12 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
@@ -34,6 +36,7 @@ import org.junit.Test;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -371,5 +374,64 @@ public class ListPartitionDescTest {
         List<PartitionDesc> partitionDescs = Lists.newArrayList(p1, p2);
         ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
         listPartitionDesc.analyze(this.findColumnDefList(), null);
+    }
+
+    @Test
+    public void testCheckHivePartitionColumns() {
+        List<String> partitionNames = Lists.newArrayList("p1");
+        ColumnDef columnDef = new ColumnDef("p1", TypeDef.create(PrimitiveType.INT));
+        ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionNames, new ArrayList<>());
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "Table contains only partition columns",
+                () -> listPartitionDesc.checkHivePartitionColPos(Lists.newArrayList(columnDef)));
+
+        partitionNames = Lists.newArrayList("p1", "p2");
+        List<ColumnDef> columnDefs = Lists.newArrayList(
+                new ColumnDef("c1", TypeDef.create(PrimitiveType.INT)),
+                new ColumnDef("p2", TypeDef.create(PrimitiveType.INT)),
+                new ColumnDef("p1", TypeDef.create(PrimitiveType.INT)));
+        ListPartitionDesc listPartitionDesc1 = new ListPartitionDesc(partitionNames, new ArrayList<>());
+
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "Partition columns must be the last columns in the table and in the same order as partition by clause:",
+                () -> listPartitionDesc1.checkHivePartitionColPos(Lists.newArrayList(columnDefs)));
+
+        ListPartitionDesc listPartitionDesc2 = new ListPartitionDesc(new ArrayList<>(), new ArrayList<>());
+
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "No partition columns",
+                () -> listPartitionDesc2.analyzeExternalPartitionColumns(new ArrayList<>(), ""));
+
+        partitionNames = Lists.newArrayList("p1");
+        ListPartitionDesc listPartitionDesc3 = new ListPartitionDesc(partitionNames, new ArrayList<>());
+
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "Partition column[p1] does not exist in column list",
+                () -> listPartitionDesc3.analyzeExternalPartitionColumns(new ArrayList<>(), ""));
+
+        ColumnDef columnDef1 = new ColumnDef("p1", TypeDef.create(PrimitiveType.INT));
+        partitionNames = Lists.newArrayList("p1", "p1");
+        ListPartitionDesc listPartitionDesc4 = new ListPartitionDesc(partitionNames, new ArrayList<>());
+
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "Duplicated partition column",
+                () -> listPartitionDesc4.analyzeExternalPartitionColumns(Lists.newArrayList(columnDef1), ""));
+
+        partitionNames = Lists.newArrayList("p1");
+        List<ColumnDef> columnDefs1 = Lists.newArrayList(
+                new ColumnDef("c1", TypeDef.create(PrimitiveType.INT)),
+                new ColumnDef("p1", TypeDef.create(PrimitiveType.DECIMAL32)));
+        ListPartitionDesc listPartitionDesc5 = new ListPartitionDesc(partitionNames, new ArrayList<>());
+
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "Invalid partition column",
+                () -> listPartitionDesc5.analyzeExternalPartitionColumns(columnDefs1, "hive"));
+
+        partitionNames = Lists.newArrayList("p1");
+        List<ColumnDef> columnDefs2 = Lists.newArrayList(
+                new ColumnDef("c1", TypeDef.create(PrimitiveType.INT)),
+                new ColumnDef("p1", TypeDef.create(PrimitiveType.INT)));
+        ListPartitionDesc listPartitionDesc6 = new ListPartitionDesc(partitionNames, new ArrayList<>());
+        listPartitionDesc6.analyzeExternalPartitionColumns(columnDefs2, "hive");
     }
 }

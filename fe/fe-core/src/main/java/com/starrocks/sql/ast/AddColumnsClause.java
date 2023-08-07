@@ -16,7 +16,8 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.analysis.ColumnDef;
+import com.starrocks.analysis.ColumnPosition;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Map;
@@ -25,12 +26,27 @@ import java.util.Map;
 public class AddColumnsClause extends AlterTableColumnClause {
     private final List<ColumnDef> columnDefs;
 
+    private ColumnPosition materializedColumnPos = null;
+
+    public ColumnPosition getMaterializedColumnPos() {
+        return materializedColumnPos;
+    }
+
+    public void setMaterializedColumnPos(ColumnPosition colPos) {
+        this.materializedColumnPos = colPos;
+    }
+
     public List<ColumnDef> getColumnDefs() {
         return columnDefs;
     }
 
     public AddColumnsClause(List<ColumnDef> columnDefs, String rollupName, Map<String, String> properties) {
-        super(AlterOpType.SCHEMA_CHANGE, rollupName, properties);
+        this(columnDefs, rollupName, properties, NodePosition.ZERO);
+    }
+
+    public AddColumnsClause(List<ColumnDef> columnDefs, String rollupName, Map<String, String> properties,
+                            NodePosition pos) {
+        super(AlterOpType.SCHEMA_CHANGE, rollupName, properties, pos);
         this.columnDefs = columnDefs;
     }
 

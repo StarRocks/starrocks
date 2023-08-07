@@ -4,10 +4,12 @@
 
 Cancels a **running** collection task, including manual and custom automatic tasks.
 
+This statement is supported from v2.4.
+
 ## Syntax
 
 ```SQL
-KILL ANALYZE <ID>;
+KILL ANALYZE <ID>
 ```
 
 The task ID for a manual collection task can be obtained from SHOW ANALYZE STATUS. The task ID for a custom collection task can be obtained from SHOW ANALYZE SHOW ANALYZE JOB.

@@ -20,7 +20,7 @@
 #include "column/datum_convert.h"
 #include "column/decimalv3_column.h"
 #include "column/nullable_column.h"
-#include "column/vectorized_schema.h"
+#include "column/schema.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
 #include "runtime/decimalv2_value.h"
@@ -1520,7 +1520,7 @@ private:
 
 DEF_PRED_GUARD(DirectlyCopybleGuard, is_directly_copyable, typename, SrcType, typename, DstType)
 #define IS_DIRECTLY_COPYABLE_CTOR(SrcType, DstType) DEF_PRED_CASE_CTOR(is_directly_copyable, SrcType, DstType)
-#define IS_DIRECTLY_COPYABLE(PT, ...) DEF_BINARY_RELATION_ENTRY_SEP_NONE(IS_DIRECTLY_COPYABLE_CTOR, PT, ##__VA_ARGS__)
+#define IS_DIRECTLY_COPYABLE(LT, ...) DEF_BINARY_RELATION_ENTRY_SEP_NONE(IS_DIRECTLY_COPYABLE_CTOR, LT, ##__VA_ARGS__)
 
 IS_DIRECTLY_COPYABLE(DecimalV2Value, int128_t)
 IS_DIRECTLY_COPYABLE(int128_t, DecimalV2Value)
@@ -1714,7 +1714,7 @@ Status RowConverter::init(const TabletSchema& in_schema, const TabletSchema& out
     return Status::OK();
 }
 
-Status RowConverter::init(const VectorizedSchema& in_schema, const VectorizedSchema& out_schema) {
+Status RowConverter::init(const Schema& in_schema, const Schema& out_schema) {
     auto num_columns = in_schema.num_fields();
     _converters.resize(num_columns);
     for (int i = 0; i < num_columns; ++i) {
@@ -1734,7 +1734,7 @@ void RowConverter::convert(std::vector<Datum>* dst, const std::vector<Datum>& sr
     }
 }
 
-Status ChunkConverter::init(const VectorizedSchema& in_schema, const VectorizedSchema& out_schema) {
+Status ChunkConverter::init(const Schema& in_schema, const Schema& out_schema) {
     DCHECK_EQ(in_schema.num_fields(), out_schema.num_fields());
     DCHECK_EQ(in_schema.num_key_fields(), out_schema.num_key_fields());
     auto num_columns = in_schema.num_fields();
@@ -1748,12 +1748,12 @@ Status ChunkConverter::init(const VectorizedSchema& in_schema, const VectorizedS
             return Status::NotSupported("Cannot get field converter");
         }
     }
-    _out_schema = std::make_shared<VectorizedSchema>(out_schema);
+    _out_schema = std::make_shared<Schema>(out_schema);
     return Status::OK();
 }
 
 std::unique_ptr<Chunk> ChunkConverter::copy_convert(const Chunk& from) const {
-    auto dest = std::make_unique<Chunk>(Columns{}, std::make_shared<VectorizedSchema>());
+    auto dest = std::make_unique<Chunk>(Columns{}, std::make_shared<Schema>());
     auto num_columns = _converters.size();
     DCHECK_EQ(num_columns, from.num_columns());
     for (int i = 0; i < num_columns; ++i) {
@@ -1765,7 +1765,7 @@ std::unique_ptr<Chunk> ChunkConverter::copy_convert(const Chunk& from) const {
 }
 
 std::unique_ptr<Chunk> ChunkConverter::move_convert(Chunk* from) const {
-    auto dest = std::make_unique<Chunk>(Columns{}, std::make_shared<VectorizedSchema>());
+    auto dest = std::make_unique<Chunk>(Columns{}, std::make_shared<Schema>());
     auto num_columns = _converters.size();
     DCHECK_EQ(num_columns, from->num_columns());
     for (int i = 0; i < num_columns; ++i) {

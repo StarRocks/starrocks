@@ -78,11 +78,13 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                 ctx->fail_infos = std::move(executor->runtime_state()->tablet_fail_infos());
                 Status status = executor->status();
                 if (status.ok()) {
-                    ctx->number_total_rows = executor->runtime_state()->num_rows_load_from_sink();
-                    ctx->number_loaded_rows = executor->runtime_state()->num_rows_load_sink_success();
+                    ctx->number_total_rows = executor->runtime_state()->num_rows_load_sink() +
+                                             executor->runtime_state()->num_rows_load_filtered() +
+                                             executor->runtime_state()->num_rows_load_unselected();
+                    ctx->number_loaded_rows = executor->runtime_state()->num_rows_load_sink();
                     ctx->number_filtered_rows = executor->runtime_state()->num_rows_load_filtered();
                     ctx->number_unselected_rows = executor->runtime_state()->num_rows_load_unselected();
-                    ctx->loaded_bytes = executor->runtime_state()->num_bytes_load_from_sink();
+                    ctx->loaded_bytes = executor->runtime_state()->num_bytes_load_sink();
 
                     int64_t num_selected_rows = ctx->number_total_rows - ctx->number_unselected_rows;
                     if ((double)ctx->number_filtered_rows / num_selected_rows > ctx->max_filter_ratio) {
@@ -122,6 +124,11 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
 
                 if (!executor->runtime_state()->get_error_log_file_path().empty()) {
                     ctx->error_url = to_load_error_http_path(executor->runtime_state()->get_error_log_file_path());
+                }
+
+                if (!executor->runtime_state()->get_rejected_record_file_path().empty()) {
+                    ctx->rejected_record_path = fmt::format("{}:{}", BackendOptions::get_localBackend().host,
+                                                            executor->runtime_state()->get_rejected_record_file_path());
                 }
 
                 if (ctx->unref()) {
@@ -281,6 +288,7 @@ Status StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
     TLoadTxnRollbackRequest request;
     set_request_auth(&request, ctx->auth);
     request.db = ctx->db;
+    request.tbl = ctx->table;
     request.txnId = ctx->txn_id;
     request.failInfos = std::move(ctx->fail_infos);
     request.__set_reason(ctx->status.get_error_msg());
@@ -334,6 +342,7 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         manual_load_attach.__set_filteredRows(ctx->number_filtered_rows);
         manual_load_attach.__set_receivedBytes(ctx->receive_bytes);
         manual_load_attach.__set_loadedBytes(ctx->loaded_bytes);
+        manual_load_attach.__set_unselectedRows(ctx->number_unselected_rows);
         if (!ctx->error_url.empty()) {
             manual_load_attach.__set_errorLogUrl(ctx->error_url);
         }

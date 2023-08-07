@@ -18,6 +18,7 @@
 
 #include <starlet.h>
 
+#include <memory>
 #include <shared_mutex>
 #include <unordered_map>
 
@@ -29,9 +30,12 @@
 
 namespace starrocks {
 
+class Cache;
+class CacheKey;
+
 // TODO: find a better place to put this function
 // Convert absl::Status to starrocks::Status
-Status to_status(absl::Status absl_status);
+Status to_status(const absl::Status& absl_status);
 
 class StarOSWorker : public staros::starlet::Worker {
 public:
@@ -43,9 +47,9 @@ public:
     using FileSystem = staros::starlet::fslib::FileSystem;
     using Configuration = staros::starlet::fslib::Configuration;
 
-    StarOSWorker() : _service_id(), _worker_id(0) {}
+    StarOSWorker();
 
-    ~StarOSWorker() override = default;
+    ~StarOSWorker() override;
 
     absl::Status add_shard(const ShardInfo& shard) override;
 
@@ -70,11 +74,28 @@ private:
         ShardInfoDetails(const ShardInfo& info) : shard_info(info) {}
     };
 
-private:
+    using CacheValue = std::weak_ptr<FileSystem>;
+
+    static void cache_value_deleter(const CacheKey& /*key*/, void* value) { delete static_cast<CacheValue*>(value); }
+
+    static std::string get_cache_key(std::string_view scheme, const Configuration& conf);
+
+    static absl::StatusOr<staros::starlet::fslib::Configuration> build_conf_from_shard_info(const ShardInfo& info);
+
+    static absl::StatusOr<std::string> build_scheme_from_shard_info(const ShardInfo& info);
+
+    static bool need_enable_cache(const ShardInfo& info);
+
+    absl::StatusOr<std::shared_ptr<FileSystem>> build_filesystem_on_demand(ShardId id, const Configuration& conf);
+    absl::StatusOr<std::shared_ptr<FileSystem>> build_filesystem_from_shard_info(const ShardInfo& info,
+                                                                                 const Configuration& conf);
+    absl::StatusOr<std::shared_ptr<FileSystem>> new_shared_filesystem(std::string_view scheme,
+                                                                      const Configuration& conf);
+    absl::Status invalidate_fs(const ShardInfo& shard);
+
     mutable std::shared_mutex _mtx;
-    ServiceId _service_id;
-    WorkerId _worker_id;
     std::unordered_map<ShardId, ShardInfoDetails> _shards;
+    std::unique_ptr<Cache> _fs_cache;
 };
 
 extern std::shared_ptr<StarOSWorker> g_worker;

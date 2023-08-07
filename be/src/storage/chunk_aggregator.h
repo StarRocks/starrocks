@@ -28,15 +28,15 @@ namespace starrocks {
 
 class ChunkAggregator {
 private:
-    ChunkAggregator(const VectorizedSchema* schema, uint32_t reserve_rows, uint32_t max_aggregate_rows, double factor,
+    ChunkAggregator(const Schema* schema, uint32_t reserve_rows, uint32_t max_aggregate_rows, double factor,
                     bool is_vertical_merge, bool is_key);
 
 public:
-    ChunkAggregator(const VectorizedSchema* schema, uint32_t reserve_rows, uint32_t max_aggregate_rows, double factor);
+    ChunkAggregator(const Schema* schema, uint32_t reserve_rows, uint32_t max_aggregate_rows, double factor);
 
-    ChunkAggregator(const VectorizedSchema* schema, uint32_t max_aggregate_rows, double factor);
+    ChunkAggregator(const Schema* schema, uint32_t max_aggregate_rows, double factor);
 
-    ChunkAggregator(const VectorizedSchema* schema, uint32_t max_aggregate_rows, double factor, bool is_vertical_merge,
+    ChunkAggregator(const Schema* schema, uint32_t max_aggregate_rows, double factor, bool is_vertical_merge,
                     bool is_key);
 
     void update_source(ChunkPtr& chunk) { update_source(chunk, nullptr); }
@@ -71,7 +71,7 @@ private:
     bool _row_equal(const Chunk* lhs, size_t m, const Chunk* rhs, size_t n) const;
 
     // chunk mate
-    const VectorizedSchema* _schema;
+    const Schema* _schema;
 
     size_t _key_fields;
 
@@ -113,8 +113,8 @@ private:
 
     // element memory usage and bytes usage calculation cost of object column is high,
     // so cache calculated element memory usage and bytes usage to avoid repeated calculation.
-    size_t _element_memory_usage = 0;
-    size_t _element_memory_usage_num_rows = 0;
+    size_t _reference_memory_usage = 0;
+    size_t _reference_memory_usage_num_rows = 0;
     size_t _bytes_usage = 0;
     size_t _bytes_usage_num_rows = 0;
 

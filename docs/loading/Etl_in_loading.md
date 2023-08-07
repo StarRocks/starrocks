@@ -2,7 +2,11 @@
 
 StarRocks supports data transformation at loading.
 
-This feature supports [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), and [Routine Load](../loading/RoutineLoad.md) but does not support [Spark Load](../loading/SparkLoad.md).
+This feature supports [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), and [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md) but does not support [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md).
+
+> **NOTICE**
+>
+> You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
 
 This topic uses CSV data as an example to describe how to extract and transform data at loading. The data file formats that are supported vary depending on the loading method of your choice.
 
@@ -34,60 +38,64 @@ When you load a data file into a StarRocks table, the data of the data file may 
 
 ### Broker Load
 
-See the "Background information" section in [Load data from HDFS or cloud storage](../loading/BrokerLoad.md).
+See the "Background information" section in [Load data from HDFS](../loading/hdfs_load.md) or [Load data from cloud storage](../loading/cloud_storage_load.md).
 
 ### Routine load
 
-If you choose Routine Load, make sure that topics are created in your Apache Kafka® cluster. Assume that you have created two topics: `topic1` and `topic2`.
+If you choose [Routine Load](./RoutineLoad.md), make sure that topics are created in your Apache Kafka® cluster. Assume that you have created two topics: `topic1` and `topic2`.
 
 ## Data examples
 
-1. Create tables in your StarRocks database `test_db`.
-
-   a. Create a table named `table1`, which consists of three columns: `event_date`, `event_type`, and `user_id`.
-
-   ```SQL
-   MySQL [test_db]> CREATE TABLE table1
-   (
-       `event_date` DATE COMMENT "event date",
-       `event_type` TINYINT COMMENT "event type",
-       `user_id` BIGINT COMMENT "user ID"
-   )
-   DISTRIBUTED BY HASH(user_id) BUCKETS 10;
-   ```
-
-   b. Create a table named `table2`, which consists of four columns: `date`, `year`, `month`, and `day`.
-
-   ```SQL
-   MySQL [test_db]> CREATE TABLE table2
-   (
-       `date` DATE COMMENT "date",
-       `year` INT COMMENT "year",
-       `month` TINYINT COMMENT "month",
-       `day` TINYINT COMMENT "day"
-   )
-   DISTRIBUTED BY HASH(date) BUCKETS 10;
-   ```
-
-2. Create data files in your local file system.
+1. Create data files in your local file system.
 
    a. Create a data file named `file1.csv`. The file consists of four columns, which represent user ID, user gender, event date, and event type in sequence.
 
-   ```Plain
-   354,female,2020-05-20,1
-   465,male,2020-05-21,2
-   576,female,2020-05-22,1
-   687,male,2020-05-23,2
-   ```
+      ```Plain
+      354,female,2020-05-20,1
+      465,male,2020-05-21,2
+      576,female,2020-05-22,1
+      687,male,2020-05-23,2
+      ```
 
    b. Create a data file named `file2.csv`. The file consists of only one column, which represents date.
 
-   ```Plain
-   2020-05-20
-   2020-05-21
-   2020-05-22
-   2020-05-23
-   ```
+      ```Plain
+      2020-05-20
+      2020-05-21
+      2020-05-22
+      2020-05-23
+      ```
+
+2. Create tables in your StarRocks database `test_db`.
+
+   > **NOTE**
+   >
+   > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+
+   a. Create a table named `table1`, which consists of three columns: `event_date`, `event_type`, and `user_id`.
+
+      ```SQL
+      MySQL [test_db]> CREATE TABLE table1
+      (
+          `event_date` DATE COMMENT "event date",
+          `event_type` TINYINT COMMENT "event type",
+          `user_id` BIGINT COMMENT "user ID"
+      )
+      DISTRIBUTED BY HASH(user_id);
+      ```
+
+   b. Create a table named `table2`, which consists of four columns: `date`, `year`, `month`, and `day`.
+
+      ```SQL
+      MySQL [test_db]> CREATE TABLE table2
+      (
+          `date` DATE COMMENT "date",
+          `year` INT COMMENT "year",
+          `month` TINYINT COMMENT "month",
+          `day` TINYINT COMMENT "day"
+      )
+      DISTRIBUTED BY HASH(date);
+      ```
 
 3. Upload `file1.csv` and `file2.csv` to the `/user/starrocks/data/input/` path of your HDFS cluster, publish the data of `file1.csv` to `topic1` of your Kafka cluster, and publish the data of `file2.csv` to `topic2` of your Kafka cluster.
 
@@ -124,7 +132,8 @@ This section uses `file1.csv` and `table1` as an example. The four columns of `f
 If `file1.csv` is stored in your local file system, run the following command to create a [Stream Load](../loading/StreamLoad.md) job:
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
+    -H "Expect:100-continue" \
     -H "column_separator:," \
     -H "columns: user_id, user_gender, event_date, event_type" \
     -T file1.csv -XPUT \
@@ -139,7 +148,7 @@ For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-referen
 
 #### Load data from an HDFS cluster
 
-If `file1.csv` is stored in your HDFS cluster, execute the following statement to create a [Broker Load](../loading/BrokerLoad.md) job:
+If `file1.csv` is stored in your HDFS cluster, execute the following statement to create a [Broker Load](../loading/hdfs_load.md) job:
 
 ```SQL
 LOAD LABEL test_db.label1
@@ -179,7 +188,7 @@ FROM KAFKA
 >
 > If you choose Routine Load, you must use the `COLUMNS` parameter to temporarily name the columns of the data file to create a column mapping between the data file and the StarRocks table.
 
-For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
+For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
 
 ### Query data
 
@@ -222,7 +231,8 @@ This section uses `file1.csv` and `table1` as an example. If you want to load on
 If `file1.csv` is stored in your local file system, run the following command to create a [Stream Load](../loading/StreamLoad.md) job:
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
+    -H "Expect:100-continue" \
     -H "column_separator:," \
     -H "columns: user_id, user_gender, event_date, event_type" \
     -H "where: event_type=1" \
@@ -234,7 +244,7 @@ For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-referen
 
 #### Load data from an HDFS cluster
 
-If `file1.csv` is stored in your HDFS cluster, execute the following statement to create a [Broker Load](../loading/BrokerLoad.md) job:
+If `file1.csv` is stored in your HDFS cluster, execute the following statement to create a [Broker Load](../loading/hdfs_load.md) job:
 
 ```SQL
 LOAD LABEL test_db.label2
@@ -268,7 +278,7 @@ FROM KAFKA
 );
 ```
 
-For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
+For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
 
 ### Query data
 
@@ -309,7 +319,8 @@ This section uses `file2.csv` and `table2` as an example. `file2.csv` consists o
 If `file2.csv` is stored in your local file system, run the following command to create a [Stream Load](../loading/StreamLoad.md) job:
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
+    -H "Expect:100-continue" \
     -H "column_separator:," \
     -H "columns:date,year=year(date),month=month(date),day=day(date)" \
     -T file2.csv -XPUT \
@@ -326,7 +337,7 @@ For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-referen
 
 #### Load data from an HDFS cluster
 
-If `file2.csv` is stored in your HDFS cluster, execute the following statement to create a [Broker Load](../loading/BrokerLoad.md) job:
+If `file2.csv` is stored in your HDFS cluster, execute the following statement to create a [Broker Load](../loading/hdfs_load.md) job:
 
 ```SQL
 LOAD LABEL test_db.label3
@@ -367,7 +378,7 @@ FROM KAFKA
 >
 > In the `COLUMNS` parameter, you must first temporarily name **all columns** of the data file, and then temporarily name the new columns that you want to generate from the original columns of the data file. As shown in the preceding example, the only column of `file2.csv` is temporarily named as `date`, and then the `year=year(date)`, `month=month(date)`, and `day=day(date)` functions are invoked to generate three new columns, which are temporarily named as `year`, `month`, and `day`.
 
-For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
+For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
 
 ### Query data
 
@@ -407,7 +418,7 @@ The four data files are stored in the `/user/starrocks/data/input/` path of your
 
 ### Load data from an HDFS cluster
 
-Execute the following statement to create a [Broker Load](../loading/BrokerLoad.md) job, which enables you to extract the `date` partition field values from the `/user/starrocks/data/input/` file path and use a wildcard (*) to specify that you want to load all data files in the file path to `table1`:
+Execute the following statement to create a [Broker Load](../loading/hdfs_load.md) job, which enables you to extract the `date` partition field values from the `/user/starrocks/data/input/` file path and use a wildcard (*) to specify that you want to load all data files in the file path to `table1`:
 
 ```SQL
 LOAD LABEL test_db.label4

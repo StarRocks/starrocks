@@ -16,16 +16,16 @@
 
 #include "column/vectorized_fwd.h"
 #include "gtest/gtest.h"
-#include "runtime/primitive_type.h"
 #include "simd/mulselector.h"
 #include "testutil/parallel_test.h"
+#include "types/logical_type.h"
 #include "util/value_generator.h"
 
 namespace starrocks {
 
 template <LogicalType TYPE, int CASE_SIZE, int TEST_SIZE>
 void test_simd_multi_select_if() {
-    static_assert(isArithmeticPT<TYPE>, "Now Select IF only support Arithmetic TYPE");
+    static_assert(isArithmeticLT<TYPE>, "Now Select IF only support Arithmetic TYPE");
 
     using SelectVec = typename SIMD_muti_selector<TYPE>::SelectVec;
     using Container = typename SIMD_muti_selector<TYPE>::Container;

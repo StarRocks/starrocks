@@ -38,6 +38,7 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
@@ -97,15 +98,35 @@ public class DataProperty implements Writable {
 
         Preconditions.checkState(mediumSet.size() <= 2, "current medium set: " + mediumSet);
         TStorageMedium m = TStorageMedium.SSD;
-        // If the storage paths reported by all the backends all have storage medium type HDD,
-        // we infer that user wants to create a table or partition with storage_medium=HDD when not explicitly
-        // specify the storage_medium property, otherwise it's SSD
+        long cooldownTimeMs = MAX_COOLDOWN_TIME_MS;
+
+        // When storage_medium property is not explicitly specified on creating table, we infer the storage medium type
+        // based on the types of storage paths reported by backends. Here is the rules,
+        //   1. If the storage paths reported by all the backends all have storage medium type HDD,
+        //      we infer that user wants to create a table or partition with storage_medium=HDD.
+        //   2. If the reported storage paths have both SSD type and HDD type, and storage cool down feature is
+        //      not used, we also infer with HDD type.
+        //   3. In other cases, it's SSD type.
         if (mediumSet.size() == 0 ||
-                (mediumSet.size() == 1 && mediumSet.iterator().next() == TStorageMedium.HDD)) {
+                (mediumSet.size() == 1 && mediumSet.iterator().next() == TStorageMedium.HDD) ||
+                (mediumSet.size() == 2 && Config.tablet_sched_storage_cooldown_second < 0)) {
             m = TStorageMedium.HDD;
         }
 
-        return new DataProperty(m);
+        if (mediumSet.size() == 2) {
+            cooldownTimeMs = getSsdCooldownTimeMs();
+        }
+
+        return new DataProperty(m, cooldownTimeMs);
+    }
+
+    public static long getSsdCooldownTimeMs() {
+        long currentTimeMs = System.currentTimeMillis();
+        return ((Config.tablet_sched_storage_cooldown_second <= 0) ||
+                ((DataProperty.MAX_COOLDOWN_TIME_MS - currentTimeMs) / 1000L <
+                        Config.tablet_sched_storage_cooldown_second)) ?
+                DataProperty.MAX_COOLDOWN_TIME_MS :
+                currentTimeMs + Config.tablet_sched_storage_cooldown_second * 1000L;
     }
 
     public TStorageMedium getStorageMedium() {

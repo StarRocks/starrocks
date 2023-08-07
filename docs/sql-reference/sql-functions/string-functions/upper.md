@@ -2,7 +2,7 @@
 
 ## Description
 
-This function converts a string to upper-case.
+Converts a string to upper-case.
 
 ## Syntax
 
@@ -12,11 +12,11 @@ upper(str)
 
 ## Parameters
 
-- `str`：The string that need to be converted. If `str` is not a string type, it will try implicit cast first.
+- `str`: the string to convert. If `str` is not a string type, it will try implicit cast first.
 
 ## Return values
 
-Return upper-case string.
+Return an upper-case string.
 
 ## Examples
 

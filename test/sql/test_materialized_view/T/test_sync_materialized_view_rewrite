@@ -1,0 +1,78 @@
+-- name: test_sync_materialized_view_rewrite
+CREATE TABLE `duplicate_tbl` (
+    `k1` date NULL COMMENT "",   
+    `k2` datetime NULL COMMENT "",   
+    `k3` char(20) NULL COMMENT "",   
+    `k4` varchar(20) NULL COMMENT "",   
+    `k5` boolean NULL COMMENT "",   
+    `k6` tinyint(4) NULL COMMENT "",   
+    `k7` smallint(6) NULL COMMENT "",   
+    `k8` int(11) NULL COMMENT "",   
+    `k9` bigint(20) NULL COMMENT "",   
+    `k10` largeint(40) NULL COMMENT "",   
+    `k11` float NULL COMMENT "",   
+    `k12` double NULL COMMENT "",   
+    `k13` decimal128(27, 9) NULL COMMENT "",   
+    INDEX idx1 (`k6`) USING BITMAP 
+) 
+ENGINE=OLAP DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) 
+DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3 
+PROPERTIES ( 
+    "replication_num" = "1", 
+    "in_memory" = "false", 
+    "enable_persistent_index" = "false", 
+    "replicated_storage" = "true", 
+    "compression" = "LZ4" 
+);
+
+insert into duplicate_tbl values 
+    ('2023-06-15', '2023-06-15 00:00:00', 'a', 'a', false, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0),
+    ('2023-06-15', '2023-06-15 00:00:00', 'a', 'a', false, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0),
+    ('2023-06-15', '2023-06-15 00:00:00', 'a', 'a', false, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0),
+    ('2023-06-16', '2023-06-15 00:00:00', 'a', 'a', false, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0)
+;
+
+create materialized view mv_1 as select k1, sum(k6) as k8, max(k7) as k7 from duplicate_tbl group by 1;
+function: wait_materialized_view_finish()
+
+create materialized view mv_2 as select k1, sum(k6 + 1) as k6, max(k7 * 10) as k7 from duplicate_tbl group by 1;
+function: wait_materialized_view_finish()
+
+create materialized view mv_3 as select k1, count(k6 + 1) as c_k6, min(k7 * 10) as m_k7 from duplicate_tbl group by 1;
+function: wait_materialized_view_finish()
+
+CREATE MATERIALIZED VIEW mv_4
+AS SELECT k1, MIN(k6), MIN(k7), MIN(k8), SUM(k9), MAX(k10), MIN(k11), MIN(k12), SUM(k13) FROM duplicate_tbl GROUP BY k1;
+function: wait_materialized_view_finish()
+
+insert into duplicate_tbl values 
+    ('2023-06-15', '2023-06-15 00:00:00', 'a', 'a', false, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0),
+    ('2023-06-15', '2023-06-15 00:00:00', 'a', 'a', false, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0),
+    ('2023-06-15', '2023-06-15 00:00:00', 'a', 'a', false, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0),
+    ('2023-06-16', '2023-06-15 00:00:00', 'a', 'a', false, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0)
+;
+
+select k1, sum(k6) as k6, max(k7) as k7 from duplicate_tbl group by 1 order by 1;
+select k1, sum(k6 + 1) as k6, max(k7 * 10) as k7 from duplicate_tbl group by 1 order by 1;
+select k1, count(k6 + 1) as c_k6, min(k7 * 10) as m_k7 from duplicate_tbl group by 1 order by 1;
+SELECT k1, MIN(k6), MIN(k7), MIN(k8), SUM(k9), MAX(k10), MIN(k11), MIN(k12), SUM(k13) FROM duplicate_tbl GROUP BY k1 order by 1;
+
+drop materialized view mv_1;
+drop materialized view mv_2;
+drop materialized view mv_3;
+drop materialized view mv_4;
+
+-- name: test_case_when
+drop table if exists case_when_tbl1;
+CREATE TABLE case_when_tbl1 (
+    k1 INT,
+    k2 char(20))
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1);
+insert into case_when_tbl1 values (1,'xian');
+
+create materialized view case_when_mv1 AS SELECT k1, (CASE k2 WHEN 'beijing' THEN 'bigcity' ELSE 'smallcity' END) as city FROM case_when_tbl1;
+function: wait_materialized_view_finish()
+
+SELECT k1, (CASE k2 WHEN 'beijing' THEN 'bigcity' ELSE 'smallcity' END) as city FROM case_when_tbl1;
+drop table if exists case_when_tbl1;

@@ -15,15 +15,17 @@
 #pragma once
 
 #include <deque>
+#include <memory>
 #include <utility>
 
 #include "column/chunk.h"
 #include "column/datum.h"
+#include "column/vectorized_fwd.h"
+#include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
 #include "runtime/chunk_cursor.h"
 
 namespace starrocks {
-
 // SortedRun represents part of sorted chunk, specified by the range
 // The chunk is sorted based on `orderby` columns
 struct SortedRun {
@@ -34,6 +36,7 @@ struct SortedRun {
     SortedRun() = default;
     ~SortedRun() = default;
     SortedRun(const SortedRun& rhs) = default;
+    SortedRun(SortedRun&& rhs) = default;
     SortedRun& operator=(const SortedRun& rhs) = default;
 
     SortedRun(const ChunkPtr& ichunk, Columns columns)
@@ -47,6 +50,17 @@ struct SortedRun {
 
     SortedRun(const ChunkPtr& ichunk, const std::vector<ExprContext*>* exprs);
 
+    void set_range(size_t start, size_t end) {
+        DCHECK_LE(range.first, range.second);
+        DCHECK_LT(range.second - range.first, Column::MAX_CAPACITY_LIMIT);
+        range.first = start;
+        range.second = end;
+    }
+    void reset_range() {
+        DCHECK_EQ(chunk->num_rows(), orderby[0]->size());
+        range.first = 0;
+        range.second = chunk->num_rows();
+    }
     size_t num_columns() const { return orderby.size(); }
     size_t start_index() const { return range.first; }
     size_t end_index() const { return range.second; }
@@ -71,9 +85,12 @@ struct SortedRun {
 
     // Steal part of chunk, skip the first `skipped_rows` rows and take the next `size` rows, avoid copy if possible
     // After steal out, this run will not reference the chunk anymore
-    ChunkPtr steal_chunk(size_t size, size_t skipped_rows = 0);
+    ChunkPtr steal_chunk(size_t size, size_t skipped_rows = 0) { return steal(false, size, skipped_rows).first; }
+    std::pair<ChunkPtr, Columns> steal(bool steal_orderby, size_t size, size_t skipped_rows);
 
     int compare_row(const SortDescs& desc, const SortedRun& rhs, size_t lhs_row, size_t rhs_row) const;
+
+    bool is_sorted(const SortDescs& desc) const;
 };
 
 // Multiple sorted chunks kept the order, without any intersection
@@ -82,10 +99,29 @@ struct SortedRuns {
 
     SortedRuns() = default;
     ~SortedRuns() = default;
+    SortedRuns(const SortedRuns& run) = default;
+    SortedRuns(SortedRuns&& run) = default;
     SortedRuns(const SortedRun& run) : chunks{run} {}
 
-    SortedRun& get_run(int i) { return chunks[i]; }
-    ChunkPtr get_chunk(int i) const { return chunks[i].chunk; }
+    void merge_runs(SortedRuns& runs) {
+        for (auto& run : runs.chunks) {
+            chunks.push_back(std::move(run));
+        }
+    }
+    SortedRun& get_run(size_t i) { return chunks[i]; }
+    const SortedRun& get_run(size_t i) const { return chunks[i]; }
+    std::optional<std::pair<size_t, size_t>> get_run_idx(const size_t row) const {
+        size_t offset = row;
+        for (size_t idx = 0; idx < chunks.size(); idx++) {
+            auto& chunk = chunks[idx];
+            if (offset < chunk.num_rows()) {
+                return std::make_pair(idx, chunk.start_index() + offset);
+            }
+            offset -= chunk.num_rows();
+        }
+        return {};
+    }
+    ChunkPtr get_chunk(size_t i) const { return chunks[i].chunk; }
     size_t num_chunks() const { return chunks.size(); }
     size_t num_rows() const;
     void resize(size_t size);
@@ -124,6 +160,9 @@ public:
 private:
     ChunkProvider& as_provider() { return _chunk_provider; }
     StatusOr<ChunkUniquePtr> merge_sorted_cursor_two_way();
+    // merge two runs
+    StatusOr<ChunkUniquePtr> merge_sorted_intersected_cursor(SortedRun& run1, SortedRun& run2);
+
     bool move_cursor();
 
     SortDescs _sort_desc;
@@ -132,6 +171,11 @@ private:
     std::unique_ptr<SimpleChunkSortCursor> _left_cursor;
     std::unique_ptr<SimpleChunkSortCursor> _right_cursor;
     ChunkProvider _chunk_provider;
+
+#ifndef NDEBUG
+    bool _left_is_empty = false;
+    bool _right_is_empty = false;
+#endif
 };
 
 // Merge multiple cursors in cascade way
@@ -158,7 +202,7 @@ class SimpleChunkSortCursor;
 Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& left, const SortedRun& right,
                                    Permutation* output);
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
-                           const std::vector<ChunkPtr>& chunks, SortedRuns* output);
+                           std::vector<ChunkUniquePtr>& chunks, SortedRuns* output);
 Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
                                    std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors,
                                    const ChunkConsumer& consumer);

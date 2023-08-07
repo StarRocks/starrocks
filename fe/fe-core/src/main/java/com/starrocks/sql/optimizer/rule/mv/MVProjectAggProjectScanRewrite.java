@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.mv;
 
 import com.google.common.base.Preconditions;
@@ -63,6 +62,7 @@ public class MVProjectAggProjectScanRewrite {
 
         if (input.getOp() instanceof LogicalProjectOperator &&
                 input.inputAt(0).getOp() instanceof LogicalAggregationOperator &&
+                input.inputAt(0).inputAt(0).getOp() instanceof LogicalProjectOperator &&
                 input.inputAt(0).inputAt(0).inputAt(0).getOp() instanceof LogicalOlapScanOperator) {
             LogicalProjectOperator topProject = (LogicalProjectOperator) input.getOp();
             LogicalProjectOperator bellowProject = (LogicalProjectOperator) input.inputAt(0).inputAt(0).getOp();
@@ -115,19 +115,9 @@ public class MVProjectAggProjectScanRewrite {
             columnRefOperatorColumnMap.put(rewriteContext.mvColumnRef, rewriteContext.mvColumn);
         }
 
-        LogicalOlapScanOperator newScanOperator = new LogicalOlapScanOperator(
-                olapScanOperator.getTable(),
-                columnRefOperatorColumnMap,
-                olapScanOperator.getColumnMetaToColRefMap(),
-                olapScanOperator.getDistributionSpec(),
-                olapScanOperator.getLimit(),
-                olapScanOperator.getPredicate(),
-                olapScanOperator.getSelectedIndexId(),
-                olapScanOperator.getSelectedPartitionId(),
-                olapScanOperator.getPartitionNames(),
-                olapScanOperator.getSelectedTabletId(),
-                olapScanOperator.getHintsTabletIds());
-
+        LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
+        LogicalOlapScanOperator newScanOperator = builder.withOperator(olapScanOperator)
+                .setColRefToColumnMetaMap(columnRefOperatorColumnMap).build();
         optExpression.setChild(0, OptExpression.create(newScanOperator));
     }
 
@@ -138,6 +128,8 @@ public class MVProjectAggProjectScanRewrite {
         for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : projectOperator.getColumnRefMap().entrySet()) {
             if (kv.getValue().getUsedColumns().contains(baseColumnRef)) {
                 kv.setValue(mvColumnRef);
+                kv.getKey().setNullable(mvColumnRef.isNullable());
+                kv.getKey().setType(mvColumnRef.getType());
                 return kv.getKey();
             }
         }

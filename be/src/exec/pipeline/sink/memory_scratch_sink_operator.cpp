@@ -60,6 +60,7 @@ Status MemoryScratchSinkOperator::set_cancelled(RuntimeState* state) {
     _pending_result.reset();
     _is_finished = true;
     _has_put_sentinel = true;
+    _queue->update_status(Status::Cancelled("Set cancelled by MemoryScratchSinkOperator"));
     return Status::OK();
 }
 
@@ -72,8 +73,12 @@ Status MemoryScratchSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr
         return Status::OK();
     }
     std::shared_ptr<arrow::RecordBatch> result;
-    RETURN_IF_ERROR(convert_chunk_to_arrow_batch(chunk.get(), _output_expr_ctxs, _arrow_schema,
-                                                 arrow::default_memory_pool(), &result));
+    auto status = convert_chunk_to_arrow_batch(chunk.get(), _output_expr_ctxs, _arrow_schema,
+                                               arrow::default_memory_pool(), &result);
+    if (!status.ok()) {
+        _queue->update_status(status);
+        return status;
+    }
 
     if (!_queue->try_put(result)) {
         DCHECK(_pending_result == nullptr);

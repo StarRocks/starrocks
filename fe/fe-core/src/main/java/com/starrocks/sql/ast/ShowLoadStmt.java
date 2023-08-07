@@ -28,6 +28,7 @@ import com.starrocks.common.proc.LoadProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -45,6 +46,7 @@ public class ShowLoadStmt extends ShowStmt {
     private final LimitElement limitElement;
     private final List<OrderByElement> orderByElements;
 
+    private boolean all = false;
     private String labelValue;
     private String stateValue;
     private boolean isAccurateMatch;
@@ -52,14 +54,16 @@ public class ShowLoadStmt extends ShowStmt {
     private ArrayList<OrderByPair> orderByPairs;
 
     public ShowLoadStmt(String db, Expr labelExpr, List<OrderByElement> orderByElements, LimitElement limitElement) {
+        this(db, labelExpr, orderByElements, limitElement, NodePosition.ZERO);
+    }
+
+    public ShowLoadStmt(String db, Expr labelExpr, List<OrderByElement> orderByElements,
+                        LimitElement limitElement, NodePosition pos) {
+        super(pos);
         this.dbName = db;
         this.whereClause = labelExpr;
         this.orderByElements = orderByElements;
         this.limitElement = limitElement;
-
-        this.labelValue = null;
-        this.stateValue = null;
-        this.isAccurateMatch = false;
     }
 
     public String getDbName() {
@@ -134,6 +138,14 @@ public class ShowLoadStmt extends ShowStmt {
 
     public void setIsAccurateMatch(boolean isAccurateMatch) {
         this.isAccurateMatch = isAccurateMatch;
+    }
+
+    public void setAll(boolean all) {
+        this.all = all;
+    }
+
+    public boolean isAll() {
+        return this.all;
     }
 
     @Override

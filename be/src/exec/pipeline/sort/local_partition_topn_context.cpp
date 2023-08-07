@@ -60,8 +60,17 @@ Status LocalPartitionTopnContext::prepare(RuntimeState* state) {
 }
 
 Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* state, const ChunkPtr& chunk) {
-    auto st = _chunks_partitioner->offer(chunk);
-    if (_chunks_partitioner->is_downgrade()) {
+    auto st = _chunks_partitioner->offer<true>(
+            chunk,
+            [this, state](size_t partition_idx) {
+                _chunks_sorters.emplace_back(std::make_shared<ChunksSorterTopn>(
+                        state, &_sort_exprs, &_is_asc_order, &_is_null_first, _sort_keys, _offset, _partition_limit,
+                        _topn_type, ChunksSorterTopn::tunning_buffered_chunks(_partition_limit)));
+            },
+            [this, state](size_t partition_idx, const ChunkPtr& chunk) {
+                _chunks_sorters[partition_idx]->update(state, chunk);
+            });
+    if (_chunks_partitioner->is_passthrough()) {
         transfer_all_chunks_from_partitioner_to_sorters(state);
     }
     return st;
@@ -75,13 +84,7 @@ Status LocalPartitionTopnContext::transfer_all_chunks_from_partitioner_to_sorter
     if (_is_transfered) {
         return Status::OK();
     }
-    const auto num_partitions = _chunks_partitioner->num_partitions();
-    _chunks_sorters.resize(num_partitions);
-    for (int i = 0; i < num_partitions; ++i) {
-        _chunks_sorters[i] = std::make_shared<ChunksSorterTopn>(
-                state, &_sort_exprs, &_is_asc_order, &_is_null_first, _sort_keys, _offset, _partition_limit, _topn_type,
-                ChunksSorterTopn::tunning_buffered_chunks(_partition_limit));
-    }
+
     RETURN_IF_ERROR(
             _chunks_partitioner->consume_from_hash_map([this, state](int32_t partition_idx, const ChunkPtr& chunk) {
                 _chunks_sorters[partition_idx]->update(state, chunk);
@@ -97,8 +100,8 @@ Status LocalPartitionTopnContext::transfer_all_chunks_from_partitioner_to_sorter
 }
 
 bool LocalPartitionTopnContext::has_output() {
-    if (_chunks_partitioner->is_downgrade() && _is_transfered) {
-        return _sorter_index < _chunks_sorters.size() || !_chunks_partitioner->is_downgrade_buffer_empty();
+    if (_chunks_partitioner->is_passthrough() && _is_transfered) {
+        return _sorter_index < _chunks_sorters.size() || !_chunks_partitioner->is_passthrough_buffer_empty();
     }
     return _is_sink_complete && _sorter_index < _chunks_sorters.size();
 }
@@ -118,7 +121,7 @@ StatusOr<ChunkPtr> LocalPartitionTopnContext::pull_one_chunk() {
             return chunk;
         }
     }
-    chunk = _chunks_partitioner->consume_from_downgrade_buffer();
+    chunk = _chunks_partitioner->consume_from_passthrough_buffer();
     return chunk;
 }
 
@@ -135,19 +138,18 @@ StatusOr<ChunkPtr> LocalPartitionTopnContext::pull_one_chunk_from_sorters() {
 }
 
 LocalPartitionTopnContextFactory::LocalPartitionTopnContextFactory(
-        const std::vector<TExpr>& t_partition_exprs, const std::vector<ExprContext*>& sort_exprs,
-        std::vector<bool> is_asc_order, std::vector<bool> is_null_first, std::string sort_keys, int64_t offset,
-        int64_t partition_limit, const TTopNType::type topn_type, const std::vector<OrderByType>& order_by_types,
-        TupleDescriptor* materialized_tuple_desc, const RowDescriptor& parent_node_row_desc,
-        const RowDescriptor& parent_node_child_row_desc)
-        : _t_partition_exprs(t_partition_exprs),
+        RuntimeState*, const TTopNType::type topn_type, bool is_merging, const std::vector<ExprContext*>& sort_exprs,
+        std::vector<bool> is_asc_order, std::vector<bool> is_null_first, const std::vector<TExpr>& t_partition_exprs,
+        int64_t offset, int64_t limit, std::string sort_keys, const std::vector<OrderByType>& order_by_types,
+        const std::vector<RuntimeFilterBuildDescriptor*>&)
+        : _topn_type(topn_type),
           _sort_exprs(sort_exprs),
           _is_asc_order(std::move(is_asc_order)),
           _is_null_first(std::move(is_null_first)),
-          _sort_keys(std::move(sort_keys)),
+          _t_partition_exprs(t_partition_exprs),
           _offset(offset),
-          _partition_limit(partition_limit),
-          _topn_type(topn_type) {}
+          _partition_limit(limit),
+          _sort_keys(std::move(sort_keys)) {}
 
 LocalPartitionTopnContext* LocalPartitionTopnContextFactory::create(int32_t driver_sequence) {
     if (auto it = _ctxs.find(driver_sequence); it != _ctxs.end()) {

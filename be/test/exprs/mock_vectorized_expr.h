@@ -26,13 +26,23 @@
 #include "glog/logging.h"
 
 namespace starrocks {
+
+TypeDescriptor array_type(const TypeDescriptor& child_type);
+
+TypeDescriptor array_type(const LogicalType& child_type);
+
+TypeDescriptor map_type(LogicalType key, LogicalType value);
+
 class MockExpr : public starrocks::Expr {
 public:
     explicit MockExpr(const TExprNode& dummy, ColumnPtr result) : Expr(dummy), _column(std::move(result)) {}
+    explicit MockExpr(TypeDescriptor type, ColumnPtr col) : Expr(std::move(type), false), _column(std::move(col)) {}
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return _column; }
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new MockExpr(*this)); }
+
+    bool is_constant() const override { return false; }
 
 private:
     ColumnPtr _column;
@@ -84,7 +94,7 @@ public:
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         start();
         ColumnPtr col;
-        if constexpr (pt_is_decimal<Type>) {
+        if constexpr (lt_is_decimal<Type>) {
             col = RunTimeColumnType<Type>::create(this->type().precision, this->type().scale);
         } else {
             col = RunTimeColumnType<Type>::create();
@@ -97,6 +107,7 @@ public:
         stop();
         return col;
     }
+    bool is_constant() const override { return false; }
 
 private:
     size_t size;
@@ -123,6 +134,7 @@ public:
         stop();
         return col;
     }
+    bool is_constant() const override { return false; }
 
 private:
     size_t size;
@@ -142,10 +154,10 @@ public:
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         start();
         if (only_null) {
-            return ColumnHelper::create_const_null_column(1);
+            return ColumnHelper::create_const_null_column(size);
         }
         ColumnPtr col = nullptr;
-        if constexpr (pt_is_decimal<Type>) {
+        if constexpr (lt_is_decimal<Type>) {
             col = RunTimeColumnType<Type>::create(this->type().precision, this->type().scale);
         } else {
             col = RunTimeColumnType<Type>::create();
@@ -169,6 +181,7 @@ public:
         stop();
         return re;
     }
+    bool is_constant() const override { return only_null; }
 
 public:
     bool all_null = false;
@@ -194,6 +207,34 @@ public:
 public:
     RunTimeCppType<Type> value;
     ColumnPtr col;
+};
+
+class MockColumnExpr : public MockCostExpr {
+public:
+    MockColumnExpr(const TExprNode& t, ColumnPtr column) : MockCostExpr(t), _column(column) {}
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+        start();
+        auto col = _column->clone();
+        stop();
+        return std::move(col);
+    }
+
+    bool is_constant() const override { return false; }
+
+private:
+    ColumnPtr _column;
+};
+
+class FakeConstExpr : public starrocks::Expr {
+public:
+    explicit FakeConstExpr(const TExprNode& dummy) : Expr(dummy) {}
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return _column; }
+
+    Expr* clone(ObjectPool*) const override { return nullptr; }
+
+    ColumnPtr _column;
 };
 
 } // namespace starrocks

@@ -18,7 +18,9 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
@@ -26,6 +28,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
@@ -42,9 +45,36 @@ public class MetaUtils {
 
     private static final Logger LOG = LogManager.getLogger(MVUtils.class);
 
+    public static void checkCatalogExistAndReport(String catalogName) throws AnalysisException {
+        if (catalogName == null) {
+            ErrorReport.reportAnalysisException("Catalog is null");
+        }
+        if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+        }
+    }
+
     public static void checkDbNullAndReport(Database db, String name) throws AnalysisException {
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, name);
+        }
+    }
+
+    public static void checkNotSupportCatalog(String catalogName, String operation) {
+        if (catalogName == null) {
+            throw new SemanticException("Catalog is null");
+        }
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            return;
+        }
+
+        Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(catalogName);
+        if (catalog == null) {
+            throw new SemanticException("Catalog %s is not found", catalogName);
+        }
+
+        if (catalog.getType().equalsIgnoreCase("iceberg")) {
+            throw new SemanticException("Table of iceberg catalog doesn't support [%s]", operation);
         }
     }
 
@@ -69,33 +99,52 @@ public class MetaUtils {
     }
 
     public static Database getDatabase(ConnectContext session, TableName tableName) {
-        Database db = session.getGlobalStateMgr().getDb(tableName.getDb());
+        if (Strings.isNullOrEmpty(tableName.getCatalog())) {
+            tableName.setCatalog(session.getCurrentCatalog());
+        }
+        Database db = session.getGlobalStateMgr().getMetadataMgr().getDb(tableName.getCatalog(), tableName.getDb());
         if (db == null) {
-            throw new SemanticException("Database %s is not found", tableName.getDb());
+            throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+        }
+        return db;
+    }
+
+    public static Database getDatabase(String catalogName, String dbName) {
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        if (db == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
         return db;
     }
 
     public static Table getTable(TableName tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(tableName.getDb());
-        if (db == null) {
-            throw new SemanticException("Database %s is not found", tableName.getDb());
+        if (Strings.isNullOrEmpty(tableName.getCatalog())) {
+            tableName.setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
         }
-        Table table = db.getTable(tableName.getTbl());
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName.getCatalog(),
+                tableName.getDb(), tableName.getTbl());
         if (table == null) {
-            throw new SemanticException("Table %s is not found", tableName.getTbl());
+            throw new SemanticException("Table %s is not found", tableName);
         }
         return table;
     }
 
     public static Table getTable(ConnectContext session, TableName tableName) {
-        Database db = session.getGlobalStateMgr().getDb(tableName.getDb());
-        if (db == null) {
-            throw new SemanticException("Database %s is not found", tableName.getDb());
+        if (Strings.isNullOrEmpty(tableName.getCatalog())) {
+            tableName.setCatalog(session.getCurrentCatalog());
         }
-        Table table = db.getTable(tableName.getTbl());
+        Table table = session.getGlobalStateMgr().getMetadataMgr().getTable(tableName.getCatalog(),
+                tableName.getDb(), tableName.getTbl());
         if (table == null) {
-            throw new SemanticException("Table %s is not found", tableName.getTbl());
+            throw new SemanticException("Table %s is not found", tableName.toString());
+        }
+        return table;
+    }
+
+    public static Table getTable(String catalogName, String dbName, String tableName) {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableName);
         }
         return table;
     }
@@ -138,5 +187,4 @@ public class MetaUtils {
                 originStmt.originStmt);
         return Maps.newConcurrentMap();
     }
-
 }

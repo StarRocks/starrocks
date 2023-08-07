@@ -22,27 +22,24 @@ public class StatsConstants {
     public static final int STATISTIC_DICT_VERSION = 101;
     public static final int STATISTIC_HISTOGRAM_VERSION = 2;
     public static final int STATISTIC_TABLE_VERSION = 3;
+    public static final int STATISTIC_BATCH_VERSION = 4;
+    public static final int STATISTIC_EXTERNAL_VERSION = 5;
 
+
+    public static final int STATISTICS_PARTITION_UPDATED_THRESHOLD = 10;
     public static final String STATISTICS_DB_NAME = "_statistics_";
     public static final String SAMPLE_STATISTICS_TABLE_NAME = "table_statistic_v1";
     public static final String FULL_STATISTICS_TABLE_NAME = "column_statistics";
+    public static final String EXTERNAL_FULL_STATISTICS_TABLE_NAME = "external_column_statistics";
     public static final String HISTOGRAM_STATISTICS_TABLE_NAME = "histogram_statistics";
 
     public static final String INFORMATION_SCHEMA = "information_schema";
 
-    public static final int CROSS_JOIN_COST_PENALTY = 100000000;
-    public static final int CROSS_JOIN_RIGHT_COST_PENALTY = 1000 * 10000;
-    public static final int BROADCAST_JOIN_MEM_EXCEED_PENALTY = 1000;
-
-    public static final double MAXIMUM_COST = Double.MAX_VALUE / Math.pow(10, 50);
-
-    public static final double MAXIMUM_ROW_COUNT = Double.MAX_VALUE / Math.pow(10, 100);
-
-    public static final double MAXIMUM_OUTPUT_SIZE = Double.MAX_VALUE / Math.pow(10, 80);
-
     //Statistics collection threshold
     public static final String STATISTIC_AUTO_COLLECT_RATIO = "statistic_auto_collect_ratio";
     public static final String STATISTIC_SAMPLE_COLLECT_ROWS = "statistic_sample_collect_rows";
+    public static final String STATISTIC_EXCLUDE_PATTERN = "statistic_exclude_pattern";
+    public static final String STATISTIC_AUTO_COLLECT_INTERVAL = "statistic_auto_collect_interval";
 
     //Histogram Statistics properties
     public static final String HISTOGRAM_BUCKET_NUM = "histogram_bucket_num";

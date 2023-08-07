@@ -19,14 +19,11 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -46,15 +43,6 @@ public class IcebergResourceTest {
 
     @Test
     public void testFromStmt(@Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth) throws UserException {
-        new Expectations() {
-            {
-                globalStateMgr.getAuth();
-                result = auth;
-                auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
-                result = true;
-            }
-        };
-
         String name = "iceberg0";
         String type = "iceberg";
         String catalogType = "HIVE";
@@ -65,7 +53,6 @@ public class IcebergResourceTest {
         properties.put("iceberg.catalog.hive.metastore.uris", metastoreURIs);
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        PrivilegeChecker.check(stmt, connectContext);
         IcebergResource resource = (IcebergResource) Resource.fromStmt(stmt);
         Assert.assertEquals("iceberg0", resource.getName());
         Assert.assertEquals(type, resource.getType().name().toLowerCase());
@@ -79,26 +66,16 @@ public class IcebergResourceTest {
 
     @Test
     public void testCustomStmt(@Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth) throws UserException {
-        new Expectations() {
-            {
-                globalStateMgr.getAuth();
-                result = auth;
-                auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
-                result = true;
-            }
-        };
-
         String name = "iceberg1";
         String type = "iceberg";
         String catalogType = "CUSTOM";
-        String catalogImpl = "com.starrocks.connector.iceberg.IcebergHiveCatalog";
+        String catalogImpl = "com.starrocks.connector.iceberg.hive.IcebergHiveCatalog";
         Map<String, String> properties = Maps.newHashMap();
         properties.put("type", type);
         properties.put("iceberg.catalog.type", catalogType);
         properties.put("iceberg.catalog-impl", catalogImpl);
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        PrivilegeChecker.check(stmt, connectContext);
         IcebergResource resource = (IcebergResource) Resource.fromStmt(stmt);
         Assert.assertEquals("iceberg1", resource.getName());
         Assert.assertEquals(type, resource.getType().name().toLowerCase());

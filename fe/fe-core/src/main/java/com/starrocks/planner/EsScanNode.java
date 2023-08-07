@@ -44,10 +44,10 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.common.UserException;
-import com.starrocks.external.elasticsearch.EsShardPartitions;
-import com.starrocks.external.elasticsearch.EsShardRouting;
-import com.starrocks.external.elasticsearch.QueryBuilders;
-import com.starrocks.external.elasticsearch.QueryConverter;
+import com.starrocks.connector.elasticsearch.EsShardPartitions;
+import com.starrocks.connector.elasticsearch.EsShardRouting;
+import com.starrocks.connector.elasticsearch.QueryBuilders;
+import com.starrocks.connector.elasticsearch.QueryConverter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TEsScanNode;
@@ -139,20 +139,25 @@ public class EsScanNode extends ScanNode {
 
     @Override
     protected void toThrift(TPlanNode msg) {
-        if (EsTable.TRANSPORT_HTTP.equals(table.getTransport())) {
+        if (EsTable.KEY_TRANSPORT_HTTP.equals(table.getTransport())) {
             msg.node_type = TPlanNodeType.ES_HTTP_SCAN_NODE;
         } else {
             msg.node_type = TPlanNodeType.ES_SCAN_NODE;
         }
         Map<String, String> properties = Maps.newHashMap();
-        properties.put(EsTable.USER, table.getUserName());
-        properties.put(EsTable.PASSWORD, table.getPasswd());
-        properties.put(EsTable.ES_NET_SSL, String.valueOf(table.sslEnabled()));
+        properties.put(EsTable.KEY_USER, table.getUserName());
+        properties.put(EsTable.KEY_PASSWORD, table.getPasswd());
+        properties.put(EsTable.KEY_ES_NET_SSL, String.valueOf(table.sslEnabled()));
+        String time_zone = table.getTimeZone();
+        if (time_zone != null) {
+            // If user has set timezone, we need to send it to BE
+            properties.put(EsTable.KEY_TIME_ZONE, time_zone);
+        }
         TEsScanNode esScanNode = new TEsScanNode(desc.getId().asInt());
         esScanNode.setProperties(properties);
         if (table.isDocValueScanEnable()) {
             esScanNode.setDocvalue_context(table.docValueContext());
-            properties.put(EsTable.DOC_VALUES_MODE, String.valueOf(useDocValueScan(desc, table.docValueContext())));
+            properties.put(EsTable.KEY_DOC_VALUES_MODE, String.valueOf(useDocValueScan(desc, table.docValueContext())));
         }
         if (table.isKeywordSniffEnable() && table.fieldsContext().size() > 0) {
             esScanNode.setFields_context(table.fieldsContext());
@@ -185,7 +190,7 @@ public class EsScanNode extends ScanNode {
                 int numBe = Math.min(3, size);
                 List<TNetworkAddress> shardAllocations = new ArrayList<>();
                 for (EsShardRouting item : shardRouting) {
-                    shardAllocations.add(EsTable.TRANSPORT_HTTP.equals(table.getTransport()) ? item.getHttpAddress() :
+                    shardAllocations.add(EsTable.KEY_TRANSPORT_HTTP.equals(table.getTransport()) ? item.getHttpAddress() :
                             item.getAddress());
                 }
 
@@ -289,6 +294,11 @@ public class EsScanNode extends ScanNode {
 
     @Override
     public boolean canUsePipeLine() {
+        return true;
+    }
+
+    @Override
+    public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }
 }

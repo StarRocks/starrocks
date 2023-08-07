@@ -208,13 +208,20 @@ private:
 // not take effects on operators in front of LocalExchangeSourceOperators before they are merged into a total one.
 class PartialRuntimeFilterMerger {
 public:
-    PartialRuntimeFilterMerger(ObjectPool* pool, size_t limit, size_t num_builders)
-            : _pool(pool),
-              _limit(limit),
-              _num_active_builders(num_builders),
-              _ht_row_counts(num_builders),
-              _partial_in_filters(num_builders),
-              _partial_bloom_filter_build_params(num_builders) {}
+    PartialRuntimeFilterMerger(ObjectPool* pool, size_t limit) : _pool(pool), _limit(limit) {}
+
+    void incr_builder() {
+        _ht_row_counts.emplace_back(0);
+        _partial_in_filters.emplace_back();
+        _partial_bloom_filter_build_params.emplace_back();
+        _num_active_builders++;
+    }
+
+    // mark runtime_filter as always true.
+    bool set_always_true() {
+        _always_true = true;
+        return _try_do_merge({});
+    }
 
     // HashJoinBuildOperator call add_partial_filters to gather partial runtime filters. the last HashJoinBuildOperator
     // will merge partial runtime filters into total one finally.
@@ -228,22 +235,16 @@ public:
         _ht_row_counts[idx] = ht_row_count;
         _partial_in_filters[idx] = std::move(partial_in_filters);
         _partial_bloom_filter_build_params[idx] = std::move(partial_bloom_filter_build_params);
-        // merge
-        if (1 == _num_active_builders--) {
-            _bloom_filter_descriptors = std::move(bloom_filter_descriptors);
-            merge_local_in_filters();
-            merge_local_bloom_filters();
-            return true;
-        }
-        return false;
+
+        return _try_do_merge(std::move(bloom_filter_descriptors));
     }
 
     RuntimeInFilterList get_total_in_filters() {
-        return std::list(_partial_in_filters[0].begin(), _partial_in_filters[0].end());
+        return {_partial_in_filters[0].begin(), _partial_in_filters[0].end()};
     }
 
     RuntimeBloomFilterList get_total_bloom_filters() {
-        return std::list(_bloom_filter_descriptors.begin(), _bloom_filter_descriptors.end());
+        return {_bloom_filter_descriptors.begin(), _bloom_filter_descriptors.end()};
     }
 
     Status merge_local_in_filters() {
@@ -380,10 +381,29 @@ public:
         return Status::OK();
     }
 
+    size_t limit() const { return _limit; }
+
+private:
+    bool _try_do_merge(RuntimeBloomFilters&& bloom_filter_descriptors) {
+        if (1 == _num_active_builders--) {
+            if (_always_true) {
+                _partial_in_filters.clear();
+                _bloom_filter_descriptors.clear();
+                return true;
+            }
+            _bloom_filter_descriptors = std::move(bloom_filter_descriptors);
+            merge_local_in_filters();
+            merge_local_bloom_filters();
+            return true;
+        }
+        return false;
+    }
+
 private:
     ObjectPool* _pool;
     const size_t _limit;
-    std::atomic<size_t> _num_active_builders;
+    bool _always_true = false;
+    std::atomic<size_t> _num_active_builders{0};
     std::vector<size_t> _ht_row_counts;
     std::vector<RuntimeInFilters> _partial_in_filters;
     std::vector<OptRuntimeBloomFilterBuildParams> _partial_bloom_filter_build_params;

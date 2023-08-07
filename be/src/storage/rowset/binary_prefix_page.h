@@ -119,7 +119,7 @@ private:
 template <LogicalType Type>
 class BinaryPrefixPageDecoder final : public PageDecoder {
 public:
-    BinaryPrefixPageDecoder(Slice data, const PageDecoderOptions& options) : _data(data) {}
+    BinaryPrefixPageDecoder(Slice data) : _data(data) {}
 
     Status init() override;
 
@@ -129,7 +129,7 @@ public:
 
     Status next_batch(size_t* n, Column* dst) override;
 
-    Status next_batch(const SparseRange& range, Column* dst) override;
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
 
     uint32_t count() const override {
         DCHECK(_parsed);

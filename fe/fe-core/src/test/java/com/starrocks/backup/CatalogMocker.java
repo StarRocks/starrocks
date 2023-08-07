@@ -292,7 +292,7 @@ public class CatalogMocker {
         olapTable.setIndexMeta(TEST_TBL_ID, TEST_TBL_NAME, TEST_TBL_BASE_SCHEMA, 0, SCHEMA_HASH, (short) 1,
                 TStorageType.COLUMN, KeysType.AGG_KEYS);
         olapTable.addPartition(partition);
-        db.createTable(olapTable);
+        db.registerTableUnlocked(olapTable);
 
         // 2. mysql table
         Map<String, String> mysqlProp = Maps.newHashMap();
@@ -308,7 +308,7 @@ public class CatalogMocker {
         } catch (DdlException e) {
             e.printStackTrace();
         }
-        db.createTable(mysqlTable);
+        db.registerTableUnlocked(mysqlTable);
 
         // 3. range partition olap table
         MaterializedIndex baseIndexP1 = new MaterializedIndex(TEST_TBL2_ID, IndexState.NORMAL);
@@ -413,7 +413,7 @@ public class CatalogMocker {
 
         olapTable2.setIndexMeta(TEST_ROLLUP_ID, TEST_ROLLUP_NAME, TEST_ROLLUP_SCHEMA, 0, ROLLUP_SCHEMA_HASH,
                 (short) 1, TStorageType.COLUMN, KeysType.AGG_KEYS);
-        db.createTable(olapTable2);
+        db.registerTableUnlocked(olapTable2);
 
         // 4. range partition primary key olap table
         MaterializedIndex baseIndexP1Pk = new MaterializedIndex(TEST_TBL3_ID, IndexState.NORMAL);
@@ -482,7 +482,7 @@ public class CatalogMocker {
                 TStorageType.COLUMN, KeysType.PRIMARY_KEYS);
         olapTable3.addPartition(partition1Pk);
         olapTable3.addPartition(partition2Pk);
-        db.createTable(olapTable3);
+        db.registerTableUnlocked(olapTable3);
 
         return db;
     }

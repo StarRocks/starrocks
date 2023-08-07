@@ -18,7 +18,6 @@
 
 #include "column/type_traits.h"
 #include "gutil/strings/fastmem.h"
-#include "runtime/primitive_type.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -28,34 +27,43 @@ template <LogicalType lt, typename = guard::Guard>
 struct AggDataTypeTraits {};
 
 template <LogicalType lt>
-struct AggDataTypeTraits<lt, FixedLengthPTGuard<lt>> {
+struct AggDataTypeTraits<lt, FixedLengthLTGuard<lt>> {
     using ColumnType = RunTimeColumnType<lt>;
     using ValueType = RunTimeCppValueType<lt>;
     using RefType = RunTimeCppType<lt>;
 
     static void assign_value(ValueType& value, const RefType& ref) { value = ref; }
+    static void assign_value(ColumnType* column, size_t row, const RefType& ref) { column->get_data()[row] = ref; }
 
     static void append_value(ColumnType* column, const ValueType& value) { column->append(value); }
 
     static RefType get_row_ref(const ColumnType& column, size_t row) { return column.get_data()[row]; }
+
+    static void update_max(ValueType& current, const RefType& input) { current = std::max<ValueType>(current, input); }
+    static void update_min(ValueType& current, const RefType& input) { current = std::min<ValueType>(current, input); }
 };
 
 // For pointer ref types
 template <LogicalType lt>
-struct AggDataTypeTraits<lt, ObjectFamilyPTGuard<lt>> {
+struct AggDataTypeTraits<lt, ObjectFamilyLTGuard<lt>> {
     using ColumnType = RunTimeColumnType<lt>;
     using ValueType = RunTimeCppValueType<lt>;
     using RefType = RunTimeCppType<lt>;
 
     static void assign_value(ValueType& value, RefType ref) { value = *ref; }
+    static void assign_value(ColumnType* column, size_t row, const RefType& ref) { *column->get_object(row) = *ref; }
+    static void assign_value(ColumnType* column, size_t row, const ValueType& ref) { *column->get_object(row) = ref; }
 
     static void append_value(ColumnType* column, const ValueType& value) { column->append(&value); }
 
     static const RefType get_row_ref(const ColumnType& column, size_t row) { return column.get_object(row); }
+
+    static void update_max(ValueType& current, const RefType& input) { current = std::max<ValueType>(current, *input); }
+    static void update_min(ValueType& current, const RefType& input) { current = std::min<ValueType>(current, *input); }
 };
 
 template <LogicalType lt>
-struct AggDataTypeTraits<lt, StringPTGuard<lt>> {
+struct AggDataTypeTraits<lt, StringLTGuard<lt>> {
     using ColumnType = RunTimeColumnType<lt>;
     using ValueType = Buffer<uint8_t>;
     using RefType = Slice;
@@ -70,6 +78,19 @@ struct AggDataTypeTraits<lt, StringPTGuard<lt>> {
     }
 
     static RefType get_row_ref(const ColumnType& column, size_t row) { return column.get_slice(row); }
+
+    static void update_max(ValueType& current, const RefType& input) {
+        if (Slice(current.data(), current.size()).compare(input) < 0) {
+            current.resize(input.size);
+            memcpy(current.data(), input.data, input.size);
+        }
+    }
+    static void update_min(ValueType& current, const RefType& input) {
+        if (Slice(current.data(), current.size()).compare(input) > 0) {
+            current.resize(input.size);
+            memcpy(current.data(), input.data, input.size);
+        }
+    }
 };
 
 template <LogicalType lt>

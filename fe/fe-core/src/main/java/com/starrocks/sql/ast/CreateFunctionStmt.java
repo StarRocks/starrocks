@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
@@ -21,7 +20,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.HdfsURI;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateFunction;
@@ -32,8 +30,10 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.commons.codec.binary.Hex;
 
@@ -215,6 +215,13 @@ public class CreateFunctionStmt extends DdlStmt {
 
     public CreateFunctionStmt(String functionType, FunctionName functionName, FunctionArgsDef argsDef,
                               TypeDef returnType, TypeDef intermediateType, Map<String, String> properties) {
+        this(functionType, functionName, argsDef, returnType, intermediateType, properties, NodePosition.ZERO);
+    }
+
+    public CreateFunctionStmt(String functionType, FunctionName functionName, FunctionArgsDef argsDef,
+                              TypeDef returnType, TypeDef intermediateType, Map<String, String> properties,
+                              NodePosition pos) {
+        super(pos);
         this.functionName = functionName;
         this.isAggregate = functionType.equalsIgnoreCase("AGGREGATE");
         this.isTable = functionType.equalsIgnoreCase("TABLE");
@@ -245,7 +252,15 @@ public class CreateFunctionStmt extends DdlStmt {
         return function;
     }
 
+    public void setFunction(Function function) {
+        this.function = function;
+    }
+
     public void analyze(ConnectContext context) throws AnalysisException {
+        if (!Config.enable_udf) {
+            throw new AnalysisException(
+                    "UDF is not enabled in FE, please configure enable_udf=true in fe/conf/fe.conf or ");
+        }
         analyzeCommon(context.getDatabase());
         Preconditions.checkArgument(isStarrocksJar);
         analyzeUdfClassInStarrocksJar();
@@ -280,7 +295,7 @@ public class CreateFunctionStmt extends DdlStmt {
         try {
             computeObjectChecksum();
         } catch (IOException | NoSuchAlgorithmException e) {
-            throw new AnalysisException("cannot to compute object's checksum");
+            throw new AnalysisException("cannot to compute object's checksum", e);
         }
 
         String md5sum = properties.get(MD5_CHECKSUM);

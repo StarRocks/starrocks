@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.collect.ImmutableMap;
@@ -24,12 +23,11 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
 public class LogicalMetaScanOperator extends LogicalScanOperator {
-    private final ImmutableMap<Integer, String> aggColumnIdToNames;
+    private ImmutableMap<Integer, String> aggColumnIdToNames;
 
     public LogicalMetaScanOperator(Table table,
                                    Map<ColumnRefOperator, Column> columnRefMap) {
@@ -46,15 +44,8 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
         this.aggColumnIdToNames = ImmutableMap.copyOf(aggColumnIdToNames);
     }
 
-    private LogicalMetaScanOperator(LogicalMetaScanOperator.Builder builder) {
-        super(OperatorType.LOGICAL_META_SCAN,
-                builder.table,
-                builder.colRefToColumnMetaMap,
-                builder.columnMetaToColRefMap,
-                builder.getLimit(),
-                builder.getPredicate(),
-                builder.getProjection());
-        this.aggColumnIdToNames = ImmutableMap.copyOf(builder.aggColumnIdToNames);
+    private LogicalMetaScanOperator() {
+        super(OperatorType.LOGICAL_META_SCAN);
     }
 
     public Map<Integer, String> getAggColumnIdToNames() {
@@ -88,17 +79,16 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
 
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalMetaScanOperator, LogicalMetaScanOperator.Builder> {
-        private Map<Integer, String> aggColumnIdToNames;
 
         @Override
-        public LogicalMetaScanOperator build() {
-            return new LogicalMetaScanOperator(this);
+        protected LogicalMetaScanOperator newInstance() {
+            return new LogicalMetaScanOperator();
         }
 
         @Override
         public LogicalMetaScanOperator.Builder withOperator(LogicalMetaScanOperator operator) {
             super.withOperator(operator);
-            this.aggColumnIdToNames = new HashMap<>(operator.aggColumnIdToNames);
+            builder.aggColumnIdToNames = ImmutableMap.copyOf(operator.aggColumnIdToNames);
             return this;
         }
     }

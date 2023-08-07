@@ -25,6 +25,7 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/descriptors.pb.h"
 #include "runtime/descriptors.h"
+#include "util/random.h"
 
 namespace starrocks {
 
@@ -84,28 +85,31 @@ using TabletLocation = TTabletLocation;
 
 class OlapTableLocationParam {
 public:
-    explicit OlapTableLocationParam(const TOlapTableLocationParam& t_param) : _t_param(t_param) {
-        for (auto& location : _t_param.tablets) {
-            _tablets.emplace(location.tablet_id, &location);
+    explicit OlapTableLocationParam(const TOlapTableLocationParam& t_param) {
+        for (auto& location : t_param.tablets) {
+            _tablets.emplace(location.tablet_id, std::move(location));
         }
     }
 
-    int64_t db_id() const { return _t_param.db_id; }
-    int64_t table_id() const { return _t_param.table_id; }
-    int64_t version() const { return _t_param.version; }
-
-    TabletLocation* find_tablet(int64_t tablet_id) const {
+    TabletLocation* find_tablet(int64_t tablet_id) {
         auto it = _tablets.find(tablet_id);
         if (it != std::end(_tablets)) {
-            return it->second;
+            return &it->second;
         }
         return nullptr;
     }
 
-private:
-    TOlapTableLocationParam _t_param;
+    void add_locations(std::vector<TTabletLocation>& locations) {
+        for (auto& location : locations) {
+            if (_tablets.count(location.tablet_id) == 0) {
+                _tablets.emplace(location.tablet_id, std::move(location));
+                VLOG(2) << "add location " << location;
+            }
+        }
+    }
 
-    std::unordered_map<int64_t, TabletLocation*> _tablets;
+private:
+    std::unordered_map<int64_t, TabletLocation> _tablets;
 };
 
 struct NodeInfo {
@@ -133,6 +137,15 @@ public:
         return nullptr;
     }
 
+    void add_nodes(const std::vector<TNodeInfo>& t_nodes) {
+        for (const auto& node : t_nodes) {
+            auto node_info = find_node(node.id);
+            if (node_info == nullptr) {
+                _nodes.emplace(node.id, node);
+            }
+        }
+    }
+
 private:
     std::unordered_map<int64_t, NodeInfo> _nodes;
 };
@@ -140,6 +153,8 @@ private:
 struct ChunkRow {
     ChunkRow() = default;
     ChunkRow(Columns* columns_, uint32_t index_) : columns(columns_), index(index_) {}
+
+    std::string debug_string();
 
     Columns* columns = nullptr;
     uint32_t index = 0;
@@ -149,6 +164,7 @@ struct OlapTablePartition {
     int64_t id = 0;
     ChunkRow start_key;
     ChunkRow end_key;
+    std::vector<ChunkRow> in_keys;
     int64_t num_buckets = 0;
     std::vector<OlapTableIndexTablets> indexes;
 };
@@ -191,13 +207,18 @@ public:
     int64_t table_id() const { return _t_param.table_id; }
     int64_t version() const { return _t_param.version; }
 
+    bool enable_automatic_partition() const { return _t_param.enable_automatic_partition; }
+
     // `invalid_row_index` stores index that chunk[index]
     // has been filtered out for not being able to find tablet.
     // it could be any row, becauset it's just for outputing error message for user to diagnose.
     Status find_tablets(Chunk* chunk, std::vector<OlapTablePartition*>* partitions, std::vector<uint32_t>* indexes,
-                        std::vector<uint8_t>* selection, int* invalid_row_index);
+                        std::vector<uint8_t>* selection, std::vector<int>* invalid_row_indexs, int64_t txn_id,
+                        std::vector<std::vector<std::string>>* partition_not_exist_row_values);
 
-    const std::vector<OlapTablePartition*>& get_partitions() const { return _partitions; }
+    const std::map<int64_t, OlapTablePartition*>& get_partitions() const { return _partitions; }
+
+    Status add_partitions(const std::vector<TOlapTablePartition>& partitions);
 
     bool is_un_partitioned() const { return _partition_columns.empty(); }
 
@@ -226,8 +247,10 @@ private:
     std::vector<ExprContext*> _partitions_expr_ctxs;
 
     ObjectPool _obj_pool;
-    std::vector<OlapTablePartition*> _partitions;
+    std::map<int64_t, OlapTablePartition*> _partitions;
     std::map<ChunkRow*, OlapTablePartition*, PartionKeyComparator> _partitions_map;
+
+    Random _rand{(uint32_t)time(nullptr)};
 };
 
 } // namespace starrocks

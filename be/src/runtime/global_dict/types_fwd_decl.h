@@ -16,7 +16,7 @@
 
 #include "column/column_hash.h"
 #include "runtime/global_dict/config.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "util/phmap/phmap_fwd_decl.h"
 #include "util/phmap/phmap_hash.h"
 #include "util/slice.h"
@@ -33,7 +33,14 @@ using GlobalDictMapEntity = std::pair<GlobalDictMap, RGlobalDictMap>;
 using GlobalDictMaps = phmap::flat_hash_map<uint32_t, GlobalDictMapEntity>;
 
 // column-name -> GlobalDictMap
-using GlobalDictByNameMaps = phmap::flat_hash_map<std::string, GlobalDictMap>;
+// template to avoid incomplete type problems
+template <class GlobalDictType>
+struct GlobalDictsWithVersion {
+    GlobalDictType dict;
+    long version;
+};
+
+using GlobalDictByNameMaps = phmap::flat_hash_map<std::string, GlobalDictsWithVersion<GlobalDictMap>>;
 
 using DictColumnsValidMap = phmap::flat_hash_map<std::string, bool, SliceHashWithSeed<PhmapSeed1>, SliceEqual>;
 

@@ -165,6 +165,7 @@ static Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, 
     column_pb->set_name(t_column.column_name);
     column_pb->set_is_key(t_column.is_key);
     column_pb->set_is_nullable(t_column.is_allow_null);
+
     if (t_column.is_key) {
         auto agg_method = STORAGE_AGGREGATE_NONE;
         column_pb->set_aggregation(get_string_by_aggregation_type(agg_method));
@@ -183,6 +184,10 @@ static Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, 
     }
     if (t_column.__isset.is_bloom_filter_column) {
         column_pb->set_is_bf_column(t_column.is_bloom_filter_column);
+    }
+
+    if (t_column.__isset.is_auto_increment) {
+        column_pb->set_is_auto_increment(t_column.is_auto_increment);
     }
 
     return Status::OK();

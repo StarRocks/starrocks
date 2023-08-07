@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -30,6 +31,11 @@ public class DelSqlBlackListStmt extends StatementBase {
     }
 
     public DelSqlBlackListStmt(List<Long> indexs) {
+        this(indexs, NodePosition.ZERO);
+    }
+
+    public DelSqlBlackListStmt(List<Long> indexs, NodePosition pos) {
+        super(pos);
         this.indexs = indexs;
     }
 

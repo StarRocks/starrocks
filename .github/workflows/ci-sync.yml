@@ -1,0 +1,40 @@
+name: SYNC PIPELINE
+
+on:
+  pull_request_target:
+    branches:
+      - main
+      - 'branch*'
+    types:
+      - closed
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: self-hosted
+    if: github.event.pull_request.merged == true && github.repository == 'StarRocks/starrocks'
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    steps:
+      - name: commit_sha
+        id: commit_sha
+        run: |
+          set -x
+          commit_sha=`curl -L \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{ github.repository }}/pulls/${PR_NUMBER} 2>/dev/null \
+            | jq .merge_commit_sha`
+          commit_sha=$(echo ${commit_sha//\"})
+          echo "commit_sha=${commit_sha:0:7}" >> $GITHUB_OUTPUT
+
+      - name: sync
+        uses: benc-uk/workflow-dispatch@v1
+        with:
+          workflow: repo-sync.yml
+          repo: CelerData/celerdata-enterprise
+          inputs: '{ "PR_ID": "${{ github.event.number }}", "COMMIT_ID": "${{ steps.commit_sha.outputs.commit_sha }}", "BRANCH": "${{ github.base_ref }}" }'
+          ref: 'main'
+          token: ${{ secrets.PAT }}
+

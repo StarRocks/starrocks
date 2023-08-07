@@ -14,12 +14,13 @@
 
 #pragma once
 
+#include "common/config.h"
 #include "fs/fs.h"
 #include "gen_cpp/Types_types.h"
 
 namespace starrocks {
 
-const static int DEFAULT_TIMEOUT_MS = 10000;
+const static int DEFAULT_TIMEOUT_MS = config::broker_write_timeout_seconds * 1000;
 
 class TBrokerFileStatus;
 class TFileBrokerServiceClient;
@@ -54,6 +55,8 @@ public:
     Status get_children(const std::string& dir, std::vector<std::string>* file) override;
 
     Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override;
+
+    Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override;
 
     Status delete_file(const std::string& path) override;
 

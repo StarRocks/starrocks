@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.common.proc;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.google.gson.Gson;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -30,11 +30,13 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -58,13 +60,11 @@ public class LakeTabletsProcNodeTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState();
-                result = globalStateMgr;
-                globalStateMgr.getStarOSAgent();
+                GlobalStateMgr.getCurrentStarOSAgent();
                 result = agent;
-                agent.getBackendIdsByShard(tablet1Id);
+                agent.getBackendIdsByShard(tablet1Id, 0);
                 result = Sets.newHashSet(10000, 10001);
-                agent.getBackendIdsByShard(tablet2Id);
+                agent.getBackendIdsByShard(tablet2Id, 0);
                 result = Sets.newHashSet(10001, 10002);
             }
         };
@@ -100,12 +100,11 @@ public class LakeTabletsProcNodeTest {
 
         // Db
         Database db = new Database(dbId, "test_db");
-        db.createTable(table);
+        db.registerTableUnlocked(table);
 
         // Check
-        LakeTabletsProcNode procNode = new LakeTabletsProcNode(db, table, index);
-        List<List<Comparable>> result = procNode.fetchComparableResult();
-        System.out.println(result);
+        LakeTabletsProcDir procDir = new LakeTabletsProcDir(db, table, index);
+        List<List<Comparable>> result = procDir.fetchComparableResult();
         Assert.assertEquals(2, result.size());
         {
             Assert.assertEquals((long) result.get(0).get(0), tablet1Id);
@@ -116,6 +115,25 @@ public class LakeTabletsProcNodeTest {
             Assert.assertEquals((long) result.get(1).get(0), tablet2Id);
             String backendIds = (String) result.get(1).get(1);
             Assert.assertTrue(backendIds.contains("10001") && backendIds.contains("10002"));
+        }
+
+        { // check show single tablet with tablet id
+            ProcNodeInterface procNode = procDir.lookup(String.valueOf(tablet1Id));
+            ProcResult res = procNode.fetchResult();
+            Assert.assertEquals(1L, res.getRows().size());
+            List<String> row = res.getRows().get(0);
+            Assert.assertEquals(String.valueOf(tablet1.getId()), row.get(0));
+
+            Assert.assertEquals(new Gson().toJson(tablet1.getBackendIds()), row.get(1));
+            Assert.assertEquals(new ByteSizeValue(tablet1.getDataSize(true)).toString(), row.get(2));
+            Assert.assertEquals(String.valueOf(tablet1.getRowCount(0L)), row.get(3));
+        }
+
+        { // error case
+            // invalid integer
+            Assert.assertThrows(AnalysisException.class, () -> procDir.lookup("a123"));
+            // non-exist tablet id
+            Assert.assertThrows(AnalysisException.class, () -> procDir.lookup("123456789"));
         }
     }
 }

@@ -1,0 +1,13 @@
+comment: false
+codecov:
+  allow_coverage_offsets: true
+github_checks:
+  annotations: false
+coverage:
+  status:
+    project:
+      fe-total:
+        target: 60%
+        threshold: 5%
+        only_pulls: true
+    patch: false

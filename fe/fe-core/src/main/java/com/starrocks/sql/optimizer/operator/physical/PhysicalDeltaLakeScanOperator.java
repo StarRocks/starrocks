@@ -12,34 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.physical;
 
-import com.google.common.base.Objects;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-
-import java.util.Map;
+import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator;
 
 public class PhysicalDeltaLakeScanOperator extends PhysicalScanOperator {
     private ScanOperatorPredicates predicates;
 
-    public PhysicalDeltaLakeScanOperator(Table table,
-                                         Map<ColumnRefOperator, Column> columnRefMap,
-                                         ScanOperatorPredicates predicates,
-                                         long limit,
-                                         ScalarOperator predicate,
-                                         Projection projection) {
-        super(OperatorType.PHYSICAL_DELTALAKE_SCAN, table, columnRefMap, limit, predicate, projection);
-        this.predicates = predicates;
+    public PhysicalDeltaLakeScanOperator(LogicalDeltaLakeScanOperator scanOperator) {
+        super(OperatorType.PHYSICAL_DELTALAKE_SCAN, scanOperator);
+        this.predicates = scanOperator.getScanOperatorPredicates();
     }
 
     @Override
@@ -60,28 +47,6 @@ public class PhysicalDeltaLakeScanOperator extends PhysicalScanOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitPhysicalDeltaLakeScan(optExpression, context);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
-            return false;
-        }
-
-        PhysicalDeltaLakeScanOperator that = (PhysicalDeltaLakeScanOperator) o;
-        ScanOperatorPredicates targetPredicts = ((PhysicalDeltaLakeScanOperator) o).getScanOperatorPredicates();
-        return Objects.equal(table, that.table) && predicates.equals(targetPredicts);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hashCode(super.hashCode(), table, predicates);
     }
 
 }

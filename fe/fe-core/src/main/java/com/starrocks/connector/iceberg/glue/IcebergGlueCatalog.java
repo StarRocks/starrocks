@@ -15,63 +15,56 @@
 
 package com.starrocks.connector.iceberg.glue;
 
-import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.IcebergTable;
-import com.starrocks.connector.HdfsEnvironment;
-import com.starrocks.connector.iceberg.CatalogLoader;
+import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
-import com.starrocks.connector.iceberg.IcebergUtil;
-import com.starrocks.connector.iceberg.StarRocksIcebergException;
-import com.starrocks.connector.iceberg.hive.HiveTableOperations;
+import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.metastore.IMetaStoreClient;
-import org.apache.iceberg.BaseMetastoreCatalog;
-import org.apache.iceberg.BaseTable;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.CatalogUtil;
-import org.apache.iceberg.ClientPool;
+import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
-import org.apache.iceberg.TableOperations;
+import org.apache.iceberg.aws.AwsProperties;
+import org.apache.iceberg.aws.glue.GlueCatalog;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
-import org.apache.iceberg.hadoop.Configurable;
-import org.apache.iceberg.hadoop.HadoopFileIO;
-import org.apache.iceberg.io.FileIO;
-import org.apache.iceberg.relocated.com.google.common.base.MoreObjects;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.thrift.TException;
 
+import java.net.URI;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-import static com.starrocks.connector.iceberg.IcebergUtil.convertToSRDatabase;
+import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
-public class IcebergGlueCatalog extends BaseMetastoreCatalog implements IcebergCatalog, Configurable<Configuration> {
+public class IcebergGlueCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(IcebergGlueCatalog.class);
+    public static final String LOCATION_PROPERTY = "location";
 
-    private static final ConcurrentHashMap<String, IcebergGlueCatalog> CATALOG_MAP =
-            new ConcurrentHashMap<>();
+    private final Configuration conf;
+    private final GlueCatalog delegate;
 
-    public static synchronized IcebergGlueCatalog getInstance(String catalogName, Map<String, String> properties,
-                                                              HdfsEnvironment hdfsEnvironment) {
-        if (!CATALOG_MAP.containsKey(catalogName)) {
-            CATALOG_MAP.put(catalogName, (IcebergGlueCatalog) CatalogLoader.glue(catalogName,
-                    hdfsEnvironment.getConfiguration(), properties).loadCatalog());
-        }
-        return CATALOG_MAP.get(catalogName);
+    public IcebergGlueCatalog(String name, Configuration conf, Map<String, String> properties) {
+        this.conf = conf;
+        Map<String, String> copiedProperties = Maps.newHashMap(properties);
+
+        copiedProperties.put(CatalogProperties.FILE_IO_IMPL, IcebergCachingFileIO.class.getName());
+        copiedProperties.put(CatalogProperties.METRICS_REPORTER_IMPL, IcebergMetricsReporter.class.getName());
+        copiedProperties.put(AwsProperties.CLIENT_FACTORY, IcebergAwsClientFactory.class.getName());
+        copiedProperties.put(AwsProperties.GLUE_CATALOG_SKIP_NAME_VALIDATION, "true");
+        delegate = (GlueCatalog) CatalogUtil.loadCatalog(GlueCatalog.class.getName(), name, copiedProperties, conf);
     }
-
-    private String name;
-    private Configuration conf;
-    private FileIO fileIO;
-    private ClientPool<IMetaStoreClient, TException> clients;
 
     @Override
     public IcebergCatalogType getIcebergCatalogType() {
@@ -79,126 +72,115 @@ public class IcebergGlueCatalog extends BaseMetastoreCatalog implements IcebergC
     }
 
     @Override
-    public Table loadTable(IcebergTable table) throws StarRocksIcebergException {
-        TableIdentifier tableId = IcebergUtil.getIcebergTableIdentifier(table);
-        return loadTable(tableId, null, null);
-    }
-
-    @Override
-    public Table loadTable(TableIdentifier tableIdentifier) throws StarRocksIcebergException {
-        return loadTable(tableIdentifier, null, null);
-    }
-
-    @Override
-    public Table loadTable(TableIdentifier tableId, String tableLocation,
-                           Map<String, String> properties) throws StarRocksIcebergException {
-        Preconditions.checkState(tableId != null);
-        try {
-            TableOperations ops = this.newTableOps(tableId);
-            return new BaseTable(ops, fullTableName(this.name(), tableId));
-        } catch (Exception e) {
-            throw new StarRocksIcebergException(String.format(
-                    "Failed to load Iceberg table with id: %s", tableId), e);
-        }
-    }
-
-    @Override
-    public void initialize(String inputName, Map<String, String> properties) {
-        this.name = inputName;
-        if (conf == null) {
-            LOG.warn("No Hadoop Configuration was set, using the default environment Configuration");
-            this.conf = new Configuration();
-        }
-
-        String fileIOImpl = properties.get(CatalogProperties.FILE_IO_IMPL);
-        this.fileIO =
-                fileIOImpl == null ? new HadoopFileIO(conf) : CatalogUtil.loadFileIO(fileIOImpl, properties, conf);
-
-        // warp cache fileIO
-        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO(fileIO);
-        cachingFileIO.initialize(properties);
-        this.fileIO = cachingFileIO;
-
-        properties.forEach(conf::set);
-        this.clients = new CachedGlueClientPool(this.name, conf, properties);
-    }
-
-    @Override
-    public String name() {
-        return name;
-    }
-
-    @Override
-    protected boolean isValidIdentifier(TableIdentifier tableIdentifier) {
-        return tableIdentifier.namespace().levels().length == 1;
-    }
-
-    @Override
-    public TableOperations newTableOps(TableIdentifier tableIdentifier) {
-        String dbName = tableIdentifier.namespace().level(0);
-        String tableName = tableIdentifier.name();
-        return new HiveTableOperations(conf, clients, fileIO, name, dbName, tableName);
-    }
-
-    @Override
-    protected String defaultWarehouseLocation(TableIdentifier tableIdentifier) {
-        throw new UnsupportedOperationException("Not implemented");
+    public Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+        return delegate.loadTable(TableIdentifier.of(dbName, tableName));
     }
 
     @Override
     public List<String> listAllDatabases() {
-        try {
-            return new ArrayList<>(clients.run(IMetaStoreClient::getAllDatabases));
-        } catch (TException | InterruptedException e) {
-            if (e instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
+        return delegate.listNamespaces().stream()
+                .map(ns -> ns.level(0))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public void createDb(String dbName, Map<String, String> properties) {
+        properties = properties == null ? new HashMap<>() : properties;
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            String key = entry.getKey();
+            String value = entry.getValue();
+            if (key.equalsIgnoreCase(LOCATION_PROPERTY)) {
+                try {
+                    URI uri = new Path(value).toUri();
+                    FileSystem fileSystem = FileSystem.get(uri, conf);
+                    fileSystem.exists(new Path(value));
+                } catch (Exception e) {
+                    LOG.error("Invalid location URI: {}", value, e);
+                    throw new StarRocksConnectorException("Invalid location URI: %s. msg: %s", value, e.getMessage());
+                }
+            } else {
+                throw new IllegalArgumentException("Unrecognized property: " + key);
             }
-            throw new RuntimeException(e);
         }
+        Namespace ns = Namespace.of(dbName);
+        delegate.createNamespace(ns, properties);
     }
 
     @Override
-    public Database getDB(String dbName) throws InterruptedException, TException {
-        org.apache.hadoop.hive.metastore.api.Database db = clients.run(client -> client.getDatabase(dbName));
-        if (db == null || db.getName() == null) {
-            throw new TException("Glue db " + dbName + " doesn't exist");
-        }
-        return convertToSRDatabase(dbName);
-    }
-
-    @Override
-    public List<TableIdentifier> listTables(Namespace namespace) {
-        String database = namespace.level(0);
+    public void dropDb(String dbName) throws MetaNotFoundException {
+        Database database;
         try {
-            List<String> tableNames = clients.run(client -> client.getAllTables(database));
-            return tableNames.stream().map(tblName -> TableIdentifier.of(namespace, tblName)).collect(Collectors.toList());
-        } catch (TException | InterruptedException e) {
-            if (e instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
+            database = getDB(dbName);
+        } catch (Exception e) {
+            LOG.error("Failed to access database {}", dbName, e);
+            throw new MetaNotFoundException("Failed to access database " + dbName);
+        }
+
+        if (database == null) {
+            throw new MetaNotFoundException("Not found database " + dbName);
+        }
+
+        String dbLocation = database.getLocation();
+        if (Strings.isNullOrEmpty(dbLocation)) {
+            throw new MetaNotFoundException("Database location is empty");
+        }
+
+        delegate.dropNamespace(Namespace.of(dbName));
+    }
+
+    @Override
+    public Database getDB(String dbName) {
+        Map<String, String> dbMeta = delegate.loadNamespaceMetadata(Namespace.of(dbName));
+        return new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName, dbMeta.getOrDefault(LOCATION_PROPERTY, ""));
+    }
+
+    @Override
+    public List<String> listTables(String dbName) {
+        List<TableIdentifier> tableIdentifiers = delegate.listTables(Namespace.of(dbName));
+        return tableIdentifiers.stream().map(TableIdentifier::name).collect(Collectors.toCollection(ArrayList::new));
+    }
+
+    @Override
+    public boolean createTable(
+            String dbName,
+            String tableName,
+            Schema schema,
+            PartitionSpec partitionSpec,
+            String location,
+            Map<String, String> properties) {
+        Table nativeTable = delegate.buildTable(TableIdentifier.of(dbName, tableName), schema)
+                .withLocation(location)
+                .withPartitionSpec(partitionSpec)
+                .withProperties(properties)
+                .create();
+
+        return nativeTable != null;
+    }
+
+    @Override
+    public boolean dropTable(String dbName, String tableName, boolean purge) {
+        return delegate.dropTable(TableIdentifier.of(dbName, tableName), purge);
+    }
+
+    @Override
+    public void deleteUncommittedDataFiles(List<String> fileLocations) {
+        if (fileLocations.isEmpty()) {
+            return;
+        }
+
+        URI uri = new Path(fileLocations.get(0)).toUri();
+        try {
+            FileSystem fileSystem = FileSystem.get(uri, conf);
+            for (String location : fileLocations) {
+                Path path = new Path(location);
+                fileSystem.delete(path, false);
             }
-            throw new RuntimeException(e);
+        } catch (Exception e) {
+            LOG.error("Failed to delete uncommitted files", e);
         }
     }
 
-    @Override
-    public boolean dropTable(TableIdentifier tableIdentifier, boolean b) {
-        throw new UnsupportedOperationException("Not implemented");
-    }
-
-    @Override
-    public void renameTable(TableIdentifier tableIdentifier, TableIdentifier tableIdentifier1) {
-        throw new UnsupportedOperationException("Not implemented");
-    }
-
-    @Override
-    public void setConf(Configuration conf) {
-        this.conf = conf;
-    }
-
-    @Override
     public String toString() {
-        return MoreObjects.toStringHelper(this)
-                .add("name", name)
-                .toString();
+        return delegate.toString();
     }
 }

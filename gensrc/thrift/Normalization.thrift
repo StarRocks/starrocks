@@ -22,6 +22,8 @@ struct TNormalOlapScanNode {
   10: optional list<i32> dict_string_ids;
   11: optional list<i32> dict_int_ids;
   12: optional list<string> unused_output_column_name;
+  13: optional list<i64> selected_partition_ids;
+  14: optional list<i64> selected_partition_versions;
 }
 
 struct TNormalProjectNode {

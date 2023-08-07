@@ -153,23 +153,13 @@ ChunksSorter::ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>*
 
 ChunksSorter::~ChunksSorter() = default;
 
-void ChunksSorter::setup_runtime(RuntimeProfile* profile) {
+void ChunksSorter::setup_runtime(RuntimeState* state, RuntimeProfile* profile, MemTracker* parent_mem_tracker) {
     _build_timer = ADD_TIMER(profile, "BuildingTime");
     _sort_timer = ADD_TIMER(profile, "SortingTime");
     _merge_timer = ADD_TIMER(profile, "MergingTime");
     _output_timer = ADD_TIMER(profile, "OutputTime");
     profile->add_info_string("SortKeys", _sort_keys);
     profile->add_info_string("SortType", _is_topn ? "TopN" : "All");
-}
-
-Status ChunksSorter::finish(RuntimeState* state) {
-    TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(done(state)));
-    _is_sink_complete = true;
-    return Status::OK();
-}
-
-bool ChunksSorter::sink_complete() {
-    return _is_sink_complete;
 }
 
 StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk, TupleDescriptor* materialized_tuple_desc,
@@ -224,6 +214,11 @@ StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk, Tup
     }
 
     return materialize_chunk;
+}
+
+Status ChunksSorter::done(RuntimeState* state) {
+    TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(do_done(state)));
+    return Status::OK();
 }
 
 } // namespace starrocks

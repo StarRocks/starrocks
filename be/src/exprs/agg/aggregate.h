@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <new>
 #include <type_traits>
 
 #include "column/column.h"
@@ -136,6 +137,16 @@ public:
         }
     }
 
+    virtual void batch_serialize_with_selection(FunctionContext* ctx, size_t chunk_size,
+                                                const Buffer<AggDataPtr>& agg_states, size_t state_offset, Column* to,
+                                                const std::vector<uint8_t>& selection) const {
+        for (size_t i = 0; i < chunk_size; i++) {
+            if (selection[i] == 0) {
+                this->serialize_to_column(ctx, agg_states[i] + state_offset, to);
+            }
+        }
+    }
+
     // Contains a loop with calls to "update" function.
     // You can collect arguments into array "states"
     // and do a single call to "update_batch" for devirtualization and inlining.
@@ -231,8 +242,8 @@ public:
     // 1. use `restore_detail` to only restore details for the specific input group_by_keys+agg_key.
     // 2. then `restore_all_details` to restore details for the speicif input group_by_keys for
     //  all need `detail_sync` group_by_keys;
-    virtual void restore_detail(FunctionContext* ctx, size_t row_idx, const std::vector<const Column*>& columns,
-                                AggDataPtr __restrict state) const {
+    virtual void restore_detail(FunctionContext* ctx, const Column* agg_column, size_t agg_row_idx,
+                                const Column* count_column, size_t count_row_idx, AggDataPtr __restrict state) const {
         throw std::runtime_error("restore_detail function in aggregate is not supported for now.");
     }
 
@@ -282,7 +293,7 @@ protected:
 public:
     static constexpr bool pod_state() { return std::is_trivially_destructible_v<State>; }
 
-    void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const final { new (ptr) State; }
+    void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override { new (ptr) State; }
 
     void destroy(FunctionContext* ctx, AggDataPtr __restrict ptr) const final { data(ptr).~State(); }
 
@@ -324,6 +335,16 @@ public:
         for (size_t i = 0; i < chunk_size; i++) {
             if (selection[i] == 0) {
                 static_cast<const Derived*>(this)->finalize_to_column(ctx, agg_states[i] + state_offset, to);
+            }
+        }
+    }
+
+    void batch_serialize_with_selection(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
+                                        size_t state_offset, Column* to,
+                                        const std::vector<uint8_t>& selection) const override {
+        for (size_t i = 0; i < chunk_size; i++) {
+            if (selection[i] == 0) {
+                static_cast<const Derived*>(this)->serialize_to_column(ctx, agg_states[i] + state_offset, to);
             }
         }
     }

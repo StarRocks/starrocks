@@ -23,6 +23,7 @@ import com.starrocks.connector.hive.glue.AWSCatalogMetastoreClient;
 import com.starrocks.sql.PlannerProfile;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
+import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.RetryingMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
@@ -37,11 +38,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.transport.TTransportException;
 
+import java.lang.reflect.Method;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.connector.hive.HiveConnector.DUMMY_THRIFT_URI;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 
@@ -55,7 +57,7 @@ public class HiveMetaClient {
     // Maximum number of idle metastore connections in the connection pool at any point.
     private static final int MAX_HMS_CONNECTION_POOL_SIZE = 32;
 
-    private final LinkedList<AutoCloseClient> clientPool = new LinkedList<>();
+    private final LinkedList<RecyclableClient> clientPool = new LinkedList<>();
     private final Object clientPoolLock = new Object();
 
     private final HiveConf conf;
@@ -70,21 +72,18 @@ public class HiveMetaClient {
     public static HiveMetaClient createHiveMetaClient(Map<String, String> properties) {
         HiveConf conf = new HiveConf();
         properties.forEach(conf::set);
-        if (!properties.containsKey(HIVE_METASTORE_URIS)) {
-            // set value for compatible with the rollback
-            properties.put(HIVE_METASTORE_URIS, DUMMY_THRIFT_URI);
+        if (properties.containsKey(HIVE_METASTORE_URIS)) {
+            conf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), properties.get(HIVE_METASTORE_URIS));
         }
-
-        conf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), properties.get(HIVE_METASTORE_URIS));
         conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(),
                 String.valueOf(Config.hive_meta_store_timeout_s));
         return new HiveMetaClient(conf);
     }
 
-    public class AutoCloseClient implements AutoCloseable {
+    public class RecyclableClient {
         private final IMetaStoreClient hiveClient;
 
-        private AutoCloseClient(HiveConf conf) throws MetaException {
+        private RecyclableClient(HiveConf conf) throws MetaException {
             if (DLF_HIVE_METASTORE.equalsIgnoreCase(conf.get(HIVE_METASTORE_TYPE))) {
                 hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
                         DLFProxyMetaStoreClient.class.getName());
@@ -93,23 +92,34 @@ public class HiveMetaClient {
                         AWSCatalogMetastoreClient.class.getName());
             } else {
                 hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
-                        HiveMetaStoreThriftClient.class.getName());
+                        HiveMetaStoreClient.class.getName());
             }
         }
 
-        @Override
-        public void close() {
+        // When the number of currently used clients is less than MAX_HMS_CONNECTION_POOL_SIZE,
+        // the client will be recycled and reused. If it does, we close the client.
+        public void finish() {
             synchronized (clientPoolLock) {
                 if (clientPool.size() >= MAX_HMS_CONNECTION_POOL_SIZE) {
-                    hiveClient.close();
+                    LOG.warn("There are more than {} connections currently accessing the metastore",
+                            MAX_HMS_CONNECTION_POOL_SIZE);
+                    close();
                 } else {
                     clientPool.offer(this);
                 }
             }
         }
+
+        public void close() {
+            hiveClient.close();
+        }
     }
 
-    private AutoCloseClient getClient() throws MetaException {
+    public int getClientSize() {
+        return clientPool.size();
+    }
+
+    private RecyclableClient getClient() throws MetaException {
         // The MetaStoreClient c'tor relies on knowing the Hadoop version by asking
         // org.apache.hadoop.util.VersionInfo. The VersionInfo class relies on opening
         // the 'common-version-info.properties' file as a resource from hadoop-common*.jar
@@ -120,120 +130,173 @@ public class HiveMetaClient {
         }
 
         synchronized (clientPoolLock) {
-            AutoCloseClient client = clientPool.poll();
+            RecyclableClient client = clientPool.poll();
             // The pool was empty so create a new client and return that.
             // Serialize client creation to defend against possible race conditions accessing
             // local Kerberos state
             if (client == null) {
-                return new AutoCloseClient(conf);
+                return new RecyclableClient(conf);
             } else {
                 return client;
             }
         }
     }
 
-    public List<String> getAllDatabaseNames() {
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getAllDatabases");
-                AutoCloseClient client = getClient()) {
-            return client.hiveClient.getAllDatabases();
+    public <T> T callRPC(String methodName, String messageIfError, Object... args) {
+        return callRPC(methodName, messageIfError, null, args);
+    }
+
+    public <T> T callRPC(String methodName, String messageIfError, Class<?>[] argClasses, Object... args) {
+        RecyclableClient client = null;
+        StarRocksConnectorException connectionException = null;
+
+        try {
+            client = getClient();
+            argClasses = argClasses == null ? ClassUtils.getCompatibleParamClasses(args) : argClasses;
+            Method method = client.hiveClient.getClass().getDeclaredMethod(methodName, argClasses);
+            return (T) method.invoke(client.hiveClient, args);
         } catch (Exception e) {
-            LOG.error("Failed to get all database names", e);
-            throw new StarRocksConnectorException("Failed to get all database names from meta store: " + e.getMessage());
+            LOG.error(messageIfError, e);
+            connectionException = new StarRocksConnectorException(messageIfError + ", msg: " + e.getMessage(), e);
+            throw connectionException;
+        } finally {
+            if (client == null && connectionException != null) {
+                LOG.error("Failed to get hive client. {}", connectionException.getMessage());
+            } else if (connectionException != null) {
+                LOG.error("An exception occurred when using the current long link " +
+                        "to access metastore. msg: {}", messageIfError);
+                client.close();
+            } else if (client != null) {
+                client.finish();
+            }
+        }
+    }
+
+    public List<String> getAllDatabaseNames() {
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getAllDatabases")) {
+            return callRPC("getAllDatabases", "Failed to getAllDatabases", new Object[0]);
+        }
+    }
+
+    public void createDatabase(Database database) {
+        Class<?>[] argClasses = {Database.class};
+
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.createDatabase")) {
+            callRPC("createDatabase", "Failed to create database " + database.getName(), argClasses, database);
+        }
+    }
+
+    public void dropDatabase(String dbName, boolean deleteData) {
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.dropDatabase")) {
+            callRPC("dropDatabase", "Failed to drop database " + dbName, dbName, deleteData, false, false);
         }
     }
 
     public List<String> getAllTableNames(String dbName) {
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getAllTables");
-                AutoCloseClient client = getClient()) {
-            return client.hiveClient.getAllTables(dbName);
-        } catch (Exception e) {
-            LOG.error("Failed to get all table names on database: " + dbName, e);
-            throw new StarRocksConnectorException("Failed to get all table names on database [%s] from meta store: %s",
-                    dbName, e.getMessage());
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getAllTables")) {
+            return callRPC("getAllTables", "Failed to get all table names on database: " + dbName, dbName);
+        }
+    }
+
+    public void createTable(Table table) {
+        Class<?>[] argClasses = {Table.class};
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.createTable")) {
+            callRPC("createTable", "Failed to create table " + table.getDbName() + "." + table.getTableName(),
+                    argClasses, table);
+        }
+    }
+
+    public void dropTable(String dbName, String tableName) {
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.dropTable")) {
+            callRPC("dropTable", "Failed to drop table " + dbName + "." + tableName,
+                    dbName, tableName, true, false);
         }
     }
 
     public List<String> getPartitionKeys(String dbName, String tableName) {
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.listPartitionNames");
-                AutoCloseClient client = getClient()) {
-            return client.hiveClient.listPartitionNames(dbName, tableName, (short) -1);
-        } catch (Exception e) {
-            LOG.error("Failed to get partitionKeys on {}.{}", dbName, tableName, e);
-            throw new StarRocksConnectorException("Failed to get partition keys on [%s.%s] from meta store: %s",
-                    dbName, tableName, e.getMessage());
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.listPartitionNames")) {
+            return callRPC("listPartitionNames", String.format("Failed to get partitionKeys on [%s.%s]", dbName, tableName),
+                    dbName, tableName, (short) -1);
+        }
+    }
+
+    public List<String> getPartitionKeysByValue(String dbName, String tableName, List<String> partitionValues) {
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.listPartitionNamesByValue")) {
+            return callRPC("listPartitionNames", String.format("Failed to get partitionKeys on [%s.%s]", dbName, tableName),
+                    dbName, tableName, partitionValues, (short) -1);
         }
     }
 
     public Database getDb(String dbName) {
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getDatabase");
-                AutoCloseClient client = getClient()) {
-            return client.hiveClient.getDatabase(dbName);
-        } catch (Exception e) {
-            LOG.error("Failed to get database {}", dbName, e);
-            throw new StarRocksConnectorException("Failed to get database [%s] from meta store: %s",
-                    dbName, e.getMessage());
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getDatabase")) {
+            return callRPC("getDatabase", String.format("Failed to get database %s", dbName), dbName);
         }
     }
 
     public Table getTable(String dbName, String tableName) {
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getTable");
-                AutoCloseClient client = getClient()) {
-            return client.hiveClient.getTable(dbName, tableName);
-        } catch (Exception e) {
-            LOG.error("Failed to get table [{}.{}]", dbName, tableName, e);
-            throw new StarRocksConnectorException("get hive table [%s.%s] from meta store failed: %s",
-                    dbName, tableName, e.getMessage());
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getTable")) {
+            return callRPC("getTable", String.format("Failed to get table [%s.%s]", dbName, tableName),
+                    dbName, tableName);
         }
     }
 
     public Partition getPartition(String dbName, String tableName, List<String> partitionValues) {
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartition");
-                AutoCloseClient client = getClient()) {
-            return client.hiveClient.getPartition(dbName, tableName, partitionValues);
-        } catch (Exception e) {
-            LOG.error("Failed to get partition on {}.{}", dbName, tableName, e);
-            throw new StarRocksConnectorException("Failed to get partition on [%s.%s] from meta store: %s",
-                    dbName, tableName, e.getMessage());
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartition")) {
+            return callRPC("getPartition", String.format("Failed to get partition on %s.%s", dbName, tableName),
+                    dbName, tableName, partitionValues);
         }
     }
 
     /**
-     * Both 'getPartitionByNames' and 'getPartitionColumnStatistics' could throw exception or no response
+     * Both 'getPartitionsByNames' and 'getPartitionColumnStatistics' could throw exception or no response
      * when querying too many partitions at present. Due to statistics don't affect accuracy, user could adjust
      * session variable 'hive_partition_stats_sample_size' to ensure 'getPartitionColumnStat' normal return.
-     * But "getPartitionByNames" interface must return the full contents due to the need to get partition file information.
-     * So we resend request "getPartitionByNames" when an exception occurs.
+     * But "getPartitionsByNames" interface must return the full contents due to the need to get partition file information.
+     * So we resend request "getPartitionsByNames" when an exception occurs.
      */
     public List<Partition> getPartitionsByNames(String dbName, String tblName, List<String> partitionNames) {
         int size = partitionNames.size();
         List<Partition> partitions;
-        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionsByNames", String.format("%s partitions", size));
+        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionsByNames." + tblName,
+                String.format("%s partitions", size));
 
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartitionsByNames");
-                AutoCloseClient client = getClient()) {
-            partitions = client.hiveClient.getPartitionsByNames(dbName, tblName, partitionNames);
-            if (partitions.size() != partitionNames.size()) {
-                LOG.warn("Expect to fetch {} partition on [{}.{}], but actually fetched {} partition",
-                        partitionNames.size(), dbName, tblName, partitions.size());
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartitionsByNames")) {
+            RecyclableClient client = null;
+            StarRocksConnectorException connectionException = null;
+            try {
+                client = getClient();
+                partitions = client.hiveClient.getPartitionsByNames(dbName, tblName, partitionNames);
+                if (partitions.size() != partitionNames.size()) {
+                    LOG.warn("Expect to fetch {} partition on [{}.{}], but actually fetched {} partition",
+                            partitionNames.size(), dbName, tblName, partitions.size());
+                }
+            } catch (TTransportException te) {
+                partitions = getPartitionsWithRetry(dbName, tblName, partitionNames, 1);
+            } catch (Exception e) {
+                LOG.error("Failed to get partitions on {}.{}", dbName, tblName, e);
+                connectionException = new StarRocksConnectorException("Failed to get partitions on [%s.%s] from meta store: %s",
+                        dbName, tblName, e.getMessage());
+                throw connectionException;
+            } finally {
+                if (client == null && connectionException != null) {
+                    LOG.error("Failed to get hive client. {}", connectionException.getMessage());
+                } else if (connectionException != null) {
+                    LOG.error("An exception occurred when using the current long link " +
+                            "to access metastore. msg: {}", connectionException.getMessage());
+                    client.close();
+                } else if (client != null) {
+                    client.finish();
+                }
             }
-        } catch (TTransportException te) {
-            partitions = getPartitionsWithRetry(dbName, tblName, partitionNames, 1);
-        } catch (Exception e) {
-            LOG.error("Failed to get partitions on {}.{}", dbName, tblName, e);
-            throw new StarRocksConnectorException("Failed to get partitions on [%s.%s] from meta store: %s",
-                    dbName, tblName, e.getMessage());
         }
         return partitions;
     }
 
     public List<ColumnStatisticsObj> getTableColumnStats(String dbName, String tableName, List<String> columns) {
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getTableColumnStatistics");
-                AutoCloseClient client = getClient()) {
-            return client.hiveClient.getTableColumnStatistics(dbName, tableName, columns);
-        } catch (Exception e) {
-            LOG.error("Failed to get table column statistics on [{}.{}]", dbName, tableName, e);
-            throw new StarRocksConnectorException("Failed to get table column statistics on [%s.%s], msg: %s",
-                    dbName, tableName, e.getMessage());
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getTableColumnStatistics")) {
+            return callRPC("getTableColumnStatistics",
+                    String.format("Failed to get table column statistics on [%s.%s]", dbName, tableName),
+                    dbName, tableName, columns);
         }
     }
 
@@ -242,17 +305,14 @@ public class HiveMetaClient {
                                                                           List<String> partitionNames,
                                                                           List<String> columnNames) {
         int size = partitionNames.size();
-        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionColumnStatistics", String.format("%s partitions", size));
+        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionColumnStatistics." + tableName,
+                String.format("%s partitions", size));
 
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartitionColumnStatistics");
-                AutoCloseClient client = getClient()) {
-            return client.hiveClient.getPartitionColumnStatistics(dbName, tableName, partitionNames, columnNames);
-        } catch (Exception e) {
-            LOG.error("Failed to get partitions column statistics on [{}.{}]. partition size: {}, columns size: {}",
-                    dbName, tableName, partitionNames.size(), columnNames.size(), e);
-            throw new StarRocksConnectorException("Failed to get partitions column statistics on [%s.%s]." +
-                    " partition size: %d, columns size: %d. msg: %s", dbName, tableName, partitionNames.size(),
-                    columnNames.size(), e.getMessage());
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartitionColumnStatistics")) {
+            return callRPC("getPartitionColumnStatistics",
+                    String.format("Failed to get partitions column statistics on [%s.%s]. partition size: %d, columns size: %d.",
+                            dbName, tableName, partitionNames.size(), columnNames.size()),
+                    dbName, tableName, partitionNames, columnNames);
         }
     }
 
@@ -275,7 +335,9 @@ public class HiveMetaClient {
         LOG.warn("Execute getPartitionsByNames on [{}.{}] with {} times retry, slice size is {}, partName size is {}",
                 dbName, tableName, retryNum, subListSize, partNames.size());
 
-        try (AutoCloseClient client = getClient()) {
+        RecyclableClient client = null;
+        try {
+            client = getClient();
             for (List<String> parts : partNamesList) {
                 partitions.addAll(client.hiveClient.getPartitionsByNames(dbName, tableName, parts));
             }
@@ -292,15 +354,19 @@ public class HiveMetaClient {
         } catch (Exception e) {
             throw new StarRocksConnectorException("Failed to getPartitionsNames on [%s.%s], msg: %s",
                     dbName, tableName, e.getMessage());
+        } finally {
+            if (client != null) {
+                client.close();
+            }
         }
     }
 
     public CurrentNotificationEventId getCurrentNotificationEventId() {
-        try (AutoCloseClient client = getClient()) {
-            return client.hiveClient.getCurrentNotificationEventId();
+        try {
+            return callRPC("getCurrentNotificationEventId",
+                    "Failed to fetch current notification event id", new Object[0]);
         } catch (Exception e) {
-            LOG.error("Failed to fetch current notification event id", e);
-            throw new MetastoreNotificationFetchException("Failed to get current notification event id. msg: " + e.getMessage());
+            throw new MetastoreNotificationFetchException(e.getMessage());
         }
     }
 
@@ -308,12 +374,52 @@ public class HiveMetaClient {
                                                          int maxEvents,
                                                          IMetaStoreClient.NotificationFilter filter)
             throws MetastoreNotificationFetchException {
-        try (AutoCloseClient client = getClient()) {
-            return client.hiveClient.getNextNotification(lastEventId, maxEvents, filter);
+        try {
+            Class<?>[] argClasses = {long.class, int.class, IMetaStoreClient.NotificationFilter.class};
+            return callRPC("getNextNotification", "Failed to get next notification based on last event id: " + lastEventId,
+                    argClasses, lastEventId, maxEvents, filter);
         } catch (Exception e) {
-            LOG.error("Failed to get next notification based on last event id {}", lastEventId, e);
-            throw new MetastoreNotificationFetchException("Failed to get next notification based on last event id: " +
-                    lastEventId + ". msg: " + e.getMessage());
+            throw new MetastoreNotificationFetchException(e.getMessage());
+        }
+    }
+
+    static class ClassUtils {
+        private static final HashMap WRAPPER_TO_PRIMITIVE = new HashMap();
+        static {
+            WRAPPER_TO_PRIMITIVE.put(Boolean.class, Boolean.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Character.class, Character.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Byte.class, Byte.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Short.class, Short.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Integer.class, Integer.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Float.class, Float.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Long.class, Long.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Double.class, Double.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(String.class, String.class);
+        }
+
+        public static Class<?>[] getCompatibleParamClasses(Object[] args) {
+            Class<?>[] argTypes = new Class[args.length];
+            for (int i = 0; i < args.length; i++) {
+                argTypes[i] = toPrimitiveClass(args[i].getClass());
+            }
+            return argTypes;
+        }
+
+        public static Class<?> toPrimitiveClass(Class<?> parameterType) {
+            if (List.class.isAssignableFrom(parameterType)) {
+                return List.class;
+            } else if (!parameterType.isPrimitive()) {
+                Class<?> wrapperType = getWrapperType(parameterType);
+
+                assert wrapperType != null;
+                return wrapperType;
+            } else {
+                return parameterType;
+            }
+        }
+
+        public static Class<?> getWrapperType(Class<?> primitiveType) {
+            return (Class) WRAPPER_TO_PRIMITIVE.get(primitiveType);
         }
     }
 }

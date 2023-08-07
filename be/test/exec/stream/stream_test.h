@@ -17,7 +17,6 @@
 #include <gtest/gtest.h>
 
 #include "exec/stream/aggregate/stream_aggregator.h"
-#include "exec/stream/stream_fdw.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/desc_tbl_helper.h"
 #include "testutil/exprs_test_helper.h"
@@ -66,6 +65,7 @@ protected:
         params->grouping_exprs = _create_group_by_exprs(slot_infos[0], group_by_infos);
         params->intermediate_aggr_exprs = {};
         params->aggregate_functions = _create_agg_exprs(slot_infos[0], agg_infos);
+        params->init();
         return std::make_shared<StreamAggregator>(std::move(params));
     }
 

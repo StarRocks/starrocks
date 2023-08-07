@@ -1,0 +1,140 @@
+-- name: test_lead_lag
+CREATE DATABASE test_lead_lag;
+-- result:
+-- !result
+USE test_lead_lag;
+-- result:
+-- !result
+CREATE TABLE `common_duplicate` (
+  `c0` int(11) NOT NULL COMMENT "",
+  `c1` int(11) NOT NULL COMMENT "",
+  `c2` varchar(500) NOT NULL COMMENT "",
+  `c3` varchar(500) NULL COMMENT "",
+  `c4` float NULL COMMENT "",
+  `c5` decimal128(38, 20) NOT NULL COMMENT "",
+  `c6` date NOT NULL COMMENT "",
+  INDEX index1_c0 (`c0`) USING BITMAP
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`, `c2`)
+COMMENT "OLAP"
+PARTITION BY RANGE(`c1`)
+(PARTITION p0 VALUES [("0"), ("500000")),
+PARTITION p500000 VALUES [("500000"), ("1000000")))
+DISTRIBUTED BY HASH(`c0`, `c1`, `c2`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"bloom_filter_columns" = "c3",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into common_duplicate values (1, 1, 'a', 'b', 1.23, 3.33, '2021-11-11'),(2, 600000, 'aa', 'bb', 2.23, 4.33, '2022-12-11'),(3, 400000, 'aaa', 'bbb', 3.23, 5.33, '2022-06-11');
+-- result:
+-- !result
+select c0, lead(c1, 5) over() from common_duplicate;
+-- result:
+1	None
+3	None
+2	None
+-- !result
+select c0, lag(c1, 5) over() from common_duplicate;
+-- result:
+3	None
+1	None
+2	None
+-- !result
+select c0, lead(c1, 5, null) over() from common_duplicate;
+-- result:
+2	None
+1	None
+3	None
+-- !result
+select c0, lag(c1, 5, null) over() from common_duplicate;
+-- result:
+1	None
+3	None
+2	None
+-- !result
+select c0, lead(c1, 5, 1) over() from common_duplicate;
+-- result:
+3	1
+1	1
+2	1
+-- !result
+select c0, lag(c1, 5, 1+2+3) over() from common_duplicate;
+-- result:
+1	6
+2	6
+3	6
+-- !result
+select c0, lag(c1, 5, abs(1)) over() from common_duplicate;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The type of the third parameter of LEAD/LAG not match the type INT.')
+-- !result
+select c0, lead(c2, 5) over() from common_duplicate;
+-- result:
+1	None
+2	None
+3	None
+-- !result
+select c0, lead(c2, 5, 1+2+3) over() from common_duplicate;
+-- result:
+3	6
+1	6
+2	6
+-- !result
+select c0, lead(c2, 5, day('2021-01-02')) over() from common_duplicate;
+-- result:
+2	2
+3	2
+1	2
+-- !result
+select c0, lag(c2, 5, 'abc') over() from common_duplicate;
+-- result:
+3	abc
+2	abc
+1	abc
+-- !result
+select c0, lead(c4, 5, 1) over() from common_duplicate;
+-- result:
+3	1.0
+2	1.0
+1	1.0
+-- !result
+select c0, lag(c4, 5, 1+2+3) over() from common_duplicate;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The type of the third parameter of LEAD/LAG not match the type FLOAT.')
+-- !result
+select c0, lag(c4, 5, 3.456) over() from common_duplicate;
+-- result:
+2	3.456
+1	3.456
+3	3.456
+-- !result
+select c0, lead(c5, 5, '12345') over() from common_duplicate;
+-- result:
+2	12345.00000000000000000000
+3	12345.00000000000000000000
+1	12345.00000000000000000000
+-- !result
+select c0, lag(c5, 5, 123) over() from common_duplicate;
+-- result:
+2	123.00000000000000000000
+1	123.00000000000000000000
+3	123.00000000000000000000
+-- !result
+select c0, lag(c5, 5, 123.456) over() from common_duplicate;
+-- result:
+2	123.45600000000000000000
+1	123.45600000000000000000
+3	123.45600000000000000000
+-- !result
+select c0, lead(c6, 5, '2021-11-11') over() from common_duplicate;
+-- result:
+3	2021-11-11
+2	2021-11-11
+1	2021-11-11
+-- !result

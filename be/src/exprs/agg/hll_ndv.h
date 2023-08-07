@@ -29,11 +29,11 @@ namespace starrocks {
  * ARGS_TYPE: ALL TYPE
  * SERIALIZED_TYPE: TYPE_VARCHAR
  */
-template <LogicalType PT, bool IsOutputHLL, typename T = RunTimeCppType<PT>>
+template <LogicalType LT, bool IsOutputHLL, typename T = RunTimeCppType<LT>>
 class HllNdvAggregateFunction final
-        : public AggregateFunctionBatchHelper<HyperLogLog, HllNdvAggregateFunction<PT, IsOutputHLL, T>> {
+        : public AggregateFunctionBatchHelper<HyperLogLog, HllNdvAggregateFunction<LT, IsOutputHLL, T>> {
 public:
-    using ColumnType = RunTimeColumnType<PT>;
+    using ColumnType = RunTimeColumnType<LT>;
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
         this->data(state).clear();
@@ -42,9 +42,9 @@ public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         uint64_t value = 0;
-        const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
+        const auto* column = down_cast<const ColumnType*>(columns[0]);
 
-        if constexpr (pt_is_string<PT>) {
+        if constexpr (lt_is_string<LT>) {
             Slice s = column->get_slice(row_num);
             value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
         } else {
@@ -60,9 +60,9 @@ public:
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
+        const auto* column = down_cast<const ColumnType*>(columns[0]);
 
-        if constexpr (pt_is_string<PT>) {
+        if constexpr (lt_is_string<LT>) {
             uint64_t value = 0;
             for (size_t i = frame_start; i < frame_end; ++i) {
                 Slice s = column->get_slice(i);
@@ -118,7 +118,7 @@ public:
 
     void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override {
-        const ColumnType* column = down_cast<const ColumnType*>(src[0].get());
+        const auto* column = down_cast<const ColumnType*>(src[0].get());
         auto* result = down_cast<BinaryColumn*>((*dst).get());
 
         Bytes& bytes = result->get_bytes();
@@ -129,7 +129,7 @@ public:
         uint64_t value = 0;
         for (size_t i = 0; i < chunk_size; ++i) {
             HyperLogLog hll;
-            if constexpr (pt_is_string<PT>) {
+            if constexpr (lt_is_string<LT>) {
                 Slice s = column->get_slice(i);
                 value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
             } else {

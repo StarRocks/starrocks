@@ -16,11 +16,18 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TableName;
+import com.starrocks.sql.parser.NodePosition;
 
 public class RecoverTableStmt extends DdlStmt {
     private final TableName dbTblName;
 
     public RecoverTableStmt(TableName dbTblName) {
+        this(dbTblName, NodePosition.ZERO);
+    }
+
+
+    public RecoverTableStmt(TableName dbTblName, NodePosition pos) {
+        super(pos);
         this.dbTblName = dbTblName;
     }
 

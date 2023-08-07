@@ -38,7 +38,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.StringLiteral;
@@ -63,6 +62,7 @@ import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.system.Backend;
@@ -73,6 +73,7 @@ import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TOpType;
+import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TPlanFragment;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -101,7 +102,6 @@ public class LoadingTaskPlannerTest {
 
     // config
     private int loadParallelInstanceNum;
-    private int maxBrokerConcurrency;
 
     // backends
     private ImmutableMap<Long, Backend> idToBackend;
@@ -121,7 +121,7 @@ public class LoadingTaskPlannerTest {
         brokerDesc = new BrokerDesc("broker0", null);
 
         loadParallelInstanceNum = Config.load_parallel_instance_num;
-        maxBrokerConcurrency = Config.max_broker_concurrency;
+        Config.eliminate_shuffle_load_by_replicated_storage = false;
 
         // backends
         Map<Long, Backend> idToBackendTmp = Maps.newHashMap();
@@ -138,7 +138,7 @@ public class LoadingTaskPlannerTest {
     @After
     public void tearDown() {
         Config.load_parallel_instance_num = loadParallelInstanceNum;
-        Config.max_broker_concurrency = maxBrokerConcurrency;
+        Config.eliminate_shuffle_load_by_replicated_storage = true;
     }
 
     @Test
@@ -196,7 +196,8 @@ public class LoadingTaskPlannerTest {
         Config.load_parallel_instance_num = 1;
         long startTime = System.currentTimeMillis();
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, startTime, false, Maps.newHashMap(), "");
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, startTime, false, Maps.newHashMap(), "", 
+                TPartialUpdateMode.UNKNOWN_MODE);
         planner.plan(loadId, fileStatusesList, 2);
         Assert.assertEquals(1, planner.getScanNodes().size());
         FileScanNode scanNode = (FileScanNode) planner.getScanNodes().get(0);
@@ -206,21 +207,22 @@ public class LoadingTaskPlannerTest {
         // load_parallel_instance_num: 2
         Config.load_parallel_instance_num = 2;
         planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, startTime, false, Maps.newHashMap(), "");
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, startTime, false, Maps.newHashMap(), "", 
+                TPartialUpdateMode.UNKNOWN_MODE);
         planner.plan(loadId, fileStatusesList, 2);
         scanNode = (FileScanNode) planner.getScanNodes().get(0);
         locationsList = scanNode.getScanRangeLocations(0);
         Assert.assertEquals(4, locationsList.size());
 
-        // load_parallel_instance_num: 2, max_broker_concurrency: 3
+        // load_parallel_instance_num: 2
         Config.load_parallel_instance_num = 2;
-        Config.max_broker_concurrency = 3;
         planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, startTime, false, Maps.newHashMap(), "");
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, startTime, false, Maps.newHashMap(), "", 
+                TPartialUpdateMode.UNKNOWN_MODE);
         planner.plan(loadId, fileStatusesList, 2);
         scanNode = (FileScanNode) planner.getScanNodes().get(0);
         locationsList = scanNode.getScanRangeLocations(0);
-        Assert.assertEquals(3, locationsList.size());
+        Assert.assertEquals(4, locationsList.size());
     }
 
     @Test
@@ -282,7 +284,7 @@ public class LoadingTaskPlannerTest {
         List<String> columnNames = Lists.newArrayList("k1", "k33", "v");
         DataDescription desc = new DataDescription("t2", null, files, columnNames,
                 null, null, "ORC", Lists.newArrayList("k2"),
-                false, columnMappingList, null);
+                false, columnMappingList, null, null);
         Deencapsulation.invoke(desc, "analyzeColumns");
         BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
         Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
@@ -298,7 +300,8 @@ public class LoadingTaskPlannerTest {
 
         // plan
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "");
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "", 
+                TPartialUpdateMode.UNKNOWN_MODE);
         planner.plan(loadId, fileStatusesList, 1);
 
         // 1. check fragment
@@ -419,7 +422,7 @@ public class LoadingTaskPlannerTest {
         List<String> columnNames = Lists.newArrayList("k1", "k33", "v");
         DataDescription desc = new DataDescription("t2", null, files, columnNames,
                 null, null, "ORC", Lists.newArrayList("k2"),
-                false, columnMappingList, null);
+                false, columnMappingList, null, null);
         Deencapsulation.invoke(desc, "analyzeColumns");
         BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
         Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
@@ -436,7 +439,8 @@ public class LoadingTaskPlannerTest {
 
         // plan
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "");
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "", 
+                TPartialUpdateMode.UNKNOWN_MODE);
         planner.plan(loadId, fileStatusesList, 1);
 
         // 1. check fragment
@@ -503,7 +507,7 @@ public class LoadingTaskPlannerTest {
         List<String> columnNames = Lists.newArrayList("pk", "v1", "v2");
         DataDescription desc = new DataDescription("t2", null, files, columnNames,
                 null, null, "CSV", Lists.newArrayList(),
-                false, columnMappingList, null);
+                false, columnMappingList, null, null);
         Deencapsulation.invoke(desc, "analyzeColumns");
         BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
         Deencapsulation.setField(brokerFileGroup, "columnSeparator", ",");
@@ -519,7 +523,8 @@ public class LoadingTaskPlannerTest {
 
         // plan
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "");
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "", 
+                TPartialUpdateMode.UNKNOWN_MODE);
         planner.plan(loadId, fileStatusesList, 1);
 
         // 2. check scan node column expr
@@ -590,7 +595,7 @@ public class LoadingTaskPlannerTest {
         List<String> columnNames = Lists.newArrayList("pk", "v1", "v2");
         DataDescription desc = new DataDescription("t2", null, files, columnNames,
                 null, null, "CSV", Lists.newArrayList(),
-                false, columnMappingList, null);
+                false, columnMappingList, null, null);
         Deencapsulation.invoke(desc, "analyzeColumns");
         BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
         Deencapsulation.setField(brokerFileGroup, "columnSeparator", ",");
@@ -606,7 +611,8 @@ public class LoadingTaskPlannerTest {
 
         // plan
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "");
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "", 
+                TPartialUpdateMode.UNKNOWN_MODE);
         planner.plan(loadId, fileStatusesList, 1);
 
         // 2. check scan node column expr
@@ -696,7 +702,7 @@ public class LoadingTaskPlannerTest {
         List<String> columnNames = Lists.newArrayList("c0", "c1", "c2", "c3");
         DataDescription desc = new DataDescription("t2", null, files, columnNames,
                 null, null, "CSV", Lists.newArrayList(),
-                false, columnMappingList, null);
+                false, columnMappingList, null, null);
         Deencapsulation.invoke(desc, "analyzeColumns");
         BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
         Deencapsulation.setField(brokerFileGroup, "columnSeparator", ",");
@@ -712,7 +718,8 @@ public class LoadingTaskPlannerTest {
 
         // plan
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "");
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "", 
+                TPartialUpdateMode.UNKNOWN_MODE);
         planner.plan(loadId, fileStatusesList, 1);
 
         // 2. check scan node column expr
@@ -792,7 +799,7 @@ public class LoadingTaskPlannerTest {
         List<String> columnNames = Lists.newArrayList("pk", "v1", "v2", "__op");
         DataDescription desc = new DataDescription("t2", null, files, columnNames,
                 null, null, "CSV", Lists.newArrayList(),
-                false, columnMappingList, null);
+                false, columnMappingList, null, null);
         Deencapsulation.invoke(desc, "analyzeColumns");
         BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
         Deencapsulation.setField(brokerFileGroup, "columnSeparator", ",");
@@ -808,7 +815,8 @@ public class LoadingTaskPlannerTest {
 
         // plan
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "");
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "", 
+                TPartialUpdateMode.UNKNOWN_MODE);
         planner.plan(loadId, fileStatusesList, 1);
 
         // 2. check scan node column expr
@@ -896,7 +904,7 @@ public class LoadingTaskPlannerTest {
         List<String> columnNames = Lists.newArrayList("k1", "k33", "v");
         DataDescription desc = new DataDescription("t2", null, files, columnNames,
                 null, null, "ORC", Lists.newArrayList("k2"),
-                false, columnMappingList, null);
+                false, columnMappingList, null, null);
         Deencapsulation.invoke(desc, "analyzeColumns");
         BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
         Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
@@ -912,7 +920,8 @@ public class LoadingTaskPlannerTest {
 
         // plan
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "");
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "", 
+                TPartialUpdateMode.UNKNOWN_MODE);
         planner.plan(loadId, fileStatusesList, 1);
 
         // check fragment
@@ -997,7 +1006,7 @@ public class LoadingTaskPlannerTest {
         List<String> columnNames = Lists.newArrayList("k1", "k33", "v");
         DataDescription desc = new DataDescription("t2", null, files, columnNames,
                 null, null, "ORC", Lists.newArrayList("k2"),
-                false, columnMappingList, null);
+                false, columnMappingList, null, null);
         Deencapsulation.invoke(desc, "analyzeColumns");
         BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
         Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
@@ -1012,12 +1021,27 @@ public class LoadingTaskPlannerTest {
         fileStatusesList.add(fileStatusList);
 
         // plan
-        LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "");
-        planner.plan(loadId, fileStatusesList, 1);
+        {
+            LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
+                    false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "", 
+                    TPartialUpdateMode.UNKNOWN_MODE);
+            planner.plan(loadId, fileStatusesList, 1);
 
-        // check fragment
-        List<PlanFragment> fragments = planner.getFragments();
-        Assert.assertEquals(2, fragments.size());
+            // check fragment
+            List<PlanFragment> fragments = planner.getFragments();
+            Assert.assertEquals(2, fragments.size());
+        }
+
+        {
+            Config.eliminate_shuffle_load_by_replicated_storage = true;
+            LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
+                    false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "", 
+                    TPartialUpdateMode.UNKNOWN_MODE);
+            planner.plan(loadId, fileStatusesList, 1);
+
+            // check fragment
+            List<PlanFragment> fragments = planner.getFragments();
+            Assert.assertEquals(1, fragments.size());
+        }
     }
 }

@@ -47,18 +47,23 @@ public:
 private:
     class ScannerCSVReader : public CSVReader {
     public:
-        ScannerCSVReader(std::shared_ptr<SequentialFile> file, const CSVParseOptions& parse_options)
+        ScannerCSVReader(std::shared_ptr<SequentialFile> file, RuntimeState* state,
+                         const CSVParseOptions& parse_options)
                 : CSVReader(parse_options) {
             _file = std::move(file);
+            _state = state;
         }
 
         void set_counter(ScannerCounter* counter) { _counter = counter; }
 
         Status _fill_buffer() override;
 
+        const std::string& filename();
+
     private:
         std::shared_ptr<SequentialFile> _file;
         ScannerCounter* _counter = nullptr;
+        RuntimeState* _state = nullptr;
     };
 
     ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots);
@@ -67,6 +72,7 @@ private:
     Status _parse_csv_v2(Chunk* chunk);
 
     StatusOr<ChunkPtr> _materialize(ChunkPtr& src_chunk);
+    void _materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chunk);
     void _report_error(const std::string& line, const std::string& err_msg);
 
     using ConverterPtr = std::unique_ptr<csv::Converter>;
@@ -80,6 +86,8 @@ private:
     CSVReaderPtr _curr_reader;
     std::vector<ConverterPtr> _converters;
     bool _use_v2;
+    CSVReader::Fields fields;
+    CSVRow row;
 };
 
 } // namespace starrocks

@@ -65,7 +65,7 @@ public:
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
     Status collect_query_statistics(QueryStatistics* statistics) override;
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     // the number of senders needs to be set after the c'tor, because it's not
     // recorded in TPlanNode, and before calling prepare()
@@ -98,6 +98,7 @@ private:
     // True if this is a merging exchange node. If true, GetNext() is delegated to the
     // underlying _stream_recvr, and _input_batch is not used/valid.
     bool _is_merging;
+    bool _is_parallel_merge;
 
     // Sort expressions and parameters passed to the merging receiver..
     SortExecExprs _sort_exec_exprs;

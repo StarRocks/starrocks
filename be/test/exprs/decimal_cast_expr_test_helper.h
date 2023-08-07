@@ -24,9 +24,9 @@
 #include "column/nullable_column.h"
 #include "exprs/cast_expr.h"
 #include "exprs/mock_vectorized_expr.h"
-#include "runtime/primitive_type.h"
 #include "runtime/time_types.h"
 #include "testutil/parallel_test.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -117,7 +117,7 @@ ColumnPtr cast(RunTimeCppType<FromType> const& value, TypeDescriptor const& from
     from_node.node_type = TExprNodeType::CAST_EXPR;
     from_type.to_thrift(&from_node.type);
     ColumnPtr from_column;
-    if constexpr (pt_is_decimal<FromType>) {
+    if constexpr (lt_is_decimal<FromType>) {
         from_column = create_column<FromType, PackedType>(value, front_fill_size, rear_fill_size, from_type.precision,
                                                           from_type.scale);
     } else {
@@ -135,10 +135,10 @@ ColumnPtr cast_single_test_case(CastTestCase const& test_case, size_t front_fill
     [[maybe_unused]] auto output_precision = std::get<3>(test_case);
     [[maybe_unused]] auto output_scale = std::get<4>(test_case);
     TypeDescriptor string_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-    TypeDescriptor from_type = TypeDescriptor::from_primtive_type(FromType, TypeDescriptor::MAX_VARCHAR_LENGTH,
-                                                                  input_precision, input_scale);
-    TypeDescriptor to_type = TypeDescriptor::from_primtive_type(ToType, TypeDescriptor::MAX_VARCHAR_LENGTH,
-                                                                output_precision, output_scale);
+    TypeDescriptor from_type = TypeDescriptor::from_logical_type(FromType, TypeDescriptor::MAX_VARCHAR_LENGTH,
+                                                                 input_precision, input_scale);
+    TypeDescriptor to_type = TypeDescriptor::from_logical_type(ToType, TypeDescriptor::MAX_VARCHAR_LENGTH,
+                                                               output_precision, output_scale);
 
     auto s = Slice{input_value.c_str(), input_value.size()};
     auto from_column =
@@ -160,12 +160,12 @@ struct CastParamCppTypeTrait {
     using type = RunTimeCppType<Type>;
 };
 template <LogicalType Type>
-struct CastParamCppTypeTrait<Type, StringPTGuard<Type>> {
+struct CastParamCppTypeTrait<Type, StringLTGuard<Type>> {
     using type = std::string;
 };
 
 template <LogicalType Type>
-struct CastParamCppTypeTrait<Type, DecimalV2PTGuard<Type>> {
+struct CastParamCppTypeTrait<Type, DecimalV2LTGuard<Type>> {
     using type = int128_t;
 };
 
@@ -175,29 +175,29 @@ using CastParamCppType = typename CastParamCppTypeTrait<Type>::type;
 template <LogicalType FromType, LogicalType ToType>
 CastParamCppType<ToType> cast_value(CastParamCppType<FromType> const& value, int from_precision, int from_scale,
                                     int to_precision, int to_scale) {
-    TypeDescriptor from_type = TypeDescriptor::from_primtive_type(FromType, 65535, from_precision, from_scale);
-    TypeDescriptor to_type = TypeDescriptor::from_primtive_type(ToType, 65535, to_precision, to_scale);
+    TypeDescriptor from_type = TypeDescriptor::from_logical_type(FromType, 65535, from_precision, from_scale);
+    TypeDescriptor to_type = TypeDescriptor::from_logical_type(ToType, 65535, to_precision, to_scale);
     ColumnPtr column = cast<FromType, ToType, CONST>(RunTimeCppType<FromType>(value), from_type, to_type, 0, 0);
     DCHECK(column->is_constant() && !column->only_null());
     RunTimeCppType<ToType> result = ColumnHelper::get_const_value<ToType>(column);
-    if constexpr (pt_is_string<ToType>) {
+    if constexpr (lt_is_string<ToType>) {
         return result.to_string();
-    } else if constexpr (pt_is_decimalv2<ToType>) {
+    } else if constexpr (lt_is_decimalv2<ToType>) {
         return result.value();
     } else {
         return result;
     }
 }
 
-VALUE_GUARD(LogicalType, RelativeErrorPTGuard, pt_is_relative_error, TYPE_DECIMAL128, TYPE_FLOAT, TYPE_DOUBLE,
+VALUE_GUARD(LogicalType, RelativeErrorLTGuard, lt_is_relative_error, TYPE_DECIMAL128, TYPE_FLOAT, TYPE_DOUBLE,
             TYPE_DECIMALV2)
 template <LogicalType Type>
 void assert_equal(std::string const& expect, std::string const& actual, [[maybe_unused]] int precision,
                   [[maybe_unused]] int scale) {
-    if constexpr (pt_is_boolean<Type>) {
+    if constexpr (lt_is_boolean<Type>) {
         std::string actual0 = std::string(actual == "1" ? "true" : "false");
         ASSERT_EQ(expect, actual0);
-    } else if constexpr (pt_is_relative_error<Type>) {
+    } else if constexpr (lt_is_relative_error<Type>) {
         using CppType = CastParamCppType<Type>;
         auto expect_value = cast_value<TYPE_VARCHAR, Type>(expect, -1, -1, precision, scale);
         auto actual_value = cast_value<TYPE_VARCHAR, Type>(actual, -1, -1, precision, scale);

@@ -17,20 +17,27 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.TableRef;
-import com.starrocks.common.FeConstants;
+import com.starrocks.server.RunMode;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Map;
 
 public class RestoreStmt extends AbstractBackupStmt {
     private boolean allowLoad = false;
-    private int replicationNum = FeConstants.default_replication_num;
+    private int replicationNum = RunMode.defaultReplicationNum();
     private String backupTimestamp = null;
     private int metaVersion = -1;
     private int starrocksMetaVersion = -1;
 
-    public RestoreStmt(LabelName labelName, String repoName, List<TableRef> tblRefs, Map<String, String> properties) {
-        super(labelName, repoName, tblRefs, properties);
+    public RestoreStmt(LabelName labelName, String repoName, List<TableRef> tblRefs,
+                       Map<String, String> properties) {
+        this(labelName, repoName, tblRefs, properties, NodePosition.ZERO);
+    }
+
+    public RestoreStmt(LabelName labelName, String repoName, List<TableRef> tblRefs,
+                       Map<String, String> properties, NodePosition pos) {
+        super(labelName, repoName, tblRefs, properties, pos);
     }
 
     public boolean allowLoad() {

@@ -30,6 +30,15 @@ struct PartialUpdateState {
     std::vector<std::unique_ptr<Column>> write_columns;
     bool inited = false;
     EditVersion read_version;
+    int64_t byte_size = 0;
+
+    void update_byte_size() {
+        for (size_t i = 0; i < write_columns.size(); i++) {
+            if (write_columns[i] != nullptr) {
+                byte_size += write_columns[i]->byte_size();
+            }
+        }
+    }
 
     void release() {
         src_rss_rowids.clear();
@@ -43,6 +52,41 @@ struct PartialUpdateState {
     }
 };
 
+struct AutoIncrementPartialUpdateState {
+    std::vector<uint64_t> src_rss_rowids;
+    std::unique_ptr<Column> write_column;
+    Rowset* rowset;
+    TabletSchema* schema;
+    // auto increment column id in partial segment file
+    // but not in full tablet schema
+    uint32_t id;
+    uint32_t segment_id;
+    std::vector<uint32_t> rowids;
+    std::unique_ptr<Column> delete_pks;
+    bool skip_rewrite;
+    AutoIncrementPartialUpdateState() : rowset(nullptr), schema(nullptr), id(0), segment_id(0), skip_rewrite(false) {}
+
+    void init(Rowset* rowset, TabletSchema* schema, uint32_t id, uint32_t segment_id) {
+        this->rowset = rowset;
+        this->schema = schema;
+        this->id = id;
+        this->segment_id = segment_id;
+    }
+
+    void release() {
+        src_rss_rowids.clear();
+        rowids.clear();
+        write_column.reset();
+        delete_pks.reset();
+
+        rowset = nullptr;
+        schema = nullptr;
+        id = 0;
+        segment_id = 0;
+        skip_rewrite = false;
+    }
+};
+
 class RowsetUpdateState {
 public:
     using ColumnUniquePtr = std::unique_ptr<Column>;
@@ -53,7 +97,8 @@ public:
     Status load(Tablet* tablet, Rowset* rowset);
 
     Status apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, uint32_t segment_id,
-                 EditVersion latest_applied_version, const PrimaryIndex& index);
+                 EditVersion latest_applied_version, const PrimaryIndex& index, std::unique_ptr<Column>& delete_pks,
+                 int64_t* append_column_size);
 
     const std::vector<ColumnUniquePtr>& upserts() const { return _upserts; }
     const std::vector<ColumnUniquePtr>& deletes() const { return _deletes; }
@@ -95,6 +140,10 @@ private:
     // to avoid dead lock.
     Status _prepare_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t idx, bool need_lock);
 
+    Status _prepare_auto_increment_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t idx,
+                                                         EditVersion latest_applied_version,
+                                                         const std::vector<uint32_t>& column_id);
+
     Status _check_and_resolve_conflict(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, uint32_t segment_id,
                                        EditVersion latest_applied_version, std::vector<uint32_t>& read_column_ids,
                                        const PrimaryIndex& index);
@@ -112,6 +161,8 @@ private:
 
     // TODO: dump to disk if memory usage is too large
     std::vector<PartialUpdateState> _partial_update_states;
+
+    std::vector<AutoIncrementPartialUpdateState> _auto_increment_partial_update_states;
 
     RowsetUpdateState(const RowsetUpdateState&) = delete;
     const RowsetUpdateState& operator=(const RowsetUpdateState&) = delete;

@@ -1,0 +1,31 @@
+-- name: test_spill_agg_with_empty_agg_operator
+set enable_spill=true;
+-- result:
+-- !result
+set spill_mode="auto";
+-- result:
+-- !result
+CREATE TABLE t1 (
+    k1 INT,
+    k2 VARCHAR(20))
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+CREATE TABLE t2 (
+    k1 INT,
+    k2 VARCHAR(20))
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+insert into t1 values (1,"1");
+-- result:
+-- !result
+insert into t2 select sum(k1),k2 from t1 group by k2;
+-- result:
+-- !result
+select * from t2;
+-- result:
+1	1
+-- !result

@@ -20,6 +20,7 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -47,14 +48,18 @@ public class ShowLoadWarningsStmt extends ShowStmt {
 
     public ShowLoadWarningsStmt(String db, String url, Expr labelExpr,
                                 LimitElement limitElement) {
+        this(db, url, labelExpr, limitElement, NodePosition.ZERO);
+    }
+
+    public ShowLoadWarningsStmt(String db, String url, Expr labelExpr, LimitElement limitElement,
+                                NodePosition pos) {
+        super(pos);
         this.dbName = db;
         this.rawUrl = url;
         this.whereClause = labelExpr;
         this.limitElement = limitElement;
-
-        this.label = null;
-        this.jobId = 0;
     }
+
 
     public String getDbName() {
         return dbName;

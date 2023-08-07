@@ -2,170 +2,201 @@
 
 ## Description
 
-This statement is used to operate nodes in a system. (Administrator only!)
+Manages FE, BE, CN, Broker nodes, and metadata snapshots in a cluster.
 
-## Syntax
+> **NOTE**
+>
+> Only the `cluster_admin` role has the privilege to execute this SQL statement.
 
-1. Add nodes (Please add in this way if multi-tenant functionality is not used).
+## Syntax and parameters
 
-   ```sql
-   ALTER SYSTEM ADD BACKEND "host:heartbeat_port"[,"host:heartbeat_port"...];
-   ALTER SYSTEM ADD COMPUTE NODE "host:heartbeat_service_port"[,"host:heartbeat_service_port"...];
-   ```
+### FE
 
-   After BE nodes are successfully added to your StarRocks cluster, you can execute the [SHOW BACKENDS](./SHOW%20BACKENDS.md) statement to see the newly added nodes.
-   After CN nodes are successfully added to your StarRocks cluster, you can execute the [SHOW COMPUTE NODES](./SHOW%20COMPUTE%20NODES.md) statement to see the newly added nodes.
+- Add a Follower FE.
 
-2. Add idle nodes (Namely, add BACKEND that does not belong to any cluster).
+  ```SQL
+  ALTER SYSTEM ADD FOLLOWER "<fe_host>:<edit_log_port>"[, ...]
+  ```
 
-   ```sql
-   ALTER SYSTEM ADD FREE BACKEND "host:heartbeat_port"[,"host:heartbeat_port"...];
-   ```
+  You can check the status of the new Follower FE by executing `SHOW PROC '/frontends'\G`.
 
-3. Add nodes to a cluster.
+- Drop a Follower FE.
 
-   ```sql
-   ALTER SYSTEM ADD BACKEND TO cluster_name "host:heartbeat_port"[,"host:heartbeat_port"...];
-   ```
+  ```SQL
+  ALTER SYSTEM DROP FOLLOWER "<fe_host>:<edit_log_port>"[, ...]
+  ```
 
-4. Delete nodes.
+- Add an Observer FE.
 
-   ```sql
-   ALTER SYSTEM DROP BACKEND "host:heartbeat_port"[,"host:heartbeat_port"...];
-   ALTER SYSTEM DROP COMPUTE NODES "host:heartbeat_service_port"[,"host:heartbeat_service_port"...];
-   ```
+  ```SQL
+  ALTER SYSTEM ADD OBSERVER "<fe_host>:<edit_log_port>"[, ...]
+  ```
 
-5. Take nodes offline.
+  You can check the status of the new Observer FE by executing `SHOW PROC '/frontends'\G`.
 
-   ```sql
-   ALTER SYSTEM DECOMMISSION BACKEND "host:heartbeat_port"[,"host:heartbeat_port"...];
-   ```
+- Drop an Observer FE.
 
-6. Add Broker.
+  ```SQL
+  ALTER SYSTEM DROP OBSERVER "<fe_host>:<edit_log_port>"[, ...]
+  ```
 
-   ```sql
-   ALTER SYSTEM ADD BROKER broker_name "host:port"[,"host:port"...];
-   ```
+| **Parameter**      | **Required** | **Description**                                                     |
+| ------------------ | ------------ | ------------------------------------------------------------------- |
+| fe_host            | Yes          | The host name or IP address of the FE instance. Use the value of configuration item `priority_networks` if your instance has multiple IP addresses. |
+| edit_log_port      | Yes          | BDB JE communication port of the FE node. Default: `9010`.          |
 
-7. Reduce Broker.
+### BE
 
-   ```sql
-   ALTER SYSTEM DROP BROKER broker_name "host:port"[,"host:port"...];
-   ```
+- Add a BE node.
 
-8. Delete all Brokers.
+  ```SQL
+  ALTER SYSTEM ADD BACKEND "<be_host>:<heartbeat_service_port>"[, ...]
+  ```
 
-   ```sql
-   ALTER SYSTEM DROP ALL BROKER broker_name
-   ```
+  You can check the status of the new BE by executing [SHOW BACKENDS](../Administration/SHOW%20BACKENDS.md).
 
-9. Set up a Load error hub for collecting and displaying import errors.
+- Drop a BE node.
 
-   ```sql
-   ALTER SYSTEM SET LOAD ERRORS HUB PROPERTIES ("key" = "value"[, ...]);
-   ```
+  > **NOTE**
+  >
+  > You cannot drop the BE node that stores the tablets of single-replica tables.
 
-Note:
+  ```SQL
+  ALTER SYSTEM DROP BACKEND "<be_host>:<heartbeat_service_port>"[, ...]
+  ```
 
-1. host could be a host name and an ip address.
+- Decommission a BE node.
 
-2. heartbeat_port is the heartbeat port of the node.
+  ```SQL
+  ALTER SYSTEM DECOMMISSION BACKEND "<be_host>:<heartbeat_service_port>"[, ...]
+  ```
 
-3. Adding and deleting nodes are synchronous operations. Without considering the existing data on nodes, these two operations delete nodes from the metadata directly. Please operate with caution.
+  Unlike dropping a BE node, which is removing it forcibly from the cluster, decommissioning a BE means removing it safely. It is an asynchronous operation. When a BE is decommissioned, the data on the BE is first migrated to other BEs, and then the BE is removed from the cluster. Data loading and query will not be affected during the data migration. You can check whether the operation is successful using [SHOW BACKENDS](../Administration/SHOW%20BACKENDS.md). If the operation is successful, the decommissioned BE will not be returned. If the operation fails, the BE will still be online. You can manually cancel the operation using [CANCEL DECOMMISSION](../Administration/CANCEL%20DECOMMISSION.md).
 
-4. Nodes decommission means safely removing the nodes. This operation is asynchronous. If successful, the nodes will be deleted from metadata. If not, they will not be taken offline.
+| **Parameter**          | **Required** | **Description**                                                                            |
+| ---------------------- | ------------ | ------------------------------------------------------------------------------------------ |
+| be_host                | Yes          | The host name or IP address of the BE instance. Use the value of configuration item `priority_networks` if your instance has multiple IP addresses.|
+| heartbeat_service_port | Yes          | BE heartbeat service port. BE uses this port to receive heartbeat from FE. Default: `9050`.|
 
-5. Nodes decommission process can be cancelled manually. For more details, please refer to CANCEL DECOMMISSION.
+### CN
 
-6. Load error hub:
+- Add a CN node.
 
-   Currently, only two types of Hub are supported: Mysql and Broker. Please specify "type" = "mysql" or "type" = "broker" in PROPERTIES. To delete the current load error hub, please set the type as null.
+  ```SQL
+  ALTER SYSTEM ADD COMPUTE NODE "<cn_host>:<heartbeat_service_port>"[, ...]
+  ```
 
-   - When using the Mysql type, import errors will be inserted into specified Mysql database table and can be viewed directly through show load warnings statement.
+  You can check the status of the new CN by executing [SHOW COMPUTE NODES](../Administration/SHOW%20COMPUTE%20NODES.md).
 
-     Hub of Mysql type needs to specify the following parameters:
+- Drop a CN node.
 
-   ```plain text
-   host：mysql host
-   port：mysql port
-   user：mysql user
-   password：mysql password
-   database：mysql database
-   table：mysql table
-   ```
+  ```SQL
+  ALTER SYSTEM DROP COMPUTE NODE "<cn_host>:<heartbeat_service_port>"[, ...]
+  ```
 
-   - When using the Broker type, import errors will be generated into a file and be written into a designated remote storage system through Broker. Please make sure that corresponding broker is already deployed in the remote system.
+| **Parameter**          | **Required** | **Description**                                                                            |
+| ---------------------- | ------------ | ------------------------------------------------------------------------------------------ |
+| cn_host                | Yes          | The host name or IP address of the CN instance. Use the value of configuration item `priority_networks` if your instance has multiple IP addresses.|
+| heartbeat_service_port | Yes          | CN heartbeat service port. CN uses this port to receive heartbeat from FE. Default: `9050`.|
 
-     Hub of Broker type needs to specify the following parameters:
+### Broker
 
-   ```plain text
-   broker: Name of broker
-   path: Remote storage path 
-   other properties: Other information required for accessing remote storage, e.g. Authentication information, etc. 
-   ```
+- Add Broker nodes. You can use Broker nodes to load data from HDFS or cloud storage into StarRocks. For more information, see [Load data from HDFS](../../../loading/hdfs_load.md) or [Load data from cloud storage](../../../loading/cloud_storage_load.md).
+
+  ```SQL
+  ALTER SYSTEM ADD BROKER <broker_name> "<broker_host>:<broker_ipc_port>"[, ...]
+  ```
+
+  You can add multiple Broker nodes with one SQL. Each `<broker_host>:<broker_ipc_port>` pair represents one Broker node. And they share a common `broker_name`. You can check the status of the new Broker node by executing [SHOW BROKER](../Administration/SHOW%20BROKER.md).
+
+- Drop Broker nodes.
+
+> **CAUTION**
+>
+> Dropping a Broker node terminates the tasks currently running on it.
+
+  - Drop one or multiple Broker nodes with the same `broker_name`.
+
+    ```SQL
+    ALTER SYSTEM DROP BROKER <broker_name> "<broker_host>:<broker_ipc_port>"[, ...]
+    ```
+
+  - Drop all Broker nodes with the same `broker_name`.
+
+    ```SQL
+    ALTER SYSTEM DROP ALL BROKER <broker_name>
+    ```
+
+| **Parameter**   | **Required** | **Description**                                                              |
+| --------------- | ------------ | ---------------------------------------------------------------------------- |
+| broker_name     | Yes          | The name of the Broker node(s). Multiple Broker nodes can use the same name. |
+| broker_host     | Yes          | The host name or IP address of the Broker instance. Use the value of configuration item `priority_networks` if your instance has multiple IP addresses.|
+| broker_ipc_port | Yes          | The thrift server port on the Broker node. The Broker node uses it to receive requests from FE or BE. Default: `8000`. |
+
+### Create image
+
+Create an image file. An image file is a snapshot of the FE metadata.
+
+```SQL
+ALTER SYSTEM CREATE IMAGE
+```
+
+Creating an image is an asynchronous operation on the Leader FE. You can check the start time and end time of the operation in the FE log file **fe.log**. A log like `triggering a new checkpoint manually...` indicates that the image creation has started, and a log like `finished save image...` indicates the image has been created.
+
+## Usage notes
+
+- Adding and dropping FE, BE, CN, or Broker nodes are synchronous operations. You cannot cancel the node dropping operations.
+- You cannot drop the FE node in a single-FE cluster.
+- You cannot directly drop the Leader FE node in a multi-FE cluster. To drop it, you must first restart it. After StarRocks elects a new Leader FE, you can then drop the previous one.
+- You cannot drop BE nodes if the number of the remained BE nodes is less than the number of data replicas. For example, if you have three BE nodes in your cluster and you store your data in three replicas, you cannot drop any of the BE nodes. And if you have four BE nodes and three replicas, you can drop one BE node.
+- The difference between dropping and decommissioning a BE node is that, when you drop a BE node, StarRocks removes it forcibly from the cluster and make up the dropped tablets after the removal, and when you decommission a BE node, StarRocks first migrates the tablets on the decommissioned BE node to others, and then removes the node.
 
 ## Examples
 
-1. Add a node.
+Example 1: Add a Follower FE node.
 
-   ```sql
-   ALTER SYSTEM ADD BACKEND "host:port";
-   ```
+```SQL
+ALTER SYSTEM ADD FOLLOWER "x.x.x.x:9010";
+```
 
-2. Add an idle node.
+Example 2: Drop two Observer FE nodes simultaneously.
 
-   ```sql
-   ALTER SYSTEM ADD FREE BACKEND "host:port";
-   ```
+```SQL
+ALTER SYSTEM DROP OBSERVER "x.x.x.x:9010","x.x.x.x:9010";
+```
 
-3. Delete two nodes.
+Example 3: Add a BE node.
 
-   ```sql
-   ALTER SYSTEM DROP BACKEND "host1:port", "host2:port";
-   ```
+```SQL
+ALTER SYSTEM ADD BACKEND "x.x.x.x:9050";
+```
 
-4. Take two nodes offline.
+Example 4: Drop two BE nodes simultaneously.
 
-   ```sql
-   ALTER SYSTEM DECOMMISSION BACKEND "host1:port", "host2:port";
-   ```
+```SQL
+ALTER SYSTEM DROP BACKEND "x.x.x.x:9050", "x.x.x.x:9050";
+```
 
-5. Add two Hdfs Broker.
+Example 5: Decommission two BE nodes simultaneously.
 
-   ```sql
-   ALTER SYSTEM ADD BROKER hdfs "host1:port", "host2:port";
-   ```
+```SQL
+ALTER SYSTEM DECOMMISSION BACKEND "x.x.x.x:9050", "x.x.x.x:9050";
+```
 
-6. Add a load error hub with Mysql type.
+Example 6: Add two Broker nodes with the same `broker_name` - `hdfs`.
 
-   ```sql
-   ALTER SYSTEM SET LOAD ERRORS HUB PROPERTIES
-   ("type"= "mysql",
-   "host" = "192.168.1.17"
-   "port" = "3306",
-   "user" = "my_name",
-   "password" = "my_passwd",
-   "database" = "starrocks_load",
-   "table" = "load_errors"
-   );
-   ```
+```SQL
+ALTER SYSTEM ADD BROKER hdfs "x.x.x.x:8000", "x.x.x.x:8000";
+```
 
-7. Add a load error hub with Broker type.
+Example 7: Drop two Broker nodes from `amazon_s3`.
 
-   ```sql
-   ALTER SYSTEM SET LOAD ERRORS HUB PROPERTIES
-   ("type"= "broker",
-   "name" = "bos",
-   "path" = "bos://backup-cmy/logs",
-   "bos_endpoint" = "http://gz.bcebos.com",
-   "bos_accesskey" = "069fc278xxxxxx24ddb522",
-   "bos_secret_accesskey"="700adb0c6xxxxxx74d59eaa980a"
-   );
-   ```
+```SQL
+ALTER SYSTEM DROP BROKER amazon_s3 "x.x.x.x:8000", "x.x.x.x:8000";
+```
 
-8. Delete the current load error hub.
+Example 8: Drop all Broker nodes in `amazon_s3`.
 
-   ```sql
-   ALTER SYSTEM SET LOAD ERRORS HUB PROPERTIES
-   ("type"= "null");
-   ```
+```SQL
+ALTER SYSTEM DROP ALL BROKER amazon_s3;
+```

@@ -8,6 +8,8 @@
 
 #include "common/statusor.h"
 #include "gen_cpp/olap_file.pb.h"
+#include "storage/lake/rowset_update_state.h"
+#include "storage/rowset_update_state.h"
 
 namespace starrocks {
 
@@ -31,6 +33,13 @@ public:
     static Status rewrite(const std::string& src, const TabletSchema& tschema, std::vector<uint32_t>& column_ids,
                           std::vector<std::unique_ptr<Column>>& columns, uint32_t segment_id,
                           const FooterPointerPB& partial_rowseet_footer);
+    static Status rewrite(const std::string& src_path, const std::string& dest_path, const TabletSchema& tschema,
+                          AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
+                          std::vector<uint32_t>& column_ids, std::vector<std::unique_ptr<Column>>* columns);
+    static Status rewrite(const std::string& src_path, const std::string& dest_path, const TabletSchema& tschema,
+                          starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
+                          std::vector<uint32_t>& column_ids, std::vector<std::unique_ptr<Column>>* columns,
+                          const starrocks::lake::TxnLogPB_OpWrite& op_write, starrocks::lake::Tablet* tablet);
 };
 
 } // namespace starrocks

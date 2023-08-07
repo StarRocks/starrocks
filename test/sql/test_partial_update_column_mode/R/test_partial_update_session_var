@@ -1,0 +1,119 @@
+-- name: test_partial_update_session_var
+show backends;
+CREATE table tab1 (
+      k1 INTEGER,
+      k2 VARCHAR(50),
+      v1 INTEGER,
+      v2 INTEGER,
+      v3 INTEGER
+)
+ENGINE=OLAP
+PRIMARY KEY(`k1`,`k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 10
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into tab1 values (100, "100", 100, "100", "100");
+-- result:
+-- !result
+insert into tab1 values (200, "100", 100, "100", "100");
+-- result:
+-- !result
+insert into tab1 values (300, "100", 100, "100", "100");
+-- result:
+-- !result
+insert into tab1 values (400, "100", 100, "100", "100");
+-- result:
+-- !result
+insert into tab1 values (500, "100", 100, "100", "100");
+-- result:
+-- !result
+select * from tab1;
+-- result:
+300	100	100	100	100
+200	100	100	100	100
+500	100	100	100	100
+400	100	100	100	100
+100	100	100	100	100
+-- !result
+set partial_update_mode = "auto";
+-- result:
+-- !result
+update tab1 set v1 = 1000;
+-- result:
+-- !result
+update tab1 set v1 = 2000, v2 = 2000;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: must specify where clause to prevent full table update.')
+-- !result
+update tab1 set v1 = 2000, v2 = 2000 where k1 = 200;
+-- result:
+-- !result
+select * from tab1;
+-- result:
+400	100	1000	100	100
+100	100	1000	100	100
+200	100	2000	2000	100
+300	100	1000	100	100
+500	100	1000	100	100
+-- !result
+set partial_update_mode = "column";
+-- result:
+-- !result
+update tab1 set v1 = 10000;
+-- result:
+-- !result
+update tab1 set v1 = 20000, v2 = 20000;
+-- result:
+-- !result
+update tab1 set v1 = 20000, v2 = 20000 where k1 = 200;
+-- result:
+-- !result
+select * from tab1;
+-- result:
+300	100	20000	20000	100
+200	100	20000	20000	100
+100	100	20000	20000	100
+500	100	20000	20000	100
+400	100	20000	20000	100
+-- !result
+set partial_update_mode = "row";
+-- result:
+-- !result
+update tab1 set v1 = 100000;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: must specify where clause to prevent full table update.')
+-- !result
+update tab1 set v1 = 200000, v2 = 200000;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: must specify where clause to prevent full table update.')
+-- !result
+update tab1 set v1 = 200000, v2 = 200000 where k1 = 200;
+-- result:
+-- !result
+select * from tab1;
+-- result:
+400	100	20000	20000	100
+200	100	200000	200000	100
+100	100	20000	20000	100
+300	100	20000	20000	100
+500	100	20000	20000	100
+-- !result
+set partial_update_mode = "row111";
+-- result:
+E: (1064, 'partial_update_mode only support auto|row|column')
+-- !result
+set partial_update_mode = "ros";
+-- result:
+E: (1064, 'partial_update_mode only support auto|row|column')
+-- !result
+set partial_update_mode = "columns";
+-- result:
+E: (1064, 'partial_update_mode only support auto|row|column')
+-- !result
+set partial_update_mode = "auto11";
+-- result:
+E: (1064, 'partial_update_mode only support auto|row|column')
+-- !result

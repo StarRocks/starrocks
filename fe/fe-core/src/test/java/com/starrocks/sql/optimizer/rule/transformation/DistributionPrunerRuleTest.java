@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.SlotRef;
@@ -122,10 +122,10 @@ public class DistributionPrunerRuleTest {
         scanColumnMap.put(column5, new Column("shop_type", Type.CHAR, false));
 
         BinaryPredicateOperator binaryPredicateOperator1 =
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, column1,
+                new BinaryPredicateOperator(BinaryType.GE, column1,
                         ConstantOperator.createDate(LocalDateTime.of(2019, 8, 22, 0, 0, 0)));
         BinaryPredicateOperator binaryPredicateOperator2 =
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, column1,
+                new BinaryPredicateOperator(BinaryType.LE, column1,
                         ConstantOperator.createDate(LocalDateTime.of(2019, 8, 22, 0, 0, 0)));
 
         InPredicateOperator inPredicateOperator1 = new InPredicateOperator(column2,
@@ -146,8 +146,8 @@ public class DistributionPrunerRuleTest {
                         inPredicateOperator2, inPredicateOperator3, inPredicateOperator4);
         LogicalOlapScanOperator operator =
                 new LogicalOlapScanOperator(olapTable, scanColumnMap, Maps.newHashMap(), null, -1, predicate,
-                        1, Lists.newArrayList(1L), null, Lists.newArrayList(), Lists.newArrayList());
-        operator.setPredicate(null);
+                        1, Lists.newArrayList(1L), null, false, Lists.newArrayList(), Lists.newArrayList(), false);
+        operator.setPredicate(predicate);
 
         new Expectations() {
             {
@@ -182,7 +182,6 @@ public class DistributionPrunerRuleTest {
                         .get(0);
 
         assertEquals(20, ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedTabletId().size());
-
 
         LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) optExpression.getOp();
         LogicalOlapScanOperator newScanOperator = new LogicalOlapScanOperator.Builder()

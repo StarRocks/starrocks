@@ -16,8 +16,18 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.sql.parser.NodePosition;
 
 public class EmptyStmt extends UnsupportedStmt {
+
+    public EmptyStmt() {
+        this(NodePosition.ZERO);
+    }
+
+    public EmptyStmt(NodePosition pos) {
+        super(pos);
+    }
+
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.NO_FORWARD;

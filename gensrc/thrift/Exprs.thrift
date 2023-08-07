@@ -81,6 +81,7 @@ enum TExprNodeType {
   RUNTIME_FILTER_MIN_MAX_EXPR,
   MAP_ELEMENT_EXPR,
   BINARY_LITERAL,
+  MAP_EXPR,
 }
 
 //enum TAggregationOp {
@@ -226,7 +227,7 @@ struct TExprNode {
   29: optional TPlaceHolder vslot_ref;
 
   // Used for SubfieldExpr
-  30: optional string used_subfield_name;
+  30: optional list<string> used_subfield_names;
   31: optional TBinaryLiteral binary_literal;
 
   // For vector query engine
@@ -235,6 +236,13 @@ struct TExprNode {
   52: optional bool is_nullable
   53: optional Types.TTypeDesc child_type_desc
   54: optional bool is_monotonic
+}
+
+struct TPartitionLiteral {
+  1: optional Types.TPrimitiveType type
+  2: optional TIntLiteral int_literal
+  3: optional TDateLiteral date_literal
+  4: optional TStringLiteral string_literal
 }
 
 // A flattened representation of a tree of Expr nodes, obtained by depth-first

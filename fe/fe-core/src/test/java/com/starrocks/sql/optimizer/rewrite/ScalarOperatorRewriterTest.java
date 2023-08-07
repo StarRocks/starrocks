@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
@@ -43,10 +44,10 @@ public class ScalarOperatorRewriterTest {
                         new ColumnRefOperator(4, Type.INT, "test4", true),
                         new ColumnRefOperator(5, Type.INT, "test5", true)),
                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
-                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                        new BinaryPredicateOperator(BinaryType.EQ,
                                 ConstantOperator.createInt(1),
                                 new ColumnRefOperator(1, Type.INT, "test1", true)),
-                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                        new BinaryPredicateOperator(BinaryType.EQ,
                                 ConstantOperator.createInt(1),
                                 new ColumnRefOperator(2, Type.INT, "test2", true))
                 ));
@@ -77,11 +78,11 @@ public class ScalarOperatorRewriterTest {
     @Test
     public void testRewrite2() {
         ScalarOperator root = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                new BinaryPredicateOperator(BinaryType.EQ,
                         ConstantOperator.createInt(1),
                         new ColumnRefOperator(0, Type.VARCHAR, "test0", true)),
                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
-                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                        new BinaryPredicateOperator(BinaryType.EQ,
                                 ConstantOperator.createInt(1),
                                 new ColumnRefOperator(1, Type.BIGINT, "test1", true)),
                         new CastOperator(Type.BOOLEAN, ConstantOperator.createNull(Type.BIGINT))));

@@ -17,22 +17,24 @@ package com.starrocks.authentication;
 
 import com.google.gson.annotations.Expose;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 public class UserAuthenticationInfo implements Writable {
     protected static final String ANY_HOST = "%";
     protected static final String ANY_USER = "%";
 
     @SerializedName(value = "p")
-    private byte[] password = null;
+    private byte[] password = MysqlPassword.EMPTY_PASSWORD;
     @SerializedName(value = "a")
     private String authPlugin = null;
     @SerializedName(value = "t")
@@ -51,6 +53,13 @@ public class UserAuthenticationInfo implements Writable {
     @Expose(serialize = false)
     protected PatternMatcher hostPattern;
 
+    /**
+     * extra user authentication info when authenticating, it may have different usage for different
+     * auth plugin, since the authenticate info for different auth mechanism can vary a log, here we
+     * use a general Object map to represent this requirement.
+     */
+    public Map<String, Object> extraInfo = new HashMap<>();
+
     public boolean matchUser(String remoteUser) {
         return isAnyUser || userPattern.match(remoteUser);
     }
@@ -60,16 +69,10 @@ public class UserAuthenticationInfo implements Writable {
     }
 
     public void analyze() throws AuthenticationException {
-        try {
-            isAnyUser = origUser.equals(ANY_USER);
-            isAnyHost = origHost.equals(ANY_HOST);
-            userPattern = PatternMatcher.createMysqlPattern(origUser, CaseSensibility.USER.getCaseSensibility());
-            hostPattern = PatternMatcher.createMysqlPattern(origHost, CaseSensibility.HOST.getCaseSensibility());
-        } catch (AnalysisException e) {
-            AuthenticationException exception = new AuthenticationException("failed to parse user host");
-            exception.initCause(e);
-            throw exception;
-        }
+        isAnyUser = origUser.equals(ANY_USER);
+        isAnyHost = origHost.equals(ANY_HOST);
+        userPattern = PatternMatcher.createMysqlPattern(origUser, CaseSensibility.USER.getCaseSensibility());
+        hostPattern = PatternMatcher.createMysqlPattern(origHost, CaseSensibility.HOST.getCaseSensibility());
     }
 
     @Override
@@ -87,6 +90,10 @@ public class UserAuthenticationInfo implements Writable {
 
     public String getOrigHost() {
         return origHost;
+    }
+
+    public String getTextForAuthPlugin() {
+        return textForAuthPlugin;
     }
 
     public void setPassword(byte[] password) {

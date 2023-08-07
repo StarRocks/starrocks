@@ -16,7 +16,13 @@
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.thrift.THdfsFileFormat;
+
+import static com.starrocks.connector.hive.HiveClassNames.HUDI_PARQUET_INPUT_FORMAT;
+import static com.starrocks.connector.hive.HiveClassNames.MAPRED_PARQUET_INPUT_FORMAT_CLASS;
+import static com.starrocks.connector.hive.HiveClassNames.ORC_INPUT_FORMAT_CLASS;
+import static com.starrocks.connector.hive.HiveClassNames.TEXT_INPUT_FORMAT_CLASS;
 
 public enum RemoteFileInputFormat {
     UNKNOWN,
@@ -26,20 +32,24 @@ public enum RemoteFileInputFormat {
 
     private static final ImmutableMap<String, RemoteFileInputFormat> VALID_INPUT_FORMATS =
             new ImmutableMap.Builder<String, RemoteFileInputFormat>()
-                    .put("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat", PARQUET)
-                    .put("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat", ORC)
-                    .put("org.apache.hadoop.mapred.TextInputFormat", TEXT)
+                    .put(MAPRED_PARQUET_INPUT_FORMAT_CLASS, PARQUET)
+                    .put(ORC_INPUT_FORMAT_CLASS, ORC)
+                    .put(TEXT_INPUT_FORMAT_CLASS, TEXT)
                     .build();
     private static final ImmutableMap<String, Boolean> FILE_FORMAT_SPLITTABLE_INFOS =
             new ImmutableMap.Builder<String, Boolean>()
-                    .put("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat", true)
-                    .put("org.apache.hudi.hadoop.HoodieParquetInputFormat", true)
-                    .put("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat", true)
-                    .put("org.apache.hadoop.mapred.TextInputFormat", true)
+                    .put(MAPRED_PARQUET_INPUT_FORMAT_CLASS, true)
+                    .put(HUDI_PARQUET_INPUT_FORMAT, true)
+                    .put(ORC_INPUT_FORMAT_CLASS, true)
+                    .put(TEXT_INPUT_FORMAT_CLASS, true)
                     .build();
 
     public static RemoteFileInputFormat fromHdfsInputFormatClass(String className) {
-        return VALID_INPUT_FORMATS.get(className);
+        RemoteFileInputFormat fileInputFormat = VALID_INPUT_FORMATS.get(className);
+        if (fileInputFormat == null) {
+            throw new StarRocksConnectorException("Unsupported file format: %s", className);
+        }
+        return fileInputFormat;
     }
 
     public static boolean isSplittable(String className) {

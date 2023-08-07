@@ -40,12 +40,16 @@ public class StarMgrServerTest {
 
     @Before
     public void setUp() {
-        Config.starmgr_s3_bucket = "abc";
+        Config.aws_s3_path = "abc";
+        Config.aws_s3_access_key = "abc";
+        Config.aws_s3_secret_key = "abc";
     }
 
     @After
     public void tearDown() {
-        Config.starmgr_s3_bucket = "";
+        Config.aws_s3_path = "";
+        Config.aws_s3_access_key = "";
+        Config.aws_s3_secret_key = "";
     }
 
     @Test

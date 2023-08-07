@@ -12,26 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector;
 
 import com.starrocks.common.Id;
 import com.starrocks.common.IdGenerator;
 
 public class ConnectorTableId extends Id<ConnectorTableId> {
+
+    public static final IdGenerator<ConnectorTableId> CONNECTOR_ID_GENERATOR = createGenerator();
+    private static int CONNECTOR_TABLE_ID_OFFSET = 100000000;
     public ConnectorTableId(int id) {
-        super(id);
+        super(id + CONNECTOR_TABLE_ID_OFFSET);
     }
 
     public static IdGenerator<ConnectorTableId> createGenerator() {
         return new IdGenerator<ConnectorTableId>() {
             @Override
-            public ConnectorTableId getNextId() {
+            public synchronized ConnectorTableId getNextId() {
                 return new ConnectorTableId(nextId++);
             }
 
             @Override
-            public ConnectorTableId getMaxId() {
+            public synchronized ConnectorTableId getMaxId() {
                 return new ConnectorTableId(nextId - 1);
             }
         };

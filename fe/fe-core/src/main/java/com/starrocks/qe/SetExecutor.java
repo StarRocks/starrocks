@@ -49,12 +49,10 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.SetNamesVar;
+import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
-import com.starrocks.sql.ast.SetTransaction;
-import com.starrocks.sql.ast.SetType;
-import com.starrocks.sql.ast.SetVar;
+import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TResultBatch;
@@ -78,45 +76,29 @@ public class SetExecutor {
         this.stmt = stmt;
     }
 
-    private void setVariablesOfAllType(SetVar var) throws DdlException {
-        if (var instanceof SetPassVar) {
+    private void setVariablesOfAllType(SetListItem var) throws DdlException {
+        if (var instanceof SystemVariable) {
+            ctx.modifySystemVariable((SystemVariable) var, false);
+        } else if (var instanceof UserVariable) {
+            UserVariable userVariable = (UserVariable) var;
+            if (userVariable.getEvaluatedExpression() == null) {
+                deriveUserVariableExpressionResult(userVariable);
+            }
+
+            ctx.modifyUserVariable(userVariable);
+        } else if (var instanceof SetPassVar) {
             // Set password
             SetPassVar setPassVar = (SetPassVar) var;
-            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                UserAuthenticationInfo userAuthenticationInfo = GlobalStateMgr.getCurrentState().getAuthenticationManager().
-                        getUserAuthenticationInfoByUserIdentity(setPassVar.getUserIdent());
-                if (null == userAuthenticationInfo) {
-                    throw new DdlException("User Authentication Info not found");
-                }
-                userAuthenticationInfo.setPassword(setPassVar.getPassword());
-                GlobalStateMgr.getCurrentState().getAuthenticationManager().
-                        updateUserWithAuthenticationInfo(
-                                setPassVar.getUserIdent(), userAuthenticationInfo);
-            } else {
-                ctx.getGlobalStateMgr().getAuth().setPassword(setPassVar);
+            UserAuthenticationInfo userAuthenticationInfo = GlobalStateMgr.getCurrentState()
+                    .getAuthenticationMgr()
+                    .getUserAuthenticationInfoByUserIdentity(setPassVar.getUserIdent());
+            if (null == userAuthenticationInfo) {
+                throw new DdlException("authentication info for user " + setPassVar.getUserIdent() + " not found");
             }
-        } else if (var instanceof SetNamesVar) {
-            // do nothing
-        } else if (var instanceof SetTransaction) {
-            // do nothing
-        } else {
-            if (var.getType().equals(SetType.USER)) {
-                UserVariable userVariable = (UserVariable) var;
-                if (userVariable.getResolvedExpression() == null) {
-                    deriveExpressionResult(userVariable);
-                }
-
-                ctx.modifyUserVariable(userVariable);
-            } else {
-                ctx.modifySessionVariable(var, false);
-            }
+            userAuthenticationInfo.setPassword(setPassVar.getPassword());
+            GlobalStateMgr.getCurrentState().getAuthenticationMgr()
+                    .alterUser(setPassVar.getUserIdent(), userAuthenticationInfo);
         }
-    }
-
-    private boolean isSessionVar(SetVar var) {
-        return !(var instanceof SetPassVar
-                || var instanceof SetNamesVar
-                || var instanceof SetTransaction);
     }
 
     /**
@@ -125,27 +107,15 @@ public class SetExecutor {
      * @throws DdlException
      */
     public void execute() throws DdlException {
-        for (SetVar var : stmt.getSetVars()) {
+        for (SetListItem var : stmt.getSetListItems()) {
             setVariablesOfAllType(var);
         }
     }
 
-    /**
-     * This method is only called after a set statement is forward to the leader.
-     * In this case, the follower should change this session variable as well.
-     */
-    public void setSessionVars() throws DdlException {
-        for (SetVar var : stmt.getSetVars()) {
-            if (isSessionVar(var)) {
-                VariableMgr.setVar(ctx.getSessionVariable(), var, true);
-            }
-        }
-    }
-
-    private void deriveExpressionResult(UserVariable userVariable) {
-        QueryStatement queryStatement = ((Subquery) userVariable.getExpression()).getQueryStatement();
+    private void deriveUserVariableExpressionResult(UserVariable userVariable) {
+        QueryStatement queryStatement = ((Subquery) userVariable.getUnevaluatedExpression()).getQueryStatement();
         ExecPlan execPlan = StatementPlanner.plan(queryStatement,
-                ConnectContext.get(), true, TResultSinkType.VARIABLE);
+                ConnectContext.get(), TResultSinkType.VARIABLE);
         StmtExecutor executor = new StmtExecutor(ctx, queryStatement);
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(ctx, execPlan);
         if (!sqlResult.second.ok()) {
@@ -161,7 +131,7 @@ public class SetExecutor {
                     if (result.get(0).isIsNull()) {
                         resultExpr = new NullLiteral();
                     } else {
-                        Type userVariableType = userVariable.getExpression().getType();
+                        Type userVariableType = userVariable.getUnevaluatedExpression().getType();
                         //JSON type will be stored as string type
                         if (userVariableType.isJsonType()) {
                             userVariableType = Type.VARCHAR;
@@ -170,7 +140,7 @@ public class SetExecutor {
                                 StandardCharsets.UTF_8.decode(result.get(0).result).toString(), userVariableType);
                     }
                 }
-                userVariable.setResolvedExpression(resultExpr);
+                userVariable.setEvaluatedExpression(resultExpr);
             } catch (TException | AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }

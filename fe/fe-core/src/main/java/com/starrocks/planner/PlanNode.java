@@ -45,7 +45,6 @@ import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TreeNode;
@@ -59,8 +58,10 @@ import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TPlan;
 import com.starrocks.thrift.TPlanNode;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections.MapUtils;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -108,10 +109,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     // estimate of the output cardinality of this node; set in computeStats();
     // invalid: -1
     protected long cardinality;
-
-    // number of nodes on which the plan tree rooted at this node would execute;
-    // set in computeStats(); invalid: -1
-    protected int numNodes;
 
     // sum of tupleIds' avgSerializedSizes; set in computeStats()
     protected float avgRowSize;
@@ -253,10 +250,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
     public long getCardinality() {
         return cardinality;
-    }
-
-    public int getNumNodes() {
-        return numNodes;
     }
 
     public float getAvgRowSize() {
@@ -468,6 +461,9 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     }
 
     protected String getColumnStatistics(String prefix) {
+        if (MapUtils.isEmpty(columnStatistics)) {
+            return "";
+        }
         StringBuilder outputBuilder = new StringBuilder();
         TreeMap<ColumnRefOperator, ColumnStatistic> sortMap =
                 new TreeMap<>(Comparator.comparingInt(ColumnRefOperator::getId));
@@ -547,7 +543,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     }
 
     /**
-     * Computes planner statistics: avgRowSize, numNodes, cardinality.
+     * Computes planner statistics: avgRowSize, cardinality.
      * Subclasses need to override this.
      * Assumes that it has already been called on all children.
      * This is broken out of finalize() so that it can be called separately
@@ -557,11 +553,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     protected void computeStats(Analyzer analyzer) {
         avgRowSize = 0.0F;
         for (TupleId tid : tupleIds) {
-            TupleDescriptor desc = analyzer.getTupleDesc(tid);
-            avgRowSize += desc.getAvgSerializedSize();
-        }
-        if (!children.isEmpty()) {
-            numNodes = getChild(0).numNodes;
+            avgRowSize += 4;
         }
     }
 
@@ -718,6 +710,10 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     }
 
     public boolean canUsePipeLine() {
+        return false;
+    }
+
+    public boolean canUseRuntimeAdaptiveDop() {
         return false;
     }
 
@@ -913,13 +909,19 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return canDoReplicatedJoin;
     }
 
+    public boolean extractConjunctsToNormalize(FragmentNormalizer normalizer) {
+        List<Expr> conjuncts = normalizer.getConjunctsByPlanNodeId(this);
+        normalizer.filterOutPartColRangePredicates(getId(), conjuncts, Collections.emptySet());
+        return true;
+    }
+
     public void normalizeConjuncts(FragmentNormalizer normalizer, TNormalPlanNode planNode, List<Expr> conjuncts) {
         final DescriptorTable descriptorTable = normalizer.getExecPlan().getDescTbl();
         List<SlotId> slotIds = tupleIds.stream().map(descriptorTable::getTupleDesc)
                 .flatMap(tupleDesc -> tupleDesc.getSlots().stream().map(SlotDescriptor::getId))
                 .collect(Collectors.toList());
-        Preconditions.checkState(normalizer.containsAllSlotIds(slotIds), "All slotIds should be remapped");
-        planNode.setConjuncts(normalizer.normalizeExprs(conjuncts));
+        normalizer.remapSlotIds(slotIds);
+        planNode.setConjuncts(normalizer.normalizeExprs(normalizer.getConjunctsByPlanNodeId(this)));
     }
 
     public TNormalPlanNode normalize(FragmentNormalizer normalizer) {
@@ -941,5 +943,13 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     public List<SlotId> getOutputSlotIds(DescriptorTable descriptorTable) {
         return descriptorTable.getTupleDesc(getTupleIds().get(0)).getSlots()
                 .stream().map(SlotDescriptor::getId).collect(Collectors.toList());
+    }
+
+    // Used to collect equivalence relations produced by PlanNodes. there are
+    // three cases:
+    // 1. ProjectNode: slotId to slotId mapping in slotMap;
+    // 2. SetOperation: input slotId and its corresponding input slotIds of the child PlanNode;
+    // 3. HashJoinNode: slotIds of both sides of Join equal conditions in semi join and inner join.
+    public void collectEquivRelation(FragmentNormalizer normalizer) {
     }
 }

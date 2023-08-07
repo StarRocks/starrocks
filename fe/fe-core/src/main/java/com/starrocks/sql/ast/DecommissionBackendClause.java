@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.alter.DecommissionType;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -24,7 +25,11 @@ public class DecommissionBackendClause extends BackendClause {
     private DecommissionType type;
 
     public DecommissionBackendClause(List<String> hostPorts) {
-        super(hostPorts);
+        this(hostPorts, NodePosition.ZERO);
+    }
+
+    public DecommissionBackendClause(List<String> hostPorts, NodePosition pos) {
+        super(hostPorts, pos);
         type = DecommissionType.SystemDecommission;
     }
 

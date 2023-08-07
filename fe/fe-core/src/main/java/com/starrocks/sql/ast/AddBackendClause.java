@@ -15,10 +15,18 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 import java.util.List;
 
 public class AddBackendClause extends BackendClause {
+
     public AddBackendClause(List<String> hostPorts) {
-        super(hostPorts);
+        super(hostPorts, NodePosition.ZERO);
     }
+
+    public AddBackendClause(List<String> hostPorts, NodePosition pos) {
+        super(hostPorts, pos);
+    }
+
 }

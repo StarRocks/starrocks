@@ -87,9 +87,16 @@ TEST_F(OrdinalPageIndexTest, normal) {
         LOG(INFO) << "index page size=" << index_meta.ordinal_index().root_page().root_page().size();
     }
 
+    IndexReadOptions opts;
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(filename))
+    opts.read_file = rfile.get();
+    opts.use_page_cache = true;
+    opts.kept_in_memory = false;
+    opts.skip_fill_data_cache = false;
+    OlapReaderStatistics stats;
+    opts.stats = &stats;
     OrdinalIndexReader index;
-    ASSIGN_OR_ABORT(auto r,
-                    index.load(_fs.get(), filename, index_meta.ordinal_index(), 16 * 1024 * 4096 + 1, true, false));
+    ASSIGN_OR_ABORT(auto r, index.load(opts, index_meta.ordinal_index(), 16 * 1024 * 4096 + 1));
     ASSERT_TRUE(r);
     ASSERT_EQ(16 * 1024, index.num_data_pages());
     ASSERT_EQ(1, index.get_first_ordinal(0));
@@ -143,8 +150,15 @@ TEST_F(OrdinalPageIndexTest, one_data_page) {
         ASSERT_EQ(data_page_pointer, root_page_pointer);
     }
 
+    IndexReadOptions opts;
+    opts.read_file = nullptr;
+    opts.use_page_cache = true;
+    opts.kept_in_memory = false;
+    opts.skip_fill_data_cache = false;
+    OlapReaderStatistics stats;
+    opts.stats = &stats;
     OrdinalIndexReader index;
-    ASSIGN_OR_ABORT(auto r, index.load(_fs.get(), "", index_meta.ordinal_index(), num_values, true, false));
+    ASSIGN_OR_ABORT(auto r, index.load(opts, index_meta.ordinal_index(), num_values));
     ASSERT_TRUE(r);
     ASSERT_EQ(1, index.num_data_pages());
     ASSERT_EQ(0, index.get_first_ordinal(0));

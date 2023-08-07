@@ -16,8 +16,7 @@
 
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/source_operator.h"
-#include "exec/stream/stream_fdw.h"
-#include "runtime/stream_epoch_manager.h"
+#include "exec/pipeline/stream_epoch_manager.h"
 
 namespace starrocks::stream {
 
@@ -79,7 +78,7 @@ private:
     GeneratorStreamSourceParam _param;
     int64_t _tablet_id;
     starrocks::EpochInfo _current_epoch_info;
-    StreamEpochManager* _stream_epoch_manager;
+    pipeline::StreamEpochManager* _stream_epoch_manager;
     bool _is_epoch_finished{true};
     int64_t _processed_chunks{1};
 };

@@ -16,6 +16,8 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.BoolLiteral;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -30,6 +32,7 @@ import org.apache.iceberg.exceptions.ValidationException;
 import org.apache.iceberg.expressions.Binder;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
+import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -156,7 +159,12 @@ public class ScalarOperatorToIcebergExpr {
             if (columnName == null) {
                 return null;
             }
+
             Object literalValue = getLiteralValue(operator.getChild(1));
+            if (context != null && context.getSchema().fieldType(columnName).typeId() == Type.TypeID.BOOLEAN) {
+                literalValue = convertBoolLiteralValue(literalValue);
+            }
+
             if (literalValue == null) {
                 return null;
             }
@@ -186,8 +194,13 @@ public class ScalarOperatorToIcebergExpr {
             }
 
             List<Object> literalValues = operator.getListChildren().stream()
-                    .map(ScalarOperatorToIcebergExpr::getLiteralValue)
-                    .collect(Collectors.toList());
+                    .map(childoperator -> {
+                        Object literalValue = ScalarOperatorToIcebergExpr.getLiteralValue(childoperator);
+                        if (context != null && context.getSchema().fieldType(columnName).typeId() == Type.TypeID.BOOLEAN) {
+                            literalValue = convertBoolLiteralValue(literalValue);
+                        }
+                        return literalValue;
+                    }).collect(Collectors.toList());
 
             if (operator.isNotIn()) {
                 return notIn(columnName, literalValues);
@@ -226,6 +239,14 @@ public class ScalarOperatorToIcebergExpr {
         }
 
         return operator.accept(new ExtractLiteralValue(), null);
+    }
+
+    private static Object convertBoolLiteralValue(Object literalValue) {
+        try {
+            return new BoolLiteral(String.valueOf(literalValue)).getValue();
+        } catch (Exception e) {
+            throw new StarRocksConnectorException("Failed to convert %s to boolean type", literalValue);
+        }
     }
 
     private static class ExtractLiteralValue extends ScalarOperatorVisitor<Object, Void> {

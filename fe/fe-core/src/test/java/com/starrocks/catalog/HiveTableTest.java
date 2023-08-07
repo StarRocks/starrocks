@@ -35,6 +35,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
@@ -42,8 +43,9 @@ import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
-import com.starrocks.server.TableFactory;
+import com.starrocks.server.TableFactoryProvider;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.common.EngineType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -76,6 +78,10 @@ public class HiveTableTest {
         hiveClient = new HiveMetastoreTest.MockedHiveMetaClient();
     }
 
+    com.starrocks.catalog.Table createTable(CreateTableStmt stmt) throws DdlException {
+        return TableFactoryProvider.getFactory(EngineType.HIVE.name()).createTable(null, null, stmt);
+    }
+
     @Test
     public void testCreateExternalTable(@Mocked MetadataMgr metadataMgr) throws Exception {
         List<FieldSchema> partKeys = Lists.newArrayList(new FieldSchema("col1", "INT", ""));
@@ -105,10 +111,10 @@ public class HiveTableTest {
             }
         };
 
-        String createTableSql = "create external table db.hive_tbl (col1 int, col2 int) engine=hive properties " +
+        String createTableSql = "create external table if not exists  db.hive_tbl (col1 int, col2 int) engine=hive properties " +
                 "(\"resource\"=\"hive0\", \"database\"=\"db0\", \"table\"=\"table0\")";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-        com.starrocks.catalog.Table table = TableFactory.createTable(createTableStmt, com.starrocks.catalog.Table.TableType.HIVE);
+        com.starrocks.catalog.Table table = createTable(createTableStmt);
 
         Assert.assertTrue(table instanceof HiveTable);
         HiveTable hiveTable = (HiveTable) table;
@@ -123,21 +129,21 @@ public class HiveTableTest {
 
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = AnalysisException.class)
     public void testNoDb() throws Exception {
         String createTableSql = "create external table nodb.hive_tbl (col1 int, col2 int) engine=hive properties " +
                 "(\"resource\"=\"hive0\", \"table\"=\"table0\")";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-        com.starrocks.catalog.Table table = TableFactory.createTable(createTableStmt, com.starrocks.catalog.Table.TableType.HIVE);
+        com.starrocks.catalog.Table table = createTable(createTableStmt);
         Assert.fail("No exception throws.");
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = AnalysisException.class)
     public void testNoTbl() throws Exception {
         String createTableSql = "create external table nodb.hive_tbl (col1 int, col2 int) engine=hive properties " +
                 "(\"resource\"=\"hive0\")";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-        com.starrocks.catalog.Table table = TableFactory.createTable(createTableStmt, com.starrocks.catalog.Table.TableType.HIVE);
+        com.starrocks.catalog.Table table = createTable(createTableStmt);
         Assert.fail("No exception throws.");
     }
 
@@ -146,7 +152,7 @@ public class HiveTableTest {
         String createTableSql = "create external table db.hive_tbl (col1 int, col2 int) engine=hive properties " +
                 "(\"resource\"=\"not_exist_reousrce\", \"database\"=\"db0\", \"table\"=\"table0\")";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-        com.starrocks.catalog.Table table = TableFactory.createTable(createTableStmt, com.starrocks.catalog.Table.TableType.HIVE);
+        com.starrocks.catalog.Table table = createTable(createTableStmt);
         Assert.fail("No exception throws.");
     }
 
@@ -155,7 +161,7 @@ public class HiveTableTest {
         String createTableSql = "create external table db.hive_tbl (col1 int, col2 int) engine=hive properties " +
                 "(\"database\"=\"db0\", \"table\"=\"table0\")";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-        com.starrocks.catalog.Table table = TableFactory.createTable(createTableStmt, com.starrocks.catalog.Table.TableType.HIVE);
+        com.starrocks.catalog.Table table = createTable(createTableStmt);
         Assert.fail("No exception throws.");
     }
 
@@ -174,10 +180,11 @@ public class HiveTableTest {
             }
         };
 
-        String createTableSql = "create external table db.hive_tbl (col1 int, not_exist int) engine=hive properties " +
+        String createTableSql = "create external table  if not exists  db.hive_tbl (col1 int, not_exist int) " +
+                "engine=hive properties " +
                 "(\"resource\"=\"hive0\", \"database\"=\"db0\", \"table\"=\"table0\")";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-        com.starrocks.catalog.Table table = TableFactory.createTable(createTableStmt, com.starrocks.catalog.Table.TableType.HIVE);
+        com.starrocks.catalog.Table table = createTable(createTableStmt);
         Assert.fail("No exception throws.");
     }
 }

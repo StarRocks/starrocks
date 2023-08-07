@@ -38,6 +38,7 @@ inline bool is_quote(char c) {
 
 bool is_valid_array(const Slice& src, std::vector<char>& container) {
     size_t length = src.get_size();
+    bool has_bracket = false;
     container.clear();
 
     for (size_t i = 0; i < length; ++i) {
@@ -55,6 +56,7 @@ bool is_valid_array(const Slice& src, std::vector<char>& container) {
             }
         } else if (src[i] == '[') {
             container.push_back(src[i]);
+            has_bracket = true;
         } else if (src[i] == ']') {
             if (!container.empty() && container.back() == '[') {
                 container.pop_back();
@@ -64,7 +66,7 @@ bool is_valid_array(const Slice& src, std::vector<char>& container) {
         }
     }
 
-    return container.empty();
+    return has_bracket && container.empty();
 }
 
 // [[],[]] -> [],[]
@@ -203,6 +205,10 @@ StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Ch
     if (column->is_nullable() || has_null) {
         res = NullableColumn::create(res, null_column);
     }
+    // Wrap constant column if source column is constant.
+    if (column->is_constant()) {
+        res = ConstColumn::create(res, column->size());
+    }
 
     return res;
 }
@@ -247,7 +253,6 @@ StatusOr<ColumnPtr> CastJsonToArray::evaluate_checked(ExprContext* context, Chun
             null_column->append(1);
             continue;
         }
-        null_column->append(0);
         const JsonValue* json_value = src.value(i);
         if (json_value && json_value->get_type() == JsonType::JSON_ARRAY) {
             vpack::Slice json_slice = json_value->to_vslice();
@@ -257,6 +262,7 @@ StatusOr<ColumnPtr> CastJsonToArray::evaluate_checked(ExprContext* context, Chun
                 json_column_builder.append(std::move(element_value));
             }
             offset += json_slice.length();
+            null_column->append(0);
         } else {
             null_column->append(1);
         }
@@ -279,6 +285,10 @@ StatusOr<ColumnPtr> CastJsonToArray::evaluate_checked(ExprContext* context, Chun
         res = NullableColumn::create(res, null_column);
     }
 
+    // Wrap constant column if source column is constant.
+    if (column->is_constant()) {
+        res = ConstColumn::create(res, column->size());
+    }
     return res;
 }
 

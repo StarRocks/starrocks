@@ -239,7 +239,13 @@ struct OlapReaderStatistics {
 
     int64_t get_rowsets_ns = 0;
     int64_t get_delvec_ns = 0;
+    int64_t get_delta_column_group_ns = 0;
     int64_t segment_init_ns = 0;
+    int64_t column_iterator_init_ns = 0;
+    int64_t bitmap_index_iterator_init_ns = 0;
+    int64_t zone_map_filter_ns = 0;
+    int64_t rows_key_range_filter_ns = 0;
+    int64_t bf_filter_ns = 0;
 
     int64_t segment_stats_filtered = 0;
     int64_t rows_key_range_filtered = 0;
@@ -261,9 +267,36 @@ struct OlapReaderStatistics {
     int64_t total_columns_data_page_count = 0;
 
     int64_t runtime_stats_filtered = 0;
+
+    int64_t read_pk_index_ns = 0;
+
+    // ------ for lake tablet ------
+    int64_t pages_from_local_disk = 0;
+
+    int64_t compressed_bytes_read_local_disk = 0;
+    int64_t compressed_bytes_read_remote = 0;
+    // bytes read requested from be, same as compressed_bytes_read for local tablet
+    int64_t compressed_bytes_read_request = 0;
+
+    int64_t io_count = 0;
+    int64_t io_count_local_disk = 0;
+    int64_t io_count_remote = 0;
+    int64_t io_count_request = 0;
+
+    int64_t io_ns_local_disk = 0;
+    int64_t io_ns_remote = 0;
+    // ------ for lake tablet ------
 };
 
+const char* const kBytesReadLocalDisk = "bytes_read_local_disk";
+const char* const kBytesReadRemote = "bytes_read_remote";
+const char* const kIOCountLocalDisk = "io_count_local_disk";
+const char* const kIOCountRemote = "io_count_remote";
+const char* const kIONsLocalDisk = "io_ns_local_disk";
+const char* const kIONsRemote = "io_ns_remote";
+
 typedef uint32_t ColumnId;
+typedef int32_t ColumnUID;
 // Column unique id set
 typedef std::set<uint32_t> UniqueIdSet;
 // Column unique Id -> column id map
@@ -331,14 +364,49 @@ struct RowsetId {
 struct TabletSegmentId {
     int64_t tablet_id = INT64_MAX;
     uint32_t segment_id = UINT32_MAX;
+    TabletSegmentId() {}
+    TabletSegmentId(int64_t tid, uint32_t sid) : tablet_id(tid), segment_id(sid) {}
+    ~TabletSegmentId() {}
     bool operator==(const TabletSegmentId& rhs) const {
         return tablet_id == rhs.tablet_id && segment_id == rhs.segment_id;
+    }
+    bool operator<(const TabletSegmentId& rhs) const {
+        if (tablet_id < rhs.tablet_id) {
+            return true;
+        } else if (tablet_id > rhs.tablet_id) {
+            return false;
+        } else {
+            return segment_id < rhs.segment_id;
+        }
     }
     std::string to_string() const {
         std::stringstream ss;
         ss << tablet_id << "_" << segment_id;
         return ss.str();
     };
+    friend std::ostream& operator<<(std::ostream& out, const TabletSegmentId& tsid) {
+        out << tsid.to_string();
+        return out;
+    }
+};
+
+struct TabletSegmentIdRange {
+    TabletSegmentId left;
+    TabletSegmentId right;
+    TabletSegmentIdRange(int64_t left_tid, uint32_t left_sid, int64_t right_tid, uint32_t right_sid)
+            : left(left_tid, left_sid), right(right_tid, right_sid) {}
+    ~TabletSegmentIdRange() {}
+    // make sure left <= right
+    bool is_valid() const { return left < right || left == right; }
+    std::string to_string() const {
+        std::stringstream ss;
+        ss << "[" << left.to_string() << "," << right.to_string() << "]";
+        return ss.str();
+    };
+    friend std::ostream& operator<<(std::ostream& out, const TabletSegmentIdRange& tsid_range) {
+        out << tsid_range.to_string();
+        return out;
+    }
 };
 
 } // namespace starrocks

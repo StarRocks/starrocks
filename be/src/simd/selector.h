@@ -24,8 +24,8 @@
 
 #include "column/type_traits.h"
 #include "gutil/port.h"
-#include "runtime/primitive_type.h"
 #include "simd/simd_utils.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 

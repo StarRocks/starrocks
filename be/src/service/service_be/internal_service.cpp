@@ -47,6 +47,7 @@
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_worker.h"
 #include "service/brpc.h"
+#include "storage/local_tablet_reader.h"
 #include "util/uid_util.h"
 
 namespace starrocks {
@@ -114,6 +115,58 @@ void BackendInternalServiceImpl<T>::tablet_writer_cancel(google::protobuf::RpcCo
              << ", tablet_id=" << request->tablet_id();
     PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->cancel(static_cast<brpc::Controller*>(cntl_base),
                                                                        *request, response, done);
+}
+
+template <typename T>
+void BackendInternalServiceImpl<T>::local_tablet_reader_open(google::protobuf::RpcController* controller,
+                                                             const PTabletReaderOpenRequest* request,
+                                                             PTabletReaderOpenResult* response,
+                                                             google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
+}
+
+template <typename T>
+void BackendInternalServiceImpl<T>::local_tablet_reader_close(google::protobuf::RpcController* controller,
+                                                              const PTabletReaderCloseRequest* request,
+                                                              PTabletReaderCloseResult* response,
+                                                              google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
+}
+
+template <typename T>
+void BackendInternalServiceImpl<T>::local_tablet_reader_multi_get(google::protobuf::RpcController* controller,
+                                                                  const PTabletReaderMultiGetRequest* request,
+                                                                  PTabletReaderMultiGetResult* response,
+                                                                  google::protobuf::Closure* done) {
+    LOG(INFO) << "call local_tablet_reader_multi_get tablet: " << request->tablet_id()
+              << " version:" << request->version();
+    ClosureGuard closure_guard(done);
+    auto st = handle_tablet_multi_get_rpc(*request, *response);
+    if (!st.ok()) {
+        LOG(WARNING) << "handle tablet multi get rpc failed: " << st << " tablet: " << request->tablet_id()
+                     << " version:" << request->version();
+    }
+    st.to_protobuf(response->mutable_status());
+}
+
+template <typename T>
+void BackendInternalServiceImpl<T>::local_tablet_reader_scan_open(google::protobuf::RpcController* controller,
+                                                                  const PTabletReaderScanOpenRequest* request,
+                                                                  PTabletReaderScanOpenResult* response,
+                                                                  google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
+}
+
+template <typename T>
+void BackendInternalServiceImpl<T>::local_tablet_reader_scan_get_next(google::protobuf::RpcController* controller,
+                                                                      const PTabletReaderScanGetNextRequest* request,
+                                                                      PTabletReaderScanGetNextResult* response,
+                                                                      google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
 }
 
 template class BackendInternalServiceImpl<PInternalService>;

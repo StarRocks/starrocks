@@ -24,7 +24,6 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
-import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -35,9 +34,11 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
@@ -98,22 +99,64 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
             columnRefOperatorColumnMap.remove(context.queryColumnRef);
             columnRefOperatorColumnMap.put(context.mvColumnRef, context.mvColumn);
 
-            LogicalOlapScanOperator newScanOperator = new LogicalOlapScanOperator(
-                    olapScanOperator.getTable(),
-                    columnRefOperatorColumnMap,
-                    olapScanOperator.getColumnMetaToColRefMap(),
-                    olapScanOperator.getDistributionSpec(),
-                    olapScanOperator.getLimit(),
-                    olapScanOperator.getPredicate(),
-                    olapScanOperator.getSelectedIndexId(),
-                    olapScanOperator.getSelectedPartitionId(),
-                    olapScanOperator.getPartitionNames(),
-                    olapScanOperator.getSelectedTabletId(),
-                    olapScanOperator.getHintsTabletIds());
-
+            LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
+            LogicalOlapScanOperator newScanOperator = builder.withOperator(olapScanOperator)
+                    .setColRefToColumnMetaMap(columnRefOperatorColumnMap).build();
             optExpression = OptExpression.create(newScanOperator, optExpression.getInputs());
         }
         return optExpression;
+    }
+
+    private CallOperator rewriteAggregateFunc(ReplaceColumnRefRewriter replaceColumnRefRewriter,
+                                              Column mvColumn,
+                                              CallOperator queryAggFunc) {
+        String functionName = queryAggFunc.getFnName();
+        if (functionName.equals(FunctionSet.COUNT) && !queryAggFunc.isDistinct()) {
+            CallOperator callOperator = new CallOperator(FunctionSet.SUM,
+                    queryAggFunc.getType(),
+                    queryAggFunc.getChildren(),
+                    Expr.getBuiltinFunction(FunctionSet.SUM, new Type[] {Type.BIGINT}, IS_IDENTICAL));
+            return (CallOperator) replaceColumnRefRewriter.rewrite(callOperator);
+        } else if (functionName.equals(FunctionSet.SUM) && !queryAggFunc.isDistinct()) {
+            CallOperator callOperator = new CallOperator(FunctionSet.SUM,
+                    queryAggFunc.getType(),
+                    queryAggFunc.getChildren(),
+                    ScalarOperatorUtil.findSumFn(new Type[] {mvColumn.getType()}));
+            return (CallOperator) replaceColumnRefRewriter.rewrite(callOperator);
+        } else if (((functionName.equals(FunctionSet.COUNT) && queryAggFunc.isDistinct())
+                || functionName.equals(FunctionSet.MULTI_DISTINCT_COUNT)) &&
+                mvColumn.getAggregationType() == AggregateType.BITMAP_UNION) {
+            CallOperator callOperator = new CallOperator(FunctionSet.BITMAP_UNION_COUNT,
+                    queryAggFunc.getType(),
+                    queryAggFunc.getChildren(),
+                    Expr.getBuiltinFunction(FunctionSet.BITMAP_UNION_COUNT, new Type[] {Type.BITMAP},
+                            IS_IDENTICAL));
+            return (CallOperator) replaceColumnRefRewriter.rewrite(callOperator);
+        } else if (
+                (functionName.equals(FunctionSet.NDV) || functionName.equals(FunctionSet.APPROX_COUNT_DISTINCT))
+                        && mvColumn.getAggregationType() == AggregateType.HLL_UNION) {
+            CallOperator callOperator = new CallOperator(FunctionSet.HLL_UNION_AGG,
+                    queryAggFunc.getType(),
+                    queryAggFunc.getChildren(),
+                    Expr.getBuiltinFunction(FunctionSet.HLL_UNION_AGG, new Type[] {Type.HLL}, IS_IDENTICAL));
+            return (CallOperator) replaceColumnRefRewriter.rewrite(callOperator);
+        } else if (functionName.equals(FunctionSet.PERCENTILE_APPROX) &&
+                mvColumn.getAggregationType() == AggregateType.PERCENTILE_UNION) {
+
+            ScalarOperator child = queryAggFunc.getChildren().get(0);
+            if (child instanceof CastOperator) {
+                child = child.getChild(0);
+            }
+            Preconditions.checkState(child instanceof ColumnRefOperator);
+            CallOperator callOperator = new CallOperator(FunctionSet.PERCENTILE_UNION,
+                    queryAggFunc.getType(),
+                    Lists.newArrayList(child),
+                    Expr.getBuiltinFunction(FunctionSet.PERCENTILE_UNION,
+                            new Type[] {Type.PERCENTILE}, IS_IDENTICAL));
+            return (CallOperator) replaceColumnRefRewriter.rewrite(callOperator);
+        } else {
+            return (CallOperator) replaceColumnRefRewriter.rewrite(queryAggFunc);
+        }
     }
 
     @Override
@@ -131,54 +174,17 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
 
         Map<ColumnRefOperator, CallOperator> newAggMap = new HashMap<>(aggregationOperator.getAggregations());
         for (Map.Entry<ColumnRefOperator, CallOperator> kv : aggregationOperator.getAggregations().entrySet()) {
-            String functionName = kv.getValue().getFnName();
-            if (kv.getValue().getUsedColumns().isEmpty()) {
+            CallOperator queryAggFunc = kv.getValue();
+            if (queryAggFunc.getUsedColumns().isEmpty()) {
                 break;
             }
+
+            String functionName = queryAggFunc.getFnName();
             if (functionName.equals(context.aggCall.getFnName())
-                    && kv.getValue().getUsedColumns().getFirstId() == context.queryColumnRef.getId()) {
-                if (kv.getValue().getFnName().equals(FunctionSet.COUNT) && !kv.getValue().isDistinct()) {
-                    CallOperator callOperator = new CallOperator(FunctionSet.SUM,
-                            kv.getValue().getType(),
-                            kv.getValue().getChildren(),
-                            Expr.getBuiltinFunction(FunctionSet.SUM, new Type[] {Type.BIGINT}, IS_IDENTICAL));
-
-                    newAggMap.put(kv.getKey(), (CallOperator) replaceColumnRefRewriter.rewrite(callOperator));
-                    break;
-                } else if (
-                        ((functionName.equals(FunctionSet.COUNT) && kv.getValue().isDistinct())
-                                || functionName.equals(FunctionSet.MULTI_DISTINCT_COUNT)) &&
-                                context.mvColumn.getAggregationType() == AggregateType.BITMAP_UNION) {
-                    CallOperator callOperator = new CallOperator(FunctionSet.BITMAP_UNION_COUNT,
-                            kv.getValue().getType(),
-                            kv.getValue().getChildren(),
-                            Expr.getBuiltinFunction(FunctionSet.BITMAP_UNION_COUNT, new Type[] {Type.BITMAP},
-                                    IS_IDENTICAL));
-                    newAggMap.put(kv.getKey(), (CallOperator) replaceColumnRefRewriter.rewrite(callOperator));
-                    break;
-                } else if (
-                        (functionName.equals(FunctionSet.NDV) || functionName.equals(FunctionSet.APPROX_COUNT_DISTINCT))
-                                && context.mvColumn.getAggregationType() == AggregateType.HLL_UNION) {
-                    CallOperator callOperator = new CallOperator(FunctionSet.HLL_UNION_AGG,
-                            kv.getValue().getType(),
-                            kv.getValue().getChildren(),
-                            Expr.getBuiltinFunction(FunctionSet.HLL_UNION_AGG, new Type[] {Type.HLL}, IS_IDENTICAL));
-                    newAggMap.put(kv.getKey(), (CallOperator) replaceColumnRefRewriter.rewrite(callOperator));
-                    break;
-                } else if (functionName.equals(FunctionSet.PERCENTILE_APPROX) &&
-                        context.mvColumn.getAggregationType() == AggregateType.PERCENTILE_UNION) {
-
-                    ScalarOperator child = kv.getValue().getChildren().get(0);
-                    if (child instanceof CastOperator) {
-                        child = child.getChild(0);
-                    }
-                    Preconditions.checkState(child instanceof ColumnRefOperator);
-                    CallOperator callOperator = new CallOperator(FunctionSet.PERCENTILE_UNION,
-                            kv.getValue().getType(),
-                            Lists.newArrayList(child),
-                            Expr.getBuiltinFunction(FunctionSet.PERCENTILE_UNION,
-                                    new Type[] {Type.PERCENTILE}, IS_IDENTICAL));
-                    newAggMap.put(kv.getKey(), (CallOperator) replaceColumnRefRewriter.rewrite(callOperator));
+                    && queryAggFunc.getUsedColumns().getFirstId() == context.queryColumnRef.getId()) {
+                CallOperator newAggFunc = rewriteAggregateFunc(replaceColumnRefRewriter, context.mvColumn, queryAggFunc);
+                if (newAggFunc != null) {
+                    newAggMap.put(kv.getKey(), newAggFunc);
                     break;
                 }
             }
@@ -201,18 +207,22 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
             optExpression.setChild(childIdx, rewrite(optExpression.inputAt(childIdx), context));
         }
 
-        ColumnRefSet bitSet = new ColumnRefSet();
+        List<ColumnRefOperator> newOuterColumns = Lists.newArrayList();
         LogicalTableFunctionOperator tableFunctionOperator = (LogicalTableFunctionOperator) optExpression.getOp();
-        for (Integer columnId : tableFunctionOperator.getOuterColumnRefSet().getColumnIds()) {
-            if (columnId == context.queryColumnRef.getId()) {
-                bitSet.union(context.mvColumnRef.getId());
+        for (ColumnRefOperator col : tableFunctionOperator.getOuterColRefs()) {
+            if (col.equals(context.queryColumnRef)) {
+                newOuterColumns.add(context.mvColumnRef);
             } else {
-                bitSet.union(columnId);
+                newOuterColumns.add(col);
             }
         }
 
-        tableFunctionOperator.setOuterColumnRefSet(bitSet);
-        return OptExpression.create(tableFunctionOperator, optExpression.getInputs());
+        LogicalTableFunctionOperator newOperator = (new LogicalTableFunctionOperator.Builder())
+                .withOperator(tableFunctionOperator)
+                .setOuterColRefs(newOuterColumns)
+                .build();
+
+        return OptExpression.create(newOperator, optExpression.getInputs());
     }
 
     @Override

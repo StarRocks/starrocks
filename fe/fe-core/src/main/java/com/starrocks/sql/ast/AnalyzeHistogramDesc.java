@@ -14,10 +14,17 @@
 
 package com.starrocks.sql.ast;
 
-public class AnalyzeHistogramDesc implements AnalyzeTypeDesc {
+import com.starrocks.sql.parser.NodePosition;
+
+public class AnalyzeHistogramDesc extends AnalyzeTypeDesc {
     private long buckets;
 
     public AnalyzeHistogramDesc(long buckets) {
+        this(buckets, NodePosition.ZERO);
+    }
+
+    public AnalyzeHistogramDesc(long buckets, NodePosition pos) {
+        super(pos);
         this.buckets = buckets;
     }
 

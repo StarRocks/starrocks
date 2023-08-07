@@ -15,7 +15,7 @@
 
 package com.starrocks.sql.plan;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -115,6 +115,7 @@ class PushDownPredicateJoinTypeTest extends PlanTestBase {
         sqls.add("select * from t0 left join t1 on v4 = 4");
         sqls.add("select * from t0 full outer join t1 on v1 = 1 and v4 = 4");
         sqls.add("select * from t0 full outer join t1 on v1 < 1 and v4 > 4 and v2 > v5");
+        sqls.add("select * from t0 left join t1 on t0.v1 = t1.v4 and t0.v1 > 1");
         return sqls.stream().map(e -> Arguments.of(e));
     }
 

@@ -18,8 +18,10 @@ package com.starrocks.connector.hive;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
@@ -30,14 +32,19 @@ import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.toHiveCommonStats;
+import static com.starrocks.connector.hive.HiveMetastoreApiConverter.toMetastoreApiTable;
+import static com.starrocks.connector.hive.HiveMetastoreApiConverter.validateHiveTableType;
+import static com.starrocks.connector.hive.HiveMetastoreOperations.LOCATION_PROPERTY;
 
 public class HiveMetastore implements IHiveMetastore {
 
@@ -55,6 +62,20 @@ public class HiveMetastore implements IHiveMetastore {
         return client.getAllDatabaseNames();
     }
 
+    @Override
+    public void createDb(String dbName, Map<String, String> properties) {
+        String location = properties.getOrDefault(LOCATION_PROPERTY, "");
+        long dbId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt();
+        Database database = new Database(dbId, dbName, location);
+        client.createDatabase(HiveMetastoreApiConverter.toMetastoreApiDatabase(database));
+    }
+
+    @Override
+    public void dropDb(String dbName, boolean deleteData) {
+        client.dropDatabase(dbName, deleteData);
+    }
+
+    @Override
     public List<String> getAllTableNames(String dbName) {
         return client.getAllTableNames(dbName);
     }
@@ -65,6 +86,17 @@ public class HiveMetastore implements IHiveMetastore {
         return HiveMetastoreApiConverter.toDatabase(db);
     }
 
+    @Override
+    public void createTable(String dbName, Table table) {
+        org.apache.hadoop.hive.metastore.api.Table hiveTable = toMetastoreApiTable((HiveTable) table);
+        client.createTable(hiveTable);
+    }
+
+    @Override
+    public void dropTable(String dbName, String tableName) {
+        client.dropTable(dbName, tableName);
+    }
+
     public Table getTable(String dbName, String tableName) {
         org.apache.hadoop.hive.metastore.api.Table table = client.getTable(dbName, tableName);
         StorageDescriptor sd = table.getSd();
@@ -73,14 +105,26 @@ public class HiveMetastore implements IHiveMetastore {
         }
 
         if (!HiveMetastoreApiConverter.isHudiTable(table.getSd().getInputFormat())) {
-            return HiveMetastoreApiConverter.toHiveTable(table, catalogName);
+            validateHiveTableType(table.getTableType());
+            if (table.getTableType().equalsIgnoreCase("VIRTUAL_VIEW")) {
+                return HiveMetastoreApiConverter.toHiveView(table, catalogName);
+            } else {
+                return HiveMetastoreApiConverter.toHiveTable(table, catalogName);
+            }
         } else {
             return HiveMetastoreApiConverter.toHudiTable(table, catalogName);
         }
     }
 
-    public List<String> getPartitionKeys(String dbName, String tableName) {
-        return client.getPartitionKeys(dbName, tableName);
+    @Override
+    public List<String> getPartitionKeysByValue(String dbName, String tableName, List<Optional<String>> partitionValues) {
+        if (partitionValues.isEmpty()) {
+            return client.getPartitionKeys(dbName, tableName);
+        } else {
+            List<String> partitionValuesStr = partitionValues.stream()
+                    .map(v -> v.orElse("")).collect(Collectors.toList());
+            return client.getPartitionKeysByValue(dbName, tableName, partitionValuesStr);
+        }
     }
 
     public Partition getPartition(String dbName, String tblName, List<String> partitionValues) {
@@ -101,8 +145,15 @@ public class HiveMetastore implements IHiveMetastore {
     }
 
     public Map<String, Partition> getPartitionsByNames(String dbName, String tblName, List<String> partitionNames) {
-        List<org.apache.hadoop.hive.metastore.api.Partition> partitions =
-                client.getPartitionsByNames(dbName, tblName, partitionNames);
+        List<org.apache.hadoop.hive.metastore.api.Partition> partitions = new ArrayList<>();
+        // fetch partitions by batch per RPC
+        for (int start = 0; start < partitionNames.size(); start += Config.max_hive_partitions_per_rpc) {
+            int end = Math.min(start + Config.max_hive_partitions_per_rpc, partitionNames.size());
+            List<String> namesPerRPC = partitionNames.subList(start, end);
+            List<org.apache.hadoop.hive.metastore.api.Partition> partsPerRPC =
+                    client.getPartitionsByNames(dbName, tblName, namesPerRPC);
+            partitions.addAll(partsPerRPC);
+        }
 
         Map<String, List<String>> partitionNameToPartitionValues = partitionNames.stream()
                 .collect(Collectors.toMap(Function.identity(), PartitionUtil::toPartitionValues));

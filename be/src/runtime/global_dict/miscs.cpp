@@ -33,7 +33,7 @@ std::pair<std::shared_ptr<NullableColumn>, std::vector<int32_t>> extract_column_
     slices.reserve(dict_map.size() + 1);
     codes.reserve(dict_map.size() + 1);
 
-    slices.emplace_back(Slice());
+    slices.emplace_back();
     codes.emplace_back(0);
 
     for (auto& [slice, code] : dict_map) {

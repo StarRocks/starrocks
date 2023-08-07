@@ -1,0 +1,151 @@
+-- name: test_sync_materialized_view2
+create table user_tags (time date, user_id int, user_name varchar(20), tag_id int) partition by range (time)  (partition p1 values less than MAXVALUE) distributed by hash(time) buckets 3 properties('replication_num' = '1');
+-- result:
+-- !result
+insert into user_tags values('2023-04-13', 1, 'a', 1), ('2023-04-13', 1, 'b', 2), ('2023-04-13', 1, 'c', 3), ('2023-04-13', 1, 'd', 4), ('2023-04-13', 1, 'e', 5), ('2023-04-13', 2, 'e', 5), ('2023-04-13', 3, 'e', 6);
+-- result:
+-- !result
+create materialized view user_tags_mv2
+as select user_id, time, bitmap_union(to_bitmap(tag_id * 100)) as agg1 from user_tags group by user_id, time;
+-- result:
+-- !result
+function: wait_materialized_view_finish()
+-- result:
+None
+-- !result
+create materialized view user_tags_hll_mv2
+as select user_id * 2 as col1, time, hll_union(hll_hash(abs(tag_id))) as agg2 from user_tags group by col1, time;
+-- result:
+-- !result
+function: wait_materialized_view_finish()
+-- result:
+None
+-- !result
+create materialized view user_tags_percential_mv2
+as select user_id + 1 as col2, time, percentile_union(percentile_hash(cast(tag_id * 10 as double))) as agg3 from user_tags group by col2, time;
+-- result:
+-- !result
+function: wait_materialized_view_finish()
+-- result:
+None
+-- !result
+create materialized view same_column_ref_mv1 
+as select user_id + 1 as col2, time, sum(tag_id* 10) as sum1 , sum(tag_id* 100) as sum2, count(tag_id* 10) as count1 from user_tags group by col2, time;
+-- result:
+-- !result
+function: wait_materialized_view_finish()
+-- result:
+None
+-- !result
+insert into user_tags values('2023-04-13', 1, 'a', 1), ('2023-04-13', 1, 'b', 2), ('2023-04-13', 1, 'c', 3), ('2023-04-13', 1, 'd', 4), ('2023-04-13', 1, 'e', 5), ('2023-04-13', 2, 'e', 5), ('2023-04-13', 3, 'e', 6);
+-- result:
+-- !result
+select user_id, time, bitmap_union(to_bitmap(tag_id * 100)) as agg1 from user_tags group by user_id, time;
+-- result:
+1	2023-04-13	None
+2	2023-04-13	None
+3	2023-04-13	None
+-- !result
+select user_id, time, count(distinct tag_id * 100) as agg1 from user_tags group by user_id, time;
+-- result:
+1	2023-04-13	5
+2	2023-04-13	1
+3	2023-04-13	1
+-- !result
+select time, count(distinct tag_id * 100) as agg1 from user_tags group by time;
+-- result:
+2023-04-13	6
+-- !result
+select user_id * 2 as col1, time, hll_union(hll_hash(abs(tag_id))) as agg2 from user_tags group by col1, time;
+-- result:
+2	2023-04-13	None
+4	2023-04-13	None
+6	2023-04-13	None
+-- !result
+select time, hll_union(hll_hash(abs(tag_id))) as agg2 from user_tags group by time;
+-- result:
+2023-04-13	None
+-- !result
+select user_id * 2 as col1, time, ndv(abs(tag_id)) as agg2 from user_tags group by col1, time;
+-- result:
+2	2023-04-13	5
+4	2023-04-13	1
+6	2023-04-13	1
+-- !result
+select time, approx_count_distinct(abs(tag_id)) as agg2 from user_tags group by time;
+-- result:
+2023-04-13	6
+-- !result
+select user_id + 1 as col1, time, percentile_union(percentile_hash(cast(tag_id * 10 as double))) as agg1 from user_tags group by col1, time;
+-- result:
+2	2023-04-13	None
+3	2023-04-13	None
+4	2023-04-13	None
+-- !result
+select user_id + 1 as col1, time, sum(tag_id* 10) as sum1 , sum(tag_id* 100) as sum2, count(tag_id* 10) as count1 from user_tags group by col1, time;
+-- result:
+2	2023-04-13	300	3000	10
+3	2023-04-13	100	1000	2
+4	2023-04-13	120	1200	2
+-- !result
+drop materialized view user_tags_mv2;
+-- result:
+-- !result
+drop materialized view user_tags_hll_mv2;
+-- result:
+-- !result
+drop materialized view user_tags_percential_mv2;
+-- result:
+-- !result
+drop materialized view same_column_ref_mv1;
+-- result:
+-- !result
+create materialized view user_tags_percential_mv2
+as select case when user_id != 0 then user_id + 1 else 0 end as col1, time, percentile_union(percentile_hash(cast(tag_id as bigint))) from user_tags group by col1, time;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The materialized view currently does not support multi-slot-refs expr: {}. Please use Asynchronous Materialized View instead')
+-- !result
+drop table if exists tbl1;
+-- result:
+-- !result
+CREATE TABLE `tbl1` (
+  `k1` tinyint(4) NULL DEFAULT "0",
+  `k2` varchar(64) NULL DEFAULT "",
+  `k3` bigint NULL DEFAULT "0",
+  `k4` varchar(64) NULL DEFAULT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1;
+-- result:
+-- !result
+insert into tbl1 values (1, 'a', 1, 'aa'), (2, 'b', 1, NULL), (3, NULL, NULL, NULL);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_ce_mv1
+as
+select k1 * 2 as k1_2, k2, sum(k3) as k4_2, hll_union(hll_hash(k4)) as k5_2 from tbl1 group by k1, k2;
+-- result:
+-- !result
+function: wait_materialized_view_finish()
+-- result:
+None
+-- !result
+insert into tbl1 values (1, 'a', 1, 'aa'), (2, 'b', 1, NULL), (3, NULL, NULL, NULL);
+-- result:
+-- !result
+select * from tbl1 order by k1;
+-- result:
+1	a	1	aa
+1	a	1	aa
+2	b	1	None
+2	b	1	None
+3	None	None	None
+3	None	None	None
+-- !result
+select * from test_ce_mv1 [_SYNC_MV_] order by mv_k1_2; 
+drop materialized view test_ce_mv1;
+-- result:
+2	a	2	None
+4	b	2	None
+6	None	None	None
+-- !result

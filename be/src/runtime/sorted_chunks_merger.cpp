@@ -216,10 +216,10 @@ Status SortedChunksMerger::get_next_for_pipeline(ChunkPtr* chunk, std::atomic<bo
 
     /*
      * Because compute thread couldn't blocking in pipeline, and merge-sort is
-     * accept chunks from network in default, so if chunk hasn't come compute thread
-     * should exit this operator and come back when you have data.
-     * STEP 0 as the process to collect merged result.
-     * STEP 1 as the process to drive cursor move to next row then execute STEP 0.
+     * accept chunks from network in default, so if chunk hasn't come, this process
+     * should exit get back when data is arrived.
+     * STEP 0 denotes the process of collecting merged result.
+     * STEP 1 denotes the process to driving cursor move to next row then execute STEP 0.
      * STEP 2 is almost like STEP 1 except it is executed when data is ready. 
      * 
      */
@@ -301,21 +301,25 @@ void SortedChunksMerger::collect_merged_chunks(ChunkPtr* chunk) {
     _row_number = 0;
 }
 
-CascadeChunkMerger::CascadeChunkMerger(RuntimeState* state, RuntimeProfile* profile)
-        : _state(state), _profile(profile), _sort_exprs(nullptr) {}
+CascadeChunkMerger::CascadeChunkMerger(RuntimeState* state) : _state(state), _sort_exprs(nullptr) {}
 
+Status CascadeChunkMerger::init(const std::vector<ChunkProvider>& providers,
+                                const std::vector<ExprContext*>* sort_exprs, const SortDescs& sort_desc) {
+    std::vector<std::unique_ptr<SimpleChunkSortCursor>> cursors;
+    for (const auto& provider : providers) {
+        cursors.push_back(std::make_unique<SimpleChunkSortCursor>(provider, sort_exprs));
+    }
+    _sort_exprs = sort_exprs;
+    _sort_desc = sort_desc;
+    _merger = std::make_unique<MergeCursorsCascade>();
+    RETURN_IF_ERROR(_merger->init(_sort_desc, std::move(cursors)));
+    return Status::OK();
+}
 Status CascadeChunkMerger::init(const std::vector<ChunkProvider>& providers,
                                 const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* sort_orders,
                                 const std::vector<bool>* null_firsts) {
-    std::vector<std::unique_ptr<SimpleChunkSortCursor>> cursors;
-    for (int i = 0; i < providers.size(); i++) {
-        cursors.push_back(std::make_unique<SimpleChunkSortCursor>(providers[i], sort_exprs));
-    }
-    _sort_exprs = sort_exprs;
-    _sort_desc = SortDescs(*sort_orders, *null_firsts);
-
-    _merger = std::make_unique<MergeCursorsCascade>();
-    RETURN_IF_ERROR(_merger->init(_sort_desc, std::move(cursors)));
+    auto descs = SortDescs(*sort_orders, *null_firsts);
+    RETURN_IF_ERROR(init(providers, sort_exprs, descs));
     return Status::OK();
 }
 
@@ -323,7 +327,7 @@ bool CascadeChunkMerger::is_data_ready() {
     return _merger->is_data_ready();
 }
 
-Status CascadeChunkMerger::get_next(ChunkPtr* output, std::atomic<bool>* eos, bool* should_exit) {
+Status CascadeChunkMerger::get_next(ChunkUniquePtr* output, std::atomic<bool>* eos, bool* should_exit) {
     if (_merger->is_eos()) {
         *eos = true;
         *should_exit = true;
@@ -332,6 +336,7 @@ Status CascadeChunkMerger::get_next(ChunkPtr* output, std::atomic<bool>* eos, bo
     if (_current_chunk.empty()) {
         ChunkUniquePtr chunk = _merger->try_get_next();
         if (!chunk) {
+            *eos = _merger->is_eos();
             *should_exit = true;
             return Status::OK();
         }

@@ -199,7 +199,7 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
             if (!res.ok()) {
                 return res.status();
             }
-            LOG(INFO) << "finished to write file via broker. file: " << local_file_path << ", length: " << *res;
+            LOG(INFO) << "finished to write the file: " << local_file_path << ", length: " << *res;
             RETURN_IF_ERROR(remote_writable_file->close());
             // rename file to end with ".md5sum"
             if (!upload.__isset.use_broker || upload.use_broker) {
@@ -401,7 +401,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
 
             // local_files always keep the updated local files
             local_files.push_back(local_file_name);
-            LOG(INFO) << "finished to download file via broker. file: " << full_local_file << ", length: " << file_len;
+            LOG(INFO) << "finished to download the file: " << full_local_file << ", length: " << file_len;
         } // end for all remote files
 
         // finally, delete local files which are not in remote
@@ -548,6 +548,19 @@ Status SnapshotLoader::primary_key_move(const std::string& snapshot_path, const 
         LOG(FATAL) << "only support overwrite now";
     }
 
+    // We just replace the table_schema in tabletMeta using the schema
+    // in snapshot_meta.
+    TabletMetaSharedPtr new_tablet_meta = std::make_shared<TabletMeta>();
+    std::shared_lock rdlock(tablet->get_header_lock());
+    tablet->generate_tablet_meta_copy_unlocked(new_tablet_meta);
+    rdlock.unlock();
+
+    TabletMetaPB metapb;
+    new_tablet_meta->to_meta_pb(&metapb);
+    new_tablet_meta->init_from_pb(&metapb, &snapshot_meta.tablet_meta().schema());
+    tablet->set_tablet_meta(new_tablet_meta);
+    tablet->save_meta();
+
     RETURN_IF_ERROR(tablet->updates()->load_snapshot(snapshot_meta, true));
     tablet->updates()->remove_expired_versions(time(nullptr));
     LOG(INFO) << "Loaded snapshot of tablet " << tablet->tablet_id() << ", removing directory " << snapshot_path;
@@ -642,7 +655,13 @@ Status SnapshotLoader::move(const std::string& snapshot_path, const TabletShared
         // link files one by one
         // files in snapshot dir will be moved in snapshot clean process
         std::vector<std::string> linked_files;
+        std::string dcg_file;
         for (auto& file : snapshot_files) {
+            // A tablet can have at most one dcgs snapshot file
+            if (_end_with(file, ".dcgs_snapshot")) {
+                dcg_file = file;
+                continue;
+            }
             std::string full_src_path = snapshot_path + "/" + file;
             std::string full_dest_path = tablet_path + "/" + file;
             if (link(full_src_path.c_str(), full_dest_path.c_str()) != 0) {
@@ -658,6 +677,47 @@ Status SnapshotLoader::move(const std::string& snapshot_path, const TabletShared
             }
             linked_files.push_back(full_dest_path);
             VLOG(2) << "link file from " << full_src_path << " to " << full_dest_path;
+        }
+
+        if (dcg_file.size() != 0) {
+            DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
+            std::string full_path = snapshot_path + "/" + dcg_file;
+            auto st = DeltaColumnGroupListHelper::parse_snapshot(full_path, dcg_snapshot_pb);
+            if (!st.ok()) {
+                return Status::InternalError("failed to parse dcgs meta");
+            }
+
+            if (dcg_snapshot_pb.dcg_lists().size() != 0) {
+                int idx = 0;
+                auto data_dir = tablet->data_dir();
+                rocksdb::WriteBatch wb;
+
+                RETURN_IF_ERROR(TabletMetaManager::clear_delta_column_group(data_dir, &wb, tablet_id));
+
+                for (const auto& dcg_list_pb : dcg_snapshot_pb.dcg_lists()) {
+                    // dcgs for each segment
+                    DeltaColumnGroupList dcgs;
+                    RETURN_IF_ERROR(
+                            DeltaColumnGroupListSerializer::deserialize_delta_column_group_list(dcg_list_pb, &dcgs));
+
+                    if (dcgs.size() == 0) {
+                        continue;
+                    }
+
+                    // tablet id and rowsetid in PB have been replace by the new one here.
+                    RETURN_IF_ERROR(TabletMetaManager::put_delta_column_group(
+                            data_dir, &wb, dcg_snapshot_pb.tablet_id(idx), dcg_snapshot_pb.rowset_id(idx),
+                            dcg_snapshot_pb.segment_id(idx), dcgs));
+                    ++idx;
+                }
+                st = data_dir->get_meta()->write_batch(&wb);
+                if (!st.ok()) {
+                    std::stringstream ss;
+                    ss << "save dcgs meta failed, tablet id: " << tablet->tablet_id();
+                    LOG(WARNING) << ss.str();
+                    return Status::InternalError(ss.str());
+                }
+            }
         }
 
     } else {
@@ -801,37 +861,40 @@ Status SnapshotLoader::_get_existing_files_from_remote(BrokerServiceConnection& 
 Status SnapshotLoader::_get_existing_files_from_remote_without_broker(const std::unique_ptr<FileSystem>& fs,
                                                                       const std::string& remote_path,
                                                                       std::map<std::string, FileStat>* files) {
-    std::vector<FileStatus> file_status;
-    Status status = fs->list_path(remote_path, &file_status);
-    if (!status.ok() && !status.is_not_found()) {
-        std::stringstream ss;
-        ss << "failed to list files in remote path: " << remote_path << ", msg: " << status.message();
-        LOG(WARNING) << ss.str();
-        return status;
-    }
-    LOG(INFO) << "finished to list files from remote path. file num: " << file_status.size();
-
-    // split file name and checksum
-    for (const auto& file : file_status) {
-        if (file.is_dir) {
-            // this is not a file
-            continue;
+    int64_t file_num = 0;
+    Status st;
+    st.update(fs->iterate_dir2(remote_path, [&](DirEntry entry) {
+        if (UNLIKELY(!entry.is_dir.has_value())) {
+            st.update(Status::InternalError("Unable to recognize the file type"));
+            return false;
         }
-
-        const std::string& file_name = file.name;
-        size_t pos = file_name.find_last_of('.');
-        if (pos == std::string::npos || pos == file_name.size() - 1) {
+        file_num++;
+        if (entry.is_dir.value()) {
+            return true;
+        }
+        if (UNLIKELY(!entry.size.has_value())) {
+            st.update(Status::InternalError("Unable to get file size"));
+            return false;
+        }
+        size_t pos = entry.name.find_last_of('.');
+        if (pos == std::string::npos || pos == entry.name.size() - 1) {
             // Not found checksum separator, ignore this file
-            continue;
+            return true;
         }
-        std::string name = std::string(file_name, 0, pos);
-        std::string md5 = std::string(file_name, pos + 1);
-        FileStat stat = {name, md5, file.size};
-        files->emplace(name, stat);
-        VLOG(2) << "split remote file: " << name << ", checksum: " << md5;
+        std::string name_part(entry.name.data(), entry.name.data() + pos);
+        std::string md5_part(entry.name.data() + pos + 1, entry.name.data() + entry.name.size());
+        FileStat stat = {.name = name_part, .md5 = md5_part, .size = entry.size.value()};
+        files->emplace(name_part, stat);
+        VLOG(2) << "split remote file: " << name_part << ", checksum: " << md5_part;
+        return true;
+    }));
+
+    if (!st.ok() && !st.is_not_found()) {
+        LOG(WARNING) << "failed to list files in remote path: " << remote_path << ", msg: " << st;
+        return st;
     }
 
-    LOG(INFO) << "finished to split files. valid file num: " << files->size();
+    LOG(INFO) << "finished to split files. total file num: " << file_num << " valid file num: " << files->size();
 
     return Status::OK();
 }
@@ -926,8 +989,13 @@ Status SnapshotLoader::_replace_tablet_id(const std::string& file_name, int64_t 
         ss << tablet_id << ".hdr";
         *new_file_name = ss.str();
         return Status::OK();
+    } else if (_end_with(file_name, ".dcgs_snapshot")) {
+        std::stringstream ss;
+        ss << tablet_id << ".dcgs_snapshot";
+        *new_file_name = ss.str();
+        return Status::OK();
     } else if (_end_with(file_name, ".idx") || _end_with(file_name, ".dat") || _end_with(file_name, "meta") ||
-               _end_with(file_name, ".del")) {
+               _end_with(file_name, ".del") || _end_with(file_name, ".cols") || _end_with(file_name, ".upt")) {
         *new_file_name = file_name;
         return Status::OK();
     } else {

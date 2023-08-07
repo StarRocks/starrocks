@@ -17,9 +17,9 @@
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "exprs/agg/maxmin.h"
-#include "runtime/primitive_type.h"
-#include "runtime/primitive_type_infra.h"
 #include "types/bitmap_value.h"
+#include "types/logical_type.h"
+#include "types/logical_type_infra.h"
 
 namespace starrocks {
 
@@ -34,6 +34,20 @@ void AggregateFuncResolver::register_bitmap() {
             "bitmap_union_int", false, AggregateFactory::MakeBitmapUnionIntAggregateFunction<TYPE_BIGINT>());
     add_aggregate_mapping<TYPE_OBJECT, TYPE_OBJECT, BitmapValue>("bitmap_union", false,
                                                                  AggregateFactory::MakeBitmapUnionAggregateFunction());
+
+    add_aggregate_mapping<TYPE_BOOLEAN, TYPE_OBJECT, BitmapValue>(
+            "bitmap_agg", false, AggregateFactory::MakeBitmapAggAggregateFunction<TYPE_BOOLEAN>());
+    add_aggregate_mapping<TYPE_TINYINT, TYPE_OBJECT, BitmapValue>(
+            "bitmap_agg", false, AggregateFactory::MakeBitmapAggAggregateFunction<TYPE_TINYINT>());
+    add_aggregate_mapping<TYPE_SMALLINT, TYPE_OBJECT, BitmapValue>(
+            "bitmap_agg", false, AggregateFactory::MakeBitmapAggAggregateFunction<TYPE_SMALLINT>());
+    add_aggregate_mapping<TYPE_INT, TYPE_OBJECT, BitmapValue>(
+            "bitmap_agg", false, AggregateFactory::MakeBitmapAggAggregateFunction<TYPE_INT>());
+    add_aggregate_mapping<TYPE_BIGINT, TYPE_OBJECT, BitmapValue>(
+            "bitmap_agg", false, AggregateFactory::MakeBitmapAggAggregateFunction<TYPE_BIGINT>());
+    add_aggregate_mapping<TYPE_LARGEINT, TYPE_OBJECT, BitmapValue>(
+            "bitmap_agg", false, AggregateFactory::MakeBitmapAggAggregateFunction<TYPE_LARGEINT>());
+
     add_aggregate_mapping<TYPE_OBJECT, TYPE_OBJECT, BitmapValuePacked>(
             "bitmap_intersect", false, AggregateFactory::MakeBitmapIntersectAggregateFunction());
     add_aggregate_mapping<TYPE_OBJECT, TYPE_BIGINT, BitmapValue>(
@@ -41,53 +55,57 @@ void AggregateFuncResolver::register_bitmap() {
 }
 
 struct MinMaxAnyDispatcher {
-    template <LogicalType pt>
+    template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (pt_is_aggregate<pt> || pt_is_string<pt>) {
-            resolver->add_aggregate_mapping<pt, pt, MinAggregateData<pt>>(
-                    "min", true, AggregateFactory::MakeMinAggregateFunction<pt>());
-            resolver->add_aggregate_mapping<pt, pt, MaxAggregateData<pt>>(
-                    "max", true, AggregateFactory::MakeMaxAggregateFunction<pt>());
-            resolver->add_aggregate_mapping<pt, pt, AnyValueAggregateData<pt>>(
-                    "any_value", true, AggregateFactory::MakeAnyValueAggregateFunction<pt>());
-        }
-        if constexpr (pt_is_json<pt>) {
-            resolver->add_aggregate_mapping<pt, pt, AnyValueAggregateData<pt>>(
-                    "any_value", true, AggregateFactory::MakeAnyValueAggregateFunction<pt>());
+        if constexpr (lt_is_aggregate<lt> || lt_is_json<lt>) {
+            resolver->add_aggregate_mapping<lt, lt, MinAggregateData<lt>>(
+                    "min", true, AggregateFactory::MakeMinAggregateFunction<lt>());
+            resolver->add_aggregate_mapping<lt, lt, MaxAggregateData<lt>>(
+                    "max", true, AggregateFactory::MakeMaxAggregateFunction<lt>());
+            resolver->add_aggregate_mapping<lt, lt, AnyValueAggregateData<lt>>(
+                    "any_value", true, AggregateFactory::MakeAnyValueAggregateFunction<lt>());
         }
     }
 };
 
-template <LogicalType ret_type>
-struct MaxByDispatcherInner {
+template <LogicalType ret_type, bool is_max_by>
+struct MaxMinByDispatcherInner {
     template <LogicalType arg_type>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr ((pt_is_aggregate<arg_type> || pt_is_string<arg_type>)&&(pt_is_aggregate<ret_type> ||
-                                                                              pt_is_string<ret_type>)) {
-            resolver->add_aggregate_mapping_variadic<arg_type, ret_type, MaxByAggregateData<arg_type>>(
-                    "max_by", true, AggregateFactory::MakeMaxByAggregateFunction<arg_type>());
+        if constexpr ((lt_is_aggregate<arg_type> || lt_is_json<arg_type>)&&(lt_is_aggregate<ret_type> ||
+                                                                            lt_is_json<ret_type>)) {
+            if constexpr (is_max_by) {
+                resolver->add_aggregate_mapping_variadic<arg_type, ret_type, MaxByAggregateData<arg_type>>(
+                        "max_by", true, AggregateFactory::MakeMaxByAggregateFunction<arg_type>());
+            } else {
+                resolver->add_aggregate_mapping_variadic<arg_type, ret_type, MinByAggregateData<arg_type>>(
+                        "min_by", true, AggregateFactory::MakeMinByAggregateFunction<arg_type>());
+            }
         }
     }
 };
 
-struct MaxByDispatcher {
-    template <LogicalType pt>
+template <bool is_max_by>
+struct MaxMinByDispatcher {
+    template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver, LogicalType ret_type) {
-        type_dispatch_all(ret_type, MaxByDispatcherInner<pt>(), resolver);
+        type_dispatch_all(ret_type, MaxMinByDispatcherInner<lt, is_max_by>(), resolver);
     }
 };
 
 void AggregateFuncResolver::register_minmaxany() {
-    for (auto ret_type : aggregate_types()) {
-        for (auto arg_type : aggregate_types()) {
-            type_dispatch_all(arg_type, MaxByDispatcher(), this, ret_type);
+    auto minmax_types = aggregate_types();
+    minmax_types.push_back(TYPE_JSON);
+    for (auto ret_type : minmax_types) {
+        for (auto arg_type : minmax_types) {
+            type_dispatch_all(arg_type, MaxMinByDispatcher<true>(), this, ret_type);
+            type_dispatch_all(arg_type, MaxMinByDispatcher<false>(), this, ret_type);
         }
     }
 
-    for (auto type : aggregate_types()) {
+    for (auto type : minmax_types) {
         type_dispatch_all(type, MinMaxAnyDispatcher(), this);
     }
-    type_dispatch_all(TYPE_JSON, MinMaxAnyDispatcher(), this);
 }
 
 } // namespace starrocks

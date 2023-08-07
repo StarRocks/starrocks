@@ -91,8 +91,7 @@ public:
         page_builder.get_last_value(&last_value);
         ASSERT_EQ(src[size - 1], last_value);
 
-        PageDecoderOptions decoder_options;
-        PageDecoderType page_decoder(s.slice(), decoder_options);
+        PageDecoderType page_decoder(s.slice());
         Status status = page_decoder.init();
         ASSERT_TRUE(status.ok());
 
@@ -112,19 +111,19 @@ public:
         page_decoder.seek_to_position_in_page(0);
         ASSERT_EQ(0, page_decoder.current_index());
 
-        SparseRange read_range;
-        read_range.add(Range(0, size / 3));
-        read_range.add(Range(size / 2, (size * 2 / 3)));
-        read_range.add(Range((size * 3 / 4), size));
+        SparseRange<> read_range;
+        read_range.add(Range<>(0, size / 3));
+        read_range.add(Range<>(size / 2, (size * 2 / 3)));
+        read_range.add(Range<>((size * 3 / 4), size));
         size_t read_num = read_range.span_size();
         status = page_decoder.next_batch(read_range, column1.get());
         ASSERT_TRUE(status.ok());
 
         const auto* decoded_data = reinterpret_cast<const CppType*>(column1->raw_data());
-        SparseRangeIterator read_iter = read_range.new_iterator();
+        SparseRangeIterator<> read_iter = read_range.new_iterator();
         size_t offset = 0;
         while (read_iter.has_more()) {
-            Range r = read_iter.next(read_num);
+            Range<> r = read_iter.next(read_num);
             for (uint i = 0; i < r.span_size(); ++i) {
                 if (src[r.begin() + i] != decoded_data[i + offset]) {
                     FAIL() << "Fail at index " << i + offset << " inserted=" << src[r.begin() + i]
@@ -158,8 +157,7 @@ public:
         size = page_builder.add(reinterpret_cast<const uint8_t*>(src), size);
         OwnedSlice s = page_builder.finish()->build();
 
-        PageDecoderOptions decoder_options;
-        PageDecoderType page_decoder(s.slice(), decoder_options);
+        PageDecoderType page_decoder(s.slice());
         Status status = page_decoder.init();
 
         ASSERT_TRUE(status.ok());

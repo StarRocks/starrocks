@@ -14,12 +14,18 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 import java.util.List;
 
 public class ExceptRelation extends SetOperationRelation {
 
     public ExceptRelation(List<QueryRelation> relations, SetQualifier qualifier) {
         super(relations, qualifier);
+    }
+
+    public ExceptRelation(List<QueryRelation> relations, SetQualifier qualifier, NodePosition pos) {
+        super(relations, qualifier, pos);
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

@@ -29,7 +29,7 @@
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "jni.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "udf/java/java_data_converter.h"
 #include "udf/java/java_udf.h"
 #include "util/defer_op.h"
@@ -428,12 +428,14 @@ public:
         LOCAL_REF_GUARD_ENV(env, res);
 
         LogicalType type = udf_ctxs->finalize->method_desc[0].type;
+        // For nullable inputs, our UDAF does not produce nullable results
         if (!to->is_nullable()) {
             ColumnPtr wrapper(const_cast<Column*>(to), [](auto p) {});
             auto output = NullableColumn::create(wrapper, NullColumn::create());
             helper.get_result_from_boxed_array(ctx, type, output.get(), res, batch_size);
         } else {
             helper.get_result_from_boxed_array(ctx, type, to, res, batch_size);
+            down_cast<NullableColumn*>(to)->update_has_null();
         }
     }
 

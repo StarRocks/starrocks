@@ -2,25 +2,25 @@
 
 ## Description
 
-### Syntax
+Queries all the custom (or built-in) functions under a database. If no database is specified, the current database is used by default.
+
+## Syntax
 
 ```sql
 SHOW [FULL] [BUILTIN] FUNCTIONS [IN|FROM db] [LIKE 'function_pattern']
 ```
 
-### Parameters
+## Parameters
 
 ```plain text
-full:It indicates to show the details of function. 
+full: indicates showing all the functions. 
 
-builtin:It indicates the functions that the system provides.
+builtin: indicates showing functions provided by the system.
 
-db: The name of the database to query.
+db: the name of the database to query.
 
-function_pattern`: The parameter used to filter function name. 
+function_pattern: the pattern used to filter function name. 
 ```
-
-Look at all the custom(builtin) functions under the database. If the user specifies the database, then look at the corresponding database. Otherwise directly query the database where the current session is located.  `SHOW` permission for this database is required.
 
 ## Examples
 

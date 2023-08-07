@@ -15,13 +15,32 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.collect.Maps;
+import com.starrocks.sql.parser.NodePosition;
+
+import java.util.Map;
+
 public class CreateDbStmt extends DdlStmt {
     private final boolean ifNotExists;
+    private String catalogName;
     private final String dbName;
+    private final Map<String, String> properties;
 
     public CreateDbStmt(boolean ifNotExists, String dbName) {
+        this(ifNotExists, "", dbName, Maps.newHashMap(), NodePosition.ZERO);
+    }
+
+    public CreateDbStmt(boolean ifNotExists, String dbName, Map<String, String> properties) {
+        this(ifNotExists, "", dbName, properties, NodePosition.ZERO);
+    }
+
+    public CreateDbStmt(boolean ifNotExists, String catalogName, String dbName,
+                        Map<String, String> properties, NodePosition pos) {
+        super(pos);
         this.ifNotExists = ifNotExists;
+        this.catalogName = catalogName;
         this.dbName = dbName;
+        this.properties = properties;
     }
 
     public String getFullDbName() {
@@ -30,6 +49,18 @@ public class CreateDbStmt extends DdlStmt {
 
     public boolean isSetIfNotExists() {
         return ifNotExists;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+    public String getCatalogName() {
+        return catalogName;
+    }
+
+    public void setCatalogName(String catalogName) {
+        this.catalogName = catalogName;
     }
 
     @Override

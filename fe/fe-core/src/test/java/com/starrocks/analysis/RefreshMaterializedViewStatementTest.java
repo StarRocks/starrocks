@@ -22,9 +22,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.scheduler.Task;
-import com.starrocks.scheduler.TaskBuilder;
-import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -55,7 +52,7 @@ public class RefreshMaterializedViewStatementTest {
         cluster = PseudoCluster.getInstance();
 
         FeConstants.runningUnitTest = true;
-        FeConstants.default_scheduler_interval_millisecond = 100;
+        Config.alter_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
         Config.enable_experimental_mv = true;
@@ -76,7 +73,8 @@ public class RefreshMaterializedViewStatementTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Can not find materialized view:no_exists", e.getMessage());
+            Assert.assertEquals("Getting analyzing error at line 1, column 26. Detail message: " +
+                    "Can not find materialized view:no_exists.", e.getMessage());
         }
     }
 
@@ -87,7 +85,7 @@ public class RefreshMaterializedViewStatementTest {
                         " DISTRIBUTED BY HASH(c1) BUCKETS 1 " +
                         " PROPERTIES(\"replication_num\" = \"1\");");
         Database db = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
-        starRocksAssert.withNewMaterializedView("create materialized view mv1 distributed by hash(`c1`) " +
+        starRocksAssert.withMaterializedView("create materialized view mv1 distributed by hash(`c1`) " +
                 " refresh manual" +
                 " as select c1, sum(c3) as total from table_name_tmp_1 group by c1");
         cluster.runSql("test", "insert into table_name_tmp_1 values(1, \"str1\", 100)");
@@ -96,15 +94,8 @@ public class RefreshMaterializedViewStatementTest {
         Table t2 = db.getTable("mv1");
         Assert.assertNotNull(t2);
         MaterializedView mv1 = (MaterializedView) t2;
+        cluster.runSql("test", "refresh materialized view mv1 with sync mode");
 
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        final String mvTaskName = TaskBuilder.getMvTaskName(mv1.getId());
-        if (!taskManager.containTask(mvTaskName)) {
-            Task task = TaskBuilder.buildMvTask(mv1, "test");
-            TaskBuilder.updateTaskInfo(task, mv1);
-            taskManager.createTask(task, false);
-        }
-        taskManager.executeTaskSync(mvTaskName);
         MaterializedView.MvRefreshScheme refreshScheme = mv1.getRefreshScheme();
         Assert.assertNotNull(refreshScheme);
         System.out.println("visibleVersionMap:" + refreshScheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap());

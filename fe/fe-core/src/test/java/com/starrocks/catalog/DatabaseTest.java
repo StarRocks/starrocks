@@ -36,7 +36,6 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.EditLog;
@@ -88,10 +87,6 @@ public class DatabaseTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
-                GlobalStateMgr.getCurrentStateJournalVersion();
-                minTimes = 0;
-                result = FeConstants.meta_version;
-
                 globalStateMgr.getClusterId();
                 minTimes = 0;
                 result = 1;
@@ -129,9 +124,9 @@ public class DatabaseTest {
         table.addPartition(partition);
 
         // create
-        Assert.assertTrue(db.createTable(table));
+        Assert.assertTrue(db.registerTableUnlocked(table));
         // duplicate
-        Assert.assertFalse(db.createTable(table));
+        Assert.assertFalse(db.registerTableUnlocked(table));
 
         Assert.assertEquals(table, db.getTable(table.getId()));
         Assert.assertEquals(table, db.getTable(table.getName()));
@@ -155,7 +150,7 @@ public class DatabaseTest {
         db.dropTableWithLock(table.getName());
         Assert.assertEquals(0, db.getTables().size());
 
-        db.createTable(table);
+        db.registerTableUnlocked(table);
         db.dropTable(table.getName());
         Assert.assertEquals(0, db.getTables().size());
     }
@@ -207,7 +202,7 @@ public class DatabaseTest {
                 KeysType.AGG_KEYS);
         Deencapsulation.setField(table, "baseIndexId", 1);
         table.addPartition(partition);
-        db2.createTable(table);
+        db2.registerTableUnlocked(table);
         db2.write(dos);
 
         dos.flush();
@@ -227,5 +222,20 @@ public class DatabaseTest {
         // 3. delete files
         dis.close();
         file.delete();
+    }
+
+    @Test
+    public void testGetUUID() {
+        // Internal database
+        Database db1 = new Database();
+        Assert.assertEquals("0", db1.getUUID());
+
+        Database db2 = new Database(101, "db2");
+        Assert.assertEquals("101", db2.getUUID());
+
+        // External database
+        Database db3 = new Database(101, "db3");
+        db3.setCatalogName("hive");
+        Assert.assertEquals("hive.db3", db3.getUUID());
     }
 }

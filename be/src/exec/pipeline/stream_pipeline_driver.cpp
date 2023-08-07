@@ -130,12 +130,12 @@ StatusOr<DriverState> StreamPipelineDriver::process(RuntimeState* runtime_state,
 
             // yield when total chunks moved or time spent on-core for evaluation
             // exceed the designated thresholds.
-            if (time_spent >= YIELD_MAX_TIME_SPENT) {
+            if (time_spent >= YIELD_MAX_TIME_SPENT_NS) {
                 should_yield = true;
                 COUNTER_UPDATE(_yield_by_time_limit_counter, 1);
                 break;
             }
-            if (_workgroup != nullptr && time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
+            if (_workgroup != nullptr && time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT_NS &&
                 _workgroup->driver_sched_entity()->in_queue()->should_yield(this, time_spent)) {
                 should_yield = true;
                 COUNTER_UPDATE(_yield_by_preempt_counter, 1);
@@ -151,7 +151,8 @@ StatusOr<DriverState> StreamPipelineDriver::process(RuntimeState* runtime_state,
         if (sink_operator()->is_epoch_finished()) {
             VLOG_ROW << "Driver epoch finished, driver=" << this->to_readable_string();
             RETURN_IF_ERROR(return_status = _mark_operator_epoch_finished(_operators.back(), runtime_state));
-            set_driver_state(DriverState::EPOCH_FINISH);
+            set_driver_state(is_still_epoch_finishing() ? DriverState::EPOCH_PENDING_FINISH
+                                                        : DriverState::EPOCH_FINISH);
             return _state;
         }
 
@@ -324,6 +325,13 @@ Status StreamPipelineDriver::reset_epoch(RuntimeState* runtime_state) {
 }
 
 void StreamPipelineDriver::epoch_finalize(RuntimeState* runtime_state, DriverState state) {
+    int64_t time_spent = 0;
+    DeferOp defer([this, &time_spent]() {
+        _update_driver_acct(0, 0, time_spent);
+        _in_queue->update_statistics(this);
+    });
+    SCOPED_RAW_TIMER(&time_spent);
+
     VLOG_ROW << "[Driver] epoch_finalize, driver=" << this->to_readable_string();
     DCHECK(state == DriverState::EPOCH_FINISH);
     _pipeline->count_down_epoch_finished_driver(runtime_state);

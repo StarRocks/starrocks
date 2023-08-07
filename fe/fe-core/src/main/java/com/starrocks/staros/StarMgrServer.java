@@ -116,27 +116,42 @@ public class StarMgrServer {
         journalSystem = new BDBJEJournalSystem(environment);
         imageDir = baseImageDir + IMAGE_SUBDIR;
 
-        String[] starMgrAddr = Config.starmgr_address.split(":");
-        if (starMgrAddr.length != 2) {
-            LOG.fatal("Config.starmgr_address {} bad format.", Config.starmgr_address);
-            System.exit(-1);
-        }
-        int port = Integer.parseInt(starMgrAddr[1]);
-
+        // TODO: remove separate deployment capability for now
         // necessary starMgr config setting
         com.staros.util.Config.STARMGR_IP = FrontendOptions.getLocalHostAddress();
-        com.staros.util.Config.STARMGR_RPC_PORT = port;
-        com.staros.util.Config.S3_BUCKET = Config.starmgr_s3_bucket;
-        com.staros.util.Config.S3_REGION = Config.starmgr_s3_region;
-        com.staros.util.Config.S3_ENDPOINT = Config.starmgr_s3_endpoint;
-        com.staros.util.Config.AWS_CREDENTIAL_TYPE = Config.starmgr_aws_credential_type;
-        com.staros.util.Config.SIMPLE_CREDENTIAL_ACCESS_KEY_ID = Config.starmgr_simple_credential_access_key_id;
-        com.staros.util.Config.SIMPLE_CREDENTIAL_ACCESS_KEY_SECRET = Config.starmgr_simple_credential_access_key_secret;
-        com.staros.util.Config.ASSUME_ROLE_CREDENTIAL_ARN = Config.starmgr_assume_role_credential_arn;
-        com.staros.util.Config.ASSUME_ROLE_CREDENTIAL_EXTERNAL_ID = Config.starmgr_assume_role_credential_external_id;
-        com.staros.util.Config.DISABLE_BACKGROUND_SHARD_SCHEDULE_CHECK = Config.starmgr_disable_shard_balance;
+        com.staros.util.Config.STARMGR_RPC_PORT = Config.cloud_native_meta_port;
 
-        com.staros.util.Config.HDFS_URL = Config.hdfs_url;
+        // Storage fs type
+        com.staros.util.Config.DEFAULT_FS_TYPE = "";
+
+        // use tablet_sched_disable_balance
+        com.staros.util.Config.DISABLE_BACKGROUND_SHARD_SCHEDULE_CHECK = Config.tablet_sched_disable_balance;
+        // turn on 0 as default worker group id, to be compatible with add/drop backend in FE
+        com.staros.util.Config.ENABLE_ZERO_WORKER_GROUP_COMPATIBILITY = true;
+        // set the same heartbeat configuration to starmgr, but not able to change in runtime.
+        com.staros.util.Config.WORKER_HEARTBEAT_INTERVAL_SEC = Config.heartbeat_timeout_second;
+        com.staros.util.Config.WORKER_HEARTBEAT_RETRY_COUNT = Config.heartbeat_retry_times;
+        com.staros.util.Config.GRPC_RPC_TIME_OUT_SEC = Config.starmgr_grpc_timeout_seconds;
+
+        // sync the mutable configVar to StarMgr in case any changes
+        GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
+            com.staros.util.Config.DISABLE_BACKGROUND_SHARD_SCHEDULE_CHECK = Config.tablet_sched_disable_balance;
+            com.staros.util.Config.WORKER_HEARTBEAT_INTERVAL_SEC = Config.heartbeat_timeout_second;
+            com.staros.util.Config.WORKER_HEARTBEAT_RETRY_COUNT = Config.heartbeat_retry_times;
+            com.staros.util.Config.GRPC_RPC_TIME_OUT_SEC = Config.starmgr_grpc_timeout_seconds;
+        });
+        // set the following config, in order to provide a customized worker group definition
+        // com.staros.util.Config.RESOURCE_MANAGER_WORKER_GROUP_SPEC_RESOURCE_FILE = "";
+
+        // use external resource provisioner service to provision/release worker group resource.
+        // Keep this empty if using builtin one for testing
+        // com.staros.util.Config.RESOURCE_PROVISIONER_ADDRESS = "";
+
+        // turn on the following config, in case to use starmgr for internal multi-cluster testing
+        // com.staros.util.Config.ENABLE_BUILTIN_RESOURCE_PROVISIONER_FOR_TEST = true;
+
+        // set the following config, in order to enable the builtin test resource provisioner dump its meta to disk
+        // com.staros.util.Config.BUILTIN_PROVISION_SERVER_DATA_DIR = "./";
 
         // start rpc server
         starMgrServer = new StarManagerServer(journalSystem);

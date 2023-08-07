@@ -44,6 +44,7 @@ import com.google.gson.JsonObject;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Reference;
 import com.starrocks.thrift.TCounter;
+import com.starrocks.thrift.TCounterStrategy;
 import com.starrocks.thrift.TRuntimeProfileNode;
 import com.starrocks.thrift.TRuntimeProfileTree;
 import com.starrocks.thrift.TUnit;
@@ -69,9 +70,10 @@ import java.util.stream.Collectors;
 public class RuntimeProfile {
 
     private static final Logger LOG = LogManager.getLogger(RuntimeProfile.class);
-    private static final String ROOT_COUNTER = "";
-    private static final String MERGED_INFO_PREFIX_MIN = "__MIN_OF_";
-    private static final String MERGED_INFO_PREFIX_MAX = "__MAX_OF_";
+    public static final String ROOT_COUNTER = "";
+    public static final String TOTAL_TIME_COUNTER = "TotalTime";
+    public static final String MERGED_INFO_PREFIX_MIN = "__MIN_OF_";
+    public static final String MERGED_INFO_PREFIX_MAX = "__MAX_OF_";
 
     private final Counter counterTotalTime;
 
@@ -93,9 +95,9 @@ public class RuntimeProfile {
     }
 
     public RuntimeProfile() {
-        this.counterTotalTime = new Counter(TUnit.TIME_NS, 0);
+        this.counterTotalTime = new Counter(TUnit.TIME_NS, null, 0);
         this.localTimePercent = 0;
-        this.counterMap.put("TotalTime", Pair.create(counterTotalTime, ROOT_COUNTER));
+        this.counterMap.put(TOTAL_TIME_COUNTER, Pair.create(counterTotalTime, ROOT_COUNTER));
     }
 
     public Counter getCounterTotalTime() {
@@ -124,18 +126,21 @@ public class RuntimeProfile {
         childMap.clear();
     }
 
-    public Counter addCounter(String name, TUnit type) {
-        return addCounter(name, type, ROOT_COUNTER);
+    public Counter addCounter(String name, TUnit type, TCounterStrategy strategy) {
+        return addCounter(name, type, strategy, ROOT_COUNTER);
     }
 
-    public Counter addCounter(String name, TUnit type, String parentName) {
+    public Counter addCounter(String name, TUnit type, TCounterStrategy strategy, String parentName) {
+        if (strategy == null) {
+            strategy = Counter.createStrategy(type);
+        }
         Pair<Counter, String> pair = this.counterMap.get(name);
         if (pair != null) {
             return pair.first;
         } else {
             Preconditions.checkState(parentName.equals(ROOT_COUNTER)
                     || this.counterMap.containsKey(parentName));
-            Counter newCounter = new Counter(type, 0);
+            Counter newCounter = new Counter(type, strategy, 0);
             this.counterMap.put(name, Pair.create(newCounter, parentName));
 
             if (!childCounterMap.containsKey(parentName)) {
@@ -184,6 +189,10 @@ public class RuntimeProfile {
         return null;
     }
 
+    public Pair<Counter, String> getCounterPair(String name) {
+        return counterMap.get(name);
+    }
+
     public Counter getMaxCounter(String name) {
         Counter counter;
         if ((counter = getCounter(MERGED_INFO_PREFIX_MAX + name)) != null) {
@@ -209,7 +218,7 @@ public class RuntimeProfile {
 
             if (!Objects.equals(ROOT_COUNTER, name)) {
                 Counter srcCounter = srcProfile.counterMap.get(name).first;
-                Counter newCounter = addCounter(name, srcCounter.getType(), parentName);
+                Counter newCounter = addCounter(name, srcCounter.getType(), srcCounter.getStrategy(), parentName);
                 newCounter.setValue(srcCounter.getValue());
             }
 
@@ -259,9 +268,9 @@ public class RuntimeProfile {
                     String parentName = child2ParentMap.get(topName);
                     if (pair == null && tcounter != null && parentName != null) {
                         Counter counter =
-                                addCounter(topName, tcounter.type, parentName);
+                                addCounter(topName, tcounter.type, tcounter.strategy, parentName);
                         counter.setValue(tcounter.value);
-                        counter.setSkipMerge(tcounter.skip_merge);
+                        counter.setStrategy(tcounter.strategy);
                         tCounterMap.remove(topName);
                     } else if (pair != null && tcounter != null) {
                         if (pair.first.getType() != tcounter.type) {
@@ -287,9 +296,9 @@ public class RuntimeProfile {
             for (TCounter tcounter : tCounterMap.values()) {
                 Pair<Counter, String> pair = counterMap.get(tcounter.name);
                 if (pair == null) {
-                    Counter counter = addCounter(tcounter.name, tcounter.type);
+                    Counter counter = addCounter(tcounter.name, tcounter.type, tcounter.strategy);
                     counter.setValue(tcounter.value);
-                    counter.setSkipMerge(tcounter.skip_merge);
+                    counter.setStrategy(tcounter.strategy);
                 } else {
                     if (pair.first.getType() != tcounter.type) {
                         LOG.error("Cannot update counters with the same name but different types"
@@ -339,7 +348,14 @@ public class RuntimeProfile {
         return formater.format(this);
     }
 
-    private String printCounter(long value, TUnit type) {
+    public static String printCounter(Counter counter) {
+        if (counter == null) {
+            return null;
+        }
+        return printCounter(counter.getValue(), counter.getType());
+    }
+
+    private static String printCounter(long value, TUnit type) {
         StringBuilder builder = new StringBuilder();
         long tmpValue = value;
         switch (type) {
@@ -473,12 +489,33 @@ public class RuntimeProfile {
     }
 
     // Copy all info strings from src profile
-    public void copyAllInfoStringsFrom(RuntimeProfile srcProfile) {
+    public void copyAllInfoStringsFrom(RuntimeProfile srcProfile, Set<String> excludedInfoStrings) {
         if (srcProfile == null || this == srcProfile) {
             return;
         }
 
-        this.infoStrings.putAll(srcProfile.infoStrings);
+        srcProfile.infoStrings.forEach((key, value) -> {
+            if (CollectionUtils.isNotEmpty(excludedInfoStrings) && excludedInfoStrings.contains(key)) {
+                return;
+            }
+            if (!this.infoStrings.containsKey(key)) {
+                this.infoStrings.put(key, value);
+            } else if (!Objects.equals(value, this.infoStrings.get(key))) {
+                String originalKey = key;
+                int pos;
+                if ((pos = key.indexOf("__DUP(")) != -1) {
+                    originalKey = key.substring(0, pos);
+                }
+                int i = 0;
+                while (true) {
+                    String indexedKey = String.format("%s__DUP(%d)", originalKey, i++);
+                    if (!this.infoStrings.containsKey(indexedKey)) {
+                        this.infoStrings.put(indexedKey, value);
+                        break;
+                    }
+                }
+            }
+        });
     }
 
     public void setName(String name) {
@@ -509,13 +546,17 @@ public class RuntimeProfile {
 
     // Merge all the isomorphic sub profiles and the caller must know for sure
     // that all the children are isomorphic, otherwise, the behavior is undefined
-    // The merged result will be stored in the first profile
-    public static void mergeIsomorphicProfiles(List<RuntimeProfile> profiles) {
+    public static RuntimeProfile mergeIsomorphicProfiles(List<RuntimeProfile> profiles,
+                                                         Set<String> excludedInfoStrings) {
         if (CollectionUtils.isEmpty(profiles)) {
-            return;
+            return null;
         }
 
-        RuntimeProfile profile0 = profiles.get(0);
+        RuntimeProfile mergedProfile = new RuntimeProfile(profiles.get(0).getName());
+
+        for (RuntimeProfile runtimeProfile : profiles) {
+            mergedProfile.copyAllInfoStringsFrom(runtimeProfile, excludedInfoStrings);
+        }
 
         // Find all counters, although these profiles are expected to be isomorphic,
         // some counters are only attached to one of them
@@ -543,9 +584,6 @@ public class RuntimeProfile {
                     Pair<Counter, String> pair = profile.counterMap.get(name);
                     Preconditions.checkNotNull(pair);
                     Counter counter = pair.first;
-                    if (counter.isSkipMerge()) {
-                        continue;
-                    }
                     String parentName = pair.second;
 
                     while (allLevelCounters.size() <= levelIdx) {
@@ -561,8 +599,8 @@ public class RuntimeProfile {
                     if (!existType.equals(counter.getType())) {
                         LOG.warn(
                                 "find non-isomorphic counter, profileName={}, counterName={}, existType={}, anotherType={}",
-                                profile0.name, name, existType.name(), counter.getType().name());
-                        return;
+                                mergedProfile.name, name, existType.name(), counter.getType().name());
+                        continue;
                     }
                 }
             }
@@ -593,6 +631,8 @@ public class RuntimeProfile {
             long maxValue = Long.MIN_VALUE;
             boolean alreadyMerged = false;
             boolean skipMerge = false;
+            Counter skipMergeCounter = null;
+            TCounterStrategy strategy = null;
             for (RuntimeProfile profile : profiles) {
                 Counter counter = profile.getCounter(name);
 
@@ -605,11 +645,14 @@ public class RuntimeProfile {
                 if (!type.equals(counter.getType())) {
                     LOG.warn(
                             "find non-isomorphic counter, profileName={}, counterName={}, existType={}, anotherType={}",
-                            profile0.name, name, type.name(), counter.getType().name());
-                    return;
+                            mergedProfile.name, name, type.name(), counter.getType().name());
+                    continue;
                 }
+                strategy = counter.getStrategy();
                 if (counter.isSkipMerge()) {
                     skipMerge = true;
+                    skipMergeCounter = counter;
+                    break;
                 }
 
                 Counter minCounter = profile.getCounter(MERGED_INFO_PREFIX_MIN + name);
@@ -628,59 +671,69 @@ public class RuntimeProfile {
                 }
                 counters.add(counter);
             }
-            Counter.MergedInfo mergedInfo = Counter.mergeIsomorphicCounters(type, counters);
-            final long mergedValue = mergedInfo.mergedValue;
-            if (!alreadyMerged) {
-                minValue = mergedInfo.minValue;
-                maxValue = mergedInfo.maxValue;
+            Counter mergedCounter;
+            if (!Objects.equals(ROOT_COUNTER, parentName) && mergedProfile.getCounter(parentName) != null) {
+                mergedCounter = mergedProfile.addCounter(name, type, strategy, parentName);
+            } else {
+                if (!Objects.equals(ROOT_COUNTER, parentName)) {
+                    LOG.warn("missing parent counter, profileName={}, counterName={}, parentCounterName={}",
+                            mergedProfile.name, name, parentName);
+                }
+                mergedCounter = mergedProfile.addCounter(name, type, strategy);
+            }
+            if (skipMerge) {
+                mergedCounter.setValue(skipMergeCounter.getValue());
+            } else {
+                Counter.MergedInfo mergedInfo = Counter.mergeIsomorphicCounters(counters);
+                final long mergedValue = mergedInfo.mergedValue;
+                if (!alreadyMerged) {
+                    minValue = mergedInfo.minValue;
+                    maxValue = mergedInfo.maxValue;
+                }
+                mergedCounter.setValue(mergedValue);
+
+                Counter minCounter =
+                        mergedProfile.addCounter(MERGED_INFO_PREFIX_MIN + name, type, mergedCounter.getStrategy(),
+                                name);
+                Counter maxCounter =
+                        mergedProfile.addCounter(MERGED_INFO_PREFIX_MAX + name, type, mergedCounter.getStrategy(),
+                                name);
+                minCounter.setValue(minValue);
+                maxCounter.setValue(maxValue);
             }
 
-            Counter counter0 = profile0.getCounter(name);
-            // As stated before, some counters may only attach to one of the isomorphic profiles
-            // and the first profile may not have this counter, so we create a counter here
-            if (counter0 == null) {
-                if (!Objects.equals(ROOT_COUNTER, parentName) && profile0.getCounter(parentName) != null) {
-                    counter0 = profile0.addCounter(name, type, parentName);
-                } else {
-                    if (!Objects.equals(ROOT_COUNTER, parentName)) {
-                        LOG.warn("missing parent counter, profileName={}, counterName={}, parentCounterName={}",
-                                profile0.name, name, parentName);
-                    }
-                    counter0 = profile0.addCounter(name, type);
-                }
-                if (skipMerge) {
-                    counter0.setSkipMerge(true);
-                }
-            }
-            counter0.setValue(mergedValue);
-
-            Counter minCounter = profile0.addCounter(MERGED_INFO_PREFIX_MIN + name, type, name);
-            Counter maxCounter = profile0.addCounter(MERGED_INFO_PREFIX_MAX + name, type, name);
-            minCounter.setValue(minValue);
-            maxCounter.setValue(maxValue);
         }
 
         // merge children
-        for (int i = 0; i < profile0.childList.size(); i++) {
+        int maxChildSize = 0;
+        for (RuntimeProfile profile : profiles) {
+            maxChildSize = Math.max(maxChildSize, profile.getChildList().size());
+        }
+        boolean missingParallelism = false;
+        for (int i = 0; i < maxChildSize; i++) {
             List<RuntimeProfile> subProfiles = Lists.newArrayList();
-            RuntimeProfile child0 = profile0.childList.get(i).first;
-            subProfiles.add(child0);
-            for (int j = 1; j < profiles.size(); j++) {
-                RuntimeProfile profile = profiles.get(j);
+            for (RuntimeProfile profile : profiles) {
                 if (i >= profile.childList.size()) {
-                    LOG.warn("find non-isomorphic children, profileName={}, childProfileNames={}" +
+                    missingParallelism = true;
+                    LOG.info("find non-isomorphic children, profileName={}, childProfileNames={}" +
                                     ", another profileName={}, another childProfileNames={}",
-                            profile0.name,
-                            profile0.childList.stream().map(p -> p.first.getName()).collect(Collectors.toList()),
+                            mergedProfile.name,
+                            mergedProfile.childList.stream().map(p -> p.first.getName()).collect(Collectors.toList()),
                             profile.name,
                             profile.childList.stream().map(p -> p.first.getName()).collect(Collectors.toList()));
-                    return;
+                    continue;
                 }
                 RuntimeProfile child = profile.childList.get(i).first;
                 subProfiles.add(child);
             }
-            mergeIsomorphicProfiles(subProfiles);
+            RuntimeProfile mergedChild = mergeIsomorphicProfiles(subProfiles, excludedInfoStrings);
+            mergedProfile.addChild(mergedChild);
         }
+        if (missingParallelism) {
+            mergedProfile.addInfoString("IsIntegrated", "False");
+        }
+
+        return mergedProfile;
     }
 
     public static void removeRedundantMinMaxMetrics(RuntimeProfile profile) {
@@ -717,6 +770,7 @@ public class RuntimeProfile {
     static class DefaultProfileFormater implements ProfileFormater {
 
         private final StringBuilder builder;
+
         DefaultProfileFormater(StringBuilder builder) {
             this.builder = builder;
         }
@@ -727,7 +781,7 @@ public class RuntimeProfile {
 
         @Override
         public String format(RuntimeProfile profile, String prefix) {
-            Counter totalTimeCounter = profile.getCounterMap().get("TotalTime");
+            Counter totalTimeCounter = profile.getCounterMap().get(TOTAL_TIME_COUNTER);
             Preconditions.checkState(totalTimeCounter != null);
             // 1. profile name
             builder.append(prefix).append(profile.getName()).append(":");
@@ -735,7 +789,7 @@ public class RuntimeProfile {
             if (totalTimeCounter.getValue() != 0) {
                 try (Formatter fmt = new Formatter()) {
                     builder.append("(Active: ")
-                            .append(profile.printCounter(totalTimeCounter.getValue(), totalTimeCounter.getType()));
+                            .append(printCounter(totalTimeCounter.getValue(), totalTimeCounter.getType()));
                     if (DebugUtil.THOUSAND < totalTimeCounter.getValue()) {
                         // TotalTime in nanosecond concated if it's larger than 1000ns
                         builder.append("[").append(totalTimeCounter.getValue()).append("ns]");
@@ -797,7 +851,7 @@ public class RuntimeProfile {
                 Counter childCounter = profile.getCounterMap().get(childName);
                 Preconditions.checkState(childCounter != null);
                 builder.append(prefix).append("   - ").append(childName).append(": ")
-                        .append(profile.printCounter(childCounter.getValue(), childCounter.getType())).append("\n");
+                        .append(printCounter(childCounter.getValue(), childCounter.getType())).append("\n");
                 this.printChildCounters(profile, prefix + "  ", childName);
             }
         }
@@ -809,6 +863,7 @@ public class RuntimeProfile {
         JsonProfileFormater() {
             this.builder = new JsonObject();
         }
+
         @Override
         public String format(RuntimeProfile profile, String prefix) {
             //may parse prefix to json
@@ -822,9 +877,8 @@ public class RuntimeProfile {
             return gson.toJson(builder);
         }
 
-
         public void addRuntimeProfile(RuntimeProfile profile, JsonObject jsonObject) {
-            Counter totalTimeCounter = profile.getCounterMap().get("TotalTime");
+            Counter totalTimeCounter = profile.getCounterMap().get(TOTAL_TIME_COUNTER);
             Preconditions.checkState(totalTimeCounter != null);
             // 1. profile name
             JsonObject innerJsonObject = new JsonObject();
@@ -833,7 +887,7 @@ public class RuntimeProfile {
             if (totalTimeCounter.getValue() != 0) {
                 try (Formatter fmt = new Formatter()) {
                     innerJsonObject.addProperty("Active",
-                            profile.printCounter(totalTimeCounter.getValue(), totalTimeCounter.getType()));
+                            printCounter(totalTimeCounter.getValue(), totalTimeCounter.getType()));
                     if (DebugUtil.THOUSAND < totalTimeCounter.getValue()) {
                         innerJsonObject.addProperty("Active_ns", totalTimeCounter.getValue());
                     }
@@ -859,7 +913,6 @@ public class RuntimeProfile {
                 }
             }
         }
-
 
         private void addChildCounters(RuntimeProfile profile, String counterName, JsonObject childJsonObject) {
             Map<String, Set<String>> childCounterMap = profile.getChildCounterMap();
@@ -888,7 +941,8 @@ public class RuntimeProfile {
             for (String childName : reorderedChildNames) {
                 Counter childCounter = profile.getCounterMap().get(childName);
                 Preconditions.checkState(childCounter != null);
-                childJsonObject.addProperty(childName, profile.printCounter(childCounter.getValue(), childCounter.getType()));
+                childJsonObject.addProperty(childName,
+                        printCounter(childCounter.getValue(), childCounter.getType()));
                 this.addChildCounters(profile, childName, childJsonObject);
             }
         }

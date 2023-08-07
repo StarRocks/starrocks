@@ -27,6 +27,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Resource;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.DbsProcDir;
@@ -34,11 +35,18 @@ import com.starrocks.common.proc.ExternalDbsProcDir;
 import com.starrocks.common.proc.ProcDirInterface;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
+import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMgr;
-import com.starrocks.connector.hive.HiveMetastoreApiConverter;
+import com.starrocks.connector.ConnectorTableId;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import org.apache.logging.log4j.LogManager;
@@ -52,12 +60,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.ResourceMgr.NEED_MAPPING_CATALOG_RESOURCES;
-import static com.starrocks.connector.ConnectorMgr.SUPPORT_CONNECTOR_TYPE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
@@ -99,9 +107,13 @@ public class CatalogMgr {
         writeLock();
         try {
             Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
-            connectorMgr.createConnector(new ConnectorContext(catalogName, type, properties));
+            Connector connector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, properties));
+            if (null == connector) {
+                LOG.error("connector create failed. catalog [{}] encounter unknown catalog type [{}]", catalogName, type);
+                throw new DdlException("connector create failed");
+            }
             long id = isResourceMappingCatalog(catalogName) ?
-                    HiveMetastoreApiConverter.CONNECTOR_ID_GENERATOR.getNextId().asInt() :
+                    ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt() :
                     GlobalStateMgr.getCurrentState().getNextId();
             Catalog catalog = new ExternalCatalog(id, catalogName, comment, properties);
             catalogs.put(catalogName, catalog);
@@ -144,7 +156,17 @@ public class CatalogMgr {
 
         readLock();
         try {
-            return catalogs.containsKey(catalogName);
+            if (catalogs.containsKey(catalogName)) {
+                return true;
+            }
+
+            // TODO: Used for replay query dump which only supports `hive` catalog for now.
+            if (FeConstants.isReplayFromQueryDump &&
+                    catalogs.containsKey(getResourceMappingCatalogName(catalogName, "hive"))) {
+                return true;
+            }
+
+            return false;
         } finally {
             readUnlock();
         }
@@ -152,6 +174,14 @@ public class CatalogMgr {
 
     public static boolean isInternalCatalog(String name) {
         return name.equalsIgnoreCase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+    }
+
+    public static boolean isInternalCatalog(long catalogId) {
+        return catalogId == InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID;
+    }
+
+    public static boolean isExternalCatalog(String name) {
+        return !Strings.isNullOrEmpty(name) && !isInternalCatalog(name) && !isResourceMappingCatalog(name);
     }
 
     public void replayCreateCatalog(Catalog catalog) throws DdlException {
@@ -163,7 +193,7 @@ public class CatalogMgr {
         }
 
         // skip unsupport connector type
-        if (!SUPPORT_CONNECTOR_TYPE.contains(type)) {
+        if (!ConnectorType.isSupport(type)) {
             LOG.error("Replay catalog [{}] encounter unknown catalog type [{}], ignore it", catalogName, type);
             return;
         }
@@ -175,7 +205,11 @@ public class CatalogMgr {
             readUnlock();
         }
 
-        connectorMgr.createConnector(new ConnectorContext(catalogName, type, config));
+        Connector connector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, config));
+        if (null == connector) {
+            LOG.error("connector create failed. catalog [{}] encounter unknown catalog type [{}]", catalogName, type);
+            throw new DdlException("connector create failed");
+        }
         writeLock();
         try {
             catalogs.put(catalogName, catalog);
@@ -229,6 +263,8 @@ public class CatalogMgr {
     }
 
     public void loadResourceMappingCatalog() {
+        LOG.info("start to replay resource mapping catalog");
+
         List<Resource> resources = GlobalStateMgr.getCurrentState().getResourceMgr().getNeedMappingCatalogResources();
         for (Resource resource : resources) {
             Map<String, String> properties = Maps.newHashMap(resource.getProperties());
@@ -246,6 +282,7 @@ public class CatalogMgr {
                 LOG.error("Failed to load resource mapping inside catalog {}", catalogName, e);
             }
         }
+        LOG.info("finished replaying resource mapping catalogs from resources");
     }
 
     public long saveCatalogs(DataOutputStream dos, long checksum) throws IOException {
@@ -269,8 +306,24 @@ public class CatalogMgr {
         return procNode.fetchResult().getRows();
     }
 
+    public String getCatalogType(String catalogName) {
+        if (isInternalCatalog(catalogName)) {
+            return "internal";
+        } else {
+            return catalogs.get(catalogName).getType();
+        }
+    }
+
     public Catalog getCatalogByName(String name) {
         return catalogs.get(name);
+    }
+
+    public Optional<Catalog> getCatalogById(long id) {
+        return catalogs.values().stream().filter(catalog -> catalog.getId() == id).findFirst();
+    }
+
+    public Map<String, Catalog> getCatalogs() {
+        return new HashMap<>(catalogs);
     }
 
     public boolean checkCatalogExistsById(long id) {
@@ -297,7 +350,18 @@ public class CatalogMgr {
         this.catalogLock.writeLock().unlock();
     }
 
+    public long getCatalogCount() {
+        readLock();
+        try {
+            return catalogs.size();
+        } finally {
+            readUnlock();
+        }
+    }
+
     public class CatalogProcNode implements ProcDirInterface {
+        private static final String DEFAULT_CATALOG_COMMENT =
+                "An internal catalog contains this cluster's self-managed tables.";
 
         @Override
         public boolean register(String name, ProcNodeInterface node) {
@@ -328,7 +392,7 @@ public class CatalogMgr {
             } finally {
                 readUnlock();
             }
-            result.addRow(Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "Internal", "Internal Catalog"));
+            result.addRow(Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "Internal", DEFAULT_CATALOG_COMMENT));
             return result;
         }
     }
@@ -347,6 +411,35 @@ public class CatalogMgr {
         public static String toResourceName(String catalogName, String type) {
             return isResourceMappingCatalog(catalogName) ?
                     catalogName.substring(RESOURCE_MAPPING_CATALOG_PREFIX.length() + type.length() + 1) : catalogName;
+        }
+    }
+
+    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        Map<String, Catalog> serializedCatalogs = catalogs.entrySet().stream()
+                .filter(entry -> !isResourceMappingCatalog(entry.getKey()))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+        int numJson = 1 + serializedCatalogs.size();
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.CATALOG_MGR, numJson);
+
+        writer.writeJson(serializedCatalogs.size());
+        for (Catalog catalog : serializedCatalogs.values()) {
+            writer.writeJson(catalog);
+        }
+
+        writer.close();
+    }
+
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        try {
+            int serializedCatalogsSize = reader.readInt();
+            for (int i = 0; i < serializedCatalogsSize; ++i) {
+                Catalog catalog = reader.readJson(Catalog.class);
+                replayCreateCatalog(catalog);
+            }
+            loadResourceMappingCatalog();
+        } catch (DdlException e) {
+            throw new IOException(e);
         }
     }
 }

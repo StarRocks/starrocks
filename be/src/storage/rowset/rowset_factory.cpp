@@ -39,6 +39,7 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "rowset.h"
 #include "runtime/exec_env.h"
+#include "storage/rowset/horizontal_update_rowset_writer.h"
 #include "storage/rowset/rowset_writer.h"
 
 namespace starrocks {
@@ -52,7 +53,13 @@ Status RowsetFactory::create_rowset(const TabletSchema* schema, const std::strin
 
 Status RowsetFactory::create_rowset_writer(const RowsetWriterContext& context, std::unique_ptr<RowsetWriter>* output) {
     if (context.writer_type == kHorizontal) {
-        *output = std::make_unique<HorizontalRowsetWriter>(context);
+        if (context.partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE ||
+            context.partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
+            // rowset writer for partial update in column mode
+            *output = std::make_unique<HorizontalUpdateRowsetWriter>(context);
+        } else {
+            *output = std::make_unique<HorizontalRowsetWriter>(context);
+        }
     } else {
         DCHECK(context.writer_type == kVertical);
         *output = std::make_unique<VerticalRowsetWriter>(context);

@@ -7,7 +7,7 @@ Shows the information of resource groups.
 ## Syntax
 
 ```SQL
-SHOW { RESOURCE GROUPS [ALL] | RESOURCE GROUP resource_group_name };
+SHOW { RESOURCE GROUPS [ALL] | RESOURCE GROUP <resource_group_name> }
 ```
 
 ## Parameters

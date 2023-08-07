@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.LabelName;
+import com.starrocks.sql.parser.NodePosition;
 
 /*
   Resume routine load job by name
@@ -28,6 +29,11 @@ public class ResumeRoutineLoadStmt extends DdlStmt {
     private LabelName labelName;
 
     public ResumeRoutineLoadStmt(LabelName labelName) {
+        this(labelName, NodePosition.ZERO);
+    }
+
+    public ResumeRoutineLoadStmt(LabelName labelName, NodePosition pos) {
+        super(pos);
         this.labelName = labelName;
     }
 

@@ -39,15 +39,11 @@ public class StorageInfo implements GsonPreProcessable, GsonPostProcessable {
         this.cacheInfo = cacheInfo;
     }
 
-    public boolean isEnableStorageCache() {
+    public boolean isEnableDataCache() {
         return getCacheInfo().getEnableCache();
     }
 
-    public long getStorageCacheTtlS() {
-        return getCacheInfo().getTtlSeconds();
-    }
-
-    public boolean isAllowAsyncWriteBack() {
+    public boolean isEnableAsyncWriteBack() {
         return getCacheInfo().getAsyncWriteBack();
     }
 
@@ -59,8 +55,8 @@ public class StorageInfo implements GsonPreProcessable, GsonPostProcessable {
         return cacheInfo;
     }
 
-    public StorageCacheInfo getStorageCacheInfo() {
-        return new StorageCacheInfo(getCacheInfo());
+    public DataCacheInfo getDataCacheInfo() {
+        return new DataCacheInfo(getCacheInfo());
     }
 
     @Override

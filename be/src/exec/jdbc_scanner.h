@@ -26,8 +26,8 @@
 #include "jni.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
+#include "types/logical_type.h"
 #include "udf/java/java_udf.h"
 
 namespace starrocks {

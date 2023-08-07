@@ -59,6 +59,13 @@ Status TabletMeta::create(const TCreateTabletReq& request, const TabletUid& tabl
             request.__isset.enable_persistent_index ? request.enable_persistent_index : false, col_ordinal_to_unique_id,
             tablet_uid, request.__isset.tablet_type ? request.tablet_type : TTabletType::TABLET_TYPE_DISK,
             request.__isset.compression_type ? request.compression_type : TCompressionType::LZ4_FRAME);
+
+    if (request.__isset.binlog_config) {
+        BinlogConfig binlog_config;
+        binlog_config.update(request.binlog_config);
+        (*tablet_meta)->set_binlog_config(binlog_config);
+    }
+
     return Status::OK();
 }
 
@@ -92,15 +99,15 @@ TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id
     convert_t_schema_to_pb_schema(tablet_schema, next_unique_id, col_ordinal_to_unique_id, schema, compression_type);
 
     init_from_pb(&tablet_meta_pb);
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 }
 
 TabletMeta::TabletMeta() : _tablet_uid(0, 0) {
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 }
 
 TabletMeta::~TabletMeta() {
-    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 }
 
 Status TabletMeta::create_from_file(const string& file_path) {
@@ -189,7 +196,7 @@ Status TabletMeta::deserialize(std::string_view data) {
     return Status::OK();
 }
 
-void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
+void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb, const TabletSchemaPB* ptablet_schema_pb) {
     auto& tablet_meta_pb = *ptablet_meta_pb;
     _table_id = tablet_meta_pb.table_id();
     _partition_id = tablet_meta_pb.partition_id();
@@ -235,11 +242,20 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
     }
 
     // init _schema
-    if (tablet_meta_pb.schema().has_id() && tablet_meta_pb.schema().id() != TabletSchema::invalid_id()) {
-        // Does not collect the memory usage of |_schema|.
-        _schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_meta_pb.schema()).first;
+    if (ptablet_schema_pb == nullptr) {
+        if (tablet_meta_pb.schema().has_id() && tablet_meta_pb.schema().id() != TabletSchema::invalid_id()) {
+            // Does not collect the memory usage of |_schema|.
+            _schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_meta_pb.schema()).first;
+        } else {
+            _schema = std::make_shared<const TabletSchema>(tablet_meta_pb.schema());
+        }
     } else {
-        _schema = std::make_shared<const TabletSchema>(tablet_meta_pb.schema());
+        if (ptablet_schema_pb->has_id() && ptablet_schema_pb->id() != TabletSchema::invalid_id()) {
+            // Does not collect the memory usage of |_schema|.
+            _schema = GlobalTabletSchemaMap::Instance()->emplace(*ptablet_schema_pb).first;
+        } else {
+            _schema = std::make_shared<const TabletSchema>(*ptablet_schema_pb);
+        }
     }
 
     // init _rs_metas
@@ -262,6 +278,19 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
     if (tablet_meta_pb.has_updates()) {
         _updatesPB.reset(tablet_meta_pb.release_updates());
     }
+
+    if (tablet_meta_pb.has_binlog_config()) {
+        BinlogConfig binlog_config;
+        binlog_config.update(tablet_meta_pb.binlog_config());
+        set_binlog_config(binlog_config);
+    }
+
+    if (tablet_meta_pb.has_binlog_min_lsn()) {
+        auto& lsnPb = tablet_meta_pb.binlog_min_lsn();
+        _binlog_min_lsn = BinlogLsn(lsnPb.version(), lsnPb.seq_id());
+    }
+
+    _enable_shortcut_compaction = tablet_meta_pb.enable_shortcut_compaction();
 }
 
 void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
@@ -311,6 +340,15 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
     } else if (_updatesPB) {
         tablet_meta_pb->mutable_updates()->CopyFrom(*_updatesPB);
     }
+
+    if (_binlog_config != nullptr) {
+        _binlog_config->to_pb(tablet_meta_pb->mutable_binlog_config());
+        BinlogLsnPB* lsn = tablet_meta_pb->mutable_binlog_min_lsn();
+        lsn->set_version(_binlog_min_lsn.version());
+        lsn->set_seq_id(_binlog_min_lsn.seq_id());
+    }
+
+    tablet_meta_pb->set_enable_shortcut_compaction(_enable_shortcut_compaction);
 }
 
 void TabletMeta::to_json(string* json_string, json2pb::Pb2JsonOptions& options) {
@@ -329,14 +367,12 @@ Version TabletMeta::max_version() const {
     return max_version;
 }
 
-Status TabletMeta::add_rs_meta(const RowsetMetaSharedPtr& rs_meta) {
-    // consistency is guarantee by tablet
+void TabletMeta::add_rs_meta(const RowsetMetaSharedPtr& rs_meta) {
+    // consistency is guaranteed by tablet
     _rs_metas.push_back(rs_meta);
     if (rs_meta->has_delete_predicate()) {
         add_delete_predicate(rs_meta->delete_predicate(), rs_meta->version().first);
     }
-
-    return Status::OK();
 }
 
 void TabletMeta::delete_rs_meta_by_version(const Version& version, std::vector<RowsetMetaSharedPtr>* deleted_rs_metas) {
@@ -387,10 +423,9 @@ void TabletMeta::revise_inc_rs_metas(std::vector<RowsetMetaSharedPtr> rs_metas) 
     _inc_rs_metas = std::move(rs_metas);
 }
 
-Status TabletMeta::add_inc_rs_meta(const RowsetMetaSharedPtr& rs_meta) {
-    // consistency is guarantee by tablet
+void TabletMeta::add_inc_rs_meta(const RowsetMetaSharedPtr& rs_meta) {
+    // consistency is guaranteed by tablet
     _inc_rs_metas.push_back(rs_meta);
-    return Status::OK();
 }
 
 void TabletMeta::delete_stale_rs_meta_by_version(const Version& version) {
@@ -483,12 +518,11 @@ std::string TabletMeta::full_name() const {
     return ss.str();
 }
 
-Status TabletMeta::set_partition_id(int64_t partition_id) {
+void TabletMeta::set_partition_id(int64_t partition_id) {
     if ((_partition_id > 0 && _partition_id != partition_id) || partition_id < 1) {
         LOG(FATAL) << "cur partition id=" << _partition_id << " new partition id=" << partition_id << " not equal";
     }
     _partition_id = partition_id;
-    return Status::OK();
 }
 
 void TabletMeta::create_inital_updates_meta() {

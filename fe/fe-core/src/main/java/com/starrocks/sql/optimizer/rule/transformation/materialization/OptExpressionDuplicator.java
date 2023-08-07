@@ -15,9 +15,9 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
@@ -27,6 +27,11 @@ import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.DistributionCol;
+import com.starrocks.sql.optimizer.base.DistributionDisjointSet;
+import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.HashDistributionDesc;
+import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -53,23 +58,28 @@ public class OptExpressionDuplicator {
     private final ColumnRefFactory columnRefFactory;
     // old ColumnRefOperator -> new ColumnRefOperator
     private final Map<ColumnRefOperator, ScalarOperator> columnMapping;
-    private ReplaceColumnRefRewriter rewriter;
-    private Table partitionByTable;
-    private Column partitionColumn;
-    private boolean partialPartitionRewrite;
+    private final ReplaceColumnRefRewriter rewriter;
+    private final Table partitionByTable;
+    private final Column partitionColumn;
+    private final boolean partialPartitionRewrite;
 
     public OptExpressionDuplicator(MaterializationContext materializationContext) {
         this.columnRefFactory = materializationContext.getQueryRefFactory();
         this.columnMapping = Maps.newHashMap();
         this.rewriter = new ReplaceColumnRefRewriter(columnMapping);
-        Pair<Table, Column> partitionInfo = materializationContext.getMv().getPartitionTableAndColumn();
+        Pair<Table, Column> partitionInfo = materializationContext.getMv().getBaseTableAndPartitionColumn();
         this.partitionByTable = partitionInfo == null ? null : partitionInfo.first;
         this.partitionColumn = partitionInfo == null ? null : partitionInfo.second;
         this.partialPartitionRewrite = !materializationContext.getMvPartitionNamesToRefresh().isEmpty();
     }
+
     public OptExpression duplicate(OptExpression source) {
         OptExpressionDuplicatorVisitor visitor = new OptExpressionDuplicatorVisitor();
         return source.getOp().accept(visitor, source, null);
+    }
+
+    public Map<ColumnRefOperator, ScalarOperator> getColumnMapping() {
+        return columnMapping;
     }
 
     public List<ColumnRefOperator> getMappedColumns(List<ColumnRefOperator> originColumns) {
@@ -107,10 +117,8 @@ public class OptExpressionDuplicator {
             ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = new ImmutableMap.Builder<>();
             for (Map.Entry<Column, ColumnRefOperator> entry : columnMetaToColRefMap.entrySet()) {
                 ColumnRefOperator key = entry.getValue();
-                ColumnRefOperator mapped = (ColumnRefOperator) columnMapping.computeIfAbsent(key, k -> {
-                    ColumnRefOperator newColumnRef = columnRefFactory.create(k, k.getType(), k.isNullable());
-                    return newColumnRef;
-                });
+                ColumnRefOperator mapped = (ColumnRefOperator) columnMapping.computeIfAbsent(key,
+                        k -> columnRefFactory.create(k, k.getType(), k.isNullable()));
                 columnRefFactory.updateColumnRefToColumns(mapped, columnRefFactory.getColumn(key),
                         columnRefFactory.getColumnRefToTable().get(key));
                 Integer newRelationId = relationIdMapping.computeIfAbsent(columnRefFactory.getRelationId(key.getId()),
@@ -121,12 +129,25 @@ public class OptExpressionDuplicator {
             ImmutableMap<Column, ColumnRefOperator> newColumnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
             scanBuilder.setColumnMetaToColRefMap(newColumnMetaToColRefMap);
 
+            // process HashDistributionSpec
+            if (optExpression.getOp() instanceof LogicalOlapScanOperator) {
+                LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) optExpression.getOp();
+                if (olapScan.getDistributionSpec() instanceof HashDistributionSpec) {
+                    HashDistributionSpec newHashDistributionSpec =
+                            processHashDistributionSpec((HashDistributionSpec) olapScan.getDistributionSpec(),
+                            columnRefFactory, columnMapping);
+                    LogicalOlapScanOperator.Builder olapScanBuilder = (LogicalOlapScanOperator.Builder) scanBuilder;
+                    olapScanBuilder.setDistributionSpec(newHashDistributionSpec);
+                }
+            }
+
             processCommon(opBuilder);
 
             if (partialPartitionRewrite
                     && optExpression.getOp() instanceof LogicalOlapScanOperator
                     && partitionByTable != null) {
                 // maybe partition column is not in the output columns, should add it
+
                 LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) optExpression.getOp();
                 OlapTable table = (OlapTable) olapScan.getTable();
                 if (table.getId() == partitionByTable.getId()) {
@@ -171,20 +192,16 @@ public class OptExpressionDuplicator {
             LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) optExpression.getOp();
             List<ColumnRefOperator> newGroupKeys = Lists.newArrayList();
             for (ColumnRefOperator groupKey : aggregationOperator.getGroupingKeys()) {
-                ColumnRefOperator mapped = (ColumnRefOperator) columnMapping.computeIfAbsent(groupKey, k -> {
-                    ColumnRefOperator newColumnRef = columnRefFactory.create(k, k.getType(), k.isNullable());
-                    return newColumnRef;
-                });
+                ColumnRefOperator mapped = (ColumnRefOperator) columnMapping.computeIfAbsent(groupKey,
+                        k -> columnRefFactory.create(k, k.getType(), k.isNullable()));
                 newGroupKeys.add(mapped);
             }
-            LogicalAggregationOperator.Builder aggregationBuilder  = (LogicalAggregationOperator.Builder) opBuilder;
+            LogicalAggregationOperator.Builder aggregationBuilder = (LogicalAggregationOperator.Builder) opBuilder;
             aggregationBuilder.setGroupingKeys(newGroupKeys);
             Map<ColumnRefOperator, CallOperator> newAggregates = Maps.newHashMap();
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationOperator.getAggregations().entrySet()) {
-                ColumnRefOperator mapped = (ColumnRefOperator) columnMapping.computeIfAbsent(entry.getKey(), k -> {
-                    ColumnRefOperator newColumnRef = columnRefFactory.create(k, k.getType(), k.isNullable());
-                    return newColumnRef;
-                });
+                ColumnRefOperator mapped = (ColumnRefOperator) columnMapping.computeIfAbsent(entry.getKey(),
+                        k -> columnRefFactory.create(k, k.getType(), k.isNullable()));
                 ScalarOperator newValue = rewriter.rewrite(entry.getValue());
                 Preconditions.checkState(newValue instanceof CallOperator);
                 newAggregates.put(mapped, (CallOperator) newValue);
@@ -195,10 +212,8 @@ public class OptExpressionDuplicator {
             List<ColumnRefOperator> partitionColumns = aggregationOperator.getPartitionByColumns();
             if (partitionColumns != null) {
                 for (ColumnRefOperator columnRef : partitionColumns) {
-                    ColumnRefOperator mapped = (ColumnRefOperator) columnMapping.computeIfAbsent(columnRef, k -> {
-                        ColumnRefOperator newColumnRef = columnRefFactory.create(k, k.getType(), k.isNullable());
-                        return newColumnRef;
-                    });
+                    ColumnRefOperator mapped = (ColumnRefOperator) columnMapping.computeIfAbsent(columnRef,
+                            k -> columnRefFactory.create(k, k.getType(), k.isNullable()));
                     newPartitionColumns.add(mapped);
                 }
             }
@@ -249,6 +264,55 @@ public class OptExpressionDuplicator {
         @Override
         public OptExpression visit(OptExpression optExpression, Void context) {
             return null;
+        }
+
+        // rewrite shuffle columns and joinEquivalentColumns in HashDistributionSpec
+        // because the columns ids have changed
+        private HashDistributionSpec processHashDistributionSpec(
+                HashDistributionSpec originSpec,
+                ColumnRefFactory columnRefFactory,
+                Map<ColumnRefOperator, ScalarOperator> columnMapping) {
+
+            // HashDistributionDesc
+            List<DistributionCol> newColumns = Lists.newArrayList();
+            for (DistributionCol column : originSpec.getShuffleColumns()) {
+                ColumnRefOperator oldRefOperator = columnRefFactory.getColumnRef(column.getColId());
+                ColumnRefOperator newRefOperator = columnMapping.get(oldRefOperator).cast();
+                Preconditions.checkNotNull(newRefOperator);
+                newColumns.add(new DistributionCol(newRefOperator.getId(), column.isNullStrict()));
+            }
+            Preconditions.checkState(newColumns.size() == originSpec.getShuffleColumns().size());
+            HashDistributionDesc hashDistributionDesc =
+                    new HashDistributionDesc(newColumns, originSpec.getHashDistributionDesc().getSourceType());
+
+            // PropertyInfo
+            DistributionSpec.PropertyInfo propertyInfo = originSpec.getPropertyInfo();
+
+            DistributionSpec.PropertyInfo newPropertyInfo = new DistributionSpec.PropertyInfo();
+            newPropertyInfo.tableId = propertyInfo.tableId;
+            newPropertyInfo.partitionIds = propertyInfo.partitionIds;
+            newPropertyInfo.setNullStrictDisjointSet(updateDistributionDisJointSet(propertyInfo.getNullStrictDisjointSet()));
+            newPropertyInfo.setNullRelaxDisjointSet(updateDistributionDisJointSet(propertyInfo.getNullRelaxDisjointSet()));
+
+            return new HashDistributionSpec(hashDistributionDesc, newPropertyInfo);
+        }
+
+        public DistributionDisjointSet updateDistributionDisJointSet(DistributionDisjointSet disjointSet) {
+            DistributionDisjointSet newDisjointSet = new DistributionDisjointSet();
+            Map<DistributionCol, DistributionCol> parentMap = Maps.newHashMap();
+            for (Map.Entry<DistributionCol, DistributionCol> entry : disjointSet.getParentMap().entrySet()) {
+                DistributionCol oldKey = entry.getKey();
+                DistributionCol oldValue = entry.getValue();
+
+                ColumnRefOperator keyColumn = columnRefFactory.getColumnRef(oldKey.getColId());
+                ColumnRefOperator newKeyCol = columnMapping.get(keyColumn).cast();
+
+                ColumnRefOperator valueColumn = columnRefFactory.getColumnRef(oldValue.getColId());
+                ColumnRefOperator newValueCol = columnMapping.get(valueColumn).cast();
+                parentMap.put(oldKey.updateColId(newKeyCol.getId()), oldValue.updateColId(newValueCol.getId()));
+            }
+            newDisjointSet.updateParentMap(parentMap);
+            return newDisjointSet;
         }
 
         private void processCommon(Operator.Builder opBuilder) {

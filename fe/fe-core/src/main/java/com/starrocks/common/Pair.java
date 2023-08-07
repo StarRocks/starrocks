@@ -88,6 +88,10 @@ public class Pair<F, S> {
         }
     }
 
+    public Pair<S, F> inverse() {
+        return Pair.create(second, first);
+    }
+
     @Override
     public int hashCode() {
         int hashFirst = first != null ? first.hashCode() : 0;

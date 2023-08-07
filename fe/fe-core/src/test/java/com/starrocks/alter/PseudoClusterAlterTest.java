@@ -14,7 +14,7 @@
 
 package com.starrocks.alter;
 
-import com.starrocks.common.FeConstants;
+import com.starrocks.common.Config;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.AfterClass;
@@ -25,7 +25,7 @@ import org.junit.Test;
 public class PseudoClusterAlterTest {
     @BeforeClass
     public static void setUp() throws Exception {
-        FeConstants.default_scheduler_interval_millisecond = 5000;
+        Config.alter_scheduler_interval_millisecond = 5000;
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
         PseudoCluster.getInstance().runSql(null, "create database test");
     }
@@ -33,13 +33,13 @@ public class PseudoClusterAlterTest {
     @AfterClass
     public static void tearDown() throws Exception {
         PseudoCluster.getInstance().runSql(null, "drop database test force");
-        PseudoCluster.getInstance().shutdown(false);
+        PseudoCluster.getInstance().shutdown(true);
     }
 
     @Test
     public void testAlterTableSimple() throws Exception {
         PseudoCluster cluster = PseudoCluster.getInstance();
-        AlterHandler handler = GlobalStateMgr.getCurrentState().getAlterInstance().getSchemaChangeHandler();
+        AlterHandler handler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler();
         long expectAlterFinishNumber = handler.getAlterJobV2Num(AlterJobV2.JobState.FINISHED) + 1;
         String table = "table_simple";
         String createTableSql = PseudoCluster.newCreateTableSqlBuilder().setTableName(table).build();
@@ -62,7 +62,7 @@ public class PseudoClusterAlterTest {
     @Test
     public void testAlterTableWithConcurrentInsert() throws Exception {
         PseudoCluster cluster = PseudoCluster.getInstance();
-        AlterHandler handler = GlobalStateMgr.getCurrentState().getAlterInstance().getSchemaChangeHandler();
+        AlterHandler handler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler();
         long expectAlterFinishNumber = handler.getAlterJobV2Num(AlterJobV2.JobState.FINISHED) + 1;
         final String table = "table_concurrent_insert";
         final String createTableSql = PseudoCluster.newCreateTableSqlBuilder().setTableName(table).build();
@@ -75,7 +75,8 @@ public class PseudoClusterAlterTest {
                     System.out.println(insertSql);
                     cluster.runSql("test", insertSql);
                 } catch (Exception e) {
-                    if (e.getMessage().startsWith("Column count doesn't match value count")) {
+                    if (e.getMessage().startsWith("Getting analyzing error. " +
+                            "Detail message: Column count doesn't match value count.")) {
                         // alter succeed, another column added, so error expected, stop insert
                         break;
                     }

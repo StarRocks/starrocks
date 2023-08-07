@@ -52,7 +52,7 @@ select bitmap_to_base64(bitmap_empty());
 
 Example 2: Convert each value in a BITMAP column into Base64-encoded strings.
 
-1. Create an aggregate table `page_uv` where the aggregate key is (`page_id`, `visit_date`). This table contains a BITMAP column `visit_users` whose values are to be aggregated.
+1. Create an Aggregate table `page_uv` where the `AGGREGATE KEY` is (`page_id`, `visit_date`). This table contains a BITMAP column `visit_users` whose values are to be aggregated.
 
     ```SQL
         CREATE TABLE `page_uv`
@@ -61,9 +61,10 @@ Example 2: Convert each value in a BITMAP column into Base64-encoded strings.
         `visit_users` BITMAP BITMAP_UNION NOT NULL
         ) ENGINE=OLAP
         AGGREGATE KEY(`page_id`, `visit_date`)
-        DISTRIBUTED BY HASH(`page_id`) BUCKETS 1
+        DISTRIBUTED BY HASH(`page_id`)
         PROPERTIES (
-        "replication_num" = "1","storage_format" = "DEFAULT"
+        "replication_num" = "3",
+        "storage_format" = "DEFAULT"
         );
     ```
 

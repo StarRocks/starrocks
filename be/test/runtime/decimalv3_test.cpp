@@ -139,6 +139,21 @@ TEST_F(TestDecimalV3, testFloatDecimal32Cast) {
     test_float_decimal_cast<double, int32_t>(cases);
 }
 
+TEST_F(TestDecimalV3, testFloatDecimal32CastRound) {
+    FloatDecimalCaseCases cases = {
+            {3.2519, 9, 2, false, 3.25},
+            {3.2549, 9, 2, false, 3.25},
+            {3.2550, 9, 2, false, 3.26},
+            {-3.2519, 9, 2, false, -3.25},
+            {-3.2549, 9, 2, false, -3.25},
+            {-3.2550, 9, 2, false, -3.26},
+            {100.0019531254, 9, 9, true, 100.001953125},
+            {1000.0019531255, 9, 9, true, 1000.001953125},
+    };
+    test_float_decimal_cast<float, int32_t>(cases);
+    test_float_decimal_cast<double, int32_t>(cases);
+}
+
 TEST_F(TestDecimalV3, testFloatDecimal64Cast) {
     FloatDecimalCaseCases cases = {
             {3.25, 18, 2, false, 3.25},         {3.125, 18, 3, false, 3.125},

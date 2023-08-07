@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
@@ -235,8 +234,8 @@ public class SetTest extends PlanTestBase {
                 "  |  output exprs:\n" +
                 "  |      [26, BIGINT, true] | [27, VARCHAR(20), true] | [28, DOUBLE, true]\n" +
                 "  |  child exprs:\n" +
-                "  |      [1, BIGINT, true] | [4, VARCHAR(20), true] | [5, DOUBLE, true]\n" +
-                "  |      [23, BIGINT, true] | [24, VARCHAR(20), true] | [25, DOUBLE, true]");
+                "  |      [1: v1, BIGINT, true] | [4: cast, VARCHAR(20), true] | [5: cast, DOUBLE, true]\n" +
+                "  |      [23: v4, BIGINT, true] | [24: cast, VARCHAR(20), true] | [25: cast, DOUBLE, true]");
         Assert.assertTrue(plan.contains(
                 "  |  19 <-> [19: k7, VARCHAR, true]\n" +
                         "  |  20 <-> [20: k8, DOUBLE, true]\n" +
@@ -245,12 +244,12 @@ public class SetTest extends PlanTestBase {
         sql = "select * from t0 union all (select cast(v4 as int), v5,v6 " +
                 "from t1 except select cast(v7 as int), v8, v9 from t2)";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "  0:UNION\n" +
+        assertContains(plan, "0:UNION\n" +
                 "  |  output exprs:\n" +
                 "  |      [16, BIGINT, true] | [17, BIGINT, true] | [18, BIGINT, true]\n" +
                 "  |  child exprs:\n" +
-                "  |      [1, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
-                "  |      [15, BIGINT, true] | [13, BIGINT, true] | [14, BIGINT, true]\n" +
+                "  |      [1: v1, BIGINT, true] | [2: v2, BIGINT, true] | [3: v3, BIGINT, true]\n" +
+                "  |      [15: cast, BIGINT, true] | [13: v5, BIGINT, true] | [14: v6, BIGINT, true]\n" +
                 "  |  pass-through-operands: all\n" +
                 "  |  cardinality: 2\n" +
                 "  |  \n" +
@@ -277,8 +276,8 @@ public class SetTest extends PlanTestBase {
                 "  |  output exprs:\n" +
                 "  |      [12, INT, true] | [13, BIGINT, true] | [14, BIGINT, true]\n" +
                 "  |  child exprs:\n" +
-                "  |      [7, INT, true] | [5, BIGINT, true] | [6, BIGINT, true]\n" +
-                "  |      [11, INT, true] | [9, BIGINT, true] | [10, BIGINT, true]");
+                "  |      [7: cast, INT, true] | [5: v5, BIGINT, true] | [6: v6, BIGINT, true]\n" +
+                "  |      [11: cast, INT, true] | [9: v8, BIGINT, true] | [10: v9, BIGINT, true]");
     }
 
     @Test
@@ -287,10 +286,10 @@ public class SetTest extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         assertContains(plan, "  0:UNION\n" +
                 "  |  output exprs:\n" +
-                "  |      [5, NULL_TYPE, true]\n" +
+                "  |      [5, BOOLEAN, true]\n" +
                 "  |  child exprs:\n" +
-                "  |      [2, NULL_TYPE, true]\n" +
-                "  |      [4, NULL_TYPE, true]");
+                "  |      [2: expr, BOOLEAN, true]\n" +
+                "  |      [4: expr, BOOLEAN, true]");
 
         sql = "select count(*) from (select 1 as c1 union all select null as c1) t group by t.c1";
         plan = getVerboseExplain(sql);
@@ -298,8 +297,8 @@ public class SetTest extends PlanTestBase {
                 "  |  output exprs:\n" +
                 "  |      [6, TINYINT, true]\n" +
                 "  |  child exprs:\n" +
-                "  |      [2, TINYINT, false]\n" +
-                "  |      [5, TINYINT, true]");
+                "  |      [2: expr, TINYINT, false]\n" +
+                "  |      [5: cast, TINYINT, true]");
 
         sql = "select count(*) from (select cast('1.2' as decimal(10,2)) as c1 union all " +
                 "select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
@@ -308,8 +307,8 @@ public class SetTest extends PlanTestBase {
                 "  |  output exprs:\n" +
                 "  |      [7, DECIMAL64(12,2), true]\n" +
                 "  |  child exprs:\n" +
-                "  |      [3, DECIMAL64(12,2), false]\n" +
-                "  |      [6, DECIMAL64(12,2), false]\n");
+                "  |      [3: cast, DECIMAL64(12,2), false]\n" +
+                "  |      [6: cast, DECIMAL64(12,2), false]\n");
 
         sql = "select count(*) from (select cast('1.2' as decimal(5,2)) as c1 union all " +
                 "select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
@@ -318,8 +317,8 @@ public class SetTest extends PlanTestBase {
                 "  |  output exprs:\n" +
                 "  |      [7, DECIMAL64(12,2), true]\n" +
                 "  |  child exprs:\n" +
-                "  |      [3, DECIMAL64(12,2), false]\n" +
-                "  |      [6, DECIMAL64(12,2), false]");
+                "  |      [3: cast, DECIMAL64(12,2), false]\n" +
+                "  |      [6: cast, DECIMAL64(12,2), false]");
     }
 
     @Test
@@ -507,7 +506,7 @@ public class SetTest extends PlanTestBase {
                 "      )\n" +
                 "  ) t;";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "8:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "7:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  group by: [9: day, TINYINT, true]\n" +
                 "  |  cardinality: 1\n" +
@@ -516,8 +515,8 @@ public class SetTest extends PlanTestBase {
                 "  |  output exprs:\n" +
                 "  |      [9, TINYINT, true]\n" +
                 "  |  child exprs:\n" +
-                "  |      [4, TINYINT, true]\n" +
-                "  |      [8, TINYINT, true]\n" +
+                "  |      [4: day, TINYINT, true]\n" +
+                "  |      [8: day, TINYINT, true]\n" +
                 "  |  pass-through-operands: all");
     }
 
@@ -562,12 +561,35 @@ public class SetTest extends PlanTestBase {
         String sql = "set @var = (select v1,v2 from test.t0)";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         SetExecutor setExecutor = new SetExecutor(connectContext, (SetStmt) statementBase);
-        Assert.assertThrows("Scalar subquery should output one column", SemanticException.class, () -> setExecutor.execute());
+        Assert.assertThrows("Scalar subquery should output one column", SemanticException.class,
+                () -> setExecutor.execute());
         try {
             setExecutor.execute();
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertEquals("Scalar subquery should output one column", e.getMessage());
+            Assert.assertEquals("Getting analyzing error. Detail message: Scalar subquery should output one column.",
+                    e.getMessage());
         }
+    }
+
+    @Test
+    public void testMinus() throws Exception {
+        String sql = "select * from t0 minus select * from t1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "0:EXCEPT\n" +
+                "  |  \n" +
+                "  |----4:EXCHANGE\n" +
+                "  |    \n" +
+                "  2:EXCHANGE");
+    }
+
+    @Test
+    public void testUnionNull() throws Exception {
+        String sql = "SELECT DISTINCT NULL\n" +
+                "WHERE NULL\n" +
+                "UNION ALL\n" +
+                "SELECT DISTINCT NULL\n" +
+                "WHERE NULL";
+        getThriftPlan(sql);
     }
 }

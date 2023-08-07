@@ -47,7 +47,7 @@
 #include "agent/master_info.h"
 #include "agent/publish_version.h"
 #include "agent/report_task.h"
-#include "agent/task_singatures_manager.h"
+#include "agent/task_signatures_manager.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group.h"
@@ -82,12 +82,20 @@ std::atomic<int64_t> g_report_version(time(nullptr) * 10000);
 
 using std::swap;
 
+int64_t curr_report_version() {
+    return g_report_version.load();
+}
+
+int64_t next_report_version() {
+    return ++g_report_version;
+}
+
 template <class AgentTaskRequest>
 TaskWorkerPool<AgentTaskRequest>::TaskWorkerPool(ExecEnv* env, int worker_count)
         : _env(env), _worker_thread_condition_variable(new std::condition_variable()), _worker_count(worker_count) {
     _backend.__set_host(BackendOptions::get_localhost());
     _backend.__set_be_port(config::be_port);
-    _backend.__set_http_port(config::webserver_port);
+    _backend.__set_http_port(config::be_http_port);
 }
 
 template <class AgentTaskRequest>
@@ -295,7 +303,7 @@ void* PushTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         std::vector<TTabletInfo> tablet_infos;
 
         EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
-                                        ExecEnv::GetInstance()->load_mem_tracker());
+                                        GlobalEnv::GetInstance()->load_mem_tracker());
         StorageEngine::instance()->execute_task(&engine_task);
 
         if (status == STARROCKS_PUSH_HAD_LOADED) {
@@ -410,7 +418,7 @@ void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         std::vector<TTabletInfo> tablet_infos;
 
         EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
-                                        ExecEnv::GetInstance()->load_mem_tracker());
+                                        GlobalEnv::GetInstance()->load_mem_tracker());
         StorageEngine::instance()->execute_task(&engine_task);
 
         if (status == STARROCKS_PUSH_HAD_LOADED) {
@@ -483,14 +491,19 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
     int64_t batch_publish_latency = 0;
 
     while (true) {
+        uint32_t wait_time = config::wait_apply_time;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
+            worker_pool_this->_sleeping_count++;
             worker_pool_this->_worker_thread_condition_variable->wait(l, [&]() {
                 return !priority_tasks.empty() || !worker_pool_this->_tasks.empty() || worker_pool_this->_stopped;
             });
+            worker_pool_this->_sleeping_count--;
             if (worker_pool_this->_stopped) {
                 break;
             }
+            // All thread are running, set wait_timeout = 0 to avoid publish block
+            wait_time = wait_time * worker_pool_this->_sleeping_count / worker_pool_this->_worker_count;
 
             while (!worker_pool_this->_tasks.empty()) {
                 // collect some publish version tasks as a group.
@@ -507,7 +520,11 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         finish_task_request.__set_backend(BackendOptions::get_localBackend());
         finish_task_request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
         int64_t start_ts = MonotonicMillis();
-        run_publish_version_task(token.get(), publish_version_task, finish_task_request, affected_dirs);
+        run_publish_version_task(token.get(), publish_version_task.task_req, finish_task_request, affected_dirs,
+                                 wait_time);
+        finish_task_request.__set_task_type(publish_version_task.task_type);
+        finish_task_request.__set_signature(publish_version_task.signature);
+
         batch_publish_latency += MonotonicMillis() - start_ts;
         priority_tasks.pop();
 
@@ -727,8 +744,8 @@ void* ReportResourceUsageTaskWorkerPool::_worker_thread_callback(void* arg_this)
 
         TResourceUsage resource_usage;
         resource_usage.__set_num_running_queries(ExecEnv::GetInstance()->query_context_mgr()->size());
-        resource_usage.__set_mem_used_bytes(ExecEnv::GetInstance()->process_mem_tracker()->consumption());
-        resource_usage.__set_mem_limit_bytes(ExecEnv::GetInstance()->process_mem_tracker()->limit());
+        resource_usage.__set_mem_used_bytes(GlobalEnv::GetInstance()->process_mem_tracker()->consumption());
+        resource_usage.__set_mem_limit_bytes(GlobalEnv::GetInstance()->process_mem_tracker()->limit());
         worker_pool_this->_cpu_usage_recorder.update_interval();
         resource_usage.__set_cpu_used_permille(worker_pool_this->_cpu_usage_recorder.cpu_used_permille());
         request.__set_resource_usage(std::move(resource_usage));

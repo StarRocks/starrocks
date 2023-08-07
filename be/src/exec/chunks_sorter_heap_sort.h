@@ -26,8 +26,8 @@
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter.h"
 #include "glog/logging.h"
-#include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -236,7 +236,7 @@ public:
     ~ChunksSorterHeapSort() override = default;
 
     Status update(RuntimeState* state, const ChunkPtr& chunk) override;
-    Status done(RuntimeState* state) override;
+    Status do_done(RuntimeState* state) override;
     Status get_next(ChunkPtr* chunk, bool* eos) override;
     std::vector<JoinRuntimeFilter*>* runtime_filters(ObjectPool* pool) override;
     int64_t mem_usage() const override {
@@ -247,10 +247,9 @@ public:
         return _sort_heap->size() * _sort_heap->top().data_segment()->mem_usage() / first_rows;
     }
 
-    SortedRuns get_sorted_runs() override;
     size_t get_output_rows() const override;
 
-    void setup_runtime(RuntimeProfile* profile) override;
+    void setup_runtime(RuntimeState* state, RuntimeProfile* profile, MemTracker* parent_mem_tracker) override;
 
 private:
     size_t _number_of_rows_to_sort() const { return _offset + _limit; }
@@ -260,7 +259,7 @@ private:
     int _filter_data(detail::ChunkHolder* chunk_holder, int row_sz);
 
     template <LogicalType TYPE>
-    void _do_filter_data_for_type(detail::ChunkHolder* chunk_holder, Column::Filter* filter, int row_sz);
+    void _do_filter_data_for_type(detail::ChunkHolder* chunk_holder, Filter* filter, int row_sz);
 
     std::vector<JoinRuntimeFilter*> _runtime_filter;
 
@@ -269,7 +268,7 @@ private:
             detail::SortingHeap<detail::ChunkRowCursor, CursorContainer, detail::ChunkCursorComparator>;
 
     std::unique_ptr<CommonCursorSortHeap> _sort_heap = nullptr;
-    std::function<void(detail::ChunkHolder*, Column::Filter*, int)> _do_filter_data;
+    std::function<void(detail::ChunkHolder*, Filter*, int)> _do_filter_data;
 
     const size_t _offset;
     const size_t _limit;

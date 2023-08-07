@@ -38,6 +38,9 @@ The consistent data distribution and mapping guarantee that the data rows with t
 ### Table creation
 
 When creating a table, you can specify the attribute `"colocate_with" = "group_name"` in PROPERTIES to indicate that the table is a Colocate Join table and belongs to a specified Colocation Group.
+> **NOTE**
+>
+> From version 2.5.4, Colocate Join can be performed on tables from different databases. You only need to specify the same `colocate_with` property when you create tables.
 
 For example:
 
@@ -52,7 +55,10 @@ PROPERTIES(
 
 If the specified Group does not exist, StarRocks automatically creates a Group that only contains the current table. If the Group exists, StarRocks checks to see if the current table meets the Colocation Group Schema. If so, it creates the table and adds it to the Group. At the same time, the table creates a partition and a tablet based on the data distribution rules of the existing Group.
 
-The Group belongs to a Database, and the name of the Group is unique within the Database. The full name of the Group is dbId_groupName in the internal storage, but the user only needs the groupName.
+A Colocation Group belongs to a database. The name of a Colocation Group is unique within a database. In the internal storage, the full name of the Colocation Group is `dbId_groupName`, but you only perceive `groupName`.
+> **NOTE**
+>
+> If you specify the same Colocation Group to associate tables from different databases for Colocate Join, the Colocation Group exists in each of these databases. You can run `show proc "/colocation_group"` to check the Colocation Groups in different databases.
 
 ### Delete
 
@@ -160,13 +166,13 @@ PARTITION BY RANGE(`k1`)
     PARTITION p1 VALUES LESS THAN ('2019-05-31'),
     PARTITION p2 VALUES LESS THAN ('2019-06-30')
 )
-DISTRIBUTED BY HASH(`k2`) BUCKETS 8
+DISTRIBUTED BY HASH(`k2`)
 PROPERTIES (
     "colocate_with" = "group1"
 );
 ~~~
 
-Table 2：
+Table 2:
 
 ~~~SQL
 CREATE TABLE `tbl2` (
@@ -175,7 +181,7 @@ CREATE TABLE `tbl2` (
     `v1` double SUM NOT NULL COMMENT ""
 ) ENGINE=OLAP
 AGGREGATE KEY(`k1`, `k2`)
-DISTRIBUTED BY HASH(`k2`) BUCKETS 8
+DISTRIBUTED BY HASH(`k2`)
 PROPERTIES (
     "colocate_with" = "group1"
 );
@@ -312,7 +318,9 @@ This API is implemented on the FE and can be accessed using `fe_host:fe_http_por
 
 1. View all Colocation information of a cluster
 
-    `GET /api/colocate`
+    ~~~bash
+    curl --location-trusted -u<username>:<password> 'http://<fe_host>:<fe_http_port>/api/colocate'  
+    ~~~
 
     ~~~JSON
     // Returns the internal Colocation information in Json format.
@@ -374,16 +382,14 @@ This API is implemented on the FE and can be accessed using `fe_host:fe_http_por
 
 2. Mark the Group as Stable or Unstable
 
-    * Mark as Stable
-        `POST /api/colocate/group_stable?db_id=10005&group_id=10008`
+    ~~~bash
+    # Mark as Stable
+    curl -XPOST --location-trusted -u<username>:<password> ​'http://<fe_host>:<fe_http_port>/api/colocate/group_stable?db_id=<dbId>&group_id=<grpId>​'
+    # Mark as Unstable
+    curl -XPOST --location-trusted -u<username>:<password> ​'http://<fe_host>:<fe_http_port>/api/colocate/group_unstable?db_id=<dbId>&group_id=<grpId>​'
+    ~~~
 
-        `Return：200`
-
-    * Mark as Unstable
-
-        `DELETE /api/colocate/group_stable?db_id=10005&group_id=10008`
-
-        `Return：200`
+    If the returned result is `200`, the Group is successfully marked as Stable or Unstable.
 
 3. Set the data distribution of a Group
 

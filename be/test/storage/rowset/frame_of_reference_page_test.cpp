@@ -50,7 +50,6 @@
 #include "util/logging.h"
 
 using starrocks::PageBuilderOptions;
-using starrocks::PageDecoderOptions;
 using starrocks::operator<<;
 
 namespace starrocks {
@@ -58,8 +57,8 @@ class FrameOfReferencePageTest : public testing::Test {
 public:
     template <LogicalType type, class PageDecoderType>
     void copy_one(PageDecoderType* decoder, typename TypeTraits<type>::CppType* ret) {
-        LogicalType ptype = scalar_field_type_to_primitive_type(type);
-        TypeDescriptor index_type(ptype);
+        LogicalType ltype = scalar_field_type_to_logical_type(type);
+        TypeDescriptor index_type(ltype);
         // TODO(alvinz): To reuse this colum
         auto column = ColumnHelper::create_column(index_type, false);
         size_t n = 1;
@@ -81,8 +80,7 @@ public:
         LOG(INFO) << "FrameOfReference Encoded size for " << size << " values: " << s.slice().size
                   << ", original size:" << size * sizeof(CppType);
 
-        PageDecoderOptions decoder_options;
-        PageDecoderType for_page_decoder(s.slice(), decoder_options);
+        PageDecoderType for_page_decoder(s.slice());
         Status status = for_page_decoder.init();
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(0, for_page_decoder.current_index());
@@ -124,8 +122,7 @@ public:
         LOG(INFO) << "FrameOfReference Encoded size for " << size << " values: " << s.slice().size
                   << ", original size:" << size * sizeof(CppType);
 
-        PageDecoderOptions decoder_options;
-        PageDecoderType for_page_decoder(s.slice(), decoder_options);
+        PageDecoderType for_page_decoder(s.slice());
         Status status = for_page_decoder.init();
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(0, for_page_decoder.current_index());
@@ -147,20 +144,20 @@ public:
         ASSERT_EQ(size, for_page_decoder.count());
 
         auto column1 = ChunkHelper::column_from_field_type(Type, false);
-        SparseRange read_range;
-        read_range.add(Range(0, size / 3));
-        read_range.add(Range(size / 2, (size * 2 / 3)));
-        read_range.add(Range((size * 3 / 4), size));
+        SparseRange<> read_range;
+        read_range.add(Range<>(0, size / 3));
+        read_range.add(Range<>(size / 2, (size * 2 / 3)));
+        read_range.add(Range<>((size * 3 / 4), size));
         size_t read_num = read_range.span_size();
 
         status = for_page_decoder.next_batch(read_range, column1.get());
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(read_num, column1->size());
 
-        SparseRangeIterator read_iter = read_range.new_iterator();
+        SparseRangeIterator<> read_iter = read_range.new_iterator();
         size_t offset = 0;
         while (read_iter.has_more()) {
-            Range r = read_iter.next(read_num);
+            Range<> r = read_iter.next(read_num);
             for (uint i = 0; i < r.span_size(); ++i) {
                 ASSERT_EQ(src[r.begin() + i], column1->get(offset + i).get<CppType>());
             }

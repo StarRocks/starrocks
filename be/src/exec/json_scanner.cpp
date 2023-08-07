@@ -22,6 +22,7 @@
 #include <sstream>
 #include <utility>
 
+#include "column/adaptive_nullable_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "exec/json_parser.h"
@@ -39,7 +40,6 @@
 
 namespace starrocks {
 
-const int64_t MAX_ERROR_LINES_IN_FILE = 50;
 const int64_t MAX_ERROR_LOG_LENGTH = 64;
 
 JsonScanner::JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
@@ -65,7 +65,7 @@ Status JsonScanner::open() {
     const TBrokerRangeDesc& range = _scan_range.ranges[0];
 
     if (range.__isset.jsonpaths) {
-        RETURN_IF_ERROR(_parse_json_paths(range.jsonpaths, &_json_paths));
+        RETURN_IF_ERROR(parse_json_paths(range.jsonpaths, &_json_paths));
     }
     if (range.__isset.json_root) {
         JsonFunctions::parse_json_paths(range.json_root, &_root_paths);
@@ -112,6 +112,7 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
             return status;
         }
     }
+    _materialize_src_chunk_adaptive_nullable_column(src_chunk);
     ASSIGN_OR_RETURN(auto cast_chunk, _cast_chunk(src_chunk));
     return materialize(src_chunk, cast_chunk);
 }
@@ -238,8 +239,7 @@ Status JsonScanner::_construct_cast_exprs() {
     return Status::OK();
 }
 
-Status JsonScanner::_parse_json_paths(const std::string& jsonpath,
-                                      std::vector<std::vector<SimpleJsonPath>>* path_vecs) {
+Status JsonScanner::parse_json_paths(const std::string& jsonpath, std::vector<std::vector<SimpleJsonPath>>* path_vecs) {
     try {
         simdjson::dom::parser parser;
         simdjson::dom::element elem = parser.parse(jsonpath.c_str(), jsonpath.length());
@@ -276,12 +276,23 @@ Status JsonScanner::_create_src_chunk(ChunkPtr* chunk) {
             continue;
         }
 
-        // The columns in source chunk are all in NullableColumn type;
-        auto col = ColumnHelper::create_column(_json_types[column_pos], true);
+        // The columns in source chunk are all in AdaptiveNullableColumn type;
+        auto col = ColumnHelper::create_column(_json_types[column_pos], true, false, 0, true);
         (*chunk)->append_column(col, slot_desc->id());
     }
 
     return Status::OK();
+}
+
+void JsonScanner::_materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chunk) {
+    chunk->materialized_nullable();
+    for (int i = 0; i < chunk->num_columns(); i++) {
+        AdaptiveNullableColumn* adaptive_column =
+                down_cast<AdaptiveNullableColumn*>(chunk->get_column_by_index(i).get());
+        chunk->update_column_by_index(NullableColumn::create(adaptive_column->materialized_raw_data_column(),
+                                                             adaptive_column->materialized_raw_null_column()),
+                                      i);
+    }
 }
 
 Status JsonScanner::_open_next_reader() {
@@ -327,15 +338,21 @@ JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::ScannerCounter
           _scanner(scanner),
           _strict_mode(strict_mode),
           _file(std::move(file)),
-          _slot_descs(std::move(slot_descs)) {
+          _slot_descs(std::move(slot_descs)),
+          _op_col_index(-1) {
 #if BE_TEST
     raw::RawVector<char> buf(_buf_size);
     std::swap(buf, _buf);
 #endif
+    int index = 0;
     for (const auto& desc : _slot_descs) {
         if (desc == nullptr) {
             continue;
         }
+        if (UNLIKELY(desc->col_name() == "__op")) {
+            _op_col_index = index;
+        }
+        index++;
         _slot_desc_dict.emplace(desc->col_name(), desc);
     }
 }
@@ -474,6 +491,12 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
                 _state->append_error_msg_to_file(std::string(sv.data(), sv.size()), st.to_string());
                 LOG(WARNING) << "failed to construct row: " << st;
             }
+            if (_state->enable_log_rejected_record()) {
+                std::string_view sv;
+                (void)!row.raw_json().get(sv);
+                _state->append_rejected_record_to_file(std::string(sv.data(), sv.size()), st.to_string(),
+                                                       _file->filename());
+            }
             // Before continuing to process other rows, we need to first clean the fail parsed row.
             chunk->set_num_rows(chunk_row_num);
         }
@@ -493,31 +516,78 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
 }
 
 Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* row, Chunk* chunk) {
-    std::unordered_map<std::string_view, SlotDescriptor*> slot_desc_dict(_slot_desc_dict);
+    _parsed_columns.assign(chunk->num_columns(), false);
 
     try {
-        std::ostringstream oss;
+        uint32_t key_index = 0;
         for (auto field : *row) {
+            int column_index;
             std::string_view key = field.unescaped_key();
 
-            // look up key in the slot dict.
-            auto itr = slot_desc_dict.find(key);
-            if (itr == slot_desc_dict.end()) {
-                continue;
+            // _prev_parsed_position records the chunk column index for each key of previous parsed json object.
+            // For example, if previous json object is
+            // {
+            //      'a':1,
+            //      'b':2,
+            // }
+            // and key 'a' refers to the 1st column of chunk, key 'b' refers to the 2nd column of chunk,
+            // then _prev_parsed_position is [ {'a', 1, int}, {'b', 2, int}].
+            // At this time, suppose the next parsed json object is
+            // {
+            //      'a':10,
+            //      'b':15,
+            //      'c':25
+            // }
+            // through the _prev_parsed_position, we can know that the column index for 'a' is 1, and the column
+            // index for 'b' is 2. Since previous parsed json object doesn't contain 'c', key 'c' 's column index
+            // needs to be searched from the _slot_desc_dict, and if the key 'c' refers to the 3rd column of chunk,
+            // then we will update the _prev_parsed_position to be [{'a', 1, int}, {'b', 2, int}, {'c', 3, int}].
+            if (LIKELY(_prev_parsed_position.size() > key_index && _prev_parsed_position[key_index].key == key)) {
+                // obtain column_index from previous parsed position
+                column_index = _prev_parsed_position[key_index].column_index;
+                if (column_index < 0) {
+                    // column_index < 0 means key is not in the slot dict, and we will skip this field
+                    key_index++;
+                    continue;
+                }
+            } else {
+                // look up key in the slot dict.
+                auto itr = _slot_desc_dict.find(key);
+                if (itr == _slot_desc_dict.end()) {
+                    // parsed key of the json object is not in the slot dict, and we will skip this field
+                    if (_prev_parsed_position.size() <= key_index) {
+                        _prev_parsed_position.emplace_back(key);
+                    } else {
+                        _prev_parsed_position[key_index].key = key;
+                        _prev_parsed_position[key_index].column_index = -1;
+                    }
+                    key_index++;
+                    continue;
+                }
+
+                auto slot_desc = itr->second;
+
+                // update the prev parsed position
+                column_index = chunk->get_index_by_slot_id(slot_desc->id());
+                if (_prev_parsed_position.size() <= key_index) {
+                    _prev_parsed_position.emplace_back(key, column_index, slot_desc->type());
+                } else {
+                    _prev_parsed_position[key_index].key = key;
+                    _prev_parsed_position[key_index].column_index = column_index;
+                    _prev_parsed_position[key_index].type = slot_desc->type();
+                }
             }
 
-            auto slot_desc = itr->second;
-
-            auto column = chunk->get_column_by_slot_id(slot_desc->id());
-            const auto& col_name = slot_desc->col_name();
-
+            DCHECK(column_index >= 0);
+            _parsed_columns[column_index] = true;
+            auto& column = chunk->get_column_by_index(column_index);
             simdjson::ondemand::value val = field.value();
 
             // construct column with value.
-            RETURN_IF_ERROR(_construct_column(val, column.get(), slot_desc->type(), col_name));
+            RETURN_IF_ERROR(_construct_column(val, column.get(), _prev_parsed_position[key_index].type,
+                                              _prev_parsed_position[key_index].key));
 
-            // delete the written column.
-            slot_desc_dict.erase(key);
+            key_index++;
         }
     } catch (simdjson::simdjson_error& e) {
         auto err_msg = strings::Substitute("construct row in object order failed, error: $0",
@@ -526,22 +596,19 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
     }
 
     // append null to the column without data.
-    for (auto& pair : slot_desc_dict) {
-        auto& col_name = pair.first;
-        auto& slot_desc = pair.second;
-
-        auto column = chunk->get_column_by_slot_id(slot_desc->id());
-
-        if (col_name == "__op") {
-            // special treatment for __op column, fill default value '0' rather than null
-            if (column->is_binary()) {
-                std::ignore = column->append_strings(std::vector{Slice{"0"}});
+    for (int i = 0; i < chunk->num_columns(); i++) {
+        if (!_parsed_columns[i]) {
+            auto& column = chunk->get_column_by_index(i);
+            if (UNLIKELY(i == _op_col_index)) {
+                // special treatment for __op column, fill default value '0' rather than null
+                if (column->is_binary()) {
+                    std::ignore = column->append_strings(std::vector{Slice{"0"}});
+                } else {
+                    column->append_datum(Datum((uint8_t)0));
+                }
             } else {
-                column->append_datum(Datum((uint8_t)0));
+                column->append_nulls(1);
             }
-        } else {
-            // Column name not found, fill column with null.
-            column->append_nulls(1);
         }
     }
     return Status::OK();
@@ -583,8 +650,8 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
             // it would get an error "Objects and arrays can only be iterated when they are first encountered",
             // Hence, resetting the row object is necessary here.
             row->reset();
-            RETURN_IF_ERROR(add_nullable_column_by_json_object(column, _slot_descs[i]->type(),
-                                                               _slot_descs[i]->col_name(), row, !_strict_mode));
+            RETURN_IF_ERROR(add_adaptive_nullable_column_by_json_object(
+                    column, _slot_descs[i]->type(), _slot_descs[i]->col_name(), row, !_strict_mode));
         } else {
             simdjson::ondemand::value val;
             auto st = JsonFunctions::extract_from_object(*row, _scanner->_json_paths[i], &val);
@@ -637,6 +704,8 @@ Status JsonReader::_read_and_parse_json() {
     {
         SCOPED_RAW_TIMER(&_counter->file_read_ns);
         ASSIGN_OR_RETURN(_parser_buf, stream_file->pipe()->read());
+
+        _state->update_num_bytes_scan_from_source(_parser_buf->remaining());
 
         if (_parser_buf->capacity < _parser_buf->remaining() + simdjson::SIMDJSON_PADDING) {
             // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
@@ -705,7 +774,7 @@ Status JsonReader::_read_and_parse_json() {
 // _construct_column constructs column based on no value.
 Status JsonReader::_construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc,
                                      const std::string& col_name) {
-    return add_nullable_column(column, type_desc, col_name, &value, !_strict_mode);
+    return add_adaptive_nullable_column(column, type_desc, col_name, &value, !_strict_mode);
 }
 
 } // namespace starrocks

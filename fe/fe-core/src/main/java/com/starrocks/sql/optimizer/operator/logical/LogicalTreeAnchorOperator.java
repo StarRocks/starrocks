@@ -12,15 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+
+import java.util.List;
 
 /*
  * For rewrite task to anchor all tree
@@ -36,6 +38,11 @@ public class LogicalTreeAnchorOperator extends LogicalOperator {
     }
 
     @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        return RowOutputInfo.createEmptyInfo();
+    }
+
+    @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalTreeAnchor(this, context);
     }
@@ -43,5 +50,13 @@ public class LogicalTreeAnchorOperator extends LogicalOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitLogicalTreeAnchor(optExpression, context);
+    }
+
+    public static class Builder
+            extends LogicalOperator.Builder<LogicalTreeAnchorOperator, LogicalAggregationOperator.Builder> {
+        @Override
+        protected LogicalTreeAnchorOperator newInstance() {
+            return new LogicalTreeAnchorOperator();
+        }
     }
 }

@@ -15,17 +15,28 @@
 package com.starrocks.sql.parser;
 
 import org.antlr.v4.runtime.BaseErrorListener;
+import org.antlr.v4.runtime.FailedPredicateException;
 import org.antlr.v4.runtime.RecognitionException;
 import org.antlr.v4.runtime.Recognizer;
-import org.antlr.v4.runtime.Token;
+
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 class ErrorHandler extends BaseErrorListener {
+
     @Override
     public void syntaxError(Recognizer<?, ?> recognizer, Object offendingSymbol, int line, int charPositionInLine,
                             String message, RecognitionException e) {
-        String errorMessage = String.format("You have an error in your SQL syntax; " +
-                "check the manual that corresponds to your MySQL server version for the right syntax to use " +
-                "near '%s' at line %d", ((Token) offendingSymbol).getText(), line);
-        throw new ParsingException(errorMessage);
+        String detailMsg = message == null ? "" : message;
+        NodePosition pos = new NodePosition(line, charPositionInLine);
+        String tokenName;
+
+        if (e instanceof FailedPredicateException) {
+            tokenName = SqlParser.getTokenDisplay(e.getOffendingToken());
+            detailMsg = PARSER_ERROR_MSG.failedPredicate(tokenName, ((FailedPredicateException) e).getPredicate());
+        } else {
+            // other unknown error, use the message return by Antlr
+        }
+
+        throw new ParsingException(detailMsg, pos);
     }
 }

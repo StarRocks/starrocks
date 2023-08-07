@@ -8,8 +8,8 @@ Syntax:
 
 ```sql
 SHOW TRANSACTION
-[FROM db_name]
-WHERE id = transaction_id;
+[FROM <db_name>]
+WHERE id = transaction_id
 ```
 
 Examples of returned results:

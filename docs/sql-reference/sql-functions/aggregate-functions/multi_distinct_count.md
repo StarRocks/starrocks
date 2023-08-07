@@ -37,7 +37,7 @@ select * from test order by id;
 +------+----------+----------+------------+
 ~~~
 
-Example 1：Count the number of distinct values in the `category` column.
+Example 1: Count the number of distinct values in the `category` column.
 
 ~~~Plain
 select multi_distinct_count(category) from test;
@@ -48,7 +48,7 @@ select multi_distinct_count(category) from test;
 +--------------------------------+
 ~~~
 
-Example 2：Count the number of distinct values in the `supplier` column.
+Example 2: Count the number of distinct values in the `supplier` column.
 
 ~~~Plain
 select multi_distinct_count(supplier) from test;

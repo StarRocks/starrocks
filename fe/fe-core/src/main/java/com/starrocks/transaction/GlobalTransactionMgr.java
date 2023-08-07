@@ -40,12 +40,15 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.EditLog;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
@@ -76,10 +79,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
-import static java.lang.Math.min;
 
 /**
  * Transaction Manager
@@ -137,6 +138,11 @@ public class GlobalTransactionMgr implements Writable {
             throws AnalysisException, BeginTransactionException {
         if (Config.disable_load_job) {
             throw new AnalysisException("disable_load_job is set to true, all load jobs are prevented");
+        }
+
+        if (GlobalStateMgr.getCurrentState().isSafeMode()) {
+            throw new AnalysisException(String.format("The cluster is under safe" +
+                    " mode state, all load jobs are rejected."));
         }
 
         switch (sourceType) {
@@ -198,10 +204,12 @@ public class GlobalTransactionMgr implements Writable {
         request.setDb_id(dbId);
         request.setTxn_id(transactionId);
         request.setCommit_infos(tabletCommitInfos);
+        request.setCommit_timeout_ms(Config.external_table_commit_timeout_ms);
         TCommitRemoteTxnResponse response;
         try {
             response = FrontendServiceProxy.call(addr,
-                    Config.thrift_rpc_timeout_ms,
+                    // commit txn might take a while, so add transaction timeout
+                    Config.thrift_rpc_timeout_ms + Config.external_table_commit_timeout_ms,
                     Config.thrift_rpc_retry_times,
                     client -> client.commitRemoteTxn(request));
         } catch (Exception e) {
@@ -217,7 +225,11 @@ public class GlobalTransactionMgr implements Writable {
             }
             LOG.warn("call fe {} commitRemoteTransaction rpc method failed, txn_id: {}, error: {}", addr, transactionId,
                     errStr);
-            throw new TransactionCommitFailedException(errStr);
+            if (response.status.getStatus_code() == TStatusCode.TIMEOUT) {
+                return false;
+            } else {
+                throw new TransactionCommitFailedException(errStr);
+            }
         } else {
             LOG.info("commit remote, txn_id: {}", transactionId);
             return true;
@@ -288,6 +300,11 @@ public class GlobalTransactionMgr implements Writable {
             throw new AnalysisException("disable_load_job is set to true, all load jobs are prevented");
         }
 
+        if (GlobalStateMgr.getCurrentState().isSafeMode()) {
+            throw new AnalysisException(String.format("The cluster is under safe mode state," +
+                    " all load jobs are rejected."));
+        }
+
         switch (sourceType) {
             case BACKEND_STREAMING:
                 checkValidTimeoutSecond(timeoutSecond, Config.max_stream_load_timeout_second,
@@ -312,7 +329,7 @@ public class GlobalTransactionMgr implements Writable {
         }
     }
 
-    public TransactionStatus getLabelState(long dbId, String label) {
+    public TransactionStatus getLabelStatus(long dbId, String label) {
         try {
             DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
             return dbTransactionMgr.getLabelState(label);
@@ -320,7 +337,6 @@ public class GlobalTransactionMgr implements Writable {
             LOG.warn("Get transaction status by label " + label + " failed", e);
             return TransactionStatus.UNKNOWN;
         }
-
     }
 
     public Long getLabelTxnID(long dbId, String label) {
@@ -333,19 +349,29 @@ public class GlobalTransactionMgr implements Writable {
         }
     }
 
+    public TransactionState getLabelTransactionState(long dbId, String label) {
+        try {
+            DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
+            return dbTransactionMgr.getLabelTransactionState(label);
+        } catch (AnalysisException e) {
+            LOG.warn("Get transaction state by label " + label + " failed", e);
+            return null;
+        }
+    }
+
     public VisibleStateWaiter commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos)
             throws UserException {
         return commitTransaction(dbId, transactionId, tabletCommitInfos, Lists.newArrayList(), null);
     }
 
     public VisibleStateWaiter commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-            TxnCommitAttachment txnCommitAttachment)
+                                                TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         return commitTransaction(dbId, transactionId, tabletCommitInfos, Lists.newArrayList(), txnCommitAttachment);
     }
 
     public VisibleStateWaiter commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-            List<TabletFailInfo> tabletFailInfos)
+                                                List<TabletFailInfo> tabletFailInfos)
             throws UserException {
         return commitTransaction(dbId, transactionId, tabletCommitInfos, tabletFailInfos, null);
     }
@@ -361,8 +387,8 @@ public class GlobalTransactionMgr implements Writable {
      */
     @NotNull
     public VisibleStateWaiter commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-            List<TabletFailInfo> tabletFailInfos,
-            TxnCommitAttachment txnCommitAttachment)
+                                                List<TabletFailInfo> tabletFailInfos,
+                                                TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         if (Config.disable_load_job) {
             throw new TransactionCommitFailedException("disable_load_job is set to true, all load jobs are prevented");
@@ -374,8 +400,8 @@ public class GlobalTransactionMgr implements Writable {
     }
 
     public void prepareTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-            List<TabletFailInfo> tabletFailInfos,
-            TxnCommitAttachment txnCommitAttachment)
+                                   List<TabletFailInfo> tabletFailInfos,
+                                   TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         if (Config.disable_load_job) {
             throw new TransactionCommitFailedException("disable_load_job is set to true, all load jobs are prevented");
@@ -387,7 +413,7 @@ public class GlobalTransactionMgr implements Writable {
     }
 
     public void commitPreparedTransaction(long dbId, long transactionId, long timeoutMillis)
-            throws UserException  {
+            throws UserException {
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
@@ -431,15 +457,15 @@ public class GlobalTransactionMgr implements Writable {
     }
 
     public boolean commitAndPublishTransaction(Database db, long transactionId,
-            List<TabletCommitInfo> tabletCommitInfos, List<TabletFailInfo> tabletFailInfos, long timeoutMillis)
-            throws UserException {
+                                               List<TabletCommitInfo> tabletCommitInfos,
+                                               List<TabletFailInfo> tabletFailInfos, long timeoutMillis) throws UserException {
         return commitAndPublishTransaction(db, transactionId, tabletCommitInfos, tabletFailInfos, timeoutMillis, null);
     }
 
     public boolean commitAndPublishTransaction(Database db, long transactionId,
-            List<TabletCommitInfo> tabletCommitInfos, List<TabletFailInfo> tabletFailInfos, long timeoutMillis,
-            TxnCommitAttachment txnCommitAttachment)
-            throws UserException {
+                                               List<TabletCommitInfo> tabletCommitInfos,
+                                               List<TabletFailInfo> tabletFailInfos, long timeoutMillis,
+                                               TxnCommitAttachment txnCommitAttachment) throws UserException {
         StopWatch stopWatch = new StopWatch();
         stopWatch.start();
         if (!db.tryWriteLock(timeoutMillis, TimeUnit.MILLISECONDS)) {
@@ -463,8 +489,14 @@ public class GlobalTransactionMgr implements Writable {
         return waiter.await(publishTimeoutMillis, TimeUnit.MILLISECONDS);
     }
 
+    public void abortAllRunningTransactions() throws UserException {
+        for (Map.Entry<Long, DatabaseTransactionMgr> entry : dbIdToDatabaseTransactionMgrs.entrySet()) {
+            entry.getValue().abortAllRunningTransaction();
+        }
+    }
+
     public void abortTransaction(long dbId, long transactionId, String reason) throws UserException {
-        abortTransaction(dbId, transactionId, reason, null);
+        abortTransaction(dbId, transactionId, reason, Lists.newArrayList());
     }
 
     public void abortTransaction(long dbId, long transactionId, String reason, List<TabletFailInfo> failedTablets)
@@ -478,7 +510,7 @@ public class GlobalTransactionMgr implements Writable {
     }
 
     public void abortTransaction(long dbId, long transactionId, String reason, List<TabletFailInfo> failedTablets,
-            TxnCommitAttachment txnCommitAttachment)
+                                 TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
         dbTransactionMgr.abortTransaction(transactionId, reason, txnCommitAttachment, failedTablets);
@@ -594,16 +626,34 @@ public class GlobalTransactionMgr implements Writable {
     /**
      * Get the min txn id of running transactions.
      *
-     * @return the min txn id of running transactions, null if no running transaction.
+     * @return the min txn id of running transactions. If there are no running transactions, return the next transaction id
+     * that will be assigned.
      */
-    @Nullable
-    public Long getMinActiveTxnId() {
-        long result = Long.MAX_VALUE;
+    public long getMinActiveTxnId() {
+        long minId = idGenerator.peekNextTransactionId();
         for (Map.Entry<Long, DatabaseTransactionMgr> entry : dbIdToDatabaseTransactionMgrs.entrySet()) {
             DatabaseTransactionMgr dbTransactionMgr = entry.getValue();
-            result = min(result, dbTransactionMgr.getMinActiveTxnId());
+            minId = Math.min(minId, dbTransactionMgr.getMinActiveTxnId().orElse(Long.MAX_VALUE));
         }
-        return result == Long.MAX_VALUE ? idGenerator.peekNextTransactionId() : result;
+        return minId;
+    }
+
+    /**
+     * Get the smallest transaction ID of active transactions in a database.
+     * If there are no active transactions in the database, return the transaction ID that will be assigned to the
+     * next transaction.
+     *
+     * @param dbId the ID the database
+     * @return the min txn id of running transactions in the database. If there are no running transactions, return
+     * the next transaction id that will be assigned.
+     */
+    public long getMinActiveTxnIdOfDatabase(long dbId) {
+        long minId = idGenerator.peekNextTransactionId();
+        DatabaseTransactionMgr dbTxnMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
+        if (dbTxnMgr != null) {
+            minId = Math.min(minId, dbTxnMgr.getMinActiveTxnId().orElse(Long.MAX_VALUE));
+        }
+        return minId;
     }
 
     public TransactionState getTransactionState(long dbId, long transactionId) {
@@ -614,10 +664,6 @@ public class GlobalTransactionMgr implements Writable {
             LOG.warn("Get transaction {} in db {} failed. msg: {}", transactionId, dbId, e.getMessage());
             return null;
         }
-    }
-
-    public void setEditLog(EditLog editLog) {
-        this.idGenerator.setEditLog(editLog);
     }
 
     // for replay idToTransactionState
@@ -688,9 +734,6 @@ public class GlobalTransactionMgr implements Writable {
         return dbTransactionMgr.getPartitionTransInfo(tid, tableId);
     }
 
-    /**
-     * It is a non thread safe method, only invoked by checkpoint thread without any lock or image dump thread with db lock
-     */
     public int getTransactionNum() {
         int txnNum = 0;
         for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
@@ -729,28 +772,49 @@ public class GlobalTransactionMgr implements Writable {
             }
             transactionStates.add(transactionState);
         }
+        putTransactionStats(transactionStates);
+        idGenerator.readFields(in);
+    }
+
+    public long loadTransactionState(DataInputStream dis, long checksum) throws IOException {
+        int size = dis.readInt();
+        long newChecksum = checksum ^ size;
+        readFields(dis);
+        LOG.info("finished replay transactionState from image");
+        return newChecksum;
+    }
+
+    public void loadTransactionStateV2(SRMetaBlockReader reader)
+            throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        long now = System.currentTimeMillis();
+        idGenerator = reader.readJson(TransactionIdGenerator.class);
+        int numTransactions = reader.readInt();
+        List<TransactionState> transactionStates = new ArrayList<>(numTransactions);
+        for (int i = 0; i < numTransactions; ++i) {
+            TransactionState transactionState = reader.readJson(TransactionState.class);
+            if (transactionState.isExpired(now)) {
+                LOG.info("discard expired transaction state: {}", transactionState);
+                continue;
+            } else if (transactionState.getTransactionStatus() == TransactionStatus.UNKNOWN) {
+                LOG.info("discard unknown transaction state: {}", transactionState);
+                continue;
+            }
+            transactionStates.add(transactionState);
+        }
+        putTransactionStats(transactionStates);
+    }
+
+    private void putTransactionStats(List<TransactionState> transactionStates) throws IOException {
         transactionStates.sort(Comparator.comparingLong(TransactionState::getCommitTime));
         for (TransactionState transactionState : transactionStates) {
             try {
                 DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(transactionState.getDbId());
                 dbTransactionMgr.unprotectUpsertTransactionState(transactionState, true);
             } catch (AnalysisException e) {
-                LOG.warn("failed to get db transaction manager for {}", transactionState);
+                LOG.warn("failed to get db transaction manager for {}", transactionState, e);
                 throw new IOException("failed to get db transaction manager for txn " + transactionState.getTransactionId(), e);
             }
         }
-        idGenerator.readFields(in);
-    }
-
-    public long loadTransactionState(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_45) {
-            int size = dis.readInt();
-            long newChecksum = checksum ^ size;
-            readFields(dis);
-            LOG.info("finished replay transactionState from image");
-            return newChecksum;
-        }
-        return checksum;
     }
 
     public List<Pair<Long, Long>> getTransactionIdByCoordinateBe(String coordinateHost, int limit) {
@@ -792,6 +856,18 @@ public class GlobalTransactionMgr implements Writable {
         dos.writeInt(size);
         write(dos);
         return checksum;
+    }
+
+    public void saveTransactionStateV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        int txnNum = getTransactionNum();
+        final int cnt = 2 + txnNum;
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.GLOBAL_TRANSACTION_MGR, cnt);
+        writer.writeJson(idGenerator);
+        writer.writeJson(txnNum);
+        for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            dbTransactionMgr.unprotectWriteAllTransactionStatesV2(writer);
+        }
+        writer.close();
     }
 
     public String getTxnPublishTimeoutDebugInfo(long dbId, long txnId) {

@@ -7,7 +7,7 @@ Drops the specified resource group.
 ## Syntax
 
 ```SQL
-DROP RESOURCE GROUP resource_group_name;
+DROP RESOURCE GROUP <resource_group_name>
 ```
 
 ## Parameters

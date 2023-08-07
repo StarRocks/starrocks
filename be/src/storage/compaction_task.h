@@ -22,6 +22,7 @@
 #include "storage/compaction_utils.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset.h"
+#include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "util/runtime_profile.h"
 #include "util/time.h"
@@ -67,6 +68,8 @@ struct CompactionTaskInfo {
     size_t filtered_rows{0};
     size_t output_num_rows{0};
     CompactionType compaction_type{CompactionType::INVALID_COMPACTION};
+    bool is_shortcut_compaction{false};
+    bool is_manual_compaction{false};
 
     // for vertical compaction
     size_t column_group_size{0};
@@ -116,6 +119,8 @@ struct CompactionTaskInfo {
         ss << ", total_output_num_rows:" << total_output_num_rows;
         ss << ", total_merged_rows:" << total_merged_rows;
         ss << ", total_del_filtered_rows:" << total_del_filtered_rows;
+        ss << ", is_shortcut_compaction:" << is_shortcut_compaction;
+        ss << ", is_manual_compaction:" << is_manual_compaction;
         ss << ", progress:" << get_progress();
         return ss.str();
     }
@@ -188,6 +193,8 @@ public:
 
     void set_start_time(int64_t start_time) { _task_info.start_time = start_time; }
 
+    int64_t get_start_time() { return _task_info.start_time; }
+
     void set_end_time(int64_t end_time) { _task_info.end_time = end_time; }
 
     void set_output_segments_num(uint32_t output_segments_num) { _task_info.output_segments_num = output_segments_num; }
@@ -206,6 +213,12 @@ public:
         _task_info.elapsed_time = _watch.elapsed_time() / 1000;
         return _task_info.to_string();
     }
+
+    bool is_shortcut_compaction() const { return _task_info.is_shortcut_compaction; }
+
+    bool is_manual_compaction() const { return _task_info.is_manual_compaction; }
+
+    void set_is_manual_compaction(bool is_manual_compaction) { _task_info.is_manual_compaction = is_manual_compaction; }
 
 protected:
     virtual Status run_impl() = 0;
@@ -236,25 +249,38 @@ protected:
     }
 
     void _commit_compaction() {
-        std::unique_lock wrlock(_tablet->get_header_lock());
         std::stringstream input_stream_info;
-        for (int i = 0; i < 5 && i < _input_rowsets.size(); ++i) {
-            input_stream_info << _input_rowsets[i]->version() << ";";
+        {
+            std::unique_lock wrlock(_tablet->get_header_lock());
+            // after one success compaction, low cardinality dict will be generated.
+            // so we can enable shortcut compaction.
+            _tablet->tablet_meta()->set_enable_shortcut_compaction(true);
+
+            for (int i = 0; i < 5 && i < _input_rowsets.size(); ++i) {
+                input_stream_info << _input_rowsets[i]->version() << ";";
+            }
+            if (_input_rowsets.size() > 5) {
+                input_stream_info << ".." << (*_input_rowsets.rbegin())->version();
+            }
+            std::vector<RowsetSharedPtr> to_replace;
+            _tablet->modify_rowsets({_output_rowset}, _input_rowsets, &to_replace);
+            _tablet->save_meta();
+            Rowset::close_rowsets(_input_rowsets);
+            for (auto& rs : to_replace) {
+                StorageEngine::instance()->add_unused_rowset(rs);
+            }
         }
-        if (_input_rowsets.size() > 5) {
-            input_stream_info << ".." << (*_input_rowsets.rbegin())->version();
-        }
-        _tablet->modify_rowsets({_output_rowset}, _input_rowsets);
-        _tablet->save_meta();
-        Rowset::close_rowsets(_input_rowsets);
         VLOG(1) << "commit compaction. output version:" << _task_info.output_version
                 << ", output rowset version:" << _output_rowset->version()
-                << ", input rowsets:" << input_stream_info.str() << ", input rowsets size:" << _input_rowsets.size();
+                << ", input rowsets:" << input_stream_info.str() << ", input rowsets size:" << _input_rowsets.size()
+                << ", max_version:" << _tablet->max_continuous_version();
     }
 
     void _success_callback();
 
     void _failure_callback(const Status& st);
+
+    Status _shortcut_compact(Statistics* statistics);
 
 protected:
     CompactionTaskInfo _task_info;

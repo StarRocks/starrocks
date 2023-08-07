@@ -40,7 +40,7 @@ public:
     using tablet_rowid_t = uint64_t;
 
     PrimaryIndex();
-    PrimaryIndex(const VectorizedSchema& pk_schema);
+    PrimaryIndex(const Schema& pk_schema);
     ~PrimaryIndex();
 
     // Fetch all primary keys from the tablet associated with this index into memory
@@ -65,10 +65,10 @@ public:
     // old position to |deletes|.
     //
     // [not thread-safe]
-    void upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes);
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes, IOStat* stat = nullptr);
 
-    void upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                DeletesMap* deletes);
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
+                  DeletesMap* deletes);
 
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     // used for compaction, try replace input rowsets' rowid with output segment's rowid, if
@@ -81,8 +81,8 @@ public:
     // |failed| rowids of output segment's rows that failed to replace
     //
     // [not thread-safe]
-    [[maybe_unused]] void try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                      const vector<uint32_t>& src_rssid, vector<uint32_t>* failed);
+    [[maybe_unused]] Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
+                                        const vector<uint32_t>& src_rssid, vector<uint32_t>* failed);
 
     // used for compaction, try replace input rowsets' rowid with output segment's rowid, if
     // input rowsets' rowid greater than the max src rssid, this indicates that the row of output rowset is
@@ -94,18 +94,18 @@ public:
     // |failed| rowids of output segment's rows that failed to replace
     //
     // [not thread-safe]
-    void try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
-                     vector<uint32_t>* failed);
+    Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
+                       vector<uint32_t>* failed);
 
     // |key_col| contains the *encoded* primary keys to be deleted from this index.
     // The position of deleted keys will be appended into |new_deletes|.
     //
     // [not thread-safe]
-    void erase(const Column& pks, DeletesMap* deletes);
+    Status erase(const Column& pks, DeletesMap* deletes);
 
-    void get(const Column& pks, std::vector<uint64_t>* rowids) const;
+    Status get(const Column& pks, std::vector<uint64_t>* rowids) const;
 
-    Status prepare(const EditVersion& version);
+    Status prepare(const EditVersion& version, size_t n);
 
     Status commit(PersistentIndexMetaPB* index_meta);
 
@@ -132,7 +132,7 @@ public:
     size_t key_size() { return _key_size; }
 
 protected:
-    void _set_schema(const VectorizedSchema& pk_schema);
+    void _set_schema(const Schema& pk_schema);
 
 private:
     Status _do_load(Tablet* tablet);
@@ -148,32 +148,32 @@ private:
 
     Status _insert_into_persistent_index(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks);
 
-    void _upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
-                                       uint32_t idx_end, DeletesMap* deletes);
+    Status _upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
+                                         uint32_t idx_end, DeletesMap* deletes, IOStat* stat);
 
-    void _erase_persistent_index(const Column& key_col, DeletesMap* deletes);
+    Status _erase_persistent_index(const Column& key_col, DeletesMap* deletes);
 
-    void _get_from_persistent_index(const Column& key_col, std::vector<uint64_t>* rowids) const;
+    Status _get_from_persistent_index(const Column& key_col, std::vector<uint64_t>* rowids) const;
 
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
-    [[maybe_unused]] void _replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                                    const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes);
-    void _replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                   const uint32_t max_src_rssid, vector<uint32_t>* deletes);
+    [[maybe_unused]] Status _replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
+                                                      const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes);
+    Status _replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
+                                     const uint32_t max_src_rssid, vector<uint32_t>* deletes);
 
 protected:
     std::mutex _lock;
     std::atomic<bool> _loaded{false};
     Status _status;
     int64_t _tablet_id = 0;
+    std::unique_ptr<PersistentIndex> _persistent_index;
 
 private:
     size_t _key_size = 0;
     int64_t _table_id = 0;
-    VectorizedSchema _pk_schema;
+    Schema _pk_schema;
     LogicalType _enc_pk_type = TYPE_UNKNOWN;
     std::unique_ptr<HashIndex> _pkey_to_rssid_rowid;
-    std::unique_ptr<PersistentIndex> _persistent_index;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const PrimaryIndex& o) {
@@ -181,6 +181,6 @@ inline std::ostream& operator<<(std::ostream& os, const PrimaryIndex& o) {
     return os;
 }
 
-std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const VectorizedSchema& pk_schema);
+std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const Schema& pk_schema);
 
 } // namespace starrocks

@@ -48,7 +48,6 @@ public abstract class DistributionInfo implements Writable {
 
     public enum DistributionInfoType {
         HASH,
-        @Deprecated
         RANDOM
     }
 
@@ -76,6 +75,8 @@ public abstract class DistributionInfo implements Writable {
         throw new NotImplementedException("not implemented");
     }
 
+    public abstract boolean supportColocate();
+
     public String getDistributionKey() {
         return "";
     }
@@ -85,6 +86,10 @@ public abstract class DistributionInfo implements Writable {
     }
 
     public DistributionDesc toDistributionDesc() {
+        throw new NotImplementedException();
+    }
+
+    public DistributionInfo copy() {
         throw new NotImplementedException();
     }
 

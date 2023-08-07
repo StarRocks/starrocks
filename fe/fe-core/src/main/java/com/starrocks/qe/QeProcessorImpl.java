@@ -35,8 +35,10 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.MvId;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TNetworkAddress;
@@ -91,7 +93,7 @@ public final class QeProcessorImpl implements QeProcessor {
 
     @Override
     public void registerQuery(TUniqueId queryId, QueryInfo info) throws UserException {
-        LOG.info("register query id = {}, job: {}", DebugUtil.printId(queryId), info.getCoord().getJobId());
+        LOG.info("register query id = {}", DebugUtil.printId(queryId));
         final QueryInfo result = coordinatorMap.putIfAbsent(queryId, info);
         if (result != null) {
             throw new UserException("queryId " + queryId + " already exists");
@@ -145,6 +147,11 @@ public final class QeProcessorImpl implements QeProcessor {
                     DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id));
             result.setStatus(new TStatus(TStatusCode.NOT_FOUND));
             result.status.addToError_msgs("query id " + DebugUtil.printId(params.query_id) + " not found");
+            return result;
+        }
+        // TODO(murphy) update exec status in FE
+        if (info.isMVJob) {
+            result.setStatus(new TStatus(TStatusCode.OK));
             return result;
         }
         try {
@@ -202,11 +209,18 @@ public final class QeProcessorImpl implements QeProcessor {
         return resultList;
     }
 
+    @Override
+    public long getCoordinatorCount() {
+        return coordinatorMap.size();
+    }
+
     public static final class QueryInfo {
         private final ConnectContext connectContext;
         private final Coordinator coord;
         private final String sql;
         private final long startExecTime;
+
+        private boolean isMVJob = false;
 
         // from Export, Pull load, Insert 
         public QueryInfo(Coordinator coord) {
@@ -219,6 +233,13 @@ public final class QeProcessorImpl implements QeProcessor {
             this.coord = coord;
             this.sql = sql;
             this.startExecTime = System.currentTimeMillis();
+        }
+
+        // TODO: report exec status for MV job
+        public static QueryInfo fromMVJob(MvId mvId, ConnectContext connectContext) {
+            QueryInfo res = new QueryInfo(connectContext, null, null);
+            res.isMVJob = true;
+            return res;
         }
 
         public ConnectContext getConnectContext() {

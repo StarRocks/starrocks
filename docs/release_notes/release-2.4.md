@@ -1,5 +1,103 @@
 # StarRocks version 2.4
 
+## 2.4.5
+
+Release date: April 21, 2023
+
+### Improvements
+
+- Forbade the List Partition syntax because it may cause errors in upgrading metadata. [#15401](https://github.com/StarRocks/starrocks/pull/15401)
+- Supports BITMAP, HLL, and PERCENTILE types for materialized views. [#15731](https://github.com/StarRocks/starrocks/pull/15731)
+- Optimized the inference of `storage_medium`. When BEs use both SSD and HDD as storage devices, if the property `storage_cooldown_time` is specified, StarRocks sets `storage_medium` to `SSD`. Otherwise, StarRocks sets `storage_medium` to `HDD`. [#18649](https://github.com/StarRocks/starrocks/pull/18649)
+- Optimized the accuracy of thread dump. [#16748](https://github.com/StarRocks/starrocks/pull/16748)
+- Optimized load efficiency by triggering metadata compaction before loading. [#19347](https://github.com/StarRocks/starrocks/pull/19347)
+- Optimized the Stream Load planner timeout. [#18992](https://github.com/StarRocks/starrocks/pull/18992/files)
+- Optimized the Unique key table performance by forbidding the collection of statistics from value columns. [#19563](https://github.com/StarRocks/starrocks/pull/19563)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- NPE is returned when an unsupported data type is used in CREATE TABLE. [# 20999](https://github.com/StarRocks/starrocks/issues/20999)
+- Wrong results are returned to queries using Broadcast Join with the short-circuit. [#20952](https://github.com/StarRocks/starrocks/issues/20952)
+- The disk occupation problem caused by the wrong data truncate logic. [#20590](https://github.com/StarRocks/starrocks/pull/20590)
+- The AuditLoader plugin can neither be installed nor deleted. [#20468](https://github.com/StarRocks/starrocks/issues/20468)
+- If an exception is thrown when a tablet is being scheduled, other tablets in the same batch will never be scheduled. [#20681](https://github.com/StarRocks/starrocks/pull/20681)
+- Unknown Error is returned when an unsupported SQL function is used in the creation of a synchronous materialized view. [#20348](https://github.com/StarRocks/starrocks/issues/20348)
+- Multiple COUNT DISTINCT calculations are incorrectly rewritten. [#19714](https://github.com/StarRocks/starrocks/pull/19714)
+- Wrong results are returned to queries on the tablet that is in compaction. [#20084](https://github.com/StarRocks/starrocks/issues/20084)
+- Wrong results are returned to queries with aggregation. [#19725](https://github.com/StarRocks/starrocks/issues/19725)
+- No error message is returned when loading NULL parquet data into NOT NULL columns. [#19885](https://github.com/StarRocks/starrocks/pull/19885)
+- The query concurrency metric decreases slowly when the concurrency limit of a resource group is continuously reached. [#19363](https://github.com/StarRocks/starrocks/pull/19363)
+- FE fails to start when replaying the `InsertOverwriteJob` state change log. [#19061](https://github.com/StarRocks/starrocks/issues/19061)
+- The Primary Key table deadlock. [#18488](https://github.com/StarRocks/starrocks/pull/18488)
+- For Colocation tables, the replica status can be manually specified as `bad` by using statements like `ADMIN SET REPLICA STATUS PROPERTIES ("tablet_id" = "10003", "backend_id" = "10001", "status" = "bad");`. If the number of BEs is less than or equal to the number of replicas, the corrupted replica cannot be repaired. [#17876](https://github.com/StarRocks/starrocks/issues/17876)
+- Issues caused by ARRAY-related functions. [#18556](https://github.com/StarRocks/starrocks/pull/18556)
+
+## 2.4.4
+
+Release date: February 22, 2023
+
+### Improvements
+
+- Supports fast cancellation of load. [#15514](https://github.com/StarRocks/starrocks/pull/15514) [#15398](https://github.com/StarRocks/starrocks/pull/15398) [#15969](https://github.com/StarRocks/starrocks/pull/15969)
+- Optimized the CPU usage of the compaction framework. [#11747](https://github.com/StarRocks/starrocks/pull/11747)
+- Supports cumulative compaction on tablets with missing versions. [#17030](https://github.com/StarRocks/starrocks/pull/17030)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- Excessive dynamic partitions are created when an invalid DATE value is specified. [#17966](https://github.com/StarRocks/starrocks/pull/17966)
+- Failure to connect to Elasticsearch external tables with the default HTTPS port. [#13726](https://github.com/StarRocks/starrocks/pull/13726)
+- BE failed to cancel a Stream Load transaction after the transaction times out. [#15738](https://github.com/StarRocks/starrocks/pull/15738)
+- Wrong query results are returned from a local shuffle aggregation on a single BE. [#17845](https://github.com/StarRocks/starrocks/pull/17845)
+- Queries may fail with the error message "wait_for_version version: failed: apply stopped". [#17848](https://github.com/StarRocks/starrocks/pull/17850)
+- Wrong query results are returned because OLAP scan bucket expressions are not correctly cleared. [#17666](https://github.com/StarRocks/starrocks/pull/17666)
+- The bucket number of dynamic partitioned tables in a Colocate Group cannot be modified and an error message is returned. [#17418](https://github.com/StarRocks/starrocks/pull/17418)
+- When you connect to a non-Leader FE node and send the SQL statement `USE <catalog_name>.<database_name>`, the non-Leader FE node forwards the SQL statement, with `<catalog_name>` excluded, to the Leader FE node. As a result, the Leader FE node chooses to use the `default_catalog` and eventually fails to find the specified database. [#17302](https://github.com/StarRocks/starrocks/pull/17302)
+- Incorrect logic for the dictmapping check before rewriting. [#17405](https://github.com/StarRocks/starrocks/pull/17405)
+- If an FE sends an occasional heartbeat to a BE, and the heartbeat connection times out, the FE considers the BE unavailable, leading to transaction failures on the BE. [#16386](https://github.com/StarRocks/starrocks/pull/16386)
+- `get_applied_rowsets` failed for queries on newly cloned tablets on a follower FE. [#17192](https://github.com/StarRocks/starrocks/pull/17192)
+- NPE caused by executing `SET variable = default` on a follower FE. [#17549](https://github.com/StarRocks/starrocks/pull/17549)
+- Expressions in projection are not rewritten by the dictionary. [#17558](https://github.com/StarRocks/starrocks/pull/17558)
+- Incorrect logic for creating dynamic partitions on weekly basis. [#17163](https://github.com/StarRocks/starrocks/pull/17163)
+- Wrong query results are returned from a local shuffle. [#17130](https://github.com/StarRocks/starrocks/pull/17130)
+- Incremental clones may fail. [#16930](https://github.com/StarRocks/starrocks/pull/16930)
+- In some cases, CBO may use incorrect logic to compare whether two operators are equivalent. [#17199](https://github.com/StarRocks/starrocks/pull/17199) [#17227](https://github.com/StarRocks/starrocks/pull/17227)
+- Failed to access JuiceFS because the JuiceFS schema is not checked and resolved properly. [#16940](https://github.com/StarRocks/starrocks/pull/16940)
+
+## 2.4.3
+
+Release date: January 19, 2023
+
+### Improvements
+
+- StarRocks checks whether the corresponding database and table exist during an Analyze to prevent NPE. [#14467](https://github.com/StarRocks/starrocks/pull/14467)
+- Columns with data types that are not supported are not materialized for queries on external tables. [#13305](https://github.com/StarRocks/starrocks/pull/13305)
+- Adds Java version check for the FE start script **start_fe.sh**. [#14333](https://github.com/StarRocks/starrocks/pull/14333)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- Stream Load may fail when timeout is not set. [#16241](https://github.com/StarRocks/starrocks/pull/16241)
+- BRPC Send crashes when memory usage is high. [#16046](https://github.com/StarRocks/starrocks/issues/16046)
+- StarRocks fails to load data in external tables from a StarRocks instance of an early version.  [#16130](https://github.com/StarRocks/starrocks/pull/16130)
+- Materialized view Refresh failure may cause memory leak. [#16041](https://github.com/StarRocks/starrocks/pull/16041)
+- Schema Change hangs at the Publish stage. [#14148](https://github.com/StarRocks/starrocks/issues/14148)
+- Memory leak caused by a materialized view QeProcessorImpl issue. [#15699](https://github.com/StarRocks/starrocks/pull/15699)
+- The results of queries with `limit`  are inconsistent. [#13574](https://github.com/StarRocks/starrocks/pull/13574)
+- Memory leak caused by INSERT. [#14718](https://github.com/StarRocks/starrocks/pull/14718)
+- Primary Key tables executes Tablet Migration.[#13720](https://github.com/StarRocks/starrocks/pull/13720)
+- Broker Kerberos tickets timeout during Broker Load. [#16149](https://github.com/StarRocks/starrocks/pull/16149)
+- The `nullable` information is inferred incorrectly in the view of a table. [#15744](https://github.com/StarRocks/starrocks/pull/15744)
+
+### Behavior Change
+
+- Modified the default backlog of Thrift Listen to `1024`. [#13911](https://github.com/StarRocks/starrocks/pull/13911)
+- Added SQL mode `FORBID_INVALID_DATES`. This SQL mode is disabled by default. When it is enabled, StarRocks verifies the input of the DATE type, and returns an error when the input is invalid. [#14143](https://github.com/StarRocks/starrocks/pull/14143)
+
 ## 2.4.2
 
 Release date: December 14, 2022
@@ -25,6 +123,7 @@ The following bugs are fixed:
 ### Behavior Change
 
 - Constrained the session variable `query_timeout` with an upper limit of `259200` and a lower limit of `1`.
+- Deprecated the FE parameter `default_storage_medium`. The storage medium of a table is automatically inferred by the system. [#14394](https://github.com/StarRocks/starrocks/pull/14394)
 
 ## 2.4.1
 
@@ -76,11 +175,11 @@ Release date: October 20, 2022
 
 ### New Features
 
-- Supports creating asynchronous materialized views based on multiple base tables to accelerate queries with JOIN operations. Asynchronous materialized views support all [Data Models](../table_design/Data_model.md). For more information, see [Materialized View](../using_starrocks/Materialized_view.md).
+- Supports creating asynchronous materialized views based on multiple base tables to accelerate queries with JOIN operations. Asynchronous materialized views support all [table types](../table_design/table_types/table_types.md). For more information, see [Materialized View](../using_starrocks/Materialized_view.md).
 
 - Supports overwriting data via INSERT OVERWRITE. For more information, see [Load data using INSERT](../loading/InsertInto.md).
 
-- [Preview] Provides stateless Compute Nodes (CN) that can be horizontally scaled. You can use StarRocks Operator to deploy CN into your Kubernetes (K8s) cluster to achieve automatic horizontal scaling. For more information, see [Deploy and manage CN on Kubernetes with StarRocks Operator](../administration/k8s_operator_cn.md).
+- [Preview] Provides stateless Compute Nodes (CN) that can be horizontally scaled. You can use StarRocks Operator to deploy CN into your Kubernetes (K8s) cluster to achieve automatic horizontal scaling. For more information, see [Deploy and manage CN on Kubernetes with StarRocks Operator](../deployment/sr_operator.md).
 
 - Outer Join supports non-equi joins in which join items are related by comparison operators including `<`, `<=`, `>`, `>=`, and `<>`. For more information, see [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md).
 
@@ -94,7 +193,7 @@ Release date: October 20, 2022
 
 - Supports FDQN access: now you can use domain name or the combination of hostname and port as the unique identification of a BE or an FE node. This prevents access failures caused by changing IP addresses. For more information, see [Enable FQDN Access](../administration/enable_fqdn.md).
 
-- flink-connector-starrocks supports Primary Key model partial update. For more information, see [Load data by using flink-connector-starrocks](../loading/Flink-connector-starrocks.md).
+- flink-connector-starrocks supports Primary Key table partial update. For more information, see [Load data by using flink-connector-starrocks](../loading/Flink-connector-starrocks.md).
 
 - Provides the following new functions:
 
@@ -103,7 +202,7 @@ Release date: October 20, 2022
 
 ### Improvements
 
-- The Primary Key model supports flushing VARCHAR-type primary key indexes to disks. From version 2.4.0, the Primary Key model supports the same data types for primary key indexes regardless of whether persistent primary key index is turned on or not.
+- The Primary Key table supports flushing VARCHAR-type primary key indexes to disks. From version 2.4.0, the Primary Key table supports the same data types for primary key indexes regardless of whether persistent primary key index is turned on or not.
 
 - Optimized the query performance on external tables.
 
@@ -122,7 +221,7 @@ Release date: October 20, 2022
 
 - Adjusted the mechanisms of default PageCache size calculation and memory consistency check to avoid OOM issues during multi-instance deployments.
 
-- Improved the performance of large-size batch load on PRIMARY KEY model up to two times by removing final_merge operations.
+- Improved the performance of large-size batch load on Primary Key tables up to two times by removing final_merge operations.
 
 - Supports a Stream Load transaction interface to implement two-phase commit (2PC) for transactions that are run to load data from external systems such as Apache Flink® and Apache Kafka®, improving the performance of highly concurrent stream loads.
 
@@ -158,7 +257,9 @@ The following bugs are fixed:
 
 ### Behavior Change
 
-Page Cache is enabled by default. The default cache size is 20% of the system memory.
+- Page Cache is enabled by default ("disable_storage_page_cache" = "false"). The default cache size (`storage_page_cache_limit`) is 20% of the system memory.
+- CBO is enabled by default. Deprecated the session variable `enable_cbo`.
+- Vectorized engine is enabled by default. Deprecated the session variable `vectorized_engine_enable`.
 
 ### Others
 

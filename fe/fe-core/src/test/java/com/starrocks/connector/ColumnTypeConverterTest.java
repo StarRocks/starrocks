@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
@@ -24,6 +23,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.avro.Schema;
 import org.junit.Assert;
@@ -38,6 +38,7 @@ import static com.starrocks.connector.ColumnTypeConverter.fromHiveTypeToArrayTyp
 import static com.starrocks.connector.ColumnTypeConverter.fromHiveTypeToMapType;
 import static com.starrocks.connector.ColumnTypeConverter.fromHudiType;
 import static com.starrocks.connector.ColumnTypeConverter.getPrecisionAndScale;
+import static com.starrocks.connector.ColumnTypeConverter.toHiveType;
 
 public class ColumnTypeConverterTest {
 
@@ -53,6 +54,11 @@ public class ColumnTypeConverterTest {
         Assert.assertEquals(222233, res[0]);
         Assert.assertEquals(4442, res[1]);
 
+        t1 = "decimal(3, 2)";
+        res = getPrecisionAndScale(t1);
+        Assert.assertEquals(3, res[0]);
+        Assert.assertEquals(2, res[1]);
+
         try {
             t1 = "decimal(3.222,2)";
             getPrecisionAndScale(t1);
@@ -63,14 +69,6 @@ public class ColumnTypeConverterTest {
 
         try {
             t1 = "decimal(a,2)";
-            getPrecisionAndScale(t1);
-            Assert.fail();
-        } catch (StarRocksConnectorException e) {
-            Assert.assertTrue(e.getMessage().contains("Failed to get"));
-        }
-
-        try {
-            t1 = "decimal(3, 2)";
             getPrecisionAndScale(t1);
             Assert.fail();
         } catch (StarRocksConnectorException e) {
@@ -129,12 +127,8 @@ public class ColumnTypeConverterTest {
         Assert.assertEquals(arrayType, resType);
 
         itemType = ScalarType.createUnifiedDecimalType(4, 2);
-        try {
-            new ArrayType(new ArrayType(itemType));
-            Assert.fail();
-        } catch (InternalError e) {
-            Assert.assertTrue(e.getMessage().contains("Decimal32/64/128"));
-        }
+        Assert.assertEquals(new ArrayType(new ArrayType(itemType)),
+                fromHiveTypeToArrayType("array<Array<decimal(4, 2)>>"));
     }
 
     @Test
@@ -397,5 +391,48 @@ public class ColumnTypeConverterTest {
         base = new Column("k1", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 5, 5), false);
         other = new Column("k1", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 5, 4), false);
         Assert.assertFalse(columnEquals(base, other));
+    }
+
+    @Test
+    public void testSRTypeToHiveType() {
+        Assert.assertEquals("tinyint", toHiveType(Type.TINYINT));
+        Assert.assertEquals("smallint", toHiveType(Type.SMALLINT));
+        Assert.assertEquals("int", toHiveType(Type.INT));
+        Assert.assertEquals("bigint", toHiveType(Type.BIGINT));
+        Assert.assertEquals("float", toHiveType(Type.FLOAT));
+        Assert.assertEquals("double", toHiveType(Type.DOUBLE));
+        Assert.assertEquals("boolean", toHiveType(Type.BOOLEAN));
+        Assert.assertEquals("binary", toHiveType(Type.VARBINARY));
+        Assert.assertEquals("date", toHiveType(Type.DATE));
+        Assert.assertEquals("timestamp", toHiveType(Type.DATETIME));
+
+        Assert.assertEquals("char(10)", toHiveType(ScalarType.createCharType(10)));
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Unsupported Hive type: CHAR(10000). Supported CHAR types: CHAR(<=255)",
+                () -> toHiveType(ScalarType.createCharType(10000)));
+
+        Assert.assertEquals("varchar(100)", toHiveType(ScalarType.createVarchar(100)));
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Unsupported Hive type: VARCHAR(200000). Supported VARCHAR types: VARCHAR(<=65535)",
+                () -> toHiveType(ScalarType.createVarcharType(200000)));
+
+        ScalarType itemType = ScalarType.createType(PrimitiveType.DATE);
+        ArrayType arrayType = new ArrayType(new ArrayType(itemType));
+        Assert.assertEquals("array<array<date>>", toHiveType(arrayType));
+
+        ScalarType keyType = ScalarType.createType(PrimitiveType.TINYINT);
+        ScalarType valueType = ScalarType.createType(PrimitiveType.SMALLINT);
+        MapType mapType = new MapType(keyType, valueType);
+        String typeStr = "map<tinyint,smallint>";
+        Assert.assertEquals(typeStr, toHiveType(mapType));
+
+        typeStr = "struct<a:struct<aa:date>,b:int>";
+        StructField aa = new StructField("aa", ScalarType.createType(PrimitiveType.DATE));
+
+        StructType innerStruct = new StructType(Lists.newArrayList(aa));
+        StructField a = new StructField("a", innerStruct);
+        StructField b = new StructField("b", ScalarType.createType(PrimitiveType.INT));
+        StructType outerStruct = new StructType(Lists.newArrayList(a, b));
+        Assert.assertEquals(typeStr, toHiveType(outerStruct));
     }
 }

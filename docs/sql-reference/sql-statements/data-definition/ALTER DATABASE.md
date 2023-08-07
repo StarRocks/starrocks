@@ -2,7 +2,7 @@
 
 ## Description
 
-The statement is used to set the properties of the specified database. (Administrators only)
+Configures the properties of the specified database. (Administrator only)
 
 1. Set database data quota in B/K/KB/M/MB/G/GB/T/TB/P/PB unit.
 
@@ -35,15 +35,13 @@ The database's default data quota and the default replica quota are 2^63-1.
 
     ```SQL
     ALTER DATABASE example_db SET DATA QUOTA 10995116277760;
-    -- The above units are bytes, equivalent to the following statement
+    -- The above unit is bytes, equivalent to the following statement.
     ALTER DATABASE example_db SET DATA QUOTA 10T;
-    
     ALTER DATABASE example_db SET DATA QUOTA 100G;
-    
     ALTER DATABASE example_db SET DATA QUOTA 200M;
     ```
 
-2. Rename the database expamle_db as example_db2
+2. Rename the database example_db as example_db2
 
     ```SQL
     ALTER DATABASE example_db RENAME example_db2;
@@ -54,3 +52,11 @@ The database's default data quota and the default replica quota are 2^63-1.
     ```SQL
     ALTER DATABASE example_db SET REPLICA QUOTA 102400;
     ```
+
+## References
+
+- [CREATE DATABASE](CREATE%20DATABASE.md)
+- [USE](../data-definition/USE.md)
+- [SHOW DATABASES](../data-manipulation/SHOW%20DATABASES.md)
+- [DESC](../Utility/DESCRIBE.md)
+- [DROP DATABASE](../data-definition/DROP%20DATABASE.md)

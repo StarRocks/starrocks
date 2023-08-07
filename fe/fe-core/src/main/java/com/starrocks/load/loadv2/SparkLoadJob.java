@@ -67,7 +67,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DataQualityException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.DuplicatedRequestException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
@@ -86,9 +85,12 @@ import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ResourceDesc;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -103,6 +105,7 @@ import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPriority;
 import com.starrocks.thrift.TPushType;
+import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.BeginTransactionException;
@@ -137,22 +140,30 @@ public class SparkLoadJob extends BulkLoadJob {
 
     // --- members below need persist ---
     // create from resourceDesc when job created
+    @SerializedName("spkr")
     private SparkResource sparkResource;
     // members below updated when job state changed to etl
+    @SerializedName("etlt")
     private long etlStartTimestamp = -1;
     // for spark yarn
+    @SerializedName("appi")
     private String appId = "";
     // spark job outputPath
+    @SerializedName("etlo")
     private String etlOutputPath = "";
     // members below updated when job state changed to loading
     // { tableId.partitionId.indexId.bucket.schemaHash -> (etlFilePath, etlFileSize) }
+    @SerializedName("tbtm")
     private Map<String, Pair<String, Long>> tabletMetaToFileInfo = Maps.newHashMap();
+    @SerializedName("spkh")
     private SparkLoadAppHandle sparkLoadAppHandle = new SparkLoadAppHandle();
 
     // --- members below not persist ---
     private ResourceDesc resourceDesc;
     // for straggler wait long time to commit transaction
     private long quorumFinishTimestamp = -1;
+    // spark load wait yarn response timeout
+    protected long sparkLoadSubmitTimeoutSecond = Config.spark_load_submit_timeout_second;
     // below for push task
     private final Map<Long, Set<Long>> tableToLoadPartitions = Maps.newHashMap();
     private final Map<Long, PushBrokerReaderParams> indexToPushBrokerReaderParams = Maps.newHashMap();
@@ -177,8 +188,22 @@ public class SparkLoadJob extends BulkLoadJob {
     }
 
     @Override
+    public String getCurrentWarehouse() {
+        // TODO(lzh): pass the current warehouse.
+        return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+    }
+
+    @Override
     protected void setJobProperties(Map<String, String> properties) throws DdlException {
         super.setJobProperties(properties);
+
+        if (properties.containsKey(LoadStmt.SPARK_LOAD_SUBMIT_TIMEOUT)) {
+            try {
+                sparkLoadSubmitTimeoutSecond = Long.parseLong(properties.get(LoadStmt.SPARK_LOAD_SUBMIT_TIMEOUT));
+            } catch (NumberFormatException e) {
+                throw new DdlException("spark_load_submit_timeout is not LONG", e);
+            }
+        }
 
         // set spark resource and broker desc
         setResourceInfo();
@@ -344,8 +369,11 @@ public class SparkLoadJob extends BulkLoadJob {
             long dummyBackendId = -1L;
             loadingStatus.getLoadStatistic()
                     .initLoad(dummyId, Sets.newHashSet(dummyId), Lists.newArrayList(dummyBackendId));
+            TReportExecStatusParams params = new TReportExecStatusParams();
+            params.setDone(true);
+            params.setSource_load_rows(dppResult.scannedRows);
             loadingStatus.getLoadStatistic()
-                    .updateLoadProgress(dummyBackendId, dummyId, dummyId, dppResult.scannedRows, true);
+                    .updateLoadProgress(params);
 
             Map<String, String> counters = loadingStatus.getCounters();
             counters.put(DPP_NORMAL_ALL, String.valueOf(dppResult.normalRows));
@@ -521,9 +549,10 @@ public class SparkLoadJob extends BulkLoadJob {
 
                                 } else {
                                     // lake tablet
-                                    long backendId = ((LakeTablet) tablet).getPrimaryBackendId();
-                                    Backend backend = GlobalStateMgr.getCurrentSystemInfo().
-                                            getBackend(backendId);
+                                    long backendId = ((LakeTablet) tablet).getPrimaryComputeNodeId();
+                                    // TODO: need to refactor after be split into cn + dn
+                                    ComputeNode backend = GlobalStateMgr.getCurrentSystemInfo().
+                                            getBackendOrComputeNode(backendId);
                                     if (backend == null) {
                                         LOG.warn("replica {} not exists", backendId);
                                         continue;
@@ -571,7 +600,7 @@ public class SparkLoadJob extends BulkLoadJob {
                           PushBrokerReaderParams params,
                           AgentBatchTask batchTask,
                           String tabletMetaStr,
-                          Backend backend, Replica replica, Set<Long> tabletFinishedReplicas,
+                          ComputeNode backend, Replica replica, Set<Long> tabletFinishedReplicas,
                           TTabletType tabletType)
             throws AnalysisException {
 
@@ -617,7 +646,7 @@ public class SparkLoadJob extends BulkLoadJob {
                     0, id, TPushType.LOAD_V2,
                     TPriority.NORMAL, transactionId, taskSignature,
                     tBrokerScanRange, params.tDescriptorTable,
-                    params.useVectorized, timezone, tabletType);
+                    timezone, tabletType);
             if (AgentTaskQueue.addTask(pushTask)) {
                 batchTask.addTask(pushTask);
                 if (!tabletToSentReplicaPushTask.containsKey(tabletId)) {
@@ -857,9 +886,7 @@ public class SparkLoadJob extends BulkLoadJob {
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
         sparkResource = (SparkResource) Resource.read(in);
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_91) {
-            sparkLoadAppHandle = SparkLoadAppHandle.read(in);
-        }
+        sparkLoadAppHandle = SparkLoadAppHandle.read(in);
         etlStartTimestamp = in.readLong();
         appId = Text.readString(in);
         etlOutputPath = Text.readString(in);
@@ -964,12 +991,10 @@ public class SparkLoadJob extends BulkLoadJob {
     private static class PushBrokerReaderParams {
         TBrokerScanRange tBrokerScanRange;
         TDescriptorTable tDescriptorTable;
-        boolean useVectorized;
 
         public PushBrokerReaderParams() {
             this.tBrokerScanRange = new TBrokerScanRange();
             this.tDescriptorTable = null;
-            this.useVectorized = true;
         }
 
         public void init(List<Column> columns, BrokerDesc brokerDesc) throws UserException {
@@ -1008,24 +1033,13 @@ public class SparkLoadJob extends BulkLoadJob {
                 srcSlotDesc.setIsMaterialized(true);
                 srcSlotDesc.setIsNullable(true);
                 Type type = column.getType();
-                if (useVectorized) {
-                    if (type.isLargeIntType() || type.isBoolean() || type.isBitmapType() || type.isHllType()) {
-                        // largeint, boolean, bitmap, hll type using varchar in spark dpp parquet file
-                        srcSlotDesc.setType(ScalarType.createType(PrimitiveType.VARCHAR));
-                        srcSlotDesc.setColumn(new Column(column.getName(), Type.VARCHAR));
-                    } else {
-                        srcSlotDesc.setType(type);
-                        srcSlotDesc.setColumn(new Column(column.getName(), type));
-                    }
+                if (type.isLargeIntType() || type.isBoolean() || type.isBitmapType() || type.isHllType()) {
+                    // largeint, boolean, bitmap, hll type using varchar in spark dpp parquet file
+                    srcSlotDesc.setType(ScalarType.createType(PrimitiveType.VARCHAR));
+                    srcSlotDesc.setColumn(new Column(column.getName(), Type.VARCHAR));
                 } else {
-                    if (type.isBitmapType() || type.isHllType()) {
-                        // VARCHAR to BITMAP|HLL cast is disabled, so use origin type.
-                        srcSlotDesc.setType(type);
-                        srcSlotDesc.setColumn(new Column(column.getName(), type));
-                    } else {
-                        srcSlotDesc.setType(ScalarType.createType(PrimitiveType.VARCHAR));
-                        srcSlotDesc.setColumn(new Column(column.getName(), Type.VARCHAR));
-                    }
+                    srcSlotDesc.setType(type);
+                    srcSlotDesc.setColumn(new Column(column.getName(), type));
                 }
                 params.addToSrc_slot_ids(srcSlotDesc.getId().asInt());
                 srcSlotDescByName.put(column.getName(), srcSlotDesc);
@@ -1070,7 +1084,7 @@ public class SparkLoadJob extends BulkLoadJob {
                 // so we cast VARCHAR to TINYINT first, then cast TINYINT to BOOLEAN
                 return new CastExpr(Type.BOOLEAN, new CastExpr(Type.TINYINT, expr));
             } else if (dstType.isScalarType()) {
-                if (useVectorized && (dstType.isBitmapType() || dstType.isHllType()) && srcType.isVarchar()) {
+                if ((dstType.isBitmapType() || dstType.isHllType()) && srcType.isVarchar()) {
                     // there is no cast VARCHAR to BITMAP|HLL function,
                     // bitmap and hll data will be converted from varchar in be push.
                     return expr;

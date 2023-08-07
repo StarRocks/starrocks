@@ -12,16 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 
+import java.util.List;
 import java.util.Objects;
 
 /*
@@ -32,7 +33,7 @@ import java.util.Objects;
  *
  * */
 public class LogicalCTEProduceOperator extends LogicalOperator {
-    private final int cteId;
+    private int cteId;
 
     public LogicalCTEProduceOperator(int cteId) {
         super(OperatorType.LOGICAL_CTE_PRODUCE);
@@ -42,6 +43,11 @@ public class LogicalCTEProduceOperator extends LogicalOperator {
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
         return expressionContext.getChildLogicalProperty(0).getOutputColumns();
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        return projectInputRow(inputs.get(0).getRowOutputInfo());
     }
 
     public int getCteId() {
@@ -63,9 +69,7 @@ public class LogicalCTEProduceOperator extends LogicalOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
+
         if (!super.equals(o)) {
             return false;
         }
@@ -83,5 +87,23 @@ public class LogicalCTEProduceOperator extends LogicalOperator {
         return "LogicalCTEProduceOperator{" +
                 "cteId='" + cteId + '\'' +
                 '}';
+    }
+
+    public static class Builder
+            extends LogicalOperator.Builder<LogicalCTEProduceOperator, LogicalValuesOperator.Builder> {
+        @Override
+        protected LogicalCTEProduceOperator newInstance() {
+            return new LogicalCTEProduceOperator(-1);
+        }
+
+        public void setCteId(int cteId) {
+            builder.cteId = cteId;
+        }
+
+        @Override
+        public LogicalValuesOperator.Builder withOperator(LogicalCTEProduceOperator operator) {
+            builder.cteId = operator.cteId;
+            return super.withOperator(operator);
+        }
     }
 }

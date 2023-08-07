@@ -39,17 +39,25 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.TreeSet;
 
-public class IndexDef {
+public class IndexDef implements ParseNode {
     private String indexName;
     private List<String> columns;
     private IndexType indexType;
     private String comment;
 
-    public IndexDef(String indexName, List<String> columns, IndexType indexType, String comment) {
+    private final NodePosition pos;
+
+    public IndexDef (String indexName, List<String> columns, IndexType indexType, String comment) {
+        this(indexName, columns, indexType, comment, NodePosition.ZERO);
+    }
+
+    public IndexDef(String indexName, List<String> columns, IndexType indexType, String comment, NodePosition pos) {
+        this.pos = pos;
         this.indexName = indexName;
         this.columns = columns;
         if (indexType == null) {
@@ -83,8 +91,14 @@ public class IndexDef {
         }
     }
 
+    @Override
     public String toSql() {
         return toSql(null);
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 
     public String toSql(String tableName) {

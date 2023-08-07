@@ -14,13 +14,17 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -32,11 +36,23 @@ import static org.junit.Assert.assertTrue;
 
 public class AlterMaterializedViewTest {
     private static ConnectContext connectContext;
+    private static StarRocksAssert starRocksAssert;
+
+    private static GlobalStateMgr currentState;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
         connectContext = AnalyzeTestUtil.getConnectContext();
+        starRocksAssert = AnalyzeTestUtil.getStarRocksAssert();
+        currentState = GlobalStateMgr.getCurrentState();
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1\n" +
+                "                DISTRIBUTED BY HASH(v1) BUCKETS 10\n" +
+                "                PROPERTIES(\n" +
+                "                    \"replication_num\" = \"1\"\n" +
+                "                )\n" +
+                "                as  select v1, count(v2) as count_c2, sum(v3) as sum_c3\n" +
+                "                from t0 group by v1;\n");
     }
 
     @Test
@@ -66,6 +82,21 @@ public class AlterMaterializedViewTest {
     }
 
     @Test
+    public void testAlterChangeRefresh() throws Exception {
+        String alterMvSql = "alter materialized view mv1 refresh async start ('2222-05-23') every (interval 1 hour)";
+        AlterMaterializedViewStmt alterMvStmt =
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+        new AlterJobMgr().processAlterMaterializedView(alterMvStmt);
+
+        alterMvSql = "alter materialized view mv1 refresh ASYNC";
+        alterMvStmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+        new AlterJobMgr().processAlterMaterializedView(alterMvStmt);
+        MaterializedView mv = (MaterializedView) currentState.getDb("test").getTable("mv1");
+        String showCreateStmt = mv.getMaterializedViewDdlStmt(false);
+        Assert.assertFalse(showCreateStmt.contains("EVERY(INTERVAL 1 HOUR)"));
+    }
+
+    @Test
     public void testAlterManualRefresh() throws Exception {
         String alterMvSql = "alter materialized view mv1 refresh manual";
         AlterMaterializedViewStmt alterMvStmt =
@@ -91,7 +122,7 @@ public class AlterMaterializedViewTest {
     @Test
     public void testAlterAsyncRefreshMonth() {
         String alterMvSql = "alter materialized view mv1 refresh async start ('2222-05-23') every (interval 1 MONTH)";
-        Assert.assertThrows(IllegalArgumentException.class,
+        Assert.assertThrows(AnalysisException.class,
                 () -> UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext));
     }
 
@@ -105,5 +136,48 @@ public class AlterMaterializedViewTest {
     public void testAlterAsyncRefreshLowercase() throws Exception {
         String alterMvSql = "alter materialized view mv1 refresh async start ('2222-05-23') every (interval 1 day)";
         UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+    }
+
+    @Test
+    public void testAlterMVProperties() throws Exception {
+        {
+            String alterMvSql = "alter materialized view mv1 set (\"session.query_timeout\" = \"10000\")";
+            AlterMaterializedViewStmt stmt =
+                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+            currentState.alterMaterializedView(stmt);
+        }
+
+        {
+            String alterMvSql = "alter materialized view mv1 set (\"query_timeout\" = \"10000\")";
+            AlterMaterializedViewStmt stmt =
+                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+            Assert.assertThrows(DdlException.class, () -> currentState.alterMaterializedView(stmt));
+        }
+    }
+
+    // TODO: consider to support alterjob for mv
+    @Test
+    public void testAlterMVColocateGroup() throws Exception {
+        String alterMvSql = "alter materialized view mv1 set (\"colocate_with\" = \"group1\")";
+        AlterMaterializedViewStmt stmt =
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+        Assert.assertThrows(DdlException.class, () -> currentState.alterMaterializedView(stmt));
+    }
+
+    @Test
+    public void testAlterMVRewriteStalenessProperties() throws Exception {
+        {
+            String alterMvSql = "alter materialized view mv1 set (\"mv_rewrite_staleness_second\" = \"60\")";
+            AlterMaterializedViewStmt stmt =
+                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+            currentState.alterMaterializedView(stmt);
+        }
+
+        {
+            String alterMvSql = "alter materialized view mv1 set (\"mv_rewrite_staleness_second\" = \"abc\")";
+            AlterMaterializedViewStmt stmt =
+                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+            Assert.assertThrows(DdlException.class, () -> currentState.alterMaterializedView(stmt));
+        }
     }
 }

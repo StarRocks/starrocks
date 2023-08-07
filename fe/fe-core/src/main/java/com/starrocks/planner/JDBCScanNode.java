@@ -15,9 +15,9 @@
 
 package com.starrocks.planner;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
@@ -122,7 +122,8 @@ public class JDBCScanNode extends ScanNode {
         }
         JDBCResource resource = (JDBCResource) GlobalStateMgr.getCurrentState().getResourceMgr()
                 .getResource(table.getResourceName());
-        String jdbcURI = resource.getProperty(JDBCResource.URI);
+        // Compatible with jdbc catalog
+        String jdbcURI = resource != null ? resource.getProperty(JDBCResource.URI) : table.getProperty(JDBCResource.URI);
         boolean isMySQL = jdbcURI.startsWith("jdbc:mysql");
         ArrayList<Expr> mysqlConjuncts = Expr.cloneList(conjuncts, sMap);
         for (Expr p : mysqlConjuncts) {
@@ -132,6 +133,11 @@ public class JDBCScanNode extends ScanNode {
 
     @Override
     public boolean canUsePipeLine() {
+        return true;
+    }
+
+    @Override
+    public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }
 

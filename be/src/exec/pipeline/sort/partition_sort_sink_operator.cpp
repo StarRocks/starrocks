@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/sort/partition_sort_sink_operator.h"
 
+#include <memory>
+
 #include "exec/chunks_sorter.h"
 #include "exec/chunks_sorter_full_sort.h"
 #include "exec/chunks_sorter_heap_sort.h"
@@ -23,11 +25,13 @@
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
+#include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/primitive_type.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
+#include "storage/chunk_helper.h"
+#include "types/logical_type.h"
 
 using namespace starrocks;
 
@@ -37,7 +41,8 @@ Status PartitionSortSinkOperator::prepare(RuntimeState* state) {
 
     _sort_context->ref();
     _sort_context->incr_sinker();
-    _chunks_sorter->setup_runtime(_unique_metrics.get());
+
+    _chunks_sorter->setup_runtime(state, _unique_metrics.get(), this->mem_tracker());
 
     return Status::OK();
 }
@@ -79,6 +84,7 @@ Status PartitionSortSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr
         }
         state->runtime_filter_port()->publish_runtime_filters(build_descs);
     }
+
     return Status::OK();
 }
 
@@ -88,7 +94,7 @@ Status PartitionSortSinkOperator::set_finishing(RuntimeState* state) {
         _is_finished = true;
         return Status::Cancelled("runtime state is cancelled");
     }
-    RETURN_IF_ERROR(_chunks_sorter->finish(state));
+    RETURN_IF_ERROR(_chunks_sorter->done(state));
 
     // Current partition sort is ended, and
     // the last call will drive LocalMergeSortSourceOperator to work.
@@ -120,10 +126,11 @@ OperatorPtr PartitionSortSinkOperatorFactory::create(int32_t dop, int32_t driver
                     _sort_keys, 0, _limit + _offset, _topn_type, max_buffered_chunks);
         }
     } else {
-        chunks_sorter =
-                std::make_unique<ChunksSorterFullSort>(runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
-                                                       &_is_asc_order, &_is_null_first, _sort_keys);
+        chunks_sorter = std::make_unique<ChunksSorterFullSort>(
+                runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
+                _sort_keys, _max_buffered_rows, _max_buffered_bytes, _early_materialized_slots);
     }
+
     auto sort_context = _sort_context_factory->create(driver_sequence);
     sort_context->add_partition_chunks_sorter(chunks_sorter);
     auto ope = std::make_shared<PartitionSortSinkOperator>(this, _id, _plan_node_id, driver_sequence, chunks_sorter,

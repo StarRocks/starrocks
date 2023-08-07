@@ -513,7 +513,7 @@ TEST(ColumnPredicateTest, test_eq) {
     // decimal_v2
     {
         std::unique_ptr<ColumnPredicate> p(new_column_eq_predicate(get_type_info(TYPE_DECIMALV2), 0, "1.23"));
-        auto field = std::make_shared<VectorizedField>(1, "test", TYPE_DECIMALV2, 27, 9, false);
+        auto field = std::make_shared<Field>(1, "test", TYPE_DECIMALV2, 27, 9, false);
         auto c = ChunkHelper::column_from_field(*field);
         c->append_datum(Datum(DecimalV2Value("1.23")));
         c->append_datum(Datum(DecimalV2Value("1.24")));

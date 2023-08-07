@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
@@ -50,14 +49,8 @@ public class LogicalMysqlScanOperator extends LogicalScanOperator {
         this.temporalClause = temporalClause;
     }
 
-    private LogicalMysqlScanOperator(LogicalMysqlScanOperator.Builder builder) {
-        super(OperatorType.LOGICAL_MYSQL_SCAN,
-                builder.table,
-                builder.colRefToColumnMetaMap,
-                builder.columnMetaToColRefMap,
-                builder.getLimit(),
-                builder.getPredicate(),
-                builder.getProjection());
+    private LogicalMysqlScanOperator() {
+        super(OperatorType.LOGICAL_MYSQL_SCAN);
     }
 
     @Override
@@ -68,14 +61,8 @@ public class LogicalMysqlScanOperator extends LogicalScanOperator {
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalMysqlScanOperator, LogicalMysqlScanOperator.Builder> {
         @Override
-        public LogicalMysqlScanOperator build() {
-            return new LogicalMysqlScanOperator(this);
-        }
-
-        @Override
-        public LogicalMysqlScanOperator.Builder withOperator(LogicalMysqlScanOperator operator) {
-            super.withOperator(operator);
-            return this;
+        protected LogicalMysqlScanOperator newInstance() {
+            return new LogicalMysqlScanOperator();
         }
     }
 }

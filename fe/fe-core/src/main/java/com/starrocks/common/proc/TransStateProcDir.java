@@ -45,10 +45,10 @@ public class TransStateProcDir implements ProcDirInterface {
             .add("State").add("Number")
             .build();
 
-    private long dbId;
+    private final String dbIdOrName;
 
-    public TransStateProcDir(Long dbId) {
-        this.dbId = dbId;
+    public TransStateProcDir(String dbIdOrName) {
+        this.dbIdOrName = dbIdOrName;
     }
 
     @Override
@@ -56,6 +56,7 @@ public class TransStateProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
         GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        long dbId = ProcUtils.getDbId(dbIdOrName);
         result.setRows(transactionMgr.getDbTransStateInfo(dbId));
         return result;
     }
@@ -75,6 +76,7 @@ public class TransStateProcDir implements ProcDirInterface {
             throw new AnalysisException("State is invalid");
         }
 
+        long dbId = ProcUtils.getDbId(dbIdOrName);
         return new TransProcDir(dbId, state);
     }
 }

@@ -15,7 +15,7 @@ VARCHAR group_concat(VARCHAR str[, VARCHAR sep])
 ## Parameters
 
 - `str`: the values to concatenate. It must evaluate to VARCHAR.
-- `sep`: the separator, optional. If it is not specified, comma (,) is used by default.
+- `sep`: the separator, optional. If it is not specified, `, ` (a comma and a space) is used by default.
 
 ## Return value
 

@@ -96,6 +96,8 @@ Status ExceptNode::open(RuntimeState* state) {
     // initial build hash table used for remove duplicted
     _hash_set = std::make_unique<ExceptHashSerializeSet>();
     RETURN_IF_ERROR(_hash_set->init(state));
+    _buffer_state = std::make_unique<ExceptBufferState>();
+    RETURN_IF_ERROR(_buffer_state->init(state));
 
     ChunkPtr chunk = nullptr;
     RETURN_IF_ERROR(child(0)->open(state));
@@ -105,7 +107,8 @@ Status ExceptNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(child(0)->get_next(state, &chunk, &eos));
     if (!eos) {
         ScopedTimer<MonotonicStopWatch> build_timer(_build_set_timer);
-        TRY_CATCH_BAD_ALLOC(_hash_set->build_set(state, chunk, _child_expr_lists[0], _build_pool.get()));
+        TRY_CATCH_BAD_ALLOC(
+                _hash_set->build_set(state, chunk, _child_expr_lists[0], _build_pool.get(), _buffer_state.get()));
         while (true) {
             RETURN_IF_CANCELLED(state);
             build_timer.stop();
@@ -116,7 +119,8 @@ Status ExceptNode::open(RuntimeState* state) {
             } else if (chunk->num_rows() == 0) {
                 continue;
             } else {
-                TRY_CATCH_BAD_ALLOC(_hash_set->build_set(state, chunk, _child_expr_lists[0], _build_pool.get()));
+                TRY_CATCH_BAD_ALLOC(_hash_set->build_set(state, chunk, _child_expr_lists[0], _build_pool.get(),
+                                                         _buffer_state.get()));
             }
         }
     }
@@ -139,14 +143,15 @@ Status ExceptNode::open(RuntimeState* state) {
                 continue;
             } else {
                 SCOPED_TIMER(_erase_duplicate_row_timer);
-                RETURN_IF_ERROR(_hash_set->erase_duplicate_row(state, chunk, _child_expr_lists[i]));
+                RETURN_IF_ERROR(
+                        _hash_set->erase_duplicate_row(state, chunk, _child_expr_lists[i], _buffer_state.get()));
             }
         }
         // TODO: optimize, when hash set has no values, direct return
     }
 
     _hash_set_iterator = _hash_set->begin();
-    _mem_tracker->set(_hash_set->mem_usage());
+    _mem_tracker->set(_hash_set->mem_usage(_buffer_state.get()));
     return Status::OK();
 }
 
@@ -207,9 +212,9 @@ Status ExceptNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     return Status::OK();
 }
 
-Status ExceptNode::close(RuntimeState* state) {
+void ExceptNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
 
     for (auto& exprs : _child_expr_lists) {
@@ -220,11 +225,15 @@ Status ExceptNode::close(RuntimeState* state) {
         _build_pool->free_all();
     }
 
+    if (_buffer_state != nullptr) {
+        _buffer_state.reset();
+    }
+
     if (_hash_set != nullptr) {
         _hash_set.reset();
     }
 
-    return ExecNode::close(state);
+    ExecNode::close(state);
 }
 
 pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
@@ -234,7 +243,7 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
     auto&& rc_rf_probe_collector =
             std::make_shared<RcRfProbeCollector>(num_operators_generated, std::move(this->runtime_filter_collector()));
     ExceptPartitionContextFactoryPtr except_partition_ctx_factory =
-            std::make_shared<ExceptPartitionContextFactory>(_tuple_id);
+            std::make_shared<ExceptPartitionContextFactory>(_tuple_id, _children.size() - 1);
 
     // Use the first child to build the hast table by ExceptBuildSinkOperator.
     OpFactories ops_with_except_build_sink = child(0)->decompose_to_pipeline(context);
@@ -245,8 +254,10 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(ops_with_except_build_sink.back().get(), context, rc_rf_probe_collector);
     context->add_pipeline(ops_with_except_build_sink);
+    context->push_dependent_pipeline(context->last_pipeline());
+    DeferOp pop_dependent_pipeline([context]() { context->pop_dependent_pipeline(); });
 
-    // Use the rest children to erase keys from the hast table by ExceptProbeSinkOperator.
+    // Use the rest children to erase keys from the hash table by ExceptProbeSinkOperator.
     for (size_t i = 1; i < _children.size(); i++) {
         OpFactories ops_with_except_probe_sink = child(i)->decompose_to_pipeline(context);
         ops_with_except_probe_sink = context->maybe_interpolate_local_shuffle_exchange(
@@ -264,7 +275,8 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
             context->next_operator_id(), id(), except_partition_ctx_factory, _children.size() - 1);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(except_output_source.get(), context, rc_rf_probe_collector);
-    except_output_source->set_degree_of_parallelism(context->degree_of_parallelism());
+    context->inherit_upstream_source_properties(except_output_source.get(),
+                                                context->source_operator(ops_with_except_build_sink));
     ops_with_except_output_source.emplace_back(std::move(except_output_source));
     if (limit() != -1) {
         ops_with_except_output_source.emplace_back(

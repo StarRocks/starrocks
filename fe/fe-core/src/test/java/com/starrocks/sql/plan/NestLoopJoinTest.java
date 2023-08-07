@@ -62,7 +62,6 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"enable_persistent_index\" = \"false\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");");
@@ -101,7 +100,6 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"enable_persistent_index\" = \"false\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 "); ");
@@ -140,11 +138,13 @@ public class NestLoopJoinTest extends PlanTestBase {
                 " on substr(cast(sub1.v7 as string), 1) = substr(cast(sub2.v10 as string), 1)";
         assertPlanContains(sql, "13:Project\n" +
                 "  |  <slot 20> : 1\n" +
+                "  |  limit: 1\n" +
                 "  |  \n" +
                 "  12:HASH JOIN\n" +
                 "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 14: substr = 15: substr");
+                "  |  equal join conjunct: 14: substr = 15: substr\n" +
+                "  |  limit: 1");
 
         // RIGHT ANTI JOIN + AGGREGATE count(*)
         sql = "select count(*) from (select t2.id_char, t2.id_varchar " +

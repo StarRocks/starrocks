@@ -19,7 +19,7 @@
 #include "common/status.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "runtime/datetime_value.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -35,13 +35,21 @@ public:
     static Status list_table_status(const std::string& ip, const int32_t port, const TGetTablesParams& table_params,
                                     TListTableStatusResult* table_result);
 
+    static Status list_materialized_view_status(const std::string& ip, const int32_t port,
+                                                const TGetTablesParams& request,
+                                                TListMaterializedViewStatusResult* result);
+
+    static Status list_pipes(const std::string& ip, int32_t port, const TListPipesParams& req, TListPipesResult* res);
+    static Status list_pipe_files(const std::string& ip, int32_t port, const TListPipeFilesParams& req,
+                                  TListPipeFilesResult* res);
+
     static Status get_tables_info(const std::string& ip, const int32_t port, const TGetTablesInfoRequest& request,
                                   TGetTablesInfoResponse* response);
 
     static Status describe_table(const std::string& ip, const int32_t port, const TDescribeTableParams& desc_params,
                                  TDescribeTableResult* desc_result);
 
-    static Status show_varialbes(const std::string& ip, const int32_t port, const TShowVariableRequest& var_params,
+    static Status show_variables(const std::string& ip, const int32_t port, const TShowVariableRequest& var_params,
                                  TShowVariableResult* var_result);
 
     static std::string extract_db_name(const std::string& full_name);
@@ -58,11 +66,33 @@ public:
     static Status get_tasks(const std::string& ip, const int32_t port, const TGetTasksParams& var_params,
                             TGetTaskInfoResult* var_result);
 
+    static Status get_loads(const std::string& ip, const int32_t port, const TGetLoadsParams& var_params,
+                            TGetLoadsResult* var_result, int timeout_ms);
+
+    static Status get_tracking_loads(const std::string& ip, const int32_t port, const TGetLoadsParams& var_params,
+                                     TGetTrackingLoadsResult* var_result, int timeout_ms);
+
+    static Status get_routine_load_jobs(const std::string& ip, const int32_t port, const TGetLoadsParams& var_params,
+                                        TGetRoutineLoadJobsResult* var_result, int timeout_ms);
+
+    static Status get_stream_loads(const std::string& ip, const int32_t port, const TGetLoadsParams& var_params,
+                                   TGetStreamLoadsResult* var_result, int timeout_ms);
+
     static Status get_task_runs(const std::string& ip, const int32_t port, const TGetTasksParams& var_params,
                                 TGetTaskRunInfoResult* var_result);
 
     static Status get_tables_config(const std::string& ip, const int32_t port,
                                     const TGetTablesConfigRequest& var_params, TGetTablesConfigResponse* var_result);
+
+    static Status get_tablet_schedules(const std::string& ip, const int32_t port,
+                                       const TGetTabletScheduleRequest& request, TGetTabletScheduleResponse* response);
+
+    static Status get_role_edges(const std::string& ip, const int32_t port, const TGetRoleEdgesRequest& request,
+                                 TGetRoleEdgesResponse* response);
+
+    static Status get_grants_to(const std::string& ip, const int32_t port,
+                                const TGetGrantsToRolesOrUserRequest& request,
+                                TGetGrantsToRolesOrUserResponse* response, int timeout_ms);
 };
 
 template <LogicalType SlotType>

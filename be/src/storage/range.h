@@ -28,8 +28,9 @@ namespace starrocks {
 
 // Range represent a logical contiguous range of a segment file.
 // Range contains a inclusive start row number and an exclusive end row number.
+template <typename T = starrocks::rowid_t>
 class Range {
-    using rowid_t = starrocks::rowid_t;
+    using rowid_t = T;
 
 public:
     Range() = default;
@@ -50,7 +51,7 @@ public:
     bool empty() const { return span_size() == 0; }
 
     // number of rows covered by this range.
-    uint32_t span_size() const { return _end - _begin; }
+    rowid_t span_size() const { return _end - _begin; }
 
     // return a new range that represent the intersection of |this| and |r|.
     Range intersection(const Range& r) const;
@@ -66,49 +67,57 @@ private:
     rowid_t _end{0};
 };
 
-inline Range::Range(rowid_t begin, rowid_t end) : _begin(begin), _end(end) {
+template <typename T>
+inline Range<T>::Range(rowid_t begin, rowid_t end) : _begin(begin), _end(end) {
     if (_begin >= _end) {
         _begin = 0;
         _end = 0;
     }
 }
 
-inline Range Range::intersection(const Range& r) const {
+template <typename T>
+inline Range<T> Range<T>::intersection(const Range& r) const {
     if (!has_intersection(r)) {
         return {};
     }
     return {std::max(_begin, r._begin), std::min(_end, r._end)};
 }
 
-inline std::string Range::to_string() const {
+template <typename T>
+inline std::string Range<T>::to_string() const {
     std::stringstream ss;
     ss << "[" << _begin << "," << _end << ")";
     return ss.str();
 }
 
-inline std::ostream& operator<<(std::ostream& os, const Range& range) {
+template <typename T>
+inline std::ostream& operator<<(std::ostream& os, const Range<T>& range) {
     return (os << range.to_string());
 }
 
-inline bool operator==(const Range& r1, const Range& r2) {
+template <typename T>
+inline bool operator==(const Range<T>& r1, const Range<T>& r2) {
     return r1.begin() == r2.begin() && r1.end() == r2.end();
 }
 
-inline bool operator!=(const Range& r1, const Range& r2) {
+template <typename T>
+inline bool operator!=(const Range<T>& r1, const Range<T>& r2) {
     return !(r1 == r2);
 }
 
+template <typename T>
 class SparseRange;
 
 // SparseRangeIterator used to travel a SparseRange.
+template <typename T = starrocks::rowid_t>
 class SparseRangeIterator {
-    using rowid_t = starrocks::rowid_t;
+    using rowid_t = T;
 
 public:
     SparseRangeIterator() = default;
-    explicit SparseRangeIterator(const SparseRange* r);
+    explicit SparseRangeIterator(const SparseRange<T>* r);
 
-    SparseRangeIterator(const SparseRangeIterator& iter) = default;
+    SparseRangeIterator(const SparseRangeIterator<T>& iter) = default;
 
     rowid_t begin() const { return _next_rowid; }
 
@@ -117,38 +126,39 @@ public:
 
     // Return the next contiguous range contains at most |size| rows.
     // `has_more` must be checked before calling this method.
-    Range next(size_t size);
+    Range<T> next(rowid_t size);
 
     // Return the next discontiguous range contains at most |size| rows
-    void next_range(size_t size, SparseRange* range);
+    void next_range(rowid_t size, SparseRange<T>* range);
 
     // rhs should be a ordered sparse range
-    SparseRangeIterator intersection(const SparseRange& rhs, SparseRange* result) const;
+    SparseRangeIterator<T> intersection(const SparseRange<T>& rhs, SparseRange<T>* result) const;
 
-    void set_range(SparseRange* range) { _range = range; }
+    void set_range(SparseRange<T>* range) { _range = range; }
 
     size_t covered_ranges(size_t size) const;
 
-    size_t convert_to_bitmap(uint8_t* bitmap, size_t max_size) const;
+    rowid_t convert_to_bitmap(uint8_t* bitmap, rowid_t max_size) const;
 
-    void skip(size_t size);
+    void skip(rowid_t size);
 
 private:
-    const SparseRange* _range{nullptr};
+    const SparseRange<T>* _range{nullptr};
     size_t _index{0};
     rowid_t _next_rowid{0};
 };
 
 // SparseRange represent a set of non-intersected contiguous ranges, or, in other words, represent
 // a single non-contiguous range.
+template <typename T = starrocks::rowid_t>
 class SparseRange {
-    using rowid_t = starrocks::rowid_t;
+    using rowid_t = T;
 
 public:
     SparseRange() = default;
-    SparseRange(rowid_t begin, rowid_t end) { add(Range(begin, end)); }
-    explicit SparseRange(const Range r) { add(r); }
-    SparseRange(const std::initializer_list<Range>& ranges) { add(ranges); }
+    SparseRange(rowid_t begin, rowid_t end) { add(Range<T>(begin, end)); }
+    explicit SparseRange(const Range<T> r) { add(r); }
+    SparseRange(const std::initializer_list<Range<T>>& ranges) { add(ranges); }
 
     // true iff there are no sub-range.
     bool empty() const;
@@ -165,25 +175,28 @@ public:
     rowid_t end() const { return _ranges.back().end(); }
 
     // this method will invalidate iterator.
-    void add(const Range& r);
+    void add(const Range<T>& r);
 
     // this method will invalidate iterator.
-    void add(const std::initializer_list<Range>& ranges);
+    void add(const std::initializer_list<Range<T>>& ranges);
 
     // number of rows covered by this range. it's the sum of all the sub-ranges span size.
-    uint32_t span_size() const;
+    rowid_t span_size() const;
+
+    // only contains single row or empty
+    bool is_single_row_or_empty() const;
 
     // return a new range that represent the intersection of |this| and |r|.
-    SparseRange intersection(const SparseRange& rhs) const;
+    SparseRange<T> intersection(const SparseRange<T>& rhs) const;
 
-    SparseRangeIterator new_iterator() const;
+    SparseRangeIterator<T> new_iterator() const;
 
     std::string to_string() const;
 
-    bool operator==(const SparseRange& rhs) const;
-    bool operator!=(const SparseRange& rhs) const;
+    bool operator==(const SparseRange<T>& rhs) const;
+    bool operator!=(const SparseRange<T>& rhs) const;
 
-    const Range& operator[](size_t idx) const { return _ranges[idx]; }
+    const Range<T>& operator[](size_t idx) const { return _ranges[idx]; }
 
     SparseRange operator&(const SparseRange& rhs) const { return intersection(rhs); }
 
@@ -194,30 +207,35 @@ public:
     SparseRange& operator|=(const SparseRange& rhs);
 
 private:
-    friend class SparseRangeIterator;
+    friend class SparseRangeIterator<T>;
 
-    void _add_uncheck(const Range& r);
+    void _add_uncheck(const Range<T>& r);
 
-    std::vector<Range> _ranges;
+    std::vector<Range<T>> _ranges;
 };
+using SparseRangePtr = std::shared_ptr<SparseRange<>>;
 
-inline void SparseRange::_add_uncheck(const Range& r) {
+template <typename T>
+inline void SparseRange<T>::_add_uncheck(const Range<T>& r) {
     if (!r.empty()) {
         _ranges.emplace_back(r);
     }
 }
 
-inline bool SparseRange::empty() const {
+template <typename T>
+inline bool SparseRange<T>::empty() const {
     return _ranges.empty();
 }
 
-inline void SparseRange::add(const std::initializer_list<Range>& ranges) {
+template <typename T>
+inline void SparseRange<T>::add(const std::initializer_list<Range<T>>& ranges) {
     for (const auto& r : ranges) {
         add(r);
     }
 }
 
-inline void SparseRange::add(const Range& r) {
+template <typename T>
+inline void SparseRange<T>::add(const Range<T>& r) {
     if (r.empty()) {
         return;
     }
@@ -229,7 +247,7 @@ inline void SparseRange::add(const Range& r) {
         _ranges.insert(_ranges.begin(), r);
         return;
     }
-    std::vector<Range> new_ranges;
+    std::vector<Range<T>> new_ranges;
     new_ranges.reserve(_ranges.size() + 1);
     size_t i = 0;
     // ranges on the left side of |r| and not contiguous with |r|.
@@ -254,19 +272,27 @@ inline void SparseRange::add(const Range& r) {
     _ranges.swap(new_ranges);
 }
 
-inline uint32_t SparseRange::span_size() const {
-    size_t n = 0;
+template <typename T>
+inline typename SparseRange<T>::rowid_t SparseRange<T>::span_size() const {
+    rowid_t n = 0;
     for (const auto& r : _ranges) {
         n += r.span_size();
     }
     return n;
 }
 
-inline SparseRangeIterator SparseRange::new_iterator() const {
+template <typename T>
+inline bool SparseRange<T>::is_single_row_or_empty() const {
+    return _ranges.empty() || (_ranges.size() == 1 && _ranges[0].span_size() == 1);
+}
+
+template <typename T>
+inline SparseRangeIterator<T> SparseRange<T>::new_iterator() const {
     return SparseRangeIterator(this);
 }
 
-inline std::string SparseRange::to_string() const {
+template <typename T>
+inline std::string SparseRange<T>::to_string() const {
     std::stringstream ss;
     ss << "(";
     for (const auto& r : _ranges) {
@@ -276,7 +302,8 @@ inline std::string SparseRange::to_string() const {
     return ss.str();
 }
 
-inline SparseRange SparseRange::intersection(const SparseRange& rhs) const {
+template <typename T>
+inline SparseRange<T> SparseRange<T>::intersection(const SparseRange<T>& rhs) const {
     SparseRange result;
     for (const auto& r1 : _ranges) {
         for (const auto& r2 : rhs._ranges) {
@@ -288,40 +315,46 @@ inline SparseRange SparseRange::intersection(const SparseRange& rhs) const {
     return result;
 }
 
-inline SparseRange SparseRange::operator|(const SparseRange& rhs) const {
+template <typename T>
+inline SparseRange<T> SparseRange<T>::operator|(const SparseRange<T>& rhs) const {
     SparseRange res = *this;
     res |= rhs;
     return res;
 }
 
-inline SparseRange& SparseRange::operator&=(const SparseRange& rhs) {
-    SparseRange tmp = this->intersection(rhs);
+template <typename T>
+inline SparseRange<T>& SparseRange<T>::operator&=(const SparseRange<T>& rhs) {
+    SparseRange<T> tmp = this->intersection(rhs);
     *this = std::move(tmp);
     return *this;
 }
 
-inline SparseRange& SparseRange::operator|=(const SparseRange& rhs) {
+template <typename T>
+inline SparseRange<T>& SparseRange<T>::operator|=(const SparseRange<T>& rhs) {
     for (size_t i = 0; i < rhs.size(); i++) {
         add(rhs[i]);
     }
     return *this;
 }
 
-inline SparseRangeIterator::SparseRangeIterator(const SparseRange* r) : _range(r) {
+template <typename T>
+inline SparseRangeIterator<T>::SparseRangeIterator(const SparseRange<T>* r) : _range(r) {
     if (!_range->_ranges.empty()) {
         _next_rowid = _range->_ranges[0].begin();
     }
 }
 
-inline bool SparseRangeIterator::has_more() const {
+template <typename T>
+inline bool SparseRangeIterator<T>::has_more() const {
     return _index < _range->_ranges.size();
 }
 
-inline Range SparseRangeIterator::next(size_t size) {
-    const std::vector<Range>& ranges = _range->_ranges;
-    const Range& range = ranges[_index];
-    size = std::min<size_t>(size, range.end() - _next_rowid);
-    Range ret(_next_rowid, _next_rowid + size);
+template <typename T>
+inline Range<T> SparseRangeIterator<T>::next(SparseRangeIterator<T>::rowid_t size) {
+    const std::vector<Range<T>>& ranges = _range->_ranges;
+    const Range<T>& range = ranges[_index];
+    size = std::min<rowid_t>(size, range.end() - _next_rowid);
+    Range<T> ret(_next_rowid, _next_rowid + size);
     _next_rowid += size;
     if (_next_rowid == range.end()) {
         ++_index;
@@ -332,7 +365,8 @@ inline Range SparseRangeIterator::next(size_t size) {
     return ret;
 }
 
-inline void SparseRangeIterator::next_range(size_t size, SparseRange* range) {
+template <typename T>
+inline void SparseRangeIterator<T>::next_range(SparseRangeIterator<T>::rowid_t size, SparseRange<T>* range) {
     while (size > 0 && has_more()) {
         Range r = next(size);
         range->add(r);
@@ -340,7 +374,9 @@ inline void SparseRangeIterator::next_range(size_t size, SparseRange* range) {
     }
 }
 
-inline SparseRangeIterator SparseRangeIterator::intersection(const SparseRange& rhs, SparseRange* result) const {
+template <typename T>
+inline SparseRangeIterator<T> SparseRangeIterator<T>::intersection(const SparseRange<T>& rhs,
+                                                                   SparseRange<T>* result) const {
     DCHECK(std::is_sorted(rhs._ranges.begin(), rhs._ranges.end(),
                           [](const auto& l, const auto& r) { return l.begin() < r.begin(); }));
     for (size_t i = _index; i < _range->_ranges.size(); ++i) {
@@ -354,7 +390,7 @@ inline SparseRangeIterator SparseRangeIterator::intersection(const SparseRange& 
             }
         }
     }
-    SparseRangeIterator res(result);
+    SparseRangeIterator<T> res(result);
     if (res.has_more()) {
         for (size_t i = 0; i < res._range->size(); ++i) {
             // set idx and next rowid
@@ -372,11 +408,12 @@ inline SparseRangeIterator SparseRangeIterator::intersection(const SparseRange& 
     return res;
 }
 
-inline size_t SparseRangeIterator::covered_ranges(size_t size) const {
+template <typename T>
+inline size_t SparseRangeIterator<T>::covered_ranges(size_t size) const {
     if (size == 0) {
         return 0;
     }
-    const std::vector<Range>& ranges = _range->_ranges;
+    const std::vector<Range<T>>& ranges = _range->_ranges;
     rowid_t end = std::min<rowid_t>(_next_rowid + size, ranges.back().end());
     size_t i = _index;
     for (; ranges[i].end() < end; i++) {
@@ -385,9 +422,10 @@ inline size_t SparseRangeIterator::covered_ranges(size_t size) const {
     return i - _index;
 }
 
-inline void SparseRangeIterator::skip(size_t size) {
+template <typename T>
+inline void SparseRangeIterator<T>::skip(SparseRangeIterator<T>::rowid_t size) {
     _next_rowid += size;
-    const std::vector<Range>& ranges = _range->_ranges;
+    const std::vector<Range<T>>& ranges = _range->_ranges;
     while (_index < ranges.size() && ranges[_index].end() <= _next_rowid) {
         _index++;
     }
@@ -396,13 +434,15 @@ inline void SparseRangeIterator::skip(size_t size) {
     }
 }
 
-inline size_t SparseRangeIterator::convert_to_bitmap(uint8_t* bitmap, size_t max_size) const {
+template <typename T>
+inline typename SparseRangeIterator<T>::rowid_t SparseRangeIterator<T>::convert_to_bitmap(uint8_t* bitmap,
+                                                                                          rowid_t max_size) const {
     rowid_t curr_row = _next_rowid;
     size_t index = _index;
-    const std::vector<Range>& ranges = _range->_ranges;
-    max_size = std::min<size_t>(max_size, ranges.back().end() - _next_rowid);
+    const std::vector<Range<T>>& ranges = _range->_ranges;
+    max_size = std::min<rowid_t>(max_size, ranges.back().end() - _next_rowid);
     DCHECK(!has_more() || ranges[_index].contains(curr_row));
-    for (size_t i = 0; i < max_size; i++) {
+    for (rowid_t i = 0; i < max_size; i++) {
         rowid_t b = ranges[index].begin();
         rowid_t e = ranges[index].end();
         bitmap[i] = (curr_row - b) < (e - b);
@@ -412,16 +452,28 @@ inline size_t SparseRangeIterator::convert_to_bitmap(uint8_t* bitmap, size_t max
     return max_size;
 }
 
-inline bool SparseRange::operator==(const SparseRange& rhs) const {
+template <typename T>
+inline bool SparseRange<T>::operator==(const SparseRange<T>& rhs) const {
     return _ranges == rhs._ranges;
 }
 
-inline bool SparseRange::operator!=(const SparseRange& rhs) const {
+template <typename T>
+inline bool SparseRange<T>::operator!=(const SparseRange<T>& rhs) const {
     return !(*this == rhs);
 }
 
-inline std::ostream& operator<<(std::ostream& os, const SparseRange& range) {
+template <typename T>
+inline std::ostream& operator<<(std::ostream& os, const SparseRange<T>& range) {
     return (os << range.to_string());
 }
+
+template class Range<>;
+template class Range<starrocks::ordinal_t>;
+
+template class SparseRange<>;
+template class SparseRange<starrocks::ordinal_t>;
+
+template class SparseRangeIterator<>;
+template class SparseRangeIterator<starrocks::ordinal_t>;
 
 } // namespace starrocks

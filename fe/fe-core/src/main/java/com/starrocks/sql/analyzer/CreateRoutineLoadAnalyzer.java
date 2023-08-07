@@ -18,7 +18,6 @@ import com.google.common.base.Strings;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
@@ -42,7 +41,6 @@ public class CreateRoutineLoadAnalyzer {
             if (Strings.isNullOrEmpty(dbName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
             }
-            label.setDbName(dbName);
         }
         if (Strings.isNullOrEmpty(statement.getTableName())) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR);

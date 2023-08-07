@@ -37,16 +37,25 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
 public class CollectionElementExpr extends Expr {
+
     public CollectionElementExpr(Expr expr, Expr subscript) {
+        super(NodePosition.ZERO);
         this.children.add(expr);
         this.children.add(subscript);
     }
 
     public CollectionElementExpr(Type type, Expr expr, Expr subscript) {
+        this(type, expr, subscript, NodePosition.ZERO);
+    }
+
+
+    public CollectionElementExpr(Type type, Expr expr, Expr subscript, NodePosition pos) {
+        super(pos);
         this.type = type;
         this.children.add(expr);
         this.children.add(subscript);
@@ -84,5 +93,14 @@ public class CollectionElementExpr extends Expr {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCollectionElementExpr(this, context);
+    }
+
+    @Override
+    public boolean isSelfMonotonic() {
+        boolean ret = true;
+        for (Expr child : children) {
+            ret &= child.isSelfMonotonic();
+        }
+        return ret;
     }
 }

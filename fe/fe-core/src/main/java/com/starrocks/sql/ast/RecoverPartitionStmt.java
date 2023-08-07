@@ -16,12 +16,18 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TableName;
+import com.starrocks.sql.parser.NodePosition;
 
 public class RecoverPartitionStmt extends DdlStmt {
     private final TableName dbTblName;
     private final String partitionName;
 
     public RecoverPartitionStmt(TableName dbTblName, String partitionName) {
+        this(dbTblName, partitionName, NodePosition.ZERO);
+    }
+
+    public RecoverPartitionStmt(TableName dbTblName, String partitionName, NodePosition pos) {
+        super(pos);
         this.dbTblName = dbTblName;
         this.partitionName = partitionName;
     }

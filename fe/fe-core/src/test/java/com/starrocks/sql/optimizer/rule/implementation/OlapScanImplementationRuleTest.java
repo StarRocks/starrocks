@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.implementation;
 
 import com.google.common.collect.Lists;
@@ -39,7 +38,7 @@ public class OlapScanImplementationRuleTest {
         LogicalOlapScanOperator logical = new LogicalOlapScanOperator(table, Maps.newHashMap(), Maps.newHashMap(),
                 null, -1, ConstantOperator.createBoolean(true),
                 1, Lists.newArrayList(1L, 2L, 3L), null,
-                Lists.newArrayList(4L), null);
+                false, Lists.newArrayList(4L), null, false);
 
         List<OptExpression> output =
                 new OlapScanImplementationRule().transform(new OptExpression(logical), new OptimizerContext(

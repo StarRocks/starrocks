@@ -53,6 +53,7 @@ import com.starrocks.leader.MetaHelper;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.QeService;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FeServer;
 import com.starrocks.service.FrontendOptions;
@@ -77,9 +78,12 @@ public class StarRocksFE {
     public static final String STARROCKS_HOME_DIR = System.getenv("STARROCKS_HOME");
     public static final String PID_DIR = System.getenv("PID_DIR");
 
+    public static volatile boolean stopped = false;
+
     public static void main(String[] args) {
         start(STARROCKS_HOME_DIR, PID_DIR, args);
     }
+
 
     // entrance for starrocks frontend
     public static void start(String starRocksDir, String pidDir, String[] args) {
@@ -120,7 +124,7 @@ public class StarRocksFE {
             // check meta dir
             MetaHelper.checkMetaDir();
 
-            LOG.info("StarRocks FE starting...");
+            LOG.info("StarRocks FE starting, version: {}-{}", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH);
 
             FrontendOptions.init(args);
             ExecuteEnv.setup();
@@ -131,7 +135,7 @@ public class StarRocksFE {
             StateChangeExecutor.getInstance().setMetaContext(
                     GlobalStateMgr.getCurrentState().getMetaContext());
 
-            if (Config.integrate_starmgr) {
+            if (RunMode.allowCreateLakeTable()) {
                 Journal journal = GlobalStateMgr.getCurrentState().getJournal();
                 if (journal instanceof BDBJEJournal) {
                     BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();
@@ -176,12 +180,18 @@ public class StarRocksFE {
 
             addShutdownHook();
 
-            while (true) {
+            LOG.info("FE started successfully");
+
+            while (!stopped) {
                 Thread.sleep(2000);
             }
+
         } catch (Throwable e) {
             LOG.error("StarRocksFE start failed", e);
+            System.exit(-1);
         }
+
+        System.exit(0);
     }
 
     /*
@@ -235,12 +245,12 @@ public class StarRocksFE {
 
         // version
         if (cmd.hasOption('v') || cmd.hasOption("version")) {
-            return new CommandLineOptions(true, "", null);
+            return new CommandLineOptions(true, null);
         } else if (cmd.hasOption('b') || cmd.hasOption("bdb")) {
             if (cmd.hasOption('l') || cmd.hasOption("listdb")) {
                 // list bdb je databases
                 BDBToolOptions bdbOpts = new BDBToolOptions(true, "", false, "", "", 0, 0);
-                return new CommandLineOptions(false, "", bdbOpts);
+                return new CommandLineOptions(false, bdbOpts);
             } else if (cmd.hasOption('d') || cmd.hasOption("db")) {
                 // specify a database
                 String dbName = cmd.getOptionValue("db");
@@ -251,7 +261,7 @@ public class StarRocksFE {
 
                 if (cmd.hasOption('s') || cmd.hasOption("stat")) {
                     BDBToolOptions bdbOpts = new BDBToolOptions(false, dbName, true, "", "", 0, 0);
-                    return new CommandLineOptions(false, "", bdbOpts);
+                    return new CommandLineOptions(false, bdbOpts);
                 } else {
                     String fromKey = "";
                     String endKey = "";
@@ -290,7 +300,7 @@ public class StarRocksFE {
                     BDBToolOptions bdbOpts =
                             new BDBToolOptions(false, dbName, false, fromKey, endKey, metaVersion,
                                     starrocksMetaVersion);
-                    return new CommandLineOptions(false, "", bdbOpts);
+                    return new CommandLineOptions(false, bdbOpts);
                 }
             } else {
                 System.err.println("Invalid options when running bdb je tools");
@@ -302,11 +312,10 @@ public class StarRocksFE {
                 System.err.println("Missing helper node");
                 System.exit(-1);
             }
-            return new CommandLineOptions(false, helperNode, null);
         }
 
         // helper node is null, means no helper node is specified
-        return new CommandLineOptions(false, null, null);
+        return new CommandLineOptions(false, null);
     }
 
     private static void checkCommandLineOptions(CommandLineOptions cmdLineOpts) {

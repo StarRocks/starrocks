@@ -38,10 +38,10 @@
 
 #include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
-#include "runtime/primitive_type.h"
 #include "runtime/string_value.h"
-#include "storage/array_type_info.h"
 #include "storage/types.h"
+#include "types/array_type_info.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -69,13 +69,11 @@ TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) {
     case TTypeNodeType::STRUCT:
         type = TYPE_STRUCT;
         ++(*idx);
-        DCHECK(node.__isset.selected_fields);
-        selected_fields = node.selected_fields;
         for (const auto& struct_field : node.struct_fields) {
             field_names.push_back(struct_field.name);
             children.push_back(TypeDescriptor(types, idx));
         }
-        DCHECK_EQ(selected_fields.size(), children.size());
+        DCHECK_EQ(field_names.size(), children.size());
         break;
     case TTypeNodeType::ARRAY:
         DCHECK(!node.__isset.scalar_type);
@@ -88,8 +86,6 @@ TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) {
         DCHECK(!node.__isset.scalar_type);
         DCHECK_LT(*idx, types.size() - 2);
         type = TYPE_MAP;
-        DCHECK_EQ(2, node.selected_fields.size());
-        selected_fields = node.selected_fields;
         ++(*idx);
         children.push_back(TypeDescriptor(types, idx));
         children.push_back(TypeDescriptor(types, idx));
@@ -107,8 +103,6 @@ void TypeDescriptor::to_thrift(TTypeDesc* thrift_type) const {
         children[0].to_thrift(thrift_type);
     } else if (type == TYPE_MAP) {
         curr_node.__set_type(TTypeNodeType::MAP);
-        DCHECK_EQ(2, selected_fields.size());
-        curr_node.__set_selected_fields(selected_fields);
         DCHECK_EQ(2, children.size());
         children[0].to_thrift(thrift_type);
         children[1].to_thrift(thrift_type);
@@ -120,8 +114,7 @@ void TypeDescriptor::to_thrift(TTypeDesc* thrift_type) const {
             curr_node.struct_fields.emplace_back();
             curr_node.struct_fields.back().__set_name(field_name);
         }
-        curr_node.__set_selected_fields(selected_fields);
-        DCHECK_EQ(children.size(), selected_fields.size());
+        DCHECK_EQ(children.size(), field_names.size());
         for (const TypeDescriptor& child : children) {
             child.to_thrift(thrift_type);
         }
@@ -150,18 +143,14 @@ void TypeDescriptor::to_protobuf(PTypeDesc* proto_type) const {
         children[0].to_protobuf(proto_type);
     } else if (type == TYPE_MAP) {
         node->set_type(TTypeNodeType::MAP);
-        DCHECK_EQ(2, selected_fields.size());
-        node->add_selected_fields(selected_fields[0]);
-        node->add_selected_fields(selected_fields[1]);
-        DCHECK_EQ(2, children.size());
         children[0].to_protobuf(proto_type);
         children[1].to_protobuf(proto_type);
+        DCHECK_EQ(2, children.size());
     } else if (type == TYPE_STRUCT) {
         node->set_type(TTypeNodeType::STRUCT);
-        DCHECK_EQ(field_names.size(), selected_fields.size());
-        for (size_t i = 0; i < field_names.size(); i++) {
-            node->add_struct_fields()->set_name(field_names[i]);
-            node->add_selected_fields(selected_fields[i]);
+        DCHECK_EQ(field_names.size(), children.size());
+        for (const auto& field_name : field_names) {
+            node->add_struct_fields()->set_name(field_name);
         }
         for (const TypeDescriptor& child : children) {
             child.to_protobuf(proto_type);
@@ -212,7 +201,6 @@ TypeDescriptor::TypeDescriptor(const google::protobuf::RepeatedPtrField<PTypeNod
         for (int i = 0; i < node.struct_fields().size(); ++i) {
             children.push_back(TypeDescriptor(types, idx));
             field_names.push_back(node.struct_fields(i).name());
-            selected_fields.push_back(node.selected_fields(i));
         }
         break;
     case TTypeNodeType::ARRAY:
@@ -227,8 +215,6 @@ TypeDescriptor::TypeDescriptor(const google::protobuf::RepeatedPtrField<PTypeNod
         DCHECK_LT(*idx, types.size() - 2);
         ++(*idx);
         type = TYPE_MAP;
-        selected_fields.push_back(node.selected_fields(0));
-        selected_fields.push_back(node.selected_fields(1));
         children.push_back(TypeDescriptor(types, idx));
         children.push_back(TypeDescriptor(types, idx));
         break;
@@ -267,14 +253,6 @@ std::string TypeDescriptor::debug_string() const {
             }
         }
         ss << "}";
-        ss << ", Selected fields: [";
-        for (size_t i = 0; i < selected_fields.size(); i++) {
-            ss << selected_fields[i];
-            if (i + 1 < selected_fields.size()) {
-                ss << ", ";
-            }
-        }
-        ss << "]";
         return ss.str();
     }
     default:
@@ -283,18 +261,26 @@ std::string TypeDescriptor::debug_string() const {
 }
 
 bool TypeDescriptor::support_join() const {
-    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
-           type != TYPE_MAP && type != TYPE_STRUCT && type != TYPE_ARRAY;
+    if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT) {
+        return std::all_of(children.begin(), children.end(), [](const TypeDescriptor& t) { return t.support_join(); });
+    }
+    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL;
 }
 
 bool TypeDescriptor::support_orderby() const {
+    if (type == TYPE_ARRAY) {
+        return children[0].support_orderby();
+    }
     return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
-           type != TYPE_MAP && type != TYPE_STRUCT && type != TYPE_ARRAY;
+           type != TYPE_MAP && type != TYPE_STRUCT;
 }
 
 bool TypeDescriptor::support_groupby() const {
-    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
-           type != TYPE_MAP && type != TYPE_STRUCT;
+    if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT) {
+        return std::all_of(children.begin(), children.end(),
+                           [](const TypeDescriptor& t) { return t.support_groupby(); });
+    }
+    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL;
 }
 
 TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
@@ -307,12 +293,12 @@ TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
         ftype = type_info->type();
     }
 
-    LogicalType ptype = scalar_field_type_to_primitive_type(ftype);
-    DCHECK(ptype != TYPE_UNKNOWN);
+    LogicalType ltype = scalar_field_type_to_logical_type(ftype);
+    DCHECK(ltype != TYPE_UNKNOWN);
     int len = TypeDescriptor::MAX_VARCHAR_LENGTH;
     int precision = type_info->precision();
     int scale = type_info->scale();
-    TypeDescriptor ret = TypeDescriptor::from_primtive_type(ptype, len, precision, scale);
+    TypeDescriptor ret = TypeDescriptor::from_logical_type(ltype, len, precision, scale);
 
     if (is_array) {
         TypeDescriptor arr;
@@ -393,6 +379,16 @@ int TypeDescriptor::get_slot_size() const {
     }
     // For llvm complain
     return -1;
+}
+
+size_t TypeDescriptor::get_array_depth_limit() const {
+    int depth = 1;
+    const TypeDescriptor* type = this;
+    while (type->children.size() > 0) {
+        type = &type->children[0];
+        depth++;
+    }
+    return depth;
 }
 
 } // namespace starrocks

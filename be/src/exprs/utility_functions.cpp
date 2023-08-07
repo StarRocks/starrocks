@@ -14,6 +14,9 @@
 
 #include "exprs/utility_functions.h"
 
+#include "gen_cpp/FrontendService_types.h"
+#include "runtime/client_cache.h"
+
 #ifdef __SSE4_2__
 #include <emmintrin.h>
 #endif
@@ -33,15 +36,17 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/version.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
-#include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "service/backend_options.h"
+#include "types/logical_type.h"
 #include "util/cidr.h"
 #include "util/monotime.h"
 #include "util/network_util.h"
 #include "util/thread.h"
+#include "util/thrift_rpc_helper.h"
 #include "util/time.h"
 #include "util/uid_util.h"
 
@@ -52,7 +57,7 @@ StatusOr<ColumnPtr> UtilityFunctions::version(FunctionContext* context, const Co
 }
 
 StatusOr<ColumnPtr> UtilityFunctions::current_version(FunctionContext* context, const Columns& columns) {
-    static std::string version = std::string(STARROCKS_VERSION) + " " + STARROCKS_COMMIT_HASH;
+    static std::string version = std::string(STARROCKS_VERSION) + "-" + STARROCKS_COMMIT_HASH;
     return ColumnHelper::create_const_column<TYPE_VARCHAR>(version, 1);
 }
 
@@ -262,6 +267,36 @@ StatusOr<ColumnPtr> UtilityFunctions::host_name(FunctionContext* context, const 
         host_name = "error";
         return ColumnHelper::create_const_column<TYPE_VARCHAR>(host_name, 1);
     }
+}
+
+StatusOr<ColumnPtr> UtilityFunctions::get_query_profile(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
+    auto* state = context->state();
+    if (state->fragment_ctx() == nullptr) {
+        return Status::NotSupported("unsupport get_query_profile for no-pipeline");
+    }
+
+    const auto& fe_addr = state->fragment_ctx()->fe_addr();
+    TGetProfileResponse res;
+    TGetProfileRequest req;
+
+    std::vector<std::string> query_ids;
+    for (size_t i = 0; i < columns[0]->size(); ++i) {
+        query_ids.emplace_back(viewer.value(i));
+    }
+    req.__set_query_id(query_ids);
+
+    RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
+            fe_addr.hostname, fe_addr.port,
+            [&](FrontendServiceConnection& client) { client->getQueryProfile(res, req); }));
+
+    ColumnBuilder<TYPE_VARCHAR> builder(state->chunk_size());
+    for (const auto& result : res.query_result) {
+        builder.append(result);
+    }
+
+    return builder.build(false);
 }
 
 } // namespace starrocks

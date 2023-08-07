@@ -2,7 +2,7 @@
 
 ## Description
 
-Sorts elements in an array according to the ascending order of elements in another array or array converted from a lambda expression. For more information, see [Lambda expression](../Lambda_expression.md).
+Sorts elements in an array according to the ascending order of elements in another array or array converted from a lambda expression. For more information, see [Lambda expression](../Lambda_expression.md). This function is supported from v2.5.
 
 Elements in the two arrays are like key-value pairs. For example, b = [7,5,6] is the sorting key of a = [3,1,4]. According to the key-value pair relationship, elements in the two arrays have the following one-to-one mapping.
 
@@ -37,7 +37,7 @@ array_sortby(<lambda function>, array0 [, array1...])
 
 - `array0`: the array you want to sort. It must be an array, array expression, or `null`. Elements in the array must be sortable.
 - `array1`: the sorting array used to sort `array0`. It must be an array, array expression, or `null`.
-- `lambda function`：the lambda expression used to generate the sorting array.
+- `lambda function`: the lambda expression used to generate the sorting array.
 
 ## Return value
 
@@ -64,10 +64,9 @@ CREATE TABLE `test_array` (
 ) ENGINE=OLAP
 DUPLICATE KEY(`c1`)
 COMMENT "OLAP"
-DISTRIBUTED BY HASH(`c1`) BUCKETS 2
+DISTRIBUTED BY HASH(`c1`)
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
+"replication_num" = "3",
 "storage_format" = "DEFAULT",
 "enable_persistent_index" = "false",
 "compression" = "LZ4"

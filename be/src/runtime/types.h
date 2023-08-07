@@ -1,4 +1,4 @@
-// Copyright 2021-present StarRocks, Inc. All rights reserved.
+// Copyright 2023-present StarRocks, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -37,11 +37,12 @@
 #include <string>
 #include <vector>
 
+#include "common/logging.h"
 #include "gen_cpp/Types_types.h" // for TPrimitiveType
 #include "gen_cpp/types.pb.h"    // for PTypeDesc
-#include "runtime/primitive_type.h"
 #include "thrift/protocol/TDebugProtocol.h"
 #include "types/constexpr.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -77,9 +78,6 @@ struct TypeDescriptor {
     /// Only set if type == TYPE_STRUCT. The field name of each child.
     std::vector<std::string> field_names;
 
-    // Only set if type == TYPE_MAP || type == TYPE_STRUCT.
-    std::vector<bool> selected_fields;
-
     TypeDescriptor() = default;
 
     explicit TypeDescriptor(LogicalType type) : type(type) {}
@@ -98,10 +96,24 @@ struct TypeDescriptor {
         return ret;
     }
 
+    static TypeDescriptor create_varbinary_type(int len) {
+        TypeDescriptor ret;
+        ret.type = TYPE_VARBINARY;
+        ret.len = len;
+        return ret;
+    }
+
     static TypeDescriptor create_json_type() {
         TypeDescriptor res;
         res.type = TYPE_JSON;
         res.len = kJsonDefaultSize;
+        return res;
+    }
+
+    static TypeDescriptor create_array_type(TypeDescriptor children) {
+        TypeDescriptor res;
+        res.type = TYPE_ARRAY;
+        res.children.push_back(children);
         return res;
     }
 
@@ -155,9 +167,9 @@ struct TypeDescriptor {
         return ret;
     }
 
-    static TypeDescriptor from_primtive_type(LogicalType type,
-                                             [[maybe_unused]] int len = TypeDescriptor::MAX_VARCHAR_LENGTH,
-                                             [[maybe_unused]] int precision = 27, [[maybe_unused]] int scale = 9) {
+    static TypeDescriptor from_logical_type(LogicalType type,
+                                            [[maybe_unused]] int len = TypeDescriptor::MAX_VARCHAR_LENGTH,
+                                            [[maybe_unused]] int precision = 27, [[maybe_unused]] int scale = 9) {
         switch (type) {
         case TYPE_CHAR:
             return TypeDescriptor::create_char_type(MAX_CHAR_LENGTH);
@@ -192,10 +204,10 @@ struct TypeDescriptor {
 
     static TypeDescriptor from_storage_type_info(TypeInfo* type_info);
 
-    static TypeDescriptor from_protobuf(const PTypeDesc& ptype) {
+    static TypeDescriptor from_protobuf(const PTypeDesc& ltype) {
         int idx = 0;
-        TypeDescriptor result(ptype.types(), &idx);
-        DCHECK_EQ(idx, ptype.types_size());
+        TypeDescriptor result(ltype.types(), &idx);
+        DCHECK_EQ(idx, ltype.types_size());
         return result;
     }
 
@@ -216,13 +228,6 @@ struct TypeDescriptor {
         } else {
             return type == o.type;
         }
-    }
-
-    bool is_implicit_castable(const TypeDescriptor& from) const {
-        if (is_decimal_type()) {
-            return precision == from.precision && scale == from.scale;
-        }
-        return false;
     }
 
     bool operator==(const TypeDescriptor& o) const {
@@ -270,6 +275,8 @@ struct TypeDescriptor {
         return (type == TYPE_DECIMAL || type == TYPE_DECIMALV2 || is_decimalv3_type());
     }
 
+    inline bool is_unknown_type() const { return type == TYPE_UNKNOWN; }
+
     inline bool is_complex_type() const { return type == TYPE_STRUCT || type == TYPE_ARRAY || type == TYPE_MAP; }
 
     inline bool is_struct_type() const { return type == TYPE_STRUCT; }
@@ -310,6 +317,8 @@ struct TypeDescriptor {
     /// Recursive implementation of ToThrift() that populates 'thrift_type' with the
     /// TTypeNodes for this type and its children.
     void to_thrift(TTypeDesc* thrift_type) const;
+
+    size_t get_array_depth_limit() const;
 
 private:
     /// Used to create a possibly nested type from the flattened Thrift representation.

@@ -95,7 +95,7 @@ public class TransactionChecker {
         List<PartitionChecker> partitions = new ArrayList<>();
         for (TableCommitInfo tableCommitInfo : txn.getIdToTableCommitInfos().values()) {
             OlapTable table = (OlapTable) db.getTable(tableCommitInfo.getTableId());
-            if (table == null || table.isLakeTable()) {
+            if (table == null || table.isCloudNativeTableOrMaterializedView()) {
                 continue;
             }
             for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {

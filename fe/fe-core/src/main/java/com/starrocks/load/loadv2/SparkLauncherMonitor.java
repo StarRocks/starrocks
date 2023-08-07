@@ -37,6 +37,7 @@ package com.starrocks.load.loadv2;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
+import com.starrocks.common.Config;
 import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.logging.log4j.LogManager;
@@ -84,7 +85,7 @@ public class SparkLauncherMonitor {
     public static class LogMonitor extends Thread {
         private final Process process;
         private SparkLoadAppHandle handle;
-        private long submitTimeoutMs;
+        private long submitTimeoutMs  = Config.spark_load_submit_timeout_second * 1000;
         private boolean isStop;
         private OutputStream outputStream;
 
@@ -95,18 +96,15 @@ public class SparkLauncherMonitor {
         private static final String URL = "tracking URL";
         private static final String USER = "user";
 
-        // 5min
-        private static final long DEFAULT_SUBMIT_TIMEOUT_MS = 300000L;
-
         public LogMonitor(SparkLoadAppHandle handle) {
             this.handle = handle;
             this.process = handle.getProcess();
             this.isStop = false;
-            setSubmitTimeoutMs(DEFAULT_SUBMIT_TIMEOUT_MS);
         }
 
-        public void setSubmitTimeoutMs(long submitTimeoutMs) {
-            this.submitTimeoutMs = submitTimeoutMs;
+        // Seconds turn into milliseconds
+        public void setSubmitTimeoutMs(long submitTimeout) {
+            this.submitTimeoutMs = submitTimeout * 1000;
         }
 
         public void setRedirectLogPath(String redirectLogPath) throws IOException {

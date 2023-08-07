@@ -100,7 +100,7 @@ public class Analyzer {
     // a tuple is outer/semi joined, etc. Remove the maps in favor of making
     // them properties of the tuple descriptor itself.
     private static class GlobalState {
-        private final DescriptorTable descTbl = new DescriptorTable();
+        private DescriptorTable descTbl = new DescriptorTable();
         private final GlobalStateMgr globalStateMgr;
         private final ConnectContext context;
 
@@ -333,6 +333,10 @@ public class Analyzer {
 
     public DescriptorTable getDescTbl() {
         return globalState.descTbl;
+    }
+
+    public void setDescTbl(DescriptorTable descTbl) {
+        this.globalState.descTbl = descTbl;
     }
 
     public GlobalStateMgr getCatalog() {

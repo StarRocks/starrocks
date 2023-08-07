@@ -14,7 +14,7 @@
 
 package com.starrocks.analysis;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Type;
@@ -104,8 +104,7 @@ public class CreateMVStmtTest {
                         "DISTRIBUTED BY HASH(`c_1_3`, `c_1_2`, `c_1_0`) BUCKETS 10 \n" +
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
-                        "\"in_memory\" = \"false\",\n" +
-                        "\"storage_format\" = \"DEFAULT\"\n" +
+                        "\"in_memory\" = \"false\"\n" +
                         ");");
     }
 
@@ -160,7 +159,7 @@ public class CreateMVStmtTest {
             UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
             fail();
         } catch (AnalysisException e) {
-            Assert.assertEquals("Data type of first column cannot be DOUBLE", e.getMessage());
+            Assert.assertTrue(e.getMessage().contains("Data type of first column cannot be DOUBLE"));
         }
     }
 
@@ -236,8 +235,8 @@ public class CreateMVStmtTest {
                 UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
                 fail();
             } catch (Exception ex) {
-                Assert.assertEquals("Materialized view does not support distinct function count(DISTINCT `test`.`t1`.`c_1_9`)",
-                        ex.getMessage());
+                Assert.assertTrue(ex.getMessage().contains("Materialized view does not support " +
+                        "distinct function count(DISTINCT `test`.`t1`.`c_1_9`)"));
             }
         }
         {
@@ -248,8 +247,9 @@ public class CreateMVStmtTest {
                 UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
                 fail();
             } catch (Exception ex) {
-                Assert.assertEquals("Materialized view does not support distinct function sum(DISTINCT `test`.`t1`.`c_1_9`)",
-                        ex.getMessage());
+
+                Assert.assertTrue(ex.getMessage().contains("Materialized view does not support distinct " +
+                        "function sum(DISTINCT `test`.`t1`.`c_1_9`)"));
             }
         }
     }
@@ -386,6 +386,23 @@ public class CreateMVStmtTest {
             } catch (Exception ex) {
                 Assert.assertTrue(ex.getMessage()
                         .contains("Any single column should be before agg column"));
+            }
+        }
+    }
+
+    @Test
+    public void testCreateMVWithAggFunctionAndOtherExprs() {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        List<String> invalidSqls = Lists.newArrayList();
+        invalidSqls.add("create materialized view mv_01 as select c_1_2, cast(sum(c_1_4) as string) from t1 group by " +
+                "c_1_2");
+        for (String sql : invalidSqls) {
+            try {
+                UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+                fail("wrong sql, should fail");
+            } catch (Exception ex) {
+                Assert.assertTrue(ex.getMessage()
+                        .contains("Aggregate function with function expr is not supported yet"));
             }
         }
     }

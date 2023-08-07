@@ -17,23 +17,32 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.HistogramStatsMeta;
 
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 public class ShowHistogramStatsMetaStmt extends ShowStmt {
+
     public ShowHistogramStatsMetaStmt(Predicate predicate) {
-        setPredicate(predicate);
+        this(predicate, NodePosition.ZERO);
+    }
+
+    public ShowHistogramStatsMetaStmt(Predicate predicate, NodePosition pos) {
+        super(pos);
+        this.predicate = predicate;
     }
 
     private static final ShowResultSetMetaData META_DATA =
@@ -47,7 +56,7 @@ public class ShowHistogramStatsMetaStmt extends ShowStmt {
                     .build();
 
     public static List<String> showHistogramStatsMeta(ConnectContext context,
-            HistogramStatsMeta histogramStatsMeta) throws MetaNotFoundException {
+                                                      HistogramStatsMeta histogramStatsMeta) throws MetaNotFoundException {
         List<String> row = Lists.newArrayList("", "", "", "", "", "");
         long dbId = histogramStatsMeta.getDbId();
         long tableId = histogramStatsMeta.getTableId();
@@ -62,10 +71,13 @@ public class ShowHistogramStatsMetaStmt extends ShowStmt {
             throw new MetaNotFoundException("No found table: " + tableId);
         }
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
-        if (context.getGlobalStateMgr().isUsingNewPrivilege() &&
-                !PrivilegeManager.checkAnyActionOnTable(context, db.getOriginName(), table.getName())) {
+        try {
+            Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), new TableName(db.getOriginName(), table.getName()));
+        } catch (AccessDeniedException e) {
             return null;
         }
+
         row.set(1, table.getName());
         row.set(2, histogramStatsMeta.getColumn());
         row.set(3, histogramStatsMeta.getType().name());

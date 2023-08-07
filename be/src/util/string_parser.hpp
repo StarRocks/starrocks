@@ -45,7 +45,7 @@
 
 #include "common/compiler_util.h"
 #include "common/status.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "util/decimal_types.h"
 
 namespace starrocks {
@@ -566,6 +566,11 @@ T StringParser::numeric_limits(bool negative) {
 
 template <>
 inline int StringParser::StringParseTraits<int8_t>::max_ascii_len() {
+    return 3;
+}
+
+template <>
+inline int StringParser::StringParseTraits<uint8_t>::max_ascii_len() {
     return 3;
 }
 

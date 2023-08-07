@@ -17,8 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.Replica.ReplicaStatus;
-
-import java.util.Map;
+import com.starrocks.sql.parser.NodePosition;
 
 /*
  *  admin set replicas status properties ("key" = "val", ..);
@@ -33,16 +32,17 @@ public class AdminSetReplicaStatusStmt extends DdlStmt {
     public static final String BACKEND_ID = "backend_id";
     public static final String STATUS = "status";
 
-    private final Map<String, String> properties;
+    private final PropertySet properties;
     private long tabletId = -1;
     private long backendId = -1;
     private ReplicaStatus status;
 
-    public AdminSetReplicaStatusStmt(Map<String, String> properties) {
+    public AdminSetReplicaStatusStmt(PropertySet properties, NodePosition pos) {
+        super(pos);
         this.properties = properties;
     }
 
-    public Map<String, String> getProperties() {
+    public PropertySet getProperties() {
         return properties;
     }
 

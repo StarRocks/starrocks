@@ -105,12 +105,11 @@ public class ParserBench {
         StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         StarRocksParser parser = new StarRocksParser(tokenStream);
-        StarRocksParser.sqlMode = SqlModeHelper.MODE_DEFAULT;
         parser.removeErrorListeners();
         parser.addErrorListener(new BaseErrorListener());
         parser.removeParseListeners();
         if (isLimit) {
-            parser.addParseListener(new TokenNumberListener(100000000, Config.expr_children_limit));
+            parser.addParseListener(new PostProcessListener(100000000, Config.expr_children_limit));
         }
         parser.getInterpreter().setPredictionMode(mode.equals("SLL") ? PredictionMode.SLL : PredictionMode.LL);
         StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();

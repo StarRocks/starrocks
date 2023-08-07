@@ -19,6 +19,8 @@
 #include <vector>
 
 #include "common/status.h"
+#include "runtime/global_dict/types_fwd_decl.h"
+#include "storage/range.h"
 
 namespace starrocks {
 class SlotDescriptor;
@@ -26,7 +28,6 @@ class SlotDescriptor;
 class RuntimeFilterProbeDescriptor;
 class PredicateParser;
 class ColumnPredicate;
-class SparseRange;
 
 struct UnarrivedRuntimeFilterList {
     std::vector<const RuntimeFilterProbeDescriptor*> unarrived_runtime_filters;
@@ -52,9 +53,10 @@ public:
 
     void set_predicate_parser(PredicateParser* parser) { _parser = parser; }
 
-    Status update_range_if_arrived(RuntimeFilterArrivedCallBack&& updater, size_t raw_read_rows) {
+    Status update_range_if_arrived(const ColumnIdToGlobalDictMap* global_dictmaps,
+                                   RuntimeFilterArrivedCallBack&& updater, size_t raw_read_rows) {
         if (_arrived_runtime_filters_masks.empty()) return Status::OK();
-        return _update(std::move(updater), raw_read_rows);
+        return _update(global_dictmaps, std::move(updater), raw_read_rows);
     }
 
 private:
@@ -66,11 +68,12 @@ private:
     size_t _raw_read_rows = 0;
 
     // get predicate
-    StatusOr<PredicatesPtrs> _get_predicates(size_t idx);
+    StatusOr<PredicatesPtrs> _get_predicates(const ColumnIdToGlobalDictMap* global_dictmaps, size_t idx);
 
     PredicatesRawPtrs _as_raw_predicates(const std::vector<std::unique_ptr<ColumnPredicate>>& predicates);
 
-    Status _update(RuntimeFilterArrivedCallBack&& updater, size_t raw_read_rows);
+    Status _update(const ColumnIdToGlobalDictMap* global_dictmaps, RuntimeFilterArrivedCallBack&& updater,
+                   size_t raw_read_rows);
 
     void _init(const UnarrivedRuntimeFilterList& params);
 };

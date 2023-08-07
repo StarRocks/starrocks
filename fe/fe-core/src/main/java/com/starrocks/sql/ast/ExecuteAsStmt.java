@@ -16,7 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.UserIdentity;
+import com.starrocks.sql.parser.NodePosition;
 
 // EXECUTE AS XX WITH NO REVERT
 public class ExecuteAsStmt extends StatementBase {
@@ -24,6 +24,11 @@ public class ExecuteAsStmt extends StatementBase {
     protected boolean allowRevert;
 
     public ExecuteAsStmt(UserIdentity toUser, boolean allowRevert) {
+        this(toUser, allowRevert, NodePosition.ZERO);
+    }
+
+    public ExecuteAsStmt(UserIdentity toUser, boolean allowRevert, NodePosition pos) {
+        super(pos);
         this.toUser = toUser;
         this.allowRevert = allowRevert;
     }

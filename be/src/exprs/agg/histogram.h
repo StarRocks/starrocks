@@ -46,11 +46,11 @@ struct HistogramState {
     std::vector<T> data;
 };
 
-template <LogicalType PT, typename T = RunTimeCppType<PT>>
+template <LogicalType LT, typename T = RunTimeCppType<LT>>
 class HistogramAggregationFunction final
-        : public AggregateFunctionBatchHelper<HistogramState<T>, HistogramAggregationFunction<PT, T>> {
+        : public AggregateFunctionBatchHelper<HistogramState<T>, HistogramAggregationFunction<LT, T>> {
 public:
-    using ColumnType = RunTimeColumnType<PT>;
+    using ColumnType = RunTimeColumnType<LT>;
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
@@ -93,7 +93,7 @@ public:
         DCHECK(false);
     }
 
-    std::string toBucketJson(std::string lower, std::string upper, size_t count, size_t upper_repeats,
+    std::string toBucketJson(const std::string& lower, const std::string& upper, size_t count, size_t upper_repeats,
                              double sample_ratio) const {
         return fmt::format(R"(["{}","{}","{}","{}"])", lower, upper, std::to_string((int64_t)(count * sample_ratio)),
                            std::to_string((int64_t)(upper_repeats * sample_ratio)));
@@ -139,26 +139,26 @@ public:
             bucket_json = "[]";
         } else {
             bucket_json = "[";
-            if constexpr (pt_is_largeint<PT>) {
+            if constexpr (lt_is_largeint<LT>) {
                 for (int i = 0; i < buckets.size(); ++i) {
                     bucket_json += toBucketJson(LargeIntValue::to_string(buckets[i].lower),
                                                 LargeIntValue::to_string(buckets[i].upper), buckets[i].count,
                                                 buckets[i].upper_repeats, sample_ratio) +
                                    ",";
                 }
-            } else if constexpr (pt_is_arithmetic<PT>) {
+            } else if constexpr (lt_is_arithmetic<LT>) {
                 for (int i = 0; i < buckets.size(); ++i) {
                     bucket_json += toBucketJson(std::to_string(buckets[i].lower), std::to_string(buckets[i].upper),
                                                 buckets[i].count, buckets[i].upper_repeats, sample_ratio) +
                                    ",";
                 }
-            } else if constexpr (pt_is_date_or_datetime<PT>) {
+            } else if constexpr (lt_is_date_or_datetime<LT>) {
                 for (int i = 0; i < buckets.size(); ++i) {
                     bucket_json += toBucketJson(buckets[i].lower.to_string(), buckets[i].upper.to_string(),
                                                 buckets[i].count, buckets[i].upper_repeats, sample_ratio) +
                                    ",";
                 }
-            } else if constexpr (pt_is_decimal<PT>) {
+            } else if constexpr (lt_is_decimal<LT>) {
                 int scale = ctx->get_arg_type(0)->scale;
                 int precision = ctx->get_arg_type(0)->precision;
                 for (int i = 0; i < buckets.size(); ++i) {
@@ -167,7 +167,7 @@ public:
                                                 buckets[i].count, buckets[i].upper_repeats, sample_ratio) +
                                    ",";
                 }
-            } else if constexpr (pt_is_string<PT>) {
+            } else if constexpr (lt_is_string<LT>) {
                 for (int i = 0; i < buckets.size(); ++i) {
                     bucket_json += toBucketJson(buckets[i].lower.to_string(), buckets[i].upper.to_string(),
                                                 buckets[i].count, buckets[i].upper_repeats, sample_ratio) +

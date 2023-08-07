@@ -1,0 +1,12 @@
+-- name: test_default_enable_mv @sequential
+create database test_default_enable_mv;
+use test_default_enable_mv;
+admin set frontend config('enable_replicated_storage_as_default_engine'='true');
+create table t1(k int, v int not null) distributed by hash(k);
+create materialized view tvd distributed by hash(k) buckets 10 REFRESH ASYNC as select k, sum(v) from t1 group by k;
+show create materialized view tvd;
+admin set frontend config('enable_replicated_storage_as_default_engine'='false');
+create materialized view tvb distributed by hash(k) buckets 10 REFRESH ASYNC as select k, sum(v) from t1 group by k;
+show create materialized view tvb;
+admin set frontend config('enable_replicated_storage_as_default_engine'='true');
+

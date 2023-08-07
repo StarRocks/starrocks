@@ -36,8 +36,7 @@ public class FilterUnusedColumnTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`d_dow`) BUCKETS 1\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
         // for agg table
         starRocksAssert.withTable("CREATE TABLE `metrics_detail` ( \n" +
@@ -53,7 +52,6 @@ public class FilterUnusedColumnTest extends PlanTestBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"enable_persistent_index\" = \"false\"\n" +
                 ");");
         // for primary key table
@@ -67,9 +65,12 @@ public class FilterUnusedColumnTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`tags_id`) BUCKETS 1\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW tpcds_100g_date_dim_mv as \n" +
+                "SELECT d_dow, d_day_name, max(d_date) \n" +
+                "FROM tpcds_100g_date_dim\n" +
+                "GROUP BY d_dow, d_day_name");
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         connectContext.getSessionVariable().setSqlMode(2);
         connectContext.getSessionVariable().enableTrimOnlyFilteredColumnsInScanStage();
@@ -120,7 +121,6 @@ public class FilterUnusedColumnTest extends PlanTestBase {
             // Key columns cannot be pruned in the non-skip-aggr scan stage.
             String sql = "select timestamp from metrics_detail where tags_id > 1";
             String plan = getThriftPlan(sql);
-            System.out.println(plan);
             Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
 
             sql = "select max(value) from metrics_detail where tags_id > 1";
@@ -136,6 +136,33 @@ public class FilterUnusedColumnTest extends PlanTestBase {
             sql = "select timestamp from metrics_detail where value is NULL limit 10;";
             plan = getThriftPlan(sql);
             Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
+        } finally {
+            connectContext.getSessionVariable().setEnableGlobalRuntimeFilter(prevEnable);
+        }
+    }
+
+    @Test
+    public void testFilterAggMV() throws Exception {
+        boolean prevEnable = connectContext.getSessionVariable().isEnableFilterUnusedColumnsInScanStage();
+
+        try {
+            connectContext.getSessionVariable().setEnableGlobalRuntimeFilter(true);
+
+            String sql;
+            String plan;
+
+            // Key columns cannot be pruned in the non-skip-aggr scan stage of MV.
+            sql = "select distinct d_day_name from tpcds_100g_date_dim where d_dow > 1";
+            plan = getThriftPlan(sql);
+            assertContains(plan, "unused_output_column_name:[]");
+            assertContains(plan, "rollup_name:tpcds_100g_date_dim_mv");
+
+            // Columns can be pruned when not using MV.
+            sql = "select d_day_name from tpcds_100g_date_dim where d_dow > 1";
+            plan = getThriftPlan(sql);
+            assertContains(plan, "unused_output_column_name:[d_dow]");
+            assertContains(plan, "rollup_name:tpcds_100g_date_dim");
+
         } finally {
             connectContext.getSessionVariable().setEnableGlobalRuntimeFilter(prevEnable);
         }

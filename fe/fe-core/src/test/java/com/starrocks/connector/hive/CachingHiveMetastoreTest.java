@@ -24,11 +24,14 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import mockit.Expectations;
+import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -106,10 +109,39 @@ public class CachingHiveMetastoreTest {
     }
 
     @Test
+    public void testRefreshTable() {
+        new Expectations(metastore) {
+            {
+                metastore.getTable(anyString, "notExistTbl");
+                minTimes = 0;
+                Throwable targetException = new NoSuchObjectException("no such obj");
+                Throwable e = new InvocationTargetException(targetException);
+                result = new StarRocksConnectorException("table not exist", e);
+            }
+        };
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        try {
+            cachingHiveMetastore.refreshTable("db1", "notExistTbl", true);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof StarRocksConnectorException);
+            Assert.assertTrue(e.getMessage().contains("invalidated cache"));
+        }
+
+        try {
+            cachingHiveMetastore.refreshTable("db1", "tbl1", true);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+    }
+
+    @Test
     public void testGetPartitionKeys() {
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
-        Assert.assertEquals(Lists.newArrayList("col1"), cachingHiveMetastore.getPartitionKeys("db1", "tbl1"));
+        Assert.assertEquals(Lists.newArrayList("col1"), cachingHiveMetastore.getPartitionKeysByValue("db1", "tbl1",
+                HivePartitionValue.ALL_PARTITION_VALUES));
     }
 
     @Test

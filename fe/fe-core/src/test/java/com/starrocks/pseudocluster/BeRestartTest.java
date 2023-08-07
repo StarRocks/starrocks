@@ -15,7 +15,6 @@
 package com.starrocks.pseudocluster;
 
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.After;
 import org.junit.Before;
@@ -31,12 +30,12 @@ public class BeRestartTest {
     @Before
     public void setUp() throws Exception {
         // make publish wait time shorter for test, so insert will finish quicker if some BE is shutdown
-        Config.quorom_publish_wait_time_ms = 1000;
+        Config.quorum_publish_wait_time_ms = 1000;
         Config.heartbeat_timeout_second = 2;
         Config.tablet_sched_checker_interval_seconds = 2;
         Config.tablet_sched_repair_delay_factor_second = 2;
         Config.enable_new_publish_mechanism = newPublish;
-        FeConstants.default_scheduler_interval_millisecond = 5000;
+        Config.alter_scheduler_interval_millisecond = 5000;
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(3000);
         PseudoCluster.getInstance().runSql(null, "create database test");

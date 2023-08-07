@@ -20,12 +20,16 @@ package com.starrocks.utframe;
 import com.google.common.collect.Queues;
 import com.starrocks.common.ClientPool;
 import com.starrocks.leader.LeaderImpl;
+import com.starrocks.proto.ExecuteCommandRequestPB;
+import com.starrocks.proto.ExecuteCommandResultPB;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
+import com.starrocks.proto.PGetFileSchemaResult;
+import com.starrocks.proto.PListFailPointResponse;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
@@ -33,6 +37,8 @@ import com.starrocks.proto.PPulsarProxyRequest;
 import com.starrocks.proto.PPulsarProxyResult;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.PTriggerProfileReportResult;
+import com.starrocks.proto.PUpdateFailPointStatusRequest;
+import com.starrocks.proto.PUpdateFailPointStatusResponse;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.PBackendService;
@@ -40,6 +46,8 @@ import com.starrocks.rpc.PCollectQueryStatisticsRequest;
 import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
 import com.starrocks.rpc.PExecPlanFragmentRequest;
 import com.starrocks.rpc.PFetchDataRequest;
+import com.starrocks.rpc.PGetFileSchemaRequest;
+import com.starrocks.rpc.PListFailPointRequest;
 import com.starrocks.rpc.PMVMaintenanceTaskRequest;
 import com.starrocks.rpc.PTriggerProfileReportRequest;
 import com.starrocks.thrift.BackendService;
@@ -87,6 +95,7 @@ import org.apache.commons.lang3.NotImplementedException;
 
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -119,27 +128,41 @@ public class MockedBackend {
 
     private final MockPBackendService pbService;
 
-    public MockedBackend(String host) throws Exception {
+    public MockedBackend(String host) {
+        this(host, BASE_PORT.getAndIncrement());
+    }
+
+    public MockedBackend(String host, int beThriftPort) {
         this.host = host;
+        this.beThriftPort = beThriftPort;
+
         brpcPort = BASE_PORT.getAndIncrement();
         heartBeatPort = BASE_PORT.getAndIncrement();
-        beThriftPort = BASE_PORT.getAndIncrement();
         httpPort = BASE_PORT.getAndIncrement();
 
         heatBeatClient = new MockHeatBeatClient(beThriftPort, httpPort, brpcPort);
         thriftClient = new MockBeThriftClient(this);
         pbService = new MockPBackendService();
 
-        ((MockGenericPool) ClientPool.heartbeatPool).register(this);
-        ((MockGenericPool) ClientPool.backendPool).register(this);
+        ((MockGenericPool<?>) ClientPool.heartbeatPool).register(this);
+        ((MockGenericPool<?>) ClientPool.backendPool).register(this);
 
         new MockUp<BrpcProxy>() {
             @Mock
-            protected synchronized PBackendService getBackendService(TNetworkAddress address) {
+            private synchronized PBackendService getBackendService(TNetworkAddress address) {
                 return pbService;
             }
         };
 
+    }
+
+    public void setBackendService(PBackendService backendService) {
+        new MockUp<BrpcProxy>() {
+            @Mock
+            private synchronized PBackendService getBackendService(TNetworkAddress address) {
+                return backendService;
+            }
+        };
     }
 
     public String getHost() {
@@ -323,12 +346,16 @@ public class MockedBackend {
         }
     }
 
-    private static class MockPBackendService implements PBackendService {
+    public static class MockPBackendService implements PBackendService {
         private final ExecutorService executor = Executors.newSingleThreadExecutor();
+
+        public <T> Future<T> submit(Callable<T> task) {
+            return executor.submit(task);
+        }
 
         @Override
         public Future<PExecPlanFragmentResult> execPlanFragmentAsync(PExecPlanFragmentRequest request) {
-            return executor.submit(() -> {
+            return submit(() -> {
                 PExecPlanFragmentResult result = new PExecPlanFragmentResult();
                 StatusPB pStatus = new StatusPB();
                 pStatus.statusCode = 0;
@@ -340,7 +367,7 @@ public class MockedBackend {
         @Override
         public Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(
                 PExecBatchPlanFragmentsRequest request) {
-            return executor.submit(() -> {
+            return submit(() -> {
                 PExecBatchPlanFragmentsResult result = new PExecBatchPlanFragmentsResult();
                 StatusPB pStatus = new StatusPB();
                 pStatus.statusCode = 0;
@@ -351,7 +378,7 @@ public class MockedBackend {
 
         @Override
         public Future<PCancelPlanFragmentResult> cancelPlanFragmentAsync(PCancelPlanFragmentRequest request) {
-            return executor.submit(() -> {
+            return submit(() -> {
                 PCancelPlanFragmentResult result = new PCancelPlanFragmentResult();
                 StatusPB pStatus = new StatusPB();
                 pStatus.statusCode = 0;
@@ -362,7 +389,7 @@ public class MockedBackend {
 
         @Override
         public Future<PFetchDataResult> fetchDataAsync(PFetchDataRequest request) {
-            return executor.submit(() -> {
+            return submit(() -> {
                 PFetchDataResult result = new PFetchDataResult();
                 StatusPB pStatus = new StatusPB();
                 pStatus.statusCode = 0;
@@ -402,8 +429,28 @@ public class MockedBackend {
         }
 
         @Override
+        public Future<PGetFileSchemaResult> getFileSchema(PGetFileSchemaRequest request) {
+            throw new NotImplementedException("TODO");
+        }
+
+        @Override
         public Future<PMVMaintenanceTaskResult> submitMVMaintenanceTaskAsync(PMVMaintenanceTaskRequest request) {
             throw new NotImplementedException("TODO");
+        }
+
+        @Override
+        public Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request) {
+            throw new NotImplementedException("TODO");
+        }
+
+        @Override
+        public Future<PUpdateFailPointStatusResponse> updateFailPointStatusAsync(PUpdateFailPointStatusRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PListFailPointResponse> listFailPointAsync(PListFailPointRequest request) {
+            return null;
         }
     }
 }

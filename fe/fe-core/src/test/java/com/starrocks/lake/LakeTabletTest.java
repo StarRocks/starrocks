@@ -15,9 +15,7 @@
 
 package com.starrocks.lake;
 
-import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
-import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
@@ -34,14 +32,6 @@ public class LakeTabletTest {
 
     @Test
     public void testSerialization() throws Exception {
-        new Expectations(globalStateMgr) {
-            {
-                GlobalStateMgr.getCurrentStateJournalVersion();
-                minTimes = 0;
-                result = FeConstants.meta_version;
-            }
-        };
-
         LakeTablet tablet = new LakeTablet(1L);
         tablet.setDataSize(3L);
         tablet.setRowCount(4L);

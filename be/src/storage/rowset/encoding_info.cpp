@@ -63,8 +63,8 @@ struct TypeEncodingTraits<type, PLAIN_ENCODING, CppType> {
         *builder = new PlainPageBuilder<type>(opts);
         return Status::OK();
     }
-    static Status create_page_decoder(const Slice& data, const PageDecoderOptions& opts, PageDecoder** decoder) {
-        *decoder = new PlainPageDecoder<type>(data, opts);
+    static Status create_page_decoder(const Slice& data, PageDecoder** decoder) {
+        *decoder = new PlainPageDecoder<type>(data);
         return Status::OK();
     }
 };
@@ -75,8 +75,8 @@ struct TypeEncodingTraits<type, PLAIN_ENCODING, Slice> {
         *builder = new BinaryPlainPageBuilder(opts);
         return Status::OK();
     }
-    static Status create_page_decoder(const Slice& data, const PageDecoderOptions& opts, PageDecoder** decoder) {
-        *decoder = new BinaryPlainPageDecoder<type>(data, opts);
+    static Status create_page_decoder(const Slice& data, PageDecoder** decoder) {
+        *decoder = new BinaryPlainPageDecoder<type>(data);
         return Status::OK();
     }
 };
@@ -88,8 +88,8 @@ struct TypeEncodingTraits<type, BIT_SHUFFLE, CppType,
         *builder = new BitshufflePageBuilder<type>(opts);
         return Status::OK();
     }
-    static Status create_page_decoder(const Slice& data, const PageDecoderOptions& opts, PageDecoder** decoder) {
-        *decoder = new BitShufflePageDecoder<type>(data, opts);
+    static Status create_page_decoder(const Slice& data, PageDecoder** decoder) {
+        *decoder = new BitShufflePageDecoder<type>(data);
         return Status::OK();
     }
 };
@@ -100,8 +100,8 @@ struct TypeEncodingTraits<TYPE_BOOLEAN, RLE, bool> {
         *builder = new RlePageBuilder<TYPE_BOOLEAN>(opts);
         return Status::OK();
     }
-    static Status create_page_decoder(const Slice& data, const PageDecoderOptions& opts, PageDecoder** decoder) {
-        *decoder = new RlePageDecoder<TYPE_BOOLEAN>(data, opts);
+    static Status create_page_decoder(const Slice& data, PageDecoder** decoder) {
+        *decoder = new RlePageDecoder<TYPE_BOOLEAN>(data);
         return Status::OK();
     }
 };
@@ -112,8 +112,8 @@ struct TypeEncodingTraits<type, DICT_ENCODING, Slice> {
         *builder = new BinaryDictPageBuilder(opts);
         return Status::OK();
     }
-    static Status create_page_decoder(const Slice& data, const PageDecoderOptions& opts, PageDecoder** decoder) {
-        *decoder = new BinaryDictPageDecoder<type>(data, opts);
+    static Status create_page_decoder(const Slice& data, PageDecoder** decoder) {
+        *decoder = new BinaryDictPageDecoder<type>(data);
         return Status::OK();
     }
 };
@@ -124,8 +124,8 @@ struct TypeEncodingTraits<TYPE_DATE_V1, FOR_ENCODING, typename CppTypeTraits<TYP
         *builder = new FrameOfReferencePageBuilder<TYPE_DATE_V1>(opts);
         return Status::OK();
     }
-    static Status create_page_decoder(const Slice& data, const PageDecoderOptions& opts, PageDecoder** decoder) {
-        *decoder = new FrameOfReferencePageDecoder<TYPE_DATE_V1>(data, opts);
+    static Status create_page_decoder(const Slice& data, PageDecoder** decoder) {
+        *decoder = new FrameOfReferencePageDecoder<TYPE_DATE_V1>(data);
         return Status::OK();
     }
 };
@@ -137,8 +137,8 @@ struct TypeEncodingTraits<type, FOR_ENCODING, CppType,
         *builder = new FrameOfReferencePageBuilder<type>(opts);
         return Status::OK();
     }
-    static Status create_page_decoder(const Slice& data, const PageDecoderOptions& opts, PageDecoder** decoder) {
-        *decoder = new FrameOfReferencePageDecoder<type>(data, opts);
+    static Status create_page_decoder(const Slice& data, PageDecoder** decoder) {
+        *decoder = new FrameOfReferencePageDecoder<type>(data);
         return Status::OK();
     }
 };
@@ -149,8 +149,8 @@ struct TypeEncodingTraits<type, PREFIX_ENCODING, Slice> {
         *builder = new BinaryPrefixPageBuilder(opts);
         return Status::OK();
     }
-    static Status create_page_decoder(const Slice& data, const PageDecoderOptions& opts, PageDecoder** decoder) {
-        *decoder = new BinaryPrefixPageDecoder<type>(data, opts);
+    static Status create_page_decoder(const Slice& data, PageDecoder** decoder) {
+        *decoder = new BinaryPrefixPageDecoder<type>(data);
         return Status::OK();
     }
 };

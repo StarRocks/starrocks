@@ -2,178 +2,128 @@
 
 ## Description
 
-Checks whether a table contains data that meets specified conditions and returns an array of BOOLEAN values.
+Calculates the user retention rate within a specified period of time. This function accepts 1 to 31 conditions and evaluates whether each condition is true. If the condition evaluates to true, 1 is returned. Otherwise, 0 is returned. It eventually returns an array of 0 and 1. You can calculate the user retention rate based on this data.
 
 ## Syntax
 
 ```Haskell
-retention(input)
+ARRAY retention(ARRAY input)
 ```
 
 ## Parameters
 
-`input`: an array that consists of event expressions.
+`input`: an array of conditions. A maximum of 31 conditions can be passed in. Separate multiple conditions with commas.
 
 ## Return value
 
-Returns an array of BOOLEAN values. The array that is returned is of the same length as the array that is specified by the `input` parameter.
+Returns an array of 0 and 1. The number of 0 and 1 is the same as the number of input conditions.
 
-- The value of the first element in the array specified by the `output` parameter is `input[1]`.
+The evaluation starts from the first condition.
 
-- If both `input[1]` and `output[`*`n`*`]` are `true`, the value of the *n*th element in the array specified by the `output` parameter is `true`.
+- If the condition evaluates to true, 1 is returned. Otherwise, 0 is returned.
+- If the first condition is not true, the current position and its following positions are all set to 0.
 
 ## Examples
 
-Example 1:
+1. Create a table named `test` and insert data.
 
-```Plain
-mysql> SELECT retention([lo_orderdate = '1997-08-01' AND lo_orderpriority = '2-HIGH', 
-    lo_orderdate = '1997-08-02' AND lo_orderpriority = '1-URGENT', lo_orderdate = '1997-08-03' AND 
-    lo_orderpriority = '5-LOW']) AS r FROM lineorder_flat GROUP BY lo_linenumber;
-+---------+
-| r       |
-+---------+
-| [1,1,1] |
-| [1,1,1] |
-| [1,1,1] |
-| [1,1,1] |
-| [1,1,1] |
-| [1,1,1] |
-| [1,1,1] |
-+---------+
-```
+    ```SQL
+    CREATE TABLE test(
+        id TINYINT,
+        action STRING,
+        time DATETIME
+    )
+    ENGINE=olap
+    DUPLICATE KEY(id)
+    DISTRIBUTED BY HASH(id);
 
-Example 2:
+    INSERT INTO test VALUES 
+    (1,'pv','2022-01-01 08:00:05'),
+    (2,'pv','2022-01-01 10:20:08'),
+    (1,'buy','2022-01-02 15:30:10'),
+    (2,'pv','2022-01-02 17:30:05'),
+    (3,'buy','2022-01-01 05:30:09'),
+    (3,'buy','22022-01-02 08:10:15'),
+    (4,'pv','2022-01-02 21:09:15'),
+    (5,'pv','2022-01-01 22:10:53'),
+    (5,'pv','2022-01-02 19:10:52'),
+    (5,'buy','2022-01-02 20:00:50');
+    ```
 
-Calculate the proportion of elements that meet the following conditions:
+2. Query data from `test`.
 
-- `lo_orderdate = '1997-08-02' AND lo_orderpriority = '1-URGENT'`
+    ```Plain Text
+    MySQL > select * from test order by id;
+    +------+--------+---------------------+
+    | id   | action | time                |
+    +------+--------+---------------------+
+    |    1 | pv     | 2022-01-01 08:00:05 |
+    |    1 | buy    | 2022-01-02 15:30:10 |
+    |    2 | pv     | 2022-01-01 10:20:08 |
+    |    2 | pv     | 2022-01-02 17:30:05 |
+    |    3 | buy    | 2022-01-01 05:30:09 |
+    |    3 | buy    | 2022-01-02 08:10:15 |
+    |    4 | pv     | 2022-01-02 21:09:15 |
+    |    5 | pv     | 2022-01-01 22:10:53 |
+    |    5 | pv     | 2022-01-02 19:10:52 |
+    |    5 | buy    | 2022-01-02 20:00:50 |
+    +------+--------+---------------------+
+    10 rows in set (0.01 sec)
+    ```
 
-- `lo_orderdate = '1997-08-03' AND lo_orderpriority = '5-LOW'`
+3. Use `retention` to calculate user retention rate.
 
-```Plain
-mysql> SELECT sum(r[1]), sum(r[2]) / sum(r[1]), sum(r[3]) / sum(r[1]) FROM 
-    (SELECT retention([lo_orderdate = '1997-08-01' AND lo_orderpriority = '2-HIGH', 
-        lo_orderdate = '1997-08-02' AND lo_orderpriority = '1-URGENT', lo_orderdate = '1997-08-03' AND 
-        lo_orderpriority = '5-LOW']) AS r FROM lineorder_flat GROUP BY lo_suppkey) t;
-+-------------+---------------------------+---------------------------+
-| sum(`r`[1]) | sum(`r`[2]) / sum(`r`[1]) | sum(`r`[3]) / sum(`r`[1]) |
-+-------------+---------------------------+---------------------------+
-|       43951 |        0.2228163181725103 |        0.2214056562990603 |
-+-------------+---------------------------+---------------------------+
-```
+    Example 1: Evaluate user behavior against the following conditions: view commodity page on 2022-01-01 (action='pv') and place an order on 2022-01-02 (action='buy').
 
-Example 3:
+    ```Plain Text
+    MySQL > select id, retention([action='pv' and to_date(time)='2022-01-01',
+                                  action='buy' and to_date(time)='2022-01-02']) as retention 
+    from test 
+    group by id
+    order by id;
+    
+    +------+-----------+
+    | id   | retention |
+    +------+-----------+
+    |    1 | [1,1]     |
+    |    2 | [1,0]     |
+    |    3 | [0,0]     |
+    |    4 | [0,0]     |
+    |    5 | [1,1]     |
+    +------+-----------+
+    5 rows in set (0.01 sec)
+    ```
 
-Suppose that you have a table named `lineorder_flat` and the table consists of the following data:
+    In the result:
 
-```Plain
-+--------------+------------------+------------+
-| lo_orderdate | lo_orderpriority | lo_custkey |
-+--------------+------------------+------------+
-| 1022-11-20   | 4-NOT SPECI      |     309050 |
-| 1222-10-31   | 2-HIGH           |     492238 |
-| 1380-09-30   | 5-LOW            |     123099 |
-| 1380-09-30   | 5-LOW            |     460237 |
-| 1380-09-30   | 5-LOW            |     426502 |
-| 1022-11-20   | 4-NOT SPECI      |     197081 |
-| 1380-09-30   | 5-LOW            |     918918 |
-| 1022-11-20   | 4-NOT SPECI      |     327825 |
-| 1380-09-30   | 5-LOW            |     252542 |
-| 1380-09-30   | 5-LOW            |     194171 |
-+--------------+------------------+------------+
-10 rows in set (0.02 sec)
-```
+    - Users 1 and 5 meets two conditions and [1,1] is returned.
 
-Execute the following statement to call the `retention` function:
+    - User 2 does not meet the second condition and [1,0] is returned.
 
-```Plain
-mysql> SELECT lo_custkey,
-    retention([lo_orderdate='1022-11-20' AND lo_orderpriority='4-NOT SPECI',
-        lo_orderdate='1022-11-21' AND lo_orderpriority='4-LONG']) AS retention
-    FROM lineorder_flat
-    GROUP BY lo_custkey;
-+------------+-----------+
-| lo_custkey | retention |
-+------------+-----------+
-|     327825 | [1,0]     |
-|     309050 | [1,0]     |
-|     252542 | [0,0]     |
-|     123099 | [0,0]     |
-|     460237 | [0,0]     |
-|     194171 | [0,0]     |
-|     197081 | [1,0]     |
-|     918918 | [0,0]     |
-|     492238 | [0,0]     |
-|     426502 | [0,0]     |
-+------------+-----------+
-10 rows in set (0.01 sec)
-```
+    - User 3 meets the second condition but does not meet the first condition. [0,0] is returned.
 
-None of the second bits of the output results is `1`, because no data meets the preceding conditions.
+    - User 4 meets no condition and [0,0] is returned.
 
-Insert the following data record into the table:
+    Example 2: Calculate the percentage of users who have viewed commodity page on 2022-01-01 (action='pv') and placed an order on 2022-01-02 (action='buy').
 
-```Plain
-（lo_orderdate='1022-11-21'， lo_orderpriority='4-LONG'， lo_custkey=460237）
-```
+    ```Plain Text
+    MySQL > select sum(r[1]),sum(r[2])/sum(r[1])
+    from (select id, retention([action='pv' and to_date(time)='2022-01-01',
+                                action='buy' and to_date(time)='2022-01-02']) as r 
+    from test 
+    group by id 
+    order by id) t;
+    
+    +-----------+---------------------------+
+    | sum(r[1]) | (sum(r[2])) / (sum(r[1])) |
+    +-----------+---------------------------+
+    |         3 |        0.6666666666666666 |
+    +-----------+---------------------------+
+    1 row in set (0.02 sec)
+    ```
 
-Execute the following statement to call the `retention` function:
+    The return value is the user retention rate on 2022-01-02.
 
-```Plain
-mysql> SELECT lo_custkey,
-    retention([lo_orderdate='1022-11-20' AND lo_orderpriority='4-NOT SPECI',
-        lo_orderdate='1022-11-21' AND lo_orderpriority='4-LONG']) AS retention
-    FROM lineorder_flat
-    GROUP BY lo_custkey;
-+------------+-----------+
-| lo_custkey | retention |
-+------------+-----------+
-|     327825 | [1,0]     |
-|     309050 | [1,0]     |
-|     252542 | [0,0]     |
-|     123099 | [0,0]     |
-|     460237 | [0,0]     |
-|     194171 | [0,0]     |
-|     197081 | [1,0]     |
-|     918918 | [0,0]     |
-|     492238 | [0,0]     |
-|     426502 | [0,0]     |
-+------------+-----------+
-10 rows in set (0.01 sec)
-```
+## keyword
 
-Still, none of the second bits of the output results is `1`, because no data meets the preceding conditions.
-
-Insert the following data record into the table:
-
-```Plain
-（lo_orderdate='1022-11-21'， lo_orderpriority='4-LONG'， lo_custkey=327825）
-```
-
-Execute the following statement to call the `retention` function:
-
-```Plain
-mysql> SELECT lo_custkey,
-    retention([lo_orderdate='1022-11-20' AND lo_orderpriority='4-NOT SPECI',
-        lo_orderdate='1022-11-21' AND lo_orderpriority='4-LONG']) AS retention
-    FROM lineorder_flat
-    GROUP BY lo_custkey;
-+------------+-----------+
-| lo_custkey | retention |
-+------------+-----------+
-|     327825 | [1,1]     |
-|     309050 | [1,0]     |
-|     252542 | [0,0]     |
-|     123099 | [0,0]     |
-|     460237 | [0,0]     |
-|     194171 | [0,0]     |
-|     197081 | [1,0]     |
-|     918918 | [0,0]     |
-|     492238 | [0,0]     |
-|     426502 | [0,0]     |
-+------------+-----------+
-10 rows in set (0.01 sec)
-```
-
-The second bit of the output result `327825` becomes `1`.
+retention, retention rate, RETENTION

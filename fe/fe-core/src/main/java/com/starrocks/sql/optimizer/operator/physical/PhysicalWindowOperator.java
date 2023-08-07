@@ -14,11 +14,14 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -37,12 +40,14 @@ public class PhysicalWindowOperator extends PhysicalOperator {
     private final List<Ordering> orderByElements;
     private final AnalyticWindow analyticWindow;
     private final List<Ordering> enforceOrderBy;
+    private final boolean useHashBasedPartition;
 
     public PhysicalWindowOperator(Map<ColumnRefOperator, CallOperator> analyticCall,
                                   List<ScalarOperator> partitionExpressions,
                                   List<Ordering> orderByElements,
                                   AnalyticWindow analyticWindow,
                                   List<Ordering> enforceOrderBy,
+                                  boolean useHashBasedPartition,
                                   long limit,
                                   ScalarOperator predicate,
                                   Projection projection) {
@@ -52,7 +57,7 @@ public class PhysicalWindowOperator extends PhysicalOperator {
         this.orderByElements = orderByElements;
         this.analyticWindow = analyticWindow;
         this.enforceOrderBy = enforceOrderBy;
-
+        this.useHashBasedPartition = useHashBasedPartition;
         this.limit = limit;
         this.predicate = predicate;
         this.projection = projection;
@@ -78,6 +83,22 @@ public class PhysicalWindowOperator extends PhysicalOperator {
         return enforceOrderBy;
     }
 
+    public boolean isUseHashBasedPartition() {
+        return useHashBasedPartition;
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        List<ColumnOutputInfo> columnOutputInfoList = Lists.newArrayList();
+        for (Map.Entry<ColumnRefOperator, CallOperator> entry : analyticCall.entrySet()) {
+            columnOutputInfoList.add(new ColumnOutputInfo(entry.getKey(), entry.getValue()));
+        }
+        for (ColumnOutputInfo entry : inputs.get(0).getRowOutputInfo().getColumnOutputInfo()) {
+            columnOutputInfoList.add(new ColumnOutputInfo(entry.getColumnRef(), entry.getColumnRef()));
+        }
+        return new RowOutputInfo(columnOutputInfoList);
+    }
+
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitPhysicalAnalytic(this, context);
@@ -93,19 +114,23 @@ public class PhysicalWindowOperator extends PhysicalOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
+
+        if (!super.equals(o)) {
             return false;
         }
+
         PhysicalWindowOperator that = (PhysicalWindowOperator) o;
         return Objects.equals(analyticCall, that.analyticCall) &&
                 Objects.equals(partitionExpressions, that.partitionExpressions) &&
                 Objects.equals(orderByElements, that.orderByElements) &&
-                Objects.equals(analyticWindow, that.analyticWindow);
+                Objects.equals(analyticWindow, that.analyticWindow) &&
+                Objects.equals(useHashBasedPartition, that.useHashBasedPartition);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(analyticCall, partitionExpressions, orderByElements, analyticWindow);
+        return Objects.hash(super.hashCode(), analyticCall, partitionExpressions, orderByElements, analyticWindow,
+                useHashBasedPartition);
     }
 
     @Override

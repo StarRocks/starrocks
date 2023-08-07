@@ -43,12 +43,17 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
@@ -64,6 +69,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
@@ -83,11 +89,11 @@ public class ResourceMgr implements Writable {
             .build();
 
     public static final ImmutableList<String> NEED_MAPPING_CATALOG_RESOURCES = new ImmutableList.Builder<String>()
-            .add("hive").add("hudi")
+            .add("hive").add("hudi").add("iceberg")
             .build();
 
     @SerializedName(value = "nameToResource")
-    private final HashMap<String, Resource> nameToResource = new HashMap<>();
+    private HashMap<String, Resource> nameToResource = new HashMap<>();
     private final ResourceProcNode procNode = new ResourceProcNode();
     private final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
 
@@ -213,6 +219,15 @@ public class ResourceMgr implements Writable {
         }
     }
 
+    public Set<String> getAllResourceName() {
+        this.readLock();
+        try {
+            return nameToResource.keySet();
+        } finally {
+            this.readUnlock();
+        }
+    }
+
     public Resource getResource(String name) {
         this.readLock();
         try {
@@ -321,15 +336,12 @@ public class ResourceMgr implements Writable {
                 if (resource == null) {
                     continue;
                 }
-                if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                    if (!GlobalStateMgr.getCurrentState().getAuth().checkResourcePriv(
-                            ConnectContext.get(), resource.getName(), PrivPredicate.SHOW)) {
-                        continue;
-                    }
-                } else {
-                    if (!PrivilegeManager.checkAnyActionOnResource(ConnectContext.get(), resource.getName())) {
-                        continue;
-                    }
+
+                try {
+                    Authorizer.checkAnyActionOnResource(ConnectContext.get().getCurrentUserIdentity(),
+                            ConnectContext.get().getCurrentRoleIds(), resource.getName());
+                } catch (AccessDeniedException e) {
+                    continue;
                 }
                 resource.getProcNodeData(result);
             }
@@ -340,5 +352,17 @@ public class ResourceMgr implements Writable {
     public long saveResources(DataOutputStream out, long checksum) throws IOException {
         write(out);
         return checksum;
+    }
+
+    public void saveResourcesV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.RESOURCE_MGR, 1);
+        writer.writeJson(this);
+        writer.close();
+    }
+
+    public void loadResourcesV2(SRMetaBlockReader reader)
+            throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        ResourceMgr data = reader.readJson(ResourceMgr.class);
+        this.nameToResource = data.nameToResource;
     }
 }

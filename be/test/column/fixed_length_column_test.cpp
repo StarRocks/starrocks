@@ -19,6 +19,7 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
 #include "exec/sorting/sorting.h"
 
 namespace starrocks {
@@ -59,7 +60,7 @@ TEST(FixedLengthColumnTest, test_basic) {
             column->append(i);
         }
 
-        Column::Filter filter;
+        Filter filter;
         for (int i = 0; i < 100; ++i) {
             filter.push_back(i % 2);
         }
@@ -117,7 +118,6 @@ TEST(FixedLengthColumnTest, test_nullable) {
     for (int i = 0; i < 100; i++) {
         if (i % 3) {
             ASSERT_EQ(true, column->is_null(i));
-            ASSERT_EQ(0, data[i]);
         } else {
             ASSERT_EQ(false, column->is_null(i));
             ASSERT_EQ(i, data[i]);
@@ -137,7 +137,7 @@ TEST(FixedLengthColumnTest, test_nullable) {
             }
         }
 
-        Column::Filter filter;
+        Filter filter;
         for (int k = 0; k < 50; ++k) {
             filter.push_back(0);
         }
@@ -523,7 +523,7 @@ TEST(FixedLengthColumnTest, test_update_rows) {
     }
 
     std::vector<uint32_t> replace_idxes = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
-    ASSERT_TRUE(column->update_rows(*replace_column.get(), replace_idxes.data()).ok());
+    column->update_rows(*replace_column.get(), replace_idxes.data());
 
     for (int i = 0; i < 10; i++) {
         ASSERT_EQ(column->get_data()[i], i + 100);
@@ -620,6 +620,28 @@ TEST(FixedLengthColumnTest, test_replicate) {
     ASSERT_EQ(c2->get(2).get_int32(), 7);
     ASSERT_EQ(c2->get(3).get_int32(), 3);
     ASSERT_EQ(c2->get(4).get_int32(), 3);
+}
+
+// NOLINTNEXTLINE
+TEST(FixedLengthColumnTest, test_fill_range) {
+    std::vector<int64_t> values{1, 2, 3, 4, 5};
+    void* buff = values.data();
+    size_t length = values.size() * sizeof(values[0]);
+
+    auto c1 = Int64Column::create();
+    ASSERT_EQ(values.size(), c1->append_numbers(buff, length));
+    ASSERT_EQ(values.size(), c1->size());
+
+    std::vector<int64_t> ids{0, 0, 0};
+    std::vector<uint8_t> filter{1, 0, 1, 0, 1};
+    c1->fill_range(ids, filter);
+
+    auto* p = reinterpret_cast<const int64_t*>(c1->raw_data());
+    ASSERT_EQ(0, p[0]);
+    ASSERT_EQ(values[1], p[1]);
+    ASSERT_EQ(0, p[2]);
+    ASSERT_EQ(values[3], p[3]);
+    ASSERT_EQ(0, p[4]);
 }
 
 } // namespace starrocks

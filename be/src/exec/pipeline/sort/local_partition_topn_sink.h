@@ -57,9 +57,12 @@ private:
 
 class LocalPartitionTopnSinkOperatorFactory final : public OperatorFactory {
 public:
+    template <class... Args>
     LocalPartitionTopnSinkOperatorFactory(int32_t id, int32_t plan_node_id,
-                                          LocalPartitionTopnContextFactoryPtr partition_topn_ctx_factory);
-
+                                          LocalPartitionTopnContextFactoryPtr partition_topn_ctx_factory,
+                                          Args&&... unused)
+            : OperatorFactory(id, "local_partition_topn_sink", plan_node_id),
+              _partition_topn_ctx_factory(std::move(partition_topn_ctx_factory)) {}
     ~LocalPartitionTopnSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;

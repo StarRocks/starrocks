@@ -49,11 +49,12 @@
 
 namespace starrocks {
 
-ExprContext::ExprContext(Expr* root)
-        : _root(root), _is_clone(false), _prepared(false), _opened(false), _closed(false) {}
+ExprContext::ExprContext(Expr* root) : _root(root) {}
 
 ExprContext::~ExprContext() {
-    // DCHECK(!_prepared || _closed) << ". expr context address = " << this;
+    // nothing to do
+    if (_runtime_state == nullptr) return;
+
     close(_runtime_state);
     for (auto& _fn_context : _fn_contexts) {
         delete _fn_context;
@@ -129,6 +130,7 @@ Status ExprContext::clone(RuntimeState* state, ObjectPool* pool, ExprContext** n
     (*new_ctx)->_is_clone = true;
     (*new_ctx)->_prepared = true;
     (*new_ctx)->_opened = true;
+    (*new_ctx)->_runtime_state = state;
 
     return _root->open(state, *new_ctx, FunctionContext::THREAD_LOCAL);
 }
@@ -147,7 +149,7 @@ Status ExprContext::get_udf_error() {
 std::string ExprContext::get_error_msg() const {
     for (auto fn_ctx : _fn_contexts) {
         if (fn_ctx->has_error()) {
-            return std::string(fn_ctx->error_msg());
+            return {fn_ctx->error_msg()};
         }
     }
     return "";

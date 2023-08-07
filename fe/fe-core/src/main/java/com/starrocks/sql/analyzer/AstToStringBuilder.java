@@ -14,9 +14,8 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.google.common.base.Function;
 import com.google.common.base.Joiner;
-import com.google.common.collect.Lists;
+import com.google.common.base.Strings;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.ArithmeticExpr;
@@ -51,45 +50,62 @@ import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.PrintableMap;
-import com.starrocks.mysql.privilege.Privilege;
+import com.starrocks.privilege.ObjectType;
+import com.starrocks.privilege.PEntryObject;
+import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
+import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.CreateStorageVolumeStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExceptRelation;
+import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
+import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.MapExpr;
+import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
-import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.storagevolume.StorageVolume;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.toList;
@@ -107,42 +123,162 @@ public class AstToStringBuilder {
     }
 
     public static class AST2StringBuilderVisitor extends AstVisitor<String, Void> {
+
+        // ------------------------------------------- Privilege Statement -------------------------------------------------
+
+        @Override
+        public String visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, Void context) {
+            StringBuilder sb = new StringBuilder();
+            if (statement instanceof CreateUserStmt) {
+                sb.append("CREATE");
+            } else {
+                sb.append("ALTER");
+            }
+
+            sb.append(" USER ").append(statement.getUserIdentity());
+            if (!Strings.isNullOrEmpty(statement.getOriginalPassword())) {
+                if (statement.isPasswordPlain()) {
+                    sb.append(" IDENTIFIED BY '").append("*XXX").append("'");
+                } else {
+                    sb.append(" IDENTIFIED BY PASSWORD '").append(statement.getOriginalPassword()).append("'");
+                }
+            }
+
+            if (!Strings.isNullOrEmpty(statement.getAuthPluginName())) {
+                sb.append(" IDENTIFIED WITH ").append(statement.getAuthPluginName());
+                if (!Strings.isNullOrEmpty(statement.getAuthStringUnResolved())) {
+                    if (statement.isPasswordPlain()) {
+                        sb.append(" BY '");
+                    } else {
+                        sb.append(" AS '");
+                    }
+                    sb.append(statement.getAuthStringUnResolved()).append("'");
+                }
+            }
+
+            if (!statement.getDefaultRoles().isEmpty()) {
+                sb.append(" DEFAULT ROLE ");
+                sb.append(Joiner.on(",").join(
+                        statement.getDefaultRoles().stream().map(r -> "'" + r + "'").collect(toList())));
+            }
+
+            return sb.toString();
+        }
+
+        @Override
+        public String visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            if (stmt instanceof GrantPrivilegeStmt) {
+                sb.append("GRANT ");
+            } else {
+                sb.append("REVOKE ");
+            }
+            List<String> privList = new ArrayList<>();
+            for (PrivilegeType privilegeType : stmt.getPrivilegeTypes()) {
+                privList.add(privilegeType.name().replace("_", " "));
+            }
+
+            sb.append(Joiner.on(", ").join(privList));
+            sb.append(" ON ");
+
+            if (stmt.getObjectType() == ObjectType.SYSTEM) {
+                sb.append(stmt.getObjectType().name());
+            } else {
+                if (stmt.getObjectList().stream().anyMatch(PEntryObject::isFuzzyMatching)) {
+                    sb.append(stmt.getObjectList().get(0).toString());
+                } else {
+                    sb.append(stmt.getObjectType().name()).append(" ");
+
+                    List<String> objectString = new ArrayList<>();
+                    for (PEntryObject tablePEntryObject : stmt.getObjectList()) {
+                        objectString.add(tablePEntryObject.toString());
+                    }
+                    sb.append(Joiner.on(", ").join(objectString));
+                }
+            }
+            if (stmt instanceof GrantPrivilegeStmt) {
+                sb.append(" TO ");
+            } else {
+                sb.append(" FROM ");
+            }
+            if (stmt.getUserIdentity() != null) {
+                sb.append("USER ").append(stmt.getUserIdentity());
+            } else {
+                sb.append("ROLE '").append(stmt.getRole()).append("'");
+            }
+
+            if (stmt instanceof GrantPrivilegeStmt && ((GrantPrivilegeStmt) stmt).isWithGrantOption()) {
+                sb.append(" WITH GRANT OPTION");
+            }
+            return sb.toString();
+        }
+
+        @Override
+        public String visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt statement, Void context) {
+            StringBuilder sqlBuilder = new StringBuilder();
+            if (statement instanceof GrantRoleStmt) {
+                sqlBuilder.append("GRANT ");
+            } else {
+                sqlBuilder.append("REVOKE ");
+            }
+
+            sqlBuilder.append(Joiner.on(", ")
+                    .join(statement.getGranteeRole().stream().map(r -> "'" + r + "'").collect(toList())));
+            sqlBuilder.append(" ");
+            if (statement instanceof GrantRoleStmt) {
+                sqlBuilder.append("TO ");
+            } else {
+                sqlBuilder.append("FROM ");
+            }
+            if (statement.getRole() != null) {
+                sqlBuilder.append(" ROLE ").append(statement.getRole());
+            } else {
+                sqlBuilder.append(statement.getUserIdentity());
+            }
+
+            return sqlBuilder.toString();
+        }
+
+        // --------------------------------------------Set Statement -------------------------------------------------------
+
         @Override
         public String visitSetStatement(SetStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
             sb.append("SET ");
 
             List<String> setVarList = new ArrayList<>();
-            for (SetVar setVar : stmt.getSetVars()) {
-                if (setVar instanceof SetPassVar) {
-                    StringBuilder tmp = new StringBuilder();
-                    tmp.append("PASSWORD FOR ")
-                            .append(((SetPassVar) setVar).getUserIdent().toString())
-                            .append(" = PASSWORD('***')");
-                    setVarList.add(tmp.toString());
-                    continue;
-                }
-                String setVarSql = "";
+            for (SetListItem setVar : stmt.getSetListItems()) {
+                if (setVar instanceof SystemVariable) {
+                    SystemVariable systemVariable = (SystemVariable) setVar;
+                    String setVarSql = "";
+                    setVarSql += systemVariable.getType().toString() + " ";
+                    setVarSql += "`" + systemVariable.getVariable() + "`";
+                    setVarSql += " = ";
+                    setVarSql += visit(systemVariable.getResolvedExpression());
 
-                // `SET DEFAULT` is not supported
-                if (!setVar.getType().equals(SetType.DEFAULT)) {
-                    if (setVar.getType().equals(SetType.USER)) {
-                        setVarSql += "@";
+                    setVarList.add(setVarSql);
+                } else if (setVar instanceof UserVariable) {
+                    UserVariable userVariable = (UserVariable) setVar;
+                    String setVarSql = "";
+                    setVarSql += "@";
+                    setVarSql += "`" + userVariable.getVariable() + "`";
+                    setVarSql += " = ";
+
+                    setVarSql += "cast (" + visit(userVariable.getEvaluatedExpression())
+                            + " as " + userVariable.getEvaluatedExpression().getType().toSql() + ")";
+                    setVarList.add(setVarSql);
+                } else if (setVar instanceof SetPassVar) {
+                    SetPassVar setPassVar = (SetPassVar) setVar;
+                    UserIdentity userIdentity = setPassVar.getUserIdent();
+                    String setPassSql = "";
+                    if (userIdentity == null) {
+                        setPassSql += "PASSWORD";
                     } else {
-                        setVarSql += setVar.getType().toString() + " ";
+                        setPassSql += "PASSWORD FOR " + userIdentity;
                     }
+                    setPassSql += " = PASSWORD('***')";
+                    setVarList.add(setPassSql);
                 }
-                setVarSql += "`" + setVar.getVariable() + "`";
-                setVarSql += " = ";
-
-                if (setVar instanceof UserVariable) {
-                    setVarSql += "cast (" + visit(setVar.getResolvedExpression())
-                            + " as " + setVar.getResolvedExpression().getType().toSql() + ")";
-                } else {
-                    setVarSql += visit(setVar.getExpression());
-                }
-
-                setVarList.add(setVarSql);
             }
 
             return sb.append(Joiner.on(",").join(setVarList)).toString();
@@ -157,9 +293,19 @@ public class AstToStringBuilder {
                 if (idx != 0) {
                     sb.append(", ");
                 }
-                sb.append(stringStringPair.first + " = " + stringStringPair.second);
+                sb.append(stringStringPair.first).append(" = ").append(stringStringPair.second);
                 idx++;
             }
+            return sb.toString();
+        }
+
+        public String visitCreateResourceStatement(CreateResourceStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE EXTERNAL RESOURCE ").append(stmt.getResourceName());
+
+            sb.append(" PROPERTIES (");
+            sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false, true));
+            sb.append(")");
             return sb.toString();
         }
 
@@ -182,8 +328,18 @@ public class AstToStringBuilder {
         @Override
         public String visitCreateRoutineLoadStatement(CreateRoutineLoadStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
-            sb.append("CREATE ROUTINE LOAD ").append(stmt.getDBName()).append(".")
-                    .append(stmt.getName()).append(" ON ").append(stmt.getTableName());
+            String dbName = null;
+            String jobName = null;
+            if (stmt.getLabelName() != null) {
+                dbName = stmt.getLabelName().getDbName();
+                jobName = stmt.getLabelName().getLabelName();
+            }
+            if (dbName != null) {
+                sb.append("CREATE ROUTINE LOAD ").append(dbName).append(".")
+                    .append(jobName).append(" ON ").append(stmt.getTableName());
+            } else {
+                sb.append("CREATE ROUTINE LOAD ").append(jobName).append(" ON ").append(stmt.getTableName());
+            }
 
             if (stmt.getRoutineLoadDesc() != null) {
                 sb.append(" ").append(stmt.getRoutineLoadDesc()).append(" ");
@@ -204,26 +360,22 @@ public class AstToStringBuilder {
             return sb.toString();
         }
 
-
         @Override
         public String visitLoadStatement(LoadStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
 
             sb.append("LOAD LABEL ").append(stmt.getLabel().toString());
-            sb.append("(");
-            Joiner.on(",").appendTo(sb, Lists.transform(stmt.getDataDescriptions(), new Function<DataDescription, Object>() {
-                @Override
-                public Object apply(DataDescription dataDescription) {
-                    return dataDescription.toString();
-                }
-            })).append(")");
+            sb.append(" (");
+            sb.append(Joiner.on(",").join(
+                    stmt.getDataDescriptions().stream().map(DataDescription::toString).collect(toList())));
+            sb.append(")");
 
             if (stmt.getBrokerDesc() != null) {
                 sb.append(stmt.getBrokerDesc());
             }
 
             if (stmt.getCluster() != null) {
-                sb.append("BY '");
+                sb.append(" BY '");
                 sb.append(stmt.getCluster());
                 sb.append("'");
             }
@@ -232,49 +384,49 @@ public class AstToStringBuilder {
             }
 
             if (stmt.getProperties() != null && !stmt.getProperties().isEmpty()) {
-                sb.append("PROPERTIES (");
-                sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false));
+                sb.append(" PROPERTIES (");
+                sb.append(new PrintableMap<>(stmt.getProperties(), "=", true, false));
                 sb.append(")");
             }
             return sb.toString();
         }
 
         @Override
-        public String visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, Void context) {
+        public String visitExportStatement(ExportStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
-            if (stmt instanceof GrantPrivilegeStmt) {
-                sb.append("GRANT ");
+
+            sb.append("EXPORT TABLE ");
+            if (stmt.getTblName() == null) {
+                sb.append("non-exist");
             } else {
-                sb.append("REVOKE ");
-            }
-            boolean firstLine = true;
-            for (Privilege privilege : stmt.getPrivBitSet().toPrivilegeList()) {
-                if (firstLine) {
-                    firstLine = false;
-                } else {
-                    sb.append(", ");
-                }
-                String priv = privilege.toString().toUpperCase();
-                sb.append(priv.substring(0, priv.length() - 5));
-            }
-            if (stmt.getPrivType().equals("TABLE") || stmt.getPrivType().equals("DATABASE")) {
-                sb.append(" ON " + stmt.getTblPattern());
-            } else if (stmt.getPrivType().equals("RESOURCE")) {
-                sb.append(" ON RESOURCE ").append(stmt.getResourcePattern());
-            } else {
-                sb.append(" ON ").append(stmt.getUserPrivilegeObject());
-            }
-            if (stmt instanceof GrantPrivilegeStmt) {
-                sb.append(" TO ");
-            } else {
-                sb.append(" FROM ");
-            }
-            if (stmt.getUserIdentity() != null) {
-                sb.append(stmt.getUserIdentity());
-            } else {
-                sb.append("ROLE '" + stmt.getRole() + "'");
+                sb.append(stmt.getTblName().toSql());
             }
 
+            if (stmt.getPartitions() != null && !stmt.getPartitions().isEmpty()) {
+                sb.append(" PARTITION (");
+                Joiner.on(",").appendTo(sb, stmt.getPartitions()).append(")");
+            }
+
+            if (stmt.getColumnNames() != null && !stmt.getColumnNames().isEmpty()) {
+                sb.append("(");
+                Joiner.on(",").appendTo(sb, stmt.getColumnNames()).append(")");
+            }
+            sb.append(" TO ");
+            sb.append("\"" + stmt.getPath() + "\" ");
+            if (stmt.getProperties() != null && !stmt.getProperties().isEmpty()) {
+                sb.append("PROPERTIES (");
+                sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false));
+                sb.append(")");
+            }
+            sb.append("WITH BROKER ");
+            if (stmt.getBrokerDesc() != null) {
+                if (!stmt.getBrokerDesc().getName().isEmpty()) {
+                    sb.append(stmt.getBrokerDesc().getName());
+                }
+                sb.append("' (");
+                sb.append(new PrintableMap<String, String>(stmt.getBrokerDesc().getProperties(), "=", true, false, true));
+                sb.append(")");
+            }
             return sb.toString();
         }
 
@@ -380,9 +532,19 @@ public class AstToStringBuilder {
         }
 
         @Override
-        public String visitSubquery(SubqueryRelation subquery, Void context) {
-            return "(" + visit(subquery.getQueryStatement()) + ")"
-                    + " " + (subquery.getAlias() == null ? "" : subquery.getAlias().getTbl());
+        public String visitSubquery(SubqueryRelation node, Void context) {
+            StringBuilder sqlBuilder = new StringBuilder("(" + visit(node.getQueryStatement()) + ")");
+
+            if (node.getAlias() != null) {
+                sqlBuilder.append(" ").append(node.getAlias().getTbl());
+
+                if (node.getExplicitColumnNames() != null) {
+                    sqlBuilder.append("(");
+                    sqlBuilder.append(Joiner.on(",").join(node.getExplicitColumnNames()));
+                    sqlBuilder.append(")");
+                }
+            }
+            return sqlBuilder.toString();
         }
 
         @Override
@@ -495,7 +657,16 @@ public class AstToStringBuilder {
                 values.add(rowBuilder.toString());
             }
             sqlBuilder.append(Joiner.on(", ").join(values));
-            sqlBuilder.append(") ").append(node.getAlias().getTbl());
+            sqlBuilder.append(")");
+            if (node.getAlias() != null) {
+                sqlBuilder.append(" ").append(node.getAlias().getTbl());
+
+                if (node.getExplicitColumnNames() != null) {
+                    sqlBuilder.append("(");
+                    sqlBuilder.append(Joiner.on(",").join(node.getExplicitColumnNames()));
+                    sqlBuilder.append(")");
+                }
+            }
 
             return sqlBuilder.toString();
         }
@@ -514,9 +685,33 @@ public class AstToStringBuilder {
             if (node.getAlias() != null) {
                 sqlBuilder.append(" ").append(node.getAlias().getTbl());
 
-                if (node.getColumnNames() != null) {
+                if (node.getColumnOutputNames() != null) {
                     sqlBuilder.append("(");
-                    sqlBuilder.append(Joiner.on(",").join(node.getColumnNames()));
+                    sqlBuilder.append(Joiner.on(",").join(node.getColumnOutputNames()));
+                    sqlBuilder.append(")");
+                }
+            }
+
+            return sqlBuilder.toString();
+        }
+
+        @Override
+        public String visitNormalizedTableFunction(NormalizedTableFunctionRelation node, Void scope) {
+            StringBuilder sqlBuilder = new StringBuilder();
+            sqlBuilder.append("TABLE(");
+
+            TableFunctionRelation tableFunction = (TableFunctionRelation) node.getRight();
+            sqlBuilder.append(tableFunction.getFunctionName());
+            sqlBuilder.append("(");
+            sqlBuilder.append(tableFunction.getChildExpressions().stream().map(this::visit).collect(Collectors.joining(",")));
+            sqlBuilder.append(")");
+            sqlBuilder.append(")"); // TABLE(
+
+            if (tableFunction.getAlias() != null) {
+                sqlBuilder.append(" ").append(tableFunction.getAlias().getTbl());
+                if (tableFunction.getColumnOutputNames() != null) {
+                    sqlBuilder.append("(");
+                    sqlBuilder.append(Joiner.on(",").join(tableFunction.getColumnOutputNames()));
                     sqlBuilder.append(")");
                 }
             }
@@ -569,15 +764,23 @@ public class AstToStringBuilder {
         }
 
         public String visitArrayExpr(ArrayExpr node, Void context) {
-            boolean explicitType = node.isExplicitType();
-
             StringBuilder sb = new StringBuilder();
-            if (explicitType) {
-                sb.append(node.getType().toString());
-            }
             sb.append('[');
             sb.append(visitAstList(node.getChildren()));
             sb.append(']');
+            return sb.toString();
+        }
+
+        public String visitMapExpr(MapExpr node, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("map{");
+            for (int i = 0; i < node.getChildren().size(); i = i + 2) {
+                if (i > 0) {
+                    sb.append(',');
+                }
+                sb.append(visit(node.getChild(i)) + ":" + visit(node.getChild(i + 1)));
+            }
+            sb.append("}");
             return sb.toString();
         }
 
@@ -671,6 +874,9 @@ public class AstToStringBuilder {
         public String visitFunctionCall(FunctionCallExpr node, Void context) {
             FunctionParams fnParams = node.getParams();
             StringBuilder sb = new StringBuilder();
+            if (node.getFnName().getDb() != null) {
+                sb.append("`" + node.getFnName().getDb() + "`.");
+            }
             String functionName = node.getFnName().getFunction();
             sb.append(functionName);
 
@@ -690,6 +896,13 @@ public class AstToStringBuilder {
                 sb.append(" ").append(ident.getValue());
                 StringLiteral boundary = (StringLiteral) node.getChild(3);
                 sb.append(", ").append(boundary.getValue());
+                sb.append(")");
+            } else if (functionName.equalsIgnoreCase(FunctionSet.ARRAY_AGG)) {
+                sb.append(visit(node.getChild(0)));
+                List<OrderByElement> sortClause = fnParams.getOrderByElements();
+                if (sortClause != null) {
+                    sb.append(" ORDER BY ").append(visitAstList(sortClause));
+                }
                 sb.append(")");
             } else {
                 List<String> p = node.getChildren().stream().map(this::visit).collect(Collectors.toList());
@@ -716,7 +929,7 @@ public class AstToStringBuilder {
 
         @Override
         public String visitSubfieldExpr(SubfieldExpr node, Void context) {
-            return String.format("%s.%s", visit(node.getChild(0)), node.getFieldName());
+            return String.format("%s.%s", visit(node.getChild(0)), Joiner.on('.').join(node.getFieldNames()));
         }
 
         public String visitGroupingFunctionCall(GroupingFunctionCallExpr node, Void context) {
@@ -941,6 +1154,54 @@ public class AstToStringBuilder {
             } else {
                 return "(" + visit(node) + ")";
             }
+        }
+
+        // --------------------------------------------Storage volume Statement ----------------------------------------
+
+        @Override
+        public String visitCreateStorageVolumeStatement(CreateStorageVolumeStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE STORAGE VOLUME ");
+            if (stmt.isSetIfNotExists()) {
+                sb.append("IF NOT EXISTS ");
+            }
+            sb.append(stmt.getName());
+            sb.append(" TYPE = ").append(stmt.getStorageVolumeType());
+            sb.append(" LOCATIONS = (");
+            List<String> locations = stmt.getStorageLocations();
+            for (int i = 0; i < locations.size(); ++i) {
+                if (i == 0) {
+                    sb.append("'").append(locations.get(i)).append("'");
+                } else {
+                    sb.append(", '").append(locations.get(i)).append("'");
+                }
+            }
+            sb.append(")");
+            if (!stmt.getComment().isEmpty()) {
+                sb.append(" COMMENT '").append(stmt.getComment()).append("'");
+            }
+            Map<String, String> properties = new HashMap<>(stmt.getProperties());
+            StorageVolume.addMaskForCredential(properties);
+            sb.append(" PROPERTIES (").
+                    append(new PrintableMap<>(properties, "=", true, false)).append(")");
+            return sb.toString();
+        }
+
+        @Override
+        public String visitAlterStorageVolumeStatement(AlterStorageVolumeStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("ALTER STORAGE VOLUME ").append(stmt.getName());
+            if (!stmt.getComment().isEmpty()) {
+                sb.append(" COMMENT = '").append(stmt.getComment()).append("'");
+            }
+            Map<String, String> properties = new HashMap<>(stmt.getProperties());
+            StorageVolume.addMaskForCredential(properties);
+            if (!properties.isEmpty()) {
+                sb.append(" SET (").
+                        append(new PrintableMap<>(properties, "=", true, false))
+                        .append(")");
+            }
+            return sb.toString();
         }
     }
 }

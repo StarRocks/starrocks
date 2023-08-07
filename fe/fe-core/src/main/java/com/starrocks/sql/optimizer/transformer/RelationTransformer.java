@@ -30,6 +30,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.IcebergTable;
@@ -38,9 +39,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
-import com.starrocks.external.elasticsearch.EsTablePartitions;
+import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.FieldId;
 import com.starrocks.sql.analyzer.RelationFields;
@@ -52,6 +54,7 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -96,10 +99,12 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionTableScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
@@ -111,6 +116,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import org.apache.commons.lang3.tuple.Triple;
 
 import java.util.ArrayList;
@@ -122,6 +128,7 @@ import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMapping> {
@@ -153,9 +160,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         OptExprBuilder root = plan.getRootBuilder();
         // Set limit if user set sql_select_limit.
         long selectLimit = ConnectContext.get().getSessionVariable().getSqlSelectLimit();
-        if (!root.getRoot().getOp().hasLimit() &&
-                selectLimit != SessionVariable.DEFAULT_SELECT_LIMIT) {
-            LogicalLimitOperator limitOperator = LogicalLimitOperator.local(selectLimit);
+        if (!root.getRoot().getOp().hasLimit() && selectLimit != SessionVariable.DEFAULT_SELECT_LIMIT) {
+            LogicalLimitOperator limitOperator = LogicalLimitOperator.init(selectLimit);
             root = root.withNewRoot(limitOperator);
             return new LogicalPlan(root, plan.getOutputColumn(), plan.getCorrelation());
         }
@@ -237,6 +243,13 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         return processSetOperation(node);
     }
 
+    // When transform SetOperationRelation into setOperation LogicalOperator, child exprs of the LogicalOperator
+    // are not processed by ReduceCastRule, that leads cast(string as string) is generated and propagated to BE
+    // unexpectedly.
+    public ScalarOperator foldCast(ScalarOperator operator) {
+        return new ScalarOperatorRewriter().rewrite(operator, Lists.newArrayList(new ReduceCastRule()));
+    }
+
     private LogicalPlan processSetOperation(SetOperationRelation setOperationRelation) {
         List<OptExprBuilder> childPlan = new ArrayList<>();
         /*
@@ -262,7 +275,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                             if (relationType.isNull()) {
                                 row.get(i).setType(outputType);
                             } else {
-                                row.set(i, ((ConstantOperator) row.get(i)).castTo(outputType));
+                                ScalarOperator expr = foldCast(((ConstantOperator) row.get(i)).castTo(outputType));
+                                row.set(i, expr);
                             }
                             valuesOperator.getColumnRefSet().get(i).setType(outputType);
                         } catch (Exception e) {
@@ -279,7 +293,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     Type outputType = setOperationRelation.getRelationFields().getFieldByIndex(i).getType();
                     if (!outputType.equals(relation.getRelationFields().getFieldByIndex(i).getType())) {
                         ColumnRefOperator c = columnRefFactory.create("cast", outputType, true);
-                        projections.put(c, new CastOperator(outputType, childOutputColumn.get(i), true));
+                        ScalarOperator expr = foldCast(new CastOperator(outputType, childOutputColumn.get(i), true));
+                        projections.put(c, expr);
                         newChildOutputs.add(c);
                     } else {
                         projections.put(childOutputColumn.get(i), childOutputColumn.get(i));
@@ -405,6 +420,38 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         return new LogicalPlan(valuesOpt, valuesOutputColumns, null);
     }
 
+    private DistributionSpec getTableDistributionSpec(TableRelation node,
+                                                      Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
+        DistributionSpec distributionSpec = null;
+        DistributionInfo distributionInfo = ((OlapTable) node.getTable()).getDefaultDistributionInfo();
+
+        if (distributionInfo.getType() == DistributionInfoType.HASH) {
+            List<Integer> hashDistributeColumns = new ArrayList<>();
+            HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
+            List<Column> distributedColumns = hashDistributionInfo.getDistributionColumns();
+
+            // NOTE: sync mv output columns may not contain the distribution columns,
+            // set it as random distribution.
+            if (node.isSyncMVQuery() &&
+                    distributedColumns.stream().anyMatch(x -> !columnMetaToColRefMap.containsKey(x))) {
+                return DistributionSpec.createAnyDistributionSpec();
+            }
+
+            for (Column distributedColumn : distributedColumns) {
+                Preconditions.checkState(columnMetaToColRefMap.containsKey(distributedColumn));
+                hashDistributeColumns.add(columnMetaToColRefMap.get(distributedColumn).getId());
+            }
+            HashDistributionDesc hashDistributionDesc =
+                    new HashDistributionDesc(hashDistributeColumns, HashDistributionDesc.SourceType.LOCAL);
+            distributionSpec = DistributionSpec.createHashDistributionSpec(hashDistributionDesc);
+        } else if (distributionInfo.getType() == DistributionInfoType.RANDOM) {
+            distributionSpec = DistributionSpec.createAnyDistributionSpec();
+        } else {
+            throw new IllegalStateException("Unknown distribution type: " + distributionInfo.getType());
+        }
+        return distributionSpec;
+    }
+
     @Override
     public LogicalPlan visitTable(TableRelation node, ExpressionMapping context) {
         ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMapBuilder = ImmutableMap.builder();
@@ -426,33 +473,31 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         boolean isMVPlanner = session.getSessionVariable().isMVPlanner();
         Map<Column, ColumnRefOperator> columnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
         List<ColumnRefOperator> outputVariables = outputVariablesBuilder.build();
-        LogicalScanOperator scanOperator;
-        if (node.getTable().isNativeTable()) {
-            DistributionInfo distributionInfo = ((OlapTable) node.getTable()).getDefaultDistributionInfo();
-            Preconditions.checkState(distributionInfo instanceof HashDistributionInfo);
-            HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-            List<Column> distributedColumns = hashDistributionInfo.getDistributionColumns();
-            List<Integer> hashDistributeColumns = new ArrayList<>();
-            for (Column distributedColumn : distributedColumns) {
-                hashDistributeColumns.add(columnMetaToColRefMap.get(distributedColumn).getId());
-            }
 
-            HashDistributionDesc hashDistributionDesc =
-                    new HashDistributionDesc(hashDistributeColumns, HashDistributionDesc.SourceType.LOCAL);
+        ScalarOperator partitionPredicate = null;
+        if (node.getPartitionPredicate() != null) {
+            partitionPredicate = SqlToScalarOperatorTranslator.translate(node.getPartitionPredicate(),
+                    new ExpressionMapping(node.getScope(), outputVariables), columnRefFactory);
+        }
+
+        LogicalScanOperator scanOperator;
+        if (node.getTable().isNativeTableOrMaterializedView()) {
+            DistributionSpec distributionSpec = getTableDistributionSpec(node, columnMetaToColRefMap);
             if (node.isMetaQuery()) {
                 scanOperator = new LogicalMetaScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build());
             } else if (!isMVPlanner) {
-                scanOperator = new LogicalOlapScanOperator(node.getTable(),
-                        colRefToColumnMetaMapBuilder.build(),
-                        columnMetaToColRefMap,
-                        DistributionSpec.createHashDistributionSpec(hashDistributionDesc),
-                        Operator.DEFAULT_LIMIT,
-                        null,
-                        ((OlapTable) node.getTable()).getBaseIndexId(),
-                        null,
-                        node.getPartitionNames(),
-                        Lists.newArrayList(),
-                        node.getTabletIds());
+                scanOperator = LogicalOlapScanOperator.builder()
+                        .setTable(node.getTable())
+                        .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
+                        .setColumnMetaToColRefMap(columnMetaToColRefMap)
+                        .setDistributionSpec(distributionSpec)
+                        .setSelectedIndexId(((OlapTable) node.getTable()).getBaseIndexId())
+                        .setPartitionNames(node.getPartitionNames())
+                        .setSelectedTabletId(Lists.newArrayList())
+                        .setHintsTabletIds(node.getTabletIds())
+                        .setHasTableHints(node.hasTableHints())
+                        .setUsePkIndex(node.isUsePkIndex())
+                        .build();
             } else {
                 scanOperator = new LogicalBinlogScanOperator(
                         node.getTable(),
@@ -462,21 +507,27 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             }
         } else if (Table.TableType.HIVE.equals(node.getTable().getType())) {
             scanOperator = new LogicalHiveScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
-                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, partitionPredicate);
         } else if (Table.TableType.FILE.equals(node.getTable().getType())) {
             scanOperator = new LogicalFileScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else if (Table.TableType.ICEBERG.equals(node.getTable().getType())) {
-            if (!((IcebergTable) node.getTable()).isCatalogTbl()) {
-                ((IcebergTable) node.getTable()).refreshTable();
+            String catalogName = ((IcebergTable) node.getTable()).getCatalogName();
+            if (isResourceMappingCatalog(catalogName)) {
+                String dbName = node.getName().getDb();
+                GlobalStateMgr.getCurrentState().getMetadataMgr().refreshTable(
+                        catalogName, dbName, node.getTable(), Lists.newArrayList(), true);
             }
             scanOperator = new LogicalIcebergScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
-                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, partitionPredicate);
         } else if (Table.TableType.HUDI.equals(node.getTable().getType())) {
             scanOperator = new LogicalHudiScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
-                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, partitionPredicate);
         } else if (Table.TableType.DELTALAKE.equals(node.getTable().getType())) {
             scanOperator = new LogicalDeltaLakeScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
+                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+        } else if (Table.TableType.PAIMON.equals(node.getTable().getType())) {
+            scanOperator = new LogicalPaimonScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else if (Table.TableType.SCHEMA.equals(node.getTable().getType())) {
             scanOperator =
@@ -512,6 +563,9 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     new LogicalJDBCScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                             columnMetaToColRefMap, Operator.DEFAULT_LIMIT,
                             null, null);
+        } else if (Table.TableType.TABLE_FUNCTION.equals(node.getTable().getType())) {
+            scanOperator = new LogicalTableFunctionTableScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
+                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else {
             throw new StarRocksPlannerException("Not support table type: " + node.getTable().getType(),
                     ErrorType.UNSUPPORTED);
@@ -580,10 +634,12 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             LogicalPlan leftPlan = visit(node.getLeft());
             LogicalPlan rightPlan = visit(node.getRight(), leftPlan.getRootBuilder().getExpressionMapping());
 
+            List<ColumnRefOperator> leftFieldMappings = leftPlan.getRootBuilder().getFieldMappings();
+            List<ColumnRefOperator> rightFieldMappings = rightPlan.getRootBuilder().getFieldMappings();
+
             ExpressionMapping expressionMapping = new ExpressionMapping(new Scope(RelationId.of(node),
                     node.getLeft().getRelationFields().joinWith(node.getRight().getRelationFields())),
-                    Streams.concat(leftPlan.getRootBuilder().getFieldMappings().stream(),
-                                    rightPlan.getRootBuilder().getFieldMappings().stream())
+                    Streams.concat(leftFieldMappings.stream(), rightFieldMappings.stream())
                             .collect(Collectors.toList()));
 
             Operator root = LogicalApplyOperator.builder().setCorrelationColumnRefs(correlation)
@@ -675,10 +731,10 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
         for (int i = 0; i < tableFunction.getTableFnReturnTypes().size(); ++i) {
             String colName;
-            if (node.getColumnNames() == null) {
+            if (node.getColumnOutputNames() == null) {
                 colName = tableFunction.getDefaultColumnNames().get(i);
             } else {
-                colName = node.getColumnNames().get(i);
+                colName = node.getColumnOutputNames().get(i);
             }
 
             outputColumns.add(columnRefFactory.create(colName, tableFunction.getTableFnReturnTypes().get(i), true));
@@ -703,11 +759,19 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             }
         }
 
-        Operator root = new LogicalTableFunctionOperator(
-                new ColumnRefSet(outputColumns), node.getTableFunction(), projectMap);
+        Operator root = new LogicalTableFunctionOperator(outputColumns, node.getTableFunction(), projectMap);
         return new LogicalPlan(new OptExprBuilder(root, Collections.emptyList(),
                 new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()), outputColumns)),
                 null, null);
+    }
+
+    @Override
+    public LogicalPlan visitNormalizedTableFunction(NormalizedTableFunctionRelation node, ExpressionMapping context) {
+        LogicalPlan plan = visitJoin(node, context);
+        // Column prune, only the table function columns should be returned.
+        OptExprBuilder rootBuilder = plan.getRootBuilder();
+        rootBuilder.setExpressionMapping(rootBuilder.getInputs().get(1).getExpressionMapping());
+        return plan;
     }
 
     /**

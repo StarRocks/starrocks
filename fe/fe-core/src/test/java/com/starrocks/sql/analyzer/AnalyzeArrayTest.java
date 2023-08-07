@@ -61,5 +61,30 @@ public class AnalyzeArrayTest {
                 "            array_contains([true, false, true], true),\n" +
                 "            array_contains([true, false, true], false)");
         analyzeSuccess("select array_length(null)");
+        analyzeSuccess("select cardinality(null)");
+        analyzeSuccess("select cardinality([])");
+        analyzeSuccess("select element_at([3,2], 0)");
+
+        analyzeFail("select element_at([3,2])");
+        analyzeFail("select element_at(1,[3,2])");
+        analyzeSuccess("select array_concat([])");
+        analyzeSuccess("select array_concat([1,2,3])");
+
+        analyzeSuccess("select array_generate(9)");
+        analyzeSuccess("select array_generate(1,9999999999999999)");
+        analyzeSuccess("select array_generate(1,9999999999999999, 10000)");
+        analyzeSuccess("select array_generate(1,NULL,1)");
+        analyzeSuccess("select array_generate(1,NULL)");
+        analyzeFail("select array_generate()");
+        analyzeFail("select array_generate('c')");
+        analyzeFail("select array_generate(a,b) from t");
+
+    }
+
+    @Test
+    public void testArrayConcat() {
+        analyzeSuccess("select array_concat([1.0, 2.0, 3.0], [2.00, 2.0])");
+        analyzeSuccess("select array_concat([1.0, 2.0, 3.0], ['2.00', '2.0'])");
+        analyzeFail("select array_concat([1, 2, 3], [[1, 1], [2, 2]])");
     }
 }

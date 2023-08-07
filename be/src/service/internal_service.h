@@ -39,6 +39,8 @@
 
 #include "common/compiler_util.h"
 #include "common/status.h"
+#include "exec/pipeline/pipeline_fwd.h"
+#include "gen_cpp/MVMaintenance_types.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "util/countdown_latch.h"
@@ -51,6 +53,7 @@ class Controller;
 namespace starrocks {
 
 class TExecPlanFragmentParams;
+class TMVCommitEpochTask;
 class ExecEnv;
 
 template <typename T>
@@ -64,6 +67,10 @@ public:
 
     void transmit_chunk(::google::protobuf::RpcController* controller, const ::starrocks::PTransmitChunkParams* request,
                         ::starrocks::PTransmitChunkResult* response, ::google::protobuf::Closure* done) override;
+
+    void transmit_chunk_via_http(::google::protobuf::RpcController* controller,
+                                 const ::starrocks::PHttpRequest* request, ::starrocks::PTransmitChunkResult* response,
+                                 ::google::protobuf::Closure* done) override;
 
     void transmit_runtime_filter(::google::protobuf::RpcController* controller,
                                  const ::starrocks::PTransmitRuntimeFilterParams* request,
@@ -119,9 +126,42 @@ public:
     void get_pulsar_info(google::protobuf::RpcController* controller, const PPulsarProxyRequest* request,
                          PPulsarProxyResult* response, google::protobuf::Closure* done) override;
 
+    void get_file_schema(google::protobuf::RpcController* controller, const PGetFileSchemaRequest* request,
+                         PGetFileSchemaResult* response, google::protobuf::Closure* done) override;
+
     void submit_mv_maintenance_task(google::protobuf::RpcController* controller,
                                     const PMVMaintenanceTaskRequest* request, PMVMaintenanceTaskResult* response,
                                     google::protobuf::Closure* done) override;
+
+    void local_tablet_reader_open(google::protobuf::RpcController* controller, const PTabletReaderOpenRequest* request,
+                                  PTabletReaderOpenResult* response, google::protobuf::Closure* done) override;
+
+    void local_tablet_reader_close(google::protobuf::RpcController* controller,
+                                   const PTabletReaderCloseRequest* request, PTabletReaderCloseResult* response,
+                                   google::protobuf::Closure* done) override;
+
+    void local_tablet_reader_multi_get(google::protobuf::RpcController* controller,
+                                       const PTabletReaderMultiGetRequest* request,
+                                       PTabletReaderMultiGetResult* response, google::protobuf::Closure* done) override;
+
+    void local_tablet_reader_scan_open(google::protobuf::RpcController* controller,
+                                       const PTabletReaderScanOpenRequest* request,
+                                       PTabletReaderScanOpenResult* response, google::protobuf::Closure* done) override;
+
+    void local_tablet_reader_scan_get_next(google::protobuf::RpcController* controller,
+                                           const PTabletReaderScanGetNextRequest* request,
+                                           PTabletReaderScanGetNextResult* response,
+                                           google::protobuf::Closure* done) override;
+
+    void execute_command(google::protobuf::RpcController* controller, const ExecuteCommandRequestPB* request,
+                         ExecuteCommandResultPB* response, google::protobuf::Closure* done) override;
+
+    void update_fail_point_status(google::protobuf::RpcController* controller,
+                                  const PUpdateFailPointStatusRequest* request,
+                                  PUpdateFailPointStatusResponse* response, google::protobuf::Closure* done) override;
+
+    void list_fail_point(google::protobuf::RpcController* controller, const PListFailPointRequest* request,
+                         PListFailPointResponse* response, google::protobuf::Closure* done) override;
 
 private:
     void _transmit_chunk(::google::protobuf::RpcController* controller,
@@ -146,31 +186,29 @@ private:
     void _fetch_data(google::protobuf::RpcController* controller, const PFetchDataRequest* request,
                      PFetchDataResult* result, google::protobuf::Closure* done);
 
-    void _get_info_impl(const PProxyRequest* request, PProxyResult* response,
-                        GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout_ms);
+    void _get_info_impl(const PProxyRequest* request, PProxyResult* response, google::protobuf::Closure* done,
+                        int timeout_ms);
 
     void _get_pulsar_info_impl(const PPulsarProxyRequest* request, PPulsarProxyResult* response,
-                               GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch,
-                               int timeout_ms);
+                               google::protobuf::Closure* done, int timeout_ms);
+
+    void _get_file_schema(google::protobuf::RpcController* controller, const PGetFileSchemaRequest* request,
+                          PGetFileSchemaResult* response, google::protobuf::Closure* done);
 
     Status _exec_plan_fragment(brpc::Controller* cntl);
     Status _exec_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_request,
                                            const TExecPlanFragmentParams& t_unique_request);
     Status _exec_plan_fragment_by_non_pipeline(const TExecPlanFragmentParams& t_request);
 
+    // MV Maintenance task
     Status _submit_mv_maintenance_task(brpc::Controller* cntl);
+    Status _mv_start_maintenance(const TMVMaintenanceTasks& task);
+    Status _mv_start_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVMaintenanceTasks& task);
+    Status _mv_commit_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVMaintenanceTasks& task);
+    Status _mv_abort_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVMaintenanceTasks& task);
 
 protected:
     ExecEnv* _exec_env;
-
-    // The BRPC call is executed by bthread.
-    // If the bthread is blocked by pthread primitive, the current bthread cannot release the bind pthread and cannot be yield.
-    // In this way, the available pthread become less and the scheduling of bthread would be influenced.
-    // So, we should execute the function that may use pthread block primitive in a specific thread pool.
-    // More detail: https://github.com/apache/incubator-brpc/blob/master/docs/cn/bthread.md
-
-    // Thread pool for executing task  asynchronously in BRPC call.
-    PriorityThreadPool _async_thread_pool;
 };
 
 } // namespace starrocks

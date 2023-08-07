@@ -17,17 +17,30 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.sql.parser.NodePosition;
 
-import java.util.ArrayList;
+import java.util.List;
 
 public class ValueList implements ParseNode {
-    private final ArrayList<Expr> row;
+    private final List<Expr> row;
 
-    public ValueList(ArrayList<Expr> row) {
+    private final NodePosition pos;
+
+    public ValueList(List<Expr> row) {
+        this(row, NodePosition.ZERO);
+    }
+
+    public ValueList(List<Expr> row, NodePosition pos) {
+        this.pos = pos;
         this.row = row;
     }
 
-    public ArrayList<Expr> getRow() {
+    public List<Expr> getRow() {
         return row;
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 }

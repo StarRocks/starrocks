@@ -43,15 +43,15 @@ class TabletReader final : public ChunkIterator {
     using RowsetPtr = std::shared_ptr<Rowset>;
     using RowSourceMask = starrocks::RowSourceMask;
     using RowSourceMaskBuffer = starrocks::RowSourceMaskBuffer;
-    using VectorizedSchema = starrocks::VectorizedSchema;
+    using Schema = starrocks::Schema;
     using SeekRange = starrocks::SeekRange;
     using SeekTuple = starrocks::SeekTuple;
     using TabletReaderParams = starrocks::TabletReaderParams;
 
 public:
-    TabletReader(Tablet tablet, int64_t version, VectorizedSchema schema);
-    TabletReader(Tablet tablet, int64_t version, VectorizedSchema schema, std::vector<RowsetPtr> rowsets);
-    TabletReader(Tablet tablet, int64_t version, VectorizedSchema schema, bool is_key,
+    TabletReader(Tablet tablet, int64_t version, Schema schema);
+    TabletReader(Tablet tablet, int64_t version, Schema schema, std::vector<RowsetPtr> rowsets);
+    TabletReader(Tablet tablet, int64_t version, Schema schema, std::vector<RowsetPtr> rowsets, bool is_key,
                  RowSourceMaskBuffer* mask_buffer);
     ~TabletReader() override;
 

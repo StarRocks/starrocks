@@ -1,14 +1,16 @@
 # Query Cache
 
-The query cache can save the intermediate computation results of queries. New queries that are semantically equivalent to previous queries can reuse the cached computation results to accelerate computations. As such, QPS is increased and average latency is decreased for highly concurrent, simple aggregate queries.
+The query cache is a powerful feature of StarRocks that can greatly enhance the performance of aggregate queries. By storing the intermediate results of local aggregations in memory, the query cache can avoid unnecessary disk access and computation for new queries that are identical or similar to previous ones. With its query cache, StarRocks can deliver fast and accurate results for aggregate queries, saving time and resources and enabling better scalability. The query cache is especially useful for high-concurrency scenarios where many users run similar queries on large and complex data sets.
 
-You can use the FE session variable `enable_query_cache` to enable the query cache. See the "[FE session variables](../using_starrocks/query_cache.md#fe-session-variables)" section of this topic.
+This feature is supported since v2.5.
+
+In v2.5, the query cache supports only aggregate queries on single flat tables. Since v3.0, the query cache also supports aggregate queries on multiple tables joined in a star schema.
 
 ## Application scenarios
 
 We recommend that you use the query cache in the following scenarios:
 
-- You frequently run aggregate queries on a single flat table or on multiple tables joined in a star schema.
+- You frequently run aggregate queries on individual flat tables or on multiple joined tables that are connected in a star schema.
 - Most of your aggregate queries are non-GROUP BY aggregate queries and low-cardinality GROUP BY aggregate queries.
 - Your data is loaded in append mode by time partition and can be categorized as hot data and cold data based on access frequency.
 
@@ -20,13 +22,14 @@ The query cache supports queries that meet the following conditions:
   >
   > Other query engines do not support the query cache.
 
-- The queries are on native OLAP tables. The query cache does not support queries on external tables or lake tables. The query cache also supports queries whose plans require access to single-table materialized views. However, the query cache does not support queries whose plans require access to multi-table materialized views.
+- The queries are on native OLAP tables (from v2.5) or cloud-native tables (from v3.0). The query cache does not support queries on external tables. The query cache also supports queries whose plans require access to synchronous materialized views. However, the query cache does not support queries whose plans require access to asynchronous materialized views.
 
-- The queries are aggregate queries on a single table.
+- The queries are aggregate queries on individual tables or on multiple joined tables.
 
   **NOTE**
   >
-  > The query cache will support aggregate queries on multiple tables that are joined by using colocate joins, broadcast joins, or bucket shuffle joins in the future.
+  > - The query cache supports Broadcast Join and Bucket Shuffle Join.
+  > - The query cache supports two tree structures that contain Join operators: Aggregation-Join and Join-Aggregation. Shuffle joins are not supported in the Aggregation-Join tree structure, while Hash joins are not supported in the Join-Aggregation tree structure.
 
 - The queries do not include nondeterminstic functions such as `rand`, `random`, `uuid`, and `sleep`.
 
@@ -34,12 +37,43 @@ The query cache supports queries on tables that use any of the following partiti
 
 ## Feature boundaries
 
-- The query cache is based on per-tablet computations of the Pipeline engine. Per-tablet computation means that a pipeline driver can process entire tables one by one rather than processing a portion of a tablet or many tablets interleaved together. When the actual number of tablets that are processed by a pipeline is greater than or equal to this pipeline's degree of parallelism (DOP) specified by the session variable `pipeline_dop`, the query cache works. If the number of tablets processed is smaller than the number of pipeline drivers, each pipeline driver processes only a portion of a specific tablet. In this situation, per-tablet computation results cannot be produced, and therefore the query cache does not work.
+- The query cache is based on per-tablet computations of the Pipeline engine. Per-tablet computation means that a pipeline driver can process entire tablets one by one rather than processing a portion of a tablet or many tablets interleaved together. If the number of tablets that need to be processed by each individual BE for a query is greater than or equal to the number of pipeline drivers that are invoked to run this query, the query cache works. The number of pipeline drivers invoked represents the actual degree of parallelism (DOP). If the number of tablets is smaller than the number of pipeline drivers, each pipeline driver processes only a portion of a specific tablet. In this situation, per-tablet computation results cannot be produced, and therefore the query cache does not work.
 - In StarRocks, an aggregate query consists of at least four stages. Per-Tablet computation results generated by AggregateNode in the first stage can be cached only when OlapScanNode and AggregateNode compute data from the same fragment. Per-Tablet computation results generated by AggregateNode in the other stages cannot be cached. For some DISTINCT aggregate queries, if the session variable `cbo_cte_reuse` is set to `true`, the query cache does not work when OlapScanNode, which produces data, and the stage-1 AggregateNode, which consumes the produced data, compute data from different fragments and are bridged by an ExchangeNode. The following two examples show scenarios in which CTE optimizations are performed and therefore the query cache does not work:
   - The output columns are computed by using the aggregate function `avg(distinct)`.
   - The output columns are computed by multiple DISTINCT aggregate functions.
+- If your data is shuffled before aggregation, the query cache cannot accelerate the queries on that data.
+- If the group-by columns or deduplicating columns of a table are high-cardinality columns, large results will be generated for aggregate queries on that table. In these cases, the queries will bypass the query cache at runtime.
+- The query cache occupies a small amount of memory provided by the BE to save computation results. The size of the query cache defaults to 512 MB. Therefore, it is unsuitable for the query cache to save large-sized data items. Additionally, after you enable the query cache, query performance is decreased if the cache hit ratio is low. Therefore, if the size of computation results generated for a tablet exceeds the threshold specified by the `query_cache_entry_max_bytes` or `query_cache_entry_max_rows` parameter, the query cache no longer works for the query and the query is switched to Passthrough mode.
 
-## Parameter configurations
+## How it works
+
+When the query cache is enabled, each BE splits the local aggregation of a query into the following two stages:
+
+1. Per-tablet aggregation
+
+   The BE processes each tablet individually. When the BE begins processing a tablet, it first probes the query cache to see if the intermediate result of aggregation on that tablet is in the query cache. If so (a cache hit), the BE directly fetches the intermediate result from the query cache. If no (a cache miss), the BE accesses the data on disk and performs local aggregation to compute the intermediate result. When the BE finished processing a tablet, it populates the query cache with the intermediate result of aggregation on that tablet.
+
+2. Inter-tablet aggregation
+
+   The BE gathers the intermediate results from all tablets involved in the query and merges them into a final result.
+
+   ![Query cache - How it works - 1](../assets/query_cache_principle-1.png)
+
+When a similar query is issued in the future, it can reuse the cached result for the previous query. For example, the query shown in the following figure involves three tablets (Tablets 0 through 2), and the intermediate result for the first tablet (Tablet 0) is already in the query cache. For this example, the BE can directly fetch the result for Tablet 0 from the query cache instead of accessing the data on disk. If the query cache is fully warmed up, it can contain the intermediate results for all three tablets and thus the BE does not need to access any data on disk.
+
+![Query cache - How it works - 2](../assets/query_cache_principle-2.png)
+
+To free up extra memory, the query cache adopts a Least Recently Used (LRU)-based eviction policy to manage the cache entries in it. According to this eviction policy, when the amount of memory occupied by the query cache exceeds its predefined size (`query_cache_capacity`), the least recently used cache entries are evicted out of the query cache.
+
+> **NOTE**
+>
+> In the future, StarRocks will also support a Time to Live (TTL)-based eviction policy based on which cache entries can be evicted out of the query cache.
+
+The FE determines whether each query needs to be accelerated by using the query cache and normalizes the queries to eliminate trivial literal details that have no effect on the semantics of queries.
+
+To prevent the performance penalty incurred by the bad cases of the query cache, the BE adopts an adaptive policy to bypass the query cache at runtime.
+
+## Enable query cache
 
 This section describes the parameters and session variables that are used to enable and configure the query cache.
 
@@ -48,7 +82,6 @@ This section describes the parameters and session variables that are used to ena
 | **Variable**                | **Default value** | **Can be dynamically configured** | **Description**                                              |
 | --------------------------- | ----------------- | --------------------------------- | ------------------------------------------------------------ |
 | enable_query_cache          | false             | Yes                               | Specifies whether to enable the query cache. Valid values: `true` and `false`. `true` specifies to enable this feature, and `false` specifies to disable this feature. When the query cache is enabled, it works only for queries that meet the conditions specified in the "[Application scenarios](../using_starrocks/query_cache.md#application-scenarios)" section of this topic. |
-| query_cache_force_populate  | false             | Yes                               | Specifies whether to ignore the computation results saved in the query cache. Valid values: `true` and `false`. `true` specifies to enable this feature, and `false` specifies to disable this feature. If this feature is enabled, StarRocks ignores the cached computation results when it performs computations required by queries. In this case, StarRocks once again reads data from the source, computes the data, and updates the computation results saved in the query cache.<br>In this sense, the `query_cache_force_populate=true` setting resembles cache misses. |
 | query_cache_entry_max_bytes | 4194304           | Yes                               | Specifies the threshold for triggering the Passthrough mode. Valid values: `0` to `9223372036854775807`. When the number of bytes or rows from the computation results of a specific tablet accessed by a query exceeds the threshold specified by the `query_cache_entry_max_bytes` or  `query_cache_entry_max_rows` parameter, the query is switched to Passthrough mode.<br>If the `query_cache_entry_max_bytes` or `query_cache_entry_max_rows` parameter is set to `0`, the Passthrough mode is used even when no computation results are generated from the involved tablets. |
 | query_cache_entry_max_rows  | 409600            | Yes                               | Same as above.                                                |
 
@@ -58,13 +91,19 @@ You need to configure the following parameter in the BE configuration file **be.
 
 | **Parameter**        | **Required** | **Description**                                              |
 | -------------------- | ------------ | ------------------------------------------------------------ |
-| query_cache_capacity | No           | Specifies the size of the query cache. Unit: bytes. The default size is 512 MB. The size cannot be less than 4 MB. If the memory capacity of the BE is insufficient to provision your expected query cache size, you can increase the memory capacity of the BE.<br>Each BE has its own storage for the query cache and populates or probes only its own query cache storage. |
+| query_cache_capacity | No           | Specifies the size of the query cache. Unit: bytes. The default size is 512 MB.<br>Each BE has its own local query cache in memory, and it populates and probes only its own query cache.<br>Note that the query cache size cannot be less than 4 MB. If the memory capacity of the BE is insufficient to provision your expected query cache size, you can increase the memory capacity of the BE. |
 
-## Concepts
+## Engineered for maximum cache hit rate in all scenarios
 
-### Semantic equivalence
+Consider three scenarios where the query cache is still effective even when the queries are not identical literally. These three scenarios are:
 
-When two queries are similar, do not need to be literally equivalent, and contain semantically equivalent snippets in their execution plans, they are semantically equivalent and can reuse each other's computation results. In a broad sense, two queries are semantically equivalent if they query data from the same source, use the same computation method, and have the same execution plan. StarRocks applies the following rules to evaluate whether two queries are semantically equivalent:
+- Semantically equivalent queries
+- Queries with overlapping scanned partitions
+- Queries against data with append-only data changes (no UPDATE or DELETE operations)
+
+### Semantically equivalent queries
+
+When two queries are similar, which does not mean that they must be literally equivalent but means that they contain semantically equivalent snippets in their execution plans, they are considered semantically equivalent and can reuse each other's computation results. In a broad sense, two queries are semantically equivalent if they query data from the same source, use the same computation method, and have the same execution plan. StarRocks applies the following rules to evaluate whether two queries are semantically equivalent:
 
 - If the two queries contain multiple aggregations, they are evaluated as semantically equivalent as long as their first aggregations are semantically equivalent. For example, the following two queries, Q1 and Q2, both contain multiple aggregations, but their first aggregations are semantically equivalent. Therefore, Q1 and Q2 are evaluated as semantically equivalent.
 
@@ -224,12 +263,11 @@ PARTITION p4 VALUES [('1995-01-01'), ('1996-01-01')),
 PARTITION p5 VALUES [('1996-01-01'), ('1997-01-01')),
 PARTITION p6 VALUES [('1997-01-01'), ('1998-01-01')),
 PARTITION p7 VALUES [('1998-01-01'), ('1999-01-01')))
-DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 48 
+DISTRIBUTED BY HASH(`lo_orderkey`)
 PROPERTIES 
 (
     "replication_num" = "1",
     "colocate_with" = "groupxx1",
-    "in_memory" = "false",
     "storage_format" = "DEFAULT",
     "enable_persistent_index" = "false",
     "compression" = "LZ4"
@@ -266,7 +304,9 @@ The following two queries, Q1 and Q2, on the table `lineorder_flat` are semantic
 
 Semantic equivalence is evaluated based on the physical plans of queries. Therefore, literal differences in queries do not impact the evaluation for semantic equivalence. Additionally, constant expressions are removed from queries, and `cast` expressions are removed during query optimizations. Therefore, these expressions do not impact the evaluation for semantic equivalence. Thirdly, the aliases of columns and relations do not impact the evaluation for semantic equivalence either.
 
-### Predicate-based query splitting
+### Queries with overlapping scanned partitions
+
+Query Cache supports predicate-based query splitting.
 
 Splitting queries based on predicate semantics help implement reuse of partial computation results. When a query contains a predicate that references the partitioning column of a table and the predicate specifies a value range, StarRocks can split the range into multiple intervals based on table partitioning. The computation results from each individual interval can be separately reused by other queries.
 
@@ -287,11 +327,10 @@ PARTITION BY RANGE(ts)
 (
   START ("2022-01-01 00:00:00") END ("2022-02-01 00:00:00") EVERY (INTERVAL 1 day) 
 )
-DISTRIBUTED BY HASH(`ts`, `k0`, `k1`) BUCKETS 1
+DISTRIBUTED BY HASH(`ts`, `k0`, `k1`)
 PROPERTIES
 (
     "replication_num" = "1", 
-    "in_memory" = "false",
     "storage_format" = "default"
 );
 ```
@@ -315,7 +354,7 @@ The table `t0` is partitioned by day, and the column `ts` is the table's partiti
   3. [2022-01-04 00:00:00, 2022-01-05 00:00:00),
   ...
   12. [2022-01-13 00:00:00, 2022-01-14 00:00:00),
-  13. [2022-01-15 00:00:00, 2022-01-15 00:00:00),
+  13. [2022-01-14 00:00:00, 2022-01-15 00:00:00),
   ```
 
 - Q2
@@ -350,7 +389,7 @@ The table `t0` is partitioned by day, and the column `ts` is the table's partiti
   2. [2022-01-03 00:00:00, 2022-01-04 00:00:00),
   3. [2022-01-04 00:00:00, 2022-01-05 00:00:00),
   ...
-  9. [2022-01-09 00:00:00, 2022-01-10 00:00:00),
+  8. [2022-01-09 00:00:00, 2022-01-10 00:00:00),
   ```
 
 - Q4
@@ -376,18 +415,20 @@ The support for reuse of partial computation results varies depending on the par
 | Multi-Column Partitioned  | Not supported<br>**NOTE**<br>This feature may be supported in the future. |
 | Single-Column Partitioned | Supported                                                    |
 
-### Multi-version caching
+### Queries against data with append-only data changes
 
-As data loads are made, new versions of tablets are generated. Consequently, the cached computation results that are generated from the previous versions of the tablets become stale and lag behind the latest tablet versions. In this situation, the multi-version caching mechanism tries to merge the stale results saved in the query cache and the incremental versions of the tablets stored on disk into the final results of the tablets so that new queries can carry the latest tablet versions. Multi-version caching is constrained by data models, query types, and data update types.
+Query Cache supports multi-version caching.
 
-The support for multi-version caching varies depending on data models and query types, as described in the following table.
+As data loads are made, new versions of tablets are generated. Consequently, the cached computation results that are generated from the previous versions of the tablets become stale and lag behind the latest tablet versions. In this situation, the multi-version caching mechanism tries to merge the stale results saved in the query cache and the incremental versions of the tablets stored on disk into the final results of the tablets so that new queries can carry the latest tablet versions. Multi-version caching is constrained by table types, query types, and data update types.
 
-| **Data type**       | **Query** **type**                                           | **Support for multi-version caching**                        |
+The support for multi-version caching varies depending on table types and query types, as described in the following table.
+
+| **Table type**       | **Query** **type**                                           | **Support for multi-version caching**                        |
 | ------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| Duplicate Key Model | <ul><li>Queries on base tables</li><li>Queries on single-table materialized views</li></ul> | <ul><li>Queries on base tables: supported in all situations except when incremental tablet versions contain data deletion records.</li><li>Queries on single-table materialized views: supported in all situations except when the GROUP BY, HAVING, or WHERE clauses of queries reference aggregation columns.</li></ul> |
-| Aggregate Key Model | Queries on base tables or queries on single-table materialized views | Supported in all situations except the following:The schemas of base tables contain the aggregate function `replace`.The GROUP BY, HAVING, or WHERE clauses of queries reference aggregation columns.Incremental tablet versions contain data deletion records. |
-| Unique Key Model    | N/A                                                          | Not supported. However, the query cache is supported.        |
-| Primary Key Model   | N/A                                                          | Not supported. However, the query cache is supported.        |
+| Duplicate Key table | <ul><li>Queries on base tables</li><li>Queries on synchronous materialized views</li></ul> | <ul><li>Queries on base tables: supported in all situations except when incremental tablet versions contain data deletion records.</li><li>Queries on synchronous materialized views: supported in all situations except when the GROUP BY, HAVING, or WHERE clauses of queries reference aggregation columns.</li></ul> |
+| Aggregate table | Queries on base tables or queries on synchronous materialized views | Supported in all situations except the following:The schemas of base tables contain the aggregate function `replace`.The GROUP BY, HAVING, or WHERE clauses of queries reference aggregation columns.Incremental tablet versions contain data deletion records. |
+| Unique Key table    | N/A                                                          | Not supported. However, the query cache is supported.        |
+| Primary Key table   | N/A                                                          | Not supported. However, the query cache is supported.        |
 
 The impact of data update types on multi-version caching is as follows:
 
@@ -404,15 +445,9 @@ The impact of data update types on multi-version caching is as follows:
 
   If the schema of a table is changed or specific tablets of the table are truncated, new tablets are generated for the table. As a result, the existing data of the tablets of the table in the query cache becomes invalid.
 
-### Passthrough
-
-The query cache occupies a small amount of memory provided by the BE to save computation results. The size of the query cache defaults to 512 MB. Therefore, it is unsuitable for the query cache to save large-sized data items. Additionally, after you enable the query cache, query performance is decreased if the cache hit ratio is low. Therefore, if the size of computation results generated for a tablet exceeds the threshold specified by the `query_cache_entry_max_bytes` or `query_cache_entry_max_rows` parameter, the query cache no longer works for the query and the query is switched to Passthrough mode.
-
 ## Metrics
 
-The profiles of queries for which the query cache works contain `CacheOperator` statistics, as shown in the following figure.
-
-![Query Cache - Metrics Overview](../assets/query-cache-metrics-overview.png)
+The profiles of queries for which the query cache works contain `CacheOperator` statistics.
 
 In the source plan of a query, if the pipeline contains `OlapScanOperator`, the names of `OlapScanOperator` and aggregate operators are prefixed with `ML_` to denote that the pipeline uses `MultilaneOperator` to perform per-tablet computations. `CacheOperator` is inserted preceding `ML_CONJUGATE_AGGREGATE` to process the logic that controls how the query cache runs in Passthrough, Populate, and Probe modes. The profile of the query contains the following `CacheOperator` metrics that help you understand the query cache usage.
 
@@ -500,9 +535,9 @@ The parameters in the preceding API operations are as follows:
 
 ## Precautions
 
-- When the session variable `pipeline_dop` is set to `1`, StarRocks needs to populate the query cache with the computation results of queries that are initiated for the first time. As a result, the query performance may be slightly lower than expected, and the query latency is increased.
-- If you configure a large query cache size, the amount of memory that can be provisioned to processes on the BE is decreased. We recommend that the query cache size do not exceed 1/6 of the memory capacity provisioned to processes.
-- If the number of tablets processed by a pipeline is less than the value of the `pipeline_dop` parameter, the query cache does not work. To enable the query cache to work, you can set `pipeline_dop` to `1`.
+- StarRocks needs to populate the query cache with the computation results of queries that are initiated for the first time. As a result, the query performance may be slightly lower than expected, and the query latency is increased.
+- If you configure a large query cache size, the amount of memory that can be provisioned to query evaluation on the BE is decreased. We recommend that the query cache size do not exceed 1/6 of the memory capacity provisioned to query evaluation.
+- If the number of tablets that need to be processed is smaller than the value of `pipeline_dop`, the query cache does not work. To enable the query cache to work, you can set `pipeline_dop` to a smaller value such as `1`. From v3.0 onwards, StarRocks adaptively adjusts this parameter based on query parallelism.
 
 ## Examples
 
@@ -526,11 +561,10 @@ The parameters in the preceding API operations are as follows:
    (
        START ("2022-01-01 00:00:00") END ("2022-02-01 00:00:00") EVERY (INTERVAL 1 DAY)
    )
-   DISTRIBUTED BY HASH(`ts`, `k0`, `k1`) BUCKETS 64 
+   DISTRIBUTED BY HASH(`ts`, `k0`, `k1`)
    PROPERTIES
    (
        "replication_num" = "1",
-       "in_memory" = "false",
        "storage_format" = "DEFAULT",
        "enable_persistent_index" = "false"
    );
@@ -645,7 +679,7 @@ GROUP BY
 
 The following figure shows the query cache-related metrics in the query profile.
 
-![Query Cache - Stage 1 - Metrics](../assets/query-cache-stage1.png)
+![Query Cache - Stage 1 - Metrics](../assets/query_cache_stage1_agg_with_cache_en.png)
 
 #### Query cache does not work for remote aggregations at stage 1
 
@@ -697,7 +731,7 @@ GROUP BY
 
 The following figure shows the query cache-related metrics in the query profile.
 
-![Query Cache - Stage 2 - Metrics](../assets/query-cache-stage2.png)
+![Query Cache - Stage 2 - Metrics](../assets/query_cache_stage2_agg_with_cache_en.png)
 
 #### Query cache works for local aggregations at stage 3
 
@@ -728,7 +762,7 @@ GROUP BY
 
 The following figure shows the query cache-related metrics in the query profile.
 
-![Query Cache - Stage 3 - Metrics](../assets/query-cache-stage3.png)
+![Query Cache - Stage 3 - Metrics](../assets/query_cache_stage3_agg_with_cache_en.png)
 
 #### Query cache works for local aggregations at stage 4
 
@@ -748,7 +782,7 @@ WHERE
 
 The following figure shows the query cache-related metrics in the query profile.
 
-![Query Cache - Stage 4 - Metrics](../assets/query-cache-stage4.png)
+![Query Cache - Stage 4 - Metrics](../assets/query_cache_stage4_agg_with_cache_en.png)
 
 #### Cached results are reused for two queries whose first aggregations are semantically equivalent
 
@@ -797,11 +831,11 @@ Use the following two queries, Q1 and Q2, as an example. Q1 and Q2 both include 
 
 The following figure shows the `CachePopulate` metrics for Q1.
 
-![Query Cache - Q1 - Metrics](../assets/query-cache-Q1-metrics.png)
+![Query Cache - Q1 - Metrics](../assets/query_cache_reuse_Q1_en.png)
 
 The following figure shows the `CacheProbe` metrics for Q2.
 
-![Query Cache - Q2 - Metrics](../assets/query-cache-Q2-metrics.png)
+![Query Cache - Q2 - Metrics](../assets/query_cache_reuse_Q2_en.png)
 
 #### Query cache does not work for DISTINCT queries for which CTE optimizations are enabled
 
@@ -819,7 +853,7 @@ After you run `set cbo_cte_reuse = true` to enable CTE optimizations, the comput
       and '2022-01-03 23:59:59';
   ```
 
-![Query Cache - CTE - 1](../assets/query-cache-CTE-1.png)
+![Query Cache - CTE - 1](../assets/query_cache_distinct_with_cte_Q1_en.png)
 
 - The query contains multiple DISTINCT aggregate functions that reference the same column:
 
@@ -835,7 +869,7 @@ After you run `set cbo_cte_reuse = true` to enable CTE optimizations, the comput
       and '2022-01-03 23:59:59';
   ```
 
-![Query Cache - CTE - 2](../assets/query-cache-CTE-2.png)
+![Query Cache - CTE - 2](../assets/query_cache_distinct_with_cte_Q2_en.png)
 
 - The query contains multiple DISTINCT aggregate functions that each reference a different column:
 
@@ -850,4 +884,12 @@ After you run `set cbo_cte_reuse = true` to enable CTE optimizations, the comput
       and '2022-01-03 23:59:59';
   ```
 
-![Query Cache - CTE - 3](../assets/query-cache-CTE-3.png)
+![Query Cache - CTE - 3](../assets/query_cache_distinct_with_cte_Q3_en.png)
+
+## Best practices
+
+When you create your table, specify a reasonable partition description and a reasonable distribution method, including:
+
+- Choose a single DATE-type column as the partition column. If the table contains more than one DATE-type column, choose the column whose values roll forward as data is incrementally ingested and that is used to define your interesting time ranges of queries.
+- Choose a proper partition width. The data ingested most recently may modify the latest partitions of the table. Therefore, the cache entries involving the latest partitions are unstable and are apt to be invalidated.
+- Specify a bucket number that is several dozen in the distribution description of the table creation statement. If the bucket number is exceedingly small, the query cache cannot take effect when the number of tablets that need to be processed by the BE is less than the value of `pipeline_dop`.

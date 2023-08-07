@@ -112,8 +112,8 @@ public class ExpressionMapping {
         if (expression instanceof FieldReference) {
             fieldMappings[((FieldReference) expression).getFieldIndex()] = columnRefOperator;
         }
-
-        if (expression instanceof SlotRef) {
+        // slotRef with struct origin type is subfieldExpr, can not put into fieldMappings.
+        if (expression instanceof SlotRef && !expression.getTrueOriginType().isStructType()) {
             scope.tryResolveField((SlotRef) expression)
                     .ifPresent(field -> fieldMappings[field.getRelationFieldIndex()] = columnRefOperator);
         }
@@ -148,5 +148,13 @@ public class ExpressionMapping {
 
     public List<Expr> getAllExpressions() {
         return Lists.newArrayList(expressionToColumns.keySet());
+    }
+
+    public Map<Expr, ColumnRefOperator> getExpressionToColumns() {
+        return expressionToColumns;
+    }
+
+    public void addExpressionToColumns(Map<Expr, ColumnRefOperator> expressionToColumns) {
+        this.expressionToColumns.putAll(expressionToColumns);
     }
 }

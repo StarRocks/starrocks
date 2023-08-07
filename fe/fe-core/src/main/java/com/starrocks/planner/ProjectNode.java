@@ -15,9 +15,9 @@
 
 package com.starrocks.planner;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
@@ -52,6 +52,14 @@ public class ProjectNode extends PlanNode {
         addChild(child);
         this.slotMap = slotMap;
         this.commonSlotMap = commonSlotMap;
+    }
+
+    public Map<SlotId, Expr> getSlotMap() {
+        return slotMap;
+    }
+
+    public Map<SlotId, Expr> getCommonSlotMap() {
+        return commonSlotMap;
     }
 
     @Override
@@ -125,6 +133,11 @@ public class ProjectNode extends PlanNode {
     @Override
     public boolean canUsePipeLine() {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
+    }
+
+    @Override
+    public boolean canUseRuntimeAdaptiveDop() {
+        return getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
     }
 
     @Override
@@ -209,5 +222,14 @@ public class ProjectNode extends PlanNode {
     @Override
     public List<SlotId> getOutputSlotIds(DescriptorTable descriptorTable) {
         return slotMap.keySet().stream().sorted(Comparator.comparing(SlotId::asInt)).collect(Collectors.toList());
+    }
+
+    @Override
+    public void collectEquivRelation(FragmentNormalizer normalizer) {
+        slotMap.forEach((k, v) -> {
+            if (v instanceof SlotRef) {
+                normalizer.getEquivRelation().union(k, ((SlotRef) v).getSlotId());
+            }
+        });
     }
 }

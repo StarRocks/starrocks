@@ -39,6 +39,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.QueryStatisticsFormatter;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryStatisticsItem;
 import org.apache.logging.log4j.LogManager;
@@ -47,6 +48,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /*
  * show proc "/current_queries"
@@ -54,11 +56,18 @@ import java.util.Map;
 public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
     private static final Logger LOG = LogManager.getLogger(CurrentQueryStatisticsProcDir.class);
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("QueryId").add("ConnectionId").add("Database").add("User")
-            .add("ScanBytes").add("ProcessRows").add("CPUCostSeconds")
-            .add("ExecTime").build();
-
-    private static final int EXEC_TIME_INDEX = 7;
+            .add("StartTime")
+            .add("QueryId")
+            .add("ConnectionId")
+            .add("Database")
+            .add("User")
+            .add("ScanBytes")
+            .add("ScanRows")
+            .add("MemoryUsage")
+            .add("DiskSpillSize")
+            .add("CPUTime")
+            .add("ExecTime")
+            .build();
 
     @Override
     public boolean register(String name, ProcNodeInterface node) {
@@ -89,33 +98,30 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
         final CurrentQueryInfoProvider provider = new CurrentQueryInfoProvider();
         final Map<String, CurrentQueryInfoProvider.QueryStatistics> statisticsMap
                 = provider.getQueryStatistics(statistic.values());
-        for (QueryStatisticsItem item : statistic.values()) {
+        final List<QueryStatisticsItem> sorted =
+                statistic.values().stream()
+                        .sorted(Comparator.comparingLong(QueryStatisticsItem::getQueryStartTime))
+                        .collect(Collectors.toList());
+        for (QueryStatisticsItem item : sorted) {
             final CurrentQueryInfoProvider.QueryStatistics statistics = statisticsMap.get(item.getQueryId());
             if (statistics == null) {
                 continue;
             }
             final List<String> values = Lists.newArrayList();
+            values.add(TimeUtils.longToTimeString(item.getQueryStartTime()));
             values.add(item.getQueryId());
             values.add(item.getConnId());
             values.add(item.getDb());
             values.add(item.getUser());
-            values.add(QueryStatisticsFormatter.getScanBytes(
-                    statistics.getScanBytes()));
-            values.add(QueryStatisticsFormatter.getRowsReturned(
-                    statistics.getScanRows()));
-            values.add(QueryStatisticsFormatter.getCPUCostSeconds(statistics.getCpuCostNs()));
-            values.add(item.getQueryExecTime());
+            values.add(QueryStatisticsFormatter.getBytes(statistics.getScanBytes()));
+            values.add(QueryStatisticsFormatter.getRowsReturned(statistics.getScanRows()));
+            values.add(QueryStatisticsFormatter.getBytes(statistics.getMemUsageBytes()));
+            values.add(QueryStatisticsFormatter.getBytes(statistics.getSpillBytes()));
+            values.add(QueryStatisticsFormatter.getSecondsFromNano(statistics.getCpuCostNs()));
+            values.add(QueryStatisticsFormatter.getSecondsFromMilli(item.getQueryExecTime()));
             sortedRowData.add(values);
         }
-        // sort according to ExecTime
-        sortedRowData.sort(new Comparator<List<String>>() {
-            @Override
-            public int compare(List<String> l1, List<String> l2) {
-                final int execTime1 = Integer.parseInt(l1.get(EXEC_TIME_INDEX));
-                final int execTime2 = Integer.parseInt(l2.get(EXEC_TIME_INDEX));
-                return execTime1 <= execTime2 ? 1 : -1;
-            }
-        });
+
         result.setRows(sortedRowData);
         return result;
     }

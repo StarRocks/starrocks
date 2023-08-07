@@ -135,7 +135,7 @@ public class AlterLoadStmtTest {
                 com.starrocks.sql.analyzer.Analyzer.analyze(stmt, new ConnectContext());
                 Assert.fail();
             } catch (SemanticException e) {
-                Assert.assertTrue(e.getMessage().contains("format is invalid property"));
+                Assert.assertTrue(e.getMessage().contains("Unsupported properties 'format'"));
             } catch (Exception e) {
                 Assert.fail();
             }

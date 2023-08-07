@@ -14,8 +14,10 @@
 
 package com.starrocks.clone;
 
+import com.google.common.collect.Range;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
@@ -23,9 +25,14 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.time.LocalDateTime;
+import java.util.Map;
 
 public class DynamicPartitionSchedulerTest {
 
@@ -35,7 +42,7 @@ public class DynamicPartitionSchedulerTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
-        FeConstants.default_scheduler_interval_millisecond = 100;
+        Config.alter_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
         Config.enable_strict_storage_medium_check = false;
@@ -120,4 +127,91 @@ public class DynamicPartitionSchedulerTest {
         }
     }
 
+    @Test
+    public void testAutoPartitionPartitionLiveNumber() throws Exception {
+        new MockUp<LocalDateTime>() {
+            @Mock
+            public LocalDateTime now() {
+                return  LocalDateTime.of(2023, 3, 30, 1, 1, 1);
+            }
+        };
+
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE site_access(\n" +
+                        "    event_day datetime,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY date_trunc('day', event_day)(\n" +
+                        " START (\"2023-03-27\") END (\"2023-03-31\") EVERY (INTERVAL 1 day),\n" +
+                        " START (\"9999-12-30\") END (\"9999-12-31\") EVERY (INTERVAL 1 day)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                        "PROPERTIES(\n" +
+                        "    \"partition_live_number\" = \"3\",\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");");
+
+        DynamicPartitionScheduler dynamicPartitionScheduler = GlobalStateMgr.getCurrentState()
+                .getDynamicPartitionScheduler();
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable tbl = (OlapTable) db.getTable("site_access");
+        dynamicPartitionScheduler.registerTtlPartitionTable(db.getId(), tbl.getId());
+        dynamicPartitionScheduler.runOnceForTest();
+
+        Map<String, Range<PartitionKey>> rangePartitionMap = tbl.getRangePartitionMap();
+
+        Assert.assertFalse(rangePartitionMap.containsKey("p20230327"));
+        Assert.assertTrue(rangePartitionMap.containsKey("p20230328"));
+        Assert.assertTrue(rangePartitionMap.containsKey("p20230329"));
+        Assert.assertTrue(rangePartitionMap.containsKey("p20230330"));
+        Assert.assertTrue(rangePartitionMap.containsKey("p99991230"));
+    }
+
+    @Test
+    public void testAutoRandomPartitionFPartitionLiveNumber() throws Exception {
+        new MockUp<LocalDateTime>() {
+            @Mock
+            public LocalDateTime now() {
+                return  LocalDateTime.of(2023, 3, 30, 1, 1, 1);
+            }
+        };
+
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE site_access(\n" +
+                        "    event_day datetime,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY date_trunc('day', event_day)(\n" +
+                        " START (\"2023-03-27\") END (\"2023-03-31\") EVERY (INTERVAL 1 day),\n" +
+                        " START (\"9999-12-30\") END (\"9999-12-31\") EVERY (INTERVAL 1 day)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY RANDOM BUCKETS 32\n" +
+                        "PROPERTIES(\n" +
+                        "    \"partition_live_number\" = \"3\",\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");");
+
+        DynamicPartitionScheduler dynamicPartitionScheduler = GlobalStateMgr.getCurrentState()
+                .getDynamicPartitionScheduler();
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable tbl = (OlapTable) db.getTable("site_access");
+        dynamicPartitionScheduler.registerTtlPartitionTable(db.getId(), tbl.getId());
+        dynamicPartitionScheduler.runOnceForTest();
+
+        Map<String, Range<PartitionKey>> rangePartitionMap = tbl.getRangePartitionMap();
+
+        Assert.assertFalse(rangePartitionMap.containsKey("p20230327"));
+        Assert.assertTrue(rangePartitionMap.containsKey("p20230328"));
+        Assert.assertTrue(rangePartitionMap.containsKey("p20230329"));
+        Assert.assertTrue(rangePartitionMap.containsKey("p20230330"));
+        Assert.assertTrue(rangePartitionMap.containsKey("p99991230"));
+    }
 }

@@ -36,12 +36,16 @@ public:
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
             pipeline::PipelineBuilderContext* context) override;
 
 private:
+    template <class ContextFactory, class SinkFactory, class SourceFactory>
+    std::vector<std::shared_ptr<pipeline::OperatorFactory>> _decompose_to_pipeline(
+            pipeline::PipelineBuilderContext* context, bool is_partition, bool is_merging, bool enable_parallel_merge);
+
     Status _consume_chunks(RuntimeState* state, ExecNode* child);
     const TPlanNode& _tnode;
 
@@ -51,6 +55,7 @@ private:
 
     // _sort_exec_exprs contains the ordering expressions
     SortExecExprs _sort_exec_exprs;
+    std::vector<SlotId> _early_materialized_slots{};
     std::vector<bool> _is_asc_order;
     std::vector<bool> _is_null_first;
     std::vector<OrderByType> _order_by_types;

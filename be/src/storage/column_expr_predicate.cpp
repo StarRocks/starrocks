@@ -12,9 +12,9 @@
 #include "exprs/expr_context.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "storage/column_predicate.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 

@@ -23,6 +23,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.LinkedList;
@@ -75,6 +76,11 @@ public class DescribeStmt extends ShowStmt {
     private boolean isMaterializedView;
 
     public DescribeStmt(TableName dbTableName, boolean isAllTables) {
+        this(dbTableName, isAllTables, NodePosition.ZERO);
+    }
+
+    public DescribeStmt(TableName dbTableName, boolean isAllTables, NodePosition pos) {
+        super(pos);
         this.dbTableName = dbTableName;
         this.totalRows = new LinkedList<>();
         this.isAllTables = isAllTables;
@@ -152,6 +158,8 @@ public class DescribeStmt extends ShowStmt {
         } else {
             if (isOlapTable) {
                 return DESC_OLAP_TABLE_ALL_META_DATA;
+            } else if (isMaterializedView) {
+                return DESC_OLAP_TABLE_META_DATA;
             } else {
                 return DESC_MYSQL_TABLE_ALL_META_DATA;
             }

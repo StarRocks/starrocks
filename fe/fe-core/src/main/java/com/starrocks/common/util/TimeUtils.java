@@ -47,12 +47,14 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.VariableMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.threeten.extra.PeriodDuration;
 
 import java.text.ParseException;
 import java.text.ParsePosition;
 import java.text.SimpleDateFormat;
 import java.time.DateTimeException;
 import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.util.Date;
 import java.util.SimpleTimeZone;
 import java.util.TimeZone;
@@ -94,6 +96,10 @@ public class TimeUtils {
 
     public static Date MIN_DATETIME = null;
     public static Date MAX_DATETIME = null;
+
+    // It's really hard to define max unix timestamp because of timezone.
+    // so this value is 253402329599(UTC 9999-12-31 23:59:59) - 24 * 3600(for all timezones)
+    public static Long MAX_UNIX_TIMESTAMP = 253402243199L;
 
     static {
         TIME_ZONE = new SimpleTimeZone(8 * 3600 * 1000, "");
@@ -157,7 +163,7 @@ public class TimeUtils {
 
     public static String longToTimeString(long timeStamp, SimpleDateFormat dateFormat) {
         if (timeStamp <= 0L) {
-            return FeConstants.null_string;
+            return FeConstants.NULL_STRING;
         }
         return dateFormat.format(new Date(timeStamp));
     }
@@ -330,5 +336,24 @@ public class TimeUtils {
         long difference = targetTimeSecond - startTimeSecond;
         long step = difference / intervalSecond + 1;
         return startTimeSecond + step * intervalSecond;
+    }
+
+    public static PeriodDuration parseHumanReadablePeriodOrDuration(String text) {
+        try {
+            return PeriodDuration.of(PeriodStyle.LONG.parse(text));
+        } catch (DateTimeParseException ignored) {
+            return PeriodDuration.of(DurationStyle.LONG.parse(text));
+        }
+    }
+
+    public static String toHumanReadableString(PeriodDuration periodDuration) {
+        if (periodDuration.getPeriod().isZero()) {
+            return DurationStyle.LONG.toString(periodDuration.getDuration());
+        } else if (periodDuration.getDuration().isZero()) {
+            return PeriodStyle.LONG.toString(periodDuration.getPeriod());
+        } else {
+            return PeriodStyle.LONG.toString(periodDuration.getPeriod()) + " "
+                    + DurationStyle.LONG.toString(periodDuration.getDuration());
+        }
     }
 }

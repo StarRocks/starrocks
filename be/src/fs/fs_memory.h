@@ -53,6 +53,8 @@ public:
 
     Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override;
 
+    Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override;
+
     Status delete_file(const std::string& url) override;
 
     Status create_dir(const std::string& dirname) override;

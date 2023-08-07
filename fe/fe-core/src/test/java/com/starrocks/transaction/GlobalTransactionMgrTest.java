@@ -46,7 +46,6 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -55,10 +54,10 @@ import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.KafkaTaskInfo;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.load.routineload.RoutineLoadJob;
-import com.starrocks.load.routineload.RoutineLoadManager;
+import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.routineload.RoutineLoadTaskInfo;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.thrift.TLoadSourceType;
@@ -67,9 +66,10 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
-import mockit.Expectations;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Injectable;
 import mockit.Mocked;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -111,15 +111,15 @@ public class GlobalTransactionMgrTest {
         fakeTransactionIDGenerator = new FakeTransactionIDGenerator();
         masterGlobalStateMgr = GlobalStateMgrTestUtil.createTestState();
         slaveGlobalStateMgr = GlobalStateMgrTestUtil.createTestState();
-        MetaContext metaContext = new MetaContext();
-        metaContext.setMetaVersion(FeMetaVersion.VERSION_40);
-        metaContext.setThreadLocalInfo();
-
         masterTransMgr = masterGlobalStateMgr.getGlobalTransactionMgr();
-        masterTransMgr.setEditLog(masterGlobalStateMgr.getEditLog());
-
         slaveTransMgr = slaveGlobalStateMgr.getGlobalTransactionMgr();
-        slaveTransMgr.setEditLog(slaveGlobalStateMgr.getEditLog());
+
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @After
+    public void tearDown() {
+        UtFrameUtils.tearDownForPersisTest();
     }
 
     @Test
@@ -352,7 +352,7 @@ public class GlobalTransactionMgrTest {
         partitionIdToOffset.put(1, 0L);
         KafkaTaskInfo routineLoadTaskInfo =
                 new KafkaTaskInfo(UUID.randomUUID(), 1L, 20000, System.currentTimeMillis(),
-                        partitionIdToOffset);
+                        partitionIdToOffset, Config.routine_load_task_timeout_second);
         Deencapsulation.setField(routineLoadTaskInfo, "txnId", 1L);
         routineLoadTaskInfoList.add(routineLoadTaskInfo);
         TransactionState transactionState = new TransactionState(1L, Lists.newArrayList(1L), 1L, "label", null,
@@ -385,7 +385,7 @@ public class GlobalTransactionMgrTest {
         rlTaskTxnCommitAttachment.setKafkaRLTaskProgress(tKafkaRLTaskProgress);
         TxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment(rlTaskTxnCommitAttachment);
 
-        RoutineLoadManager routineLoadManager = new RoutineLoadManager();
+        RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         routineLoadManager.addRoutineLoadJob(routineLoadJob, "db");
 
         Deencapsulation.setField(masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1),
@@ -425,7 +425,7 @@ public class GlobalTransactionMgrTest {
         partitionIdToOffset.put(1, 0L);
         KafkaTaskInfo routineLoadTaskInfo =
                 new KafkaTaskInfo(UUID.randomUUID(), 1L, 20000, System.currentTimeMillis(),
-                        partitionIdToOffset);
+                        partitionIdToOffset, Config.routine_load_task_timeout_second);
         Deencapsulation.setField(routineLoadTaskInfo, "txnId", 1L);
         routineLoadTaskInfoList.add(routineLoadTaskInfo);
         TransactionState transactionState = new TransactionState(1L, Lists.newArrayList(1L), 1L, "label", null,
@@ -457,7 +457,7 @@ public class GlobalTransactionMgrTest {
         rlTaskTxnCommitAttachment.setKafkaRLTaskProgress(tKafkaRLTaskProgress);
         TxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment(rlTaskTxnCommitAttachment);
 
-        RoutineLoadManager routineLoadManager = new RoutineLoadManager();
+        RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         routineLoadManager.addRoutineLoadJob(routineLoadJob, "db");
 
         Deencapsulation.setField(masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1),
@@ -493,6 +493,7 @@ public class GlobalTransactionMgrTest {
         transTablets.add(tabletCommitInfo3);
         masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, transTablets);
         TransactionState transactionState = fakeEditLog.getTransaction(transactionId);
+        slaveTransMgr.replayUpsertTransactionState(transactionState);
         assertEquals(TransactionStatus.COMMITTED, transactionState.getTransactionStatus());
         Set<Long> errorReplicaIds = Sets.newHashSet();
         errorReplicaIds.add(GlobalStateMgrTestUtil.testReplicaId1);
@@ -664,13 +665,6 @@ public class GlobalTransactionMgrTest {
 
     @Test
     public void replayWithExpiredJob() throws Exception {
-        new Expectations(masterGlobalStateMgr) {
-            {
-                masterGlobalStateMgr.getCurrentStateJournalVersion();
-                minTimes = 0;
-                result = FeMetaVersion.VERSION_CURRENT;
-            }
-        };
         Config.label_keep_max_second = 1;
         long dbId = 1;
         Assert.assertEquals(0, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
@@ -756,6 +750,7 @@ public class GlobalTransactionMgrTest {
         }
         transactionState = fakeEditLog.getTransaction(transactionId);
         assertEquals(TransactionStatus.COMMITTED, transactionState.getTransactionStatus());
+        slaveTransMgr.replayUpsertTransactionState(transactionState);
 
         Set<Long> errorReplicaIds = Sets.newHashSet();
         errorReplicaIds.add(GlobalStateMgrTestUtil.testReplicaId1);
@@ -785,4 +780,23 @@ public class GlobalTransactionMgrTest {
         assertTrue(GlobalStateMgrTestUtil.compareState(masterGlobalStateMgr, slaveGlobalStateMgr));
     }
 
+    @Test
+    public void testSaveLoadJsonFormatImage() throws Exception {
+        long transactionId = masterTransMgr
+                .beginTransaction(GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                        GlobalStateMgrTestUtil.testTxnLable1,
+                        transactionSource,
+                        LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+
+        UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
+        masterTransMgr.saveTransactionStateV2(pseudoImage.getDataOutputStream());
+
+        GlobalTransactionMgr followerTransMgr = new GlobalTransactionMgr(masterGlobalStateMgr);
+        followerTransMgr.addDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        SRMetaBlockReader reader = new SRMetaBlockReader(pseudoImage.getDataInputStream());
+        followerTransMgr.loadTransactionStateV2(reader);
+        reader.close();
+
+        Assert.assertEquals(1, followerTransMgr.getTransactionNum());
+    }
 }

@@ -1,0 +1,81 @@
+-- name: test_sr_8425
+show backends;
+create database test_number_bf58dfca_6183_11ed_b695_00163e0b9de0;
+use test_number_bf58dfca_6183_11ed_b695_00163e0b9de0;
+select 601070.968843214312543654*8.54914236*0.4790000000019*0.98901*18727.790683412432141;
+set sql_mode = 'MODE_DOUBLE_LITERAL,ONLY_FULL_GROUP_BY,PIPES_AS_CONCAT';
+select 601070.968843214312543654*8.54914236*0.4790000000019*0.98901*18727.790683412432141;
+drop database test_number_bf58dfca_6183_11ed_b695_00163e0b9de0;
+-- name: test_sr_8537
+show backends;
+create database test_number_bf5a0936_6183_11ed_b695_00163e0b9de0;
+use test_number_bf5a0936_6183_11ed_b695_00163e0b9de0;
+CREATE TABLE `sr_8537` (
+                `brand_code` tinyint not null comment '',
+                `operation_type` tinyint  not null comment "",
+                `merchandise_code` varchar(64) not null comment '',
+                `store_code` varchar(64) not null  comment '',
+                `business_date` date not null comment '',
+                `operation_flow_id` varchar(128)   comment "",
+                `operation_amount` decimal(10,2) not null  comment "",
+                `unit_code` varchar(64)  comment "",
+                `origin_operation_amount` decimal(10,2) not null  comment "",
+                `operation_time` datetime not null  comment ''
+                ) 
+                DUPLICATE KEY(brand_code, operation_type, merchandise_code,store_code,business_date)
+                PARTITION BY RANGE (`business_date`)(
+                partition p1 values less than ("2022-04-01"),
+                partition p2 values less than ("2022-05-01"),
+                partition p3 values less than ("2022-06-01"))
+                DISTRIBUTED BY HASH(store_code) BUCKETS 12
+                PROPERTIES(
+                 "replication_num" = "1"
+                );
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8537.csv -XPUT -H label:stream_load_1668145399844 -H column_separator:, ${url}/api/test_number_bf5a0936_6183_11ed_b695_00163e0b9de0/sr_8537/_stream_load
+sync;
+select * from sr_8537;
+drop database test_number_bf5a0936_6183_11ed_b695_00163e0b9de0;
+-- name: test_sr_9483
+show backends;
+create database test_number_bf8e9ab6_6183_11ed_b695_00163e0b9de0;
+use test_number_bf8e9ab6_6183_11ed_b695_00163e0b9de0;
+CREATE TABLE `test_decimal_type6` (
+               `dec_1_2` decimal32(2, 1) NOT NULL COMMENT "",
+               `dec_18_0` decimal64(18, 0) NOT NULL COMMENT "",
+               `dec_18_2` decimal64(18, 18) NOT NULL COMMENT ""
+             ) ENGINE=OLAP
+             DUPLICATE KEY(`dec_1_2`)
+             COMMENT "OLAP"
+             DISTRIBUTED BY HASH(`dec_1_2`) BUCKETS 10
+             PROPERTIES (
+             "replication_num" = "1",
+             "in_memory" = "false",
+             "enable_persistent_index" = "false"
+             );
+insert into test_decimal_type6 values(1,1,0.100000000000000000),(2,10,0.100000000000000000);
+select * from test_decimal_type6 order by 1;
+select dec_18_0 + dec_18_2 from test_decimal_type6 order by 1;
+drop database test_number_bf8e9ab6_6183_11ed_b695_00163e0b9de0;
+-- name: test_sr_9663
+show backends;
+create database test_number_bfa2e020_6183_11ed_b695_00163e0b9de0;
+use test_number_bfa2e020_6183_11ed_b695_00163e0b9de0;
+CREATE TABLE `ollo` (
+              `dt_year` datetime NOT NULL COMMENT "yyyy-01-01 00:00:00",
+              `dt_month` datetime NOT NULL COMMENT "yyyy-MM-01 00:00:00",
+              `dt_day` datetime NOT NULL COMMENT "yyyy-MM-dd 00:00:00",
+                ol  DECIMAL(38,18) NOT NULL COMMENT "1",
+                lo  DECIMAL(38,18) NOT NULL COMMENT "2"
+            ) ENGINE=OLAP 
+            DUPLICATE KEY(`dt_year`, `dt_month`, `dt_day`)
+            COMMENT "OLAP"
+            PARTITION BY RANGE(`dt_day`)
+            (PARTITION p20220410 VALUES [('2022-04-10 00:00:00'), ('2022-04-11 00:00:00')),
+            PARTITION p20220411 VALUES [('2022-04-11 00:00:00'), ('2022-04-12 00:00:00')),
+            PARTITION p20220421 VALUES [('2022-04-21 00:00:00'), ('2022-04-22 00:00:00')))
+            DISTRIBUTED BY HASH(`dt_year`) BUCKETS 2
+            PROPERTIES ("replication_num" = "1");
+insert INTO ollo values  ('2022-04-11','2022-04-11','2022-04-11',-2516.460439,1673.37);
+SELECT -2516.460439/1673.37;
+SELECT ol/lo from ollo;
+drop database test_number_bfa2e020_6183_11ed_b695_00163e0b9de0;

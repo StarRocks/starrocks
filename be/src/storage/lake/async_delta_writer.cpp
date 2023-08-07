@@ -15,7 +15,6 @@
 #include "storage/lake/async_delta_writer.h"
 
 #include <bthread/execution_queue.h>
-#include <bthread/mutex.h>
 #include <fmt/format.h>
 
 #include <memory>
@@ -26,6 +25,8 @@
 #include "runtime/current_thread.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/storage_engine.h"
+#include "testutil/sync_point.h"
+#include "util/stack_trace_mutex.h"
 
 namespace starrocks::lake {
 
@@ -35,14 +36,36 @@ class AsyncDeltaWriterImpl {
 public:
     using Callback = AsyncDeltaWriter::Callback;
 
-    // Undocemented rule of bthread that -1(0xFFFFFFFFFFFFFFFF) is an invalid ExecutionQueueId
+    // Undocumented rule of bthread that -1(0xFFFFFFFFFFFFFFFF) is an invalid ExecutionQueueId
     constexpr static uint64_t kInvalidQueueId = (uint64_t)-1;
 
-    AsyncDeltaWriterImpl(int64_t tablet_id, int64_t txn_id, int64_t partition_id,
+    AsyncDeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
                          const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker)
-            : _writer(DeltaWriter::create(tablet_id, txn_id, partition_id, slots, mem_tracker)),
+            : _writer(DeltaWriter::create(tablet_manager, tablet_id, txn_id, partition_id, slots, mem_tracker)),
               _queue_id{kInvalidQueueId},
-              _open_mtx(),
+              _mtx(),
+              _status(),
+              _opened(false),
+              _closed(false) {}
+
+    AsyncDeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
+                         const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
+                         MemTracker* mem_tracker)
+            : _writer(DeltaWriter::create(tablet_manager, tablet_id, txn_id, partition_id, slots, merge_condition,
+                                          mem_tracker)),
+              _queue_id{kInvalidQueueId},
+              _mtx(),
+              _status(),
+              _opened(false),
+              _closed(false) {}
+
+    AsyncDeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
+                         const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
+                         bool miss_auto_increment_column, int64_t table_id, MemTracker* mem_tracker)
+            : _writer(DeltaWriter::create(tablet_manager, tablet_id, txn_id, partition_id, slots, merge_condition,
+                                          miss_auto_increment_column, table_id, mem_tracker)),
+              _queue_id{kInvalidQueueId},
+              _mtx(),
               _status(),
               _opened(false),
               _closed(false) {}
@@ -78,20 +101,28 @@ private:
     static int execute(void* meta, bthread::TaskIterator<AsyncDeltaWriterImpl::Task>& iter);
 
     Status do_open();
+    bool closed();
 
     DeltaWriter::Ptr _writer;
     bthread::ExecutionQueueId<Task> _queue_id;
-    bthread::Mutex _open_mtx;
+    StackTraceMutex<bthread::Mutex> _mtx;
+    // _status、_opened and _closed are protected by _mtx
     Status _status;
-    std::atomic<bool> _opened;
-    std::atomic<bool> _closed;
+    bool _opened;
+    bool _closed;
 };
 
 AsyncDeltaWriterImpl::~AsyncDeltaWriterImpl() {
     close();
 }
 
+inline bool AsyncDeltaWriterImpl::closed() {
+    std::lock_guard l(_mtx);
+    return _closed;
+}
+
 inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<AsyncDeltaWriterImpl::Task>& iter) {
+    TEST_SYNC_POINT("AsyncDeltaWriterImpl::execute:1");
     auto async_writer = static_cast<AsyncDeltaWriterImpl*>(meta);
     auto delta_writer = async_writer->_writer.get();
     if (iter.is_queue_stopped()) {
@@ -100,8 +131,8 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
     }
     auto st = Status{};
     for (; iter; ++iter) {
-        // It's safe to run without checking `_closed` but doing so can make the task quit earlier on cancel/error.
-        if (async_writer->_closed.load(std::memory_order_acquire)) {
+        // It's safe to run without checking `closed()` but doing so can make the task quit earlier on cancel/error.
+        if (async_writer->closed()) {
             iter->cb(Status::InternalError("AsyncDeltaWriter has been closed"));
             continue;
         }
@@ -121,15 +152,15 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
 }
 
 inline Status AsyncDeltaWriterImpl::open() {
-    if (_opened.load(std::memory_order_acquire)) {
-        return _status;
+    std::lock_guard l(_mtx);
+    if (_closed) {
+        return Status::InternalError("AsyncDeltaWriter has been closed");
     }
-    std::lock_guard l(_open_mtx);
-    if (_opened.load(std::memory_order_acquire)) {
+    if (_opened) {
         return _status;
     }
     _status = do_open();
-    _opened.store(true, std::memory_order_release);
+    _opened = true;
     return _status;
 }
 
@@ -143,6 +174,7 @@ inline Status AsyncDeltaWriterImpl::do_open() {
         return Status::InternalError("AsyncDeltaWriterExecutor init failed");
     }
     if (int r = bthread::execution_queue_start(&_queue_id, &opts, execute, this); r != 0) {
+        _queue_id.value = kInvalidQueueId;
         return Status::InternalError(fmt::format("fail to create bthread execution queue: {}", r));
     }
     return _writer->open();
@@ -168,6 +200,9 @@ inline void AsyncDeltaWriterImpl::finish(Callback cb) {
     task.indexes_size = 0;
     task.finish_after_write = true;
     task.cb = std::move(cb); // Do NOT touch |cb| since here
+    // NOTE: the submited tasks will be executed in the thread pool `StorageEngine::instance()->async_delta_writer_executor()`,
+    // which is a thread pool of pthraed NOT bthread, so don't worry the bthread worker threads or RPC threads will be blocked
+    // by the submitted tasks.
     if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
         LOG(WARNING) << "Fail to execution_queue_execute: " << r;
         task.cb(Status::InternalError("AsyncDeltaWriterImpl not open()ed or has been close()ed"));
@@ -175,22 +210,34 @@ inline void AsyncDeltaWriterImpl::finish(Callback cb) {
 }
 
 inline void AsyncDeltaWriterImpl::close() {
-    bool expect = _closed.load(std::memory_order_acquire);
-    if (expect || !_opened.load(std::memory_order_acquire)) return;
-    if (_closed.compare_exchange_strong(expect, true, std::memory_order_acq_rel)) {
+    std::unique_lock l(_mtx);
+    TEST_SYNC_POINT("AsyncDeltaWriterImpl::close:1");
+    _closed = true;
+    if (_queue_id.value != kInvalidQueueId) {
+        auto old_id = _queue_id;
+        _queue_id.value = kInvalidQueueId;
+
+        // Must unlock mutex first before joining the executino queue, otherwise deadlock may occur:
+        //           Current Thread                  Execution Queue Thread
+        //
+        //   AsyncDeltaWriterImpl::close()     |
+        //   \__  _mtx.lock (acquired)         |
+        //                                     |  AsyncDeltaWriter::execute()
+        //                                     |  \__ AsyncDeltaWriter::closed()
+        //                                     |      \__ _mtx.lock (blocked)
+        //                                     |
+        //   execution_queue_join() (blocked)  |
+        //
+        l.unlock();
+
         // After the execution_queue been `stop()`ed all incoming `write()` and `finish()` requests
         // will fail immediately.
-        int r = bthread::execution_queue_stop(_queue_id);
+        int r = bthread::execution_queue_stop(old_id);
         PLOG_IF(WARNING, r != 0) << "Fail to stop execution queue";
 
         // Wait for all running tasks completed.
-        r = bthread::execution_queue_join(_queue_id);
+        r = bthread::execution_queue_join(old_id);
         PLOG_IF(WARNING, r != 0) << "Fail to join execution queue";
-
-        // Destroy TabletWriter. Since the execution_queue has been stopped and all
-        // running tasks have finished, no further execution will call `_writer` anymore, it's
-        // safe to destroy it.
-        _writer.reset();
     }
 }
 
@@ -226,10 +273,32 @@ int64_t AsyncDeltaWriter::txn_id() const {
     return _impl->txn_id();
 }
 
-std::unique_ptr<AsyncDeltaWriter> AsyncDeltaWriter::create(int64_t tablet_id, int64_t txn_id, int64_t partition_id,
+std::unique_ptr<AsyncDeltaWriter> AsyncDeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id,
+                                                           int64_t txn_id, int64_t partition_id,
                                                            const std::vector<SlotDescriptor*>* slots,
                                                            MemTracker* mem_tracker) {
-    auto impl = new AsyncDeltaWriterImpl(tablet_id, txn_id, partition_id, slots, mem_tracker);
+    auto impl = new AsyncDeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots, mem_tracker);
+    return std::make_unique<AsyncDeltaWriter>(impl);
+}
+
+std::unique_ptr<AsyncDeltaWriter> AsyncDeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id,
+                                                           int64_t txn_id, int64_t partition_id,
+                                                           const std::vector<SlotDescriptor*>* slots,
+                                                           const std::string& merge_condition,
+                                                           MemTracker* mem_tracker) {
+    auto impl = new AsyncDeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots, merge_condition,
+                                         mem_tracker);
+    return std::make_unique<AsyncDeltaWriter>(impl);
+}
+
+std::unique_ptr<AsyncDeltaWriter> AsyncDeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id,
+                                                           int64_t txn_id, int64_t partition_id,
+                                                           const std::vector<SlotDescriptor*>* slots,
+                                                           const std::string& merge_condition,
+                                                           bool miss_auto_increment_column, int64_t table_id,
+                                                           MemTracker* mem_tracker) {
+    auto impl = new AsyncDeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots, merge_condition,
+                                         miss_auto_increment_column, table_id, mem_tracker);
     return std::make_unique<AsyncDeltaWriter>(impl);
 }
 

@@ -16,6 +16,11 @@ package com.starrocks.catalog;
 
 public class AnyStructType extends PseudoType {
     @Override
+    public boolean equals(Object obj) {
+        return obj instanceof AnyStructType;
+    }
+
+    @Override
     public boolean matchesType(Type t) {
         return t instanceof AnyStructType || t instanceof AnyElementType || t.isStructType();
     }

@@ -28,7 +28,13 @@ void SpinLock::slow_acquire() {
 #if (defined(__i386) || defined(__x86_64__))
             asm volatile("pause\n" : : : "memory");
 #elif defined(__aarch64__)
-            asm volatile("yield\n" ::: "memory");
+            // A "yield" instruction in aarch64 is essentially a nop, and does
+            // not cause enough delay to help backoff. "isb" is a barrier that,
+            // especially inside a loop, creates a small delay without consuming
+            // ALU resources.  Experiments shown that adding the isb instruction
+            // improves stability and reduces result jitter. Adding more delay
+            // to the UT_RELAX_CPU than a single isb reduces performance.
+            asm volatile("isb\n" ::: "memory");
 #endif
         }
         if (try_lock()) {

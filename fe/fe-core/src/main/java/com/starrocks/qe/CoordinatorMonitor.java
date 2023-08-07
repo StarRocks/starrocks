@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.qe;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Queues;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.proto.PPlanFragmentCancelReason;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -95,7 +96,7 @@ public class CoordinatorMonitor {
                                     DebugUtil.printId(coord.getQueryId()));
                         }
                         coord.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR,
-                                "Backend not found. Check if any backend is down or not");
+                                FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
                     }
                 }
 

@@ -14,9 +14,11 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
+import com.google.common.base.Objects;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
@@ -25,10 +27,12 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public class LogicalValuesOperator extends LogicalOperator {
-    private final List<ColumnRefOperator> columnRefSet;
-    private final List<List<ScalarOperator>> rows;
+    private List<ColumnRefOperator> columnRefSet;
+    private List<List<ScalarOperator>> rows;
 
     public LogicalValuesOperator(List<ColumnRefOperator> columnRefSet, List<List<ScalarOperator>> rows) {
         super(OperatorType.LOGICAL_VALUES);
@@ -36,10 +40,8 @@ public class LogicalValuesOperator extends LogicalOperator {
         this.rows = rows;
     }
 
-    private LogicalValuesOperator(Builder builder) {
-        super(OperatorType.LOGICAL_VALUES, builder.getLimit(), builder.getPredicate(), builder.getProjection());
-        this.columnRefSet = builder.columnRefSet;
-        this.rows = builder.rows;
+    private LogicalValuesOperator() {
+        super(OperatorType.LOGICAL_VALUES);
     }
 
     public List<ColumnRefOperator> getColumnRefSet() {
@@ -60,6 +62,11 @@ public class LogicalValuesOperator extends LogicalOperator {
     }
 
     @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        return new RowOutputInfo(columnRefSet.stream().collect(Collectors.toMap(Function.identity(), Function.identity())));
+    }
+
+    @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalValues(this, context);
     }
@@ -70,29 +77,37 @@ public class LogicalValuesOperator extends LogicalOperator {
 
     @Override
     public boolean equals(Object o) {
-        return this == o;
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        if (!super.equals(o)) {
+            return false;
+        }
+        LogicalValuesOperator that = (LogicalValuesOperator) o;
+        return Objects.equal(columnRefSet, that.columnRefSet) && Objects.equal(rows, that.rows);
     }
 
     @Override
     public int hashCode() {
-        return System.identityHashCode(this);
+        return Objects.hashCode(super.hashCode(), columnRefSet);
     }
 
     public static class Builder extends LogicalOperator.Builder<LogicalValuesOperator, LogicalValuesOperator.Builder> {
-        private List<ColumnRefOperator> columnRefSet;
-        private List<List<ScalarOperator>> rows;
 
         @Override
-        public LogicalValuesOperator build() {
-            return new LogicalValuesOperator(this);
+        protected LogicalValuesOperator newInstance() {
+            return new LogicalValuesOperator();
         }
 
         @Override
         public Builder withOperator(LogicalValuesOperator valuesOperator) {
             super.withOperator(valuesOperator);
 
-            this.columnRefSet = valuesOperator.columnRefSet;
-            this.rows = valuesOperator.rows;
+            builder.columnRefSet = valuesOperator.columnRefSet;
+            builder.rows = valuesOperator.rows;
             return this;
         }
     }

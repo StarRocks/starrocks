@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.task;
 
 import com.google.common.base.Stopwatch;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.Group;
@@ -40,6 +40,7 @@ public class SeriallyTaskScheduler implements TaskScheduler {
         long timeout = context.getOptimizerContext().getSessionVariable().getOptimizerExecuteTimeout();
         Stopwatch watch = context.getOptimizerContext().getTraceInfo().getStopwatch();
         while (!tasks.empty()) {
+           
             if (timeout > 0 && watch.elapsed(TimeUnit.MILLISECONDS) > timeout) {
                 // Should have at least one valid plan
                 // group will be null when in rewrite phase
@@ -62,12 +63,29 @@ public class SeriallyTaskScheduler implements TaskScheduler {
             }
             OptimizerTask task = tasks.pop();
             context.getOptimizerContext().setTaskContext(context);
-            task.execute();
+            if (context.getOptimizerContext().getTraceInfo().isTraceOptimizer()) {
+                executeWithRecord(task);
+            } else {
+                task.execute();
+            }
         }
     }
 
     @Override
     public void pushTask(OptimizerTask task) {
         tasks.push(task);
+    }
+
+
+    private void executeWithRecord(OptimizerTask task) {
+        String timerName = "";
+        if (task instanceof RewriteTreeTask) {
+            timerName = "Optimizer.RuleBaseOptimize." + task.getClass().getSimpleName();
+        } else {
+            timerName = "Optimizer.CostBaseOptimize." + task.getClass().getSimpleName();
+        }
+        try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer(timerName)) {
+            task.execute();
+        }
     }
 }

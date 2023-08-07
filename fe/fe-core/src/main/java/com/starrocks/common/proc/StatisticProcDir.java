@@ -66,7 +66,7 @@ public class StatisticProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("DbId").add("DbName").add("TableNum").add("PartitionNum")
             .add("IndexNum").add("TabletNum").add("ReplicaNum").add("UnhealthyTabletNum")
-            .add("InconsistentTabletNum").add("CloningTabletNum")
+            .add("InconsistentTabletNum").add("CloningTabletNum").add("ErrorStateTabletNum")
             .build();
     private static final Logger LOG = LogManager.getLogger(StatisticProcDir.class);
 
@@ -78,12 +78,15 @@ public class StatisticProcDir implements ProcDirInterface {
     Multimap<Long, Long> inconsistentTabletIds;
     // db id -> set(tablet id)
     Multimap<Long, Long> cloningTabletIds;
+    // db id -> set(tablet id)
+    Multimap<Long, Long> errorStateTabletIds;
 
     public StatisticProcDir(GlobalStateMgr globalStateMgr) {
         this.globalStateMgr = globalStateMgr;
         unhealthyTabletIds = HashMultimap.create();
         inconsistentTabletIds = HashMultimap.create();
         cloningTabletIds = HashMultimap.create();
+        errorStateTabletIds = HashMultimap.create();
     }
 
     @Override
@@ -110,6 +113,7 @@ public class StatisticProcDir implements ProcDirInterface {
 
         unhealthyTabletIds.clear();
         inconsistentTabletIds.clear();
+        errorStateTabletIds.clear();
         cloningTabletIds = AgentTaskQueue.getTabletIdsByType(TTaskType.CLONE);
         List<List<Comparable>> lines = new ArrayList<List<Comparable>>();
         for (Long dbId : dbIds) {
@@ -133,7 +137,7 @@ public class StatisticProcDir implements ProcDirInterface {
                 int dbReplicaNum = 0;
 
                 for (Table table : db.getTables()) {
-                    if (!table.isNativeTable()) {
+                    if (!table.isNativeTableOrMaterializedView()) {
                         continue;
                     }
 
@@ -149,12 +153,15 @@ public class StatisticProcDir implements ProcDirInterface {
                             for (Tablet tablet : materializedIndex.getTablets()) {
                                 ++dbTabletNum;
 
-                                if (table.isLakeTable()) {
+                                if (table.isCloudNativeTableOrMaterializedView()) {
                                     continue;
                                 }
 
                                 LocalTablet localTablet = (LocalTablet) tablet;
                                 dbReplicaNum += localTablet.getImmutableReplicas().size();
+                                if (localTablet.getErrorStateReplicaNum() > 0) {
+                                    errorStateTabletIds.put(dbId, tablet.getId());
+                                }
 
                                 Pair<TabletStatus, Priority> res = localTablet.getHealthStatusWithPriority(
                                         infoService, partition.getVisibleVersion(),
@@ -186,6 +193,7 @@ public class StatisticProcDir implements ProcDirInterface {
                 oneLine.add(unhealthyTabletIds.get(dbId).size());
                 oneLine.add(inconsistentTabletIds.get(dbId).size());
                 oneLine.add(cloningTabletIds.get(dbId).size());
+                oneLine.add(errorStateTabletIds.get(dbId).size());
 
                 lines.add(oneLine);
 
@@ -215,6 +223,7 @@ public class StatisticProcDir implements ProcDirInterface {
         finalLine.add(unhealthyTabletIds.size());
         finalLine.add(inconsistentTabletIds.size());
         finalLine.add(cloningTabletIds.size());
+        finalLine.add(errorStateTabletIds.size());
         lines.add(finalLine);
 
         // add result
@@ -249,6 +258,7 @@ public class StatisticProcDir implements ProcDirInterface {
 
         return new IncompleteTabletsProcNode(unhealthyTabletIds.get(dbId),
                 inconsistentTabletIds.get(dbId),
-                cloningTabletIds.get(dbId));
+                cloningTabletIds.get(dbId),
+                errorStateTabletIds.get(dbId));
     }
 }

@@ -25,8 +25,8 @@
 #include "exec/aggregate/agg_hash_set.h"
 #include "exec/aggregate/agg_hash_variant.h"
 #include "runtime/mem_pool.h"
-#include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 

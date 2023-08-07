@@ -12,17 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HudiTable;
-import com.starrocks.common.UserException;
+import com.starrocks.catalog.Type;
+import com.starrocks.connector.Connector;
 import com.starrocks.connector.RemoteScanRangeLocations;
-import com.starrocks.connector.hudi.HudiConnector;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
@@ -36,11 +36,13 @@ import com.starrocks.thrift.TScanRangeLocations;
 import java.util.List;
 
 public class HudiScanNode extends ScanNode {
-    private RemoteScanRangeLocations scanRangeLocations = new RemoteScanRangeLocations();
+    private final RemoteScanRangeLocations scanRangeLocations = new RemoteScanRangeLocations();
 
-    private HudiTable hudiTable;
-    private HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
+    private final HudiTable hudiTable;
+    private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private CloudConfiguration cloudConfiguration = null;
+
+    private DescriptorTable descTbl;
 
     public HudiScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -64,8 +66,9 @@ public class HudiScanNode extends ScanNode {
         return helper.toString();
     }
 
-    public void setupScanRangeLocations(DescriptorTable descTbl) throws UserException {
-        scanRangeLocations.setupScanRangeLocations(descTbl, hudiTable, scanNodePredicates);
+    public void setupScanRangeLocations(DescriptorTable descTbl) {
+        this.descTbl = descTbl;
+        scanRangeLocations.setup(descTbl, hudiTable, scanNodePredicates);
     }
 
     private void setupCloudCredential() {
@@ -73,8 +76,7 @@ public class HudiScanNode extends ScanNode {
         if (catalog == null) {
             return;
         }
-        HudiConnector connector = (HudiConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
-                getConnector(catalog);
+        Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
         if (connector != null) {
             cloudConfiguration = connector.getCloudConfiguration();
         }
@@ -82,7 +84,7 @@ public class HudiScanNode extends ScanNode {
 
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
-        return scanRangeLocations.getScanRangeLocations(maxScanRangeLength);
+        return scanRangeLocations.getScanRangeLocations(descTbl, hudiTable, scanNodePredicates);
     }
 
     @Override
@@ -118,8 +120,15 @@ public class HudiScanNode extends ScanNode {
         output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
         output.append("\n");
 
-        output.append(prefix).append(String.format("numNodes=%s", numNodes));
-        output.append("\n");
+        if (detailLevel == TExplainLevel.VERBOSE) {
+            for (SlotDescriptor slotDescriptor : desc.getSlots()) {
+                Type type = slotDescriptor.getOriginType();
+                if (type.isComplexType()) {
+                    output.append(prefix)
+                            .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
+                }
+            }
+        }
 
         return output.toString();
     }
@@ -175,10 +184,18 @@ public class HudiScanNode extends ScanNode {
             cloudConfiguration.toThrift(tCloudConfiguration);
             msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
         }
+
+        msg.hdfs_scan_node.setCan_use_any_column(canUseAnyColumn);
+        msg.hdfs_scan_node.setCan_use_min_max_count_opt(canUseMinMaxCountOpt);
     }
 
     @Override
     public boolean canUsePipeLine() {
+        return true;
+    }
+
+    @Override
+    public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }
 }

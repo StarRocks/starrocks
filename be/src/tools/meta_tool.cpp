@@ -34,13 +34,14 @@
 
 #include <gflags/gflags.h>
 
-#include <fstream>
 #include <iostream>
 #include <set>
 #include <string>
 
+#include "column/datum_convert.h"
 #include "common/status.h"
 #include "fs/fs.h"
+#include "fs/fs_posix.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -49,13 +50,17 @@
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "json2pb/pb_to_json.h"
+#include "storage/chunk_helper.h"
 #include "storage/data_dir.h"
+#include "storage/key_coder.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/options.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
+#include "storage/rowset/segment.h"
+#include "storage/rowset/segment_options.h"
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_schema_map.h"
@@ -81,8 +86,6 @@ using starrocks::PagePointer;
 using starrocks::ColumnIteratorOptions;
 using starrocks::PageFooterPB;
 
-const std::string HEADER_PREFIX = "tabletmeta_";
-
 DEFINE_string(root_path, "", "storage root path");
 DEFINE_string(operation, "get_meta",
               "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, "
@@ -96,6 +99,7 @@ DEFINE_string(json_meta_path, "", "absolute json meta file path");
 DEFINE_string(pb_meta_path, "", "pb meta file path");
 DEFINE_string(tablet_file, "", "file to save a set of tablets");
 DEFINE_string(file, "", "segment file path");
+DEFINE_int32(key_column_count, 0, "key column count");
 
 std::string get_usage(const std::string& progname) {
     std::stringstream ss;
@@ -123,6 +127,8 @@ std::string get_usage(const std::string& progname) {
     ss << "./meta_tool --operation=ls --root_path=/path/to/storage/path\n";
     ss << "./meta_tool --operation=show_meta --pb_meta_path=path\n";
     ss << "./meta_tool --operation=show_segment_footer --file=/path/to/segment/file\n";
+    ss << "./meta_tool --operation=dump_segment_data --file=/path/to/segment/file\n";
+    ss << "./meta_tool --operation=dump_short_key_index --file=/path/to/segment/file --key_column_count=2\n";
     ss << "./meta_tool --operation=check_table_meta_consistency --root_path=/path/to/storage/path "
           "--table_id=tableid\n";
     ss << "cat 0001000000001394_0000000000000004.meta | ./meta_tool --operation=print_lake_metadata\n";
@@ -267,16 +273,17 @@ void get_meta_stats(DataDir* data_dir) {
         std::cout << "get_meta_stats failed: " << st.to_string() << std::endl;
         return;
     }
-    printf("All tablets:\n");
-    printf(" tablet: %8zu %10zu\n", stats.tablet_size, stats.tablet_bytes);
-    printf("    rst: %8zu %10zu\n", stats.rst_size, stats.rst_bytes);
-    printf("Updatable tablets:\n");
-    printf(" tablet: %8zu %10zu\n", stats.update_tablet_size, stats.update_tablet_bytes);
-    printf("    log: %8zu %10zu\n", stats.log_size, stats.log_bytes);
-    printf(" delvec: %8zu %10zu\n", stats.delvec_size, stats.delvec_bytes);
-    printf(" rowset: %8zu %10zu\n", stats.rowset_size, stats.rowset_bytes);
-    printf("\n  Total: %8zu %10zu\n", stats.total_size, stats.total_bytes);
-    printf("Error: %zu\n", stats.error_size);
+    printf("Non-update tablets:\n");
+    printf("         tablet: %8zu %10zu\n", stats.tablet_count, stats.tablet_meta_bytes);
+    printf("            rst: %8zu %10zu\n", stats.rowset_count, stats.rowset_meta_bytes);
+    printf("Update tablets:\n");
+    printf("         tablet: %8zu %10zu\n", stats.update_tablet_count, stats.update_tablet_meta_bytes);
+    printf("            log: %8zu %10zu\n", stats.log_count, stats.log_meta_bytes);
+    printf("  delete vector: %8zu %10zu\n", stats.delvec_count, stats.delvec_meta_bytes);
+    printf("         rowset: %8zu %10zu\n", stats.update_rowset_count, stats.update_rowset_meta_bytes);
+    printf(" pending rowset: %8zu %10zu\n", stats.pending_rowset_count, stats.pending_rowset_count);
+    printf("\n          Total: %8zu %10zu\n", stats.total_count, stats.total_meta_bytes);
+    printf("Error: %zu\n", stats.error_count);
 }
 
 void list_meta(DataDir* data_dir) {
@@ -286,16 +293,17 @@ void list_meta(DataDir* data_dir) {
         std::cout << "list_meta: " << st.to_string() << std::endl;
         return;
     }
-    printf("%8s %8s %10s %4s %10s %6s %10s %6s %10s %18s %24s\n", "table", "tablet", "bytes", "log", "bytes", "delvec",
-           "bytes", "rowset", "bytes", "pending_rowset", "pending_rowset_bytes");
+    printf("%8s %8s %18s %4s %16s %8s %18s %6s %18s %18s %26s\n", "table", "tablet", "tablet_meta_bytes", "log",
+           "log_meta_bytes", "delvec", "delvec_meta_bytes", "rowset", "rowset_meta_bytes", "pending_rowset",
+           "pending_rowset_meta_bytes");
     for (auto& e : stats.tablets) {
         auto& st = e.second;
-        printf("%8ld %8ld %10zu %4zu %10zu %6zu %10zu %6zu %10lu %18lu %24lu\n", st.table_id, st.tablet_id,
-               st.meta_bytes, st.log_size, st.log_bytes, st.delvec_size, st.delvec_bytes, st.rowset_size,
-               st.rowset_bytes, st.pending_rowset_size, st.pending_rowset_bytes);
+        printf("%8ld %8ld %18zu %4zu %16zu %8zu %18zu %6zu %18lu %18lu %26lu\n", st.table_id, st.tablet_id,
+               st.tablet_meta_bytes, st.log_count, st.log_meta_bytes, st.delvec_count, st.delvec_meta_bytes,
+               st.rowset_count, st.rowset_meta_bytes, st.pending_rowset_count, st.pending_rowset_meta_bytes);
     }
-    printf("  Total KV: %zu Bytes: %zu Tablets: %zu Error: %zu\n", stats.total_size, stats.total_bytes,
-           stats.tablets.size(), stats.error_size);
+    printf("  Total KV: %zu Bytes: %zu Tablets: %zu Error: %zu\n", stats.total_count, stats.total_meta_bytes,
+           stats.tablets.size(), stats.error_count);
 }
 
 Status init_data_dir(const std::string& dir, std::unique_ptr<DataDir>* ret, bool read_only = false) {
@@ -570,10 +578,274 @@ void check_meta_consistency(DataDir* data_dir) {
     return;
 }
 
+namespace starrocks {
+
+class SegmentDump {
+public:
+    SegmentDump(std::string path) : _path(std::move(path)) {}
+    ~SegmentDump() = default;
+
+    Status dump_segment_data();
+    Status dump_short_key_index(size_t key_column_count);
+
+private:
+    struct ColItem {
+        TypeInfoPtr type;
+        size_t offset;
+        size_t size;
+    };
+
+    Status _init();
+    void _convert_column_meta(const ColumnMetaPB& src_col, ColumnPB* dest_col);
+    std::shared_ptr<Schema> _init_query_schema(const std::shared_ptr<TabletSchema>& tablet_schema);
+    std::shared_ptr<TabletSchema> _init_search_schema_from_footer(const SegmentFooterPB& footer);
+    void _analyze_short_key_columns(size_t key_column_count, std::vector<ColItem>* cols);
+    Status _output_short_key_string(const std::vector<ColItem>& cols, size_t idx, Slice& key, std::string* result);
+
+    std::shared_ptr<FileSystem> _fs;
+    std::unique_ptr<RandomAccessFile> _input_file;
+    std::string _path;
+    std::shared_ptr<Segment> _segment;
+    std::shared_ptr<TabletSchema> _tablet_schema;
+    SegmentFooterPB _footer;
+    MemPool _mem_pool;
+    const size_t _max_short_key_size = 36;
+    const size_t _max_short_key_col_cnt = 3;
+};
+
+std::shared_ptr<Schema> SegmentDump::_init_query_schema(const std::shared_ptr<TabletSchema>& tablet_schema) {
+    return std::make_shared<Schema>(tablet_schema->schema());
+}
+
+void SegmentDump::_convert_column_meta(const ColumnMetaPB& src_col, ColumnPB* dest_col) {
+    dest_col->set_unique_id(src_col.unique_id());
+    dest_col->set_type(type_to_string(LogicalType(src_col.type())));
+    dest_col->set_is_nullable(src_col.is_nullable());
+    dest_col->set_length(src_col.length());
+
+    const auto& src_child_cols = src_col.children_columns();
+    for (const auto& src_child_col : src_child_cols) {
+        auto* dest_child_col = dest_col->add_children_columns();
+        _convert_column_meta(src_child_col, dest_child_col);
+    }
+}
+
+std::shared_ptr<TabletSchema> SegmentDump::_init_search_schema_from_footer(const SegmentFooterPB& footer) {
+    TabletSchemaPB tablet_schema_pb;
+    for (int i = 0; i < footer.columns_size(); i++) {
+        const auto& src_col = footer.columns(i);
+        ColumnPB* dest_col = tablet_schema_pb.add_column();
+        _convert_column_meta(src_col, dest_col);
+    }
+
+    return std::make_shared<TabletSchema>(tablet_schema_pb);
+}
+
+Status SegmentDump::_init() {
+    // open file
+    _fs = new_fs_posix();
+
+    auto res = _fs->new_random_access_file(_path);
+    if (!res.ok()) {
+        std::cout << "open file failed: " << res.status() << std::endl;
+        return Status::InternalError("");
+    }
+    _input_file = std::move(res.value());
+
+    // parse segment footer
+    Status st = get_segment_footer(_input_file.get(), &_footer);
+    if (!st.ok()) {
+        std::cout << "parse segment footer failed: " << st << std::endl;
+        return Status::InternalError("");
+    }
+
+    // construct tablet schema
+    _tablet_schema = _init_search_schema_from_footer(_footer);
+
+    // open segment
+    size_t footer_length = 16 * 1024 * 1024;
+    auto segment_res = Segment::open(_fs, _path, 0, _tablet_schema.get(), &footer_length, nullptr);
+    if (!segment_res.ok()) {
+        std::cout << "open segment failed: " << segment_res.status() << std::endl;
+        return Status::InternalError("");
+    }
+    _segment = std::move(segment_res.value());
+
+    return Status::OK();
+}
+
+void SegmentDump::_analyze_short_key_columns(size_t key_column_count, std::vector<ColItem>* cols) {
+    size_t start_offset = 1;
+    size_t short_key_size = 0;
+
+    for (size_t i = 0; i < key_column_count; i++) {
+        auto col = _tablet_schema->columns()[i];
+        LogicalType logical_type = col.type();
+        if (is_enumeration_type(logical_type)) {
+            if (short_key_size + col.length() > _max_short_key_size) {
+                break;
+            }
+            short_key_size += col.length();
+
+            ColItem item;
+            item.type = get_type_info(logical_type);
+            item.offset = start_offset;
+            item.size = item.type->size();
+            cols->emplace_back(item);
+
+            start_offset += item.type->size() + 1;
+        } else {
+            ColItem item;
+            item.type = get_type_info(logical_type);
+            item.offset = start_offset;
+            item.size = 0;
+            cols->emplace_back(item);
+
+            break;
+        }
+    }
+}
+
+Status SegmentDump::_output_short_key_string(const std::vector<ColItem>& cols, size_t idx, Slice& key,
+                                             std::string* result) {
+    size_t item_size = cols[idx].size;
+    if (item_size == 0) {
+        item_size = key.size - cols[idx].offset;
+    }
+    Slice convert_key = {key.data + cols[idx].offset, item_size};
+
+    size_t num_short_key_columns = cols.size();
+    const KeyCoder* coder = get_key_coder(cols[idx].type->type());
+    uint8_t* tmp_mem = _mem_pool.allocate(item_size);
+    coder->decode_ascending(&convert_key, item_size, tmp_mem, &_mem_pool);
+
+    auto logical_type = cols[idx].type->type();
+
+    switch (logical_type) {
+#define M(logical_type)                                                                                   \
+    case logical_type: {                                                                                  \
+        Datum data;                                                                                       \
+        data.set<TypeTraits<logical_type>::CppType>(*(TypeTraits<logical_type>::CppType*)(tmp_mem));      \
+        result->append(" key");                                                                           \
+        result->append(std::to_string(idx));                                                              \
+        result->append("(");                                                                              \
+        result->append(std::to_string(static_cast<int32_t>(*(uint8*)(key.data + cols[idx].offset - 1)))); \
+        result->append(":");                                                                              \
+        result->append(datum_to_string(cols[idx].type.get(), data));                                      \
+        result->append(")");                                                                              \
+        if (idx + 1 < num_short_key_columns) {                                                            \
+            result->append(",");                                                                          \
+        }                                                                                                 \
+        break;                                                                                            \
+    }
+        APPLY_FOR_TYPE_INTEGER(M)
+        APPLY_FOR_TYPE_TIME(M)
+        APPLY_FOR_TYPE_DECIMAL(M)
+        M(TYPE_FLOAT)
+        M(TYPE_DOUBLE)
+        M(TYPE_CHAR)
+        M(TYPE_VARCHAR)
+#undef M
+    default:
+        std::cout << "Not support type: " << logical_type << std::endl;
+        return Status::InternalError("Not support type");
+    }
+
+    return Status::OK();
+}
+
+Status SegmentDump::dump_short_key_index(size_t key_column_count) {
+    key_column_count = std::min(key_column_count, _max_short_key_col_cnt);
+    Status st = _init();
+    if (!st.ok()) {
+        std::cout << "SegmentDump init failed: " << st << std::endl;
+        return st;
+    }
+
+    st = _segment->load_index();
+    if (!st.ok()) {
+        std::cout << "load short key index failed: " << st << std::endl;
+        return st;
+    }
+
+    const ShortKeyIndexDecoder* decoder = _segment->decoder();
+    size_t key_count = decoder->num_items();
+    std::cout << "Short key index items count: " << key_count << std::endl;
+    std::cout << "MARKER: MIN(0x00), NULL_FIRST(0x01), NORMAL(0x02), NULL_LAST(0xFE), MAX(0xFF)" << std::endl;
+
+    std::vector<ColItem> _cols;
+    _analyze_short_key_columns(key_column_count, &_cols);
+
+    for (size_t i = 0; i < key_count; i++) {
+        Slice key = decoder->key(i);
+        std::string result;
+
+        for (size_t j = 0; j < _cols.size(); j++) {
+            st = _output_short_key_string(_cols, j, key, &result);
+            if (!st.ok()) {
+                std::cout << "Output short key string failed: " << st << std::endl;
+                return st;
+            }
+        }
+
+        std::cout << "INDEX(" << i << "): " << result << std::endl;
+    }
+
+    return Status::OK();
+}
+
+Status SegmentDump::dump_segment_data() {
+    Status st = _init();
+    if (!st.ok()) {
+        std::cout << "SegmentDump init failed: " << st << std::endl;
+        return st;
+    }
+
+    // convert schema
+    auto schema = _init_query_schema(_tablet_schema);
+    SegmentReadOptions seg_opts;
+    seg_opts.fs = _fs;
+    seg_opts.use_page_cache = false;
+    OlapReaderStatistics stats;
+    seg_opts.stats = &stats;
+    auto seg_res = _segment->new_iterator(*schema, seg_opts);
+    if (!seg_res.ok()) {
+        std::cout << "new segment iterator failed: " << seg_res.status() << std::endl;
+        return seg_res.status();
+    }
+    auto seg_iter = std::move(seg_res.value());
+
+    // iter chunk
+    size_t row = 0;
+    auto chunk = ChunkHelper::new_chunk(*schema, 4096);
+    do {
+        st = seg_iter->get_next(chunk.get());
+        if (!st.ok()) {
+            if (st.is_end_of_file()) {
+                break;
+            }
+            std::cout << "iter chunk failed: " << st.to_string() << std::endl;
+            return st;
+        }
+
+        for (size_t i = 0; i < chunk->num_rows(); i++) {
+            std::cout << "ROW: (" << row << "): " << chunk->debug_row(i) << std::endl;
+            row++;
+        }
+        chunk->reset();
+    } while (true);
+
+    return Status::OK();
+}
+
+} // namespace starrocks
+
 int meta_tool_main(int argc, char** argv) {
     std::string usage = get_usage(argv[0]);
     gflags::SetUsageMessage(usage);
     google::ParseCommandLineFlags(&argc, &argv, true);
+    starrocks::date::init_date_cache();
+    starrocks::config::disable_storage_page_cache = true;
 
     if (FLAGS_operation == "show_meta") {
         show_meta();
@@ -592,6 +864,33 @@ int meta_tool_main(int argc, char** argv) {
             return -1;
         }
         show_segment_footer(FLAGS_file);
+    } else if (FLAGS_operation == "dump_segment_data") {
+        if (FLAGS_file == "") {
+            std::cout << "no file flag for dump segment file" << std::endl;
+            return -1;
+        }
+        starrocks::SegmentDump segment_dump(FLAGS_file);
+        Status st = segment_dump.dump_segment_data();
+        if (!st.ok()) {
+            std::cout << "dump segment data failed: " << st << std::endl;
+            return -1;
+        }
+    } else if (FLAGS_operation == "dump_short_key_index") {
+        starrocks::MemChunkAllocator::init_instance(nullptr, 2ul * 1024 * 1024 * 1024);
+        if (FLAGS_file == "") {
+            std::cout << "no file set for dump short key index" << std::endl;
+            return -1;
+        }
+        if (FLAGS_key_column_count == 0) {
+            std::cout << "no key_column_count for dump short key index" << std::endl;
+            return -1;
+        }
+        starrocks::SegmentDump segment_dump(FLAGS_file);
+        Status st = segment_dump.dump_short_key_index(FLAGS_key_column_count);
+        if (!st.ok()) {
+            std::cout << "dump short key index failed: " << st << std::endl;
+            return -1;
+        }
     } else if (FLAGS_operation == "print_lake_metadata") {
         starrocks::lake::TabletMetadataPB metadata;
         if (!metadata.ParseFromIstream(&std::cin)) {

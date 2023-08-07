@@ -14,8 +14,11 @@
 
 #include "exec/parquet_scanner.h"
 
+#include <fmt/format.h>
+
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
 #include "fs/fs_broker.h"
@@ -28,8 +31,8 @@
 namespace starrocks {
 
 ParquetScanner::ParquetScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
-                               ScannerCounter* counter)
-        : FileScanner(state, profile, scan_range.params, counter),
+                               ScannerCounter* counter, bool schema_only)
+        : FileScanner(state, profile, scan_range.params, counter, schema_only),
           _scan_range(scan_range),
           _next_file(0),
           _curr_file_reader(nullptr),
@@ -53,7 +56,9 @@ Status ParquetScanner::open() {
                                         ? implicit_cast<int>(range.num_of_columns_from_file)
                                         : implicit_cast<int>(_src_slot_descriptors.size());
 
-    _conv_funcs.resize(_num_of_columns_from_file, nullptr);
+    for (auto i = 0; i < _num_of_columns_from_file; ++i) {
+        _conv_funcs.emplace_back(std::make_unique<ConvertFuncTree>());
+    }
     _cast_exprs.resize(_num_of_columns_from_file, nullptr);
 
     // column from path
@@ -81,7 +86,8 @@ Status ParquetScanner::initialize_src_chunk(ChunkPtr* chunk) {
         }
         auto* array = _batch->column(column_pos++).get();
         ColumnPtr column;
-        RETURN_IF_ERROR(new_column(array->type().get(), slot_desc, &column, &_conv_funcs[i], &_cast_exprs[i]));
+        RETURN_IF_ERROR(new_column(array->type().get(), slot_desc, &column, _conv_funcs[i].get(), &_cast_exprs[i],
+                                   _pool, _strict_mode));
         column->reserve(_max_chunk_size);
         (*chunk)->append_column(column, slot_desc->id());
     }
@@ -110,7 +116,8 @@ Status ParquetScanner::append_batch_to_src_chunk(ChunkPtr* chunk) {
             auto& mutable_timezone = (std::string&)timestamp_type->timezone();
             mutable_timezone = _state->timezone();
         }
-        RETURN_IF_ERROR(convert_array_to_column(_conv_funcs[i], num_elements, array, &slot_desc->type(), column));
+        RETURN_IF_ERROR(convert_array_to_column(_conv_funcs[i].get(), num_elements, array, column, _batch_start_idx,
+                                                _chunk_start_idx, &_chunk_filter, &_conv_ctx));
     }
 
     _chunk_start_idx += num_elements;
@@ -154,128 +161,187 @@ Status ParquetScanner::finalize_src_chunk(ChunkPtr* chunk) {
 
 // when first batch is accumulated into a column whose propre type must be
 // selected. Two concepts used to depict this selection is explained at first:
-// 1. arrow-column convertible:  a arrow type can convert to a column directly, e.g. HalfFloatArray -> FloatColumn
+// 1. arrow-column convertible:  an arrow type can convert to a column directly, e.g. HalfFloatArray -> FloatColumn
 // 2. inter-column convertible:  a column can convert to another column, e.g. BinaryColumn -> FloatColumn
-// A arrow type AT loading into column type PT is undergoes this steps:
-// AT ===[arrow-column convert]===> PT0 ===[inter-column convert]===> PT
-//
-// case#0: if PT is TYPE_ARRAY, then convert AT to PT directly
-//  ListArray ===[array_conv] ===> TYPE_ARRAY === [ColumnRef expr] ===> TYPE_ARRAY
-// case#1: if an optimized conv_func provided for AT converting to PT, then convert AT to PT directly
-//  AT ===[conv_func] ===> PT ===[ColumnRef expr]===> PT
-// case#2: if no optimized conv_func is provided, then convert AT to a strict PT, then use CastExpr for
+// An arrow type AT loading into column type LT is undergoes this steps:
+// AT ===[arrow-column convert]===> LT0 ===[inter-column convert]===> LT
+// case#0: convert recursively for nested types: TYPE_ARRAY, TYPE_MAP, TYPE_STRUCT
+// case#1: if an optimized conv_func provided for AT converting to LT, then convert AT to LT directly
+//  AT ===[conv_func] ===> LT ===[ColumnRef expr]===> LT
+// case#2: if no optimized conv_func is provided, then convert AT to a strict LT, then use CastExpr for
 //  inter-column converting.
-//  AT ===[conv_func]===> strict PT ===[VectorizedCastExpr]===> PT
-// case#3: otherwise, AT to PT is inconvertible and InterError is reported.
+//  AT ===[conv_func]===> strict LT ===[VectorizedCastExpr]===> LT
+// case#3: otherwise, AT to LT is inconvertible and InterError is reported.
 
-Status ParquetScanner::new_column(const arrow::DataType* arrow_type, const SlotDescriptor* slot_desc, ColumnPtr* column,
-                                  ConvertFunc* conv_func, Expr** expr) {
-    auto& type_desc = slot_desc->type();
+// build convert function tree, raw type desc to get cast function and create dest column,
+Status ParquetScanner::build_dest(const arrow::DataType* arrow_type, const TypeDescriptor* type_desc, bool is_nullable,
+                                  TypeDescriptor* raw_type_desc, ConvertFuncTree* conv_func, bool& need_cast,
+                                  bool strict_mode) {
     auto at = arrow_type->id();
-    auto pt = type_desc.type;
+    auto lt = type_desc->type;
+    conv_func->func = get_arrow_converter(at, lt, is_nullable, strict_mode);
 
-    if (pt == TYPE_ARRAY) {
-        (*column) = ColumnHelper::create_column(type_desc, slot_desc->is_nullable());
-        *expr = _pool.add(new ColumnRef(slot_desc));
-        return Status::OK();
-    }
-
-    auto optimized_conv_func = get_arrow_converter(at, pt, slot_desc->is_nullable(), _strict_mode);
-    if (optimized_conv_func != nullptr) {
-        (*column) = ColumnHelper::create_column(type_desc, slot_desc->is_nullable());
-        *expr = _pool.add(new ColumnRef(slot_desc));
-        *conv_func = optimized_conv_func;
-        return Status::OK();
-    }
-
-    Status error = illegal_converting_error(arrow_type->name(), type_desc.debug_string());
-    auto strict_pt = get_strict_type(at);
-    if (strict_pt == TYPE_UNKNOWN) {
-        return error;
-    }
-
-    auto strict_conv_func = get_arrow_converter(at, strict_pt, slot_desc->is_nullable(), _strict_mode);
-    if (strict_conv_func == nullptr) {
-        return error;
-    }
-
-    auto* strict_type_desc = _pool.add(new TypeDescriptor());
-    strict_type_desc->type = strict_pt;
-    switch (strict_pt) {
-    case TYPE_DECIMAL128: {
-        const auto* discrete_type = down_cast<const arrow::Decimal128Type*>(arrow_type);
-        auto precision = discrete_type->precision();
-        auto scale = discrete_type->scale();
-        if (precision < 1 || precision > decimal_precision_limit<int128_t> || scale < 0 || scale > precision) {
-            return Status::InternalError(strings::Substitute("Decimal($0, $1) is out of range.", precision, scale));
+    switch (lt) {
+    case TYPE_ARRAY: {
+        if (at != ArrowTypeId::LIST && at != ArrowTypeId::LARGE_LIST && at != ArrowTypeId::FIXED_SIZE_LIST) {
+            return Status::InternalError(
+                    fmt::format("Apache Arrow type (nested) {} does not match the type {} in StarRocks",
+                                arrow_type->name(), type_to_string(lt)));
         }
-        strict_type_desc->precision = precision;
-        strict_type_desc->scale = scale;
+        raw_type_desc->type = TYPE_ARRAY;
+        TypeDescriptor type;
+        auto cf = std::make_unique<ConvertFuncTree>();
+        auto sub_at = arrow_type->field(0)->type();
+        RETURN_IF_ERROR(
+                build_dest(sub_at.get(), &type_desc->children[0], true, &type, cf.get(), need_cast, strict_mode));
+        raw_type_desc->children.emplace_back(std::move(type));
+        conv_func->children.emplace_back(std::move(cf));
         break;
     }
-    case TYPE_VARCHAR: {
-        strict_type_desc->len = TypeDescriptor::MAX_VARCHAR_LENGTH;
-        break;
-    }
-    case TYPE_CHAR: {
-        strict_type_desc->len = TypeDescriptor::MAX_CHAR_LENGTH;
-        break;
-    }
-    case TYPE_DECIMALV2:
-    case TYPE_DECIMAL32:
-    case TYPE_DECIMAL64: {
-        return Status::InternalError(
-                strings::Substitute("Apache Arrow type($0) does not match the type($1) in StarRocks",
-                                    arrow_type->name(), type_to_string(strict_pt)));
-    }
-    default:
-        break;
-    }
+    case TYPE_MAP: {
+        if (at != ArrowTypeId::MAP) {
+            return Status::InternalError(
+                    fmt::format("Apache Arrow type (nested) {} does not match the type {} in StarRocks",
+                                arrow_type->name(), type_to_string(lt)));
+        }
 
-    auto slot = _pool.add(new ColumnRef(slot_desc));
-    *expr = VectorizedCastExprFactory::from_type(*strict_type_desc, slot_desc->type(), slot, &_pool);
-    if ((*expr) == nullptr) {
-        return illegal_converting_error(arrow_type->name(), type_desc.debug_string());
+        raw_type_desc->type = TYPE_MAP;
+        for (auto i = 0; i < 2; i++) {
+            TypeDescriptor type;
+            auto cf = std::make_unique<ConvertFuncTree>();
+            auto sub_at = i == 0 ? down_cast<const arrow::MapType*>(arrow_type)->key_type()
+                                 : down_cast<const arrow::MapType*>(arrow_type)->item_type();
+            RETURN_IF_ERROR(
+                    build_dest(sub_at.get(), &type_desc->children[i], true, &type, cf.get(), need_cast, strict_mode));
+            raw_type_desc->children.emplace_back(std::move(type));
+            conv_func->children.emplace_back(std::move(cf));
+        }
+        break;
     }
-    *column = ColumnHelper::create_column(*strict_type_desc, slot_desc->is_nullable());
-    *conv_func = strict_conv_func;
+    case TYPE_STRUCT: {
+        if (at != ArrowTypeId::STRUCT) {
+            return Status::InternalError(
+                    fmt::format("Apache Arrow type (nested) {} does not match the type {} in StarRocks",
+                                arrow_type->name(), type_to_string(lt)));
+        }
+        auto field_size = type_desc->children.size();
+        auto arrow_field_size = arrow_type->num_fields();
+
+        raw_type_desc->type = TYPE_STRUCT;
+        raw_type_desc->field_names = type_desc->field_names;
+        conv_func->field_names = type_desc->field_names;
+        for (auto i = 0; i < field_size; i++) {
+            TypeDescriptor type;
+            auto cf = std::make_unique<ConvertFuncTree>();
+            auto sub_at = i >= arrow_field_size ? arrow::null() : arrow_type->field(i)->type();
+            RETURN_IF_ERROR(
+                    build_dest(sub_at.get(), &type_desc->children[i], true, &type, cf.get(), need_cast, strict_mode));
+            raw_type_desc->children.emplace_back(std::move(type));
+            conv_func->children.emplace_back(std::move(cf));
+        }
+        break;
+    }
+    default: {
+        if (conv_func->func == nullptr) {
+            need_cast = true;
+            Status error = illegal_converting_error(arrow_type->name(), type_desc->debug_string());
+            auto strict_pt = get_strict_type(at);
+            if (strict_pt == TYPE_UNKNOWN) {
+                return error;
+            }
+            auto strict_conv_func = get_arrow_converter(at, strict_pt, is_nullable, strict_mode);
+            if (strict_conv_func == nullptr) {
+                return error;
+            }
+            conv_func->func = strict_conv_func;
+            raw_type_desc->type = strict_pt;
+            switch (strict_pt) {
+            case TYPE_DECIMAL128: {
+                const auto* discrete_type = down_cast<const arrow::Decimal128Type*>(arrow_type);
+                auto precision = discrete_type->precision();
+                auto scale = discrete_type->scale();
+                if (precision < 1 || precision > decimal_precision_limit<int128_t> || scale < 0 || scale > precision) {
+                    return Status::InternalError(
+                            strings::Substitute("Decimal($0, $1) is out of range.", precision, scale));
+                }
+                raw_type_desc->precision = precision;
+                raw_type_desc->scale = scale;
+                break;
+            }
+            case TYPE_VARCHAR: {
+                raw_type_desc->len = TypeDescriptor::MAX_VARCHAR_LENGTH;
+                break;
+            }
+            case TYPE_CHAR: {
+                raw_type_desc->len = TypeDescriptor::MAX_CHAR_LENGTH;
+                break;
+            }
+            case TYPE_DECIMALV2:
+            case TYPE_DECIMAL32:
+            case TYPE_DECIMAL64: {
+                return Status::InternalError(
+                        strings::Substitute("Apache Arrow type($0) does not match the type($1) in StarRocks",
+                                            arrow_type->name(), type_to_string(strict_pt)));
+            }
+            default:
+                break;
+            }
+        } else {
+            *raw_type_desc = *type_desc;
+        }
+    }
+    }
     return Status::OK();
 }
 
-Status ParquetScanner::convert_array_to_column(ConvertFunc conv_func, size_t num_elements, const arrow::Array* array,
-                                               const TypeDescriptor* type_desc, const ColumnPtr& column) {
+Status ParquetScanner::new_column(const arrow::DataType* arrow_type, const SlotDescriptor* slot_desc, ColumnPtr* column,
+                                  ConvertFuncTree* conv_func, Expr** expr, ObjectPool& pool, bool strict_mode) {
+    auto& type_desc = slot_desc->type();
+    auto* raw_type_desc = pool.add(new TypeDescriptor());
+    bool need_cast = false;
+    build_dest(arrow_type, &type_desc, slot_desc->is_nullable(), raw_type_desc, conv_func, need_cast, strict_mode);
+    if (!need_cast) {
+        *expr = pool.add(new ColumnRef(slot_desc));
+        (*column) = ColumnHelper::create_column(type_desc, slot_desc->is_nullable());
+    } else {
+        auto slot = pool.add(new ColumnRef(slot_desc));
+        *expr = VectorizedCastExprFactory::from_type(*raw_type_desc, slot_desc->type(), slot, &pool);
+        if ((*expr) == nullptr) {
+            return illegal_converting_error(arrow_type->name(), type_desc.debug_string());
+        }
+        *column = ColumnHelper::create_column(*raw_type_desc, slot_desc->is_nullable());
+    }
+
+    return Status::OK();
+}
+
+Status ParquetScanner::convert_array_to_column(ConvertFuncTree* conv_func, size_t num_elements,
+                                               const arrow::Array* array, const ColumnPtr& column,
+                                               size_t batch_start_idx, size_t chunk_start_idx, Filter* chunk_filter,
+                                               ArrowConvertContext* conv_ctx) {
     uint8_t* null_data;
     Column* data_column;
     if (column->is_nullable()) {
         auto nullable_column = down_cast<NullableColumn*>(column.get());
         auto null_column = nullable_column->mutable_null_column();
-        size_t null_count = fill_null_column(array, _batch_start_idx, num_elements, null_column, _chunk_start_idx);
+        size_t null_count = fill_null_column(array, batch_start_idx, num_elements, null_column, chunk_start_idx);
         nullable_column->set_has_null(null_count != 0);
-        null_data = &null_column->get_data().front() + _chunk_start_idx;
+        null_data = &null_column->get_data().front() + chunk_start_idx;
         data_column = nullable_column->data_column().get();
     } else {
         null_data = nullptr;
         // Fill nullable array into not-nullable column, positions of NULLs is marked as 1
-        fill_filter(array, _batch_start_idx, num_elements, &_chunk_filter, _chunk_start_idx);
+        fill_filter(array, batch_start_idx, num_elements, chunk_filter, chunk_start_idx, conv_ctx);
         data_column = column.get();
     }
-    if (type_desc->type == TYPE_ARRAY) {
-        // only base types are supported, nested types are not supported
-        auto list_conv_func = get_arrow_list_converter();
-        return list_conv_func(array, _batch_start_idx, num_elements, 1 /* non nested */, type_desc, data_column,
-                              _chunk_start_idx, null_data, &_conv_ctx);
-    } else {
-        auto* filter_data = (&_chunk_filter.front()) + _chunk_start_idx;
-        auto st = conv_func(array, _batch_start_idx, num_elements, data_column, _chunk_start_idx, null_data,
-                            filter_data, &_conv_ctx);
-        if (st.ok()) {
-            // in some scene such as string length exceeds limit, the column will be set NULL, so we need reset has_null
-            if (column->is_nullable()) {
-                down_cast<NullableColumn*>(column.get())->update_has_null();
-            }
-        }
-        return st;
+
+    auto st = conv_func->func(array, batch_start_idx, num_elements, data_column, chunk_start_idx, null_data,
+                              chunk_filter, conv_ctx, conv_func);
+    if (st.ok() && column->is_nullable()) {
+        // in some scene such as string length exceeds limit, the column will be set NULL, so we need reset has_null
+        down_cast<NullableColumn*>(column.get())->update_has_null();
     }
+    return st;
 }
 
 bool ParquetScanner::chunk_is_full() {
@@ -322,6 +388,7 @@ StatusOr<ChunkPtr> ParquetScanner::get_next() {
 
         // process end of file
         // if chunk is not empty, then just break the loop and finalize the chunk
+        // so always empty chunks read data from files
         _curr_file_reader.reset();
         if (chunk->num_rows() > 0) {
             break;
@@ -340,6 +407,13 @@ Status ParquetScanner::next_batch() {
     SCOPED_RAW_TIMER(&_counter->read_batch_ns);
     _batch_start_idx = 0;
     if (_curr_file_reader == nullptr) {
+        if (_last_range_size - _last_file_scan_bytes != 0) {
+            _state->update_num_bytes_scan_from_source(_last_range_size - _last_file_scan_bytes);
+            _last_file_scan_bytes = 0;
+            _last_file_scan_rows = 0;
+            _next_batch_counter = 0;
+            _last_range_size = 0;
+        }
         RETURN_IF_ERROR(open_next_reader());
     }
     while (!_scanner_eof) {
@@ -347,6 +421,17 @@ Status ParquetScanner::next_batch() {
         if (status.ok() && _batch->num_rows() == 0) {
             continue;
         } else {
+            if (status.ok()) {
+                _next_batch_counter++;
+                _last_file_scan_rows += _batch->num_rows();
+                if (_next_batch_counter % 32 == 0) {
+                    auto incr_bytes = (int64_t)((double)_last_file_scan_rows / _curr_file_reader->total_num_rows() *
+                                                        _last_file_size -
+                                                _last_file_scan_bytes);
+                    _last_file_scan_bytes += incr_bytes;
+                    _state->update_num_bytes_scan_from_source(incr_bytes);
+                }
+            }
             return status;
         }
     }
@@ -364,7 +449,8 @@ Status ParquetScanner::open_next_reader() {
         Status st = create_random_access_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params,
                                               CompressionTypePB::NO_COMPRESSION, &file);
         if (!st.ok()) {
-            LOG(WARNING) << "Failed to create random-access files. status: " << st.to_string();
+            LOG(WARNING) << "Failed to create random-access files. status: " << st.to_string()
+                         << " file: " << range_desc.path;
             return st;
         }
         _conv_ctx.current_file = file->filename();
@@ -374,6 +460,8 @@ Status ParquetScanner::open_next_reader() {
         _next_file++;
         int64_t file_size;
         RETURN_IF_ERROR(parquet_reader->size(&file_size));
+        _last_file_size = file_size;
+        _last_range_size = range_desc.size;
         // switch to next file if the current file is empty
         if (file_size == 0) {
             parquet_reader->close();
@@ -383,6 +471,24 @@ Status ParquetScanner::open_next_reader() {
                                                                  _state->timezone());
         return Status::OK();
     }
+}
+
+Status ParquetScanner::get_schema(std::vector<SlotDescriptor>* schema) {
+    std::shared_ptr<RandomAccessFile> file;
+    // TODO(fw): Infer schema from more files.
+    const TBrokerRangeDesc& range_desc = _scan_range.ranges[0];
+    Status st = create_random_access_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params,
+                                          CompressionTypePB::NO_COMPRESSION, &file);
+    if (!st.ok()) {
+        LOG(WARNING) << "Failed to create random-access files. status: " << st.to_string()
+                     << " file: " << range_desc.path;
+        return st;
+    }
+    _conv_ctx.current_file = file->filename();
+    auto parquet_file = std::make_shared<ParquetChunkFile>(file, 0);
+    auto parquet_reader = std::make_shared<ParquetReaderWrap>(std::move(parquet_file), _num_of_columns_from_file,
+                                                              range_desc.start_offset, range_desc.size);
+    return parquet_reader->get_schema(schema);
 }
 
 void ParquetScanner::close() {

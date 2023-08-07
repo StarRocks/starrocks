@@ -3,22 +3,23 @@
 ## Description
 
 This function extracts a number of characters from a string with specified length (starting from left). The unit for length: utf8 character.
+Note: This function is also named as [left](left.md).
 
 ## Syntax
 
-```Haskell
+```SQL
 VARCHAR strleft(VARCHAR str,INT len)
 ```
 
 ## Examples
 
-```Plain Text
+```SQL
 MySQL > select strleft("Hello starrocks",5);
-+-------------------------+
-|strleft('Hello starrocks', 5)|
-+-------------------------+
-| Hello                   |
-+-------------------------+
++-------------------------------+
+| strleft('Hello starrocks', 5) |
++-------------------------------+
+| Hello                         |
++-------------------------------+
 ```
 
 ## keyword

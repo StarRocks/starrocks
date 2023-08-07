@@ -38,7 +38,7 @@ public:
 
 struct ExceptSliceFlagEqual {
     bool operator()(const ExceptSliceFlag& x, const ExceptSliceFlag& y) const {
-        return memequal(x.slice.data, x.slice.size, y.slice.data, y.slice.size);
+        return memequal_padded(x.slice.data, x.slice.size, y.slice.data, y.slice.size);
     }
 };
 
@@ -56,42 +56,49 @@ public:
     using Iterator = typename HashSet::iterator;
     using KeyVector = std::vector<Slice>;
 
+    /// Used to allocate memory for serializing columns to the key.
+    struct BufferState {
+    public:
+        Status init(RuntimeState* state);
+
+    public:
+        size_t max_one_row_size{8};
+        Buffer<uint32_t> slice_sizes;
+
+        MemPool mem_pool;
+        uint8_t* buffer{nullptr};
+    };
+
     ExceptHashSet() = default;
 
     Status init(RuntimeState* state);
 
     Iterator begin() { return _hash_set->begin(); }
-
     Iterator end() { return _hash_set->end(); }
-
     bool empty() { return _hash_set->empty(); }
-
     size_t size() { return _hash_set->size(); }
 
-    void build_set(RuntimeState* state, const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs, MemPool* pool);
+    void build_set(RuntimeState* state, const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs, MemPool* pool,
+                   BufferState* buffer_state);
 
-    Status erase_duplicate_row(RuntimeState* state, const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs);
+    Status erase_duplicate_row(RuntimeState* state, const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs,
+                               BufferState* buffer_state);
 
     void deserialize_to_columns(KeyVector& keys, const Columns& key_columns, size_t chunk_size);
 
-    int64_t mem_usage() { return _hash_set->dump_bound() + _mem_pool->total_reserved_bytes(); }
+    int64_t mem_usage(BufferState* buffer_state);
 
 private:
     size_t _get_max_serialize_size(const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs);
+    void _serialize_columns(const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs, size_t chunk_size,
+                            BufferState* buffer_state);
 
-    void _serialize_columns(const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs, size_t chunk_size);
-
-    size_t _max_one_row_size = 8;
-    Buffer<uint32_t> _slice_sizes;
-
+private:
     std::unique_ptr<HashSet> _hash_set;
-
-    // Used to allocate memory for serializing columns to the key.
-    std::unique_ptr<MemPool> _mem_pool;
-    uint8_t* _buffer;
 };
 
 using ExceptHashSerializeSet =
         ExceptHashSet<phmap::flat_hash_set<ExceptSliceFlag, ExceptSliceFlagHash, ExceptSliceFlagEqual>>;
+using ExceptBufferState = ExceptHashSerializeSet::BufferState;
 
 } // namespace starrocks

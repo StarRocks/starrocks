@@ -36,10 +36,10 @@ package com.starrocks.load.routineload;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
-import com.starrocks.common.FeConstants;
+import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.server.GlobalStateMgr;
@@ -48,20 +48,20 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
-public class RoutineLoadScheduler extends LeaderDaemon {
+public class RoutineLoadScheduler extends FrontendDaemon {
 
     private static final Logger LOG = LogManager.getLogger(RoutineLoadScheduler.class);
 
-    private RoutineLoadManager routineLoadManager;
+    private RoutineLoadMgr routineLoadManager;
 
     @VisibleForTesting
     public RoutineLoadScheduler() {
         super();
-        routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadManager();
+        routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
     }
 
-    public RoutineLoadScheduler(RoutineLoadManager routineLoadManager) {
-        super("Routine load scheduler", FeConstants.default_scheduler_interval_millisecond);
+    public RoutineLoadScheduler(RoutineLoadMgr routineLoadManager) {
+        super("Routine load scheduler", Config.routine_load_scheduler_interval_millisecond);
         this.routineLoadManager = routineLoadManager;
     }
 

@@ -15,7 +15,11 @@
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.base.Objects;
+import com.google.common.collect.Lists;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -56,13 +60,22 @@ public class PhysicalSetOperation extends PhysicalOperator {
     }
 
     @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        List<ColumnOutputInfo> columnOutputInfoList = Lists.newArrayList();
+        outputColumnRefOp.stream().forEach(e -> columnOutputInfoList.add(new ColumnOutputInfo(e, e)));
+        return new RowOutputInfo(columnOutputInfoList, outputColumnRefOp);
+    }
+
+    @Override
     public boolean equals(Object o) {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
+
+        if (!super.equals(o)) {
             return false;
         }
+
         PhysicalSetOperation that = (PhysicalSetOperation) o;
         return Objects.equal(outputColumnRefOp, that.outputColumnRefOp) &&
                 Objects.equal(childOutputColumns, that.childOutputColumns);
@@ -70,6 +83,6 @@ public class PhysicalSetOperation extends PhysicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(outputColumnRefOp, childOutputColumns);
+        return Objects.hashCode(super.hashCode(), outputColumnRefOp);
     }
 }

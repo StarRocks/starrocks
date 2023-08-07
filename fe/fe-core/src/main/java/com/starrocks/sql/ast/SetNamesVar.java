@@ -12,26 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.google.common.base.Strings;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.parser.NodePosition;
 
 // Now only support utf-8
-public class SetNamesVar extends SetVar {
-    private static final String DEFAULT_NAMES = "utf8";
-    private static final String GBK_NAMES = "gbk";
+public class SetNamesVar extends SetListItem {
+    public static final String DEFAULT_NAMES = "utf8";
+    public static final String GBK_NAMES = "gbk";
     private String charset;
-    private String collate;
+    private final String collate;
 
     public SetNamesVar(String charsetName) {
         this(charsetName, null);
     }
 
     public SetNamesVar(String charsetName, String collate) {
+        this(charsetName, collate, NodePosition.ZERO);
+    }
+
+    public SetNamesVar(String charsetName, String collate, NodePosition pos) {
+        super(pos);
         this.charset = charsetName;
         this.collate = collate;
     }
@@ -40,32 +41,15 @@ public class SetNamesVar extends SetVar {
         return charset;
     }
 
+    public void setCharset(String charset) {
+        this.charset = charset;
+    }
+
     public String getCollate() {
         if (collate == null) {
             return "DEFAULT";
         } else {
             return collate;
-        }
-    }
-
-    @Override
-    public void analyze() {
-        if (Strings.isNullOrEmpty(charset)) {
-            charset = DEFAULT_NAMES;
-        } else {
-            charset = charset.toLowerCase();
-        }
-        // utf8-superset transform to utf8
-        if (charset.startsWith(DEFAULT_NAMES)) {
-            charset = DEFAULT_NAMES;
-        }
-
-        if (!charset.equalsIgnoreCase(DEFAULT_NAMES) && !charset.equalsIgnoreCase(GBK_NAMES)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_CHARACTER_SET, charset);
-        }
-        // be is not supported yet,so Display unsupported information to the user
-        if (!charset.equalsIgnoreCase(DEFAULT_NAMES)) {
-            throw new SemanticException("charset name " + charset + " is not supported yet");
         }
     }
 }

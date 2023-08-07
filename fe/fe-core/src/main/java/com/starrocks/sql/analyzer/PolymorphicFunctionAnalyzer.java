@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
@@ -23,11 +24,13 @@ import com.starrocks.catalog.AnyMapType;
 import com.starrocks.catalog.AnyStructType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.common.TypeManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -48,7 +51,7 @@ public class PolymorphicFunctionAnalyzer {
         if (t2.isNull()) {
             return t1;
         }
-        if (t1.isFixedPointType() && t2.isFixedPointType()) {
+        if (t1.isScalarType() && t2.isScalarType()) {
             Type commonType = Type.getCommonType(t1, t2);
             return commonType.isValid() ? commonType : null;
         }
@@ -89,12 +92,14 @@ public class PolymorphicFunctionAnalyzer {
         return newFn;
     }
 
-    private static Type[] resolveArgTypes(Type[] declTypes, Type[] inputArgTypes) {
+    private static Type[] resolveArgTypes(Function fn, Type[] inputArgTypes) {
         // Use inputArgTypes length, because function may be a variable arguments
         Type[] resolvedTypes = Arrays.copyOf(inputArgTypes, inputArgTypes.length);
+        Type[] argsTypes = fn.getArgs();
 
-        for (int i = 0; i < declTypes.length; ++i) {
-            Type declType = declTypes[i];
+        int size = Math.max(argsTypes.length, inputArgTypes.length);
+        for (int i = 0; i < size; ++i) {
+            Type declType = i >= argsTypes.length ? argsTypes[argsTypes.length - 1] : argsTypes[i];
             Type inputType = inputArgTypes[i];
 
             // If declaration type is not a pseudo type, use it.
@@ -105,20 +110,22 @@ public class PolymorphicFunctionAnalyzer {
 
             // Need to make input be a valid complex type if the input is Type NULL
             if (declType instanceof AnyArrayType) {
-                resolvedTypes[i] = inputType.isNull() ? new ArrayType(Type.NULL) : inputType;
+                resolvedTypes[i] = inputType.isNull() ? new ArrayType(Type.BOOLEAN) : inputType;
             } else if (declType instanceof AnyMapType) {
-                resolvedTypes[i] = inputType.isNull() ? new MapType(Type.NULL, Type.NULL) : inputType;
+                resolvedTypes[i] = inputType.isNull() ? new MapType(Type.BOOLEAN, Type.BOOLEAN) : inputType;
             } else if (declType instanceof AnyStructType) {
-                resolvedTypes[i] = inputType.isNull() ? new StructType(Lists.newArrayList(Type.NULL)) : inputType;
+                resolvedTypes[i] = inputType.isNull() ? new StructType(Lists.newArrayList(Type.BOOLEAN)) : inputType;
             } else {
                 resolvedTypes[i] = inputType;
             }
+
+            resolvedTypes[i] = AnalyzerUtils.replaceNullType2Boolean(resolvedTypes[i]);
         }
         return resolvedTypes;
     }
 
     private static Function resolveByReplacingInputs(Function fn, Type[] inputArgTypes) {
-        Type[] resolvedArgTypes = resolveArgTypes(fn.getArgs(), inputArgTypes);
+        Type[] resolvedArgTypes = resolveArgTypes(fn, inputArgTypes);
         if (fn instanceof ScalarFunction) {
             return newScalarFunction((ScalarFunction) fn, Arrays.asList(resolvedArgTypes), fn.getReturnType());
         }
@@ -144,12 +151,46 @@ public class PolymorphicFunctionAnalyzer {
         }
     }
 
+    private static class MapFilterDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            MapType mapType = (MapType) types[0];
+            return new MapType(mapType.getKeyType(), mapType.getValueType());
+        }
+    }
+
     private static class MapFromArraysDeduce implements java.util.function.Function<Type[], Type> {
         @Override
         public Type apply(Type[] types) {
             ArrayType keyArrayType = (ArrayType) types[0];
             ArrayType valueArrayType = (ArrayType) types[1];
             return new MapType(keyArrayType.getItemType(), valueArrayType.getItemType());
+        }
+    }
+
+    // map_apply/array_map(lambda of function, map/array) -> return type of lambda
+    private static class LambdaDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            // fake return type, the real return type is from the right part lambda expression of lambda functions.
+            return types[1];
+        }
+    }
+
+    private static class DistinctMapKeysDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            return types[0];
+        }
+    }
+
+    private static class IfDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            Type commonType = TypeManager.getCommonSuperType(types[1], types[2]);
+            types[1] = commonType;
+            types[2] = commonType;
+            return commonType;
         }
     }
 
@@ -160,12 +201,32 @@ public class PolymorphicFunctionAnalyzer {
         }
     }
 
+    private static class CommonDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            Type commonType = TypeManager.getCommonSuperType(Arrays.asList(types));
+            Arrays.fill(types, commonType);
+            return commonType;
+        }
+    }
+
     private static final ImmutableMap<String, java.util.function.Function<Type[], Type>> DEDUCE_RETURN_TYPE_FUNCTIONS
             = ImmutableMap.<String, java.util.function.Function<Type[], Type>>builder()
-            .put("map_keys", new MapKeysDeduce())
-            .put("map_values", new MapValuesDeduce())
-            .put("map_from_arrays", new MapFromArraysDeduce())
-            .put("row", new RowDeduce())
+            .put(FunctionSet.MAP_KEYS, new MapKeysDeduce())
+            .put(FunctionSet.MAP_VALUES, new MapValuesDeduce())
+            .put(FunctionSet.MAP_FROM_ARRAYS, new MapFromArraysDeduce())
+            .put(FunctionSet.ROW, new RowDeduce())
+            .put(FunctionSet.MAP_APPLY, new LambdaDeduce())
+            .put(FunctionSet.ARRAY_MAP, new LambdaDeduce())
+            .put(FunctionSet.MAP_FILTER, new MapFilterDeduce())
+            .put(FunctionSet.DISTINCT_MAP_KEYS, new DistinctMapKeysDeduce())
+            .put(FunctionSet.MAP_CONCAT, new CommonDeduce())
+            .put(FunctionSet.IF, new IfDeduce())
+            .put(FunctionSet.IFNULL, new CommonDeduce())
+            .put(FunctionSet.NULLIF, new CommonDeduce())
+            .put(FunctionSet.COALESCE, new CommonDeduce())
+            // it's mock, need handle it in expressionAnalyzer
+            .put(FunctionSet.NAMED_STRUCT, new RowDeduce())
             .build();
 
     private static Function resolveByDeducingReturnType(Function fn, Type[] inputArgTypes) {
@@ -173,7 +234,7 @@ public class PolymorphicFunctionAnalyzer {
         if (deduce == null) {
             return null;
         }
-        Type[] resolvedArgTypes = resolveArgTypes(fn.getArgs(), inputArgTypes);
+        Type[] resolvedArgTypes = resolveArgTypes(fn, inputArgTypes);
         Type newRetType = deduce.apply(resolvedArgTypes);
         if (fn instanceof ScalarFunction) {
             return newScalarFunction((ScalarFunction) fn, Arrays.asList(resolvedArgTypes), newRetType);
@@ -224,90 +285,78 @@ public class PolymorphicFunctionAnalyzer {
      * declaration constrains the actual first argument to be an array type, and allows the parser to infer the
      * correct result type from the actual first argument's type.
      * </p>
-     * TODO(zhuming): throws an exception on error, instead of return null.
      */
-    public static Function checkPolymorphicFunction(Function fn, Type[] paramTypes) {
+    public static Function generatePolymorphicFunction(Function fn, Type[] paramTypes) {
         if (!fn.isPolymorphic()) {
             return fn;
         }
         Type retType = fn.getReturnType();
         Type[] declTypes = fn.getArgs();
         Function resolvedFunction;
+
         long numPseudoArgs = Arrays.stream(declTypes).filter(Type::isPseudoType).count();
+        // resolve single pseudo type parameter, example: int array_length(ANY_ARRAY)
         if (!retType.isPseudoType() && numPseudoArgs == 1) {
             resolvedFunction = resolveByReplacingInputs(fn, paramTypes);
             if (resolvedFunction != null) {
                 return resolvedFunction;
             }
         }
+        // deduce by special function
         resolvedFunction = resolveByDeducingReturnType(fn, paramTypes);
         if (resolvedFunction != null) {
             return resolvedFunction;
         }
 
-        Type[] realTypes = Arrays.copyOf(declTypes, declTypes.length);
-        ArrayType typeArray = null;
-        Type typeElement = null;
-        for (int i = 0; i < declTypes.length; i++) {
-            Type declType = declTypes[i];
+        // common deduce
+        ArrayType typeArray;
+        Type typeElement;
+
+        List<Type> allRealElementType = Lists.newArrayList();
+        int size = fn.hasVarArgs() ? paramTypes.length : declTypes.length;
+        for (int i = 0; i < size; i++) {
+            Type declType = i >= declTypes.length ? fn.getVarArgsType() : declTypes[i];
             Type realType = paramTypes[i];
             if (declType instanceof AnyArrayType) {
                 if (realType.isNull()) {
                     continue;
                 }
-                if (typeArray == null) {
-                    typeArray = (ArrayType) realType;
-                } else if ((typeArray = (ArrayType) getSuperType(typeArray, realType)) == null) {
-                    LOGGER.warn("could not determine polymorphic type because input has non-match types");
-                    return null;
-                }
+                Preconditions.checkState(realType.isArrayType());
+                allRealElementType.add(((ArrayType) realType).getItemType());
             } else if (declType instanceof AnyElementType) {
                 if (realType.isNull()) {
                     continue;
                 }
-                if (typeElement == null) {
-                    typeElement = realType;
-                } else if ((typeElement = getSuperType(typeElement, realType)) == null) {
+                allRealElementType.add(realType);
+            }
+        }
+
+        if (!allRealElementType.isEmpty()) {
+            Type commonType = allRealElementType.get(0);
+            for (Type type : allRealElementType) {
+                commonType = TypeManager.getCommonSuperType(commonType, type);
+                if (commonType == null) {
                     LOGGER.warn("could not determine polymorphic type because input has non-match types");
                     return null;
                 }
-            } else if (declType.matchesType(realType) || Type.canCastTo(realType, declType)) { // non-pseudo types
-                continue;
-            } else {
-                LOGGER.warn("has unhandled pseudo type '{}'", declType);
-                return null;
             }
-        }
-
-        if (typeArray != null && typeElement != null) {
-            typeArray = (ArrayType) getSuperType(typeArray, new ArrayType(typeElement));
-            if (typeArray == null) {
-                LOGGER.warn("could not determine polymorphic type because has non-match types");
-                return null;
-            }
-            typeElement = typeArray.getItemType();
-        } else if (typeArray != null) {
-            typeElement = typeArray.getItemType();
-        } else if (typeElement != null) {
-            typeArray = new ArrayType(typeElement);
+            commonType = AnalyzerUtils.replaceNullType2Boolean(commonType);
+            typeArray = new ArrayType(commonType);
+            typeElement = commonType;
         } else {
-            typeElement = Type.NULL;
-            typeArray = new ArrayType(Type.NULL);
-        }
-
-        if (!typeArray.getItemType().matchesType(typeElement)) {
-            LOGGER.warn("could not determine polymorphic type because has non-match types");
-            return null;
+            typeElement = Type.BOOLEAN;
+            typeArray = new ArrayType(Type.BOOLEAN);
         }
 
         if (retType instanceof AnyArrayType) {
             retType = typeArray;
         } else if (retType instanceof AnyElementType) {
             retType = typeElement;
-        } else if (!(fn instanceof TableFunction)) { //TableFunction don't use retType
-            assert !retType.isPseudoType();
+        } else {
+            Preconditions.checkState(fn instanceof TableFunction || !retType.isPseudoType());
         }
 
+        Type[] realTypes = new Type[declTypes.length];
         for (int i = 0; i < declTypes.length; i++) {
             if (declTypes[i] instanceof AnyArrayType) {
                 realTypes[i] = typeArray;
@@ -351,6 +400,7 @@ public class PolymorphicFunctionAnalyzer {
                     realTableFnRetTypes.add(typeElement);
                 } else {
                     assert !retType.isPseudoType();
+                    realTableFnRetTypes.add(t);
                 }
             }
 
@@ -361,3 +411,4 @@ public class PolymorphicFunctionAnalyzer {
         return null;
     }
 }
+

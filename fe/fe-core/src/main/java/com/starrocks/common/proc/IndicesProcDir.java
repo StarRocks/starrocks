@@ -45,7 +45,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.lake.LakeTable;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -136,8 +135,8 @@ public class IndicesProcDir implements ProcDirInterface {
             if (materializedIndex == null) {
                 throw new AnalysisException("Index[" + indexId + "] does not exist.");
             }
-            if (olapTable.isLakeTable()) {
-                return new LakeTabletsProcNode(db, (LakeTable) olapTable, materializedIndex);
+            if (olapTable.isCloudNativeTableOrMaterializedView()) {
+                return new LakeTabletsProcDir(db, olapTable, materializedIndex);
             } else {
                 return new LocalTabletsProcDir(db, olapTable, materializedIndex);
             }

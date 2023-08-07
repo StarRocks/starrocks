@@ -1,10 +1,16 @@
-# External tables
+# (To be deprecated) External table
 
-StarRocks supports access to other data sources by using external tables. External tables are created based on data tables that are stored in other data sources. StarRocks only stores the metadata of the data tables. You can use external tables to directly query data in other data sources. StarRocks supports the following data sources: MySQL, Elasticsearch, Hive, StarRocks, Apache Iceberg, and Apache Hudi. **Currently, you can only write data from another StarRocks cluster into the current StarRocks cluster. You cannot read data from it. For data sources other than StarRocks, you can only read data from these data sources.**
+StarRocks supports access to other data sources by using external tables. External tables are created based on data tables that are stored in other data sources. StarRocks only stores the metadata of the data tables. You can use external tables to directly query data in other data sources. StarRocks supports the following data sources: MySQL, StarRocks, Elasticsearch, Apache Hive™, Apache Iceberg, and Apache Hudi. **Currently, you can only write data from another StarRocks cluster into the current StarRocks cluster. You cannot read data from it. For data sources other than StarRocks, you can only read data from these data sources.**
+
+> **NOTICE**
+>
+> Since v3.0, we recommend that you use catalogs to query data from Hive, Iceberg, Hudi, and JDBC data sources. See [Hive catalog](../data_source/catalog/hive_catalog.md), [Iceberg catalog](../data_source/catalog/iceberg_catalog.md), [Hudi catalog](../data_source/catalog/hudi_catalog.md), and [JDBC catalog](../data_source/catalog/jdbc_catalog.md).
+
+From 2.5 onwards, StarRocks provides the Data Cache feature, which accelerates hot data queriers on external data sources. For more information, see [Data Cache](data_cache.md).
 
 ## MySQL external table
 
-In the star schema, data is generally divided into dimension tables and fact tables. Dimension tables have less data but involve UPDATE operations. Currently, StarRocks does not support direct UPDATE operations (update can be implemented by using the unique key model). In some scenarios, you can store dimension tables in MySQL for direct data read.
+In the star schema, data is generally divided into dimension tables and fact tables. Dimension tables have less data but involve UPDATE operations. Currently, StarRocks does not support direct UPDATE operations (update can be implemented by using the Unique Key table). In some scenarios, you can store dimension tables in MySQL for direct data read.
 
 To query MySQL data, you must create an external table in StarRocks and map it to the table in your MySQL database. You need to specify the MySQL connection information when creating the table.
 
@@ -60,7 +66,7 @@ CREATE TABLE t
     k5 DATETIME
 )
 ENGINE=olap
-DISTRIBUTED BY HASH(k1) BUCKETS 10;
+DISTRIBUTED BY HASH(k1);
 
 # Create an external table in the source StarRocks cluster.
 CREATE EXTERNAL TABLE external_t
@@ -72,7 +78,7 @@ CREATE EXTERNAL TABLE external_t
     k5 DATETIME
 )
 ENGINE=olap
-DISTRIBUTED BY HASH(k1) BUCKETS 10
+DISTRIBUTED BY HASH(k1)
 PROPERTIES
 (
     "host" = "127.0.0.1",
@@ -88,7 +94,7 @@ insert into external_t values ('2020-10-11', 1, 1, 'hello', '2020-10-11 10:00:00
 insert into external_t select * from other_table;
 ~~~
 
-Parameters：
+Parameters:
 
 * **EXTERNAL:** This keyword indicates that the table to be created is an external table.
 * **host:** This parameter specifies the IP address of the leader FE node of the destination StarRocks cluster.
@@ -110,6 +116,8 @@ StarRocks and Elasticsearch are two popular analytics systems. StarRocks is perf
 
 ### Example of creating an Elasticsearch external table
 
+#### Syntax
+
 ~~~sql
 CREATE EXTERNAL TABLE elastic_search_external_table
 (
@@ -121,31 +129,135 @@ CREATE EXTERNAL TABLE elastic_search_external_table
 )
 ENGINE=ELASTICSEARCH
 PROPERTIES (
-    "hosts" = "http://192.168.0.1:8200,http://192.168.0.2:8200",
+    "hosts" = "http://192.168.0.1:9200,http://192.168.0.2:9200",
     "user" = "root",
     "password" = "root",
     "index" = "tindex",
-    "type" = "doc",
+    "type" = "_doc",
     "es.net.ssl" = "true"
 );
 ~~~
 
-Parameters
+The following table describes the parameters.
 
-* **host**: The connection address of the Elasticsearch cluster. You can specify one or more addresses. StarRocks can parse the Elasticsearch version and index shard allocation from this address. StarRocks communicates with your Elasticsearch cluster based on the address returned by the `GET /_nodes/http` API. Therefore, the value of the `host` parameter must be the same as the address returned by the `GET /_nodes/http` API. Otherwise, BE may not be able to communicate with your Elasticsearch cluster.
-* **user**: The username of the Elasticsearch cluster with **basic authentication** enabled. Make sure you have the access to `/*cluster/state/*nodes/http` and the index.
-* **password**: The password of the Elasticsearch cluster.
-* **index**: The name of the Elasticsearch index that corresponds to the table in StarRocks. It can be an alias.
-* **type**: the type of the index. Default value: `_doc`. If you want to query data in Elasticsearch 8 and later versions, you do not need to configure this parameter because the mapping types have been removed in Elasticsearch 8 and later versions.
-* **transport**: This parameter is reserved. Default value: http.
-* **es.nodes.wan.only**: indicates whether StarRocks only uses the addresses specified by `hosts` to access the Elasticsearch cluster and fetch data.
+| **Parameter**        | **Required** | **Default value** | **Description**                                              |
+| -------------------- | ------------ | ----------------- | ------------------------------------------------------------ |
+| hosts                | Yes          | None              | The connection address of the Elasticsearch cluster. You can specify one or more addresses. StarRocks can parse the Elasticsearch version and index shard allocation from this address. StarRocks communicates with your Elasticsearch cluster based on the address returned by the `GET /_nodes/http` API operation. Therefore, the value of the `host` parameter must be the same as the address returned by the `GET /_nodes/http` API operation. Otherwise, BEs may not be able to communicate with your Elasticsearch cluster. |
+| index                | Yes          | None              | The name of the Elasticsearch index that is created on the table in StarRocks. The name can be an alias. This parameter supports wildcards (\*). For example, if you set `index` to <code class="language-text">hello*</code>, StarRocks retrieves all indexes whose names start with `hello`. |
+| user                 | No           | Empty             | The username that is used to log in to the Elasticsearch cluster with basic authentication enabled. Make sure you have access to `/*cluster/state/*nodes/http` and the index. |
+| password             | No           | Empty             | The password that is used to log in to the Elasticsearch cluster. |
+| type                 | No           | `_doc`            | The type of the index. Default value: `_doc`. If you want to query data in Elasticsearch 8 and later versions, you do not need to configure this parameter because the mapping types have been removed in Elasticsearch 8 and later versions. |
+| es.nodes.wan.only    | No           | `false`           | Specifies whether StarRocks only uses the addresses specified by `hosts` to access the Elasticsearch cluster and fetch data.<ul><li>`true`: StarRocks only uses the addresses specified by `hosts` to access the Elasticsearch cluster and fetch data and does not sniff data nodes on which the shards of the Elasticsearch index reside. If StarRocks cannot access the addresses of the data nodes inside the Elasticsearch cluster, you need to set this parameter to `true`.</li><li>`false`: StarRocks uses the addresses specified by `host` to sniff data nodes on which the shards of the Elasticsearch cluster indexes reside. After StarRocks generates a query execution plan, the relevant BEs directly access the data nodes inside the Elasticsearch cluster to fetch data from the shards of indexes. If StarRocks can access the addresses of the data nodes inside the Elasticsearch cluster, we recommend that you retain the default value `false`.</li></ul> |
+| es.net.ssl           | No           | `false`           | Specifies whether the HTTPS protocol can be used to access your Elasticsearch cluster. Only StarRocks 2.4 and later versions support configuring this parameter.<ul><li>`true`: Both the HTTPS and HTTP protocols can be used to access your Elasticsearch cluster.</li><li>`false`: Only the HTTP protocol can be used to access your Elasticsearch cluster.</li></ul> |
+| enable_docvalue_scan | No           | `true`            | Specifies whether to obtain the values of the target fields from Elasticsearch columnar storage. In most cases, reading data from columnar storage outperforms reading data from row storage. |
+| enable_keyword_sniff | No           | `true`            | Specifies whether to sniff TEXT-type fields in Elasticsearch based on KEYWORD-type fields. If this parameter is set to `false`, StarRocks performs matching after tokenization. |
 
-  * true: StarRocks only uses the addresses specified by `hosts` to access the Elasticsearch cluster and fetch data and does not sniff data nodes which shards of the Elasticsearch index reside in. If StarRocks cannot access the addresses of the data nodes inside the Elasticsearch cluster, you need to set this parameter to `true`.
-  * false: default value. StarRocks uses the addresses specified by `host` to sniff data nodes on which the shards of the Elasticsearch cluster indexes are located. After StarRocks generates a query execution plan, the relevant BEs directly access the data nodes inside the Elasticsearch cluster to fetch data from the shards of indexes. If StarRocks can access the addresses of the data nodes inside the Elasticsearch cluster, we recommend that you retain the default value `false`.
-**es.net.ssl**: Whether the HTTPS protocol can be used to access your Elasticsearch cluster. Only StarRocks 2.4 and later versions support configuring this parameter.
+##### Columnar scan for faster queries
 
-  * `true`: The HTTPS protocol can be used to access your Elasticsearch cluster (Additionally, the HTTP protocol is supported).
-  * `false`: The HTTPS protocol cannot be used to access your Elasticsearch cluster. Only the HTTP protocol is supported.
+If you set `enable_docvalue_scan` to `true`, StarRocks follows these rules when it obtains data from Elasticsearch:
+
+* **Try and see**: StarRocks automatically checks if columnar storage is enabled for the target fields. If so, StarRocks obtains all values in the target fields from columnar storage.
+* **Auto-downgrading**: If any one of the target fields is unavailable in columnar storage, StarRocks parses and obtains all values in the target fields from row storage (`_source`).
+
+> **NOTE**
+>
+> * Columnar storage is unavailable for TEXT-type fields in Elasticsearch. Therefore, if you query fields containing TEXT-type values, StarRocks obtains the values of the fields from `_source`.
+> * If you query a large number (greater than or equal to 25) of fields, reading field values from `docvalue` does not show noticeable benefits compared with reading field values from `_source`.
+
+##### Sniff KEYWORD-type fields
+
+If you set `enable_keyword_sniff` to `true`, Elasticsearch allows direct data ingestion without an index because it will automatically create an index after ingestion. For STRING-type fields, Elasticsearch will create a field with both TEXT and KEYWORD types. This is how the Multi-Field feature of Elasticsearch works. The mapping is as follows:
+
+~~~SQL
+"k4": {
+   "type": "text",
+   "fields": {
+      "keyword": {   
+         "type": "keyword",
+         "ignore_above": 256
+      }
+   }
+}
+~~~
+
+For example, to conduct "=" filtering on `k4`, StarRocks on Elasticsearch will convert the filtering operation into an Elasticsearch TermQuery.
+
+The original SQL filter is as follows:
+
+~~~SQL
+k4 = "StarRocks On Elasticsearch"
+~~~
+
+The converted Elasticsearch query DSL is as follows:
+
+~~~SQL
+"term" : {
+    "k4": "StarRocks On Elasticsearch"
+
+}
+~~~
+
+The first field of `k4` is TEXT, and it will be tokenized by the analyzer configured for `k4` (or by the standard analyzer if no analyzer has been configured for `k4`) after data ingestion. As a result, the first field will be tokenized into three terms: `StarRocks`, `On`, and `Elasticsearch`. The details are as follows:
+
+~~~SQL
+POST /_analyze
+{
+  "analyzer": "standard",
+  "text": "StarRocks On Elasticsearch"
+}
+~~~
+
+The tokenization results are as follows:
+
+~~~SQL
+{
+   "tokens": [
+      {
+         "token": "starrocks",
+         "start_offset": 0,
+         "end_offset": 5,
+         "type": "<ALPHANUM>",
+         "position": 0
+      },
+      {
+         "token": "on",
+         "start_offset": 6,
+         "end_offset": 8,
+         "type": "<ALPHANUM>",
+         "position": 1
+      },
+      {
+         "token": "elasticsearch",
+         "start_offset": 9,
+         "end_offset": 11,
+         "type": "<ALPHANUM>",
+         "position": 2
+      }
+   ]
+}
+~~~
+
+Suppose you conduct a query as follows:
+
+~~~SQL
+"term" : {
+    "k4": "StarRocks On Elasticsearch"
+}
+~~~
+
+There is no term in the dictionary that matches the term `StarRocks On Elasticsearch`, and therefore no result will be returned.
+
+However, if you have set `enable_keyword_sniff` to `true`, StarRocks will convert `k4 = "StarRocks On Elasticsearch"` to `k4.keyword = "StarRocks On Elasticsearch"` to match the SQL semantics. The converted `StarRocks On Elasticsearch` query DSL is as follows:
+
+~~~SQL
+"term" : {
+    "k4.keyword": "StarRocks On Elasticsearch"
+}
+~~~
+
+`k4.keyword` is of the KEYWORD type. Therefore, the data is written into Elasticsearch as a complete term, allowing for successful matching.
+
+#### Mapping of column data types
 
 When you create an external table, you need to specify the data types of columns in the external table based on the data types of columns in the Elasticsearch table. The following table shows the mapping of column data types.
 
@@ -168,7 +280,7 @@ When you create an external table, you need to specify the data types of columns
 > **Note**
 >
 > * StarRocks reads the data of the NESTED type by using JSON-related functions.
-> * Elasticsearch automatically flattens multi-dimensional arrays into one-dimensional arrays. StarRocks does the same.
+> * Elasticsearch automatically flattens multi-dimensional arrays into one-dimensional arrays. StarRocks does the same. The support for querying ARRAY data from Elasticsearch is added from v2.5.
 
 ### Predicate pushdown
 
@@ -256,7 +368,7 @@ select * from es_table where esquery(k4, ' {
 * Elasticsearch clusters with HTTP basic authentication enabled are supported.
 * Querying data from StarRocks may not be as fast as directly querying data from Elasticsearch, such as count-related queries. The reason is that Elasticsearch directly reads the metadata of target documents without the need to filter the real data, which accelerates the count query.
 
-## External table for a JDBC-compatible database
+## (Deprecated) External table for a JDBC-compatible database
 
 From v2.3.0, StarRocks provides external tables to query JDBC-compatible databases. This way, you can analyze the data of such databases in a blazing fast manner without the need to import the data into StarRocks. This section describes how to create an external table in StarRocks and query data in JDBC-compatible databases.
 
@@ -351,8 +463,8 @@ create external table jdbc_tbl (
     `data` varchar(200) NULL 
 ) ENGINE=jdbc 
 properties (
-    "resource"="jdbc0",
-    "table"="dest_tbl"
+    "resource" = "jdbc0",
+    "table" = "dest_tbl"
 );
 ~~~
 
@@ -360,7 +472,7 @@ The required parameters in `properties` are as follows:
 
 * `resource`: the name of the JDBC resource used to create the external table.
 
-* `table`：the target table name in the database.
+* `table`: the target table name in the database.
 
 For supported data types and data type mapping between StarRocks and target databases, see [Data type mapping](External_table.md#Data type mapping).
 
@@ -465,7 +577,9 @@ The mapping between the target database and StarRocks varies based on the type o
 
 * When you query JDBC external tables, StarRocks cannot push down functions to the tables.
 
-## Hive external table
+## (Deprecated) Hive external table
+
+Before using Hive external tables, make sure JDK 1.8 has been installed on your servers.
 
 ### Create a Hive resource
 
@@ -582,16 +696,26 @@ Query the total number of rows of `profile_wos_p7`.
 select count(*) from profile_wos_p7;
 ~~~
 
-### Configuration
+### Update cached Hive table metadata
 
-* The path of the FE configuration file is `fe/conf`, to which the configuration file can be added if you need to customize the Hadoop cluster. For example: HDFS cluster uses a highly available nameservice, you need to put `hdfs-site.xml` under `fe/conf`.  If HDFS is configured with viewfs, you need to put the `core-site.xml` under `fe/conf`.
-* The path of the BE configuration file is `be/conf`, to which configuration file can be added if you need to customize the Hadoop cluster. For example, HDFS cluster using a highly available nameservice, you need to put `hdfs-site.xml` under `be/conf`. If HDFS is configured with viewfs, you need to put `core-site.xml` under `be/conf`.
-* The machine where BE is located need to configure JAVA_HOME as a jdk environment rather than a jre environment
-* kerberos supports:
+* Hive partition information and the related file information are cached in StarRocks. The cache is refreshed at intervals specified by `hive_meta_cache_refresh_interval_s`. The default value is 7200.  `hive_meta_cache_ttl_s` specifies the timeout duration of the cache and the default value is 86400.
+  * The cached data can also be refreshed manually.
+    1. If a partition is added or deleted from a table in Hive, you must run the `REFRESH EXTERNAL TABLE hive_t` command to refresh the table metadata cached in StarRocks. `hive_t` is the name of the Hive external table in StarRocks.
+    2. If data in some Hive partitions is updated, you must refresh the cached data in StarRocks by running the `REFRESH EXTERNAL TABLE hive_t PARTITION ('k1=01/k2=02', 'k1=03/k2=04')` command. `hive_t` is the name of the Hive external table in StarRocks. `'k1=01/k2=02'` and `'k1=03/k2=04'` are the names of Hive partitions whose data is updated.
+    3. When you run `REFRESH EXTERNAL TABLE hive_t`, StarRocks first checks if the column information of the Hive external table is the same as the column information of the Hive table returned by the Hive Metastore. If the schema of the Hive table changes, such as adding columns or removing columns, StarRocks synchronizes the changes to the Hive external table. After synchronization, the column order of the Hive external table remains the same as the column order of the Hive table, with the partition column being the last column.
+* When Hive data is stored in the Parquet, ORC, and CSV format, you can synchronize schema changes (such as ADD COLUMN and REPLACE COLUMN) of a Hive table to a Hive external table in StarRocks 2.3 and later versions.
+
+### Access object storage
+
+* The path of the FE configuration file is `fe/conf`, to which the configuration file can be added if you need to customize the Hadoop cluster. For example: If the HDFS cluster uses a highly available nameservice, you need to put `hdfs-site.xml` under `fe/conf`. If HDFS is configured with ViewFs, you need to put the `core-site.xml` under `fe/conf`.
+* The path of the BE configuration file is `be/conf`, to which the configuration file can be added if you need to customize the Hadoop cluster. For example, if the HDFS cluster using a highly available nameservice, you need to put `hdfs-site.xml` under `be/conf`. If HDFS is configured with ViewFs, you need to put `core-site.xml` under `be/conf`.
+* On the machine where BE is located, configure JAVA_HOME as a JDK environment rather than a JRE environment in the BE **startup script** `bin/start_be.sh`, for example, `export JAVA_HOME = <JDK path>`. You must add this configuration at the beginning of the script and restart the BE for the configuration to take effect.
+* Configure Kerberos support:
   1. To log in with `kinit -kt keytab_path principal` to all FE/BE machines, you need to have access to Hive and HDFS. The kinit command login is only good for a period of time and needs to be put into crontab to be executed regularly.
   2. Put `hive-site.xml/core-site.xml/hdfs-site.xml` under `fe/conf`, and put `core-site.xml/hdfs-site.xml` under `be/conf`.
-  3. Add **Djava.security.krb5.conf:/etc/krb5.conf** to the **JAVA_OPTS/JAVA_OPTS_FOR_JDK_9** option of the **fe/conf/fe.conf** file.  **/etc/krb5.conf** is the path of the **krb5.conf** file. You can adjust the path based on your operating system.
-  4. When you add a Hive resource, you must pass in a domain name to `hive.metastore.uris`. In addition, you must add the mapping between Hive/HDFS domain names and IP addresses in the **/etc/hosts** file*.*
+  3. Add `-Djava.security.krb5.conf=/etc/krb5.conf` to the value of the `JAVA_OPTS` option in the **$FE_HOME/conf/fe.conf** file. **/etc/krb5.conf** is the save path of the **krb5.conf** file. You can change the path based on your operating system.
+  4. Directly add `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"` to the **$BE_HOME/conf/be.conf** file. **/etc/krb5.conf** is the save path of the **krb5.conf** file. You can change the path based on your operating system.
+  5. When you add a Hive resource, you must pass in a domain name to `hive.metastore.uris`. In addition, you must add the mapping between Hive/HDFS domain names and IP addresses in the **/etc/hosts** file.
 
 * Configure support for AWS S3: Add the following configuration to `fe/conf/core-site.xml` and `be/conf/core-site.xml`.
 
@@ -621,18 +745,9 @@ select count(*) from profile_wos_p7;
    3. `fs.s3a.endpoint`: the AWS S3 endpoint to connect to.
    4. `fs.s3a.connection.maximu``m`: the maximum number of concurrent connections from StarRocks to S3. If an error `Timeout waiting for connection from poll` occurs during a query, you can set this parameter to a larger value.
 
-### Metadata caching strategy
+## (Deprecated) Iceberg external table
 
-* Hive partitions information and the related file information are cached in StarRocks. The cache is refreshed at intervals specified by `hive_meta_cache_refresh_interval_s`. The default value is 7200.  `hive_meta_cache_ttl_s` specifies the timeout duration of the cache and the default value is 86400.
-  * The cached data can also be refreshed manually.
-    1. If a partition is added or deleted from a table in Hive, you must run the `REFRESH EXTERNAL TABLE hive_t` command to refresh the table metadata cached in StarRocks. `hive_t` is the name of the Hive external table in StarRocks.
-    2. If data in some Hive partitions is updated, you must refresh the cached data in StarRocks by running the `REFRESH EXTERNAL TABLE hive_t PARTITION ('k1=01/k2=02', 'k1=03/k2=04')` command. `hive_t` is the name of the Hive external table in StarRocks. `'k1=01/k2=02'` and `'k1=03/k2=04'` are the names of Hive partitions whose data is updated.
-    3. When you run `REFRESH EXTERNAL TABLE hive_t`, StarRocks first checks if the column information of the Hive external table is the same as the column information of the Hive table returned by the Hive Metastore. If the schema of the Hive table changes, such as adding columns or remove columns, StarRocks synchronizes the changes to the Hive external table. After synchronization, the column order of the Hive external table remains the same as the column order of the Hive table, with the partition column being the last column.
-* When Hive data is stored in the Parquet, ORC, and CSV format, you can synchronize schema changes (such as ADD COLUMN and REPLACE COLUMN) of a Hive table to a Hive external table in StarRocks 2.3 and later versions.
-
-## Apache Iceberg external table
-
-From v2.1.0, StarRocks provides external tables to query data in Apache Iceberg. To query data in Iceberg, you need to create an Iceberg external table in StarRocks. When you create the table, you need to establish mapping between the external table and the Iceberg table you want to query.
+From v2.1.0, StarRocks allows you to query data from Apache Iceberg by using external tables. To query data in Iceberg, you need to create an Iceberg external table in StarRocks. When you create the table, you need to establish mapping between the external table and the Iceberg table you want to query.
 
 ### Before you begin
 
@@ -640,8 +755,8 @@ Make sure that StarRocks has permissions to access the metadata service (such as
 
 ### Precautions
 
-* The Iceberg external table can be used to query only the following types of data:
-  * Versions 1 (Analytic Data Tables) tables. Versions 2 (Row-level Deletes) tables are not supported. For the differences between Versions 1 tables and Versions 2 tables, see [Iceberg Table Spec](https://iceberg.apache.org/spec/).
+* Iceberg external tables can be used to query only the following types of data:
+  * Iceberg v1 tables (Analytic Data Tables). ORC-formatted Iceberg v2 (Row-level Deletes) tables are supported from v3.0 onwards, and Parquet-formatted Iceberg v2 tables are supported from v3.1 onwards. For the differences between Iceberg v1 tables and Iceberg v2 tables, see [Iceberg Table Spec](https://iceberg.apache.org/spec/).
   * Tables that are compressed in gzip (default format), Zstd, LZ4, or Snappy format.
   * Files that are stored in Parquet or ORC format.
 
@@ -663,7 +778,10 @@ For example, create a resource named `iceberg0` and set the catalog type to `HIV
 
 ~~~SQL
 CREATE EXTERNAL RESOURCE "iceberg0" 
-PROPERTIES ( "type" = "iceberg", "iceberg.catalog.type"="HIVE", "iceberg.catalog.hive.metastore.uris"="thrift://192.168.0.81:9083" 
+PROPERTIES (
+   "type" = "iceberg",
+   "iceberg.catalog.type" = "HIVE",
+   "iceberg.catalog.hive.metastore.uris" = "thrift://192.168.0.81:9083" 
 );
 ~~~
 
@@ -683,7 +801,10 @@ For example, create a resource named `iceberg1` and set the catalog type to `CUS
 
 ~~~SQL
 CREATE EXTERNAL RESOURCE "iceberg1" 
-PROPERTIES ( "type" = "iceberg", "iceberg.catalog.type"="CUSTOM", "iceberg.catalog-impl"="com.starrocks.IcebergCustomCatalog" 
+PROPERTIES (
+   "type" = "iceberg",
+   "iceberg.catalog.type" = "CUSTOM",
+   "iceberg.catalog-impl" = "com.starrocks.IcebergCustomCatalog" 
 );
 ~~~
 
@@ -692,7 +813,7 @@ The following table describes the related parameters.
 | **Parameter**          | **Description**                                              |
 | ---------------------- | ------------------------------------------------------------ |
 | type                   | The resource type. Set the value to `iceberg`.               |
-| iceberg.catalog.type | The catalog type of the resource. Both Hive catalog and custom catalog are supported. If you specify a Hive catalog, set the value to `HIVE`.If you specify a custom catalog, set the value to `CUSTOM`. |
+| iceberg.catalog.type | The catalog type of the resource. Both Hive catalog and custom catalog are supported. If you specify a Hive catalog, set the value to `HIVE`. If you specify a custom catalog, set the value to `CUSTOM`. |
 | iceberg.catalog-impl   | The fully qualified class name of the custom catalog. FEs search for the catalog based on this name. If the catalog contains custom configuration items, you must add them to the `PROPERTIES` parameter as key-value pairs when you create an Iceberg external table. |
 
 You can modify `hive.metastore.uris` and `iceberg.catalog-impl`of a Iceberg resource in StarRocks 2.3 and later versions. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER%20RESOURCE.md).
@@ -799,9 +920,9 @@ After an external table is created, you can query the data in Apache Iceberg by 
 select count(*) from iceberg_tbl;
 ~~~
 
-## Hudi external table
+## (Deprecated) Hudi external table
 
-StarRocks allows you to query data from Hudi data lakes by using Hudi external tables, thus facilitating blazing-fast data lake analytics. This topic describes how to create a Hudi external table in your StarRocks cluster and use the Hudi external table to query data from a Hudi data lake.
+From v2.2.0, StarRocks allows you to query data from Hudi data lakes by using Hudi external tables, thus facilitating blazing-fast data lake analytics. This topic describes how to create a Hudi external table in your StarRocks cluster and use the Hudi external table to query data from a Hudi data lake.
 
 ### Before you begin
 
@@ -810,7 +931,7 @@ Make sure that your StarRocks cluster is granted access to the Hive metastore, H
 ### Precautions
 
 * Hudi external tables for Hudi are read-only and can be used only for queries.
-* StarRocks supports querying Copy on Write and Merge On Read tables. For the differences between these two types of tables, see [Table & Query Types](https://hudi.apache.org/docs/table_types/).
+* StarRocks supports querying Copy on Write and Merge On Read tables (MOR tables are supported from v2.5). For the differences between these two types of tables, see [Table & Query Types](https://hudi.apache.org/docs/table_types/).
 * StarRocks supports the following two query types of Hudi: Snapshot Queries and Read Optimized Queries (Hudi only supports performing Read Optimized Queries on Merge On Read tables). Incremental Queries are not supported. For more information about the query types of Hudi, see [Table & Query Types](https://hudi.apache.org/docs/next/table_types/#query-types).
 * StarRocks supports the following compression formats for Hudi files: gzip, zstd, LZ4, and Snappy. The default compression format for Hudi files is gzip.
 * StarRocks cannot synchronize schema changes from Hudi managed tables. For more information, see [Schema Evolution](https://hudi.apache.org/docs/schema_evolution/). If the schema of a Hudi managed table is changed, you must delete the associated Hudi external table from your StarRocks cluster and then re-create that external table.

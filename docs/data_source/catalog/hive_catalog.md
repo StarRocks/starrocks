@@ -1,225 +1,908 @@
 # Hive catalog
 
-This topic describes how to create a Hive catalog, and how to configure your StarRocks cluster for querying data from Apache Hive™.
+A Hive catalog is a kind of external catalog that enables you to query data from Apache Hive™ without ingestion. Also, you can directly transform and load data from Hive by using [INSERT INTO](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md) based on Hive catalogs.
 
-A Hive catalog is an external catalog supported in StarRocks 2.3 and later versions. It enables you to query data from Hive without loading data into StarRocks or creating external tables.
+StarRocks supports Hive catalogs from v2.4 onwards, and from v3.1 onwards StarRocks supports accessing views that are created on tables within Hive catalogs.
+
+To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster needs to integrate with two important components:
+
+- Distributed file system (HDFS) or object storage like AWS S3, Microsoft Azure Storage, Google GCS, or other S3-compatible storage system (for example, MinIO)
+
+- Metastore like Hive metastore or AWS Glue
+
+  > **NOTE**
+  >
+  > If you choose AWS S3 as storage, you can use HMS or AWS Glue as metastore. If you choose any other storage system, you can only use HMS as metastore.
 
 ## Usage notes
 
-- StarRocks supports querying data files of Hive in the following formats: Parquet, ORC, and CSV.
-- StarRocks does not support querying data of the following types from Hive: INTERVAL, BINARY, and UNION.
+- The file formats of Hive that StarRocks supports are Parquet, ORC, and CSV:
 
-    > **Note**
-    >
-    > - An error occurs if you query Hive data in unsupported data types.
-    > - StarRocks only supports querying data of MAP and STRUCT types in Parquet or ORC data files.
+  - Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
+  - ORC files support the following compression formats: ZLIB, SNAPPY, LZO, LZ4, ZSTD, and NO_COMPRESSION.
 
-- You can use the [DESC](../../sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of a Hive table in StarRocks 2.4 and later versions.
+- The data types of Hive that StarRocks does not support are INTERVAL, BINARY, and UNION. Additionally, StarRocks does not support the MAP and STRUCT data types for CSV-formatted Hive tables.
+- You can only use Hive catalogs to query data. You cannot use Hive catalogs to drop, delete, or insert data into your Hive cluster.
 
-## Before you begin
+## Integration preparations
 
-Before you create a Hive catalog, configure your StarRocks cluster so that StarRocks can access the data storage system and metadata service of your Hive cluster. StarRocks supports two data storage systems for Hive: HDFS and Amazon S3. StarRocks supports two metadata services for Hive: Hive metastore and AWS Glue.
+Before you create a Hive catalog, make sure your StarRocks cluster can integrate with the storage system and metastore of your Hive cluster.
+
+### AWS IAM
+
+If your Hive cluster uses AWS S3 as storage or AWS Glue as metastore, choose your suitable authentication method and make the required preparations to ensure that your StarRocks cluster can access the related AWS cloud resources.
+
+The following authentication methods are recommended:
+
+- Instance profile
+- Assumed role
+- IAM user
+
+Of the above-mentioned three authentication methods, instance profile is the most widely used.
+
+For more information, see [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparation-for-authentication-in-aws-iam).
 
 ### HDFS
 
-If you use HDFS as the data storage system, configure your StarRocks cluster as follows:
+If you choose HDFS as storage, configure your StarRocks cluster as follows:
 
-- (Optional) Set the username that is used to access your HDFS and Hive metastore. By default, StarRocks uses the username of the FE and BE processes to access your HDFS and Hive metastore. You can also set the username via the `HADOOP_USERNAME` parameter in the **fe/conf/hadoop_env.sh** file of each FE and the **be/conf/hadoop_env.sh** file of each BE. Then restart each FE and BE to make the parameter settings take effect. You can set only one username for a StarRocks cluster.
+- (Optional) Set the username that is used to access your HDFS cluster and Hive metastore. By default, StarRocks uses the username of the FE and BE processes to access your HDFS cluster and Hive metastore. You can also set the username by adding `export HADOOP_USER_NAME="<user_name>"` at the beginning of the **fe/conf/hadoop_env.sh** file of each FE and at the beginning of the **be/conf/hadoop_env.sh** file of each BE. After you set the username in these files, restart each FE and each BE to make the parameter settings take effect. You can set only one username for each StarRocks cluster.
+- When you query Hive data, the FEs and BEs of your StarRocks cluster use the HDFS client to access your HDFS cluster. In most cases, you do not need to configure your StarRocks cluster to achieve that purpose, and StarRocks starts the HDFS client using the default configurations. You need to configure your StarRocks cluster only in the following situations:
 
-- When you query Hive data, the FEs and BEs use the HDFS client to access HDFS. In general, StarRocks starts the HDFS client using the default configurations. However, in the following cases, you need to configure your StarRocks cluster:
-  - If your HDFS cluster runs in HA mode, add the **hdfs-site.xml** file of your HA cluster to the **$FE_HOME/conf path** of each FE and the **$BE_HOME/conf** path of each BE.
-  - If you configure View File System (ViewFs) to your HDFS cluster, add the **core-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and the **$BE_HOME/conf** path of each BE.
+  - High availability (HA) is enabled for your HDFS cluster: Add the **hdfs-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE.
+  - View File System (ViewFs) is enabled for your HDFS cluster: Add the **core-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE.
 
-> **Note**
+> **NOTE**
 >
-> If an error (unknown host) occurs when you send a query, configure the mapping between the host names and IP addresses of HDFS nodes under the **/etc/hosts** path.
+> If an error indicating an unknown host is returned when you send a query, you must add the mapping between the host names and IP addresses of your HDFS cluster nodes to the **/etc/hosts** path.
 
 ### Kerberos authentication
 
-If  Kerberos authentication is enabled for your HDFS cluster or Hive metastore, configure your StarRocks cluster as follows:
+If Kerberos authentication is enabled for your HDFS cluster or Hive metastore, configure your StarRocks cluster as follows:
 
-- Run the `kinit -kt keytab_path principal` command on each FE and each BE to obtain Ticket Granting Ticket (TGT) from Key Distribution Center (KDC). To run this command, you must have the permissions to access your HDFS cluster and Hive metastore. Note that accessing KDC with this command is time-sensitive. Therefore, you need to use the cron to run this command periodically.
-- Add `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"` to the **$FE_HOME/conf/fe.conf** file of each FE and the **$BE_HOME/conf/be.conf** file of each BE. `/etc/krb5.conf` indicates the path of the **krb5.conf** file. You can modify the path based on your needs.
-
-### Amazon S3
-
-If you use Amazon S3 as the data storage system, configure your StarRocks cluster as follows:
-
-1. Add the following configuration items to the **$FE_HOME/conf/core-site.xml** file of each FE.
-
-      ```XML
-      <configuration>
-            <property>
-                <name>fs.s3a.impl</name>
-                <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
-            </property>
-            <property>
-                <name>fs.AbstractFileSystem.s3a.impl</name>
-                <value>org.apache.hadoop.fs.s3a.S3A</value>
-            </property>
-            <property>
-                <name>fs.s3a.access.key</name>
-                <value>******</value>
-            </property>
-            <property>
-                <name>fs.s3a.secret.key</name>
-                <value>******</value>
-            </property>
-            <property>
-                <name>fs.s3a.endpoint</name>
-                <value>******</value>
-            </property>
-            <property>
-                <name>fs.s3a.connection.maximum</name>
-                <value>500</value>
-            </property>
-      </configuration>
-      ```
-
-     The following table describes the configuration items.
-
-      | **Configuration item**    |**Description**                                              |
-      | ------------------------- | ------------------------------------------------------------ |
-      | fs.s3a.access.key         | The access key ID of the root user or an Identity and Access Management (IAM) user. For information about how to obtain the access key ID, see [Understanding and getting your AWS credentials](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html). |
-      | fs.s3a.secret.key         | The secret access key of the root user or an IAM user. For information about how to obtain the secret access key, see [Understanding and getting your AWS credentials](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html). |
-      | fs.s3a.endpoint           | The regional endpoint of your Amazon S3 service. For example, `s3.us-west-2.amazonaws.com` is the endpoint of US West (Oregon). For information about how to obtain your regional endpoint, see [Amazon Simple Storage Service endpoints and quotas](https://docs.aws.amazon.com/general/latest/gr/s3.html). |
-      | fs.s3a.connection.maximum | The maximum number of concurrent connections that are allowed by your Amazon S3 service. This parameter defaults to `500`.  If an error (`Timeout waiting for connection from poll`) occurs when you query Hive data, increase the value of this parameter. |
-
-2. Add the following configuration items to the **$BE_HOME/conf/be.conf** file of each BE.
-
-      | **Configuration item**           | **Description**                                              |
-      | -------------------------------- | ------------------------------------------------------------ |
-      | object_storage_access_key_id     | The access key ID of the root user or an IAM user. This parameter value is the same as the `fs.s3a.access.key` parameter. |
-      | object_storage_secret_access_key | The secret access key of the root user or an IAM user. The value of the parameter is the same as the value of the `fs.s3a.secret.key` parameter. |
-      | object_storage_endpoint          | The regional endpoint of your Amazon S3 service. The value of the parameter is the same as the value of the `fs.s3a.endpoint` parameter. |
-
-3. Restart all BEs and FEs.
+- Run the `kinit -kt keytab_path principal` command on each FE and each BE to obtain Ticket Granting Ticket (TGT) from Key Distribution Center (KDC). To run this command, you must have the permissions to access your HDFS cluster and Hive metastore. Note that accessing KDC with this command is time-sensitive. Therefore, you need to use cron to run this command periodically.
+- Add `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"` to the **$FE_HOME/conf/fe.conf** file of each FE and to the **$BE_HOME/conf/be.conf** file of each BE. In this example, `/etc/krb5.conf` is the save path of the **krb5.conf** file. You can modify the path based on your needs.
 
 ## Create a Hive catalog
 
-After you complete the preceding configurations, you can create a Hive catalog. The syntax and parameters are described below.
+### Syntax
 
 ```SQL
-CREATE EXTERNAL CATALOG <catalog_name> 
-PROPERTIES ("key"="value", ...);
+CREATE EXTERNAL CATALOG <catalog_name>
+[COMMENT <comment>]
+PROPERTIES
+(
+    "type" = "hive",
+    GeneralParams,
+    MetastoreParams,
+    StorageCredentialParams,
+    MetadataUpdateParams
+)
 ```
 
-### catalog_name
+### Parameters
 
-The name of the Hive catalog. This parameter is required. The naming conventions are as follows:
+#### catalog_name
+
+The name of the Hive catalog. The naming conventions are as follows:
 
 - The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.
-- The name cannot exceed 64 characters in length.
+- The name is case-sensitive and cannot exceed 1023 characters in length.
 
-### PROPERTIES
+#### comment
 
-The properties of the Hive catalog. This parameter is required. You can configure the following properties:
+The description of the Hive catalog. This parameter is optional.
 
-- Configure the properties based on the metadata service used by your Hive cluster.
-- Set the policy that the Hive catalog uses to update cached metadata.
+#### type
 
-#### Properties for metadata services
+The type of your data source. Set the value to `hive`.
 
-- If you use Hive metastore for your Hive cluster, configure the following properties for the Hive catalog.
+#### GeneralParams
 
-    | **Property**        | **Required** | **Description**                                              |
-    | ------------------- | ------------ | ------------------------------------------------------------ |
-    | type                | Yes          | The type of the data source. Set the value to `hive`.        |
-    | hive.metastore.uris | Yes          | The URI of the Hive metastore. The parameter value is in the following format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to 9083. |
+A set of general parameters.
 
-    > **Note**
-    >
-    > Before querying Hive data, you must add the mapping between the domain name and IP address of the Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
+The following table describes the parameters you can configure in `GeneralParams`.
 
-- [Preview] If you use AWS Glue for your Hive cluster, configure the following properties for the Hive catalog.
+| Parameter                | Required | Description                                                  |
+| ------------------------ | -------- | ------------------------------------------------------------ |
+| enable_recursive_listing | No       | Specifies whether StarRocks reads data from a table and its partitions and from the subdirectories within the physical locations of the table and its partitions. Valid values: `true` and `false`. Default value: `false`. The value `true` specifies to recursively list subdirectories, and the value `false` specifies to ignore subdirectories. |
 
-    | **Property**                           | **Required** | **Description**                                              |
-    | -------------------------------------- | ------------ | ------------------------------------------------------------ |
-    | type                                   | Yes          | The type of the data source. Set the value to `hive`.        |
-    | hive.metastore.type                    | Yes          | The metadata service used by your Hive cluster. Set the value to `glue`. |
-    | aws.hive.metastore.glue.aws-access-key | Yes          | The access key ID of the AWS Glue user.                      |
-    | aws.hive.metastore.glue.aws-secret-key | Yes          | The secret access key of the AWS Glue user.                  |
-    | aws.hive.metastore.glue.endpoint       | Yes          | The regional endpoint of your AWS Glue service. For information about how to obtain your regional endpoint, see [AWS Glue endpoints and quotas](https://docs.aws.amazon.com/general/latest/gr/glue.html). |
+#### MetastoreParams
 
-#### Properties for update policies for cached metadata
+A set of parameters about how StarRocks integrates with the metastore of your data source.
 
-StarRocks supports two policies to update cached metadata: asynchronous update and automatic incremental update. For more information, see [Update policies for cached metadata](#update-policies-for-cached-metadata).
+##### Hive metastore
 
-- Asynchronous update is the default policy that StarRocks uses to update the cached metadata of Hive. In most cases, you do not need to tune the following parameters because the default settings already maximize query performance. However, if the frequency of updating Hive data is relatively high, you can adjust the time interval of updating and discarding cached metadata to match the data update frequency.
+If you choose Hive metastore as the metastore of your data source, configure `MetastoreParams` as follows:
 
-    | **Property**                           | **Required** | **Description**                                              |
-    | -------------------------------------- | ------------ | ------------------------------------------------------------ |
-    | enable_hive_metastore_cache            | No           | Whether the metadata of Hive tables or partitions is cached. Valid values:<ul><li>`true`: Cache the metadata of Hive tables or partitions. The value of this parameter defaults to `true`.</li><li>`false`: Do not cache the metadata of Hive tables or partitions.</li></ul> |
-    | enable_remote_file_cache               | No           | Whether the metadata of the data files of Hive tables or partitions is cached. Valid values:<ul><li>`true`: Cache the metadata of data files of Hive tables or partitions. The value of this parameter defaults to `true`.</li><li>`false`: Do not cache the metadata of data files of Hive tables or partitions.</li></ul> |
-    | metastore_cache_refresh_interval_sec   | No           | The time interval to asynchronously update the metadata of Hive tables or partitions cached in StarRocks. Unit: seconds. Default value: `7200`, which is 2 hours. |
-    | remote_file_cache_refresh_interval_sec | No           | The time interval to asynchronously update the metadata of the data files of Hive tables or partitions cached in StarRocks. Unit: seconds. Default value: `60`. |
-    | metastore_cache_ttl_sec                | No           | The time interval to automatically discard the metadata of Hive tables or partitions cached in StarRocks. Unit: seconds. Default value: `86400`, which is 24 hours. |
-    | remote_file_cache_ttl_sec              | No           | The time interval to automatically discard the metadata of the data files of Hive tables or partitions cached in StarRocks. Unit: seconds. Default value: `129600`, which is 36 hours. |
+```SQL
+"hive.metastore.type" = "hive",
+"hive.metastore.uris" = "<hive_metastore_uri>"
+```
 
-  If you want to query the latest Hive data but the time interval for updating cached metadata has not arrived, you can manually update the cached metadata. For example, there is a Hive table named `table1`, which has four partitions: `p1`, `p2`, `p3`, and `p4`. If StarRocks only cached the two kinds of metadata of `p1`, `p2`, and `p3`, you can update the cached metadata in one of the following ways:
+> **NOTE**
+>
+> Before querying Hive data, you must add the mapping between the host names and IP addresses of your Hive metastore nodes to the `/etc/hosts` path. Otherwise, StarRocks may fail to access your Hive metastore when you start a query.
 
-  - Updates the two kinds of cached metadata of all partitions (`p1`, `p2`, and `p3`) at the same time.
+The following table describes the parameter you need to configure in `MetastoreParams`.
 
-      ```SQL
-      REFRESH EXTERNAL TABLE [external_catalog.][db_name.]table_name;
-      ```
+| Parameter           | Required | Description                                                  |
+| ------------------- | -------- | ------------------------------------------------------------ |
+| hive.metastore.type | Yes      | The type of metastore that you use for your Hive cluster. Set the value to `hive`. |
+| hive.metastore.uris | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br>If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
 
-  - Updates the two kinds of cached metadata of given partitions.
+##### AWS Glue
 
-      ```SQL
-      REFRESH EXTERNAL TABLE [external_catalog.][db_name.]table_name
-      [PARTITION ('partition_name', ...)];
-      ```
+If you choose AWS Glue as the metastore of your data source, which is supported only when you choose AWS S3 as storage, take one of the following actions:
 
-    For more information about the parameter descriptions and examples of using the REFRESH EXTERNAL TABEL statement, see [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md).
-- To enable the automatic incremental update policy for the Hive catalog, add the following property.
+- To choose the instance profile-based authentication method, configure `MetastoreParams` as follows:
 
-    | **Property**                       | **Required** | **Description**                                              |
-    | ---------------------------------- | ------------ | ------------------------------------------------------------ |
-    | enable_hms_events_incremental_sync | No           | Whether the automatic incremental update policy is enabled. Valid values:<ul><li>`TRUE`: means enabled.</li><li>`FALSE`: means disabled. The value of the parameter defaults to `FALSE`.</li></ul>To enable the automatic incremental update policy for the Hive catalog, set the value of this parameter to `TRUE`. |
+  ```SQL
+  "hive.metastore.type" = "glue",
+  "aws.glue.use_instance_profile" = "true",
+  "aws.glue.region" = "<aws_glue_region>"
+  ```
 
-After the catalog is created, you can use the Hive catalog to query Hive data. For more information, see [Query external data](../catalog/query_external_data.md).
+- To choose the assumed role-based authentication method, configure `MetastoreParams` as follows:
 
-## Update policies for cached metadata
+  ```SQL
+  "hive.metastore.type" = "glue",
+  "aws.glue.use_instance_profile" = "true",
+  "aws.glue.iam_role_arn" = "<iam_role_arn>",
+  "aws.glue.region" = "<aws_glue_region>"
+  ```
 
-StarRocks develops a query execution plan based on the following data:
+- To choose the IAM user-based authentication method, configure `MetastoreParams` as follows:
 
-- Metadata (such as table schema) of Hive tables or partitions in the metadata service.
-- Metadata (such as file size) of the data files of Hive tables or partitions in the storage system.
+  ```SQL
+  "hive.metastore.type" = "glue",
+  "aws.glue.use_instance_profile" = "false",
+  "aws.glue.access_key" = "<iam_user_access_key>",
+  "aws.glue.secret_key" = "<iam_user_secret_key>",
+  "aws.glue.region" = "<aws_s3_region>"
+  ```
 
-Therefore, the time consumed by StarRocks to access the metadata service and storage system of Hive directly affects the time consumed by a query. To reduce the impact, StarRocks supports caching metadata of Hive and provides two policies, based on which StarRocks can cache and update the metadata of Hive tables or partitions and the metadata of their data files.
+The following table describes the parameters you need to configure in `MetastoreParams`.
 
-- **Asynchronous update**: This is the default policy and requires no further configurations on your StarRocks cluster. With this policy, updates on cached metadata are automatically triggered when several conditions are met (see [Asynchronous update](#asynchronous-update) for more information), thereby reducing the access frequency on metadata services and storage systems. This means that the metadata cached in StarRocks cannot always stay up-to-date with the metadata in Hive. In some cases, you need to manually update the metadata cached in StarRocks.
-- **Automatic incremental update**: The policy is available only when Hive metastore is used for your Hive cluster. To enable this policy, you need to add additional configurations to your StarRocks cluster and metadata service. After this policy is enabled, the asynchronous update policy is automatically disabled. The metadata cached in StarRocks always stays up-to-date with the metadata in Hive, and no manual updates are required.
+| Parameter                     | Required | Description                                                  |
+| ----------------------------- | -------- | ------------------------------------------------------------ |
+| hive.metastore.type           | Yes      | The type of metastore that you use for your Hive cluster. Set the value to `glue`. |
+| aws.glue.use_instance_profile | Yes      | Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication. Valid values: `true` and `false`. Default value: `false`. |
+| aws.glue.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS Glue Data Catalog. If you use the assumed role-based authentication method to access AWS Glue, you must specify this parameter. |
+| aws.glue.region               | Yes      | The region in which your AWS Glue Data Catalog resides. Example: `us-west-1`. |
+| aws.glue.access_key           | No       | The access key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
+| aws.glue.secret_key           | No       | The secret key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
 
-### Asynchronous update
+For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
-By default (the values of the`enable_hive_metastore_cache` and `enable_remote_file_cache` parameters are `true`), if a query hits a partition of a Hive table, StarRocks automatically caches the metadata of the partition and the metadata of the data file of the partition. The cached metadata is updated by using the lazy update policy. Example：
+#### StorageCredentialParams
 
-There is a Hive table named `table2`, which has four partitions: `p1`, `p2`, `p3`, and `p4`. A query hit `p1`, and StarRocks caches the metadata of `p1` and the metadata of the data file of `p1`. Assume that the default time intervals to update and discard the cached metadata are as follows:
+A set of parameters about how StarRocks integrates with your storage system. This parameter set is optional.
 
-- The time interval (set by the `metastore_cache_refresh_interval_sec` parameter) to asynchronously update the cached metadata of `p1` is 2 hours.
-- The time interval (set by the `remote_file_cache_refresh_interval_sec` parameter) to asynchronously update the cached metadata of the data file of `p1`is 60 seconds.
-- The time interval (set by the `metastore_cache_ttl_sec` parameter) to automatically discard the cached metadata of `p1` is 24 hours.
-- The time interval (set by the `remote_file_cache_ttl_sec` parameter) to automatically discard the cached metadata of the data file of `p1` is 36 hours.
+If you use HDFS as storage, you do not need to configure `StorageCredentialParams`.
 
-Then StarRocks updates or discards these metadata in the following situations:
+If you use AWS S3, other S3-compatible storage system, Microsoft Azure Storage, or Google GCS as storage, you must configure `StorageCredentialParams`.
 
-![figure1](../../assets/hive_catalog.png)
+##### AWS S3
 
-- If another query hits `p1` again and the current time from the last update is less than 60 seconds, StarRocks does not update the cached metadata of `p1` and the cached metadata of the data file of `p1`.
-- If another query hits `p1` again and the current time from the last update is more than 60 seconds, StarRocks updates the cached metadata of the data file of `p1`.
-- If another query hits `p1` again and the current time from the last update is more than 2 hours, StarRocks updates the cached metadata of `p1`.
-- If `p1` has not been accessed in 24 hours from the last update, StarRocks discards the cached metadata of `p1`. The metadata will be cached at the next query.
-- If `p1` has not been accessed in 36 hours from the last update, StarRocks discards the cached metadata of the data file of `p1`. The metadata will be cached at the next query.
+If you choose AWS S3 as storage for your Hive cluster, take one of the following actions:
+
+- To choose the instance profile-based authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "aws.s3.use_instance_profile" = "true",
+  "aws.s3.region" = "<aws_s3_region>"
+  ```
+
+- To choose the assumed role-based authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "aws.s3.use_instance_profile" = "true",
+  "aws.s3.iam_role_arn" = "<iam_role_arn>",
+  "aws.s3.region" = "<aws_s3_region>"
+  ```
+
+- To choose the IAM user-based authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "aws.s3.use_instance_profile" = "false",
+  "aws.s3.access_key" = "<iam_user_access_key>",
+  "aws.s3.secret_key" = "<iam_user_secret_key>",
+  "aws.s3.region" = "<aws_s3_region>"
+  ```
+
+The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+| Parameter                   | Required | Description                                                  |
+| --------------------------- | -------- | ------------------------------------------------------------ |
+| aws.s3.use_instance_profile | Yes      | Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`. |
+| aws.s3.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS S3 bucket. If you use the assumed role-based authentication method to access AWS S3, you must specify this parameter.  |
+| aws.s3.region               | Yes      | The region in which your AWS S3 bucket resides. Example: `us-west-1`. |
+| aws.s3.access_key           | No       | The access key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
+| aws.s3.secret_key           | No       | The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
+
+For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
+
+##### S3-compatible storage system
+
+Hive catalogs support S3-compatible storage systems from v2.5 onwards.
+
+If you choose an S3-compatible storage system, such as MinIO, as storage for your Hive cluster, configure `StorageCredentialParams` as follows to ensure a successful integration:
+
+```SQL
+"aws.s3.enable_ssl" = "{true | false}",
+"aws.s3.enable_path_style_access" = "{true | false}",
+"aws.s3.endpoint" = "<s3_endpoint>",
+"aws.s3.access_key" = "<iam_user_access_key>",
+"aws.s3.secret_key" = "<iam_user_secret_key>"
+```
+
+The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+| Parameter                        | Required | Description                                                  |
+| -------------------------------- | -------- | ------------------------------------------------------------ |
+| aws.s3.enable_ssl                | Yes      | Specifies whether to enable SSL connection.<br>Valid values: `true` and `false`. Default value: `true`. |
+| aws.s3.enable_path_style_access  | Yes      | Specifies whether to enable path-style access.<br>Valid values: `true` and `false`. Default value: `false`.<br>Path-style URLs use the following format: `https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`. For example, if you create a bucket named `DOC-EXAMPLE-BUCKET1` in the US West (Oregon) Region, and you want to access the `alice.jpg` object in that bucket, you can use the following path-style URL: `https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`. |
+| aws.s3.endpoint                  | Yes      | The endpoint that is used to connect to your S3-compatible storage system instead of AWS S3. |
+| aws.s3.access_key                | Yes      | The access key of your IAM user. |
+| aws.s3.secret_key                | Yes      | The secret key of your IAM user. |
+
+##### Microsoft Azure Storage
+
+Hive catalogs support Microsoft Azure Storage from v3.0 onwards.
+
+###### Azure Blob Storage
+
+If you choose Blob Storage as storage for your Hive cluster, take one of the following actions:
+
+- To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.blob.storage_account" = "<blob_storage_account_name>",
+  "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**              | **Required** | **Description**                              |
+  | -------------------------- | ------------ | -------------------------------------------- |
+  | azure.blob.storage_account | Yes          | The username of your Blob Storage account.   |
+  | azure.blob.shared_key      | Yes          | The shared key of your Blob Storage account. |
+
+- To choose the SAS Token authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.blob.account_name" = "<blob_storage_account_name>",
+  "azure.blob.container_name" = "<blob_container_name>",
+  "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**             | **Required** | **Description**                                              |
+  | ------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.blob.account_name   | Yes          | The username of your Blob Storage account.                   |
+  | azure.blob.container_name | Yes          | The name of the blob container that stores your data.        |
+  | azure.blob.sas_token      | Yes          | The SAS token that is used to access your Blob Storage account. |
+
+###### Azure Data Lake Storage Gen1
+
+If you choose Data Lake Storage Gen1 as storage for your Hive cluster, take one of the following actions:
+
+- To choose the Managed Service Identity authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls1.use_managed_service_identity" = "true"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                            | **Required** | **Description**                                              |
+  | ---------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls1.use_managed_service_identity | Yes          | Specifies whether to enable the Managed Service Identity authentication method. Set the value to `true`. |
+
+- To choose the Service Principal authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls1.oauth2_client_id" = "<application_client_id>",
+  "azure.adls1.oauth2_credential" = "<application_client_credential>",
+  "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                 | **Required** | **Description**                                              |
+  | ----------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls1.oauth2_client_id  | Yes          | The client (application) ID of the service principal.        |
+  | azure.adls1.oauth2_credential | Yes          | The value of the new client (application) secret created.    |
+  | azure.adls1.oauth2_endpoint   | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
+
+###### Azure Data Lake Storage Gen2
+
+If you choose Data Lake Storage Gen2 as storage for your Hive cluster, take one of the following actions:
+
+- To choose the Managed Identity authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                           | **Required** | **Description**                                              |
+  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_use_managed_identity | Yes          | Specifies whether to enable the Managed Identity authentication method. Set the value to `true`. |
+  | azure.adls2.oauth2_tenant_id            | Yes          | The ID of the tenant whose data you want to access.          |
+  | azure.adls2.oauth2_client_id            | Yes          | The client (application) ID of the managed identity.         |
+
+- To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.storage_account" = "<storage_account_name>",
+  "azure.adls2.shared_key" = "<shared_key>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**               | **Required** | **Description**                                              |
+  | --------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.storage_account | Yes          | The username of your Data Lake Storage Gen2 storage account. |
+  | azure.adls2.shared_key      | Yes          | The shared key of your Data Lake Storage Gen2 storage account. |
+
+- To choose the Service Principal authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.oauth2_client_id" = "<service_client_id>",
+  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
+  ```
+
+  The following table describes the parameters you need to configure `in StorageCredentialParams`.
+
+  | **Parameter**                      | **Required** | **Description**                                              |
+  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_client_id       | Yes          | The client (application) ID of the service principal.        |
+  | azure.adls2.oauth2_client_secret   | Yes          | The value of the new client (application) secret created.    |
+  | azure.adls2.oauth2_client_endpoint | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
+
+##### Google GCS
+
+Hive catalogs support Google GCS from v3.0 onwards.
+
+If you choose Google GCS as storage for your Hive cluster, take one of the following actions:
+
+- To choose the VM-based authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "gcp.gcs.use_compute_engine_service_account" = "true"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                              | **Default value** | **Value** **example** | **Description**                                              |
+  | ------------------------------------------ | ----------------- | --------------------- | ------------------------------------------------------------ |
+  | gcp.gcs.use_compute_engine_service_account | false             | true                  | Specifies whether to directly use the service account that is bound to your Compute Engine. |
+
+- To choose the service account-based authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "gcp.gcs.service_account_email" = "<google_service_account_email>",
+  "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
+  "gcp.gcs.service_account_private_key" = "<google_service_private_key>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                          | **Default value** | **Value** **example**                                        | **Description**                                              |
+  | -------------------------------------- | ----------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+  | gcp.gcs.service_account_email          | ""                | "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" | The email address in the JSON file generated at the creation of the service account. |
+  | gcp.gcs.service_account_private_key_id | ""                | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | The private key ID in the JSON file generated at the creation of the service account. |
+  | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | The private key in the JSON file generated at the creation of the service account. |
+
+- To choose the impersonation-based authentication method, configure `StorageCredentialParams` as follows:
+
+  - Make a VM instance impersonate a service account:
+  
+    ```SQL
+    "gcp.gcs.use_compute_engine_service_account" = "true",
+    "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
+    ```
+
+    The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+    | **Parameter**                              | **Default value** | **Value** **example** | **Description**                                              |
+    | ------------------------------------------ | ----------------- | --------------------- | ------------------------------------------------------------ |
+    | gcp.gcs.use_compute_engine_service_account | false             | true                  | Specifies whether to directly use the service account that is bound to your Compute Engine. |
+    | gcp.gcs.impersonation_service_account      | ""                | "hello"               | The service account that you want to impersonate.            |
+
+  - Make a service account (temporarily named as meta service account) impersonate another service account (temporarily named as data service account):
+
+    ```SQL
+    "gcp.gcs.service_account_email" = "<google_service_account_email>",
+    "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
+    "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
+    "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
+    ```
+
+    The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+    | **Parameter**                          | **Default value** | **Value** **example**                                        | **Description**                                              |
+    | -------------------------------------- | ----------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+    | gcp.gcs.service_account_email          | ""                | "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" | The email address in the JSON file generated at the creation of the meta service account. |
+    | gcp.gcs.service_account_private_key_id | ""                | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | The private key ID in the JSON file generated at the creation of the meta service account. |
+    | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | The private key in the JSON file generated at the creation of the meta service account. |
+    | gcp.gcs.impersonation_service_account  | ""                | "hello"                                                      | The data service account that you want to impersonate.       |
+
+#### MetadataUpdateParams
+
+A set of parameters about how StarRocks updates the cached metadata of Hive. This parameter set is optional.
+
+StarRocks implements the [automatic asynchronous update policy](#appendix-understand-metadata-automatic-asynchronous-update) by default.
+
+In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with an out-of-the-box performance.
+
+However, if the frequency of data updates in Hive is high, you can tune these parameters to further optimize the performance of automatic asynchronous updates.
+
+> **NOTE**
+>
+> In most cases, if your Hive data is updated at a granularity of 1 hour or less, the data update frequency is considered high.
+
+| Parameter                              | Required | Description                                                  |
+|----------------------------------------| -------- | ------------------------------------------------------------ |
+| enable_metastore_cache                 | No       | Specifies whether StarRocks caches the metadata of Hive tables. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the cache, and the value `false` disables the cache. |
+| enable_remote_file_cache               | No       | Specifies whether StarRocks caches the metadata of the underlying data files of Hive tables or partitions. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the cache, and the value `false` disables the cache. |
+| metastore_cache_refresh_interval_sec   | No       | The time interval at which StarRocks asynchronously updates the metadata of Hive tables or partitions cached in itself. Unit: seconds. Default value: `7200`, which is 2 hours. |
+| remote_file_cache_refresh_interval_sec | No       | The time interval at which StarRocks asynchronously updates the metadata of the underlying data files of Hive tables or partitions cached in itself. Unit: seconds. Default value: `60`. |
+| metastore_cache_ttl_sec                | No       | The time interval at which StarRocks automatically discards the metadata of Hive tables or partitions cached in itself. Unit: seconds. Default value: `86400`, which is 24 hours. |
+| remote_file_cache_ttl_sec              | No       | The time interval at which StarRocks automatically discards the metadata of the underlying data files of Hive tables or partitions cached in itself. Unit: seconds. Default value: `129600`, which is 36 hours. |
+| enable_cache_list_names                | No       | Specifies whether StarRocks caches Hive partition names. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the cache, and the value `false` disables the cache. |
+
+### Examples
+
+The following examples create a Hive catalog named `hive_catalog_hms` or `hive_catalog_glue`, depending on the type of metastore you use, to query data from your Hive cluster.
+
+#### AWS S3
+
+##### Instance profile-based authentication
+
+- If you use Hive metastore in your Hive cluster, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
+      "aws.s3.use_instance_profile" = "true",
+      "aws.s3.region" = "us-west-2"
+  );
+  ```
+
+- If you use AWS Glue in your Amazon EMR Hive cluster, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_glue
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "glue",
+      "aws.glue.use_instance_profile" = "true",
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "true",
+      "aws.s3.region" = "us-west-2"
+  );
+  ```
+
+##### Assumed role-based authentication
+
+- If you use Hive metastore in your Hive cluster, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
+      "aws.s3.use_instance_profile" = "true",
+      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
+      "aws.s3.region" = "us-west-2"
+  );
+  ```
+
+- If you use AWS Glue in your Amazon EMR Hive cluster, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_glue
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "glue",
+      "aws.glue.use_instance_profile" = "true",
+      "aws.glue.iam_role_arn" = "arn:aws:iam::081976408565:role/test_glue_role",
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "true",
+      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
+      "aws.s3.region" = "us-west-2"
+  );
+  ```
+
+##### IAM user-based authentication
+
+- If you use Hive metastore in your Hive cluster, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
+      "aws.s3.use_instance_profile" = "false",
+      "aws.s3.access_key" = "<iam_user_access_key>",
+      "aws.s3.secret_key" = "<iam_user_access_key>",
+      "aws.s3.region" = "us-west-2"
+  );
+  ```
+
+- If you use AWS Glue in your Amazon EMR Hive cluster, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_glue
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "glue",
+      "aws.glue.use_instance_profile" = "false",
+      "aws.glue.access_key" = "<iam_user_access_key>",
+      "aws.glue.secret_key" = "<iam_user_secret_key>",
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "false",
+      "aws.s3.access_key" = "<iam_user_access_key>",
+      "aws.s3.secret_key" = "<iam_user_secret_key>",
+      "aws.s3.region" = "us-west-2"
+  );
+  ```
+
+#### S3-compatible storage system
+
+Use MinIO as an example. Run a command like below:
+
+```SQL
+CREATE EXTERNAL CATALOG hive_catalog_hms
+PROPERTIES
+(
+    "type" = "hive",
+    "hive.metastore.type" = "hive",
+    "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+    "aws.s3.enable_ssl" = "true",
+    "aws.s3.enable_path_style_access" = "true",
+    "aws.s3.endpoint" = "<s3_endpoint>",
+    "aws.s3.access_key" = "<iam_user_access_key>",
+    "aws.s3.secret_key" = "<iam_user_secret_key>"
+);
+```
+
+#### Microsoft Azure Storage
+
+##### Azure Blob Storage
+
+- If you choose the Shared Key authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.blob.storage_account" = "<blob_storage_account_name>",
+      "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
+  );
+  ```
+
+- If you choose the SAS Token authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.blob.account_name" = "<blob_storage_account_name>",
+      "azure.blob.container_name" = "<blob_container_name>",
+      "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  );
+  ```
+
+##### Azure Data Lake Storage Gen1
+
+- If you choose the Managed Service Identity authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.adls1.use_managed_service_identity" = "true"    
+  );
+  ```
+
+- If you choose the Service Principal authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.adls1.oauth2_client_id" = "<application_client_id>",
+      "azure.adls1.oauth2_credential" = "<application_client_credential>",
+      "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
+  );
+  ```
+
+##### Azure Data Lake Storage Gen2
+
+- If you choose the Managed Identity authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.adls2.oauth2_use_managed_identity" = "true",
+      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  );
+  ```
+
+- If you choose the Shared Key authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.adls2.storage_account" = "<storage_account_name>",
+      "azure.adls2.shared_key" = "<shared_key>"     
+  );
+  ```
+
+- If you choose the Service Principal authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>",
+      "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+      "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
+  );
+  ```
+
+#### Google GCS
+
+- If you choose the VM-based authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "gcp.gcs.use_compute_engine_service_account" = "true"    
+  );
+  ```
+
+- If you choose the service account-based authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "gcp.gcs.service_account_email" = "<google_service_account_email>",
+      "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
+      "gcp.gcs.service_account_private_key" = "<google_service_private_key>"    
+  );
+  ```
+
+- If you choose the impersonation-based authentication method:
+
+  - If you make a VM instance impersonate a service account, run a command like below:
+
+    ```SQL
+    CREATE EXTERNAL CATALOG hive_catalog_hms
+    PROPERTIES
+    (
+        "type" = "hive",
+        "hive.metastore.type" = "hive",
+        "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+        "gcp.gcs.use_compute_engine_service_account" = "true",
+        "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"    
+    );
+    ```
+
+  - If you make a service account impersonate another service account, run a command like below:
+
+    ```SQL
+    CREATE EXTERNAL CATALOG hive_catalog_hms
+    PROPERTIES
+    (
+        "type" = "hive",
+        "hive.metastore.type" = "hive",
+        "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+        "gcp.gcs.service_account_email" = "<google_service_account_email>",
+        "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
+        "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
+        "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"    
+    );
+    ```
+
+## View Hive catalogs
+
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+
+```SQL
+SHOW CATALOGS;
+```
+
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Hive catalog named `hive_catalog_glue`:
+
+```SQL
+SHOW CREATE CATALOG hive_catalog_glue;
+```
+
+## Drop a Hive catalog
+
+You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) to drop an external catalog.
+
+The following example drops a Hive catalog named `hive_catalog_glue`:
+
+```SQL
+DROP Catalog hive_catalog_glue;
+```
+
+## View the schema of a Hive table
+
+You can use one of the following syntaxes to view the schema of a Hive table:
+
+- View schema
+
+  ```SQL
+  DESC[RIBE] <catalog_name>.<database_name>.<table_name>
+  ```
+
+- View schema and location from the CREATE statement
+
+  ```SQL
+  SHOW CREATE TABLE <catalog_name>.<database_name>.<table_name>
+  ```
+
+## Query a Hive table
+
+1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW%20DATABASES.md) to view the databases in your Hive cluster:
+
+   ```SQL
+   SHOW DATABASES FROM <catalog_name>
+   ```
+
+2. Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) to switch to the destination catalog in the current session:
+
+    ```SQL
+    SET CATALOG <catalog_name>;
+    ```
+
+    Then, use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify the active database in the current session:
+
+    ```SQL
+    USE <db_name>;
+    ```
+
+    Or, you can use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to directly specify the active database in the destination catalog:
+
+    ```SQL
+    USE <catalog_name>.<db_name>;
+    ```
+
+3. Use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the destination table in the specified database:
+
+   ```SQL
+   SELECT count(*) FROM <table_name> LIMIT 10
+   ```
+
+## Load data from Hive
+
+Suppose you have an OLAP table named `olap_tbl`, you can transform and load data like below:
+
+```SQL
+INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM hive_table
+```
+
+## Grant privileges on Hive tales and views
+
+You can use the [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) statement to grant the privileges on all tables or views within a Hive catalog to a specific role.
+
+- Grant a role the privilege to query all tables within a Hive catalog:
+
+  ```SQL
+  GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE <role_name>
+  ```
+
+- Grant a role the privilege to query all views within a Hive catalog:
+
+  ```SQL
+  GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE <role_name>
+  ```
+
+For example, use the following commands to create a role named `hive_role_table`, switch to the Hive catalog `hive_catalog`, and then grant the role `hive_role_table` the privilege to query all tables and views within the Hive catalog `hive_catalog`:
+
+```SQL
+-- Create a role named hive_role_table.
+CREATE ROLE hive_role_table;
+
+-- Switch to the Hive catalog hive_catalog.
+SET CATALOG hive_catalog;
+
+-- Grant the role hive_role_table the privilege to query all tables within the Hive catalog hive_catalog.
+GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE hive_role_table;
+
+-- Grant the role hive_role_table the privilege to query all views within the Hive catalog hive_catalog.
+GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE hive_role_table;
+```
+
+## Manually or automatically update metadata cache
+
+### Manual update
+
+By default, StarRocks caches the metadata of Hive and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on a Hive table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) to manually update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
+
+```SQL
+REFRESH EXTERNAL TABLE <table_name>
+```
+
+You need to manually update metadata in the following situations:
+
+- A data file in an existing partition is changed, for example, by running the `INSERT OVERWRITE ... PARTITION ...` command.
+- Schema changes are made on a Hive table.
+- An existing Hive table is deleted by using the DROP statement, and a new Hive table with the same name as the deleted Hive table is created.
+- You have specified `"enable_cache_list_names" = "true"` in `PROPERTIES` at the creation of your Hive catalog, and you want to query new partitions that you just created on your Hive cluster.
+
+  > **NOTE**
+  >
+  > From v2.5.5 onwards, StarRocks provides the periodic Hive metadata cache refresh feature. For more information, see the below "[Periodically refresh metadata cache](#periodically-refresh-metadata-cache)" section of this topic. After you enable this feature, StarRocks refreshes your Hive metadata cache every 10 minutes by default. Therefore, manual updates are not needed in most cases. You need to perform a manual update only when you want to query new partitions immediately after the new partitions are created on your Hive cluster.
+
+Note that the REFRESH EXTERNAL TABLE refreshes only the tables and partitions cached in your FEs.
 
 ### Automatic incremental update
 
-This policy enables FEs to read the events from Hive metastore, such as adding columns, removing partitions, or updating data. Then StarRocks automatically updates the metadata cached in StarRocks based on these events. Follow the steps below to enable this policy.
+Unlike the automatic asynchronous update policy, the automatic incremental update policy enables the FEs in your StarRocks cluster to read events, such as adding columns, removing partitions, and updating data, from your Hive metastore. StarRocks can automatically update the metadata cached in the FEs based on these events. This means you do not need to manually update the metadata of your Hive tables.
 
-#### Configure the event listener for your Hive metastore
+This feature may cause significant pressure to the HMS, exercise caution when you use this feature. We recommend that you use [Periodically refresh metadata cache](#periodically-refresh-metadata-cache).
 
-Both Hive metastore 2.x and 3.x support the configuration of the event listener. The following configuration is for Hive metastore 3.1.2. Add the following configuration items to the file **$HiveMetastore/conf/hive-site.xml** and restart Hive metastore.
+To enable automatic incremental update, follow these steps:
+
+#### Step 1: Configure event listener for your Hive metastore
+
+Both Hive metastore v2.x and v3.x support configuring an event listener. This step uses the event listener configuration used for Hive metastore v3.1.2 as an example. Add the following configuration items to the **$HiveMetastore/conf/hive-site.xml** file, and then restart your Hive metastore:
 
 ```XML
 <property>
@@ -252,26 +935,70 @@ Both Hive metastore 2.x and 3.x support the configuration of the event listener.
 </property>
 ```
 
-You can search for the `event id` parameter in the FE log to check whether the event listener is successfully configured. If not, the `event id` parameter is `0`.
+You can search for `event id` in the FE log file to check whether the event listener is successfully configured. If the configuration fails, `event id` values are `0`.
 
-#### Enable automatic incremental update of StarRocks
+#### Step 2: Enable automatic incremental update on StarRocks
 
-To enable the automatic incremental update policy, set `enable_hms_events_incremental_sync=true`. You can enable this policy for a single external catalog or for all external catalogs that support the automatic incremental update policy in your StarRocks cluster.
+You can enable automatic incremental update for a single Hive catalog or for all Hive catalogs in your StarRocks cluster.
 
-- To enable this policy for a single external catalog, configure the parameter in PROPERTIES when you create the external catalog.
-- To enable this policy for all external catalogs, add this parameter to the **$FE_HOME/conf/fe.conf** file of each FE. Then restart each FE to make the setting take effect.
+- To enable automatic incremental update for a single Hive catalog, set the `enable_hms_events_incremental_sync` parameter to `true` in `PROPERTIES` like below when you create the Hive catalog:
 
-You can also tune the following parameters in the **$FE_HOME/conf/fe.conf** file of each FE based on your business requirements. Then restart each FE to make the setting take effect.
+  ```SQL
+  CREATE EXTERNAL CATALOG <catalog_name>
+  [COMMENT <comment>]
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.uris" = "thrift://102.168.xx.xx:9083",
+       ....
+      "enable_hms_events_incremental_sync" = "true"
+  );
+  ```
 
-| **Parameter**                      | **Description**                                              |
-| ---------------------------------- | ------------------------------------------------------------ |
-| hms_events_polling_interval_ms     | The time interval for StarRocks to read events from Hive metastore. The parameter defaults to `5000`. Unit: milliseconds. |
-| hms_events_batch_size_per_rpc      | The maximum number of events that StarRocks can read at a time. The parameter value defaults to `500`. |
-| enable_hms_parallel_process_evens  | Whether the read events are processed in parallel. Valid values are:<ul><li>`TRUE`: means the events are processed in parallel. The value of the parameter defaults to `TRUE`.</li><li>`FALSE`: means the events are not processed in parallel.</li></ul> |
-| hms_process_events_parallel_num    | The maximum number of events that can be processed in parallel. This parameter defaults to `4`. |
+- To enable automatic incremental update for all Hive catalogs, add `"enable_hms_events_incremental_sync" = "true"` to the `$FE_HOME/conf/fe.conf` file of each FE, and then restart each FE to make the parameter setting take effect.
 
-## References
+You can also tune the following parameters in the `$FE_HOME/conf/fe.conf` file of each FE based on your business requirements, and then restart each FE to make the parameter settings take effect.
 
-- To view examples of creating an external catalog, see [CREATE EXTERNAL CATALOG](../../sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md).
-- To view all catalogs in the current StarRocks cluster, see [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md).
-- To delete an external catalog, see [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP%20CATALOG.md).
+| Parameter                         | Description                                                  |
+| --------------------------------- | ------------------------------------------------------------ |
+| hms_events_polling_interval_ms    | The time interval at which StarRocks reads events from your Hive metastore. Default value: `5000`. Unit: milliseconds. |
+| hms_events_batch_size_per_rpc     | The maximum number of events that StarRocks can read at a time. Default value: `500`. |
+| enable_hms_parallel_process_evens | Specifies whether StarRocks processes events in parallel as it reads the events. Valid values: `true` and `false`. Default value: `true`. The value `true` enables parallelism, and the value `false` disables parallelism. |
+| hms_process_events_parallel_num   | The maximum number of events that StarRocks can process in parallel. Default value: `4`. |
+
+## Periodically refresh metadata cache
+
+From v2.5.5 onwards, StarRocks can periodically refresh the cached metadata of the frequently accessed Hive catalogs to perceive data changes. You can configure the Hive metadata cache refresh through the following [FE parameters](../../administration/Configuration.md#fe-configuration-items):
+
+| Configuration item                                           | Default                              | Description                          |
+| ------------------------------------------------------------ | ------------------------------------ | ------------------------------------ |
+| enable_background_refresh_connector_metadata                 | `true` in v3.0<br />`false` in v2.5  | Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Hive cluster, and refreshes the cached metadata of the frequently accessed Hive catalogs to perceive data changes. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it. This item is an [FE dynamic parameter](../../administration/Configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) command. |
+| background_refresh_metadata_interval_millis                  | `600000` (10 minutes)                | The interval between two consecutive Hive metadata cache refreshes. Unit: millisecond. This item is an [FE dynamic parameter](../../administration/Configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) command. |
+| background_refresh_metadata_time_secs_since_last_access_secs | `86400` (24 hours)                   | The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second. This item is an [FE dynamic parameter](../../administration/Configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) command. |
+
+Using the periodic Hive metadata cache refresh feature and the metadata automatic asynchronous update policy together significantly accelerates data access, reduces the read load from external data sources, and improves query performance.
+
+## Appendix: Understand metadata automatic asynchronous update
+
+Automatic asynchronous update is the default policy that StarRocks uses to update the metadata in Hive catalogs.
+
+By default (namely, when the `enable_metastore_cache` and `enable_remote_file_cache` parameters are both set to `true`), if a query hits a partition of a Hive table, StarRocks automatically caches the metadata of the partition and the metadata of the underlying data files of the partition. The cached metadata is updated by using the lazy update policy.
+
+For example, there is a Hive table named `table2`, which has four partitions: `p1`, `p2`, `p3`, and `p4`. A query hits `p1`, and StarRocks caches the metadata of `p1` and the metadata of the underlying data files of `p1`. Assume that the default time intervals to update and discard the cached metadata are as follows:
+
+- The time interval (specified by the `metastore_cache_refresh_interval_sec` parameter) to asynchronously update the cached metadata of `p1` is 2 hours.
+- The time interval (specified by the `remote_file_cache_refresh_interval_sec` parameter) to asynchronously update the cached metadata of the underlying data files of `p1` is 60 seconds.
+- The time interval (specified by the `metastore_cache_ttl_sec` parameter) to automatically discard the cached metadata of `p1` is 24 hours.
+- The time interval (specified by the `remote_file_cache_ttl_sec` parameter) to automatically discard the cached metadata of the underlying data files of `p1` is 36 hours.
+
+The following figure shows the time intervals on a timeline for easier understanding.
+
+![Timeline for updating and discarding cached metadata](../../assets/catalog_timeline.png)
+
+Then StarRocks updates or discards the metadata in compliance with the following rules:
+
+- If another query hits `p1` again and the current time from the last update is less than 60 seconds, StarRocks does not update the cached metadata of `p1` or the cached metadata of the underlying data files of `p1`.
+- If another query hits `p1` again and the current time from the last update is more than 60 seconds, StarRocks updates the cached metadata of the underlying data files of `p1`.
+- If another query hits `p1` again and the current time from the last update is more than 2 hours, StarRocks updates the cached metadata of `p1`.
+- If `p1` has not been accessed within 24 hours from the last update, StarRocks discards the cached metadata of `p1`. The metadata will be cached at the next query.
+- If `p1` has not been accessed within 36 hours from the last update, StarRocks discards the cached metadata of the underlying data files of `p1`. The metadata will be cached at the next query.

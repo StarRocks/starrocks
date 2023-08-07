@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LikePredicate;
@@ -69,7 +70,7 @@ public class ShowLoadStmtAnalyzer {
             String dbName = statement.getDbName();
             if (Strings.isNullOrEmpty(dbName)) {
                 dbName = context.getDatabase();
-                if (Strings.isNullOrEmpty(dbName)) {
+                if (Strings.isNullOrEmpty(dbName) && !statement.isAll()) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
                 }
             }
@@ -133,7 +134,7 @@ public class ShowLoadStmtAnalyzer {
             {
                 if (expr instanceof BinaryPredicate) {
                     BinaryPredicate binaryPredicate = (BinaryPredicate) expr;
-                    if (binaryPredicate.getOp() != BinaryPredicate.Operator.EQ) {
+                    if (binaryPredicate.getOp() != BinaryType.EQ) {
                         valid = false;
                         break CHECK;
                     }
@@ -201,7 +202,8 @@ public class ShowLoadStmtAnalyzer {
             if (!valid) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Where clause should looks like: LABEL = \"your_load_label\","
-                                + " or LABEL LIKE \"matcher\", " + " or STATE = \"PENDING|ETL|LOADING|FINISHED|CANCELLED\", "
+                                + " or LABEL LIKE \"matcher\", "
+                                + " or STATE = \"PENDING|ETL|LOADING|FINISHED|CANCELLED|QUEUEING\", "
                                 + " or compound predicate with operator AND");
             }
         }

@@ -46,10 +46,10 @@ RESULT SINK
 distribution type: GATHER
 cardinality: 40000
 column statistics:
-* S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
-* PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 40000.0] ESTIMATE
+* S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 1(F11)
 
@@ -62,10 +62,10 @@ OutPut Exchange Id: 25
 |  offset: 0
 |  cardinality: 40000
 |  column statistics:
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
-|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 40000.0] ESTIMATE
+|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 23:Project
 |  output columns:
@@ -84,10 +84,10 @@ OutPut Exchange Id: 25
 |  output columns: 2, 3
 |  cardinality: 40000
 |  column statistics:
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
-|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 40000.0] ESTIMATE
+|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 |----21:EXCHANGE
 |       distribution type: SHUFFLE
@@ -193,7 +193,7 @@ OutPut Exchange Id: 14
 |  build runtime filters:
 |  - filter_id = 1, build_expr = (14: PS_PARTKEY), remote = true
 |  - filter_id = 2, build_expr = (15: PS_SUPPKEY), remote = false
-|  output columns: 15
+|  output columns: 15, 16, 48
 |  cardinality: 40862130
 |  column statistics:
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
@@ -201,7 +201,7 @@ OutPut Exchange Id: 14
 |  * PS_AVAILQTY-->[1.0, 9999.0, 0.0, 4.0, 9999.0] ESTIMATE
 |  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[1.0, 1.649099944864302E14, 0.0, 8.0, 50.0] ESTIMATE
+|  * sum-->[1.0, 9.080473404135662E7, 0.0, 8.0, 50.0] ESTIMATE
 |
 |----11:EXCHANGE
 |       distribution type: SHUFFLE
@@ -215,7 +215,7 @@ OutPut Exchange Id: 14
 |  column statistics:
 |  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[1.0, 1.649099944864302E14, 0.0, 8.0, 50.0] ESTIMATE
+|  * sum-->[1.0, 9.080473404135662E7, 0.0, 8.0, 50.0] ESTIMATE
 |
 3:EXCHANGE
 distribution type: SHUFFLE

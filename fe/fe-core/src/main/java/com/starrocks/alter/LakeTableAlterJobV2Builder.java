@@ -31,8 +31,10 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
     private final LakeTable table;
@@ -54,7 +56,7 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
         schemaChangeJob.setBloomFilterInfo(bloomFilterColumnsChanged, bloomFilterColumns, bloomFilterFpp);
         schemaChangeJob.setAlterIndexInfo(hasIndexChanged, indexes);
         schemaChangeJob.setStartTime(startTime);
-        schemaChangeJob.setStorageFormat(newStorageFormat);
+        schemaChangeJob.setSortKeyIdxes(sortKeyIdxes);
         for (Map.Entry<Long, List<Column>> entry : newIndexSchema.entrySet()) {
             long originIndexId = entry.getKey();
             // 1. get new schema version/schema version hash, short key column count
@@ -66,13 +68,18 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
             for (Partition partition : table.getPartitions()) {
                 long partitionId = partition.getId();
                 long shardGroupId = partition.getShardGroupId();
-                short replicaNum = table.getPartitionInfo().getReplicationNum(partitionId);
                 List<Tablet> originTablets = partition.getIndex(originIndexId).getTablets();
                 // TODO: It is not good enough to create shards into the same group id, schema change PR needs to
                 //  revise the code again.
+                List<Long> originTabletIds = originTablets.stream().map(Tablet::getId).collect(Collectors.toList());
+                Map<String, String> properties = new HashMap<>();
+                properties.put(LakeTablet.PROPERTY_KEY_TABLE_ID, Long.toString(table.getId()));
+                properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(partitionId));
+                properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(shadowIndexId));
                 List<Long> shadowTabletIds =
-                        createShards(originTablets.size(), replicaNum, table.getPartitionFilePathInfo(),
-                                     table.getPartitionFileCacheInfo(partitionId), shardGroupId);
+                        createShards(originTablets.size(), table.getPartitionFilePathInfo(),
+                                     table.getPartitionFileCacheInfo(partitionId), shardGroupId,
+                                     originTabletIds, properties);
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
                 TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
@@ -96,10 +103,11 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
     }
 
     @VisibleForTesting
-    public static List<Long> createShards(int shardCount, int replicaNum, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
-                                          long groupId)
+    public static List<Long> createShards(int shardCount, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
+                                          long groupId, List<Long> matchShardIds, Map<String, String> properties)
         throws DdlException {
-        return GlobalStateMgr.getCurrentStarOSAgent().createShards(shardCount, replicaNum, pathInfo, cacheInfo, groupId);
+        return GlobalStateMgr.getCurrentStarOSAgent().createShards(shardCount, pathInfo, cacheInfo, groupId, matchShardIds,
+                properties);
     }
 
 }

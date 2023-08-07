@@ -18,6 +18,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 // SHOW OPEN TABLES
 public class ShowOpenTableStmt extends ShowStmt {
@@ -28,6 +29,14 @@ public class ShowOpenTableStmt extends ShowStmt {
                     .addColumn(new Column("In_use", ScalarType.createVarchar(80)))
                     .addColumn(new Column("Name_locked", ScalarType.createVarchar(64)))
                     .build();
+
+    public ShowOpenTableStmt() {
+        this(NodePosition.ZERO);
+    }
+
+    public ShowOpenTableStmt(NodePosition pos) {
+        super(pos);
+    }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

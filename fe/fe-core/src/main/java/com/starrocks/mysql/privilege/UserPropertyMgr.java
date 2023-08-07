@@ -36,11 +36,11 @@ package com.starrocks.mysql.privilege;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
+import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -160,10 +160,10 @@ public class UserPropertyMgr implements Writable {
         return propertyMap.get(userIdent.getQualifiedUser()).getWhiteList().containsDomain(userIdent.getHost());
     }
 
-    public void addUserPrivEntriesByResovledIPs(Map<String, Set<String>> resolvedIPsMap) {
+    public void addUserPrivEntriesByResolvedIPs(Map<String, Set<String>> resolvedIPsMap) {
         for (UserProperty userProperty : propertyMap.values()) {
             userProperty.getWhiteList()
-                    .addUserPrivEntriesByResovledIPs(userProperty.getQualifiedUser(), resolvedIPsMap);
+                    .addUserPrivEntriesByResolvedIPs(userProperty.getQualifiedUser(), resolvedIPsMap);
         }
     }
 

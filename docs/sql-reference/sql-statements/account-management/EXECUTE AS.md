@@ -4,10 +4,12 @@
 
 After you obtain the privilege to impersonate a user, you can use the EXECUTE AS statement to switch the execution context of the current session to the user.
 
+This command is supported from v2.4.
+
 ## Syntax
 
 ```SQL
-EXECUTE AS user WITH NO REVERT;
+EXECUTE AS user WITH NO REVERT
 ```
 
 ## Parameters

@@ -18,15 +18,15 @@
 #include <orc/OrcFile.hh>
 
 #include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter_bank.h"
-#include "formats/orc/fill_function.h"
+#include "formats/orc/column_reader.h"
 #include "formats/orc/orc_mapping.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
-#include "util/buffered_stream.h"
 
 namespace orc::proto {
 class ColumnStatistics;
@@ -57,6 +57,7 @@ public:
 
     // src slot descriptors should exactly matches columns in row readers.
     explicit OrcChunkReader(int chunk_size, std::vector<SlotDescriptor*> src_slot_descriptors);
+    OrcChunkReader();
     ~OrcChunkReader();
     Status init(std::unique_ptr<orc::InputStream> input_stream);
     Status init(std::unique_ptr<orc::Reader> reader);
@@ -98,7 +99,7 @@ public:
     size_t get_num_rows_filtered() const { return _num_rows_filtered; }
     bool get_broker_load_mode() const { return _broker_load_mode; }
     bool get_strict_mode() const { return _strict_mode; }
-    std::shared_ptr<Column::Filter> get_broker_load_fiter() { return _broker_load_filter; }
+    std::shared_ptr<Filter> get_broker_load_fiter() { return _broker_load_filter; }
 
     void set_hive_column_names(const std::vector<std::string>* v) {
         if (v != nullptr && v->size() != 0) {
@@ -123,17 +124,21 @@ public:
     SlotDescriptor* get_current_slot() const { return _current_slot; }
     void set_current_file_name(const std::string& name) { _current_file_name = name; }
     void report_error_message(const std::string& error_msg);
-    int get_column_id_by_name(const std::string& name) const;
+    int get_column_id_by_slot_name(const std::string& name) const;
 
     void set_lazy_load_context(LazyLoadContext* ctx) { _lazy_load_ctx = ctx; }
     bool has_lazy_load_context() { return _lazy_load_ctx != nullptr; }
     StatusOr<ChunkPtr> get_chunk();
     StatusOr<ChunkPtr> get_active_chunk();
-    void lazy_read_next(size_t numValues);
-    void lazy_seek_to(uint64_t rowInStripe);
+    Status lazy_read_next(size_t numValues);
+    Status lazy_seek_to(uint64_t rowInStripe);
     void lazy_filter_on_cvb(Filter* filter);
     StatusOr<ChunkPtr> get_lazy_chunk();
     ColumnPtr get_row_delete_filter(const std::set<int64_t>& deleted_pos);
+
+    bool is_implicit_castable(TypeDescriptor& starrocks_type, const TypeDescriptor& orc_type);
+
+    Status get_schema(std::vector<SlotDescriptor>* schema);
 
 private:
     ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
@@ -145,6 +150,8 @@ private:
     Status _add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder);
     bool _add_runtime_filter(const SlotDescriptor* slot_desc, const JoinRuntimeFilter* rf,
                              std::unique_ptr<orc::SearchArgumentBuilder>& builder);
+
+    void _try_implicit_cast(TypeDescriptor* from, const TypeDescriptor& to);
 
     std::unique_ptr<orc::ColumnVectorBatch> _batch;
     std::unique_ptr<orc::Reader> _reader;
@@ -162,20 +169,18 @@ private:
     // We make the same behavior as Trino & Presto.
     // https://trino.io/docs/current/connector/hive.html?highlight=hive#orc-format-configuration-properties
     bool _use_orc_column_names = false;
+    OrcMappingOptions _orc_mapping_options;
     std::unique_ptr<OrcMapping> _root_selected_mapping;
     std::vector<TypeDescriptor> _src_types;
     // slot id to position in orc.
     std::unordered_map<SlotId, int> _slot_id_to_position;
     std::vector<Expr*> _cast_exprs;
-    std::vector<FillColumnFunction> _fill_functions;
-    Status _slot_to_orc_column_name(const SlotDescriptor* slot,
-                                    const std::unordered_map<int, std::string>& column_id_to_orc_name,
-                                    std::string* orc_column_name);
+    std::vector<std::unique_ptr<ORCColumnReader>> _column_readers;
     Status _init_include_columns(const std::unique_ptr<OrcMapping>& mapping);
     Status _init_position_in_orc();
     Status _init_src_types(const std::unique_ptr<OrcMapping>& mapping);
     Status _init_cast_exprs();
-    Status _init_fill_functions();
+    Status _init_column_readers();
     // holding Expr* in cast_exprs;
     ObjectPool _pool;
     uint64_t _read_chunk_size;
@@ -191,13 +196,14 @@ private:
     // fields related to broker load.
     bool _broker_load_mode;
     bool _strict_mode;
-    std::shared_ptr<Column::Filter> _broker_load_filter;
+    std::shared_ptr<Filter> _broker_load_filter;
     size_t _num_rows_filtered;
     const std::vector<std::string>* _hive_column_names = nullptr;
     bool _case_sensitive = false;
-    std::unordered_map<std::string, int> _name_to_column_id;
-    RuntimeState* _state;
-    SlotDescriptor* _current_slot;
+    // Key is slot name formatted with case sensitive
+    std::unordered_map<std::string, int> _formatted_slot_name_to_column_id;
+    RuntimeState* _state = nullptr;
+    SlotDescriptor* _current_slot = nullptr;
     std::string _current_file_name;
     int _error_message_counter;
     LazyLoadContext* _lazy_load_ctx;

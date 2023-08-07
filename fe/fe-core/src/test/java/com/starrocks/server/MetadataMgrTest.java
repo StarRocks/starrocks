@@ -18,12 +18,13 @@ package com.starrocks.server;
 import com.google.common.collect.Lists;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.hive.HiveMetaStoreThriftClient;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.Database;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
@@ -50,7 +51,7 @@ public class MetadataMgrTest {
     }
 
     @Test
-    public void testListDbNames(@Mocked HiveMetaStoreThriftClient metaStoreThriftClient) throws TException, DdlException {
+    public void testListDbNames(@Mocked HiveMetaStoreClient metaStoreThriftClient) throws TException, DdlException {
         new Expectations() {
             {
                 metaStoreThriftClient.getAllDatabases();
@@ -68,7 +69,7 @@ public class MetadataMgrTest {
     }
 
     @Test
-    public void testListTblNames(@Mocked HiveMetaStoreThriftClient metaStoreThriftClient) throws TException, DdlException {
+    public void testListTblNames(@Mocked HiveMetaStoreClient metaStoreThriftClient) throws TException, DdlException {
         new Expectations() {
             {
                 metaStoreThriftClient.getAllTables("db2");
@@ -95,7 +96,7 @@ public class MetadataMgrTest {
     }
 
     @Test
-    public void testGetDb(@Mocked HiveMetaStoreThriftClient metaStoreThriftClient) throws TException {
+    public void testGetDb(@Mocked HiveMetaStoreClient metaStoreThriftClient) throws TException {
         new Expectations() {
             {
                 metaStoreThriftClient.getDatabase("db2");
@@ -113,6 +114,7 @@ public class MetadataMgrTest {
 
         com.starrocks.catalog.Database database1 = metadataMgr.getDb("hive_catalog", "db2");
         Assert.assertNotNull(database1);
+        Assert.assertEquals("hive_catalog.db2", database1.getUUID());
 
         com.starrocks.catalog.Database database2 = metadataMgr.getDb("hive_catalog", "db3");
         Assert.assertNull(database2);
@@ -121,7 +123,15 @@ public class MetadataMgrTest {
     }
 
     @Test
-    public void testGetTable(@Mocked HiveMetaStoreThriftClient metaStoreThriftClient) throws TException {
+    public void testGetTableWithDefaultCatalog() {
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        Assert.assertTrue(metadataMgr.getOptionalMetadata("").isPresent());
+        com.starrocks.catalog.Table internalTable = metadataMgr.getTable("default_catalog", "db1", "tbl1");
+        Assert.assertEquals(internalTable.getName(), "tbl1");
+    }
+
+    @Test
+    public void testGetTable(@Mocked HiveMetaStoreClient metaStoreThriftClient) throws TException {
         List<FieldSchema> partKeys = Lists.newArrayList(new FieldSchema("col1", "BIGINT", ""));
         List<FieldSchema> unPartKeys = Lists.newArrayList(new FieldSchema("col2", "INT", ""));
         String hdfsPath = "hdfs://127.0.0.1:10000/hive";
@@ -135,6 +145,7 @@ public class MetadataMgrTest {
         msTable1.setPartitionKeys(partKeys);
         msTable1.setSd(sd);
         msTable1.setTableType("MANAGED_TABLE");
+        msTable1.setCreateTime(20201010);
         new Expectations() {
             {
                 metaStoreThriftClient.getTable("hive_db", "hive_table");
@@ -151,6 +162,7 @@ public class MetadataMgrTest {
 
         com.starrocks.catalog.Table tbl1 = metadataMgr.getTable("hive_catalog", "hive_db", "hive_table");
         Assert.assertNotNull(tbl1);
+        Assert.assertEquals("hive_catalog.hive_db.hive_table.20201010", tbl1.getUUID());
 
         com.starrocks.catalog.Table tbl2 = metadataMgr.getTable("not_exist_catalog", "xxx", "xxx");
         Assert.assertNull(tbl2);
@@ -160,5 +172,63 @@ public class MetadataMgrTest {
 
         com.starrocks.catalog.Table tbl4 = metadataMgr.getTable("hive_catalog", "hive_db", "not_exist_tbl");
         Assert.assertNull(tbl4);
+    }
+
+    @Test
+    public void testCreateIcebergTable() throws Exception {
+        String createIcebergCatalogStmt = "create external catalog iceberg_catalog properties (\"type\"=\"iceberg\", " +
+                "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
+        AnalyzeTestUtil.getStarRocksAssert().withCatalog(createIcebergCatalogStmt);
+        MetadataMgr metadataMgr = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+        new Expectations(metadataMgr) {
+            {
+                metadataMgr.getDb("iceberg_catalog", "iceberg_db");
+                result = new com.starrocks.catalog.Database();
+                minTimes = 0;
+            }
+        };
+
+        String stmt = "create external table iceberg_catalog.iceberg_db.iceberg_table (k1 int, k2 int) partition by (k2)";
+        CreateTableStmt createTableStmt =
+                (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, AnalyzeTestUtil.getConnectContext());
+
+        new Expectations(metadataMgr) {
+            {
+                metadataMgr.getDb("iceberg_catalog", "iceberg_db");
+                result = null;
+                minTimes = 0;
+            }
+        };
+
+        try {
+            metadataMgr.createTable(createTableStmt);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof DdlException);
+            Assert.assertTrue(e.getMessage().contains("Unknown database"));
+        }
+
+        new Expectations(metadataMgr) {
+            {
+                metadataMgr.getDb("iceberg_catalog", "iceberg_db");
+                result = new com.starrocks.catalog.Database();
+                minTimes = 0;
+
+                metadataMgr.listTableNames("iceberg_catalog", "iceberg_db");
+                result = Lists.newArrayList("iceberg_table");
+                minTimes = 0;
+            }
+        };
+
+        try {
+            metadataMgr.createTable(createTableStmt);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof DdlException);
+            Assert.assertTrue(e.getMessage().contains("Table 'iceberg_table' already exists"));
+        }
+
+        createTableStmt.setIfNotExists();
+        Assert.assertFalse(metadataMgr.createTable(createTableStmt));
     }
 }

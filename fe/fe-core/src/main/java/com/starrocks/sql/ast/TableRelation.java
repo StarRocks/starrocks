@@ -15,11 +15,15 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.parser.NodePosition;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -29,7 +33,9 @@ public class TableRelation extends Relation {
 
     public enum TableHint {
         _META_,
-        _BINLOG_
+        _BINLOG_,
+        _SYNC_MV_,
+        _USE_PK_INDEX_,
     }
 
     private final TableName name;
@@ -42,13 +48,23 @@ public class TableRelation extends Relation {
     // optional temporal clause for external MySQL tables that support this syntax
     private String temporalClause;
 
+    private Expr partitionPredicate;
+
+    private Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
+
     public TableRelation(TableName name) {
+        super(name.getPos());
         this.name = name;
         this.partitionNames = null;
         this.tabletIds = Lists.newArrayList();
     }
 
     public TableRelation(TableName name, PartitionNames partitionNames, List<Long> tabletIds) {
+        this(name, partitionNames, tabletIds, NodePosition.ZERO);
+    }
+
+    public TableRelation(TableName name, PartitionNames partitionNames, List<Long> tabletIds, NodePosition pos) {
+        super(pos);
         this.name = name;
         this.partitionNames = partitionNames;
         this.tabletIds = tabletIds;
@@ -74,6 +90,11 @@ public class TableRelation extends Relation {
         this.partitionNames = partitionNames;
     }
 
+    // Check whether the table has some table hints, some rules should not be applied.
+    public boolean hasTableHints() {
+        return partitionNames != null || isSyncMVQuery() || (tabletIds != null && !tabletIds.isEmpty());
+    }
+
     public List<Long> getTabletIds() {
         return tabletIds;
     }
@@ -90,14 +111,22 @@ public class TableRelation extends Relation {
         return columns;
     }
 
+    public Expr getPartitionPredicate() {
+        return this.partitionPredicate;
+    }
+
+    public void setPartitionPredicate(Expr partitionPredicate) {
+        this.partitionPredicate = partitionPredicate;
+    }
+
     @Override
     public TableName getResolveTableName() {
         if (alias != null) {
             if (name.getDb() != null) {
                 if (name.getCatalog() != null) {
-                    return new TableName(name.getCatalog(), name.getDb(), alias.getTbl());
+                    return new TableName(name.getCatalog(), name.getDb(), alias.getTbl(), name.getPos());
                 } else {
-                    return new TableName(name.getDb(), alias.getTbl());
+                    return new TableName(null, name.getDb(), alias.getTbl(), name.getPos());
                 }
             } else {
                 return alias;
@@ -131,6 +160,14 @@ public class TableRelation extends Relation {
         return tableHints.contains(TableHint._BINLOG_) && table.isOlapTable();
     }
 
+    public boolean isSyncMVQuery() {
+        return tableHints.contains(TableHint._SYNC_MV_);
+    }
+
+    public boolean isUsePkIndex() {
+        return tableHints.contains(TableHint._USE_PK_INDEX_);
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitTable(this, context);
@@ -147,5 +184,13 @@ public class TableRelation extends Relation {
 
     public String getTemporalClause() {
         return this.temporalClause;
+    }
+
+    public void setGeneratedExprToColumnRef(Map<Expr, SlotRef> generatedExprToColumnRef) {
+        this.generatedExprToColumnRef = generatedExprToColumnRef;
+    }
+
+    public Map<Expr, SlotRef> getGeneratedExprToColumnRef() {
+        return generatedExprToColumnRef;
     }
 }

@@ -16,7 +16,11 @@ package com.starrocks.sql.optimizer.rule.join;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -46,6 +50,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -54,8 +59,8 @@ public class ReorderJoinRule extends Rule {
         super(RuleType.TF_MULTI_JOIN_ORDER, Pattern.create(OperatorType.PATTERN));
     }
 
-    private void extractRootInnerJoin(OptExpression root,
-                                      List<OptExpression> results,
+    private void extractRootInnerJoin(OptExpression parent, int childIdx, OptExpression root,
+                                      List<Pair<OptExpression, Pair<OptExpression, Integer>>> results,
                                       boolean findNewRoot) {
         Operator operator = root.getOp();
         if (operator instanceof LogicalJoinOperator) {
@@ -68,7 +73,7 @@ public class ReorderJoinRule extends Rule {
                 // For A inner join (B inner join C), we only think A is root tree
                 if (!findNewRoot) {
                     findNewRoot = true;
-                    results.add(root);
+                    results.add(Pair.create(root, Pair.create(parent, childIdx)));
                 }
             } else {
                 findNewRoot = false;
@@ -77,15 +82,19 @@ public class ReorderJoinRule extends Rule {
             findNewRoot = false;
         }
 
-        for (OptExpression child : root.getInputs()) {
-            extractRootInnerJoin(child, results, findNewRoot);
+        for (int i = 0; i < root.getInputs().size(); ++i) {
+            OptExpression child = root.inputAt(i);
+            extractRootInnerJoin(root, i, child, results, findNewRoot);
         }
     }
 
-    void enumerate(JoinOrder reorderAlgorithm, OptimizerContext context, OptExpression innerJoinRoot,
-                   MultiJoinNode multiJoinNode) {
-        reorderAlgorithm.reorder(Lists.newArrayList(multiJoinNode.getAtoms()),
-                multiJoinNode.getPredicates(), multiJoinNode.getExpressionMap());
+    Optional<OptExpression> enumerate(JoinOrder reorderAlgorithm, OptimizerContext context, OptExpression innerJoinRoot,
+                                      MultiJoinNode multiJoinNode, boolean copyIntoMemo) {
+        try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer(
+                reorderAlgorithm.getClass().getSimpleName())) {
+            reorderAlgorithm.reorder(Lists.newArrayList(multiJoinNode.getAtoms()),
+                    multiJoinNode.getPredicates(), multiJoinNode.getExpressionMap());
+        }
 
         List<OptExpression> reorderTopKResult = reorderAlgorithm.getResult();
         LogicalJoinOperator oldRoot = (LogicalJoinOperator) innerJoinRoot.getOp();
@@ -105,7 +114,7 @@ public class ReorderJoinRule extends Rule {
                 innerJoinRoot.getInputs().forEach(opt -> outputColumns.union(opt.getOutputColumns()));
 
                 projectMap.putAll(outputColumns.getStream()
-                        .mapToObj(context.getColumnRefFactory()::getColumnRef)
+                        .map(context.getColumnRefFactory()::getColumnRef)
                         .collect(Collectors.toMap(Function.identity(), Function.identity())));
             } else {
                 outputColumns.union(oldRoot.getProjection().getOutputColumns());
@@ -144,15 +153,60 @@ public class ReorderJoinRule extends Rule {
             }
 
             joinExpr = new RemoveDuplicateProject(context).rewrite(joinExpr);
-
-            context.getMemo().copyIn(innerJoinRoot.getGroupExpression().getGroup(), joinExpr);
+            if (copyIntoMemo) {
+                context.getMemo().copyIn(innerJoinRoot.getGroupExpression().getGroup(), joinExpr);
+            } else {
+                return Optional.of(joinExpr);
+            }
         }
+        return Optional.empty();
+    }
+
+    // This method is only called in RBO phase, so it return the rewritten plan instead of copying its into memo,
+    // it adopts JoinReorderCardinalityPreserving algorithm to reorder multi-joins to adapt to table pruning.
+    public OptExpression rewrite(OptExpression input, OptimizerContext context) {
+        List<Pair<OptExpression, Pair<OptExpression, Integer>>> innerJoinTreesAndParents = Lists.newArrayList();
+        extractRootInnerJoin(null, -1, input, innerJoinTreesAndParents, false);
+        if (!innerJoinTreesAndParents.isEmpty()) {
+            // In order to reorder the bottom join tree firstly
+            Collections.reverse(innerJoinTreesAndParents);
+            for (Pair<OptExpression, Pair<OptExpression, Integer>> innerJoinRoot : innerJoinTreesAndParents) {
+                OptExpression child = innerJoinRoot.first;
+                OptExpression parent = innerJoinRoot.second.first;
+                Integer childIdx = innerJoinRoot.second.second;
+
+                MultiJoinNode multiJoinNode = MultiJoinNode.toMultiJoinNode(child);
+                if (!multiJoinNode.checkDependsPredicate()) {
+                    continue;
+                }
+                Optional<OptExpression> newChild =
+                        enumerate(new JoinReorderCardinalityPreserving(context), context, child, multiJoinNode, false);
+                if (newChild.isPresent()) {
+                    int prevNumCrossJoins =
+                            Utils.countJoinNodeSize(child, Sets.newHashSet(JoinOperator.CROSS_JOIN));
+                    int numCrossJoins =
+                            Utils.countJoinNodeSize(newChild.get(), Sets.newHashSet(JoinOperator.CROSS_JOIN));
+                    // we adopt result of reorder only if the number of cross joins is reduced
+                    if (numCrossJoins != 0 && prevNumCrossJoins <= numCrossJoins) {
+                        continue;
+                    }
+                    if (parent != null) {
+                        parent.setChild(childIdx, newChild.get());
+                    } else {
+                        return newChild.get();
+                    }
+                }
+            }
+        }
+        return input;
     }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        List<OptExpression> innerJoinTrees = Lists.newArrayList();
-        extractRootInnerJoin(input, innerJoinTrees, false);
+        List<Pair<OptExpression, Pair<OptExpression, Integer>>> innerJoinTreesAndParents = Lists.newArrayList();
+        extractRootInnerJoin(null, -1, input, innerJoinTreesAndParents, false);
+        List<OptExpression> innerJoinTrees =
+                innerJoinTreesAndParents.stream().map(p -> p.first).collect(Collectors.toList());
         if (!innerJoinTrees.isEmpty()) {
             // In order to reorder the bottom join tree firstly
             Collections.reverse(innerJoinTrees);
@@ -161,10 +215,11 @@ public class ReorderJoinRule extends Rule {
                 if (!multiJoinNode.checkDependsPredicate()) {
                     continue;
                 }
-                enumerate(new JoinReorderLeftDeep(context), context, innerJoinRoot, multiJoinNode);
+                enumerate(new JoinReorderLeftDeep(context), context, innerJoinRoot, multiJoinNode, true);
                 // If there is no statistical information, the DP and greedy reorder algorithm are disabled,
                 // and the query plan degenerates to the left deep tree
-                if (Utils.hasUnknownColumnsStats(input) && !FeConstants.runningUnitTest) {
+                if (Utils.hasUnknownColumnsStats(innerJoinRoot) &&
+                        (!FeConstants.runningUnitTest || FeConstants.isReplayFromQueryDump)) {
                     continue;
                 }
 
@@ -172,11 +227,11 @@ public class ReorderJoinRule extends Rule {
                         && context.getSessionVariable().isCboEnableDPJoinReorder()) {
                     // 10 table join reorder takes more than 100ms,
                     // so the join reorder using dp is currently controlled below 10.
-                    enumerate(new JoinReorderDP(context), context, innerJoinRoot, multiJoinNode);
+                    enumerate(new JoinReorderDP(context), context, innerJoinRoot, multiJoinNode, true);
                 }
 
                 if (context.getSessionVariable().isCboEnableGreedyJoinReorder()) {
-                    enumerate(new JoinReorderGreedy(context), context, innerJoinRoot, multiJoinNode);
+                    enumerate(new JoinReorderGreedy(context), context, innerJoinRoot, multiJoinNode, true);
                 }
             }
         }
@@ -249,9 +304,8 @@ public class ReorderJoinRule extends Rule {
                 joinOperator = new LogicalJoinOperator.Builder()
                         .withOperator((LogicalJoinOperator) optExpression.getOp())
                         .setProjection(new Projection(newOutputColumns.getStream()
-                                .mapToObj(optimizerContext.getColumnRefFactory()::getColumnRef)
-                                .collect(Collectors.toMap(Function.identity(), Function.identity())),
-                                new HashMap<>()))
+                                .map(optimizerContext.getColumnRefFactory()::getColumnRef)
+                                .collect(Collectors.toMap(Function.identity(), Function.identity()))))
                         .build();
             }
 

@@ -6,11 +6,11 @@ This section briefly introduces memory classification and StarRocks’ methods o
 
 Explanation:
 
-|   Indicator  | Name | Description |
+|   Metric  | Name | Description |
 | --- | --- | --- |
 |  process   |  Total memory used of BE  | |
-|  query\_pool   |   Querying memory   | Consists of two parts: (1) memory used by the execution layer (2) memory used by the storage layer.|
-|  load   |  Importing memory    | Generally MemTable|
+|  query\_pool   |   Memory used by data querying  | Consists of two parts: memory used by the execution layer and memory used by the storage layer.|
+|  load   |  Memory used by data loading    | Generally MemTable|
 |  table_meta   |   Metadata memory | S Schema, Tablet metadata, RowSet metadata, Column metadata, ColumnReader, IndexReader |
 |  compaction   |   Multi-version memory compaction  |  compaction that happens after data import is complete |
 |  snapshot  |   Snapshot memory  | Generally used for clone, little memory usage |
@@ -24,22 +24,21 @@ Explanation:
 | Name | Default| Description|  
 | --- | --- | --- |
 | vector_chunk_size | 4096 | Number of chunk rows |
-| tc_use_memory_min | 10737418240 | minimum reserved memory for TCmalloc, exceeding which StarRocks will return free memory to the operating system |
 | mem_limit | 80% | The percentage of total memory that BE can use. If BE is deployed as a standalone, there is no need to configure it. If it is deployed with other services that consume more memory, it should be configured separately. |
-| disable_storage_page_cache | true |  Whether to enable the storage limit of `PageCachestorage_page_cache_limit0PageCache` |
+| disable_storage_page_cache | false | The boolean value to control if to disable PageCache. When PageCache is enabled, StarRocks caches the query results. PageCache can significantly improve the query performance when similar queries are repeated frequently. `true` indicates to disable PageCache. Use this item together with `storage_page_cache_limit`, you can accelerate query performance in scenarios with sufficient memory resources and much data scan. The value of this item has been changed from `true` to `false` since StarRocks v2.4. |
 | write_buffer_size | 104857600 |  The capacity limit of a single MemTable, exceeding which a disk swipe will be performed. |
 | load_process_max_memory_limit_bytes | 107374182400 | The total import memory limit `min(mem_limit * load_process_max_memory_limit_bytes, load_process_max_memory_limit_bytes)`. It is the actual available import memory threshold, reaching which a disk swipe will be triggered.  |
 | load_process_max_memory_limit_percent | 30 | The total import memory limit `min(mem_limit * load_process_max_memory_limit_percent, load_process_max_memory_limit_bytes)`. It is the actual available import memory threshold, reaching which the swipe will be triggered. |
 | default_load_mem_limit | 2147483648 | If the memory limit on the receiving side is reached for a single import instance, a disk swipe will be triggered. This needs to be modified with the Session variable `load_mem_limit` to take effect. |
-| max_compaction_concurrency | 10 | Disable the compaction|
+| max_compaction_concurrency | -1 | The maximum concurrency of compactions (both Base Compaction and Cumulative Compaction). The value -1 indicates that no limit is imposed on the concurrency. |
 | cumulative_compaction_check_interval_seconds | 1 | Interval of compaction check|
 
 * **Session variables**
 
 | Name| Default| Description|
 | --- | --- | --- |
-| exec_mem_limit| 2147483648| Memory limit of a single instance |
-| load_mem_limit| 0| Memory limit of a single import task. If the value is 0, `exec_mem_limit` will be taken|
+| query_mem_limit| 0| Memory limit of a query on each backend node |
+| load_mem_limit | 0| Memory limit of a single import task. If the value is 0, `exec_mem_limit` will be taken|
 
 ## View memory usage
 
@@ -47,16 +46,16 @@ Explanation:
 
 ~~~ bash
 //View the overall memory statistics
-<http://be_ip:be_web_port/mem_tracker>
+<http://be_ip:be_http_port/mem_tracker>
 
 // View fine-grained memory statistics
-<http://be_ip:be_web_port/mem_tracker?type=query_pool&upper_level=3>
+<http://be_ip:be_http_port/mem_tracker?type=query_pool&upper_level=3>
 ~~~
 
 * **tcmalloc**
 
 ~~~ bash
-<http://be_ip:be_web_port/memz>
+<http://be_ip:be_http_port/memz>
 ~~~
 
 ~~~plain text
@@ -88,8 +87,8 @@ Here `Bytes in use by application` refers to the memory currently in use.
 * **metrics**
 
 ~~~bash
-curl -XGET http://be_ip:be_web_port/metrics | grep 'mem'
-curl -XGET http://be_ip:be_web_port/metrics | grep 'column_pool'
+curl -XGET http://be_ip:be_http_port/metrics | grep 'mem'
+curl -XGET http://be_ip:be_http_port/metrics | grep 'column_pool'
 ~~~
 
 The value of metrics is updated every 10 seconds. It is possible to monitor some of the memory statistics with older versions.

@@ -53,7 +53,6 @@ public:
 
 TEST_F(PosixFileSystemTest, random_access) {
     std::string fname = "./ut_dir/fs_posix/random_access";
-    WritableFileOptions ops;
     std::unique_ptr<WritableFile> wfile;
     auto fs = FileSystem::Default();
     WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
@@ -197,6 +196,35 @@ TEST_F(PosixFileSystemTest, create_dir_recursive) {
 
     ASSERT_OK(FileSystem::Default()->delete_dir_recursive(dir_path));
     ASSERT_TRUE(FileSystem::Default()->path_exists(dir_path).is_not_found());
+}
+
+TEST_F(PosixFileSystemTest, iterate_dir2) {
+    auto fs = FileSystem::Default();
+    auto now = ::time(nullptr);
+    ASSERT_OK(fs->create_dir_recursive("./ut_dir/fs_posix/iterate_dir2.d"));
+    ASSIGN_OR_ABORT(auto f, fs->new_writable_file("./ut_dir/fs_posix/iterate_dir2"));
+    ASSERT_OK(f->append("test"));
+    ASSERT_OK(f->close());
+
+    ASSERT_OK(fs->iterate_dir2("./ut_dir/fs_posix/", [&](DirEntry entry) -> bool {
+        auto name = entry.name;
+        if (name == "iterate_dir2.d") {
+            CHECK(entry.is_dir.has_value());
+            CHECK(entry.is_dir.value());
+            CHECK(entry.mtime.has_value());
+            CHECK_GE(entry.mtime.value(), now);
+        } else if (name == "iterate_dir2") {
+            CHECK(entry.is_dir.has_value());
+            CHECK(!entry.is_dir.value());
+            CHECK(entry.size.has_value());
+            CHECK_EQ(4, entry.size.value());
+            CHECK(entry.mtime.has_value());
+            CHECK_GE(entry.mtime.value(), now);
+        } else {
+            CHECK(false) << "Unexpected file " << name;
+        }
+        return true;
+    }));
 }
 
 } // namespace starrocks

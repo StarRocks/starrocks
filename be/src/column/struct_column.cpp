@@ -54,6 +54,15 @@ size_t StructColumn::byte_size() const {
     return total_size;
 }
 
+size_t StructColumn::byte_size(size_t from, size_t size) const {
+    DCHECK_LE(from + size, this->size()) << "Range error";
+    size_t total_size = 0;
+    for (const auto& column : _fields) {
+        total_size += column->byte_size(from, size);
+    }
+    return total_size;
+}
+
 size_t StructColumn::byte_size(size_t idx) const {
     size_t total_size = 0;
     for (const auto& column : _fields) {
@@ -142,14 +151,13 @@ void StructColumn::fill_default(const Filter& filter) {
     }
 }
 
-Status StructColumn::update_rows(const Column& src, const uint32_t* indexes) {
+void StructColumn::update_rows(const Column& src, const uint32_t* indexes) {
     DCHECK(src.is_struct());
     const auto& src_column = down_cast<const StructColumn&>(src);
     DCHECK_EQ(_fields.size(), src_column._fields.size());
     for (size_t i = 0; i < _fields.size(); i++) {
-        RETURN_IF_ERROR(_fields[i]->update_rows(*src_column._fields[i], indexes));
+        _fields[i]->update_rows(*src_column._fields[i], indexes);
     }
-    return Status::OK();
 }
 
 void StructColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
@@ -161,12 +169,12 @@ void StructColumn::append_selective(const Column& src, const uint32_t* indexes, 
     }
 }
 
-void StructColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
+void StructColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) {
     DCHECK(src.is_struct());
     const auto& src_column = down_cast<const StructColumn&>(src);
     DCHECK_EQ(_fields.size(), src_column._fields.size());
     for (size_t i = 0; i < _fields.size(); i++) {
-        _fields[i]->append_value_multiple_times(*src_column._fields[i], index, size);
+        _fields[i]->append_value_multiple_times(*src_column._fields[i], index, size, deep_copy);
     }
 }
 
@@ -290,19 +298,47 @@ size_t StructColumn::filter_range(const Filter& filter, size_t from, size_t to) 
 }
 
 int StructColumn::compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const {
-    DCHECK(false) << "Dont support it";
-    return 0;
+    const auto& rhs_struct = down_cast<const StructColumn&>(rhs);
+
+    auto lsize = _fields.size();
+    auto rsize = rhs_struct._fields.size();
+    auto size = std::min(lsize, rsize);
+
+    for (int i = 0; i < size; ++i) {
+        auto cmp = _fields[i]->compare_at(left, right, *rhs_struct._fields[i].get(), nan_direction_hint);
+        if (cmp != 0) {
+            return cmp;
+        }
+    }
+    return lsize < rsize ? -1 : (lsize == rsize ? 0 : 1);
+}
+
+int StructColumn::equals(size_t left, const Column& rhs, size_t right, bool safe_eq) const {
+    const auto& rhs_struct = down_cast<const StructColumn&>(rhs);
+    if (_fields.size() != rhs_struct._fields.size()) {
+        return false;
+    }
+
+    int ret = EQUALS_TRUE;
+    for (int i = 0; i < _fields.size(); ++i) {
+        auto tmp = _fields[i]->equals(left, *rhs_struct._fields[i].get(), right, safe_eq);
+        if (tmp == EQUALS_FALSE) {
+            return EQUALS_FALSE;
+        } else if (tmp == EQUALS_NULL) {
+            ret = EQUALS_NULL;
+        }
+    }
+
+    return safe_eq ? EQUALS_TRUE : ret;
 }
 
 void StructColumn::fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const {
-    // TODO(SmithCruise) Not tested.
     for (const ColumnPtr& column : _fields) {
         column->fnv_hash(seed, from, to);
     }
 }
 
 void StructColumn::crc32_hash(uint32_t* seed, uint32_t from, uint32_t to) const {
-    // TODO(SmithCruise) Not tested.
     for (const ColumnPtr& column : _fields) {
         column->crc32_hash(seed, from, to);
     }
@@ -320,53 +356,31 @@ int64_t StructColumn::xor_checksum(uint32_t from, uint32_t to) const {
 void StructColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
     DCHECK_LT(idx, size());
     buf->begin_push_bracket();
-    if (is_unnamed_struct()) {
-        for (size_t i = 0; i < _fields.size(); ++i) {
-            const auto& field = _fields[i];
-            field->put_mysql_row_buffer(buf, idx);
-            if (i < _fields.size() - 1) {
-                // Add struct field separator, last field don't need ','.
-                buf->separator(',');
-            }
-        }
-    } else {
-        for (size_t i = 0; i < _fields.size(); ++i) {
-            const auto& field = _fields[i];
-            buf->push_string(_field_names[i]);
-            buf->separator(':');
-            field->put_mysql_row_buffer(buf, idx);
-            if (i < _fields.size() - 1) {
-                // Add struct field separator, last field don't need ','.
-                buf->separator(',');
-            }
+    for (size_t i = 0; i < _fields.size(); ++i) {
+        const auto& field = _fields[i];
+        buf->push_string(_field_names[i]);
+        buf->separator(':');
+        field->put_mysql_row_buffer(buf, idx);
+        if (i < _fields.size() - 1) {
+            // Add struct field separator, last field don't need ','.
+            buf->separator(',');
         }
     }
     buf->finish_push_bracket();
 }
 
-std::string StructColumn::debug_item(uint32_t idx) const {
+std::string StructColumn::debug_item(size_t idx) const {
     DCHECK_LT(idx, size());
     std::stringstream ss;
     ss << '{';
-    if (is_unnamed_struct()) {
-        for (size_t i = 0; i < _fields.size(); i++) {
-            const auto& field = _fields[i];
-            ss << field->debug_item(idx);
-            if (i < _fields.size() - 1) {
-                // Add struct field separator, last field don't need ','.
-                ss << ",";
-            }
-        }
-    } else {
-        for (size_t i = 0; i < _fields.size(); i++) {
-            const auto& field = _fields[i];
-            ss << _field_names[i];
-            ss << ":";
-            ss << field->debug_item(idx);
-            if (i < _fields.size() - 1) {
-                // Add struct field separator, last field don't need ','.
-                ss << ",";
-            }
+    for (size_t i = 0; i < _fields.size(); i++) {
+        const auto& field = _fields[i];
+        ss << _field_names[i];
+        ss << ":";
+        ss << field->debug_item(idx);
+        if (i < _fields.size() - 1) {
+            // Add struct field separator, last field don't need ','.
+            ss << ",";
         }
     }
     ss << '}';
@@ -414,14 +428,14 @@ size_t StructColumn::container_memory_usage() const {
     return memory_usage;
 }
 
-size_t StructColumn::element_memory_usage(size_t from, size_t size) const {
+size_t StructColumn::reference_memory_usage(size_t from, size_t size) const {
     DCHECK_LE(from + size, this->size()) << "Range error";
     size_t memorg_usage = 0;
     for (const auto& column : _fields) {
-        memorg_usage += column->element_memory_usage(from, size);
+        memorg_usage += column->reference_memory_usage(from, size);
     }
 
-    // Do not need to include _field_names's element_memory_usage, because it's BinaryColumn, always return 0.
+    // Do not need to include _field_names's reference_memory_usage, because it's BinaryColumn, always return 0.
     return memorg_usage;
 }
 
@@ -450,6 +464,7 @@ void StructColumn::check_or_die() const {
     DCHECK(_fields.size() == _field_names.size());
 
     for (const auto& column : _fields) {
+        DCHECK(column->is_nullable());
         column->check_or_die();
     }
 }

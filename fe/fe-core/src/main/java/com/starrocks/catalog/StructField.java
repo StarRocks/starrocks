@@ -20,13 +20,13 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.thrift.TStructField;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
+import org.apache.commons.lang3.StringUtils;
 
 /**
  * TODO: Support comments for struct fields. The Metastore does not properly store
  * comments of struct fields. We set comment to null to avoid compatibility issues.
  */
 public class StructField {
-    // If name is null, that means this StructFiled is unnamed.
     @SerializedName(value = "name")
     private final String name;
     @SerializedName(value = "type")
@@ -45,11 +45,6 @@ public class StructField {
 
     public StructField(String name, Type type) {
         this(name, type, null);
-    }
-
-    // Unnamed struct field
-    public StructField(Type type) {
-        this(null, type, null);
     }
 
     public String getComment() {
@@ -72,10 +67,10 @@ public class StructField {
         this.position = position;
     }
 
-    public String toSql(int depth) {
+    public String toSql(int depth, boolean printName) {
         String typeSql = (depth < Type.MAX_NESTING_DEPTH) ? type.toSql(depth) : "...";
         StringBuilder sb = new StringBuilder();
-        if (name != null) {
+        if (printName) {
             sb.append(name).append(' ');
         }
         sb.append(typeSql);
@@ -89,10 +84,10 @@ public class StructField {
      * Pretty prints this field with lpad number of leading spaces.
      * Calls prettyPrint(lpad) on this field's type.
      */
-    public String prettyPrint(int lpad) {
+    public String prettyPrint(int lpad, boolean printName) {
         String leftPadding = Strings.repeat(" ", lpad);
         StringBuilder sb = new StringBuilder(leftPadding);
-        if (name != null) {
+        if (printName) {
             sb.append(name).append(' ');
         }
 
@@ -118,33 +113,17 @@ public class StructField {
 
     @Override
     public int hashCode() {
-        if (name != null) {
-            return Objects.hashCode(name, type);
-        } else {
-            return Objects.hashCode(type);
-        }
+        return Objects.hashCode(name.toLowerCase(), type);
     }
 
-    // [Named vs Named] struct<a: INT, b: STRING> is equal to struct<a: INT, b: STRING>
-    // [Unnamed vs Unnamed] struct<INT, STRING> is equal to struct<INT, STRING>
-    // [Named vs Unnamed][Always false] struct<a: INT, b: STRING> is not equal to struct<INT, STRING>
     @Override
     public boolean equals(Object other) {
         if (!(other instanceof StructField)) {
             return false;
         }
         StructField otherStructField = (StructField) other;
-        if (name == null) {
-            // If this() is unnamed struct field, other struct field must also be an unnamed struct field.
-            return otherStructField.name == null && type.equals(otherStructField.type);
-        }
-
-        if (otherStructField.name == null) {
-            // If other struct field is not named struct field, return false directly.
-            return false;
-        }
         // Both are named struct field
-        return otherStructField.name.equals(name) && otherStructField.type.equals(type);
+        return StringUtils.equalsIgnoreCase(name, otherStructField.name) && Objects.equal(type, otherStructField.type);
     }
 
     @Override

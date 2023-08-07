@@ -8,19 +8,21 @@ By default, StarRocks automatically collects full statistics of a table. It chec
 
 Before creating a custom automatic collection task, you must disable automatic full collection (`enable_collect_full_statistic = false`). Otherwise, custom tasks cannot take effect.
 
+This statement is supported from v2.4.
+
 ## Syntax
 
 ```SQL
 -- Automatically collect stats of all databases.
-CREATE ANALYZE [FULL|SAMPLE] ALL PROPERTIES (property [,property]);
+CREATE ANALYZE [FULL|SAMPLE] ALL PROPERTIES (property [,property])
 
 -- Automatically collect stats of all tables in a database.
 CREATE ANALYZE [FULL|SAMPLE] DATABASE db_name
-PROPERTIES (property [,property]);
+PROPERTIES (property [,property])
 
 -- Automatically collect stats of specified columns in a table.
 CREATE ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name])
-PROPERTIES (property [,property]);
+PROPERTIES (property [,property])
 ```
 
 ## Parameter description
@@ -30,7 +32,7 @@ PROPERTIES (property [,property]);
   - SAMPLE: indicates sampled collection.
   - If no collection type is specified, full collection is used by default.
 
-- `col_name`: columns from which to collect statistics. Separate multiple columns with commas (;). If this parameter is not specified, the entire table is collected.
+- `col_name`: columns from which to collect statistics. Separate multiple columns with commas (`,`). If this parameter is not specified, the entire table is collected.
 
 - `PROPERTIES`: custom parameters. If `PROPERTIES` is not specified, the default settings in `fe.conf` are used. The properties that are actually used can be viewed via the `Properties` column in the output of SHOW ANALYZE JOB.
 

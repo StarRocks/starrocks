@@ -32,17 +32,13 @@ CREATE TABLE `aggregate_tbl` (
 ) ENGINE=OLAP
 AGGREGATE KEY(`site_id`, `date`, `city_code`)
 COMMENT "OLAP"
-DISTRIBUTED BY HASH(`site_id`) BUCKETS 8
-PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"storage_format" = "DEFAULT",
-"enable_persistent_index" = "false"
-);
+DISTRIBUTED BY HASH(`site_id`)
+PROPERTIES ("replication_num" = "3");
 ```
 
 Insert data into the table.
 
 ```sql
-insert into aggregate_tbl values (5, '2020-02-23', 'city_code', 555, percentile_empty());
+INSERT INTO aggregate_tbl VALUES
+(5, '2020-02-23', 'city_code', 555, percentile_empty());
 ```

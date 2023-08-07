@@ -15,7 +15,7 @@
 #include "exprs/in_const_predicate.hpp"
 
 #include "gutil/strings/substitute.h"
-#include "runtime/primitive_type_infra.h"
+#include "types/logical_type_infra.h"
 
 namespace starrocks {
 
@@ -26,7 +26,6 @@ ExprContext* VectorizedInConstPredicateBuilder::_create() {
     LogicalType probe_type = probe_expr->type().type;
 
     // create TExprNode
-    node.__set_use_vectorized(true);
     node.__set_node_type(TExprNodeType::IN_PRED);
     TScalarType tscalar_type;
     tscalar_type.__set_type(TPrimitiveType::BOOLEAN);

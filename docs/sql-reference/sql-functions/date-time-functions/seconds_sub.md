@@ -20,7 +20,7 @@ DATETIME seconds_sub(DATETIME|DATE date, INT seconds);
 
 Returns a value of the DATETIME type.
 
-If the input value is of the DATE type，the hour, minute, and seconds parts are processed as `00:00:00`.
+If the input value is of the DATE type, the hour, minute, and seconds parts are processed as `00:00:00`.
 
 ## Examples
 

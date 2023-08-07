@@ -17,14 +17,20 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
 public class SetUserPropertyStmt extends DdlStmt {
     private String user;
-    private final List<SetVar> propertyList;
+    private final List<SetUserPropertyVar> propertyList;
 
-    public SetUserPropertyStmt(String user, List<SetVar> propertyList) {
+    public SetUserPropertyStmt(String user, List<SetUserPropertyVar> propertyList) {
+        this(user, propertyList, NodePosition.ZERO);
+    }
+
+    public SetUserPropertyStmt(String user, List<SetUserPropertyVar> propertyList, NodePosition pos) {
+        super(pos);
         this.user = user;
         this.propertyList = propertyList;
     }
@@ -37,16 +43,15 @@ public class SetUserPropertyStmt extends DdlStmt {
         this.user = user;
     }
 
-    public List<SetVar> getPropertyList() {
+    public List<SetUserPropertyVar> getPropertyList() {
         return this.propertyList;
     }
 
     // using List because we need retain the origin property order
     public List<Pair<String, String>> getPropertyPairList() {
         List<Pair<String, String>> list = Lists.newArrayList();
-        for (SetVar var : propertyList) {
-            list.add(Pair.create(((SetUserPropertyVar) var).getPropertyKey(),
-                    ((SetUserPropertyVar) var).getPropertyValue()));
+        for (SetUserPropertyVar var : propertyList) {
+            list.add(Pair.create(var.getPropertyKey(), var.getPropertyValue()));
         }
         return list;
     }

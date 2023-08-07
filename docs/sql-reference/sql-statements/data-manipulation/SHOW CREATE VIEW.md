@@ -1,11 +1,13 @@
 # SHOW CREATE VIEW
 
-Returns the CREATE VIEW statement that was used to create a given view. The CREATE VIEW statement helps you understand how the view is defined and provides a reference for you to modify or reconstruct the view. Note that the SHOW CREATE VIEW statement requires you to have the `SELECT_PRIV` permission on the view and the table based on which the view is created.
+Returns the CREATE statement that was used to create a given view. The CREATE VIEW statement helps you understand how the view is defined and provides a reference for you to modify or reconstruct the view. Note that the SHOW CREATE VIEW statement requires you to have the `SELECT` privilege on the view and the table based on which the view is created.
+
+From v2.5.4 onwards, you can use SHOW CREATE VIEW to query the statement that is used to create a **materialized view**.
 
 ## Syntax
 
 ```SQL
-SHOW CREATE VIEW [db_name.]view_name;
+SHOW CREATE VIEW [db_name.]view_name
 ```
 
 ## Parameters
@@ -46,7 +48,7 @@ CREATE TABLE example_table
 )
 ENGINE = olap
 AGGREGATE KEY(k1, k2)
-DISTRIBUTED BY HASH(k1) BUCKETS 10;
+DISTRIBUTED BY HASH(k1);
 ```
 
 Create a view named `example_view` based on `example_table`.

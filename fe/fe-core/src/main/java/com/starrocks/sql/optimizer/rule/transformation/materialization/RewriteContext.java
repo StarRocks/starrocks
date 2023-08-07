@@ -20,24 +20,24 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.EquivalenceClasses;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 public class RewriteContext {
     private final OptExpression queryExpression;
     private final PredicateSplit queryPredicateSplit;
-    private final EquivalenceClasses queryEquivalenceClasses;
+    private EquivalenceClasses queryEquivalenceClasses;
     // key is table relation id
-    private final Map<Integer, List<ColumnRefOperator>> queryRelationIdToColumns;
+    private final Map<Integer, Map<String, ColumnRefOperator>> queryRelationIdToColumns;
     private final ColumnRefFactory queryRefFactory;
     private final ReplaceColumnRefRewriter queryColumnRefRewriter;
 
     private final OptExpression mvExpression;
     private final PredicateSplit mvPredicateSplit;
-    private final Map<Integer, List<ColumnRefOperator>> mvRelationIdToColumns;
+    private final Map<Integer, Map<String, ColumnRefOperator>> mvRelationIdToColumns;
     private final ColumnRefFactory mvRefFactory;
     private EquivalenceClasses queryBasedViewEquivalenceClasses;
     private final ReplaceColumnRefRewriter mvColumnRefRewriter;
@@ -49,12 +49,12 @@ public class RewriteContext {
     public RewriteContext(OptExpression queryExpression,
                           PredicateSplit queryPredicateSplit,
                           EquivalenceClasses queryEquivalenceClasses,
-                          Map<Integer, List<ColumnRefOperator>> queryRelationIdToColumns,
+                          Map<Integer, Map<String, ColumnRefOperator>> queryRelationIdToColumns,
                           ColumnRefFactory queryRefFactory,
                           ReplaceColumnRefRewriter queryColumnRefRewriter,
                           OptExpression mvExpression,
                           PredicateSplit mvPredicateSplit,
-                          Map<Integer, List<ColumnRefOperator>> mvRelationIdToColumns,
+                          Map<Integer, Map<String, ColumnRefOperator>> mvRelationIdToColumns,
                           ColumnRefFactory mvRefFactory,
                           ReplaceColumnRefRewriter mvColumnRefRewriter,
                           Map<ColumnRefOperator, ColumnRefOperator> outputMapping,
@@ -94,7 +94,11 @@ public class RewriteContext {
         return queryEquivalenceClasses;
     }
 
-    public Map<Integer, List<ColumnRefOperator>> getQueryRelationIdToColumns() {
+    public void setQueryEquivalenceClasses(EquivalenceClasses queryEquivalenceClasses) {
+        this.queryEquivalenceClasses = queryEquivalenceClasses;
+    }
+
+    public Map<Integer, Map<String, ColumnRefOperator>> getQueryRelationIdToColumns() {
         return queryRelationIdToColumns;
     }
 
@@ -106,7 +110,7 @@ public class RewriteContext {
         return mvPredicateSplit;
     }
 
-    public Map<Integer, List<ColumnRefOperator>> getMvRelationIdToColumns() {
+    public Map<Integer, Map<String, ColumnRefOperator>> getMvRelationIdToColumns() {
         return mvRelationIdToColumns;
     }
 
@@ -140,5 +144,9 @@ public class RewriteContext {
 
     public Set<ColumnRefOperator> getQueryColumnSet() {
         return queryColumnSet;
+    }
+
+    public Map<ColumnRefOperator, ScalarOperator> getMVColumnRefToScalarOp() {
+        return MvUtils.getColumnRefMap(getMvExpression(), getMvRefFactory());
     }
 }

@@ -56,6 +56,9 @@ namespace starrocks {
 
 class ExecEnv;
 
+int64_t curr_report_version();
+int64_t next_report_version();
+
 class TaskWorkerPoolBase {
 public:
     static AgentStatus get_tablet_info(TTabletId tablet_id, TSchemaHash schema_hash, int64_t signature,
@@ -111,6 +114,7 @@ protected:
     std::deque<AgentTaskRequestPtr> _tasks;
 
     uint32_t _worker_count = 0;
+    uint32_t _sleeping_count = 0;
     CALLBACK_FUNCTION _callback_function = nullptr;
 
     std::atomic<bool> _stopped{false};

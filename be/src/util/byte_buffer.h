@@ -39,6 +39,7 @@
 #include <memory>
 
 #include "common/logging.h"
+#include "gutil/strings/fastmem.h"
 
 namespace starrocks {
 
@@ -54,12 +55,12 @@ struct ByteBuffer {
     ~ByteBuffer() { delete[] ptr; }
 
     void put_bytes(const char* data, size_t size) {
-        memcpy(ptr + pos, data, size);
+        strings::memcpy_inlined(ptr + pos, data, size);
         pos += size;
     }
 
     void get_bytes(char* data, size_t size) {
-        memcpy(data, ptr + pos, size);
+        strings::memcpy_inlined(data, ptr + pos, size);
         pos += size;
         DCHECK(pos <= limit);
     }

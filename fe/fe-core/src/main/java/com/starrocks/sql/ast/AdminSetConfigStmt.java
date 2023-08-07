@@ -15,10 +15,8 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.collect.Maps;
 import com.starrocks.analysis.RedirectStatus;
-
-import java.util.Map;
+import com.starrocks.sql.parser.NodePosition;
 
 // admin set frontend config ("key" = "value");
 public class AdminSetConfigStmt extends DdlStmt {
@@ -29,22 +27,20 @@ public class AdminSetConfigStmt extends DdlStmt {
     }
 
     private final ConfigType type;
-    private Map<String, String> configs;
+    private Property config;
 
-    public AdminSetConfigStmt(ConfigType type, Map<String, String> configs) {
+    public AdminSetConfigStmt(ConfigType type, Property config, NodePosition pos) {
+        super(pos);
         this.type = type;
-        this.configs = configs;
-        if (this.configs == null) {
-            this.configs = Maps.newHashMap();
-        }
+        this.config = config;
     }
 
     public ConfigType getType() {
         return type;
     }
 
-    public Map<String, String> getConfigs() {
-        return configs;
+    public Property getConfig() {
+        return config;
     }
 
     @Override

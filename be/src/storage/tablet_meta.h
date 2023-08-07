@@ -43,6 +43,7 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "gen_cpp/olap_file.pb.h"
+#include "storage/binlog_manager.h"
 #include "storage/delete_handler.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
@@ -91,10 +92,10 @@ class TabletUpdates;
 // The concurrency control is handled in Tablet Class, not in this class.
 class TabletMeta {
 public:
-    static Status create(const TCreateTabletReq& request, const TabletUid& tablet_uid, uint64_t shard_id,
-                         uint32_t next_unique_id,
-                         const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
-                         TabletMetaSharedPtr* tablet_meta);
+    [[nodiscard]] static Status create(const TCreateTabletReq& request, const TabletUid& tablet_uid, uint64_t shard_id,
+                                       uint32_t next_unique_id,
+                                       const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
+                                       TabletMetaSharedPtr* tablet_meta);
 
     static TabletMetaSharedPtr create();
 
@@ -108,16 +109,16 @@ public:
 
     // Function create_from_file is used to be compatible with previous tablet_meta.
     // Previous tablet_meta is a physical file in tablet dir, which is not stored in rocksdb.
-    Status create_from_file(const std::string& file_path);
-    Status save(const std::string& file_path);
-    static Status save(const std::string& file_path, const TabletMetaPB& tablet_meta_pb);
-    static Status reset_tablet_uid(const std::string& file_path);
+    [[nodiscard]] Status create_from_file(const std::string& file_path);
+    [[nodiscard]] Status save(const std::string& file_path);
+    [[nodiscard]] static Status save(const std::string& file_path, const TabletMetaPB& tablet_meta_pb);
+    [[nodiscard]] static Status reset_tablet_uid(const std::string& file_path);
     static std::string construct_header_file_path(const std::string& schema_hash_path, int64_t tablet_id);
-    Status save_meta(DataDir* data_dir);
+    [[nodiscard]] Status save_meta(DataDir* data_dir);
 
-    Status serialize(std::string* meta_binary);
-    Status deserialize(std::string_view data);
-    void init_from_pb(TabletMetaPB* ptablet_meta_pb);
+    [[nodiscard]] Status serialize(std::string* meta_binary);
+    [[nodiscard]] Status deserialize(std::string_view data);
+    void init_from_pb(TabletMetaPB* ptablet_meta_pb, const TabletSchemaPB* ptablet_schema_pb = nullptr);
 
     void to_meta_pb(TabletMetaPB* tablet_meta_pb);
     void to_json(std::string* json_string, json2pb::Pb2JsonOptions& options);
@@ -157,7 +158,7 @@ public:
     std::shared_ptr<const TabletSchema>& tablet_schema_ptr() { return _schema; }
 
     const std::vector<RowsetMetaSharedPtr>& all_rs_metas() const;
-    Status add_rs_meta(const RowsetMetaSharedPtr& rs_meta);
+    void add_rs_meta(const RowsetMetaSharedPtr& rs_meta);
     void delete_rs_meta_by_version(const Version& version, std::vector<RowsetMetaSharedPtr>* deleted_rs_metas);
     void modify_rs_metas(const std::vector<RowsetMetaSharedPtr>& to_add,
                          const std::vector<RowsetMetaSharedPtr>& to_delete);
@@ -166,7 +167,7 @@ public:
     void revise_inc_rs_metas(std::vector<RowsetMetaSharedPtr> rs_metas);
     const std::vector<RowsetMetaSharedPtr>& all_inc_rs_metas() const;
     const std::vector<RowsetMetaSharedPtr>& all_stale_rs_metas() const;
-    Status add_inc_rs_meta(const RowsetMetaSharedPtr& rs_meta);
+    void add_inc_rs_meta(const RowsetMetaSharedPtr& rs_meta);
     void delete_inc_rs_meta_by_version(const Version& version);
     RowsetMetaSharedPtr acquire_inc_rs_meta_by_version(const Version& version) const;
     void delete_stale_rs_meta_by_version(const Version& version);
@@ -177,7 +178,7 @@ public:
     bool version_for_delete_predicate(const Version& version);
     std::string full_name() const;
 
-    Status set_partition_id(int64_t partition_id);
+    void set_partition_id(int64_t partition_id);
 
     // used when create new tablet
     void create_inital_updates_meta();
@@ -191,6 +192,23 @@ public:
 
     void set_enable_persistent_index(bool enable_persistent_index) {
         _enable_persistent_index = enable_persistent_index;
+    }
+
+    std::shared_ptr<BinlogConfig> get_binlog_config() { return _binlog_config; }
+
+    void set_binlog_config(const BinlogConfig& new_config) {
+        _binlog_config = std::make_shared<BinlogConfig>();
+        _binlog_config->update(new_config);
+    }
+
+    BinlogLsn get_binlog_min_lsn() { return _binlog_min_lsn; }
+
+    void set_binlog_min_lsn(BinlogLsn& binlog_lsn) { _binlog_min_lsn = binlog_lsn; }
+
+    bool enable_shortcut_compaction() const { return _enable_shortcut_compaction; }
+
+    void set_enable_shortcut_compaction(bool enable_shortcut_compaction) {
+        _enable_shortcut_compaction = enable_shortcut_compaction;
     }
 
 private:
@@ -235,6 +253,21 @@ private:
     // A reference to TabletUpdates, so update related meta
     // can be serialized with tablet meta automatically
     TabletUpdates* _updates = nullptr;
+
+    std::shared_ptr<BinlogConfig> _binlog_config;
+
+    // The minimum lsn of binlog that is valid. It will be updated when deleting expired
+    // or overcapacity binlog in Tablet#delete_expired_inc_rowsets, and used to skip those
+    // useless binlog when recovery in Tablet#finish_load_rowsets. We can not only depend
+    // on _inc_rs_metas for recovery because _inc_rs_metas may contain rowsets that doest
+    // not have binlog in the following cases
+    // 1. _inc_rs_metas already contains some rowsets before enable binlog, so there is no
+    //    binlog for these data
+    // 2. config::inc_rowset_expired_sec is larger than the expired time of binlog, so
+    //    a rowset will not be removed from _inc_rs_metas if only the binlog is expired
+    BinlogLsn _binlog_min_lsn;
+
+    bool _enable_shortcut_compaction = true;
 
     std::shared_mutex _meta_lock;
 };

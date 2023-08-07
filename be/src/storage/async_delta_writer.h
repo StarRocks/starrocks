@@ -90,6 +90,8 @@ public:
 
     const std::vector<PNetworkAddress>& replicas() const { return _writer->replicas(); }
 
+    const FlushStatistic& get_flush_stats() const { return _writer->get_flush_stats(); }
+
 private:
     struct private_type {
         explicit private_type(int) {}

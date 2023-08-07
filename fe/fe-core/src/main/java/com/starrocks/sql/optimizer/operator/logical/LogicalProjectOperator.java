@@ -14,21 +14,26 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
 public final class LogicalProjectOperator extends LogicalOperator {
-    private final Map<ColumnRefOperator, ScalarOperator> columnRefMap;
+    private Map<ColumnRefOperator, ScalarOperator> columnRefMap;
 
     public LogicalProjectOperator(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
         super(OperatorType.LOGICAL_PROJECT);
@@ -39,6 +44,10 @@ public final class LogicalProjectOperator extends LogicalOperator {
         super(OperatorType.LOGICAL_PROJECT);
         this.columnRefMap = columnRefMap;
         this.limit = limit;
+    }
+
+    private LogicalProjectOperator() {
+        super(OperatorType.LOGICAL_PROJECT);
     }
 
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {
@@ -55,21 +64,28 @@ public final class LogicalProjectOperator extends LogicalOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(opType, columnRefMap);
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        return new RowOutputInfo(columnRefMap, Maps.newHashMap());
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (!(obj instanceof LogicalProjectOperator)) {
-            return false;
-        }
-        LogicalProjectOperator rhs = (LogicalProjectOperator) obj;
-        if (this == rhs) {
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), opType, columnRefMap);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
             return true;
         }
 
-        return columnRefMap.keySet().equals(rhs.columnRefMap.keySet());
+        if (!super.equals(o)) {
+            return false;
+        }
+
+        LogicalProjectOperator that = (LogicalProjectOperator) o;
+
+        return columnRefMap.keySet().equals(that.columnRefMap.keySet());
     }
 
     @Override
@@ -92,23 +108,28 @@ public final class LogicalProjectOperator extends LogicalOperator {
     }
 
     public static class Builder extends Operator.Builder<LogicalProjectOperator, LogicalProjectOperator.Builder> {
-        private Map<ColumnRefOperator, ScalarOperator> columnRefMap;
+
+        @Override
+        protected LogicalProjectOperator newInstance() {
+            return new LogicalProjectOperator();
+        }
 
         @Override
         public Builder withOperator(LogicalProjectOperator operator) {
             super.withOperator(operator);
-            this.columnRefMap = operator.getColumnRefMap();
+            builder.columnRefMap = operator.getColumnRefMap();
             return this;
         }
 
         public Builder setColumnRefMap(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
-            this.columnRefMap = columnRefMap;
+            builder.columnRefMap = columnRefMap;
             return this;
         }
 
         @Override
-        public LogicalProjectOperator build() {
-            return new LogicalProjectOperator(columnRefMap, this.limit);
+        public Builder setProjection(Projection projection) {
+            Preconditions.checkState(false, "Shouldn't set projection to Project Operator");
+            return this;
         }
     }
 }

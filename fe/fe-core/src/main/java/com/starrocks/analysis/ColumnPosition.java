@@ -19,22 +19,30 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.parser.NodePosition;
 
 // Column position used when add column
-public class ColumnPosition {
+public class ColumnPosition implements ParseNode {
     public static final ColumnPosition FIRST = new ColumnPosition();
 
     private String lastCol;
+
+    private final NodePosition pos;
+
+    private ColumnPosition() {
+        this(null, NodePosition.ZERO);
+    }
 
     public String getLastCol() {
         return lastCol;
     }
 
-    // used to create FIRST position.
-    private ColumnPosition() {
+    public ColumnPosition(String col) {
+        this(col, NodePosition.ZERO);
     }
 
-    public ColumnPosition(String col) {
+    public ColumnPosition(String col, NodePosition pos) {
+        this.pos = pos;
         this.lastCol = col;
     }
 
@@ -51,6 +59,7 @@ public class ColumnPosition {
         return this == FIRST;
     }
 
+    @Override
     public String toSql() {
         StringBuilder sb = new StringBuilder();
         if (this == FIRST) {
@@ -59,6 +68,11 @@ public class ColumnPosition {
             sb.append("AFTER `").append(lastCol).append("`");
         }
         return sb.toString();
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 
     @Override

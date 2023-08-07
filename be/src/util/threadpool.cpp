@@ -42,6 +42,7 @@
 #include "gutil/map_util.h"
 #include "gutil/strings/substitute.h"
 #include "gutil/sysinfo.h"
+#include "util/cpu_info.h"
 #include "util/scoped_cleanup.h"
 #include "util/thread.h"
 
@@ -63,7 +64,7 @@ private:
 ThreadPoolBuilder::ThreadPoolBuilder(string name)
         : _name(std::move(name)),
           _min_threads(0),
-          _max_threads(base::NumCPUs()),
+          _max_threads(CpuInfo::num_cores()),
           _max_queue_size(std::numeric_limits<int>::max()),
           _idle_timeout(MonoDelta::FromMilliseconds(500)) {}
 
@@ -480,7 +481,8 @@ Status ThreadPool::update_max_threads(int max_threads) {
 
 void ThreadPool::dispatch_thread() {
     std::unique_lock l(_lock);
-    InsertOrDie(&_threads, Thread::current_thread());
+    auto current_thread = Thread::current_thread();
+    InsertOrDie(&_threads, current_thread);
     DCHECK_GT(_num_threads_pending_start, 0);
     _num_threads++;
     _num_threads_pending_start--;
@@ -499,6 +501,7 @@ void ThreadPool::dispatch_thread() {
         }
 
         if (_queue.empty()) {
+            current_thread->set_idle(true);
             // There's no work to do, let's go idle.
             //
             // Note: if FIFO behavior is desired, it's as simple as changing this to push_back().
@@ -533,6 +536,7 @@ void ThreadPool::dispatch_thread() {
         }
 
         // Get the next token and task to execute.
+        current_thread->set_idle(false);
         ThreadPoolToken* token = _queue.front();
         _queue.pop_front();
         DCHECK_EQ(ThreadPoolToken::State::RUNNING, token->state());
@@ -547,6 +551,7 @@ void ThreadPool::dispatch_thread() {
 
         // Execute the task
         task.runnable->run();
+        current_thread->inc_finished_tasks();
 
         // Destruct the task while we do not hold the lock.
         //
@@ -594,6 +599,7 @@ void ThreadPool::dispatch_thread() {
         CHECK(_queue.empty());
         DCHECK_EQ(0, _total_queued_tasks);
     }
+    current_thread->set_idle(true);
 }
 
 Status ThreadPool::create_thread() {

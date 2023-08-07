@@ -15,12 +15,19 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.parser.NodePosition;
+
 // ToDo(zhuodong): to support internal catalog in the future
 public class DropCatalogStmt extends DdlStmt {
 
     private final String name;
 
     public DropCatalogStmt(String name) {
+        this(name, NodePosition.ZERO);
+    }
+
+    public DropCatalogStmt(String name, NodePosition pos) {
+        super(pos);
         this.name = name;
     }
 

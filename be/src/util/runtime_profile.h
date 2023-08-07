@@ -53,6 +53,10 @@
 
 namespace starrocks {
 
+inline unsigned long long operator"" _ms(unsigned long long x) {
+    return x * 1000 * 1000;
+}
+
 // Define macros for updating counters.  The macros make it very easy to disable
 // all counters at compile time.  Set this to 0 to remove counters.  This is useful
 // to do to make sure the counters aren't affecting the system.
@@ -63,18 +67,30 @@ namespace starrocks {
 #define MACRO_CONCAT(x, y) CONCAT_IMPL(x, y)
 
 #if ENABLE_COUNTERS
-#define ADD_COUNTER(profile, name, type) (profile)->add_counter(name, type)
-#define ADD_COUNTER_SKIP_MERGE(profile, name, type) (profile)->add_counter(name, type, true)
-#define ADD_TIMER(profile, name) (profile)->add_counter(name, TUnit::TIME_NS)
-#define ADD_CHILD_COUNTER(profile, name, type, parent) (profile)->add_child_counter(name, type, parent)
-#define ADD_CHILD_COUNTER_SKIP_MERGE(profile, name, type, parent) (profile)->add_child_counter(name, type, parent, true)
-#define ADD_CHILD_TIMER(profile, name, parent) (profile)->add_child_counter(name, TUnit::TIME_NS, parent)
+#define ADD_COUNTER(profile, name, type) \
+    (profile)->add_counter(name, type, RuntimeProfile::Counter::create_strategy(type))
+#define ADD_COUNTER_SKIP_MERGE(profile, name, type, merge_type) \
+    (profile)->add_counter(name, type, RuntimeProfile::Counter::create_strategy(type, merge_type))
+#define ADD_TIMER(profile, name) \
+    (profile)->add_counter(name, TUnit::TIME_NS, RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS))
+#define ADD_CHILD_COUNTER(profile, name, type, parent) \
+    (profile)->add_child_counter(name, type, RuntimeProfile::Counter::create_strategy(type), parent)
+#define ADD_CHILD_COUNTER_SKIP_MERGE(profile, name, type, merge_type, parent) \
+    (profile)->add_child_counter(name, type, RuntimeProfile::Counter::create_strategy(type, merge_type), parent)
+#define ADD_CHILD_TIMER_THESHOLD(profile, name, parent, threshold) \
+    (profile)->add_child_counter(                                  \
+            name, TUnit::TIME_NS,                                  \
+            RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::MERGE_ALL, threshold), parent)
+#define ADD_CHILD_TIMER(profile, name, parent) \
+    (profile)->add_child_counter(name, TUnit::TIME_NS, RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS), parent)
 #define SCOPED_TIMER(c) ScopedTimer<MonotonicStopWatch> MACRO_CONCAT(SCOPED_TIMER, __COUNTER__)(c)
 #define CANCEL_SAFE_SCOPED_TIMER(c, is_cancelled) \
     ScopedTimer<MonotonicStopWatch> MACRO_CONCAT(SCOPED_TIMER, __COUNTER__)(c, is_cancelled)
 #define SCOPED_RAW_TIMER(c) ScopedRawTimer<MonotonicStopWatch> MACRO_CONCAT(SCOPED_RAW_TIMER, __COUNTER__)(c)
 #define COUNTER_UPDATE(c, v) (c)->update(v)
 #define COUNTER_SET(c, v) (c)->set(v)
+// this is only used for HighWaterMarkCounter
+#define COUNTER_ADD(c, v) (c)->add(v)
 #define ADD_THREAD_COUNTERS(profile, prefix) (profile)->add_thread_counters(prefix)
 #define SCOPED_THREAD_COUNTER_MEASUREMENT(c) \
     /*ThreadCounterMeasurement                                        \
@@ -86,6 +102,7 @@ namespace starrocks {
 #define SCOPED_RAW_TIMER(c)
 #define COUNTER_UPDATE(c, v)
 #define COUNTER_SET(c, v)
+#define COUNTER_ADD(c, v)
 #define ADD_THREADCOUNTERS(profile, prefix) NULL
 #define SCOPED_THREAD_COUNTER_MEASUREMENT(c)
 #endif
@@ -104,8 +121,27 @@ class RuntimeProfile {
 public:
     class Counter {
     public:
-        explicit Counter(TUnit::type type, int64_t value = 0, bool skip_merge = false)
-                : _value(value), _type(type), _skip_merge(skip_merge){};
+        static TCounterStrategy create_strategy(TCounterAggregateType::type aggregate_type,
+                                                TCounterMergeType::type merge_type = TCounterMergeType::MERGE_ALL,
+                                                int64_t display_threshold = 0) {
+            TCounterStrategy strategy;
+            strategy.aggregate_type = aggregate_type;
+            strategy.merge_type = merge_type;
+            strategy.display_threshold = display_threshold;
+            return strategy;
+        }
+
+        static TCounterStrategy create_strategy(TUnit::type type,
+                                                TCounterMergeType::type merge_type = TCounterMergeType::MERGE_ALL,
+                                                int64_t display_threshold = 0) {
+            auto aggregate_type = is_time_type(type) ? TCounterAggregateType::AVG : TCounterAggregateType::SUM;
+            return create_strategy(aggregate_type, merge_type, display_threshold);
+        }
+
+        explicit Counter(TUnit::type type, int64_t value = 0)
+                : _value(0), _type(type), _strategy(create_strategy(type)) {}
+        explicit Counter(TUnit::type type, const TCounterStrategy& strategy, int64_t value = 0)
+                : _value(value), _type(type), _strategy(strategy) {}
 
         virtual ~Counter() = default;
 
@@ -130,19 +166,24 @@ public:
 
         TUnit::type type() const { return _type; }
 
-        bool skip_merge() const { return _skip_merge; }
+        const TCounterStrategy& strategy() const { return _strategy; }
+
+        bool is_sum() const { return _strategy.aggregate_type == TCounterAggregateType::SUM; }
+        bool is_avg() const { return _strategy.aggregate_type == TCounterAggregateType::AVG; }
+
+        bool skip_merge() const {
+            return _strategy.merge_type == TCounterMergeType::SKIP_ALL ||
+                   _strategy.merge_type == TCounterMergeType::SKIP_FIRST_MERGE;
+        }
+
+        int64_t display_threshold() const { return _strategy.display_threshold; }
 
     private:
         friend class RuntimeProfile;
 
         std::atomic<int64_t> _value;
         const TUnit::type _type;
-
-        // For non-time metrics, the default behavior of profile merge mechanism is sum up all the
-        // isomorphic counters, but for some special counters, like dop, tabletCount etc., which require
-        // its original value after merge. We can set the flag _skip_merge to true to skip the merge process
-        // of the counter.
-        const bool _skip_merge;
+        const TCounterStrategy _strategy;
     };
 
     class ConcurrentTimerCounter;
@@ -157,8 +198,9 @@ public:
     /// as value()) and the current value.
     class HighWaterMarkCounter : public Counter {
     public:
-        explicit HighWaterMarkCounter(TUnit::type type, int64_t value = 0, bool skip_merge = false)
-                : Counter(type, value, skip_merge) {}
+        explicit HighWaterMarkCounter(TUnit::type type, int64_t value = 0) : Counter(type, value) {}
+        explicit HighWaterMarkCounter(TUnit::type type, const TCounterStrategy& strategy, int64_t value = 0)
+                : Counter(type, strategy, value) {}
 
         virtual void add(int64_t delta) {
             int64_t new_val = current_value_.fetch_add(delta, std::memory_order_relaxed) + delta;
@@ -210,7 +252,7 @@ public:
     class DerivedCounter : public Counter {
     public:
         DerivedCounter(TUnit::type type, DerivedCounterFunction counter_fn)
-                : Counter(type, 0), _counter_fn(std::move(counter_fn)) {}
+                : Counter(type, create_strategy(type), 0), _counter_fn(std::move(counter_fn)) {}
 
         int64_t value() const override { return _counter_fn(); }
 
@@ -333,10 +375,10 @@ public:
     // If parent_name is a non-empty string, the counter is added as a child of
     // parent_name.
     // If the counter already exists, the existing counter object is returned.
-    Counter* add_child_counter(const std::string& name, TUnit::type type, const std::string& parent_name,
-                               bool skip_merge = false);
-    Counter* add_counter(const std::string& name, TUnit::type type, bool skip_merge = false) {
-        return add_child_counter(name, type, ROOT_COUNTER, skip_merge);
+    Counter* add_child_counter(const std::string& name, TUnit::type type, const TCounterStrategy& strategy,
+                               const std::string& parent_name);
+    Counter* add_counter(const std::string& name, TUnit::type type, const TCounterStrategy& strategy) {
+        return add_child_counter(name, type, strategy, ROOT_COUNTER);
     }
 
     // Add a derived counter with 'name'/'type'. The counter is owned by the
@@ -443,7 +485,8 @@ public:
     /// Adds a high water mark counter to the runtime profile. Otherwise, same behavior
     /// as AddCounter().
     HighWaterMarkCounter* AddHighWaterMarkCounter(const std::string& name, TUnit::type unit,
-                                                  const std::string& parent_name = "", bool skip_merge = false);
+                                                  const TCounterStrategy& strategy,
+                                                  const std::string& parent_name = "");
 
     // Recursively compute the fraction of the 'total_time' spent in this profile and
     // its children.
@@ -459,8 +502,8 @@ private:
     typedef std::vector<std::pair<RuntimeProfile*, bool>> ChildVector;
 
     void add_child_unlock(RuntimeProfile* child, bool indent, ChildVector::iterator pos);
-    Counter* add_counter_unlock(const std::string& name, TUnit::type type, const std::string& parent_name,
-                                bool skip_merge);
+    Counter* add_counter_unlock(const std::string& name, TUnit::type type, const TCounterStrategy& strategy,
+                                const std::string& parent_name);
 
     RuntimeProfile* _parent;
 
@@ -543,22 +586,15 @@ public:
     // Merge all the isomorphic sub profiles and the caller must know for sure
     // that all the children are isomorphic, otherwise, the behavior is undefined
     // The merged result will be stored in the first profile
-    static void merge_isomorphic_profiles(std::vector<RuntimeProfile*>& profiles);
+    static RuntimeProfile* merge_isomorphic_profiles(ObjectPool* obj_pool, std::vector<RuntimeProfile*>& profiles);
 
 private:
     static const std::unordered_set<std::string> NON_MERGE_COUNTER_NAMES;
     // Merge all the isomorphic counters
-    // The exact semantics of merge depends on TUnit::type
-    // sum:
-    //     UNIT / UNIT_PER_SECOND
-    //     BYTES / BYTES_PER_SECOND
-    //     DOUBLE_VALUE / NONE
-    // average:
-    //     CPU_TICKS / TIME_NS / TIME_MS / TIME_S
     typedef std::tuple<int64_t, int64_t, int64_t> MergedInfo;
-    static MergedInfo merge_isomorphic_counters(TUnit::type type, std::vector<Counter*>& counters);
+    static MergedInfo merge_isomorphic_counters(std::vector<Counter*>& counters);
 
-    static bool is_average_type(TUnit::type type) {
+    static bool is_time_type(TUnit::type type) {
         return TUnit::type::CPU_TICKS == type || TUnit::type::TIME_NS == type || TUnit::type::TIME_MS == type ||
                TUnit::type::TIME_S == type;
     }

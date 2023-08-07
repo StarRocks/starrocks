@@ -17,6 +17,7 @@
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column.h"
+#include "column/column_access_path.h"
 #include "column/datum_convert.h"
 #include "column/fixed_length_column.h"
 #include "column/map_column.h"
@@ -63,30 +64,30 @@ protected:
         map_column.add_sub_column(value_column);
 
         auto src_offsets = UInt32Column::create();
-        auto src_keys = Int32Column::create();
-        auto src_values = Int32Column::create();
+        auto src_keys = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        auto src_values = NullableColumn::create(Int32Column::create(), NullColumn::create());
 
         ColumnPtr src_column = MapColumn::create(src_keys, src_values, src_offsets);
 
         //  {1 = 1}
-        src_keys->append(1);
-        src_values->append(1);
+        src_keys->append_datum(1);
+        src_values->append_datum(1);
         src_offsets->append(1);
         // {}
         src_offsets->append(1);
         // { 2 = 200, 3 = 3000}
-        src_keys->append(2);
-        src_keys->append(3);
-        src_values->append(200);
-        src_values->append(3000);
+        src_keys->append_datum(2);
+        src_keys->append_datum(3);
+        src_values->append_datum(200);
+        src_values->append_datum(3000);
         src_offsets->append(3);
         // { 4 = -1, 5 = -2, 6 = -3}
-        src_keys->append(4);
-        src_keys->append(5);
-        src_keys->append(6);
-        src_values->append(-1);
-        src_values->append(-2);
-        src_values->append(-3);
+        src_keys->append_datum(4);
+        src_keys->append_datum(5);
+        src_keys->append_datum(6);
+        src_values->append_datum(-1);
+        src_values->append_datum(-2);
+        src_values->append_datum(-3);
         src_offsets->append(6);
 
         TypeInfoPtr type_info = get_type_info(map_column);
@@ -143,11 +144,11 @@ protected:
         }
 
         // read and check
-        {
-            auto res = ColumnReader::create(&meta, segment.get());
-            ASSERT_TRUE(res.ok());
-            auto reader = std::move(res).value();
+        auto res = ColumnReader::create(&meta, segment.get());
+        ASSERT_TRUE(res.ok());
+        auto reader = std::move(res).value();
 
+        {
             ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
             ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
 
@@ -163,8 +164,8 @@ protected:
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
                 auto dst_offsets = UInt32Column::create();
-                auto dst_keys = Int32Column::create();
-                auto dst_values = Int32Column::create();
+                auto dst_keys = NullableColumn::create(Int32Column::create(), NullColumn::create());
+                auto dst_values = NullableColumn::create(Int32Column::create(), NullColumn::create());
                 auto dst_column = MapColumn::create(dst_keys, dst_values, dst_offsets);
                 size_t rows_read = src_column->size();
                 st = iter->next_batch(&rows_read, dst_column.get());
@@ -175,6 +176,82 @@ protected:
                 ASSERT_EQ("{}", dst_column->debug_item(1));
                 ASSERT_EQ("{2:200,3:3000}", dst_column->debug_item(2));
                 ASSERT_EQ("{4:-1,5:-2,6:-3}", dst_column->debug_item(3));
+            }
+        }
+
+        {
+            auto child_path = std::make_unique<ColumnAccessPath>();
+            child_path->init(TAccessPathType::type::OFFSET, "offsets", 1);
+
+            ColumnAccessPath path;
+            path.init(TAccessPathType::type::ROOT, "root", 0);
+            path.children().emplace_back(std::move(child_path));
+
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(&path));
+            ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
+
+            ColumnIteratorOptions iter_opts;
+            OlapReaderStatistics stats;
+            iter_opts.stats = &stats;
+            iter_opts.read_file = read_file.get();
+            ASSERT_TRUE(iter->init(iter_opts).ok());
+
+            // sequence read
+            {
+                auto st = iter->seek_to_first();
+                ASSERT_TRUE(st.ok()) << st.to_string();
+
+                auto dst_offsets = UInt32Column::create();
+                auto dst_keys = NullableColumn::create(Int32Column::create(), NullColumn::create());
+                auto dst_values = NullableColumn::create(Int32Column::create(), NullColumn::create());
+                auto dst_column = MapColumn::create(dst_keys, dst_values, dst_offsets);
+                size_t rows_read = src_column->size();
+                st = iter->next_batch(&rows_read, dst_column.get());
+                ASSERT_TRUE(st.ok());
+                ASSERT_EQ(src_column->size(), rows_read);
+
+                ASSERT_EQ("{NULL:NULL}", dst_column->debug_item(0));
+                ASSERT_EQ("{}", dst_column->debug_item(1));
+                ASSERT_EQ("{NULL:NULL,NULL:NULL}", dst_column->debug_item(2));
+                ASSERT_EQ("{NULL:NULL,NULL:NULL,NULL:NULL}", dst_column->debug_item(3));
+            }
+        }
+
+        {
+            auto child_path = std::make_unique<ColumnAccessPath>();
+            child_path->init(TAccessPathType::type::KEY, "key", 1);
+
+            ColumnAccessPath path;
+            path.init(TAccessPathType::type::ROOT, "root", 0);
+            path.children().emplace_back(std::move(child_path));
+
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(&path));
+            ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
+
+            ColumnIteratorOptions iter_opts;
+            OlapReaderStatistics stats;
+            iter_opts.stats = &stats;
+            iter_opts.read_file = read_file.get();
+            ASSERT_TRUE(iter->init(iter_opts).ok());
+
+            // sequence read
+            {
+                auto st = iter->seek_to_first();
+                ASSERT_TRUE(st.ok()) << st.to_string();
+
+                auto dst_offsets = UInt32Column::create();
+                auto dst_keys = NullableColumn::create(Int32Column::create(), NullColumn::create());
+                auto dst_values = NullableColumn::create(Int32Column::create(), NullColumn::create());
+                auto dst_column = MapColumn::create(dst_keys, dst_values, dst_offsets);
+                size_t rows_read = src_column->size();
+                st = iter->next_batch(&rows_read, dst_column.get());
+                ASSERT_TRUE(st.ok());
+                ASSERT_EQ(src_column->size(), rows_read);
+
+                ASSERT_EQ("{1:NULL}", dst_column->debug_item(0));
+                ASSERT_EQ("{}", dst_column->debug_item(1));
+                ASSERT_EQ("{2:NULL,3:NULL}", dst_column->debug_item(2));
+                ASSERT_EQ("{4:NULL,5:NULL,6:NULL}", dst_column->debug_item(3));
             }
         }
     }

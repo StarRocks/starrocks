@@ -21,15 +21,32 @@
 
 namespace starrocks {
 
-RowidRangeOption::RowidRangeOption(const RowsetId& rowset_id, uint64_t segment_id, SparseRange rowid_range)
-        : rowset_id(rowset_id), segment_id(segment_id), rowid_range(std::move(rowid_range)) {}
+void RowidRangeOption::add(const Rowset* rowset, const Segment* segment, SparseRangePtr rowid_range) {
+    auto rowset_it = rowid_range_per_segment_per_rowset.find(rowset->rowset_id());
+    if (rowset_it == rowid_range_per_segment_per_rowset.end()) {
+        rowset_it = rowid_range_per_segment_per_rowset.emplace(rowset->rowset_id(), SetgmentRowidRangeMap()).first;
+    }
 
-bool RowidRangeOption::match_rowset(const Rowset* rowset) const {
-    return rowset->rowset_id() == rowset_id;
+    auto& segment_map = rowset_it->second;
+    segment_map.emplace(segment->id(), std::move(rowid_range));
 }
 
-bool RowidRangeOption::match_segment(const Segment* segment) const {
-    return segment->id() == segment_id;
+bool RowidRangeOption::match_rowset(const Rowset* rowset) const {
+    return rowid_range_per_segment_per_rowset.find(rowset->rowset_id()) != rowid_range_per_segment_per_rowset.end();
+}
+
+SparseRangePtr RowidRangeOption::get_segment_rowid_range(const Rowset* rowset, const Segment* segment) {
+    auto rowset_it = rowid_range_per_segment_per_rowset.find(rowset->rowset_id());
+    if (rowset_it == rowid_range_per_segment_per_rowset.end()) {
+        return nullptr;
+    }
+
+    auto& segment_map = rowset_it->second;
+    auto segment_it = segment_map.find(segment->id());
+    if (segment_it == segment_map.end()) {
+        return nullptr;
+    }
+    return segment_it->second;
 }
 
 } // namespace starrocks

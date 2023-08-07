@@ -36,10 +36,11 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.HdfsURI;
 import com.starrocks.common.io.Text;
 import com.starrocks.sql.ast.CreateFunctionStmt;
+import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TScalarFunction;
@@ -60,8 +61,11 @@ import static com.starrocks.common.io.IOUtils.writeOptionString;
 public class ScalarFunction extends Function {
     // The name inside the binary at location_ that contains this particular
     // function. e.g. org.example.MyUdf.class.
+    @SerializedName(value = "symbolName")
     private String symbolName;
+    @SerializedName(value = "prepareFnSymbol")
     private String prepareFnSymbol;
+    @SerializedName(value = "closeFnSymbol")
     private String closeFnSymbol;
 
     // Only used for serialization
@@ -90,6 +94,13 @@ public class ScalarFunction extends Function {
 
     public ScalarFunction(long fid, FunctionName name, List<Type> argTypes, Type retType, boolean hasVarArgs) {
         super(fid, name, argTypes, retType, hasVarArgs);
+    }
+
+    public ScalarFunction(ScalarFunction other) {
+        super(other);
+        symbolName = other.symbolName;
+        prepareFnSymbol = other.prepareFnSymbol;
+        closeFnSymbol = other.closeFnSymbol;
     }
 
     public static ScalarFunction createVectorizedBuiltin(long fid,
@@ -227,5 +238,10 @@ public class ScalarFunction extends Function {
         properties.put(CreateFunctionStmt.SYMBOL_KEY, getSymbolName());
         properties.put(CreateFunctionStmt.TYPE_KEY, getBinaryType().name());
         return new Gson().toJson(properties);
+    }
+
+    @Override
+    public Function copy() {
+        return new ScalarFunction(this);
     }
 }

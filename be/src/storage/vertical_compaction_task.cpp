@@ -16,7 +16,7 @@
 
 #include <vector>
 
-#include "column/vectorized_schema.h"
+#include "column/schema.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
@@ -34,6 +34,7 @@ namespace starrocks {
 
 Status VerticalCompactionTask::run_impl() {
     Statistics statistics;
+    RETURN_IF_ERROR(_shortcut_compact(&statistics));
     RETURN_IF_ERROR(_vertical_compaction_data(&statistics));
     TRACE_COUNTER_INCREMENT("merged_rows", statistics.merged_rows);
     TRACE_COUNTER_INCREMENT("filtered_rows", statistics.filtered_rows);
@@ -49,6 +50,9 @@ Status VerticalCompactionTask::run_impl() {
 }
 
 Status VerticalCompactionTask::_vertical_compaction_data(Statistics* statistics) {
+    if (_output_rowset != nullptr) {
+        return Status::OK();
+    }
     TRACE("[Compaction] start vertical comapction data");
     int64_t max_rows_per_segment = CompactionUtils::get_segment_max_rows(
             config::max_segment_file_size, _task_info.input_rows_num, _task_info.input_rowsets_size);
@@ -106,6 +110,10 @@ Status VerticalCompactionTask::_vertical_compaction_data(Statistics* statistics)
     TRACE_COUNTER_INCREMENT("output_segments_num", _output_rowset->num_segments());
     TRACE("[Compaction] output rowset built");
 
+    if (config::enable_rowset_verify) {
+        RETURN_IF_ERROR(_output_rowset->verify());
+    }
+
     return Status::OK();
 }
 
@@ -113,7 +121,7 @@ Status VerticalCompactionTask::_compact_column_group(bool is_key, int column_gro
                                                      const std::vector<uint32_t>& column_group,
                                                      RowsetWriter* output_rs_writer, RowSourceMaskBuffer* mask_buffer,
                                                      std::vector<RowSourceMask>* source_masks, Statistics* statistics) {
-    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema(), column_group);
+    Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema(), column_group);
     TabletReader reader(std::static_pointer_cast<Tablet>(_tablet->shared_from_this()), output_rs_writer->version(),
                         schema, is_key, mask_buffer);
     RETURN_IF_ERROR(reader.prepare());
@@ -176,9 +184,9 @@ StatusOr<int32_t> VerticalCompactionTask::_calculate_chunk_size_for_column_group
 }
 
 StatusOr<size_t> VerticalCompactionTask::_compact_data(bool is_key, int32_t chunk_size,
-                                                       const std::vector<uint32_t>& column_group,
-                                                       const VectorizedSchema& schema, TabletReader* reader,
-                                                       RowsetWriter* output_rs_writer, RowSourceMaskBuffer* mask_buffer,
+                                                       const std::vector<uint32_t>& column_group, const Schema& schema,
+                                                       TabletReader* reader, RowsetWriter* output_rs_writer,
+                                                       RowSourceMaskBuffer* mask_buffer,
                                                        std::vector<RowSourceMask>* source_masks) {
     DCHECK(reader);
     size_t output_rows = 0;

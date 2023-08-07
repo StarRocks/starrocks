@@ -37,7 +37,6 @@ package com.starrocks.load;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -308,7 +307,7 @@ public class DppConfig implements Writable {
     public String getApplicationsPath() {
         return String.format("%s/%d/%s/%s", starrocksPath, GlobalStateMgr.getCurrentState().getClusterId(),
                 APPLICATIONS_PATH,
-                FeConstants.dpp_version);
+                FeConstants.DPP_VERSION);
     }
 
     public String getOutputPath() {
@@ -402,11 +401,7 @@ public class DppConfig implements Writable {
 
     public void readFields(DataInput in) throws IOException {
         boolean readStarRocksPath = false;
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_12) {
-            if (in.readBoolean()) {
-                readStarRocksPath = true;
-            }
-        } else {
+        if (in.readBoolean()) {
             readStarRocksPath = true;
         }
         if (readStarRocksPath) {
@@ -416,11 +411,7 @@ public class DppConfig implements Writable {
         httpPort = in.readInt();
 
         boolean readHadoopConfigs = false;
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_12) {
-            if (in.readBoolean()) {
-                readHadoopConfigs = true;
-            }
-        } else {
+        if (in.readBoolean()) {
             readHadoopConfigs = true;
         }
         if (readHadoopConfigs) {
@@ -431,11 +422,7 @@ public class DppConfig implements Writable {
             }
         }
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_15) {
-            this.priority = TPriority.valueOf(Text.readString(in));
-        } else {
-            this.priority = TPriority.NORMAL;
-        }
+        this.priority = TPriority.valueOf(Text.readString(in));
     }
 
 }

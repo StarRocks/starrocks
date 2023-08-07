@@ -38,12 +38,12 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.io.Text;
@@ -80,10 +80,12 @@ public abstract class BulkLoadJob extends LoadJob {
     private static final Logger LOG = LogManager.getLogger(BulkLoadJob.class);
 
     // input params
+    @SerializedName("bds")
     protected BrokerDesc brokerDesc;
     // this param is used to persist the expr of columns
     // the origin stmt is persisted instead of columns expr
     // the expr of columns will be reanalyze when the log is replayed
+    @SerializedName("ost")
     protected OriginStatement originStmt;
 
     // include broker desc and data desc
@@ -93,9 +95,13 @@ public abstract class BulkLoadJob extends LoadJob {
 
     // sessionVariable's name -> sessionVariable's value
     // we persist these sessionVariables due to the session is not available when replaying the job.
+    @SerializedName("svs")
     protected Map<String, String> sessionVariables = Maps.newHashMap();
 
     protected static final String PRIORITY_SESSION_VARIABLE_KEY = "priority.session.variable.key";
+    public static final String LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY = "log.rejected.record.num.session.variable.key";
+    public static final String CURRENT_USER_IDENT_KEY = "current.user.ident.key";
+    public static final String CURRENT_QUALIFIED_USER_KEY = "current.qualified.user.key";
 
     // only for log replay
     public BulkLoadJob() {
@@ -111,6 +117,8 @@ public abstract class BulkLoadJob extends LoadJob {
             SessionVariable var = ConnectContext.get().getSessionVariable();
             sessionVariables.put(SessionVariable.SQL_MODE, Long.toString(var.getSqlMode()));
             sessionVariables.put(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE, var.getloadTransmissionCompressionType());
+            sessionVariables.put(CURRENT_QUALIFIED_USER_KEY, ConnectContext.get().getQualifiedUser());
+            sessionVariables.put(CURRENT_USER_IDENT_KEY, ConnectContext.get().getCurrentUserIdentity().toString());
         } else {
             sessionVariables.put(SessionVariable.SQL_MODE, String.valueOf(SqlModeHelper.MODE_DEFAULT));
         }
@@ -149,6 +157,10 @@ public abstract class BulkLoadJob extends LoadJob {
                 bulkLoadJob.sessionVariables.put(BulkLoadJob.PRIORITY_SESSION_VARIABLE_KEY,
                         Integer.toString(bulkLoadJob.priority));
             }
+            if (bulkLoadJob.logRejectedRecordNum != 0) {
+                bulkLoadJob.sessionVariables.put(BulkLoadJob.LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY,
+                        Long.toString(bulkLoadJob.logRejectedRecordNum));
+            }
             bulkLoadJob.checkAndSetDataSourceInfo(db, stmt.getDataDescriptions());
             return bulkLoadJob;
         } catch (MetaNotFoundException e) {
@@ -175,7 +187,7 @@ public abstract class BulkLoadJob extends LoadJob {
         if (database == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
-        return new AuthorizationInfo(database.getFullName(), getTableNames());
+        return new AuthorizationInfo(database.getFullName(), getTableNames(false));
     }
 
     @Override
@@ -200,18 +212,24 @@ public abstract class BulkLoadJob extends LoadJob {
     }
 
     @Override
-    public Set<String> getTableNames() throws MetaNotFoundException {
+    public Set<String> getTableNames(boolean noThrow) throws MetaNotFoundException {
         Set<String> result = Sets.newHashSet();
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (database == null) {
-            throw new MetaNotFoundException("Database " + dbId + "has been deleted");
+            if (noThrow) {
+                return result;
+            } else {
+                throw new MetaNotFoundException("Database " + dbId + "has been deleted");
+            }
         }
         // The database will not be locked in here.
         // The getTable is a thread-safe method called without read lock of database
         for (long tableId : fileGroupAggInfo.getAllTableIds()) {
             Table table = database.getTable(tableId);
             if (table == null) {
-                throw new MetaNotFoundException("Failed to find table " + tableId + " in db " + dbId);
+                if (!noThrow) {
+                    throw new MetaNotFoundException("Failed to find table " + tableId + " in db " + dbId);
+                }
             } else {
                 result.add(table.getName());
             }
@@ -240,6 +258,9 @@ public abstract class BulkLoadJob extends LoadJob {
                 logFinalOperation();
                 return;
             } else {
+                failMsg.setMsg("Still retrying, error: " + failMsg.getMsg());
+                unprotectUpdateFailMsg(failMsg);
+
                 // retry task
                 idToTasks.remove(loadTask.getSignature());
                 if (loadTask instanceof LoadLoadingTask) {
@@ -327,38 +348,23 @@ public abstract class BulkLoadJob extends LoadJob {
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
         brokerDesc = BrokerDesc.read(in);
-        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_61) {
-            fileGroupAggInfo.readFields(in);
-        }
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_58) {
-            if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_76) {
-                String stmt = Text.readString(in);
-                originStmt = new OriginStatement(stmt, 0);
-            } else {
-                originStmt = OriginStatement.read(in);
-            }
-        } else {
-            originStmt = new OriginStatement("", 0);
-        }
+        originStmt = OriginStatement.read(in);
         // The origin stmt does not be analyzed in here.
         // The reason is that it will thrown MetaNotFoundException when the tableId could not be found by tableName.
         // The origin stmt will be analyzed after the replay is completed.
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_66) {
-            int size = in.readInt();
-            for (int i = 0; i < size; i++) {
-                String key = Text.readString(in);
-                String value = Text.readString(in);
-                sessionVariables.put(key, value);
-            }
-            if (sessionVariables.containsKey(PRIORITY_SESSION_VARIABLE_KEY)) {
-                priority = Integer.parseInt(sessionVariables.get(PRIORITY_SESSION_VARIABLE_KEY));
-            }
-        } else {
-            // old version of load does not have sqlmode, set it to default
-            sessionVariables.put(SessionVariable.SQL_MODE, String.valueOf(SqlModeHelper.MODE_DEFAULT));
+        int size = in.readInt();
+        for (int i = 0; i < size; i++) {
+            String key = Text.readString(in);
+            String value = Text.readString(in);
+            sessionVariables.put(key, value);
+        }
+        if (sessionVariables.containsKey(PRIORITY_SESSION_VARIABLE_KEY)) {
+            priority = Integer.parseInt(sessionVariables.get(PRIORITY_SESSION_VARIABLE_KEY));
+        }
+        if (sessionVariables.containsKey(LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY)) {
+            logRejectedRecordNum = Long.parseLong(sessionVariables.get(LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY));
         }
     }
-
 }

@@ -18,14 +18,19 @@ package com.starrocks.privilege;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaNotFoundException;
 
 import java.util.List;
 import java.util.Objects;
 
 public class ResourceGroupPEntryObject implements PEntryObject {
-    protected static final long ALL_RESOURCE_GROUP_ID = -1; // -1 represent all
+
     @SerializedName(value = "i")
     private long id;
+
+    public long getId() {
+        return id;
+    }
 
     public static ResourceGroupPEntryObject generate(GlobalStateMgr mgr,
                                                      List<String> tokens) throws PrivilegeException {
@@ -33,23 +38,15 @@ public class ResourceGroupPEntryObject implements PEntryObject {
             throw new PrivilegeException("invalid object tokens, should have only one, token: " + tokens);
         }
         String name = tokens.get(0);
-        long id;
-
-        ResourceGroup resourceGroup = mgr.getResourceGroupMgr().getResourceGroup(name);
-        if (resourceGroup == null) {
-            throw new PrivilegeException("cannot find resource group: " + name);
+        if (name.equals("*")) {
+            return new ResourceGroupPEntryObject(PrivilegeBuiltinConstants.ALL_RESOURCE_GROUP_ID);
+        } else {
+            ResourceGroup resourceGroup = mgr.getResourceGroupMgr().getResourceGroup(name);
+            if (resourceGroup == null) {
+                throw new PrivObjNotFoundException("cannot find resource group: " + name);
+            }
+            return new ResourceGroupPEntryObject(resourceGroup.getId());
         }
-        id = resourceGroup.getId();
-        return new ResourceGroupPEntryObject(id);
-    }
-
-    public static ResourceGroupPEntryObject generate(
-            List<String> allTypes, String restrictType, String restrictName) throws PrivilegeException {
-        if (allTypes.size() != 1 || restrictType != null || restrictName != null) {
-            throw new PrivilegeException(
-                    "invalid ALL statement for resource groups! only support ON ALL RESOURCE_GROUPS");
-        }
-        return new ResourceGroupPEntryObject(ALL_RESOURCE_GROUP_ID);
     }
 
     protected ResourceGroupPEntryObject(long id) {
@@ -69,7 +66,7 @@ public class ResourceGroupPEntryObject implements PEntryObject {
             return false;
         }
         ResourceGroupPEntryObject other = (ResourceGroupPEntryObject) obj;
-        if (other.id == ALL_RESOURCE_GROUP_ID) {
+        if (other.id == PrivilegeBuiltinConstants.ALL_RESOURCE_GROUP_ID) {
             return true;
         }
         return other.id == id;
@@ -77,7 +74,7 @@ public class ResourceGroupPEntryObject implements PEntryObject {
 
     @Override
     public boolean isFuzzyMatching() {
-        return ALL_RESOURCE_GROUP_ID == id;
+        return PrivilegeBuiltinConstants.ALL_RESOURCE_GROUP_ID == id;
     }
 
     @Override
@@ -114,5 +111,18 @@ public class ResourceGroupPEntryObject implements PEntryObject {
     @Override
     public int hashCode() {
         return Objects.hash(id);
+    }
+
+    @Override
+    public String toString() {
+        if (getId() == PrivilegeBuiltinConstants.ALL_RESOURCE_GROUP_ID) {
+            return "ALL RESOURCE GROUPS";
+        } else {
+            ResourceGroup resourceGroup = GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup(getId());
+            if (resourceGroup == null) {
+                throw new MetaNotFoundException("Can't find resource group : " + id);
+            }
+            return resourceGroup.getName();
+        }
     }
 }

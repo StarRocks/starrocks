@@ -4,13 +4,13 @@
 
 This statement is used to display the amount of data, the number of copies, and the number of statistical rows.
 
-Syntax：
+Syntax:
 
 ```sql
-SHOW DATA [FROM db_name[.table_name]];
+SHOW DATA [FROM <db_name>[.<table_name>]]
 ```
 
-Note：
+Note:
 
 1. If the FROM clause is not specified, the amount of data and copies subdivided into each table in the current db will be displayed. Where the data volume is the total data volume of all replicas. The number of copies is the number of copies of all partitions of the table and all materialized views.
 2. If the FROM clause is specified, the amount of data, the number of copies and the number of statistical rows subdivided into each materialized view under the table are displayed. Where the data volume is the total data volume of all replicas. The number of copies is the number of copies of all partitions corresponding to the materialized view. The number of statistical rows is the number of statistical rows of all partitions corresponding to the materialized view.

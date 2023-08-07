@@ -32,13 +32,13 @@ class MemTableSink;
 
 class MemTable {
 public:
-    MemTable(int64_t tablet_id, const VectorizedSchema* schema, const std::vector<SlotDescriptor*>* slot_descs,
+    MemTable(int64_t tablet_id, const Schema* schema, const std::vector<SlotDescriptor*>* slot_descs,
              MemTableSink* sink, MemTracker* mem_tracker);
 
-    MemTable(int64_t tablet_id, const VectorizedSchema* schema, MemTableSink* sink, int64_t max_buffer_size,
+    MemTable(int64_t tablet_id, const Schema* schema, MemTableSink* sink, int64_t max_buffer_size,
              MemTracker* mem_tracker);
 
-    MemTable(int64_t tablet_id, const VectorizedSchema* schema, const std::vector<SlotDescriptor*>* slot_descs,
+    MemTable(int64_t tablet_id, const Schema* schema, const std::vector<SlotDescriptor*>* slot_descs,
              MemTableSink* sink, std::string merge_condition, MemTracker* mem_tracker);
 
     ~MemTable();
@@ -64,8 +64,13 @@ public:
 
     void set_write_buffer_row(size_t max_buffer_row) { _max_buffer_row = max_buffer_row; }
 
-    static VectorizedSchema convert_schema(const TabletSchema* tablet_schema,
-                                           const std::vector<SlotDescriptor*>* slot_descs);
+    void set_partial_schema_with_sort_key(bool partial_schema_with_sort_key) {
+        _partial_schema_with_sort_key = partial_schema_with_sort_key;
+    }
+
+    static Schema convert_schema(const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs);
+
+    ChunkPtr get_result_chunk() { return _result_chunk; }
 
 private:
     void _merge();
@@ -88,7 +93,7 @@ private:
 
     int64_t _tablet_id;
 
-    const VectorizedSchema* _vectorized_schema;
+    const Schema* _vectorized_schema;
     // the slot in _slot_descs are in order of tablet's schema
     const std::vector<SlotDescriptor*>* _slot_descs;
     KeysType _keys_type;
@@ -119,6 +124,7 @@ private:
     size_t _chunk_bytes_usage = 0;
     size_t _aggregator_memory_usage = 0;
     size_t _aggregator_bytes_usage = 0;
+    bool _partial_schema_with_sort_key = false;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const MemTable& table) {

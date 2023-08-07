@@ -14,11 +14,12 @@ Stream Load is suitable for the following business scenarios:
   
   In most cases, we recommend that you use programs such as Apache Flink® to submit a load job, within which a series of tasks can be generated to continuously load streaming data in real time into StarRocks.
 
-Additionally, Stream Load supports data transformation at data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md).
+Stream Load supports data transformation at data loading and supports data changes made by UPSERT and DELETE operations during data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md) and [Change data through loading](../loading/Load_to_Primary_Key_tables.md).
 
-> **NOTE**
+> **NOTICE**
 >
-> After you load data into a StarRocks table by using Stream Load, the data of the materialized views that are created on that table is also updated.
+> - After you load data into a StarRocks table by using Stream Load, the data of the materialized views that are created on that table is also updated.
+> - You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
 
 ## Supported data file formats
 
@@ -32,7 +33,10 @@ You can use the `streaming_load_max_mb` parameter to specify the maximum size of
 
 > **NOTE**
 >
-> For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
+> For CSV data, take note of the following points:
+>
+> - You can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
+> - Null values are denoted by using `\N`. For example, a data file consists of three columns, and a record from that data file holds data in the first and third columns but no data in the second column. In this situation, you need to use `\N` in the second column to denote a null value. This means the record must be compiled as `a,\N,b` instead of `a,,b`. `a,,b` denotes that the second column of the record holds an empty string.
 
 ## Limits
 
@@ -64,7 +68,16 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
 
 ##### Data examples
 
-1. In your StarRocks database `test_db`, create a table named `table1` that uses the Primary Key model. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
+1. In your local file system, create a CSV file named `example1.csv`. The file consists of three columns, which represent the user ID, user name, and user score in sequence.
+
+   ```Plain
+   1,Lily,23
+   2,Rose,23
+   3,Alice,24
+   4,Julia,25
+   ```
+
+2. In your StarRocks database `test_db`, create a Primary Key table named `table1`. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
 
    ```SQL
    MySQL [test_db]> CREATE TABLE `table1`
@@ -75,29 +88,31 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
    )
    ENGINE=OLAP
    PRIMARY KEY(`id`)
-   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+   DISTRIBUTED BY HASH(`id`);
    ```
 
-2. In your local file system, create a CSV file named `example1.csv`. The file consists of three columns, which represent the user ID, user name, and user score in sequence.
-
-   ```Plain
-   1,Lily,23
-   2,Rose,23
-   3,Alice,24
-   4,Julia,25
-   ```
+   > **NOTE**
+   >
+   > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 ##### Load data
 
 Run the following command to load the data of `example1.csv` into `table1`:
 
 ```Bash
-curl --location-trusted -u root: -H "label:123" \
+curl --location-trusted -u <username>:<password> -H "label:123" \
+    -H "Expect:100-continue" \
     -H "column_separator:," \
+    -H "Expect:100-continue" \
     -H "columns: id, name, score" \
     -T example1.csv -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/table1/_stream_load
 ```
+
+> **NOTE**
+>
+> - If you use an account for which no password is set, you need to input only `<username>:`.
+> - You can use [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW%20FRONTENDS.md) to view the IP address and HTTP port of the FE node.
 
 `example1.csv` consists of three columns, which are separated by commas (,) and can be mapped in sequence onto the `id`, `name`, and `score` columns of `table1`. Therefore, you need to use the `column_separator` parameter to specify the comma (,) as the column separator. You also need to use the `columns` parameter to temporarily name the three columns of `example1.csv` as `id`, `name`, and `score`, which are mapped in sequence onto the three columns of `table1`.
 
@@ -122,7 +137,13 @@ MySQL [test_db]> SELECT * FROM table1;
 
 ##### Data examples
 
-1. In your StarRocks database `test_db`, create a table named `table2` that uses the Primary Key model. The table consists of two columns: `id` and `city`, of which `id` is the primary key.
+1. In your local file system, create a JSON file named `example2.json`. The file consists of two columns, which represent city ID and city name in sequence.
+
+   ```JSON
+   {"name": "Beijing", "code": 2}
+   ```
+
+2. In your StarRocks database `test_db`, create a Primary Key table named `table2`. The table consists of two columns: `id` and `city`, of which `id` is the primary key.
 
    ```SQL
    MySQL [test_db]> CREATE TABLE `table2`
@@ -132,26 +153,29 @@ MySQL [test_db]> SELECT * FROM table1;
    )
    ENGINE=OLAP
    PRIMARY KEY(`id`)
-   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+   DISTRIBUTED BY HASH(`id`);
    ```
 
-2. In your local file system, create a JSON file named `example2.json`. The file consists of two columns, which represent city ID and city name in sequence.
-
-   ```JSON
-   {"name": "Beijing", "code": 2}
-   ```
+   > **NOTE**
+   >
+   > Since v2.5.7, StarRocks can set the number of(BUCKETS) automatically when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 ##### Load data
 
 Run the following command to load the data of `example2.json` into `table2`:
 
 ```Bash
-curl -v --location-trusted -u root: -H "strict_mode: true" \
+curl -v --location-trusted -u <username>:<password> -H "strict_mode: true" \
+    -H "Expect:100-continue" \
     -H "format: json" -H "jsonpaths: [\"$.name\", \"$.code\"]" \
     -H "columns: city,tmp_id, id = tmp_id * 100" \
     -T example2.json -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/table2/_stream_load
 ```
+
+> **NOTE**
+>
+> You can use [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW%20FRONTENDS.md) to view the IP address and HTTP port of the FE node.
 
 `example2.json` consists of two keys, `name` and `code`, which are mapped onto the `id` and `city` columns of `table2`, as shown in the following figure.
 

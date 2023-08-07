@@ -15,10 +15,12 @@
 package com.starrocks.connector.parser.trino;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.sql.ast.AstVisitor;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -29,28 +31,42 @@ import java.util.stream.Collectors;
  * Before transform, it need to use match to check whether the FunctionCallTransformer can work.
  */
 public class FunctionCallTransformer {
-    private final String fnName;
     private final FunctionCallExpr targetCall;
-    private final PlaceholderExpr[] placeholderExprs;
+    private final List<PlaceholderExpr> placeholderExprs;
     private final int argNums;
+    private final boolean variableArgument;
 
     public FunctionCallTransformer(FunctionCallExpr targetCall, int argNums) {
-        this.fnName = targetCall.getFnName().getFunction();
+        this(targetCall, false, argNums);
+    }
+
+    public FunctionCallTransformer(FunctionCallExpr targetCall, boolean variableArgument) {
+        this(targetCall, variableArgument, 0);
+    }
+
+    private FunctionCallTransformer(FunctionCallExpr targetCall, boolean variableArgument, int argNums) {
         this.targetCall = targetCall;
         this.argNums = argNums;
-        this.placeholderExprs = new PlaceholderExpr[argNums];
+        this.variableArgument = variableArgument;
+        if (variableArgument) {
+            this.placeholderExprs = Lists.newArrayList();
+        } else {
+            this.placeholderExprs = Arrays.asList(new PlaceholderExpr[argNums]);
+        }
         init();
     }
 
     private void init() {
         // collect the all placeholderExprs which defined by targetCall
-        new PlaceholderCollector(placeholderExprs).visit(targetCall);
+        new PlaceholderCollector(placeholderExprs, variableArgument).visit(targetCall);
     }
 
     private static class PlaceholderCollector extends AstVisitor<Void, Void> {
-        private final PlaceholderExpr[] placeholderExprs;
-        public PlaceholderCollector(PlaceholderExpr[] placeholderExprs) {
+        private final List<PlaceholderExpr> placeholderExprs;
+        private final boolean variableArgument;
+        public PlaceholderCollector(List<PlaceholderExpr> placeholderExprs, boolean vararg) {
             this.placeholderExprs = placeholderExprs;
+            this.variableArgument = vararg;
         }
 
         @Override
@@ -63,18 +79,30 @@ public class FunctionCallTransformer {
 
         @Override
         public Void visitPlaceholderExpr(PlaceholderExpr node, Void context) {
-            placeholderExprs[node.getIndex() - 1] = node;
+            if (!variableArgument) {
+                placeholderExprs.set(node.getIndex() - 1, node);
+            } else {
+                placeholderExprs.add(node);
+            }
             return null;
         }
     }
 
     public boolean match(List<Expr> sourceArguments) {
         List<Class<? extends Expr>> argTypes = sourceArguments.stream().map(Expr::getClass).collect(Collectors.toList());
+        if (variableArgument) {
+            for (Class<? extends Expr> argType : argTypes) {
+                if (!placeholderExprs.get(0).getClazz().isAssignableFrom(argType)) {
+                    return false;
+                }
+            }
+            return true;
+        }
         if (sourceArguments.size() != argNums) {
             return false;
         }
         for (int index = 0; index < argNums; ++index) {
-            if (!placeholderExprs[index].getClazz().isAssignableFrom(argTypes.get(index))) {
+            if (!placeholderExprs.get(index).getClazz().isAssignableFrom(argTypes.get(index))) {
                 return false;
             }
         }
@@ -82,21 +110,35 @@ public class FunctionCallTransformer {
     }
 
     public Expr transform(List<Expr> sourceArguments) {
-        return new FunctionCallRewriter(placeholderExprs, sourceArguments).visit(targetCall);
+        return new FunctionCallRewriter(placeholderExprs, variableArgument, sourceArguments).visit(targetCall.clone());
     }
 
     private static class FunctionCallRewriter extends AstVisitor<Expr, Void> {
         private final List<Expr> sourceArguments;
+        private boolean variableArgument;
 
-        public FunctionCallRewriter(PlaceholderExpr[] placeholderExprs, List<Expr> sourceArguments) {
-            Preconditions.checkState(placeholderExprs.length == sourceArguments.size());
+        public FunctionCallRewriter(List<PlaceholderExpr> placeholderExprs, boolean varargs, List<Expr> sourceArguments) {
+            this.variableArgument = varargs;
+            if (!varargs) {
+                Preconditions.checkState(placeholderExprs.size() == sourceArguments.size());
+            }
             this.sourceArguments = sourceArguments;
         }
 
         @Override
         public Expr visitExpression(Expr node, Void context) {
-            for (int index = 0; index < node.getChildren().size(); ++index) {
-                node.setChild(index, visit(node.getChild(index)));
+            if (!variableArgument) {
+                for (int index = 0; index < node.getChildren().size(); ++index) {
+                    node.setChild(index, visit(node.getChild(index)));
+                }
+            } else {
+                // If variableArgument is true, use all source arguments to replace placeholders.
+                if (node.getChildren().stream().anyMatch(child -> child instanceof PlaceholderExpr)) {
+                    node.clearChildren();
+                    for (Expr sourceArgument : sourceArguments) {
+                        node.addChild(sourceArgument);
+                    }
+                }
             }
             return node;
         }

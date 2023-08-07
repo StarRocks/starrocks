@@ -14,9 +14,12 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -42,6 +45,16 @@ public class PhysicalRepeatOperator extends PhysicalOperator {
         this.limit = limit;
         this.predicate = predicate;
         this.projection = projection;
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        List<ColumnOutputInfo> columnOutputInfoList = Lists.newArrayList();
+        outputGrouping.stream().forEach(e -> columnOutputInfoList.add(new ColumnOutputInfo(e, e)));
+        for (ColumnOutputInfo columnOutputInfo : inputs.get(0).getRowOutputInfo().getColumnOutputInfo()) {
+            columnOutputInfoList.add(new ColumnOutputInfo(columnOutputInfo.getColumnRef(), columnOutputInfo.getColumnRef()));
+        }
+        return new RowOutputInfo(columnOutputInfoList, outputGrouping);
     }
 
     @Override
@@ -71,12 +84,15 @@ public class PhysicalRepeatOperator extends PhysicalOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
+
+        if (!super.equals(o)) {
             return false;
         }
+
         PhysicalRepeatOperator that = (PhysicalRepeatOperator) o;
         return Objects.equals(outputGrouping, that.outputGrouping) &&
-                Objects.equals(repeatColumnRef, that.repeatColumnRef);
+                Objects.equals(repeatColumnRef, that.repeatColumnRef) &&
+                Objects.equals(groupingIds, that.groupingIds);
     }
 
     @Override

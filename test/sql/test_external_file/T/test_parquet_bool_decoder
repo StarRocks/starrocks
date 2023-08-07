@@ -1,0 +1,19 @@
+-- name: testParquetBoolDecoder
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_parquet_bool_decoder/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/bool_decoder.parquet oss://${oss_bucket}/test_parquet_bool_decoder/${uuid0}/bool_decoder.parquet | grep -Pv "(average|elapsed)"
+
+CREATE EXTERNAL TABLE parquet_bool_decoder
+(
+    c_enabled boolean
+) 
+ENGINE=file
+PROPERTIES 
+(
+    "path" = "oss://${oss_bucket}/test_parquet_bool_decoder/${uuid0}/", 
+    "format" = "parquet"
+);
+
+select count(*),c_enabled from parquet_bool_decoder group by c_enabled order by c_enabled;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_parquet_bool_decoder/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null

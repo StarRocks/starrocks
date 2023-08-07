@@ -42,7 +42,7 @@ public class MapType extends Type {
     public MapType(Type keyType, Type valueType) {
         Preconditions.checkNotNull(keyType);
         Preconditions.checkNotNull(valueType);
-        selectedFields = new Boolean[] { false, false };
+        selectedFields = new Boolean[] {false, false};
         this.keyType = keyType;
         this.valueType = valueType;
     }
@@ -56,15 +56,38 @@ public class MapType extends Type {
     }
 
     @Override
-    public void setSelectedField(int pos, boolean needSetChildren) {
-        if (pos == -1) {
-            Arrays.fill(selectedFields, true);
-        } else {
-            selectedFields[pos] = true;
+    public void setSelectedField(ComplexTypeAccessPath accessPath, boolean needSetChildren) {
+        ComplexTypeAccessPathType accessPathType = accessPath.getAccessPathType();
+        switch (accessPathType) {
+            case ALL_SUBFIELDS:
+                Arrays.fill(selectedFields, true);
+                break;
+            case MAP_KEY:
+                selectedFields[0] = true;
+                break;
+            case MAP_VALUE:
+                selectedFields[1] = true;
+                break;
+            default:
+                Preconditions.checkArgument(false, "Unreachable!");
         }
-        if (needSetChildren && (pos == 1 || pos == -1) && valueType.isComplexType()) {
+
+        if (needSetChildren &&
+                (accessPathType == ComplexTypeAccessPathType.ALL_SUBFIELDS ||
+                        accessPathType == ComplexTypeAccessPathType.MAP_VALUE) && valueType.isComplexType()) {
             valueType.selectAllFields();
         }
+    }
+
+    public void pruneUnusedSubfields() {
+        // We set pruned subfield to NULL in map
+        if (!selectedFields[0]) {
+            keyType = ScalarType.UNKNOWN_TYPE;
+        }
+        if (!selectedFields[1]) {
+            valueType = ScalarType.UNKNOWN_TYPE;
+        }
+        Preconditions.checkArgument(!keyType.isUnknown() || !valueType.isUnknown());
     }
 
     @Override
@@ -112,9 +135,9 @@ public class MapType extends Type {
     @Override
     public String toSql(int depth) {
         if (depth >= MAX_NESTING_DEPTH) {
-            return "MAP<...>";
+            return "map<...>";
         }
-        return String.format("MAP<%s,%s>",
+        return String.format("map<%s,%s>",
                 keyType.toSql(depth + 1), valueType.toSql(depth + 1));
     }
 
@@ -141,12 +164,23 @@ public class MapType extends Type {
     public void toThrift(TTypeDesc container) {
         TTypeNode node = new TTypeNode();
         container.types.add(node);
-        Preconditions.checkNotNull(keyType);
-        Preconditions.checkNotNull(valueType);
         node.setType(TTypeNodeType.MAP);
-        node.setSelected_fields(Arrays.asList(selectedFields));
         keyType.toThrift(container);
         valueType.toThrift(container);
+    }
+
+    @Override
+    public boolean isFullyCompatible(Type other) {
+        if (!other.isMapType()) {
+            return false;
+        }
+
+        if (equals(other)) {
+            return true;
+        }
+
+        MapType t = (MapType) other;
+        return keyType.isFullyCompatible(t.getKeyType()) && valueType.isFullyCompatible(t.getValueType());
     }
 
     @Override
@@ -154,10 +188,13 @@ public class MapType extends Type {
         MapType clone = (MapType) super.clone();
         clone.keyType = this.keyType.clone();
         clone.valueType = this.valueType.clone();
-        clone.selectedFields = this.selectedFields.clone();
+        if (this.selectedFields != null) {
+            clone.selectedFields = this.selectedFields.clone();
+        }
         return clone;
     }
 
+    // Todo: remove it after remove selectedFields
     public static class MapTypeDeserializer implements JsonDeserializer<MapType> {
         @Override
         public MapType deserialize(JsonElement jsonElement, java.lang.reflect.Type type,

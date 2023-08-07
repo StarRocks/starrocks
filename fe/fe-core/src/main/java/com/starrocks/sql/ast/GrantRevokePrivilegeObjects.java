@@ -15,79 +15,60 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.UserIdentity;
+import com.starrocks.common.Pair;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
 public class GrantRevokePrivilegeObjects implements ParseNode {
-    private List<List<String>> privilegeObjectNameTokensList = null;
-    private List<UserIdentity> userPrivilegeObjectList = null;
-    // grant create_table on all databases to userx
-    // ==> allTypeList: ["databases"], restrictType: null, restrictName: null
-    // grant select on all tables in database db1 to userx
-    // ==> allTypeList: ["tables"], restrictType: database, restrictName: db1
-    // grant select on all tables in all databases to userx
-    // ==> allTypeList: ["tables", "databases"], restrictType: null, restrictName: null
-    private List<String> allTypeList = null;
-    private String restrictType = null;
-    private String restrictName = null;
+    //UnResolved AST used in syntax grantPrivWithType
+    private List<List<String>> privilegeObjectNameTokensList;
 
-    private FunctionArgsDef functionArgsDef = null;
+    //UnResolved AST used in syntax grantImpersonate
+    private List<UserIdentity> userPrivilegeObjectList;
 
-    private String functionName = null;
-    public void setPrivilegeObjectNameTokensList(List<List<String>> privilegeObjectNameTokensList) {
-        this.privilegeObjectNameTokensList = privilegeObjectNameTokensList;
+    //UnResolved AST used in syntax grantPrivWithFunc
+    private List<Pair<FunctionName, FunctionArgsDef>> functions;
+
+    private final NodePosition pos;
+
+    public GrantRevokePrivilegeObjects() {
+        this(NodePosition.ZERO);
     }
 
-    public void setUserPrivilegeObjectList(List<UserIdentity> userPrivilegeObjectList) {
-        this.userPrivilegeObjectList = userPrivilegeObjectList;
+    public GrantRevokePrivilegeObjects(NodePosition pos) {
+        this.pos = pos;
     }
 
-    public void setAll(List<String> allTypeList, String restrictType, String restrictName) {
-        this.allTypeList = allTypeList;
-        this.restrictType = restrictType;
-        this.restrictName = restrictName;
-    }
 
     public List<List<String>> getPrivilegeObjectNameTokensList() {
         return privilegeObjectNameTokensList;
+    }
+
+    public void setPrivilegeObjectNameTokensList(List<List<String>> privilegeObjectNameTokensList) {
+        this.privilegeObjectNameTokensList = privilegeObjectNameTokensList;
     }
 
     public List<UserIdentity> getUserPrivilegeObjectList() {
         return userPrivilegeObjectList;
     }
 
-    public List<String> getAllTypeList() {
-        return allTypeList;
+    public void setUserPrivilegeObjectList(List<UserIdentity> userPrivilegeObjectList) {
+        this.userPrivilegeObjectList = userPrivilegeObjectList;
     }
 
-    public String getRestrictType() {
-        return restrictType;
+    public List<Pair<FunctionName, FunctionArgsDef>> getFunctions() {
+        return functions;
     }
 
-    public String getRestrictName() {
-        return restrictName;
-    }
-
-    public String getFunctionName() {
-        return functionName;
-    }
-
-    public void setFunctionName(String functionName) {
-        this.functionName = functionName;
-    }
-
-    public FunctionArgsDef getFunctionArgsDef() {
-        return functionArgsDef;
-    }
-
-    public void setFunctionArgsDef(FunctionArgsDef functionArgsDef) {
-        this.functionArgsDef = functionArgsDef;
+    public void setFunctions(List<Pair<FunctionName, FunctionArgsDef>> functions) {
+        this.functions = functions;
     }
 
     @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return null;
+    public NodePosition getPos() {
+        return pos;
     }
 }

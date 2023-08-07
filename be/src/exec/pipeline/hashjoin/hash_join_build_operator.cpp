@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
 
+#include <utility>
+
 #include "exec/pipeline/query_context.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_filter_worker.h"
@@ -21,12 +23,10 @@ namespace starrocks::pipeline {
 
 HashJoinBuildOperator::HashJoinBuildOperator(OperatorFactory* factory, int32_t id, const string& name,
                                              int32_t plan_node_id, int32_t driver_sequence, HashJoinerPtr join_builder,
-                                             const std::vector<HashJoinerPtr>& read_only_join_probers,
                                              PartialRuntimeFilterMerger* partial_rf_merger,
                                              const TJoinDistributionMode::type distribution_mode)
         : Operator(factory, id, name, plan_node_id, driver_sequence),
           _join_builder(std::move(join_builder)),
-          _read_only_join_probers(read_only_join_probers),
           _partial_rf_merger(partial_rf_merger),
           _distribution_mode(distribution_mode) {}
 
@@ -37,19 +37,20 @@ Status HashJoinBuildOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
 Status HashJoinBuildOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
 
+    _partial_rf_merger->incr_builder();
+
+    // For prober.
+    // HashJoinProbeOperator may be instantiated lazily, so join_builder is ref here
+    // and unref when all the probers are finished in join_builder->decr_prober.
     _join_builder->ref();
-    for (auto& read_only_join_prober : _read_only_join_probers) {
-        read_only_join_prober->ref();
-    }
+    // For builder.
+    _join_builder->ref();
 
     RETURN_IF_ERROR(_join_builder->prepare_builder(state, _unique_metrics.get()));
 
     return Status::OK();
 }
 void HashJoinBuildOperator::close(RuntimeState* state) {
-    for (auto& read_only_join_prober : _read_only_join_probers) {
-        read_only_join_prober->unref(state);
-    }
     _join_builder->unref(state);
 
     Operator::close(state);
@@ -61,8 +62,23 @@ StatusOr<ChunkPtr> HashJoinBuildOperator::pull_chunk(RuntimeState* state) {
     return Status::NotSupported(msg);
 }
 
+size_t HashJoinBuildOperator::output_amplification_factor() const {
+    if (_avg_keys_perf_bucket > 0) {
+        return _avg_keys_perf_bucket;
+    }
+
+    _avg_keys_perf_bucket = _join_builder->avg_keys_perf_bucket();
+    _avg_keys_perf_bucket = std::max<size_t>(_avg_keys_perf_bucket, 1);
+
+    auto* counter = ADD_COUNTER(_unique_metrics, "AvgKeysPerBuckets", TUnit::UNIT);
+    COUNTER_SET(counter, static_cast<int64_t>(_avg_keys_perf_bucket));
+
+    return _avg_keys_perf_bucket;
+}
+
 Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
-    _is_finished = true;
+    DeferOp op([this]() { _is_finished = true; });
+
     RETURN_IF_ERROR(_join_builder->build_ht(state));
 
     size_t merger_index = _driver_sequence;
@@ -101,29 +117,21 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
         runtime_filter_hub()->set_collector(_plan_node_id, std::make_unique<RuntimeFilterCollector>(
                                                                    std::move(in_filters), std::move(bloom_filters)));
     }
-    {
-        TRY_CATCH_ALLOC_SCOPE_START()
-        for (auto& read_only_join_prober : _read_only_join_probers) {
-            read_only_join_prober->reference_hash_table(_join_builder.get());
-        }
-        TRY_CATCH_ALLOC_SCOPE_END()
-    }
 
     _join_builder->enter_probe_phase();
-    for (auto& read_only_join_prober : _read_only_join_probers) {
-        read_only_join_prober->enter_probe_phase();
-    }
+
     return Status::OK();
 }
 
 HashJoinBuildOperatorFactory::HashJoinBuildOperatorFactory(
         int32_t id, int32_t plan_node_id, HashJoinerFactoryPtr hash_joiner_factory,
         std::unique_ptr<PartialRuntimeFilterMerger>&& partial_rf_merger,
-        const TJoinDistributionMode::type distribution_mode)
+        const TJoinDistributionMode::type distribution_mode, SpillProcessChannelFactoryPtr spill_channel_factory)
         : OperatorFactory(id, "hash_join_build", plan_node_id),
           _hash_joiner_factory(std::move(hash_joiner_factory)),
           _partial_rf_merger(std::move(partial_rf_merger)),
-          _distribution_mode(distribution_mode) {}
+          _distribution_mode(distribution_mode),
+          _spill_channel_factory(std::move(spill_channel_factory)) {}
 
 Status HashJoinBuildOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
@@ -135,13 +143,14 @@ void HashJoinBuildOperatorFactory::close(RuntimeState* state) {
     OperatorFactory::close(state);
 }
 
-OperatorPtr HashJoinBuildOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
+OperatorPtr HashJoinBuildOperatorFactory::create(int32_t dop, int32_t driver_sequence) {
     if (_string_key_columns.empty()) {
-        _string_key_columns.resize(degree_of_parallelism);
+        _string_key_columns.resize(dop);
     }
-    return std::make_shared<HashJoinBuildOperator>(
-            this, _id, _name, _plan_node_id, driver_sequence, _hash_joiner_factory->create_builder(driver_sequence),
-            _hash_joiner_factory->get_read_only_probers(), _partial_rf_merger.get(), _distribution_mode);
+
+    return std::make_shared<HashJoinBuildOperator>(this, _id, _name, _plan_node_id, driver_sequence,
+                                                   _hash_joiner_factory->create_builder(dop, driver_sequence),
+                                                   _partial_rf_merger.get(), _distribution_mode);
 }
 
 void HashJoinBuildOperatorFactory::retain_string_key_columns(int32_t driver_sequence, Columns&& columns) {

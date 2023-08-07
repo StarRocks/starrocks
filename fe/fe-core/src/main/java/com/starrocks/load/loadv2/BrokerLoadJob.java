@@ -34,8 +34,10 @@
 
 package com.starrocks.load.loadv2;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -63,10 +65,14 @@ import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TLoadJobType;
+import com.starrocks.thrift.TPartialUpdateMode;
+import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.TransactionState;
@@ -91,10 +97,20 @@ public class BrokerLoadJob extends BulkLoadJob {
     private ConnectContext context;
     private List<LoadLoadingTask> newLoadingTasks = Lists.newArrayList();
 
+    @SerializedName("wh")
+    private String warehouse;
+
     // only for log replay
     public BrokerLoadJob() {
         super();
         this.jobType = EtlJobType.BROKER;
+        this.warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+    }
+
+    @VisibleForTesting
+    public void setConnectContext(ConnectContext context) {
+        this.context = context;
+        this.warehouse = context == null ? WarehouseManager.DEFAULT_WAREHOUSE_NAME : context.getCurrentWarehouse();
     }
 
     public BrokerLoadJob(long dbId, String label, BrokerDesc brokerDesc, OriginStatement originStmt, ConnectContext context)
@@ -104,6 +120,12 @@ public class BrokerLoadJob extends BulkLoadJob {
         this.brokerDesc = brokerDesc;
         this.jobType = EtlJobType.BROKER;
         this.context = context;
+        this.warehouse = context == null ? WarehouseManager.DEFAULT_WAREHOUSE_NAME : context.getCurrentWarehouse();
+    }
+
+    @Override
+    public String getCurrentWarehouse() {
+        return warehouse;
     }
 
     @Override
@@ -239,16 +261,37 @@ public class BrokerLoadJob extends BulkLoadJob {
                             + tableId + " not found");
                 }
 
+                if (context == null) {
+                    context = new ConnectContext();
+                    context.setDatabase(db.getFullName());
+                    if (sessionVariables.get(CURRENT_QUALIFIED_USER_KEY) != null) {
+                        context.setQualifiedUser(sessionVariables.get(CURRENT_QUALIFIED_USER_KEY));
+                        context.setCurrentUserIdentity(UserIdentity.fromString(sessionVariables.get(CURRENT_USER_IDENT_KEY)));
+                        context.setCurrentRoleIds(UserIdentity.fromString(sessionVariables.get(CURRENT_USER_IDENT_KEY)));
+                    } else {
+                        throw new DdlException("Failed to divide job into loading task when user is null");
+                    }
+                }
+
                 String mergeCondition = (brokerDesc == null) ? "" : brokerDesc.getMergeConditionStr();
+                TPartialUpdateMode mode = TPartialUpdateMode.UNKNOWN_MODE;
+                if (partialUpdateMode.equals("column")) {
+                    mode = TPartialUpdateMode.COLUMN_UPSERT_MODE;
+                } else if (partialUpdateMode.equals("auto")) {
+                    mode = TPartialUpdateMode.AUTO_MODE;
+                } else if (partialUpdateMode.equals("row")) {
+                    mode = TPartialUpdateMode.ROW_MODE;
+                }
                 // Generate loading task and init the plan of task
                 LoadLoadingTask task = new LoadLoadingTask(db, table, brokerDesc,
                         brokerFileGroups, getDeadlineMs(), loadMemLimit,
                         strictMode, transactionId, this, timezone, timeoutSecond,
                         createTimestamp, partialUpdate, mergeCondition, sessionVariables,
-                        context,  TLoadJobType.BROKER, priority, originStmt);
+                        context,  TLoadJobType.BROKER, priority, originStmt, mode);
                 UUID uuid = UUID.randomUUID();
                 TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
                 task.init(loadId, attachment.getFileStatusByTable(aggKey), attachment.getFileNumByTable(aggKey));
+                // update total loading task scan range num
                 idToTasks.put(task.getSignature(), task);
                 // idToTasks contains previous LoadPendingTasks, so idToTasks is just used to save all tasks.
                 // use newLoadingTasks to save new created loading tasks and submit them later.
@@ -379,6 +422,9 @@ public class BrokerLoadJob extends BulkLoadJob {
         if (attachment.getTrackingUrl() != null) {
             loadingStatus.setTrackingUrl(attachment.getTrackingUrl());
         }
+        if (!attachment.getRejectedRecordPaths().isEmpty()) {
+            loadingStatus.setRejectedRecordPaths(attachment.getRejectedRecordPaths());
+        }
         commitInfos.addAll(attachment.getCommitInfoList());
         failInfos.addAll(attachment.getFailInfoList());
         progress = (int) ((double) finishedTaskIds.size() / idToTasks.size() * 100);
@@ -408,14 +454,18 @@ public class BrokerLoadJob extends BulkLoadJob {
     }
 
     @Override
-    public void updateProgess(Long beId, TUniqueId loadId, TUniqueId fragmentId,
-                              long sinkRows, long sinkBytes, long sourceRows, long sourceBytes, boolean isDone) {
+    public void updateProgress(TReportExecStatusParams params) {
         writeLock();
         try {
-            super.updateProgess(beId, loadId, fragmentId, sinkRows, sinkBytes, sourceRows, sourceBytes, isDone);
+            super.updateProgress(params);
             if (!loadingStatus.getLoadStatistic().getLoadFinish()) {
-                progress = (int) ((double) loadingStatus.getLoadStatistic().totalSourceLoadBytes() /
-                        loadingStatus.getLoadStatistic().totalFileSize() * 100);
+                if (jobType == EtlJobType.BROKER) {
+                    progress = (int) ((double) loadingStatus.getLoadStatistic().sourceScanBytes() /
+                            loadingStatus.getLoadStatistic().totalFileSize() * 100);
+                } else {
+                    progress = (int) ((double) loadingStatus.getLoadStatistic().totalSourceLoadBytes() /
+                            loadingStatus.getLoadStatistic().totalFileSize() * 100);
+                }
                 if (progress >= 100) {
                     progress = 99;
                 }

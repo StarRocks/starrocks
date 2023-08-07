@@ -24,8 +24,9 @@ import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
-import com.starrocks.server.TableFactory;
+import com.starrocks.server.TableFactoryProvider;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.common.EngineType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -54,6 +55,10 @@ public class HudiTableTest {
                 "\"type\"  =  \"hudi\", \"hive.metastore.uris\"  =  \"thrift://127.0.0.1:9083\")");
         starRocksAssert.withDatabase("db");
         hiveClient = new HiveMetastoreTest.MockedHiveMetaClient();
+    }
+
+    com.starrocks.catalog.Table createTable(CreateTableStmt stmt) throws DdlException {
+        return TableFactoryProvider.getFactory(EngineType.HUDI.name()).createTable(null, null, stmt);
     }
 
     @Test(expected = HoodieIOException.class)
@@ -104,10 +109,10 @@ public class HudiTableTest {
             }
         };
 
-        String createTableSql = "create external table db.hudi_tbl (col1 int, col2 int) engine=hudi properties " +
+        String createTableSql = "create external table if not exists db.hudi_tbl (col1 int, col2 int) engine=hudi properties " +
                 "(\"resource\"=\"hudi0\", \"database\"=\"db0\", \"table\"=\"table0\")";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-        com.starrocks.catalog.Table table = TableFactory.createTable(createTableStmt, com.starrocks.catalog.Table.TableType.HUDI);
+        com.starrocks.catalog.Table table = createTable(createTableStmt);
         Assert.fail("No exception throws.");
     }
 
@@ -118,7 +123,7 @@ public class HudiTableTest {
         String createTableSql = "create external table db.hudi_tbl (col1 int, col2 int) engine=hudi properties " +
                 "(\"resource\"=\"hudi0\", \"table\"=\"table0\")";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-        com.starrocks.catalog.Table table = TableFactory.createTable(createTableStmt, com.starrocks.catalog.Table.TableType.HUDI);
+        com.starrocks.catalog.Table table = createTable(createTableStmt);
         Assert.fail("No exception throws.");
     }
 
@@ -127,7 +132,7 @@ public class HudiTableTest {
         String createTableSql = "create external table db.hudi_tbl (col1 int, col2 int) engine=hudi properties " +
                 "(\"resource\"=\"hudi0\", \"database\"=\"db0\")";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-        com.starrocks.catalog.Table table = TableFactory.createTable(createTableStmt, com.starrocks.catalog.Table.TableType.HUDI);
+        com.starrocks.catalog.Table table = createTable(createTableStmt);
         Assert.fail("No exception throws.");
     }
 
@@ -136,7 +141,7 @@ public class HudiTableTest {
         String createTableSql = "create external table db.hudi_tbl (col1 int, col2 int) engine=hudi properties " +
                 "(\"database\"=\"db0\", \"table\"=\"table0\")";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-        com.starrocks.catalog.Table table = TableFactory.createTable(createTableStmt, com.starrocks.catalog.Table.TableType.HUDI);
+        com.starrocks.catalog.Table table = createTable(createTableStmt);
         Assert.fail("No exception throws.");
     }
 
@@ -145,7 +150,7 @@ public class HudiTableTest {
         String createTableSql = "create external table db.hudi_tbl (col1 int, col2 int) engine=hudi properties " +
                 "(\"resource\"=\"not_exist\", \"database\"=\"db0\", \"table\"=\"table0\")";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-        com.starrocks.catalog.Table table = TableFactory.createTable(createTableStmt, com.starrocks.catalog.Table.TableType.HUDI);
+        com.starrocks.catalog.Table table = createTable(createTableStmt);
         Assert.fail("No exception throws.");
     }
 

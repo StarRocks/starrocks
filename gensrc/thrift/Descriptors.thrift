@@ -137,7 +137,26 @@ enum TSchemaTableType {
     SCH_TASKS,
     SCH_TASK_RUNS,
     SCH_VERBOSE_SESSION_VARIABLES,
-    SCH_INVALID
+    SCH_BE_TABLETS,
+    SCH_BE_METRICS,
+    SCH_BE_TXNS,
+    SCH_BE_CONFIGS,
+    SCH_LOADS,
+    SCH_LOAD_TRACKING_LOGS,
+    SCH_FE_TABLET_SCHEDULES,
+    SCH_BE_COMPACTIONS,
+    SCH_BE_THREADS,
+    SCH_BE_LOGS,
+    SCH_BE_BVARS,
+    SCH_BE_CLOUD_NATIVE_COMPACTIONS,
+    SCH_ROUTINE_LOAD_JOBS,
+    SCH_STREAM_LOADS,
+    SCH_PIPE_FILES,
+    SCH_PIPES,
+
+    STARROCKS_ROLE_EDGES,
+    STARROCKS_GRANT_TO_ROLES,
+    STARROCKS_GRANT_TO_USERS
 }
 
 enum THdfsCompression {
@@ -175,7 +194,8 @@ struct TColumn {
     5: optional bool is_allow_null                                                                    
     6: optional string default_value               
     7: optional bool is_bloom_filter_column     
-    8: optional Exprs.TExpr define_expr                                                               
+    8: optional Exprs.TExpr define_expr 
+    9: optional bool is_auto_increment                                                              
                                                                                                       
     // How many bytes used for short key index encoding.
     // For fixed-length column, this value may be ignored by BE when creating a tablet.
@@ -205,6 +225,8 @@ struct TOlapTablePartition {
     7: optional list<Exprs.TExprNode> end_keys
 
     8: optional list<list<Exprs.TExprNode>> in_keys
+    // for automatic partition
+    9: optional bool is_shadow_partition = false
 }
 
 struct TOlapTablePartitionParam {
@@ -224,6 +246,8 @@ struct TOlapTablePartitionParam {
 
     7: optional list<string> partition_columns
     8: optional list<Exprs.TExpr> partition_exprs
+
+    9: optional bool enable_automatic_partition
 }
 
 struct TOlapTableIndexSchema {
@@ -344,12 +368,44 @@ struct TFileTable {
     2: optional list<TColumn> columns
 }
 
+struct TTableFunctionTable {
+    // Table Function Table's file dir 
+    1: optional string path 
+
+    // Schema columns
+    2: optional list<TColumn> columns
+}
+
+struct TIcebergSchema {
+    1: optional list<TIcebergSchemaField> fields
+}
+
+struct TIcebergSchemaField {
+    // Refer to field id in iceberg schema
+    1: optional i32 field_id
+
+    // Refer to field name
+    2: optional string name
+
+    // You can fill other field properties here if you needed
+    // .......
+
+    // Children fields for struct, map and list(array)
+    100: optional list<TIcebergSchemaField> children
+}
+
 struct TIcebergTable {
     // table location
     1: optional string location
 
     // Schema columns, except partition columns
     2: optional list<TColumn> columns
+
+    // Iceberg schema, used to support schema evolution
+    3: optional TIcebergSchema iceberg_schema
+
+    // partition column names
+    4: optional list<string> partition_column_names
 }
 
 struct THudiTable {
@@ -382,9 +438,17 @@ struct THudiTable {
 
     // hudi table serde_lib
     10: optional string serde_lib
+}
 
-    // hudi table type: copy on write or merge on read
-    11: optional bool is_mor_table
+struct TPaimonTable {
+    // paimon table catalog type
+    1: optional string catalog_type
+
+    // paimon table metastore URI
+    2: optional string metastore_uri
+
+    // paimon table warehouse path
+    3: optional string warehouse_path
 }
 
 struct TDeltaLakeTable {
@@ -448,6 +512,12 @@ struct TTableDescriptor {
 
   // File Table
   34: optional TFileTable fileTable
+
+  // Table Function Table
+  35: optional TTableFunctionTable tableFunctionTable
+
+  // Paimon Table schema
+  36: optional TPaimonTable paimonTable
 }
 
 struct TDescriptorTable {

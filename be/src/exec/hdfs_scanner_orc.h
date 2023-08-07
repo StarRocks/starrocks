@@ -32,6 +32,7 @@ public:
     void do_close(RuntimeState* runtime_state) noexcept override;
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
     Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
+    void do_update_counter(HdfsScanProfile* profile) override;
 
     void disable_use_orc_sargs() { _use_orc_sargs = false; }
 
@@ -51,6 +52,7 @@ private:
     std::shared_ptr<OrcRowReaderFilter> _orc_row_reader_filter;
     Filter _dict_filter;
     Filter _chunk_filter;
+    std::set<int64_t> _need_skip_rowids;
 };
 
 } // namespace starrocks

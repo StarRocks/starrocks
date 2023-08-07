@@ -27,10 +27,11 @@
 
 #include "column/const_column.h"
 #include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/cpu.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
@@ -45,17 +46,17 @@ public:
     // The result column is not nullable uint8 column
     // For nullable uint8 column, we merge it's null column and data column
     // Used in ExecNode::eval_conjuncts
-    static Column::Filter& merge_nullable_filter(Column* column);
+    static Filter& merge_nullable_filter(Column* column);
 
     // merge column with filter, and save result to filer.
     // `all_zero` means, after merging, if there is only zero value in filter.
-    static void merge_two_filters(const ColumnPtr& column, Column::Filter* __restrict filter, bool* all_zero = nullptr);
-    static void merge_filters(const Columns& columns, Column::Filter* __restrict filter);
-    static void merge_two_filters(Column::Filter* __restrict filter, const uint8_t* __restrict selected,
+    static void merge_two_filters(const ColumnPtr& column, Filter* __restrict filter, bool* all_zero = nullptr);
+    static void merge_filters(const Columns& columns, Filter* __restrict filter);
+    static void merge_two_filters(Filter* __restrict filter, const uint8_t* __restrict selected,
                                   bool* all_zero = nullptr);
 
     // Like merge_filters but use OR operator to merge them
-    static void or_two_filters(Column::Filter* __restrict filter, const uint8_t* __restrict selected);
+    static void or_two_filters(Filter* __restrict filter, const uint8_t* __restrict selected);
     static void or_two_filters(size_t count, uint8_t* __restrict filter, const uint8_t* __restrict selected);
     static size_t count_nulls(const ColumnPtr& col);
 
@@ -73,15 +74,15 @@ public:
      */
     static size_t count_false_with_notnull(const ColumnPtr& col);
 
-    // Find the first non-null value
+    // Find the first non-null value in [start, end), return end if all null
     static size_t find_nonnull(const Column* col, size_t start, size_t end);
 
-    // Find the non-null value in reversed order
+    // Find the non-null value in reversed order in [start, end), return start if all null
     static size_t last_nonnull(const Column* col, size_t start, size_t end);
 
     template <LogicalType Type>
     static inline ColumnPtr create_const_column(const RunTimeCppType<Type>& value, size_t chunk_size) {
-        static_assert(!pt_is_decimal<Type>,
+        static_assert(!lt_is_decimal<Type>,
                       "Decimal column can not created by this function because of missing "
                       "precision and scale param");
         auto ptr = RunTimeColumnType<Type>::create();
@@ -94,13 +95,13 @@ public:
         return ConstColumn::create(ptr, chunk_size);
     }
 
-    template <LogicalType PT>
-    static inline ColumnPtr create_const_decimal_column(RunTimeCppType<PT> value, int precision, int scale,
+    template <LogicalType LT>
+    static inline ColumnPtr create_const_decimal_column(RunTimeCppType<LT> value, int precision, int scale,
                                                         size_t size) {
-        static_assert(pt_is_decimal<PT>);
-        using ColumnType = RunTimeColumnType<PT>;
+        static_assert(lt_is_decimal<LT>);
+        using ColumnType = RunTimeColumnType<LT>;
         auto data_column = ColumnType::create(precision, scale, 1);
-        auto& data = ColumnHelper::cast_to_raw<PT>(data_column)->get_data();
+        auto& data = ColumnHelper::cast_to_raw<LT>(data_column)->get_data();
         DCHECK(data.size() == 1);
         data[0] = value;
         return ConstColumn::create(data_column, size);
@@ -114,6 +115,15 @@ public:
             return const_column->data_column();
         }
         return column;
+    }
+
+    static inline bool offsets_equal(const UInt32Column::Ptr& offset0, const UInt32Column::Ptr& offset1) {
+        if (offset0->size() != offset1->size()) {
+            return false;
+        }
+        auto data1 = offset0->get_data();
+        auto data2 = offset1->get_data();
+        return std::equal(data1.begin(), data1.end(), data2.begin());
     }
 
     static ColumnPtr unfold_const_column(const TypeDescriptor& type_desc, size_t size, const ColumnPtr& column) {
@@ -212,8 +222,8 @@ public:
                                        const bool is_nullable);
 
     // Create a column with specified size, the column will be resized to size
-    static ColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size);
-
+    static ColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size,
+                                   bool use_adaptive_nullable_column = false);
     /**
      * Cast columnPtr to special type ColumnPtr
      * Plz sure actual column type by yourself
@@ -332,7 +342,7 @@ public:
     static bool is_all_const(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);
     static size_t compute_bytes_size(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);
     template <typename T, bool avx512f>
-    static size_t t_filter_range(const Column::Filter& filter, T* data, size_t from, size_t to) {
+    static size_t t_filter_range(const Filter& filter, T* data, size_t from, size_t to) {
         auto start_offset = from;
         auto result_offset = from;
 
@@ -447,7 +457,7 @@ public:
     }
 
     template <typename T>
-    static size_t filter_range(const Column::Filter& filter, T* data, size_t from, size_t to) {
+    static size_t filter_range(const Filter& filter, T* data, size_t from, size_t to) {
         if (base::CPU::instance()->has_avx512f()) {
             return t_filter_range<T, true>(filter, data, from, to);
         } else {
@@ -456,7 +466,7 @@ public:
     }
 
     template <typename T>
-    static size_t filter(const Column::Filter& filter, T* data) {
+    static size_t filter(const Filter& filter, T* data) {
         return filter_range(filter, data, 0, filter.size());
     }
 
@@ -486,15 +496,19 @@ public:
 };
 
 // Hold a slice of chunk
-struct ChunkSlice {
-    ChunkUniquePtr chunk;
+template <class Ptr = ChunkUniquePtr>
+struct ChunkSliceTemplate {
+    Ptr chunk;
     size_t offset = 0;
 
     bool empty() const;
     size_t rows() const;
     size_t skip(size_t skip_rows);
-    ChunkPtr cutoff(size_t required_rows);
-    void reset(ChunkUniquePtr input);
+    Ptr cutoff(size_t required_rows);
+    void reset(Ptr input);
 };
+
+using ChunkSlice = ChunkSliceTemplate<ChunkUniquePtr>;
+using ChunkSharedSlice = ChunkSliceTemplate<ChunkPtr>;
 
 } // namespace starrocks

@@ -34,8 +34,6 @@
 
 package com.starrocks.persist;
 
-import com.starrocks.common.FeMetaVersion;
-import com.starrocks.meta.MetaContext;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -48,10 +46,6 @@ import java.io.FileOutputStream;
 public class DropPartitionInfoTest {
     @Test
     public void testSerialization() throws Exception {
-        MetaContext metaContext = new MetaContext();
-        metaContext.setMetaVersion(FeMetaVersion.VERSION_89);
-        metaContext.setThreadLocalInfo();
-
         // 1. Write objects to file
         File file = new File("./dropPartitionInfo");
         file.createNewFile();

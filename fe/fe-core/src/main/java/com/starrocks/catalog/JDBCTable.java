@@ -17,6 +17,7 @@ package com.starrocks.catalog;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.Resource.ResourceType;
 import com.starrocks.common.DdlException;
@@ -41,10 +42,14 @@ public class JDBCTable extends Table {
     private static final String TABLE = "table";
     private static final String RESOURCE = "resource";
 
-    private String resourceName;
+    @SerializedName(value = "tn")
     private String jdbcTable;
+    @SerializedName(value = "rn")
+    private String resourceName;
+
     private Map<String, String> properties;
     private String dbName;
+    private String catalogName;
 
     public JDBCTable() {
         super(TableType.JDBC);
@@ -55,10 +60,11 @@ public class JDBCTable extends Table {
         validate(properties);
     }
 
-    public JDBCTable(long id, String name, List<Column> schema, String dbName,
+    public JDBCTable(long id, String name, List<Column> schema, String dbName, String catalogName,
                      Map<String, String> properties) throws DdlException {
         super(id, name, TableType.JDBC, schema);
         this.dbName = dbName;
+        this.catalogName = catalogName;
         validate(properties);
     }
 
@@ -68,6 +74,10 @@ public class JDBCTable extends Table {
 
     public String getJdbcTable() {
         return jdbcTable;
+    }
+
+    public String getProperty(String propertyKey) {
+        return properties.get(propertyKey);
     }
 
     private void validate(Map<String, String> properties) throws DdlException {
@@ -101,6 +111,16 @@ public class JDBCTable extends Table {
         }
         if (resource.getType() != ResourceType.JDBC) {
             throw new DdlException("resource [" + resourceName + "] is not jdbc resource");
+        }
+    }
+
+    // TODO, identify the remote table that created after deleted
+    @Override
+    public String getUUID() {
+        if (!Strings.isNullOrEmpty(catalogName)) {
+            return String.join(".", catalogName, dbName, name);
+        } else {
+            return Long.toString(id);
         }
     }
 

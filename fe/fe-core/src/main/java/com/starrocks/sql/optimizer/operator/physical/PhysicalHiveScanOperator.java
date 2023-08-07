@@ -12,35 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.physical;
 
-import com.google.common.base.Objects;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-
-import java.util.Map;
+import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 
 public class PhysicalHiveScanOperator extends PhysicalScanOperator {
     private ScanOperatorPredicates predicates;
 
-    public PhysicalHiveScanOperator(Table table,
-                                    Map<ColumnRefOperator, Column> columnRefMap,
-                                    ScanOperatorPredicates predicates,
-                                    long limit,
-                                    ScalarOperator predicate,
-                                    Projection projection) {
-        super(OperatorType.PHYSICAL_HIVE_SCAN, table, columnRefMap, limit, predicate, projection);
-        this.predicates = predicates;
+    public PhysicalHiveScanOperator(LogicalHiveScanOperator scanOperator) {
+        super(OperatorType.PHYSICAL_HIVE_SCAN, scanOperator);
+        this.predicates = scanOperator.getScanOperatorPredicates();
     }
 
     @Override
@@ -61,28 +48,6 @@ public class PhysicalHiveScanOperator extends PhysicalScanOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitPhysicalHiveScan(optExpression, context);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
-            return false;
-        }
-
-        PhysicalHiveScanOperator that = (PhysicalHiveScanOperator) o;
-        ScanOperatorPredicates targetPredicts = ((PhysicalHiveScanOperator) o).getScanOperatorPredicates();
-        return Objects.equal(table, that.table) && predicates.equals(targetPredicts);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hashCode(super.hashCode(), table, predicates);
     }
 
     @Override

@@ -33,13 +33,8 @@ class LocationProvider {
 public:
     virtual ~LocationProvider() = default;
 
-    // TODO: move this method to another class.
-    virtual std::set<int64_t> owned_tablets() const = 0;
-
     // The result should be guaranteed to not end with "/"
     virtual std::string root_location(int64_t tablet_id) const = 0;
-
-    virtual Status list_root_locations(std::set<std::string>* groups) const = 0;
 
     std::string metadata_root_location(int64_t tablet_id) const {
         return join_path(root_location(tablet_id), kMetadataDirectoryName);
@@ -57,10 +52,6 @@ public:
         return join_path(metadata_root_location(tablet_id), tablet_metadata_filename(tablet_id, version));
     }
 
-    std::string tablet_delvec_location(int64_t tablet_id, int64_t version) const {
-        return join_path(segment_root_location(tablet_id), tablet_delvec_filename(tablet_id, version));
-    }
-
     std::string txn_log_location(int64_t tablet_id, int64_t txn_id) const {
         return join_path(txn_log_root_location(tablet_id), txn_log_filename(tablet_id, txn_id));
     }
@@ -75,6 +66,10 @@ public:
 
     std::string del_location(int64_t tablet_id, std::string_view del_name) const {
         return join_path(segment_root_location(tablet_id), del_name);
+    }
+
+    std::string delvec_location(int64_t tablet_id, std::string_view delvec_name) const {
+        return join_path(segment_root_location(tablet_id), delvec_name);
     }
 
     std::string tablet_metadata_lock_location(int64_t tablet_id, int64_t version, int64_t expire_time) const {

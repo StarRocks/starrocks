@@ -12,22 +12,46 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector;
 
-public interface ConnectorFactory {
+import com.starrocks.connector.config.ConnectorConfig;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.lang.reflect.Constructor;
+
+public class ConnectorFactory {
+    private static final Logger LOG = LogManager.getLogger(ConnectorFactory.class);
+
     /**
      * create a connector instance
      *
      * @param context - encapsulate all information needed to create a connector
      * @return a connector instance
      */
-    Connector createConnector(ConnectorContext context);
+    public static Connector createConnector(ConnectorContext context) {
+        if (null == context || !ConnectorType.isSupport(context.getType())) {
+            return null;
+        }
 
-    /**
-     * a unique string represents a kinds of connector
-     *
-     * @return a string of connector name
-     */
-    String name();
+        ConnectorType connectorType = ConnectorType.from(context.getType());
+        Class<Connector> connectorClass = connectorType.getConnectorClass();
+        Class<ConnectorConfig> ctConfigClass = connectorType.getConfigClass();
+        try {
+            Constructor connectorConstructor = connectorClass.getDeclaredConstructor(ConnectorContext.class);
+            Connector connector = (Connector) connectorConstructor.newInstance(new Object[] {context});
+
+            // init config, then load config
+            if (null != connector && null != ctConfigClass) {
+                ConnectorConfig connectorConfig = ctConfigClass.newInstance();
+                connectorConfig.loadConfig(context.getProperties());
+                connector.bindConfig(connectorConfig);
+            }
+
+            return connector;
+        } catch (Exception e) {
+            LOG.error("can't create connector for type: " + context.getType(), e);
+            return null;
+        }
+    }
 }

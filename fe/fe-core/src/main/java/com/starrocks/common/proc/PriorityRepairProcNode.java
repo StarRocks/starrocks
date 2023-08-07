@@ -54,7 +54,7 @@ public class PriorityRepairProcNode implements ProcNodeInterface {
         result.setNames(TITLE_NAMES);
 
         TabletChecker tabletChecker = GlobalStateMgr.getCurrentState().getTabletChecker();
-        result.setRows(tabletChecker.getPriosInfo());
+        result.setRows(tabletChecker.getUrgentTableInfo());
 
         return result;
     }

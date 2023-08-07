@@ -31,7 +31,7 @@ namespace starrocks {
 class MemPool;
 class MysqlRowBuffer;
 class Slice;
-class TypeDescriptor;
+struct TypeDescriptor;
 
 // Forward declaration
 class Datum;
@@ -56,6 +56,10 @@ public:
 
     static const uint64_t MAX_CAPACITY_LIMIT = static_cast<uint64_t>(UINT32_MAX) + 1;
     static const uint64_t MAX_LARGE_CAPACITY_LIMIT = UINT64_MAX;
+
+    static const int EQUALS_FALSE = 0;
+    static const int EQUALS_NULL = -1;
+    static const int EQUALS_TRUE = 1;
 
     // mutable operations cannot be applied to shared data when concurrent
     using Ptr = std::shared_ptr<Column>;
@@ -95,8 +99,6 @@ public:
 
     virtual bool is_struct() const { return false; }
 
-    virtual bool low_cardinality() const { return false; }
-
     virtual const uint8_t* raw_data() const = 0;
 
     virtual uint8_t* mutable_raw_data() = 0;
@@ -114,13 +116,7 @@ public:
 
     // Size of column data in memory (may be approximate). Zero, if could not be determined.
     virtual size_t byte_size() const = 0;
-    virtual size_t byte_size(size_t from, size_t size) const {
-        DCHECK_LE(from + size, this->size()) << "Range error";
-        if (empty()) {
-            return 0;
-        }
-        return byte_size() * size / this->size();
-    }
+    virtual size_t byte_size(size_t from, size_t size) const = 0;
 
     // The byte size for serialize, for varchar, we need to add the len byte size
     virtual size_t byte_size(size_t idx) const = 0;
@@ -163,7 +159,11 @@ public:
     // The type of |src| and |this| must be exactly matched.
     virtual void append(const Column& src, size_t offset, size_t count) = 0;
 
+    virtual void append_shallow_copy(const Column& src, size_t offset, size_t count) { append(src, offset, count); }
+
     virtual void append(const Column& src) { append(src, 0, src.size()); }
+
+    virtual void append_shallow_copy(const Column& src) { append_shallow_copy(src, 0, src.size()); }
 
     // replicate a column to align with an array's offset, used for captured columns in lambda functions
     // for example: column(1,2)->replicate({0,2,5}) = column(1,1,2,2,2)
@@ -175,7 +175,7 @@ public:
         DCHECK(this->size() >= dest_size) << "The size of the source column is less when duplicating it.";
         dest->reserve(offsets.back());
         for (int i = 0; i < dest_size; ++i) {
-            dest->append_value_multiple_times(*this, i, offsets[i + 1] - offsets[i]);
+            dest->append_value_multiple_times(*this, i, offsets[i + 1] - offsets[i], true);
         }
         return dest;
     }
@@ -190,7 +190,7 @@ public:
     //      src_column data: [5, 6]
     // After call this function, column data will be set as [5, 1, 2, 6, 4]
     // The values in indexes is incremented
-    virtual Status update_rows(const Column& src, const uint32_t* indexes) = 0;
+    virtual void update_rows(const Column& src, const uint32_t* indexes) = 0;
 
     // This function will append data from src according to the input indexes. 'indexes' contains
     // the row index of the src.
@@ -203,12 +203,22 @@ public:
     // This function will copy the [3, 2] row of src to this column.
     virtual void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) = 0;
 
+    virtual void append_selective_shallow_copy(const Column& src, const uint32_t* indexes, uint32_t from,
+                                               uint32_t size) {
+        return append_selective(src, indexes, from, size);
+    }
+
     void append_selective(const Column& src, const Buffer<uint32_t>& indexes) {
-        return append_selective(src, indexes.data(), 0, indexes.size());
+        return append_selective(src, indexes.data(), 0, static_cast<uint32_t>(indexes.size()));
+    }
+
+    void append_selective_shallow_copy(const Column& src, const Buffer<uint32_t>& indexes) {
+        return append_selective_shallow_copy(src, indexes.data(), 0, static_cast<uint32_t>(indexes.size()));
     }
 
     // This function will get row through 'from' index from src, and copy size elements to this column.
-    virtual void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) = 0;
+    // Currently only `ObjectColumn<BitmapValue>` support shallow copy
+    virtual void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) = 0;
 
     // Append multiple `null` values into this column.
     // Return false if this is a non-nullable column, i.e, if `is_nullable` return false.
@@ -309,13 +319,15 @@ public:
 
     // REQUIRES: size of |filter| equals to the size of this column.
     // Removes elements that don't match the filter.
-    using Filter = Buffer<uint8_t>;
     inline size_t filter(const Filter& filter) {
         DCHECK_EQ(size(), filter.size());
         return filter_range(filter, 0, filter.size());
     }
 
     inline size_t filter(const Filter& filter, size_t count) { return filter_range(filter, 0, count); }
+
+    // get rid of the case where the map/array is null but the map/array'elements are not empty.
+    bool empty_null_in_complex_column(const Filter& null_data, const std::vector<uint32_t>& offsets);
 
     // FIXME: Many derived implementation assume |to| equals to size().
     virtual size_t filter_range(const Filter& filter, size_t from, size_t to) = 0;
@@ -332,6 +344,14 @@ public:
     // For non Nullable and non floating point types, nan_direction_hint is ignored.
     virtual int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const = 0;
 
+    // For some columns equals will be overwritten for more efficient
+    // When safe equals, 0: false, 1: true
+    // When unsafe equals, -1: NULL, 0: false, 1: true
+    // return: EQUALS_FALSE, EQUALS_NULL, EQUALS_TRUE
+    virtual int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const {
+        return compare_at(left, right, rhs, -1) == 0;
+    }
+
     // Compute fvn hash, mainly used by shuffle column data
     // Note: shuffle hash function should be different from Aggregate and Join Hash map hash function
     virtual void fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const = 0;
@@ -339,9 +359,9 @@ public:
     // used by data loading compute tablet bucket
     virtual void crc32_hash(uint32_t* seed, uint32_t from, uint32_t to) const = 0;
 
-    virtual void crc32_hash_at(uint32_t* seed, int32_t idx) const { crc32_hash(seed - idx, idx, idx + 1); }
+    virtual void crc32_hash_at(uint32_t* seed, uint32_t idx) const { crc32_hash(seed - idx, idx, idx + 1); }
 
-    virtual void fnv_hash_at(uint32_t* seed, int32_t idx) const { fnv_hash(seed - idx, idx, idx + 1); }
+    virtual void fnv_hash_at(uint32_t* seed, uint32_t idx) const { fnv_hash(seed - idx, idx, idx + 1); }
 
     virtual int64_t xor_checksum(uint32_t from, uint32_t to) const = 0;
 
@@ -362,20 +382,23 @@ public:
     [[nodiscard]] virtual bool set_null(size_t idx __attribute__((unused))) { return false; }
 
     // Only used for debug one item in this column
-    virtual std::string debug_item(uint32_t idx) const { return ""; }
+    virtual std::string debug_item(size_t idx) const { return ""; }
 
     virtual std::string debug_string() const { return {}; }
 
-    // memory usage includes container memory usage and element memory usage.
+    // used for automatic partition item in this column
+    virtual std::string raw_item_value(size_t idx) const { return debug_item(idx); }
+
+    // memory usage includes container memory usage and reference memory usage.
     // 1. container memory usage: container capacity * type size.
-    // 2. element memory usage: element data size that is not in the container,
+    // 2. reference memory usage: element data size that is not in the container,
     //    such as memory referenced by pointer.
     //   2.1 object column: element serialize data size.
     //   2.2 other columns: 0.
-    virtual size_t memory_usage() const { return container_memory_usage() + element_memory_usage(); }
+    virtual size_t memory_usage() const { return container_memory_usage() + reference_memory_usage(); }
     virtual size_t container_memory_usage() const = 0;
-    virtual size_t element_memory_usage() const { return element_memory_usage(0, size()); }
-    virtual size_t element_memory_usage(size_t from, size_t size) const { return 0; }
+    virtual size_t reference_memory_usage() const { return reference_memory_usage(0, size()); }
+    virtual size_t reference_memory_usage(size_t from, size_t size) const = 0;
 
     virtual void swap_column(Column& rhs) = 0;
 
@@ -395,6 +418,8 @@ public:
     // But if complex types contains ConstColumns internally, current unpack functions can not handle it.
     // So to get a right answer, we need to make sure that there are no const columns in Complex Columns(Struct/Map)
     virtual Status unfold_const_children(const TypeDescriptor& type) { return Status::OK(); }
+    // current only used by adaptive_nullable_column
+    virtual void materialized_nullable() const {}
 
 protected:
     static StatusOr<ColumnPtr> downgrade_helper_func(ColumnPtr* col);

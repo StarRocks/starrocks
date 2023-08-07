@@ -17,17 +17,39 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.sql.parser.NodePosition;
 
 public class RefreshSchemeDesc implements ParseNode {
 
     protected MaterializedView.RefreshType type;
+    protected MaterializedView.RefreshMoment moment;
+    protected final NodePosition pos;
 
     public RefreshSchemeDesc(MaterializedView.RefreshType type) {
+        this(type, NodePosition.ZERO);
+    }
+
+    public RefreshSchemeDesc(MaterializedView.RefreshType type, NodePosition pos) {
+        this(type, pos, MaterializedView.RefreshMoment.IMMEDIATE);
+    }
+
+    public RefreshSchemeDesc(MaterializedView.RefreshType type, NodePosition pos, MaterializedView.RefreshMoment moment) {
         this.type = type;
+        this.moment = moment;
+        this.pos = pos;
     }
 
     public MaterializedView.RefreshType getType() {
         return type;
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
+    }
+
+    public MaterializedView.RefreshMoment getMoment() {
+        return moment;
     }
 
 }

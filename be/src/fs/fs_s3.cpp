@@ -24,7 +24,6 @@
 #include <aws/s3/model/DeleteBucketRequest.h>
 #include <aws/s3/model/DeleteObjectRequest.h>
 #include <aws/s3/model/DeleteObjectsRequest.h>
-#include <aws/s3/model/DeleteObjectsResult.h>
 #include <aws/s3/model/GetObjectRequest.h>
 #include <aws/s3/model/HeadObjectRequest.h>
 #include <aws/s3/model/ListObjectsV2Request.h>
@@ -61,7 +60,7 @@ static Status to_status(Aws::S3::S3Errors error, const std::string& msg) {
     case Aws::S3::S3Errors::NO_SUCH_UPLOAD:
         return Status::NotFound(fmt::format("no such upload: {}", msg));
     default:
-        return Status::InternalError(fmt::format(msg));
+        return Status::InternalError(msg);
     }
 }
 
@@ -90,6 +89,8 @@ public:
 
     S3ClientPtr new_client(const TCloudConfiguration& cloud_configuration);
     S3ClientPtr new_client(const ClientConfiguration& config, const FSOptions& opts);
+
+    void close();
 
     static ClientConfiguration& getClientConfig() {
         // We cached config here and make a deep copy each time.Since aws sdk has changed the
@@ -129,7 +130,7 @@ private:
 
 S3ClientFactory::S3ClientFactory() : _rand((int)::time(nullptr)) {}
 
-// Get a AWSCredentialsProvider based on CloudCredential
+// Get an AWSCredentialsProvider based on CloudCredential
 std::shared_ptr<Aws::Auth::AWSCredentialsProvider> S3ClientFactory::_get_aws_credentials_provider(
         const AWSCloudCredential& aws_cloud_credential) {
     std::shared_ptr<Aws::Auth::AWSCredentialsProvider> credential_provider = nullptr;
@@ -141,7 +142,8 @@ std::shared_ptr<Aws::Auth::AWSCredentialsProvider> S3ClientFactory::_get_aws_cre
             credential_provider = std::make_shared<Aws::Auth::InstanceProfileCredentialsProvider>();
         } else if (!aws_cloud_credential.access_key.empty() && !aws_cloud_credential.secret_key.empty()) {
             credential_provider = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(
-                    aws_cloud_credential.access_key, aws_cloud_credential.secret_key);
+                    aws_cloud_credential.access_key, aws_cloud_credential.secret_key,
+                    aws_cloud_credential.session_token);
         } else {
             DCHECK(false) << "Unreachable!";
             credential_provider = std::make_shared<Aws::Auth::AnonymousAWSCredentialsProvider>();
@@ -156,6 +158,13 @@ std::shared_ptr<Aws::Auth::AWSCredentialsProvider> S3ClientFactory::_get_aws_cre
         }
     }
     return credential_provider;
+}
+
+void S3ClientFactory::close() {
+    std::lock_guard l(_lock);
+    for (auto& item : _clients) {
+        item.reset();
+    }
 }
 
 S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfiguration& t_cloud_configuration) {
@@ -177,6 +186,13 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfigurati
     if (!aws_cloud_credential.endpoint.empty()) {
         config.endpointOverride = aws_cloud_credential.endpoint;
     }
+    config.maxConnections = config::object_storage_max_connection;
+    if (config::object_storage_connect_timeout_ms > 0) {
+        config.connectTimeoutMs = config::object_storage_connect_timeout_ms;
+    }
+    if (config::object_storage_request_timeout_ms >= 0) {
+        config.requestTimeoutMs = config::object_storage_request_timeout_ms;
+    }
 
     ClientCacheKey client_cache_key{config, aws_cloud_configuration};
     {
@@ -193,6 +209,7 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfigurati
             credential_provider, config, Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, !path_style_access);
 
     {
+        std::lock_guard l(_lock);
         if (UNLIKELY(_items >= kMaxItems)) {
             int idx = _rand.Uniform(kMaxItems);
             _client_cache_keys[idx] = client_cache_key;
@@ -258,11 +275,14 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
     return client;
 }
 
+// If you find yourself change this code, see also `bool operator==(const Aws::Client::ClientConfiguration&, const Aws::Client::ClientConfiguration&)`
 static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri, const FSOptions& opts) {
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     const THdfsProperties* hdfs_properties = opts.hdfs_properties();
+    // TODO(SmithCruise) If CloudType is DEFAULT, we should use hadoop sdk to access file,
+    // otherwise user's core-site.xml will not take effect in s3 sdk
     if ((hdfs_properties != nullptr && hdfs_properties->__isset.cloud_configuration) ||
-        opts.cloud_configuration != nullptr) {
+        (opts.cloud_configuration != nullptr && opts.cloud_configuration->cloud_type != TCloudType::DEFAULT)) {
         // Use CloudConfiguration instead of original logic
         const TCloudConfiguration& tCloudConfiguration = (opts.cloud_configuration != nullptr)
                                                                  ? *opts.cloud_configuration
@@ -299,6 +319,13 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri, const F
         }
         config.maxConnections = config::object_storage_max_connection;
     }
+    if (config::object_storage_connect_timeout_ms > 0) {
+        config.connectTimeoutMs = config::object_storage_connect_timeout_ms;
+    }
+    // 0 is meaningful for object_storage_request_timeout_ms
+    if (config::object_storage_request_timeout_ms >= 0) {
+        config.requestTimeoutMs = config::object_storage_request_timeout_ms;
+    }
     return S3ClientFactory::instance().new_client(config, opts);
 }
 
@@ -332,13 +359,13 @@ public:
 
     Status path_exists(const std::string& path) override { return Status::NotSupported("S3FileSystem::path_exists"); }
 
-    Status list_path(const std::string& dir, std::vector<FileStatus>* result) override;
-
     Status get_children(const std::string& dir, std::vector<std::string>* file) override {
         return Status::NotSupported("S3FileSystem::get_children");
     }
 
     Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override;
+
+    Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override;
 
     Status delete_file(const std::string& path) override;
 
@@ -526,7 +553,7 @@ Status S3FileSystem::iterate_dir(const std::string& dir, const std::function<boo
     return directory_exist ? Status::OK() : Status::NotFound(dir);
 }
 
-Status S3FileSystem::list_path(const std::string& dir, std::vector<FileStatus>* file_status) {
+Status S3FileSystem::iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) {
     S3URI uri;
     if (!uri.parse(dir)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", dir));
@@ -557,9 +584,10 @@ Status S3FileSystem::list_path(const std::string& dir, std::vector<FileStatus>* 
             const auto& full_name = cp.GetPrefix();
 
             std::string_view name(full_name.data() + uri.key().size(), full_name.size() - uri.key().size() - 1);
-            bool is_dir = true;
-            int64_t file_size = 0;
-            file_status->emplace_back(name, is_dir, file_size);
+            DirEntry entry{.name = name, .is_dir = {true}};
+            if (!cb(entry)) {
+                return Status::OK();
+            }
         }
         for (auto&& obj : result.GetContents()) {
             if (obj.GetKey() == uri.key()) {
@@ -568,19 +596,27 @@ Status S3FileSystem::list_path(const std::string& dir, std::vector<FileStatus>* 
             DCHECK(HasPrefixString(obj.GetKey(), uri.key()));
 
             std::string_view obj_key(obj.GetKey());
-            bool is_dir = true;
-            int64_t file_size = 0;
+            DirEntry entry;
+            if (obj.LastModifiedHasBeenSet()) {
+                entry.mtime = obj.GetLastModified().Seconds();
+            }
             if (obj_key.back() == '/') {
                 obj_key = std::string_view(obj_key.data(), obj_key.size() - 1);
+                entry.is_dir = true;
             } else {
                 DCHECK(obj.SizeHasBeenSet());
-                is_dir = false;
-                file_size = obj.GetSize();
+                entry.is_dir = false;
+                if (obj.SizeHasBeenSet()) {
+                    entry.size = obj.GetSize();
+                }
             }
 
             std::string_view name(obj_key.data() + uri.key().size(), obj_key.size() - uri.key().size());
+            entry.name = name;
 
-            file_status->emplace_back(name, is_dir, file_size);
+            if (!cb(entry)) {
+                return Status::OK();
+            }
         }
     } while (result.GetIsTruncated());
     return directory_exist ? Status::OK() : Status::NotFound(dir);
@@ -787,6 +823,10 @@ Status S3FileSystem::delete_dir_recursive(const std::string& dirname) {
 
 std::unique_ptr<FileSystem> new_fs_s3(const FSOptions& options) {
     return std::make_unique<S3FileSystem>(options);
+}
+
+void close_s3_clients() {
+    S3ClientFactory::instance().close();
 }
 
 } // namespace starrocks

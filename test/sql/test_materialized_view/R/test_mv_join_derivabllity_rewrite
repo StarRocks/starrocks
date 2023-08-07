@@ -1,0 +1,667 @@
+
+
+CREATE TABLE IF NOT EXISTS `customer` (
+  `c_custkey` int(11) NULL,
+  `c_id` int(11) NULL,
+  `c_name` varchar(26) NOT NULL ,
+  `c_address` varchar(41) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c_custkey`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 2
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into customer values (1, 1, "name_1", "address_1"), (2, 2, "name_2", "address_2"), (3, 3, "name_3", "address_3"), (null, 4, "name_null", "address_null");
+
+CREATE TABLE IF NOT EXISTS `lineorder` (
+  `lo_orderkey` int(11) NULL,
+  `lo_linenumber` int(11) NOT NULL COMMENT "",
+  `lo_custkey` int(11) NULL COMMENT "",
+  `lo_quantity` int(11) NOT NULL,
+  `lo_revenue` int(11) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`lo_orderkey`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 2
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into lineorder values(10001, 1, 1, 10, 1000), (10002, 1, 2, 20, 2000), (10003, 1, 3, 30, 3000), (10004, 1, null, 40, 4000);
+
+create materialized view mv_left_outer
+distributed by hash(`lo_orderkey`) buckets 10
+refresh manual
+as
+select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name
+from lineorder left outer join customer
+on lo_custkey = c_custkey;
+
+refresh materialized view mv_left_outer with sync mode;
+
+explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name
+from lineorder left outer join customer
+on lo_custkey = c_custkey
+where c_name = 'name_1';
+-- result:
+[REGEX]mv_left_outer
+[REGEX]PREDICATES: 14: c_name = 'name'
+
+select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name
+from lineorder left outer join customer
+on lo_custkey = c_custkey
+where c_name = 'name_1';
+-- result:
+10001	1	10	1000	1	name_1
+
+explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name
+from lineorder left outer join customer
+on lo_custkey = c_custkey
+where c_name = 'name_1';
+-- result:
+[REGEX]mv_left_outer
+[REGEX]PREDICATES: .*: c_name = 'name'
+
+select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name
+from lineorder left outer join customer
+on lo_custkey = c_custkey
+where c_name = 'name_1';
+-- result:
+10001	1	10	1000	1	name_1
+
+create materialized view mv_left_outer_2
+distributed by hash(`lo_orderkey`) buckets 10
+refresh manual
+as
+select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name
+from lineorder left outer join customer
+on lo_custkey = c_custkey;
+-- result:
+-- !result
+refresh materialized view mv_left_outer_2 with sync mode;
+-- result:
+-- !result
+
+explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name
+from lineorder inner join customer
+on lo_custkey = c_custkey;
+-- result:
+[REGEX]mv_left_outer_2
+[REGEX]PREDICATES: .*: c_custkey IS NOT NULL
+-- !result
+
+select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name
+from lineorder inner join customer
+on lo_custkey = c_custkey order by lo_orderkey;
+-- result:
+10001	1	10	1000	1	name_1
+10002	1	20	2000	2	name_2
+10003	1	30	3000	3	name_3
+-- !result
+
+
+explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name
+from lineorder inner join customer
+on lo_custkey = c_custkey
+where c_name = 'name_1' and c_custkey = 1;
+-- result:
+[REGEX]mv_left_outer
+[REGEX]PREDICATES: .*: lo_custkey = 1, .*: c_name = 'name_1'
+
+select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name
+from lineorder inner join customer
+on lo_custkey = c_custkey
+where c_name = 'name_1' and c_custkey = 1;
+-- result:
+10001	1	10	1000	1	name_1
+
+explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue
+from lineorder left anti join customer
+on lo_custkey = c_custkey;
+-- result:
+[REGEX]mv_left_outer_2
+[REGEX]PREDICATES: .*: c_custkey IS NULL
+
+insert into lineorder values(10001, 2, 1, 10, 1400), (10002, 2, 2, 20, 2500), (10003, 1, 3, 30, 3600);
+
+create materialized view mv_left_outer_agg
+distributed by hash(`lo_orderkey`) buckets 10
+refresh manual
+as
+select lo_orderkey, c_name, sum(lo_revenue) as total_revenue
+from lineorder left outer join customer
+on lo_custkey = c_custkey
+group by lo_orderkey, c_name;
+
+refresh materialized view mv_left_outer_agg with sync mode;
+
+select count() from mv_left_outer_agg;
+-- result:
+4
+
+explain select lo_orderkey, c_name, sum(lo_revenue) as total_revenue
+from lineorder left outer join customer
+on lo_custkey = c_custkey
+where c_name = 'name_1'
+group by lo_orderkey, c_name;
+-- result:
+[REGEX]mv_left_outer_agg
+[REGEX]PREDICATES: .*: c_name = 'name_1'
+
+select lo_orderkey, c_name, sum(lo_revenue) as total_revenue
+from lineorder left outer join customer
+on lo_custkey = c_custkey
+where c_name = 'name_1'
+group by lo_orderkey, c_name;
+-- result:
+10001	name_1	2400
+
+drop materialized view mv_left_outer;
+drop materialized view mv_left_outer_2;
+drop materialized view mv_left_outer_agg;
+
+create materialized view mv_right_outer
+distributed by hash(`lo_orderkey`) buckets 10
+refresh manual
+as
+select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+from lineorder right outer join customer
+on lo_custkey = c_custkey;
+
+refresh materialized view mv_right_outer with sync mode;
+
+select count() from mv_right_outer;
+-- result:
+7
+
+explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+from lineorder right outer join customer
+on lo_custkey = c_custkey
+where lo_orderkey = 10001;
+-- result:
+[REGEX]mv_right_outer
+[REGEX]PREDICATES: .*: lo_orderkey = 1
+
+select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+from lineorder right outer join customer
+on lo_custkey = c_custkey
+where lo_orderkey = 10001;
+-- result:
+10001	1	10	1	1	name_1
+10001	2	10	1	1	name_1
+
+explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+from lineorder inner join customer
+on lo_custkey = c_custkey;
+-- result:
+[REGEX]mv_right_outer
+[REGEX]PREDICATES: .*: lo_custkey IS NOT NULL
+
+select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+from lineorder inner join customer
+on lo_custkey = c_custkey
+order by lo_orderkey, lo_linenumber;
+-- result:
+10001	1	10	1	1	name_1
+10001	2	10	1	1	name_1
+10002	1	20	2	2	name_2
+10002	2	20	2	2	name_2
+10003	1	30	3	3	name_3
+10003	1	30	3	3	name_3
+
+explain select c_custkey, c_name
+from lineorder right anti join customer
+on lo_custkey = c_custkey;
+-- result:
+[REGEX]mv_right_outer
+[REGEX]PREDICATES: .*: lo_custkey IS NULL
+
+
+drop materialized view mv_right_outer;
+
+create materialized view mv_right_outer_2
+distributed by hash(`lo_orderkey`) buckets 10
+refresh manual
+as
+select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name, c_id
+from lineorder right outer join customer
+on lo_custkey = c_custkey and lo_linenumber = c_id;
+
+refresh materialized view mv_right_outer_2 with sync mode;
+
+select count() from mv_right_outer_2;
+-- result:
+4
+
+explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name, c_id
+from lineorder inner join customer
+on lo_custkey = c_custkey and lo_linenumber = c_id;
+-- result:
+[REGEX]mv_right_outer_2
+[REGEX]PREDICATES: .*: lo_.* IS NOT NULL
+
+select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name, c_id
+from lineorder inner join customer
+on lo_custkey = c_custkey and lo_linenumber = c_id;
+-- result:
+10001	1	10	1	1	name_1	1
+10002	2	20	2	2	name_2	2
+
+drop materialized view mv_right_outer_2;
+
+
+create materialized view mv_right_outer_agg
+distributed by hash(`lo_orderkey`) buckets 10
+refresh manual
+as
+select lo_orderkey, lo_custkey, sum(lo_revenue) as total_revenue
+from lineorder right outer join customer
+on lo_custkey = c_custkey
+group by lo_orderkey, lo_custkey;
+
+refresh materialized view mv_right_outer_agg with sync mode;
+
+select count() from mv_right_outer_agg;
+-- result:
+4
+
+explain 
+select lo_orderkey, lo_custkey, sum(lo_revenue) as total_revenue
+from lineorder right outer join customer
+on lo_custkey = c_custkey
+where lo_orderkey = 10001
+group by lo_orderkey, lo_custkey;
+-- result:
+[REGEX]mv_right_outer_agg
+[REGEX]PREDICATES: .*: lo_orderkey = 10001
+
+select lo_orderkey, lo_custkey, sum(lo_revenue) as total_revenue
+from lineorder right outer join customer
+on lo_custkey = c_custkey
+where lo_orderkey = 10001
+group by lo_orderkey, lo_custkey;
+-- result:
+10001	1	2400
+
+explain select lo_orderkey, lo_custkey, sum(lo_revenue) as total_revenue
+from lineorder inner join customer
+on lo_custkey = c_custkey
+group by lo_orderkey, lo_custkey;
+-- result:
+[REGEX]mv_right_outer_agg
+[REGEX]PREDICATES: 12: lo_custkey IS NOT NULL
+
+select lo_orderkey, lo_custkey, sum(lo_revenue) as total_revenue
+from lineorder inner join customer
+on lo_custkey = c_custkey
+group by lo_orderkey, lo_custkey
+order by lo_orderkey;
+-- result:
+10001	1	2400
+10002	2	4500
+10003	3	6600
+
+drop materialized view mv_right_outer_agg;
+
+alter table customer set ("unique_constraints"="c_custkey");
+
+
+create materialized view mv_inner_join
+distributed by hash(`lo_orderkey`) buckets 10
+refresh manual
+as
+select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+from lineorder inner join customer
+on lo_custkey = c_custkey;
+
+refresh materialized view mv_inner_join with sync mode;
+
+select count() from mv_inner_join;
+-- result:
+6
+
+explain select lo_orderkey, lo_linenumber, lo_quantity
+from lineorder left semi join customer
+on lo_custkey = c_custkey;
+-- result:
+[REGEX]mv_inner_join
+
+select lo_orderkey, lo_linenumber, lo_quantity
+from lineorder left semi join customer
+on lo_custkey = c_custkey
+order by lo_orderkey,lo_linenumber;
+-- result:
+10001	1	10
+10001	2	10
+10002	1	20
+10002	2	20
+10003	1	30
+10003	1	30
+
+drop materialized view mv_inner_join;
+
+CREATE TABLE IF NOT EXISTS `customer_primary` (
+  `c_custkey` int(11) NOT NULL,
+  `c_id` int(11) NULL,
+  `c_name` varchar(26) NOT NULL ,
+  `c_address` varchar(41) NOT NULL
+) ENGINE=OLAP
+PRIMARY KEY(`c_custkey`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 2
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into customer_primary values (1, 1, "name_1", "address_1"), (2, 2, "name_2", "address_2"), (3, 3, "name_3", "address_3");
+
+create materialized view mv_inner_join_2
+distributed by hash(`lo_orderkey`) buckets 10
+refresh manual
+as
+select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+from lineorder inner join customer_primary
+on lo_custkey = c_custkey;
+
+refresh materialized view mv_inner_join_2 with sync mode;
+
+select count() from mv_inner_join_2;
+-- result:
+6
+
+
+explain select lo_orderkey, lo_linenumber, lo_quantity
+from lineorder left semi join customer_primary
+on lo_custkey = c_custkey;
+-- result:
+[REGEX]mv_inner_join_2
+
+select lo_orderkey, lo_linenumber, lo_quantity
+from lineorder left semi join customer_primary
+on lo_custkey = c_custkey
+order by lo_orderkey,lo_linenumber;
+-- result:
+10001	1	10
+10001	2	10
+10002	1	20
+10002	2	20
+10003	1	30
+10003	1	30
+
+drop materialized view mv_inner_join_2;
+
+
+CREATE TABLE IF NOT EXISTS `customer_unique` (
+  `c_custkey` int(11) NOT NULL,
+  `c_id` int(11) NULL,
+  `c_name` varchar(26) NOT NULL ,
+  `c_address` varchar(41) NOT NULL
+) ENGINE=OLAP
+UNIQUE KEY(`c_custkey`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 2
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into customer_unique values (1, 1, "name_1", "address_1"), (2, 2, "name_2", "address_2"), (3, 3, "name_3", "address_3");
+
+create materialized view mv_inner_join_3
+distributed by hash(`lo_orderkey`) buckets 10
+refresh manual
+as
+select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+from lineorder inner join customer_unique
+on lo_custkey = c_custkey;
+
+refresh materialized view mv_inner_join_3 with sync mode;
+
+select count() from mv_inner_join_3;
+-- result:
+6
+
+
+explain select lo_orderkey, lo_linenumber, lo_quantity
+from lineorder left semi join customer_unique
+on lo_custkey = c_custkey;
+-- result:
+[REGEX]mv_inner_join_3
+
+select lo_orderkey, lo_linenumber, lo_quantity
+from lineorder left semi join customer_unique
+on lo_custkey = c_custkey
+order by lo_orderkey,lo_linenumber;
+-- result:
+10001	1	10
+10001	2	10
+10002	1	20
+10002	2	20
+10003	1	30
+10003	1	30
+
+drop materialized view mv_inner_join_3;
+
+create materialized view mv_inner_join_4
+distributed by hash(`lo_orderkey`) buckets 10
+refresh manual
+as
+select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+from customer inner join lineorder
+on lo_custkey = c_custkey;
+
+refresh materialized view mv_inner_join_4 with sync mode;
+
+select count() from mv_inner_join_4;
+-- result:
+6
+
+explain select lo_orderkey, lo_linenumber, lo_quantity
+from customer right semi join lineorder
+on lo_custkey = c_custkey;
+-- result:
+[REGEX]mv_inner_join_4
+
+select lo_orderkey, lo_linenumber, lo_quantity
+from customer right semi join lineorder
+on lo_custkey = c_custkey
+order by lo_orderkey,lo_linenumber;
+-- result:
+10001	1	10
+10001	2	10
+10002	1	20
+10002	2	20
+10003	1	30
+10003	1	30
+
+drop materialized view mv_inner_join_4;
+
+create materialized view mv_inner_join_5
+distributed by hash(`lo_orderkey`) buckets 10
+refresh manual
+as
+select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+from customer_primary inner join lineorder
+on lo_custkey = c_custkey;
+
+refresh materialized view mv_inner_join_5 with sync mode;
+
+select count() from mv_inner_join_5;
+-- result:
+6
+
+explain select lo_orderkey, lo_linenumber, lo_quantity
+from customer_primary right semi join lineorder
+on lo_custkey = c_custkey;
+-- result:
+[REGEX]mv_inner_join_5
+
+select lo_orderkey, lo_linenumber, lo_quantity
+from customer_primary right semi join lineorder
+on lo_custkey = c_custkey
+order by lo_orderkey,lo_linenumber;
+-- result:
+10001	1	10
+10001	2	10
+10002	1	20
+10002	2	20
+10003	1	30
+10003	1	30
+
+drop materialized view mv_inner_join_5;
+
+create materialized view mv_inner_join_6
+distributed by hash(`lo_orderkey`) buckets 10
+refresh manual
+as
+select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+from customer_unique inner join lineorder
+on lo_custkey = c_custkey;
+
+refresh materialized view mv_inner_join_6 with sync mode;
+
+select count() from mv_inner_join_6;
+-- result:
+6
+
+
+explain select lo_orderkey, lo_linenumber, lo_quantity
+from customer_unique right semi join lineorder
+on lo_custkey = c_custkey;
+-- result:
+[REGEX]mv_inner_join_6
+
+select lo_orderkey, lo_linenumber, lo_quantity
+from customer_unique right semi join lineorder
+on lo_custkey = c_custkey;
+order by lo_orderkey,lo_linenumber;
+-- result:
+10001	1	10
+10001	2	10
+10002	1	20
+10002	2	20
+10003	1	30
+10003	1	30
+
+drop materialized view mv_inner_join_6;
+
+create materialized view mv_full_outer_join
+distributed by hash(`lo_orderkey`) buckets 10
+refresh manual
+as
+select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+from lineorder full outer join customer
+on lo_custkey = c_custkey;
+
+refresh materialized view mv_full_outer_join with sync mode;
+
+select count() from mv_full_outer_join;
+-- result:
+8
+
+explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+from lineorder left outer join customer
+on lo_custkey = c_custkey;
+-- result:
+[REGEX]mv_full_outer_join
+[REGEX]PREDICATES: .*: lo_linenumber IS NOT NULL
+
+select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name from lineorder left outer join customer on lo_custkey = c_custkey order by lo_orderkey, lo_linenumber;
+[REGEX]
+10001	1	10	1000	1	name_1
+10001	2	10	1400	1	name_1
+10002	1	10	2000	2	name_2
+10002	2	10	2500	2	name_2
+10003	1	30	3000	3	name_3
+10003	1	30	3600	3	name_3
+10004	1	40	4000	NULL	NULL
+
+
+explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+from lineorder right outer join customer
+on lo_custkey = c_custkey;
+-- result:
+[REGEX]mv_full_outer_join
+[REGEX]PREDICATES: .*: c_name IS NOT NULL
+
+select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+from lineorder right outer join customer
+on lo_custkey = c_custkey
+order by lo_orderkey, lo_linenumber;
+-- result:
+NULL	NULL	NULL	NULL	NULL	name_null
+10001	1	10	1000	1	name_1
+10001	2	10	1400	1	name_1
+10002	1	10	2000	2	name_2
+10002	2	10	2500	2	name_2
+10003	1	30	3000	3	name_3
+10003	1	30	3600	3	name_3
+
+
+
+explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+from lineorder inner join customer
+on lo_custkey = c_custkey;
+-- result:
+[REGEX]mv_full_outer_join
+[REGEX]PREDICATES: .*: c_name IS NOT NULL, .*: lo_linenumber IS NOT NULL
+
+select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+from lineorder inner join customer
+on lo_custkey = c_custkey
+order by lo_orderkey, lo_linenumber;
+-- result:
+10001	1	10	1000	1	name_1
+10001	2	10	1400	1	name_1
+10002	1	10	2000	2	name_2
+10002	2	10	2500	2	name_2
+10003	1	30	3000	3	name_3
+10003	1	30	3600	3	name_3
+
+
+-- name: test_outer_join_rewrite
+
+CREATE TABLE t1 (
+                k1 int,
+                k2 int not null
+            )
+            DUPLICATE KEY(k1);
+CREATE TABLE t2 (
+                a int,
+                b int not null
+            )
+            DUPLICATE KEY(a);
+INSERT INTO t1 VALUES (1,1),(3,2),(null,1);
+INSERT INTO t2 VALUES (1,1),(2,2),(null,1);
+CREATE MATERIALIZED VIEW mv1 REFRESH MANUAL AS select * from t1 full outer join t2 on k1=a;
+REFRESH MATERIALIZED VIEW mv1 with sync mode;
+select * from t1 left outer join t2 on k1=a where k1=3;
+-- result:
+3	2	NULL	NULL
+
+select * from t1 right outer join t2 on k1=a where b=2;
+-- result:
+NULL	NULL	2	2
+
+-- name: test_anti_join_rewrite
+
+CREATE TABLE t1 (
+                                    k1 int,
+                                    k2 int
+                                )
+                                DUPLICATE KEY(k1);
+CREATE TABLE t2 (
+                  a int,
+                  b int
+              )
+              DUPLICATE KEY(a);
+INSERT INTO t1 VALUES (1,1),(3,2),(1,null),(null,null);
+INSERT INTO t2 VALUES (1,1),(2,2),(null,1),(null,null);
+CREATE MATERIALIZED VIEW mv1 REFRESH MANUAL AS select * from t1 right outer join t2 on k1=a;
+REFRESH MATERIALIZED VIEW mv1 with sync mode;
+select * from t1 right anti join t2 on k1=a order by 1,2;
+-- result:
+NULL	NULL
+NULL	1
+2	2

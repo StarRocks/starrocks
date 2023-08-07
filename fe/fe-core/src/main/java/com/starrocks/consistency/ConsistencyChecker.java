@@ -46,7 +46,7 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.consistency.CheckConsistencyJob.JobState;
 import com.starrocks.persist.ConsistencyCheckInfo;
@@ -65,16 +65,15 @@ import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class ConsistencyChecker extends LeaderDaemon {
+public class ConsistencyChecker extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(ConsistencyChecker.class);
 
     private static final int MAX_JOB_NUM = 100;
-
     private static final Comparator<MetaObject> COMPARATOR =
             (first, second) -> Long.signum(first.getLastCheckTime() - second.getLastCheckTime());
 
     // tabletId -> job
-    private Map<Long, CheckConsistencyJob> jobs;
+    private final Map<Long, CheckConsistencyJob> jobs;
 
     /*
      * ATTN:
@@ -83,12 +82,13 @@ public class ConsistencyChecker extends LeaderDaemon {
      *       CheckConsistencyJob's synchronized
      *       db lock
      *
-     * if reversal is inevitable. use db.tryLock() instead to avoid dead lock
+     * if reversal is inevitable. use db.tryLock() instead to avoid deadlock
      */
-    private ReentrantReadWriteLock jobsLock;
+    private final ReentrantReadWriteLock jobsLock;
 
     private int startTime;
     private int endTime;
+    private long lastTabletMetaCheckTime = 0;
 
     public ConsistencyChecker() {
         super("consistency checker");
@@ -120,8 +120,17 @@ public class ConsistencyChecker extends LeaderDaemon {
         return true;
     }
 
+    private void checkTabletMetaConsistency() {
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().checkTabletMetaConsistency();
+    }
+
     @Override
     protected void runAfterCatalogReady() {
+        if (System.currentTimeMillis() - lastTabletMetaCheckTime > Config.consistency_tablet_meta_check_interval_ms) {
+            checkTabletMetaConsistency();
+            lastTabletMetaCheckTime = System.currentTimeMillis();
+        }
+
         // for each round. try chose enough new tablets to check
         // only add new job when it's work time
         if (itsTime() && getJobNum() == 0) {
@@ -177,20 +186,12 @@ public class ConsistencyChecker extends LeaderDaemon {
         calendar.setTimeInMillis(System.currentTimeMillis());
         int currentTime = calendar.get(Calendar.HOUR_OF_DAY);
 
-        boolean isTime = false;
+        boolean isTime;
         if (startTime < endTime) {
-            if (currentTime >= startTime && currentTime <= endTime) {
-                isTime = true;
-            } else {
-                isTime = false;
-            }
+            isTime = currentTime >= startTime && currentTime <= endTime;
         } else {
             // startTime > endTime (across the day)
-            if (currentTime >= startTime || currentTime <= endTime) {
-                isTime = true;
-            } else {
-                isTime = false;
-            }
+            isTime = currentTime >= startTime || currentTime <= endTime;
         }
 
         if (!isTime) {
@@ -240,13 +241,13 @@ public class ConsistencyChecker extends LeaderDaemon {
     }
 
     /**
-     * choose a tablet to check it's consistency
+     * choose a tablet to check whether it's consistent
      * we use a priority queue to sort db/table/partition/index/tablet by 'lastCheckTime'.
      * chose a tablet which has the smallest 'lastCheckTime'.
      */
     protected List<Long> chooseTablets() {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        MetaObject chosenOne = null;
+        MetaObject chosenOne;
 
         List<Long> chosenTablets = Lists.newArrayList();
 
@@ -255,7 +256,7 @@ public class ConsistencyChecker extends LeaderDaemon {
         if (dbIds.isEmpty()) {
             return chosenTablets;
         }
-        Queue<MetaObject> dbQueue = new PriorityQueue<>(Math.max(dbIds.size(), 1), COMPARATOR);
+        Queue<MetaObject> dbQueue = new PriorityQueue<>(dbIds.size(), COMPARATOR);
         for (Long dbId : dbIds) {
             if (dbId == 0L) {
                 // skip 'information_schema' database
@@ -283,7 +284,7 @@ public class ConsistencyChecker extends LeaderDaemon {
                         // Because some tablets of the not NORMAL table may just a temporary presence in memory,
                         // if we check those tablets and log FinishConsistencyCheck to bdb,
                         // it will throw NullPointerException when replaying the log.
-                        if (!table.isLocalTable() || ((OlapTable) table).getState() != OlapTableState.NORMAL) {
+                        if (!table.isOlapTableOrMaterializedView() || ((OlapTable) table).getState() != OlapTableState.NORMAL) {
                             continue;
                         }
                         tableQueue.add(table);
@@ -315,11 +316,11 @@ public class ConsistencyChecker extends LeaderDaemon {
                             Partition partition = (Partition) chosenOne;
 
                             // sort materializedIndices
-                            List<MaterializedIndex> visibleIndexs =
+                            List<MaterializedIndex> visibleIndexes =
                                     partition.getMaterializedIndices(IndexExtState.VISIBLE);
                             Queue<MetaObject> indexQueue =
-                                    new PriorityQueue<>(Math.max(visibleIndexs.size(), 1), COMPARATOR);
-                            indexQueue.addAll(visibleIndexs);
+                                    new PriorityQueue<>(Math.max(visibleIndexes.size(), 1), COMPARATOR);
+                            indexQueue.addAll(visibleIndexes);
 
                             while ((chosenOne = indexQueue.poll()) != null) {
                                 MaterializedIndex index = (MaterializedIndex) chosenOne;
@@ -341,7 +342,7 @@ public class ConsistencyChecker extends LeaderDaemon {
                                     if (partition.getVisibleVersion() == tablet.getCheckedVersion()) {
                                         if (tablet.isConsistent()) {
                                             LOG.debug("tablet[{}]'s version[{}-{}] has been checked. ignore",
-                                                    chosenTabletId, tablet.getCheckedVersion());
+                                                    chosenTabletId, tablet.getCheckedVersion(), partition.getVisibleVersion());
                                         }
                                     } else {
                                         LOG.info("chose tablet[{}-{}-{}-{}-{}] to check consistency", db.getId(),

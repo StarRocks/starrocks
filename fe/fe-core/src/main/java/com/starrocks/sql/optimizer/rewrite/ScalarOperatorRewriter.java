@@ -114,6 +114,8 @@ public class ScalarOperatorRewriter {
                 changeNums = context.changeNum();
                 result = applyRuleTopDown(result, rule);
             } while (changeNums != context.changeNum());
+        } else if (rule.isOnlyOnce()) {
+            result = applyRuleOnlyOnce(result, rule);
         }
 
         return result;
@@ -129,6 +131,10 @@ public class ScalarOperatorRewriter {
             context.change();
         }
         return op;
+    }
+
+    private ScalarOperator applyRuleOnlyOnce(ScalarOperator operator, ScalarOperatorRewriteRule rule) {
+        return rule.apply(operator, context);
     }
 
     private ScalarOperator applyRuleTopDown(ScalarOperator operator, ScalarOperatorRewriteRule rule) {

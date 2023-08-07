@@ -45,9 +45,8 @@ struct ShortKeyRangeOption;
 using ShortKeyRangeOptionPtr = std::shared_ptr<ShortKeyRangeOption>;
 struct ShortKeyOption;
 using ShortKeyOptionPtr = std::unique_ptr<ShortKeyOption>;
-class VectorizedSchema;
-using VectorizedSchemaPtr = std::shared_ptr<VectorizedSchema>;
-class Range;
+class Schema;
+using SchemaPtr = std::shared_ptr<Schema>;
 
 namespace pipeline {
 
@@ -82,14 +81,24 @@ public:
     void set_from_version(int64_t from_version) { _from_version = from_version; }
     int64_t from_version() { return _from_version; }
 
-    void set_rowsets(std::vector<RowsetSharedPtr> rowsets) { _rowsets = std::move(rowsets); }
-    const std::vector<RowsetSharedPtr>& rowsets() const { return _rowsets; }
+    void set_rowsets(const std::vector<RowsetSharedPtr>& rowsets) { _rowsets = &rowsets; }
+    void set_delta_rowsets(std::vector<RowsetSharedPtr>&& delta_rowsets) { _delta_rowsets = std::move(delta_rowsets); }
+    const std::vector<RowsetSharedPtr>& rowsets() const {
+        if (_delta_rowsets.has_value()) {
+            return _delta_rowsets.value();
+        } else {
+            return *_rowsets;
+        }
+    }
 
 private:
     int32_t _plan_node_id;
     int64_t _from_version = 0;
 
-    std::vector<RowsetSharedPtr> _rowsets;
+    static const std::vector<RowsetSharedPtr> kEmptyRowsets;
+    // _rowsets is owned by MorselQueue, whose lifecycle is longer than that of Morsel.
+    const std::vector<RowsetSharedPtr>* _rowsets = &kEmptyRowsets;
+    std::optional<std::vector<RowsetSharedPtr>> _delta_rowsets;
 };
 
 class ScanMorsel : public Morsel {
@@ -101,7 +110,12 @@ public:
             auto str_version = _scan_range->internal_scan_range.version;
             _version = strtol(str_version.c_str(), nullptr, 10);
         }
+        if (_scan_range->__isset.binlog_scan_range) {
+            _tablet_id = _scan_range->binlog_scan_range.tablet_id;
+        }
     }
+
+    ~ScanMorsel() override = default;
 
     ScanMorsel(int32_t plan_node_id, const TScanRangeParams& scan_range)
             : ScanMorsel(plan_node_id, scan_range.scan_range) {}
@@ -125,6 +139,8 @@ public:
     PhysicalSplitScanMorsel(int32_t plan_node_id, const TScanRange& scan_range, RowidRangeOptionPtr rowid_range_option)
             : ScanMorsel(plan_node_id, scan_range), _rowid_range_option(std::move(rowid_range_option)) {}
 
+    ~PhysicalSplitScanMorsel() override = default;
+
     void init_tablet_reader_params(TabletReaderParams* params) override;
 
 private:
@@ -136,6 +152,8 @@ public:
     LogicalSplitScanMorsel(int32_t plan_node_id, const TScanRange& scan_range,
                            std::vector<ShortKeyRangeOptionPtr> short_key_ranges)
             : ScanMorsel(plan_node_id, scan_range), _short_key_ranges(std::move(short_key_ranges)) {}
+
+    ~LogicalSplitScanMorsel() override = default;
 
     void init_tablet_reader_params(TabletReaderParams* params) override;
 
@@ -313,6 +331,9 @@ private:
     // Load the meta of the new rowset and the index of the new segment,
     // and find the rowid range of each key range in this segment.
     Status _init_segment();
+    // Obtain row id ranges from multiple segments of multiple rowsets within a single tablet,
+    // until _splitted_scan_rows rows are retrieved.
+    StatusOr<RowidRangeOptionPtr> _try_get_split_from_single_tablet();
 
 private:
     std::mutex _mutex;
@@ -332,8 +353,8 @@ private:
     size_t _rowset_idx = 0;
     size_t _segment_idx = 0;
     std::vector<SeekRange> _tablet_seek_ranges;
-    SparseRange _segment_scan_range;
-    SparseRangeIterator _segment_range_iter;
+    SparseRange<> _segment_scan_range;
+    SparseRangeIterator<> _segment_range_iter;
     // The number of unprocessed rows of the current segment.
     size_t _num_segment_rest_rows = 0;
 
@@ -396,7 +417,7 @@ private:
     std::vector<SeekRange> _tablet_seek_ranges;
     Rowset* _largest_rowset = nullptr;
     SegmentGroupPtr _segment_group = nullptr;
-    VectorizedSchemaPtr _short_key_schema = nullptr;
+    SchemaPtr _short_key_schema = nullptr;
     int64_t _sample_splitted_scan_blocks = 0;
 
     std::vector<std::pair<ShortKeyIndexGroupIterator, ShortKeyIndexGroupIterator>> _block_ranges_per_seek_range;

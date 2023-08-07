@@ -18,6 +18,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 // Show Events statement
 public class ShowEventsStmt extends ShowStmt {
@@ -39,6 +40,14 @@ public class ShowEventsStmt extends ShowStmt {
                     .addColumn(new Column("collation_connection", ScalarType.createVarchar(30)))
                     .addColumn(new Column("Database Collation", ScalarType.createVarchar(30)))
                     .build();
+
+    public ShowEventsStmt() {
+        this(NodePosition.ZERO);
+    }
+
+    public ShowEventsStmt(NodePosition pos) {
+        super(pos);
+    }
 
     @Override
     public ShowResultSetMetaData getMetaData() {

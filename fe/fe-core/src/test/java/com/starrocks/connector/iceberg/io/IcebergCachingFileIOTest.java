@@ -50,9 +50,10 @@ public class IcebergCachingFileIOTest {
         // create iceberg cachingFileIO
         IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO(hadoopFileIO);
         Map<String, String> icebergProperties = new HashMap<>();
+        icebergProperties.put("iceberg.catalog.type", "hive");
         cachingFileIO.initialize(icebergProperties);
 
-        // get inputfile by hadoopFileIO and cachingFileIO
+        // get input file by hadoopFileIO and cachingFileIO
         InputFile hadoopFileIOInputFile = hadoopFileIO.newInputFile(path);
         InputFile cachingFileIOInputFile = cachingFileIO.newInputFile(path);
         cachingFileIOInputFile.newStream();
@@ -66,5 +67,6 @@ public class IcebergCachingFileIOTest {
         long hadoopIOInputFileSize = hadoopFileIOInputFile.getLength();
         Assert.assertEquals(cacheIOInputFileSize, 39);
         Assert.assertEquals(hadoopIOInputFileSize, 39);
+        hadoopFileIO.deleteFile(path);
     }
 }

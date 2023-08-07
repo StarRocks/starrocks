@@ -54,7 +54,7 @@ public class InsertIntoValuesDecimalV3Test {
                         "DUPLICATE KEY(`col_int`) \n" +
                         "COMMENT \"OLAP\" \n" +
                         "DISTRIBUTED BY HASH(`col_int`) BUCKETS 1 \n" +
-                        "PROPERTIES( \"replication_num\" = \"1\", \"in_memory\" = \"false\", \"storage_format\" = \"DEFAULT\" )";
+                        "PROPERTIES( \"replication_num\" = \"1\", \"in_memory\" = \"false\")";
 
         ctx = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(ctx);
@@ -70,8 +70,7 @@ public class InsertIntoValuesDecimalV3Test {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
     }
 
@@ -104,7 +103,7 @@ public class InsertIntoValuesDecimalV3Test {
         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
 
         Assert.assertTrue(plan.contains("constant exprs: \n" +
-                "         1 | 2 | ARRAY<bigint(20)>[]"));
+                "         1 | 2 | []"));
     }
 }
 

@@ -32,18 +32,7 @@ public class ArrayType extends Type {
     private Type itemType;
 
     public ArrayType(Type itemType) {
-        if (itemType != null && itemType.isDecimalV3()) {
-            throw new InternalError("Decimal32/64/128 is not supported in current version");
-        }
         this.itemType = itemType;
-    }
-
-    public ArrayType(Type itemType, boolean fromDlaEnableDecimalV3) {
-        if (!fromDlaEnableDecimalV3 && itemType.isDecimalV3()) {
-            this.itemType = Type.UNKNOWN_TYPE;
-        } else {
-            this.itemType = itemType;
-        }
     }
 
     public Type getItemType() {
@@ -67,9 +56,9 @@ public class ArrayType extends Type {
     @Override
     public String toSql(int depth) {
         if (depth >= MAX_NESTING_DEPTH) {
-            return "ARRAY<...>";
+            return "array<...>";
         }
-        return String.format("ARRAY<%s>", itemType.toSql(depth + 1));
+        return String.format("array<%s>", itemType.toSql(depth + 1));
     }
 
     @Override
@@ -93,6 +82,20 @@ public class ArrayType extends Type {
         Preconditions.checkNotNull(itemType);
         node.setType(TTypeNodeType.ARRAY);
         itemType.toThrift(container);
+    }
+
+    @Override
+    public boolean isFullyCompatible(Type other) {
+        if (!other.isArrayType()) {
+            return false;
+        }
+
+        if (equals(other)) {
+            return true;
+        }
+
+        ArrayType t = (ArrayType) other;
+        return itemType.isFullyCompatible(t.getItemType());
     }
 
     @Override
@@ -124,6 +127,12 @@ public class ArrayType extends Type {
     public void selectAllFields() {
         if (itemType.isComplexType()) {
             itemType.selectAllFields();
+        }
+    }
+
+    public void pruneUnusedSubfields() {
+        if (itemType.isComplexType()) {
+            itemType.pruneUnusedSubfields();
         }
     }
 

@@ -164,6 +164,9 @@ public:
      */
     DEFINE_VECTORIZED_FN(tanh);
 
+    template <LogicalType TYPE, bool isNorm>
+    DEFINE_VECTORIZED_FN(cosine_similarity);
+
     /**
     * @param columns: [DoubleColumn]
     * @return BigIntColumn
@@ -364,10 +367,10 @@ public:
         auto l = VECTORIZED_FN_ARGS(0);
         auto r = VECTORIZED_FN_ARGS(1);
 
-        if constexpr (pt_is_decimalv2<Type>) {
+        if constexpr (lt_is_decimalv2<Type>) {
             return VectorizedUnstrictBinaryFunction<RValueCheckZeroDecimalv2Impl, modDecimalv2Impl>::evaluate<Type>(l,
                                                                                                                     r);
-        } else if constexpr (pt_is_decimal<Type>) {
+        } else if constexpr (lt_is_decimal<Type>) {
             // TODO(by satanson):
             //  FunctionContext carry decimal_overflow_check flag to control overflow checking.
             using VectorizedDiv = VectorizedUnstrictDecimalBinaryFunction<Type, ModOp, false>;
@@ -396,7 +399,7 @@ public:
      */
     template <LogicalType Type>
     DEFINE_VECTORIZED_FN(negative) {
-        if constexpr (pt_is_decimal<Type>) {
+        if constexpr (lt_is_decimal<Type>) {
             const auto& type = context->get_return_type();
             return VectorizedStrictUnaryFunction<negativeImpl>::evaluate<Type>(VECTORIZED_FN_ARGS(0), type.precision,
                                                                                type.scale);

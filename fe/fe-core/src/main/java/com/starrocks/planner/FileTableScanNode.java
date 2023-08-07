@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.FileTable;
+import com.starrocks.catalog.Type;
 import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.credential.CloudConfiguration;
@@ -41,9 +42,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class FileTableScanNode extends ScanNode {
-    private List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
-    private FileTable fileTable;
-    private HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
+    private final List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
+    private final FileTable fileTable;
+    private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private CloudConfiguration cloudConfiguration = null;
 
     public FileTableScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
@@ -61,7 +62,7 @@ public class FileTableScanNode extends ScanNode {
     }
 
     private void setupCredential() {
-        cloudConfiguration = CloudConfigurationFactory.tryBuildForStorage(fileTable.getFileProperties());
+        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(fileTable.getFileProperties());
     }
 
     @Override
@@ -93,6 +94,7 @@ public class FileTableScanNode extends ScanNode {
             hdfsScanRange.setOffset(blockDesc.getOffset());
             hdfsScanRange.setLength(blockDesc.getLength());
             hdfsScanRange.setFile_length(file.getLength());
+            hdfsScanRange.setModification_time(file.getModificationTime());
             hdfsScanRange.setFile_format(fileTable.getFileFormat().toThrift());
             TScanRange scanRange = new TScanRange();
             scanRange.setHdfs_scan_range(hdfsScanRange);
@@ -138,8 +140,15 @@ public class FileTableScanNode extends ScanNode {
         output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
         output.append("\n");
 
-        output.append(prefix).append(String.format("numNodes=%s", numNodes));
-        output.append("\n");
+        if (detailLevel == TExplainLevel.VERBOSE) {
+            for (SlotDescriptor slotDescriptor : desc.getSlots()) {
+                Type type = slotDescriptor.getOriginType();
+                if (type.isComplexType()) {
+                    output.append(prefix)
+                            .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
+                }
+            }
+        }
 
         return output.toString();
     }
@@ -188,10 +197,18 @@ public class FileTableScanNode extends ScanNode {
             cloudConfiguration.toThrift(tCloudConfiguration);
             msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
         }
+
+        msg.hdfs_scan_node.setCan_use_any_column(canUseAnyColumn);
+        msg.hdfs_scan_node.setCan_use_min_max_count_opt(canUseMinMaxCountOpt);
     }
 
     @Override
     public boolean canUsePipeLine() {
+        return true;
+    }
+
+    @Override
+    public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }
 }

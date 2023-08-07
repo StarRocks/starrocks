@@ -32,6 +32,7 @@ import com.starrocks.thrift.TBrokerPWriteRequest;
 import com.starrocks.thrift.TBrokerRenamePathRequest;
 import com.starrocks.thrift.TBrokerSeekRequest;
 import com.starrocks.thrift.THdfsProperties;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -55,7 +56,7 @@ public class HdfsService {
 
     public void listPath(TBrokerListPathRequest request, List<TBrokerFileStatus> fileStatuses, boolean skipDir,
                          boolean fileNameOnly) throws UserException {
-        LOG.info("receive a delete path request, path: {}", request.path);
+        LOG.info("receive a list path request, path: {}", request.path);
         List<TBrokerFileStatus> allFileStatuses = fileSystemManager.listPath(request.path, fileNameOnly,
                 request.properties);
 
@@ -65,6 +66,16 @@ public class HdfsService {
             }
             fileStatuses.add(tBrokerFileStatus);
         }
+    }
+
+    public List<FileStatus> listFileMeta(String path, Map<String, String> properties, boolean skipDir)
+            throws UserException {
+        LOG.info("try to list file meta: {}", path);
+        List<FileStatus> allFileStatuses = fileSystemManager.listFileMeta(path, properties);
+        if (skipDir) {
+            allFileStatuses.removeIf(FileStatus::isDirectory);
+        }
+        return allFileStatuses;
     }
 
     public void deletePath(TBrokerDeletePathRequest request)

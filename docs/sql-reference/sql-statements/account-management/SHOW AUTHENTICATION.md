@@ -2,19 +2,20 @@
 
 ## Description
 
-Displays the authentication information of the current user or all users in the current cluster. Each user has permissions to view their authentication information. Only users with the global `GRANT_PRIV` permission can view the authentication information of all users.
+Displays the authentication information of the current user or all users in the current cluster. Each user has privilege to view their authentication information. Only users with the global `GRANT` privilege and the `user_admin role` can view the authentication information of all users or the authentication information of specified users.
 
 ## Syntax
 
 ```SQL
-SHOW [ALL] AUTHENTICATION;
+SHOW [ALL] AUTHENTICATION [FOR USERNAME]
 ```
 
-## Paramaters
+## Parameters
 
 | **Parameter** | **Required** | **Description**                                              |
 | ------------- | ------------ | ------------------------------------------------------------ |
 | ALL           | No           | If this keyword is specified, the authentication information of all users in the current cluster is returned. If this keyword is not specified, only the authentication information of the current user is returned. |
+| USERNAME      | No           | If this parameter is specified, the authentication information of a specified user can be viewed. If this parameter is not specified, only the authentication information of the current user can be viewed. |
 
 ## Output
 
@@ -54,4 +55,15 @@ SHOW ALL AUTHENTICATION;
 | 'root'@'%'    | Yes      | NULL                    | NULL              |
 | 'chelsea'@'%' | No       | AUTHENTICATION_KERBEROS | HADOOP.COM        |
 +---------------+----------+-------------------------+-------------------+
+```
+
+Example 3: Display the authentication information of a specified user.
+
+```Plain
+SHOW AUTHENTICATION FOR root;
++--------------+----------+------------+-------------------+
+| UserIdentity | Password | AuthPlugin | UserForAuthPlugin |
++--------------+----------+------------+-------------------+
+| 'root'@'%'   | Yes      | NULL       | NULL              |
++--------------+----------+------------+-------------------+
 ```

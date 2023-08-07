@@ -88,7 +88,7 @@ namespace moodycamel { namespace details {
 } }
 #if defined(MCDBGQ_USE_RELACY)
 namespace moodycamel { namespace details {
-	typedef std::uint32_t thread_id_t;
+	typedef uint32_t thread_id_t;
 	static const thread_id_t invalid_thread_id  = 0xFFFFFFFFU;
 	static const thread_id_t invalid_thread_id2 = 0xFFFFFFFEU;
 	static inline thread_id_t thread_id() { return rl::thread_index(); }
@@ -98,8 +98,8 @@ namespace moodycamel { namespace details {
 // we use and rely on backwards-compatibility for this not to break
 extern "C" __declspec(dllimport) unsigned long __stdcall GetCurrentThreadId(void);
 namespace moodycamel { namespace details {
-	static_assert(sizeof(unsigned long) == sizeof(std::uint32_t), "Expected size of unsigned long to be 32 bits on Windows");
-	typedef std::uint32_t thread_id_t;
+	static_assert(sizeof(unsigned long) == sizeof(uint32_t), "Expected size of unsigned long to be 32 bits on Windows");
+	typedef uint32_t thread_id_t;
 	static const thread_id_t invalid_thread_id  = 0;			// See http://blogs.msdn.com/b/oldnewthing/archive/2004/02/23/78395.aspx
 	static const thread_id_t invalid_thread_id2 = 0xFFFFFFFFU;	// Not technically guaranteed to be invalid, but is never used in practice. Note that all Win32 thread IDs are presently multiples of 4.
 	static inline thread_id_t thread_id() { return static_cast<thread_id_t>(::GetCurrentThreadId()); }
@@ -117,8 +117,8 @@ namespace moodycamel { namespace details {
 	static inline thread_id_t thread_id() { return std::this_thread::get_id(); }
 
 	template<std::size_t> struct thread_id_size { };
-	template<> struct thread_id_size<4> { typedef std::uint32_t numeric_t; };
-	template<> struct thread_id_size<8> { typedef std::uint64_t numeric_t; };
+	template<> struct thread_id_size<4> { typedef uint32_t numeric_t; };
+	template<> struct thread_id_size<8> { typedef uint64_t numeric_t; };
 
 	template<> struct thread_id_converter<thread_id_t> {
 		typedef thread_id_size<sizeof(thread_id_t)>::numeric_t thread_id_numeric_size_t;
@@ -331,7 +331,7 @@ struct ConcurrentQueueDefaultTraits
 	// A 64-bit int type is recommended in that case, and in practice will
 	// prevent a race condition no matter the usage of the queue. Note that
 	// whether the queue is lock-free with a 64-int type depends on the whether
-	// std::atomic<std::uint64_t> is lock-free, which is platform-specific.
+	// std::atomic<uint64_t> is lock-free, which is platform-specific.
 	typedef std::size_t index_t;
 	
 	// Internally, all elements are enqueued and dequeued from multi-element
@@ -365,7 +365,7 @@ struct ConcurrentQueueDefaultTraits
 	// Controls the number of items that an explicit consumer (i.e. one with a token)
 	// must consume before it causes all consumers to rotate and move on to the next
 	// internal queue.
-	static const std::uint32_t EXPLICIT_CONSUMER_CONSUMPTION_QUOTA_BEFORE_ROTATE = 256;
+	static const uint32_t EXPLICIT_CONSUMER_CONSUMPTION_QUOTA_BEFORE_ROTATE = 256;
 	
 	// The maximum number of elements (inclusive) that can be enqueued to a sub-queue.
 	// Enqueue operations that would cause this limit to be surpassed will fail. Note
@@ -433,7 +433,7 @@ namespace details
 	};
 	
 	template<bool use32> struct _hash_32_or_64 {
-		static inline std::uint32_t hash(std::uint32_t h)
+		static inline uint32_t hash(uint32_t h)
 		{
 			// MurmurHash3 finalizer -- see https://code.google.com/p/smhasher/source/browse/trunk/MurmurHash3.cpp
 			// Since the thread ID is already unique, all we really want to do is propagate that
@@ -447,7 +447,7 @@ namespace details
 		}
 	};
 	template<> struct _hash_32_or_64<1> {
-		static inline std::uint64_t hash(std::uint64_t h)
+		static inline uint64_t hash(uint64_t h)
 		{
 			h ^= h >> 33;
 			h *= 0xff51afd7ed558ccd;
@@ -729,9 +729,9 @@ private:
 	friend class ConcurrentQueueTests;
 	
 private: // but shared with ConcurrentQueue
-	std::uint32_t initialOffset;
-	std::uint32_t lastKnownGlobalOffset;
-	std::uint32_t itemsConsumedFromCurrent;
+	uint32_t initialOffset;
+	uint32_t lastKnownGlobalOffset;
+	uint32_t itemsConsumedFromCurrent;
 	details::ConcurrentQueueProducerTypelessBase* currentProducer;
 	details::ConcurrentQueueProducerTypelessBase* desiredProducer;
 };
@@ -757,7 +757,7 @@ public:
 	static const size_t EXPLICIT_INITIAL_INDEX_SIZE = static_cast<size_t>(Traits::EXPLICIT_INITIAL_INDEX_SIZE);
 	static const size_t IMPLICIT_INITIAL_INDEX_SIZE = static_cast<size_t>(Traits::IMPLICIT_INITIAL_INDEX_SIZE);
 	static const size_t INITIAL_IMPLICIT_PRODUCER_HASH_SIZE = static_cast<size_t>(Traits::INITIAL_IMPLICIT_PRODUCER_HASH_SIZE);
-	static const std::uint32_t EXPLICIT_CONSUMER_CONSUMPTION_QUOTA_BEFORE_ROTATE = static_cast<std::uint32_t>(Traits::EXPLICIT_CONSUMER_CONSUMPTION_QUOTA_BEFORE_ROTATE);
+	static const uint32_t EXPLICIT_CONSUMER_CONSUMPTION_QUOTA_BEFORE_ROTATE = static_cast<uint32_t>(Traits::EXPLICIT_CONSUMER_CONSUMPTION_QUOTA_BEFORE_ROTATE);
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable: 4307)		// + integral constant overflow (that's what the ternary expression is for!)
@@ -1235,12 +1235,12 @@ public:
 		
 		size_t count = static_cast<ProducerBase*>(token.currentProducer)->dequeue_bulk(itemFirst, max);
 		if (count == max) {
-			if ((token.itemsConsumedFromCurrent += static_cast<std::uint32_t>(max)) >= EXPLICIT_CONSUMER_CONSUMPTION_QUOTA_BEFORE_ROTATE) {
+			if ((token.itemsConsumedFromCurrent += static_cast<uint32_t>(max)) >= EXPLICIT_CONSUMER_CONSUMPTION_QUOTA_BEFORE_ROTATE) {
 				globalExplicitConsumerOffset.fetch_add(1, std::memory_order_relaxed);
 			}
 			return max;
 		}
-		token.itemsConsumedFromCurrent += static_cast<std::uint32_t>(count);
+		token.itemsConsumedFromCurrent += static_cast<uint32_t>(count);
 		max -= count;
 		
 		auto tail = producerListTail.load(std::memory_order_acquire);
@@ -1253,7 +1253,7 @@ public:
 			count += dequeued;
 			if (dequeued != 0) {
 				token.currentProducer = ptr;
-				token.itemsConsumedFromCurrent = static_cast<std::uint32_t>(dequeued);
+				token.itemsConsumedFromCurrent = static_cast<uint32_t>(dequeued);
 			}
 			if (dequeued == max) {
 				break;
@@ -1319,7 +1319,7 @@ public:
 		return
 			details::static_is_lock_free<bool>::value == 2 &&
 			details::static_is_lock_free<size_t>::value == 2 &&
-			details::static_is_lock_free<std::uint32_t>::value == 2 &&
+			details::static_is_lock_free<uint32_t>::value == 2 &&
 			details::static_is_lock_free<index_t>::value == 2 &&
 			details::static_is_lock_free<void*>::value == 2 &&
 			details::static_is_lock_free<typename details::thread_id_converter<details::thread_id_t>::thread_id_numeric_size_t>::value == 2;
@@ -1381,9 +1381,9 @@ private:
 			// Aha, first time we're dequeueing anything.
 			// Figure out our local position
 			// Note: offset is from start, not end, but we're traversing from end -- subtract from count first
-			std::uint32_t offset = prodCount - 1 - (token.initialOffset % prodCount);
+			uint32_t offset = prodCount - 1 - (token.initialOffset % prodCount);
 			token.desiredProducer = tail;
-			for (std::uint32_t i = 0; i != offset; ++i) {
+			for (uint32_t i = 0; i != offset; ++i) {
 				token.desiredProducer = static_cast<ProducerBase*>(token.desiredProducer)->next_prod();
 				if (token.desiredProducer == nullptr) {
 					token.desiredProducer = tail;
@@ -1391,11 +1391,11 @@ private:
 			}
 		}
 		
-		std::uint32_t delta = globalOffset - token.lastKnownGlobalOffset;
+		uint32_t delta = globalOffset - token.lastKnownGlobalOffset;
 		if (delta >= prodCount) {
 			delta = delta % prodCount;
 		}
-		for (std::uint32_t i = 0; i != delta; ++i) {
+		for (uint32_t i = 0; i != delta; ++i) {
 			token.desiredProducer = static_cast<ProducerBase*>(token.desiredProducer)->next_prod();
 			if (token.desiredProducer == nullptr) {
 				token.desiredProducer = tail;
@@ -1418,7 +1418,7 @@ private:
 	{
 		FreeListNode() : freeListRefs(0), freeListNext(nullptr) { }
 		
-		std::atomic<std::uint32_t> freeListRefs;
+		std::atomic<uint32_t> freeListRefs;
 		std::atomic<N*> freeListNext;
 	};
 	
@@ -1520,8 +1520,8 @@ private:
 		// Implemented like a stack, but where node order doesn't matter (nodes are inserted out of order under contention)
 		std::atomic<N*> freeListHead;
 	
-	static const std::uint32_t REFS_MASK = 0x7FFFFFFF;
-	static const std::uint32_t SHOULD_BE_ON_FREELIST = 0x80000000;
+	static const uint32_t REFS_MASK = 0x7FFFFFFF;
+	static const uint32_t SHOULD_BE_ON_FREELIST = 0x80000000;
 		
 #ifdef MCDBGQ_NOLOCKFREE_FREELIST
 		debug::DebugMutex mutex;
@@ -1653,7 +1653,7 @@ private:
 		std::atomic<size_t> elementsCompletelyDequeued;
 		std::atomic<bool> emptyFlags[BLOCK_SIZE <= EXPLICIT_BLOCK_EMPTY_COUNTER_THRESHOLD ? BLOCK_SIZE : 1];
 	public:
-		std::atomic<std::uint32_t> freeListRefs;
+		std::atomic<uint32_t> freeListRefs;
 		std::atomic<Block*> freeListNext;
 		std::atomic<bool> shouldBeOnFreeList;
 		bool dynamicallyAllocated;		// Perhaps a better name for this would be 'isNotPartOfInitialBlockPool'
@@ -3643,7 +3643,7 @@ private:
 
 private:
 	std::atomic<ProducerBase*> producerListTail;
-	std::atomic<std::uint32_t> producerCount;
+	std::atomic<uint32_t> producerCount;
 	
 	std::atomic<size_t> initialBlockPoolIndex;
 	Block* initialBlockPool;
@@ -3661,8 +3661,8 @@ private:
 	std::array<ImplicitProducerKVP, INITIAL_IMPLICIT_PRODUCER_HASH_SIZE> initialImplicitProducerHashEntries;
 	std::atomic_flag implicitProducerHashResizeInProgress;
 	
-	std::atomic<std::uint32_t> nextExplicitConsumerId;
-	std::atomic<std::uint32_t> globalExplicitConsumerOffset;
+	std::atomic<uint32_t> nextExplicitConsumerId;
+	std::atomic<uint32_t> globalExplicitConsumerOffset;
 	
 #ifdef MCDBGQ_NOLOCKFREE_IMPLICITPRODHASH
 	debug::DebugMutex implicitProdMutex;
@@ -3698,7 +3698,7 @@ ConsumerToken::ConsumerToken(ConcurrentQueue<T, Traits>& queue)
 	: itemsConsumedFromCurrent(0), currentProducer(nullptr), desiredProducer(nullptr)
 {
 	initialOffset = queue.nextExplicitConsumerId.fetch_add(1, std::memory_order_release);
-	lastKnownGlobalOffset = static_cast<std::uint32_t>(-1);
+	lastKnownGlobalOffset = static_cast<uint32_t>(-1);
 }
 
 template<typename T, typename Traits>
@@ -3706,7 +3706,7 @@ ConsumerToken::ConsumerToken(BlockingConcurrentQueue<T, Traits>& queue)
 	: itemsConsumedFromCurrent(0), currentProducer(nullptr), desiredProducer(nullptr)
 {
 	initialOffset = reinterpret_cast<ConcurrentQueue<T, Traits>*>(&queue)->nextExplicitConsumerId.fetch_add(1, std::memory_order_release);
-	lastKnownGlobalOffset = static_cast<std::uint32_t>(-1);
+	lastKnownGlobalOffset = static_cast<uint32_t>(-1);
 }
 
 template<typename T, typename Traits>

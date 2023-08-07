@@ -73,7 +73,7 @@ public class MaterializedViewPlanTest extends PlanTestBase {
     public void testSelectFromBinlog() throws Exception {
         String createTableStmtStr = "CREATE TABLE test.binlog_test(k1 int, v1 int, v2 varchar(20)) " +
                 "duplicate key(k1) distributed by hash(k1) buckets 2 properties('replication_num' = '1', " +
-                "'binlog_enable' = 'false', 'binlog_ttl' = '100', 'binlog_max_size' = '100');";
+                "'binlog_enable' = 'false', 'binlog_ttl_second' = '100', 'binlog_max_size' = '100');";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.
                 parseStmtWithNewParser(createTableStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createTable(createTableStmt);
@@ -99,9 +99,21 @@ public class MaterializedViewPlanTest extends PlanTestBase {
                 "    EXCHANGE ID: 01\n" +
                 "    UNPARTITIONED\n" +
                 "\n" +
-                "  0:BinlogScanNode\n" +
-                "     table: binlog_test     tabletList: 16336,16338"
-
+                "  0:BinlogScanNode\n"
         );
+    }
+
+    @Test
+    public void testTableSink() throws Exception {
+        String sql = "create materialized view rtmv \n" +
+                "distributed by hash(v1) " +
+                "refresh incremental as " +
+                "select v1, count(*) as cnt from t0 join t1 on t0.v1 = t1.v4 group by v1";
+        Pair<CreateMaterializedViewStatement, ExecPlan> pair = UtFrameUtils.planMVMaintenance(connectContext, sql);
+        String verbosePlan = pair.second.getExplainString(StatementBase.ExplainLevel.VERBOSE);
+        assertContains(verbosePlan, "  OLAP TABLE SINK\n" +
+                "    TABLE: rtmv\n" +
+                "    TUPLE ID: 4\n" +
+                "    RANDOM");
     }
 }

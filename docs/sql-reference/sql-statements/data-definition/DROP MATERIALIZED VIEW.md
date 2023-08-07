@@ -2,7 +2,9 @@
 
 ## Description
 
-Drops a materialized view. You cannot drop a materialized view that is being created in process with this command. To drop a materialized view that is being created in process, see [Materialized View](../using_starrocks/Materialized_view.md#drop-an-unfinished-materialized-view) for further instructions.
+Drops a materialized view. 
+
+You cannot drop a synchronous materialized view that is being created in process with this command. To drop a synchronous materialized view that is being created in process, see [Synchronous materialized View - Drop an unfinished materialized view](../using_starrocks/Materialized_view.md#drop-an-unfinished-materialized-view) for further instructions.
 
 > **CAUTION**
 >
@@ -11,7 +13,7 @@ Drops a materialized view. You cannot drop a materialized view that is being cre
 ## Syntax
 
 ```SQL
-DROP MATERIALIZED VIEW [IF EXISTS] [database.]mv_name;
+DROP MATERIALIZED VIEW [IF EXISTS] [database.]mv_name
 ```
 
 Parameters in brackets [] is optional.
@@ -30,7 +32,7 @@ Example 1: Drop an existing materialized view
 1. View all existing materialized views in the database.
 
   ```Plain
-  MySQL > SHOW MATERIALIZED VIEW\G
+  MySQL > SHOW MATERIALIZED VIEWS\G
   *************************** 1. row ***************************
               id: 470740
           name: order_mv1
@@ -49,7 +51,7 @@ Example 1: Drop an existing materialized view
 3. Check if the dropped materialized view exists.
 
   ```Plain
-  MySQL > SHOW MATERIALIZED VIEW;
+  MySQL > SHOW MATERIALIZED VIEWS;
   Empty set (0.01 sec)
   ```
 

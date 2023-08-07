@@ -17,6 +17,8 @@
 
 #include "bthread/execution_queue.h"
 #include "column/chunk.h"
+#include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
 
@@ -79,20 +81,15 @@ public:
         return Status::OK();
     }
 
-    virtual bool is_finished() { return _is_finished; }
+    virtual bool is_finished() { return _is_finished && _num_pending_chunks == 0; }
 
-    virtual void cancel_one_sinker() {
-        _is_cancelled = true;
-        if (_exec_queue_id != nullptr) {
-            bthread::execution_queue_stop(*_exec_queue_id);
-        }
-    }
+    virtual void cancel_one_sinker() { _is_cancelled = true; }
 
     virtual void close(RuntimeState* state) {
-        _is_finished = true;
         if (_exec_queue_id != nullptr) {
             bthread::execution_queue_stop(*_exec_queue_id);
         }
+        _is_finished = true;
     }
 
     inline void set_io_status(const Status& status) {
@@ -107,18 +104,23 @@ public:
         return _io_status;
     }
 
-    static int execute_io_task(void* meta, bthread::TaskIterator<const ChunkPtr>& iter) {
+    static int execute_io_task(void* meta, bthread::TaskIterator<ChunkPtr>& iter) {
+        if (iter.is_queue_stopped()) {
+            return 0;
+        }
         auto* sink_io_buffer = static_cast<SinkIOBuffer*>(meta);
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(sink_io_buffer->_state->query_mem_tracker_ptr().get());
         for (; iter; ++iter) {
             sink_io_buffer->_process_chunk(iter);
+            (*iter).reset();
         }
         return 0;
     }
 
 protected:
-    virtual void _process_chunk(bthread::TaskIterator<const ChunkPtr>& iter) = 0;
+    virtual void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) = 0;
 
-    std::unique_ptr<bthread::ExecutionQueueId<const ChunkPtr>> _exec_queue_id;
+    std::unique_ptr<bthread::ExecutionQueueId<ChunkPtr>> _exec_queue_id;
 
     std::atomic_int32_t _num_result_sinkers = 0;
     std::atomic_int64_t _num_pending_chunks = 0;

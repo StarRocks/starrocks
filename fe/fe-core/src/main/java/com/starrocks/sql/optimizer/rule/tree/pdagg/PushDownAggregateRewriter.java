@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.tree.pdagg;
 
 import com.google.common.base.Preconditions;
@@ -23,6 +22,7 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -64,6 +64,7 @@ import java.util.stream.Collectors;
 public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpression, AggregatePushDownContext> {
     private final ColumnRefFactory factory;
     private final PushDownAggregateCollector collector;
+    private final SessionVariable sessionVariable;
 
     private Map<LogicalAggregationOperator, List<AggregatePushDownContext>> allRewriteContext;
     // record all push down column on scan node
@@ -73,6 +74,7 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
     public PushDownAggregateRewriter(TaskContext taskContext) {
         this.factory = taskContext.getOptimizerContext().getColumnRefFactory();
         this.collector = new PushDownAggregateCollector(taskContext);
+        this.sessionVariable = taskContext.getOptimizerContext().getSessionVariable();
     }
 
     public OptExpression rewrite(OptExpression root) {
@@ -119,7 +121,7 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         }
 
         LogicalFilterOperator filter = (LogicalFilterOperator) optExpression.getOp();
-        filter.getRequiredChildInputColumns().getStream().mapToObj(factory::getColumnRef)
+        filter.getRequiredChildInputColumns().getStream().map(factory::getColumnRef)
                 .forEach(v -> context.groupBys.put(v, v));
         return processChild(optExpression, context);
     }
@@ -146,14 +148,15 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
 
     // rewrite groupBys/aggregation by project expression, maybe needs push down
     // expression with aggregation or rewrite project expression
-    private void rewriteProject(AggregatePushDownContext context, Map<ColumnRefOperator, ScalarOperator> originProjectMap) {
+    private void rewriteProject(AggregatePushDownContext context,
+                                Map<ColumnRefOperator, ScalarOperator> originProjectMap) {
         // rewrite group bys
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(originProjectMap);
         context.groupBys.replaceAll((k, v) -> rewriter.rewrite(v));
         ColumnRefSet refSet = new ColumnRefSet();
         context.groupBys.values().forEach(v -> refSet.union(v.getUsedColumns()));
         context.groupBys.clear();
-        refSet.getStream().mapToObj(factory::getColumnRef).forEach(k -> context.groupBys.put(k, k));
+        refSet.getStream().map(factory::getColumnRef).forEach(k -> context.groupBys.put(k, k));
 
         // rewrite aggregation & push down expression
         // special case-when/if only push down values
@@ -176,7 +179,7 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
             if (isCaseWhen) {
                 CaseWhenOperator caseWhen = (CaseWhenOperator) aggExpr;
                 for (ScalarOperator condition : caseWhen.getAllConditionClause()) {
-                    condition.getUsedColumns().getStream().mapToObj(factory::getColumnRef)
+                    condition.getUsedColumns().getStream().map(factory::getColumnRef)
                             .forEach(v -> context.groupBys.put(v, v));
                 }
 
@@ -204,7 +207,7 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
                 originProjectMap.put(key, new CaseWhenOperator(key.getType(), caseWhen));
             } else if (isIfFn) {
                 CallOperator ifFn = (CallOperator) aggExpr;
-                ifFn.getChild(0).getUsedColumns().getStream().mapToObj(factory::getColumnRef)
+                ifFn.getChild(0).getUsedColumns().getStream().map(factory::getColumnRef)
                         .forEach(v -> context.groupBys.put(v, v));
 
                 for (int i = 1; i < ifFn.getChildren().size(); i++) {
@@ -332,12 +335,12 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
 
         if (join.getOnPredicate() != null) {
             join.getOnPredicate().getUsedColumns().getStream().filter(childOutput::contains)
-                    .mapToObj(factory::getColumnRef).forEach(c -> childContext.groupBys.put(c, c));
+                    .map(factory::getColumnRef).forEach(c -> childContext.groupBys.put(c, c));
         }
 
         if (join.getPredicate() != null) {
             join.getPredicate().getUsedColumns().getStream().filter(childOutput::contains)
-                    .mapToObj(factory::getColumnRef).forEach(v -> childContext.groupBys.put(v, v));
+                    .map(factory::getColumnRef).forEach(v -> childContext.groupBys.put(v, v));
         }
 
         return process(joinOpt.inputAt(child), childContext);
@@ -387,9 +390,16 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
             result = OptExpression.create(new LogicalProjectOperator(refs), result);
         }
 
-        LogicalAggregationOperator aggregate = new LogicalAggregationOperator(AggType.GLOBAL,
-                Lists.newArrayList(context.groupBys.keySet()), context.aggregations);
-
+        LogicalAggregationOperator aggregate;
+        List<ColumnRefOperator> groupBys = Lists.newArrayList(context.groupBys.keySet());
+        if ("local".equalsIgnoreCase(sessionVariable.getCboPushDownAggregate()) ||
+                ("auto".equalsIgnoreCase(sessionVariable.getCboPushDownAggregate()) && groupBys.size() <= 1)) {
+            // local && un-split
+            aggregate = new LogicalAggregationOperator(AggType.LOCAL, groupBys, context.aggregations);
+            aggregate.setOnlyLocalAggregate();
+        } else {
+            aggregate = new LogicalAggregationOperator(AggType.GLOBAL, groupBys, context.aggregations);
+        }
         return OptExpression.create(aggregate, result);
     }
 
@@ -419,7 +429,7 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
             context.groupBys.values().stream()
                     .map(rewriter::rewrite)
                     .map(ScalarOperator::getUsedColumns)
-                    .forEach(c -> c.getStream().mapToObj(factory::getColumnRef)
+                    .forEach(c -> c.getStream().map(factory::getColumnRef)
                             .forEach(ref -> childContext.groupBys.put(ref, ref)));
             childContexts.add(childContext);
         }

@@ -32,17 +32,17 @@ struct SortDescs;
 // @param permutation input and output permutation
 // @param tie input and output tie
 // @param range sort range, {0, 0} means not build tie but sort data
-Status sort_and_tie_column(const bool cancel, ColumnPtr& column, const SortDesc& sort_desc,
+Status sort_and_tie_column(const std::atomic<bool>& cancel, ColumnPtr& column, const SortDesc& sort_desc,
                            SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, const bool build_tie);
-Status sort_and_tie_column(const bool cancel, const ColumnPtr& column, const SortDesc& sort_desc,
+Status sort_and_tie_column(const std::atomic<bool>& cancel, const ColumnPtr& column, const SortDesc& sort_desc,
                            SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, const bool build_tie);
 
 // Sort multiple columns using column-wise algorithm, output the order in permutation array
-Status sort_and_tie_columns(const bool cancel, const Columns& columns, const SortDescs& sort_desc,
+Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,
                             Permutation* permutation);
 
 // Sort multiple columns, and stable
-Status stable_sort_and_tie_columns(const bool cancel, const Columns& columns, const SortDescs& sort_desc,
+Status stable_sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,
                                    SmallPermutation* permutation);
 
 // Sort multiple columns in vertical
@@ -82,7 +82,6 @@ struct SortDesc {
     bool is_null_first() const { return (null_first * sort_order) == -1; }
     bool asc_order() const { return sort_order == 1; }
 };
-
 struct SortDescs {
     std::vector<SortDesc> descs;
 

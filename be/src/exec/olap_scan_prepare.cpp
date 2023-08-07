@@ -22,12 +22,13 @@
 #include "exprs/in_const_predicate.hpp"
 #include "gutil/map_util.h"
 #include "runtime/descriptors.h"
-#include "runtime/primitive_type.h"
-#include "runtime/primitive_type_infra.h"
 #include "storage/column_predicate.h"
 #include "storage/olap_runtime_range_pruner.h"
+#include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/predicate_parser.h"
 #include "types/date_value.hpp"
+#include "types/logical_type.h"
+#include "types/logical_type_infra.h"
 
 namespace starrocks {
 
@@ -384,9 +385,10 @@ void OlapScanConjunctsManager::normalize_join_runtime_filter(const SlotDescripto
     }
 
     // bloom runtime filter
-    for (const auto it : runtime_filters->descriptors()) {
+    for (const auto& it : runtime_filters->descriptors()) {
         const RuntimeFilterProbeDescriptor* desc = it.second;
         const JoinRuntimeFilter* rf = desc->runtime_filter();
+        using RangeType = ColumnValueRange<RangeValueType>;
         using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
         SlotId slot_id;
 
@@ -401,20 +403,32 @@ void OlapScanConjunctsManager::normalize_join_runtime_filter(const SlotDescripto
 
         if (rf->has_null()) continue;
 
-        const auto* filter = down_cast<const RuntimeBloomFilter<SlotType>*>(rf);
         // If this column doesn't have other filter, we use join runtime filter
         // to fast comput row range in storage engine
         if (range->is_init_state()) {
             range->set_index_filter_only(true);
         }
 
-        SQLFilterOp min_op = to_olap_filter_type(TExprOpcode::GE, false);
-        ValueType min_value = filter->min_value();
-        range->add_range(min_op, static_cast<RangeValueType>(min_value));
+        // if we have multi-scanners
+        // If a scanner has finished building a runtime filter,
+        // the rest of the runtime filters will be normalized here
 
-        SQLFilterOp max_op = to_olap_filter_type(TExprOpcode::LE, false);
-        ValueType max_value = filter->max_value();
-        range->add_range(max_op, static_cast<RangeValueType>(max_value));
+        auto& global_dicts = runtime_state->get_query_global_dict_map();
+        if constexpr (SlotType == TYPE_VARCHAR) {
+            if (auto iter = global_dicts.find(slot_id); iter != global_dicts.end()) {
+                detail::RuntimeColumnPredicateBuilder::build_minmax_range<
+                        RangeType, ValueType, LowCardDictType,
+                        detail::RuntimeColumnPredicateBuilder::GlobalDictCodeDecoder>(*range, rf, &iter->second.first);
+            } else {
+                detail::RuntimeColumnPredicateBuilder::build_minmax_range<
+                        RangeType, ValueType, SlotType, detail::RuntimeColumnPredicateBuilder::DummyDecoder>(*range, rf,
+                                                                                                             nullptr);
+            }
+        } else {
+            detail::RuntimeColumnPredicateBuilder::build_minmax_range<
+                    RangeType, ValueType, SlotType, detail::RuntimeColumnPredicateBuilder::DummyDecoder>(*range, rf,
+                                                                                                         nullptr);
+        }
     }
 }
 
@@ -514,30 +528,30 @@ void OlapScanConjunctsManager::normalize_predicate(const SlotDescriptor& slot,
 }
 
 struct ColumnRangeBuilder {
-    template <LogicalType ptype>
+    template <LogicalType ltype>
     std::nullptr_t operator()(OlapScanConjunctsManager* cm, const SlotDescriptor* slot,
                               std::map<std::string, ColumnValueRangeType>* column_value_ranges) {
-        if constexpr (ptype == TYPE_TIME || ptype == TYPE_NULL || ptype == TYPE_JSON || pt_is_float<ptype> ||
-                      pt_is_binary<ptype>) {
+        if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || ltype == TYPE_JSON || lt_is_float<ltype> ||
+                      lt_is_binary<ltype>) {
             return nullptr;
         } else {
             // Treat tinyint and boolean as int
-            constexpr LogicalType limit_type = ptype == TYPE_TINYINT || ptype == TYPE_BOOLEAN ? TYPE_INT : ptype;
+            constexpr LogicalType limit_type = ltype == TYPE_TINYINT || ltype == TYPE_BOOLEAN ? TYPE_INT : ltype;
             // Map TYPE_CHAR to TYPE_VARCHAR
-            constexpr LogicalType mapping_type = ptype == TYPE_CHAR ? TYPE_VARCHAR : ptype;
+            constexpr LogicalType mapping_type = ltype == TYPE_CHAR ? TYPE_VARCHAR : ltype;
             using value_type = typename RunTimeTypeLimits<limit_type>::value_type;
             using RangeType = ColumnValueRange<value_type>;
 
             const std::string& col_name = slot->col_name();
-            RangeType full_range(col_name, ptype, RunTimeTypeLimits<ptype>::min_value(),
-                                 RunTimeTypeLimits<ptype>::max_value());
-            if constexpr (pt_is_decimal<limit_type>) {
+            RangeType full_range(col_name, ltype, RunTimeTypeLimits<ltype>::min_value(),
+                                 RunTimeTypeLimits<ltype>::max_value());
+            if constexpr (lt_is_decimal<limit_type>) {
                 full_range.set_precision(slot->type().precision);
                 full_range.set_scale(slot->type().scale);
             }
             ColumnValueRangeType& v = LookupOrInsert(column_value_ranges, col_name, full_range);
             auto& range = std::get<ColumnValueRange<value_type>>(v);
-            if constexpr (pt_is_decimal<limit_type>) {
+            if constexpr (lt_is_decimal<limit_type>) {
                 range.set_precision(slot->type().precision);
                 range.set_scale(slot->type().scale);
             }
@@ -624,7 +638,7 @@ Status OlapScanConjunctsManager::build_scan_keys(bool unlimited, int32_t max_sca
         }
         conditional_key_columns++;
     }
-    if (conditional_key_columns > 1) {
+    if (config::enable_short_key_for_one_column_filter || conditional_key_columns > 1) {
         for (int i = 0; i < conditional_key_columns && !scan_keys.has_range_value(); ++i) {
             ExtendScanKeyVisitor visitor(&scan_keys, max_scan_key_num);
             if (!std::visit(visitor, column_value_ranges[ref_key_column_names[i]]).ok()) {
@@ -735,19 +749,17 @@ void OlapScanConjunctsManager::build_column_expr_predicates() {
         // note(yan): we only handles scalar type now to avoid complex type mismatch.
         // otherwise we don't need this limitation.
         const SlotDescriptor* slot_desc = slots[index];
-        LogicalType ptype = slot_desc->type().type;
-        if (!is_scalar_primitive_type(ptype)) continue;
-        // disable on float/double type because min/max value may lose precision
-        // The fix should be on storage layer, and this is just a temporary fix.
-        if (ptype == LogicalType::TYPE_FLOAT || ptype == LogicalType::TYPE_DOUBLE) continue;
-        {
-            auto iter = slot_index_to_expr_ctxs.find(index);
-            if (iter == slot_index_to_expr_ctxs.end()) {
-                slot_index_to_expr_ctxs.insert(make_pair(index, std::vector<ExprContext*>{}));
-                iter = slot_index_to_expr_ctxs.find(index);
-            }
-            iter->second.emplace_back(ctx);
+        LogicalType ltype = slot_desc->type().type;
+        if (!support_column_expr_predicate(ltype)) {
+            continue;
         }
+
+        auto iter = slot_index_to_expr_ctxs.find(index);
+        if (iter == slot_index_to_expr_ctxs.end()) {
+            slot_index_to_expr_ctxs.insert(make_pair(index, std::vector<ExprContext*>{}));
+            iter = slot_index_to_expr_ctxs.find(index);
+        }
+        iter->second.emplace_back(ctx);
         normalized_conjuncts[i] = true;
     }
 }

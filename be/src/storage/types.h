@@ -63,9 +63,8 @@ public:
 
     virtual void deep_copy(void* dest, const void* src, MemPool* mem_pool) const = 0;
 
-    // The mem_pool is used to allocate memory for array type.
-    // The scalar type can copy the value directly
-    virtual void direct_copy(void* dest, const void* src, MemPool* mem_pool) const = 0;
+    // map/struct/array have not yet implemented this interface.
+    virtual void direct_copy(void* dest, const void* src) const = 0;
 
     virtual Status from_string(void* buf, const std::string& scan_key) const = 0;
 
@@ -98,10 +97,6 @@ template <LogicalType ftype>
 struct TypeComparator {
     static int cmp(const void* lhs, const void* rhs);
 };
-
-bool is_scalar_field_type(LogicalType field_type);
-
-bool is_complex_metric_type(LogicalType field_type);
 
 const TypeInfo* get_scalar_type_info(LogicalType t);
 

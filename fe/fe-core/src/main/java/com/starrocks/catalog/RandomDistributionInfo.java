@@ -67,6 +67,11 @@ public class RandomDistributionInfo extends DistributionInfo {
     }
 
     @Override
+    public boolean supportColocate() {
+        return false;
+    }
+
+    @Override
     public int getBucketNum() {
         return bucketNum;
     }
@@ -77,9 +82,17 @@ public class RandomDistributionInfo extends DistributionInfo {
     }
 
     @Override
+    public RandomDistributionInfo copy() {
+        return new RandomDistributionInfo(bucketNum);
+    }
+
+    @Override
     public String toSql() {
         StringBuilder builder = new StringBuilder();
-        builder.append("DISTRIBUTED BY RANDOM BUCKETS ").append(bucketNum);
+        builder.append("DISTRIBUTED BY RANDOM");
+        if (bucketNum > 0) {
+            builder.append(" BUCKETS ").append(bucketNum);
+        }
         return builder.toString();
     }
 

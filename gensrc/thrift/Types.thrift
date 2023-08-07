@@ -136,8 +136,8 @@ struct TTypeNode {
     // only used for structs; has struct_fields.size() corresponding child types
     3: optional list<TStructField> struct_fields
 
-    // Marking which subfield will be used, this value will be set in FE. Used for MapType and StructType.
-    4: optional list<bool> selected_fields;
+    // only used for structs; for output use
+    4: optional bool is_named
 }
 
 // A flattened representation of a tree of column types obtained by depth-first
@@ -201,6 +201,8 @@ enum TTaskType {
     INSTALL_PLUGIN,
     UNINSTALL_PLUGIN,
     // this use for calculate enum count
+    DROP_AUTO_INCREMENT_MAP,
+    COMPACTION,
     NUM_TASK_TYPE
 }
 
@@ -302,6 +304,11 @@ struct TAggregateFunction {
   9: optional string remove_fn_symbol
   10: optional bool is_analytic_only_fn = false
   11: optional string symbol
+  // used for agg_func(a order by b, c) like array_agg, group_concat
+  12: optional list<bool> is_asc_order
+  // Indicates, for each expr, if nulls should be listed first or last. This is
+  // independent of is_asc_order.
+  13: optional list<bool> nulls_first
 }
 
 struct TTableFunction {
@@ -379,10 +386,12 @@ enum TTableType {
     ICEBERG_TABLE,
     HUDI_TABLE,
     JDBC_TABLE,
+    PAIMON_TABLE,
     VIEW = 20,
     MATERIALIZED_VIEW,
     FILE_TABLE,
-    DELTALAKE_TABLE
+    DELTALAKE_TABLE,
+    TABLE_FUNCTION_TABLE
 }
 
 enum TKeysType {
@@ -426,6 +435,7 @@ struct TTabletCommitInfo {
     2: required i64 backendId
     3: optional list<string> invalid_dict_cache_columns
     4: optional list<string> valid_dict_cache_columns
+    5: optional list<i64> valid_dict_collected_versions
 }
 
 struct TTabletFailInfo {
@@ -450,11 +460,17 @@ enum TOpType {
     DELETE,
 }
 
+struct TUserRoles {
+    1: optional list<i64> role_id_list
+}
+
 // represent a user identity
 struct TUserIdentity {
     1: optional string username
     2: optional string host
     3: optional bool is_domain
+    4: optional bool is_ephemeral
+    5: optional TUserRoles current_role_ids
 }
 
 const i32 TSNAPSHOT_REQ_VERSION1 = 3; // corresponding to alpha rowset
@@ -475,6 +491,7 @@ enum TCompressionType {
     DEFLATE = 9;
     BZIP2 = 10;
     LZO = 11; // Deprecated
+    BROTLI = 12;
 }
 
 enum TWriteQuorumType {
@@ -492,4 +509,44 @@ struct TBinlogOffset {
     1: optional TTabletId tablet_id
     2: optional TVersion version
     3: optional i64 lsn
+}
+
+enum TPartialUpdateMode {
+    UNKNOWN_MODE = 0;
+    ROW_MODE = 1;
+    COLUMN_UPSERT_MODE = 2;
+    AUTO_MODE = 3;
+    COLUMN_UPDATE_MODE = 4;
+}
+
+enum TRunMode {
+    SHARED_NOTHING = 0;
+    SHARED_DATA = 1;
+    HYBRID = 2;
+}
+
+struct TIcebergColumnStats {
+    1: optional map<i32, i64> column_sizes
+    2: optional map<i32, i64> value_counts
+    3: optional map<i32, i64> null_value_counts
+    4: optional map<i32, i64> nan_value_counts
+    5: optional map<i32, binary> lower_bounds;
+    6: optional map<i32, binary> upper_bounds;
+}
+
+struct TIcebergDataFile {
+    1: optional string path
+    2: optional string format
+    3: optional i64 record_count
+    4: optional i64 file_size_in_bytes
+    5: optional string partition_path;
+    6: optional list<i64> split_offsets;
+    7: optional TIcebergColumnStats column_stats;
+}
+
+struct TSinkCommitInfo {
+    1: optional TIcebergDataFile iceberg_data_file
+    // ... for other tables sink commit info
+
+    100: optional bool is_overwrite;
 }

@@ -81,7 +81,7 @@ public class MysqlTableTest {
 
         fakeGlobalStateMgr = new FakeGlobalStateMgr();
         FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
-        FakeGlobalStateMgr.setMetaVersion(FeConstants.meta_version);
+        FakeGlobalStateMgr.setMetaVersion(FeConstants.META_VERSION);
     }
 
     @Test

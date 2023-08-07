@@ -19,6 +19,7 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 // Show Warning stmt
 public class ShowWarningStmt extends ShowStmt {
@@ -32,10 +33,8 @@ public class ShowWarningStmt extends ShowStmt {
 
     private LimitElement limitElement;
 
-    public ShowWarningStmt() {
-    }
-
-    public ShowWarningStmt(LimitElement limitElement) {
+    public ShowWarningStmt(LimitElement limitElement, NodePosition pos) {
+        super(pos);
         this.limitElement = limitElement;
     }
 

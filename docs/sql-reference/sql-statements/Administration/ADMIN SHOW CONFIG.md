@@ -2,12 +2,14 @@
 
 ## Description
 
-Displays the configuration of the current cluster (currently only FE configuration items are supported).
+Displays the configuration of the current cluster (Currently, only FE configuration items can be displayed). For detailed description of these configuration items, see [Configuration](../../../administration/Configuration.md#fe-configuration-items).
+
+If you want to set or modify a configuration item, use [ADMIN SET CONFIG](ADMIN%20SET%20CONFIG.md).
 
 ## Syntax
 
 ```sql
-ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
+ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"]
 ```
 
 Note:
@@ -15,12 +17,12 @@ Note:
 Description of the return parameters:
 
 ```plain text
-1. Key：        Configuration item name
-2. Value：      Configuration item value
-3. Type：       Configuration item type 
-4. IsMutable：  Whether it can be set through the ADMIN SET CONFIG command
-5. MasterOnly： Whether it only applies to leader FE
-6. Comment：    Configuration item description 
+1. Key:        Configuration item name
+2. Value:      Configuration item value
+3. Type:       Configuration item type 
+4. IsMutable:  Whether it can be set through the ADMIN SET CONFIG command
+5. MasterOnly: Whether it only applies to leader FE
+6. Comment:    Configuration item description 
 ```
 
 ## Examples

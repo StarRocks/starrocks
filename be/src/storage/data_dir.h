@@ -87,6 +87,12 @@ public:
         return info;
     }
 
+    int64_t available_bytes() const { return _available_bytes; }
+    int64_t disk_capacity_bytes() const { return _disk_capacity_bytes; }
+    double disk_usage(int64_t incoming_data_size) const {
+        return (double)(_disk_capacity_bytes - _available_bytes + incoming_data_size) / (double)_disk_capacity_bytes;
+    }
+
     // save a cluster_id file under data path to prevent
     // invalid be config for example two be use the same
     // data path
@@ -108,6 +114,7 @@ public:
     std::string get_absolute_shard_path(int64_t shard_id);
     std::string get_absolute_tablet_path(int64_t shard_id, int64_t tablet_id, int32_t schema_hash);
 
+    Status create_dir_if_path_not_exists(const std::string& path);
     void find_tablet_in_trash(int64_t tablet_id, std::vector<std::string>* paths);
 
     static std::string get_root_path_from_schema_hash_path_in_trash(const std::string& schema_hash_dir_in_trash);
@@ -128,10 +135,13 @@ public:
     // TODO(cmy): for now we can not precisely calculate the capacity StarRocks used,
     // so in order to avoid running out of disk capacity, we currently use the actual
     // disk available capacity and total capacity to do the calculation.
-    // So that the capacity StarRocks actually used may exceeds the user specified capacity.
+    // So that the capacity StarRocks actually used may exceed the user specified capacity.
     bool capacity_limit_reached(int64_t incoming_data_size);
 
     Status update_capacity();
+
+    std::string get_persistent_index_path() { return _path + "/" + PERSISTENT_INDEX_PREFIX; }
+    Status init_persistent_index_dir();
 
 private:
     Status _init_data_dir();

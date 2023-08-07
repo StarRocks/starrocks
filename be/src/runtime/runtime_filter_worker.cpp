@@ -57,10 +57,14 @@ static void send_rpc_runtime_filter(doris::PBackendService_Stub* stub, RuntimeFi
                                     int timeout_ms, const PTransmitRuntimeFilterParams& request) {
     if (rpc_closure->seq != 0) {
         brpc::Join(rpc_closure->cntl.call_id());
+        WARN_IF_RPC_ERROR(rpc_closure->cntl);
     }
     rpc_closure->ref();
     rpc_closure->cntl.Reset();
     rpc_closure->cntl.set_timeout_ms(timeout_ms);
+    // as the attachment is empty, the http rpc also can do like the following interface.
+    // create a http rpc stub: http_stub
+    // http_stub->transmit_runtime_filter(&rpc_closure->cntl, &request, &rpc_closure->result, rpc_closure);
     stub->transmit_runtime_filter(&rpc_closure->cntl, &request, &rpc_closure->result, rpc_closure);
     rpc_closure->seq++;
 }
@@ -146,8 +150,8 @@ void RuntimeFilterPort::publish_runtime_filters(std::list<RuntimeFilterBuildDesc
         std::string* rf_data = params.mutable_data();
         size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(filter);
         rf_data->resize(max_size);
-        size_t actual_size =
-                RuntimeFilterHelper::serialize_runtime_filter(filter, reinterpret_cast<uint8_t*>(rf_data->data()));
+        size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter(state, filter,
+                                                                           reinterpret_cast<uint8_t*>(rf_data->data()));
         rf_data->resize(actual_size);
 
         auto passthrough_delivery = actual_size <= config::deliver_broadcast_rf_passthrough_bytes_limit;
@@ -255,8 +259,8 @@ void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& par
     // to merge runtime filters
     ObjectPool* pool = &(status->pool);
     JoinRuntimeFilter* rf = nullptr;
-    RuntimeFilterHelper::deserialize_runtime_filter(pool, &rf, reinterpret_cast<const uint8_t*>(params.data().data()),
-                                                    params.data().size());
+    int rf_version = RuntimeFilterHelper::deserialize_runtime_filter(
+            pool, &rf, reinterpret_cast<const uint8_t*>(params.data().data()), params.data().size());
     if (rf == nullptr) {
         // something wrong with deserialization.
         return;
@@ -280,10 +284,11 @@ void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& par
 
     // not ready. still have to wait more filters.
     if (status->filters.size() < status->expect_number) return;
-    _send_total_runtime_filter(filter_id, rpc_closure);
+    _send_total_runtime_filter(rf_version, filter_id, rpc_closure);
 }
 
-void RuntimeFilterMerger::_send_total_runtime_filter(int32_t filter_id, RuntimeFilterRpcClosure* rpc_closure) {
+void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t filter_id,
+                                                     RuntimeFilterRpcClosure* rpc_closure) {
     auto status_it = _statuses.find(filter_id);
     DCHECK(status_it != _statuses.end());
     RuntimeFilterMergerStatus* status = &(status_it->second);
@@ -315,8 +320,8 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int32_t filter_id, RuntimeF
     size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(out);
     send_data->resize(max_size);
 
-    size_t actual_size =
-            RuntimeFilterHelper::serialize_runtime_filter(out, reinterpret_cast<uint8_t*>(send_data->data()));
+    size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter(rf_version, out,
+                                                                       reinterpret_cast<uint8_t*>(send_data->data()));
     send_data->resize(actual_size);
     int timeout_ms = config::send_rpc_runtime_filter_timeout_ms;
     if (_query_options.__isset.runtime_filter_send_timeout_ms) {
@@ -713,6 +718,7 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_relay(PTransmitRunti
             {request.query_id(), request.filter_id(), first_dest.address.hostname, "DELIVER_BROADCAST_RF_RELAY"});
     send_rpc_runtime_filter(stub, rpc_closure, timeout_ms, request);
     brpc::Join(rpc_closure->cntl.call_id());
+    WARN_IF_RPC_ERROR(rpc_closure->cntl);
     rpc_closure->unref();
 }
 
@@ -749,6 +755,7 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_passthrough(
 
         for (auto& rpc_closure : rpc_closures) {
             brpc::Join(rpc_closure->cntl.call_id());
+            WARN_IF_RPC_ERROR(rpc_closure->cntl);
             rpc_closure->unref();
             delete rpc_closure;
         }

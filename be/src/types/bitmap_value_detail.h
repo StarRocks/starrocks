@@ -45,6 +45,7 @@
 #include "roaring/containers/containers.h"
 #include "roaring/roaring.h"
 #include "roaring/roaring_array.h"
+#include "util/coding.h"
 
 namespace starrocks {
 
@@ -89,6 +90,13 @@ struct BitmapTypeCode {
 };
 
 namespace detail {
+
+// https://github.com/RoaringBitmap/CRoaring/blob/5d6dd2342d9e3ffaf481aa5ebe344e19984faa4a/src/roaring.c#L21
+// The tow macro is not in .h file, so copy to here.
+#define SERIALIZATION_ARRAY_UINT32 1
+#define SERIALIZATION_CONTAINER 2
+
+using Roaring = roaring::Roaring;
 
 class Roaring64MapSetBitForwardIterator;
 
@@ -162,11 +170,10 @@ public:
      *
      */
     void addMany(size_t n_args, const uint32_t* vals) {
-        for (size_t lcv = 0; lcv < n_args; lcv++) {
-            roarings[0].add(vals[lcv]);
-            roarings[0].setCopyOnWrite(copyOnWrite);
-        }
+        roarings[0].addMany(n_args, vals);
+        roarings[0].setCopyOnWrite(copyOnWrite);
     }
+
     void addMany(size_t n_args, const uint64_t* vals) {
         for (size_t lcv = 0; lcv < n_args; lcv++) {
             roarings[highBytes(vals[lcv])].add(lowBytes(vals[lcv]));

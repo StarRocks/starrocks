@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+if (CLANG_TIDY_PATH)
+    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
+endif()
+
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/agent")
 
 # where to put generated binaries
@@ -28,5 +32,5 @@ add_library(Agent STATIC
         finish_task.cpp
         report_task.cpp
         agent_task.cpp
-        task_singatures_manager.cpp
+        task_signatures_manager.cpp
         )

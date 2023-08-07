@@ -43,6 +43,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.lake.backup.LakeBackupJob;
 import com.starrocks.lake.backup.LakeRestoreJob;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -88,6 +89,7 @@ public abstract class AbstractJob implements Writable {
     @SerializedName(value = "dbName")
     protected String dbName;
 
+    @SerializedName("status")
     protected Status status = Status.OK;
 
     @SerializedName(value = "createTime")
@@ -120,6 +122,11 @@ public abstract class AbstractJob implements Writable {
         this.timeoutMs = timeoutMs;
         this.globalStateMgr = globalStateMgr;
         this.repoId = repoId;
+    }
+
+    public String getCurrentWarehouse() {
+        // TODO(lzh): pass the current warehouse.
+        return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
     }
 
     public JobType getType() {

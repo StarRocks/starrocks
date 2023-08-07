@@ -68,9 +68,7 @@ public:
 
         OwnedSlice dict_slice = page_builder.finish()->build();
 
-        PageDecoderOptions dict_decoder_options;
-        auto page_decoder =
-                std::make_unique<BinaryPrefixPageDecoder<TYPE_VARCHAR>>(dict_slice.slice(), dict_decoder_options);
+        auto page_decoder = std::make_unique<BinaryPrefixPageDecoder<TYPE_VARCHAR>>(dict_slice.slice());
         Status ret = page_decoder->init();
         ASSERT_TRUE(ret.ok());
 
@@ -111,9 +109,7 @@ public:
         page_builder.get_last_value(&last_value);
         ASSERT_EQ(slices[count - 1], last_value);
 
-        PageDecoderOptions dict_decoder_options;
-        auto page_decoder =
-                std::make_unique<BinaryPrefixPageDecoder<TYPE_VARCHAR>>(dict_slice.slice(), dict_decoder_options);
+        auto page_decoder = std::make_unique<BinaryPrefixPageDecoder<TYPE_VARCHAR>>(dict_slice.slice());
         Status ret = page_decoder->init();
         ASSERT_TRUE(ret.ok());
         // because every slice is unique
@@ -142,10 +138,10 @@ public:
         ret = page_decoder->seek_to_position_in_page(0);
         ASSERT_TRUE(ret.ok());
         auto column3 = BinaryColumn::create();
-        SparseRange read_range;
-        read_range.add(Range(0, 10));
-        read_range.add(Range(15, 25));
-        read_range.add(Range(28, 38));
+        SparseRange<> read_range;
+        read_range.add(Range<>(0, 10));
+        read_range.add(Range<>(15, 25));
+        read_range.add(Range<>(28, 38));
         ret = page_decoder->next_batch(read_range, column3.get());
         ASSERT_TRUE(ret.ok());
         ASSERT_EQ(30, column3->size());

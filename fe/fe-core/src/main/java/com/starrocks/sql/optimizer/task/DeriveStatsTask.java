@@ -16,8 +16,10 @@
 package com.starrocks.sql.optimizer.task;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.GroupExpression;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
@@ -55,12 +57,38 @@ public class DeriveStatsTask extends OptimizerTask {
         statisticsCalculator.estimatorStats();
 
         Statistics currentStatistics = groupExpression.getGroup().getStatistics();
+        // @Todo: update choose algorithm, like choose the least predicate statistics
         // choose best statistics
-        if (currentStatistics == null ||
-                (expressionContext.getStatistics().getOutputRowCount() < currentStatistics.getOutputRowCount())) {
+        // do set group statistics when the groupExpression is a materialized view scan
+        if (needUpdateGroupStatistics(currentStatistics, expressionContext.getStatistics())) {
             groupExpression.getGroup().setStatistics(expressionContext.getStatistics());
+        }
+        if (currentStatistics != null && !currentStatistics.equals(expressionContext.getStatistics())) {
+            if (isMaterializedView()) {
+                LogicalOlapScanOperator scan = groupExpression.getOp().cast();
+                MaterializedView mv = (MaterializedView) scan.getTable();
+                groupExpression.getGroup().setMvStatistics(mv.getId(), expressionContext.getStatistics());
+            }
         }
 
         groupExpression.setStatsDerived();
+    }
+
+    private boolean isMaterializedView() {
+        return groupExpression.getOp() instanceof LogicalOlapScanOperator
+                && ((LogicalOlapScanOperator) groupExpression.getOp()).getTable().isMaterializedView();
+    }
+
+
+    private boolean needUpdateGroupStatistics(Statistics currentStatistics, Statistics newStatistics) {
+        if (currentStatistics == null) {
+            return true;
+        }
+
+        if (isMaterializedView()) {
+            return false;
+        }
+
+        return newStatistics.getComputeSize() < currentStatistics.getComputeSize();
     }
 }

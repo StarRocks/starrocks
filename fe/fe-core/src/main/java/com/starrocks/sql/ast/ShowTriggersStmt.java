@@ -18,6 +18,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 public class ShowTriggersStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
@@ -34,6 +35,14 @@ public class ShowTriggersStmt extends ShowStmt {
                     .addColumn(new Column("collation_connection", ScalarType.createVarchar(80)))
                     .addColumn(new Column("Database Collation", ScalarType.createVarchar(80)))
                     .build();
+
+    public ShowTriggersStmt() {
+        this(NodePosition.ZERO);
+    }
+
+    public ShowTriggersStmt(NodePosition pos) {
+        super(pos);
+    }
 
     @Override
     public ShowResultSetMetaData getMetaData() {

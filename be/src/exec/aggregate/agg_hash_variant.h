@@ -25,7 +25,7 @@
 #include "exec/aggregate/agg_hash_map.h"
 #include "exec/aggregate/agg_hash_set.h"
 #include "exec/aggregate/agg_profile.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -475,9 +475,17 @@ struct AggHashMapVariant {
 
     void convert_to_two_level(RuntimeState* state);
 
+    // release the hash table
+    void reset();
+
     size_t capacity() const;
+
     size_t size() const;
+
+    bool need_expand(size_t increasement) const;
+
     size_t reserved_memory_usage(const MemPool* pool) const;
+
     size_t allocated_memory_usage(const MemPool* pool) const;
 
 private:
@@ -570,9 +578,13 @@ struct AggHashSetVariant {
 
     void convert_to_two_level(RuntimeState* state);
 
+    void reset();
+
     size_t capacity() const;
 
     size_t size() const;
+
+    bool need_expand(size_t increasement) const;
 
     size_t reserved_memory_usage(const MemPool* pool) const;
 

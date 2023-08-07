@@ -94,7 +94,7 @@ Status EngineChecksumTask::_compute_checksum() {
         return_columns.push_back(i);
     }
 
-    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, return_columns);
+    Schema schema = ChunkHelper::convert_schema(tablet_schema, return_columns);
 
     TabletReader reader(tablet, Version(0, _version), schema);
 

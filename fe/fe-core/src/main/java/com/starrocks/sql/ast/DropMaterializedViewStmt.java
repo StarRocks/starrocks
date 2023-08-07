@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TableName;
+import com.starrocks.sql.parser.NodePosition;
 
 /**
  * DROP MATERIALIZED VIEW [ IF EXISTS ] <mv_name> IN|FROM [db_name].<table_name>
@@ -32,6 +33,11 @@ public class DropMaterializedViewStmt extends DdlStmt {
     private final TableName dbMvName;
 
     public DropMaterializedViewStmt(boolean ifExists, TableName dbMvName) {
+        this(ifExists, dbMvName, NodePosition.ZERO);
+    }
+
+    public DropMaterializedViewStmt(boolean ifExists, TableName dbMvName, NodePosition pos) {
+        super(pos);
         this.ifExists = ifExists;
         this.dbMvName = dbMvName;
     }

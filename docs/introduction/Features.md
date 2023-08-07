@@ -40,13 +40,15 @@ StarRocks can load data within seconds for near-real-time analytics. StarRocks' 
 
 ![Realtime](../assets/1.1-6-realtime.png)
 
-StarRocks' storage engine uses the Delete-and-insert (Merge on Read) pattern, which allows for efficient Append and UPSERT operations. The storage engine can quickly filter data using primary key indexes,  eliminating the need for Sort and Merge operations at data reading. The engine can also make full use of secondary indexes. It delivers ultimate query performance even on huge amounts of data updates.
+StarRocks' storage engine uses the Delete-and-insert pattern, which allows for efficient Partial Update and Upsert operations. The storage engine can quickly filter data using primary key indexes,  eliminating the need for Sort and Merge operations at data reading. The engine can also make full use of secondary indexes. It delivers fast and predictable query performance even on huge volume of data updates.
 
 ## Intelligent materialized view
 
-StarRocks uses intelligent materialized views to accelerate queries. Different from materialized views of other similar database produces that need to asynchronously synchronize data with the base table, StarRocks' materialized views automatically update data according to the data changes in the base table without requiring additional maintenance operations. In addition, the selection of materialized views is also automatic. During query planning, if StarRocks identifies that a suitable materialized view can be created to speed up the query, StarRocks will automatically rewrite the query and create an appropriate materialized view.
+StarRocks uses intelligent materialized views to accelerate queries and data warehouse layering. Different from materialized views of other similar products that requires manual data synchronization with the base table, StarRocks' materialized views automatically update data according to the data changes in the base table without requiring additional maintenance operations. In addition, the selection of materialized views is also automatic. If StarRocks identifies a suitable materialized view (MV) to improve query performance, it will automatically rewrite the query to utilize the MV. This intelligent process significantly enhances query efficiency without requiring manual intervention.
 
-StarRocks' materialized views can be created or deleted on demand. You do not need to create a materialized view when you create a base table. Instead, you can determine whether to create or delete a materialized view based on your business requirements. StarRocks automatically creates or adjusts materialized views in the background.
+ StarRocks' MV can replace the traditional ETL data modeling process: Instead of transforming data in the upstream applications, you now have the option to transform data with MV within StarRocks, simplifying the data processing pipeline.
+
+For example, in the figure, raw data on data lake can be used to create a normalized table based on an external MV. A denormalized table can be created from normalized tables through asynchronous materialized views. Another MV can be created from normalized tables to support high-concurrency queries and better query performance.
 
 ![MV](../assets/1.1-7-mv.png)
 
@@ -54,6 +56,6 @@ StarRocks' materialized views can be created or deleted on demand. You do not ne
 
 ![DLA](../assets/1.1-8-dla.png)
 
-In addition to efficient analytics of local data, StarRocks can work as the compute engine to analyze data stored in data lakes such as Apache Hive, Apache Iceberg, and Apache Hudi. Users can use StarRocks to analyze data in a variety of file formats, including Parquet, ORC, and CSV, which can be stored in various systems such as HDFS, Amazon S3, and Alibaba Cloud OSS.
+In addition to efficient analytics of local data, StarRocks can work as the compute engine to analyze data stored in data lakes such as Apache Hive, Apache Iceberg, Apache Hudi, and Delta Lake. One of the key features of StarRocks is its external catalog, which acts as a linkage to an externally maintained metastore. This functionality provides users with the capability to query external data sources seamlessly, eliminating the need for data migration. As such, users can analyze data from different systems such as HDFS and Amazon S3, in various file formats such as Parquet, ORC, and CSV, etc.
 
 The preceding figure shows a data lake analytics scenario where StarRocks is responsible for data computing and analysis, and the data lake is responsible for data storage, organization, and maintenance. Data lakes allow users to store data in open storage formats and use flexible schemas to produce reports on "single source of truth" for various BI, AI, ad-hoc, and reporting use cases. StarRocks fully leverages the advantages of its vectorization engine and CBO, significantly improving the performance of data lake analytics.

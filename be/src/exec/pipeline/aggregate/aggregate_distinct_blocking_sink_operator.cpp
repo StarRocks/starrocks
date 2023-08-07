@@ -20,17 +20,26 @@ namespace starrocks::pipeline {
 
 Status AggregateDistinctBlockingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get(), _mem_tracker.get()));
+    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
     return _aggregator->open(state);
 }
 
 void AggregateDistinctBlockingSinkOperator::close(RuntimeState* state) {
+    auto* counter = ADD_COUNTER(_unique_metrics, "HashTableMemoryUsage", TUnit::BYTES);
+    counter->set(_aggregator->hash_set_memory_usage());
     _aggregator->unref(state);
     Operator::close(state);
 }
 
 Status AggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state) {
+    if (_is_finished) return Status::OK();
+
     _is_finished = true;
+
+    // skip processing if cancelled
+    if (state->is_cancelled()) {
+        return Status::OK();
+    }
 
     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
 
@@ -54,23 +63,21 @@ StatusOr<ChunkPtr> AggregateDistinctBlockingSinkOperator::pull_chunk(RuntimeStat
 
 Status AggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     DCHECK_LE(chunk->num_rows(), state->chunk_size());
-    RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
-
     {
         SCOPED_TIMER(_aggregator->agg_compute_timer());
         bool limit_with_no_agg = _aggregator->limit() != -1;
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set(chunk->num_rows()));
-
-        _mem_tracker->set(_aggregator->hash_set_variant().reserved_memory_usage(_aggregator->mem_pool()));
-        TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
-
-        _aggregator->update_num_input_rows(chunk->num_rows());
         if (limit_with_no_agg) {
             auto size = _aggregator->hash_set_variant().size();
             if (size >= _aggregator->limit()) {
-                // TODO(hcf) do something
+                set_finishing(state);
+                return Status::OK();
             }
         }
+        RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set(chunk->num_rows()));
+        TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
+
+        _aggregator->update_num_input_rows(chunk->num_rows());
     }
 
     return Status::OK();

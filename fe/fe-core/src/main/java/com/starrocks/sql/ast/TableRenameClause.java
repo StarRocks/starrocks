@@ -16,12 +16,17 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.alter.AlterOpType;
+import com.starrocks.sql.parser.NodePosition;
 
 public class TableRenameClause extends AlterTableClause {
     private final String newTableName;
 
-    public TableRenameClause(String newTableName) {
-        super(AlterOpType.RENAME);
+    public TableRenameClause(String newTableNam) {
+        this(newTableNam, NodePosition.ZERO);
+    }
+
+    public TableRenameClause(String newTableName, NodePosition pos) {
+        super(AlterOpType.RENAME, pos);
         this.newTableName = newTableName;
         this.needTableStable = false;
     }

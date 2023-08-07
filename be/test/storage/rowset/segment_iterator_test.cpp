@@ -87,7 +87,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
         // col0
         std::vector<uint32_t> column_indexes = {0};
         ASSERT_OK(writer.init(column_indexes, true));
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
@@ -103,7 +103,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
         // col1
         std::vector<uint32_t> column_indexes{1};
         ASSERT_OK(writer.init(column_indexes, false));
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
@@ -125,9 +125,13 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     seg_options.fs = _fs;
     seg_options.stats = &stats;
 
-    VectorizedSchema vec_schema;
-    vec_schema.append(std::make_shared<VectorizedField>(0, "c1", TYPE_INT, -1, -1, false));
-    vec_schema.append(std::make_shared<VectorizedField>(1, "c2", TYPE_VARCHAR, -1, -1, false));
+    Schema vec_schema;
+    auto f0 = std::make_shared<Field>(0, "c1", TYPE_INT, -1, -1, false);
+    f0->set_uid(0);
+    auto f1 = std::make_shared<Field>(1, "c2", TYPE_VARCHAR, -1, -1, false);
+    f1->set_uid(1);
+    vec_schema.append(f0);
+    vec_schema.append(f1);
 
     ObjectPool pool;
     SegmentReadOptions seg_opts;
@@ -207,7 +211,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
         // col0
         std::vector<uint32_t> column_indexes = {0};
         ASSERT_OK(writer.init(column_indexes, true));
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
@@ -223,7 +227,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
         // col1
         std::vector<uint32_t> column_indexes{1};
         ASSERT_OK(writer.init(column_indexes, false));
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
@@ -256,9 +260,13 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     ASSERT_OK(scalar_iter->init(iter_opts));
     ASSERT_FALSE(scalar_iter->all_page_dict_encoded());
 
-    VectorizedSchema vec_schema;
-    vec_schema.append(std::make_shared<VectorizedField>(0, "c1", TYPE_INT, -1, -1, false));
-    vec_schema.append(std::make_shared<VectorizedField>(1, "c2", TYPE_VARCHAR, -1, -1, false));
+    Schema vec_schema;
+    auto f0 = std::make_shared<Field>(0, "c1", TYPE_INT, -1, -1, false);
+    f0->set_uid(0);
+    auto f1 = std::make_shared<Field>(1, "c2", TYPE_VARCHAR, -1, -1, false);
+    f1->set_uid(1);
+    vec_schema.append(f0);
+    vec_schema.append(f1);
 
     ObjectPool pool;
     SegmentReadOptions seg_opts;

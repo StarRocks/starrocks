@@ -16,9 +16,15 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.sql.parser.NodePosition;
 
 public class DropFollowerClause extends FrontendClause {
+
     public DropFollowerClause(String hostPort) {
-        super(hostPort, FrontendNodeType.FOLLOWER);
+        this(hostPort, NodePosition.ZERO);
+    }
+
+    public DropFollowerClause(String hostPort, NodePosition pos) {
+        super(hostPort, FrontendNodeType.FOLLOWER, pos);
     }
 }

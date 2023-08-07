@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -31,6 +32,11 @@ public class RefreshTableStmt extends DdlStmt {
     private final List<String> partitionNames;
 
     public RefreshTableStmt(TableName tableName, List<String> partitionNames) {
+        this(tableName, partitionNames, NodePosition.ZERO);
+    }
+
+    public RefreshTableStmt(TableName tableName, List<String> partitionNames, NodePosition pos) {
+        super(pos);
         this.tableName = tableName;
         this.partitionNames = partitionNames;
     }

@@ -74,7 +74,7 @@ public class CreateTableInfoTest {
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
         FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
-        FakeGlobalStateMgr.setMetaVersion(FeConstants.meta_version);
+        FakeGlobalStateMgr.setMetaVersion(FeConstants.META_VERSION);
     }
 
     @Test
@@ -117,7 +117,7 @@ public class CreateTableInfoTest {
                 TStorageType.COLUMN, KeysType.AGG_KEYS);
         Deencapsulation.setField(table, "baseIndexId", 1000);
         table.addPartition(partition);
-        CreateTableInfo info = new CreateTableInfo("db1", table);
+        CreateTableInfo info = new CreateTableInfo("db1", table, "");
         info.write(dos);
 
         dos.flush();

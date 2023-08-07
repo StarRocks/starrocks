@@ -47,8 +47,7 @@ import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.PCollectQueryStatisticsRequest;
 import com.starrocks.rpc.RpcException;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
@@ -74,7 +73,7 @@ public class CurrentQueryInfoProvider {
     }
 
     public Map<String, QueryStatistics> getQueryStatistics(Collection<QueryStatisticsItem> items)
-        throws AnalysisException {
+            throws AnalysisException {
         return collectQueryStatistics(items);
     }
 
@@ -85,7 +84,7 @@ public class CurrentQueryInfoProvider {
             TNetworkAddress brpcNetAddress = brpcAddresses.get(instanceInfo.getAddress());
             if (brpcNetAddress == null) {
                 try {
-                    brpcNetAddress = toBrpcHost(instanceInfo.getAddress());
+                    brpcNetAddress = SystemInfoService.toBrpcHost(instanceInfo.getAddress());
                     brpcAddresses.put(instanceInfo.getAddress(), brpcNetAddress);
                 } catch (Exception e) {
                     LOG.warn(e.getMessage());
@@ -108,13 +107,17 @@ public class CurrentQueryInfoProvider {
         for (Pair<Request, Future<PCollectQueryStatisticsResult>> pair : futures) {
             try {
                 final PCollectQueryStatisticsResult result = pair.second.get(10, TimeUnit.SECONDS);
-                if (result.queryStatistics != null) {
+                if (result != null && result.queryStatistics != null) {
                     Preconditions.checkState(result.queryStatistics.size() == 1);
                     PCollectQueryStatistics queryStatistics = result.queryStatistics.get(0);
                     QueryStatistics statistics = new QueryStatistics();
                     statistics.updateCpuCostNs(queryStatistics.cpuCostNs);
                     statistics.updateScanBytes(queryStatistics.scanBytes);
                     statistics.updateScanRows(queryStatistics.scanRows);
+                    statistics.updateMemUsageBytes(queryStatistics.memUsageBytes);
+                    if (queryStatistics.spillBytes != null) {
+                        statistics.updateSpillBytes(queryStatistics.spillBytes);
+                    }
                     final Request request = pair.first;
                     String host = String.format("%s:%d",
                             request.getAddress().getHostname(), request.getAddress().getPort());
@@ -140,7 +143,7 @@ public class CurrentQueryInfoProvider {
                 TNetworkAddress brpcNetAddress = brpcAddresses.get(instanceInfo.getAddress());
                 if (brpcNetAddress == null) {
                     try {
-                        brpcNetAddress = toBrpcHost(instanceInfo.getAddress());
+                        brpcNetAddress = SystemInfoService.toBrpcHost(instanceInfo.getAddress());
                         brpcAddresses.put(instanceInfo.getAddress(), brpcNetAddress);
                     } catch (Exception e) {
                         LOG.warn(e.getMessage());
@@ -187,7 +190,7 @@ public class CurrentQueryInfoProvider {
         for (Pair<Request, Future<PCollectQueryStatisticsResult>> pair : futures) {
             try {
                 final PCollectQueryStatisticsResult result = pair.second.get(10, TimeUnit.SECONDS);
-                if (result.queryStatistics != null) {
+                if (result != null && result.queryStatistics != null) {
                     for (PCollectQueryStatistics queryStatistics : result.queryStatistics) {
                         final String queryIdStr = DebugUtil.printId(queryStatistics.queryId);
                         QueryStatistics statistics = statisticsMap.get(queryIdStr);
@@ -198,6 +201,10 @@ public class CurrentQueryInfoProvider {
                         statistics.updateCpuCostNs(queryStatistics.cpuCostNs);
                         statistics.updateScanBytes(queryStatistics.scanBytes);
                         statistics.updateScanRows(queryStatistics.scanRows);
+                        statistics.updateMemUsageBytes(queryStatistics.memUsageBytes);
+                        if (queryStatistics.spillBytes != null) {
+                            statistics.updateSpillBytes(queryStatistics.spillBytes);
+                        }
                     }
                 }
             } catch (InterruptedException e) {
@@ -211,27 +218,12 @@ public class CurrentQueryInfoProvider {
         return statisticsMap;
     }
 
-    private TNetworkAddress toBrpcHost(TNetworkAddress host) throws AnalysisException {
-        final Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
-                host.getHostname(), host.getPort());
-        if (backend == null) {
-            throw new AnalysisException(new StringBuilder("Backend ")
-                    .append(host.getHostname())
-                    .append(":")
-                    .append(host.getPort())
-                    .append(" does not exist")
-                    .toString());
-        }
-        if (backend.getBrpcPort() < 0) {
-            throw new AnalysisException("BRPC port is't exist.");
-        }
-        return new TNetworkAddress(backend.getHost(), backend.getBrpcPort());
-    }
-
     public static class QueryStatistics {
         long cpuCostNs = 0;
         long scanBytes = 0;
         long scanRows = 0;
+        long memUsageBytes = 0;
+        long spillBytes = 0;
 
         public QueryStatistics() {
 
@@ -259,6 +251,22 @@ public class CurrentQueryInfoProvider {
 
         public void updateScanRows(long value) {
             scanRows += value;
+        }
+
+        public long getMemUsageBytes() {
+            return memUsageBytes;
+        }
+
+        public void updateMemUsageBytes(long value) {
+            memUsageBytes += value;
+        }
+
+        public void updateSpillBytes(long value) {
+            spillBytes += value;
+        }
+
+        public long getSpillBytes() {
+            return spillBytes;
         }
     }
 

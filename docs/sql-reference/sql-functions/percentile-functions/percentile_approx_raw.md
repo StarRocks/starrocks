@@ -16,7 +16,7 @@ PERCENTILE_APPROX_RAW(x, y);
 
 - `x`: It can be a column or a set of values. It must evaluate to PERCENTILE.
 
-- `y`: the percentile. The supported data type is DOUBLE. Value range: [0.0,1.0]。
+- `y`: the percentile. The supported data type is DOUBLE. Value range: [0.0,1.0].
 
 ## Return value
 
@@ -36,13 +36,8 @@ Returns a PERCENTILE value.
   ) ENGINE=OLAP
   AGGREGATE KEY(`site_id`, `date`, `city_code`)
   COMMENT "OLAP"
-  DISTRIBUTED BY HASH(`site_id`) BUCKETS 8
-  PROPERTIES (
-  "replication_num" = "1",
-  "in_memory" = "false",
-  "storage_format" = "DEFAULT",
-  "enable_persistent_index" = "false"
-  );
+  DISTRIBUTED BY HASH(`site_id`)
+  PROPERTIES ("replication_num" = "1");
   ```
 
 Insert data into the table.
@@ -65,10 +60,3 @@ Calculate the value corresponding to percentile 0.5.
   +-------------------------------------+
   1 row in set (0.03 sec)
   ```
-
-
-insert into aggregate_tbl values
-(5, '2020-02-23', 'city_code', 555, percentile_hash(1)),
-(5, '2020-02-23', 'city_code', 555, percentile_hash(2)),
-(5, '2020-02-23', 'city_code', 555, percentile_hash(3)),
-(5, '2020-02-23', 'city_code', 555, percentile_hash(4));

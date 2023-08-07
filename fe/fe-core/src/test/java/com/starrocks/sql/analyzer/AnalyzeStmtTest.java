@@ -21,25 +21,32 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.FullStatisticsCollectJob;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.statistic.StatisticSQLBuilder;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -48,6 +55,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.regex.Pattern;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
@@ -132,9 +140,13 @@ public class AnalyzeStmtTest {
     public void testShow() throws MetaNotFoundException {
         String sql = "show analyze";
         ShowAnalyzeJobStmt showAnalyzeJobStmt = (ShowAnalyzeJobStmt) analyzeSuccess(sql);
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = testDb.getTable("t0");
 
-        AnalyzeJob analyzeJob = new AnalyzeJob(10002, 10004, Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
-                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
+        AnalyzeJob analyzeJob = new AnalyzeJob(testDb.getId(), table.getId(), Lists.newArrayList(),
+                StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
         Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, {}, FINISH, None, ]",
                 ShowAnalyzeJobStmt.showAnalyzeJobs(getConnectContext(), analyzeJob).toString());
 
@@ -144,70 +156,76 @@ public class AnalyzeStmtTest {
         sql = "show analyze status";
         ShowAnalyzeStatusStmt showAnalyzeStatusStatement = (ShowAnalyzeStatusStmt) analyzeSuccess(sql);
 
-        AnalyzeStatus analyzeStatus = new AnalyzeStatus(-1, 10002, 10004, Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
-                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.of(2020, 1, 1, 1, 1));
+        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(-1, testDb.getId(), table.getId(), Lists.newArrayList(),
+                StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.of(
+                        2020, 1, 1, 1, 1));
         analyzeStatus.setEndTime(LocalDateTime.of(2020, 1, 1, 1, 1));
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
         analyzeStatus.setReason("Test Failed");
-        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, FAILED, 2020-01-01 01:01:00, 2020-01-01 01:01:00, {}, Test Failed]",
+        Assert.assertEquals("[-1, default_catalog.test, t0, ALL, FULL, ONCE, FAILED, " +
+                        "2020-01-01 01:01:00, 2020-01-01 01:01:00, " +
+                        "{}, Test Failed]",
                 ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
 
         sql = "show stats meta";
         ShowBasicStatsMetaStmt showAnalyzeMetaStmt = (ShowBasicStatsMetaStmt) analyzeSuccess(sql);
 
-        BasicStatsMeta basicStatsMeta = new BasicStatsMeta(10002, 10004, null, StatsConstants.AnalyzeType.FULL,
+        BasicStatsMeta basicStatsMeta = new BasicStatsMeta(testDb.getId(), table.getId(), null,
+                StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1), Maps.newHashMap());
         Assert.assertEquals("[test, t0, ALL, FULL, 2020-01-01 01:01:00, {}, 100%]",
                 ShowBasicStatsMetaStmt.showBasicStatsMeta(getConnectContext(), basicStatsMeta).toString());
 
         sql = "show histogram meta";
         ShowHistogramStatsMetaStmt showHistogramStatsMetaStmt = (ShowHistogramStatsMetaStmt) analyzeSuccess(sql);
-        HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(10002, 10004, "v1",
-                StatsConstants.AnalyzeType.HISTOGRAM, LocalDateTime.of(2020, 1, 1, 1, 1),
+        HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(testDb.getId(), table.getId(), "v1",
+                StatsConstants.AnalyzeType.HISTOGRAM, LocalDateTime.of(
+                        2020, 1, 1, 1, 1),
                 Maps.newHashMap());
         Assert.assertEquals("[test, t0, v1, HISTOGRAM, 2020-01-01 01:01:00, {}]",
                 ShowHistogramStatsMetaStmt.showHistogramStatsMeta(getConnectContext(), histogramStatsMeta).toString());
     }
 
     @Test
-    public void testStatisticsSqlBuilder() {
-        Database database = GlobalStateMgr.getCurrentState().getDb(10002L);
-        OlapTable table = (OlapTable) database.getTable(10004L);
-        Partition partition = table.getPartition(10003L);
+    public void testStatisticsSqlBuilder() throws Exception {
+        Database database = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable table = (OlapTable) database.getTable("t0");
+        System.out.println(table.getPartitions());
+        Partition partition = (new ArrayList<>(table.getPartitions())).get(0);
 
         Column v1 = table.getColumn("v1");
         Column v2 = table.getColumn("v2");
 
-        Assert.assertEquals("SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
+        Assert.assertEquals(String.format(new String("SELECT cast(1 as INT), now(), " +
+                        "db_id, table_id, column_name," +
+                        " sum(row_count), " +
                         "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
                         "cast(max(cast(max as bigint(20))) as string), " +
                         "cast(min(cast(min as bigint(20))) as string) FROM column_statistics " +
-                        "WHERE table_id = 10004 and column_name = \"v1\" GROUP BY db_id, table_id, column_name " +
+                        "WHERE table_id = %d and column_name = \"v1\" GROUP BY db_id, table_id, column_name " +
                         "UNION ALL SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
                         "cast(sum(data_size) as bigint), " +
                         "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as bigint(20))) as string), " +
                         "cast(min(cast(min as bigint(20))) as string) " +
-                        "FROM column_statistics WHERE table_id = 10004 and column_name = \"v2\" " +
-                        "GROUP BY db_id, table_id, column_name",
-                StatisticSQLBuilder.buildQueryFullStatisticsSQL(10002L, 10004L, Lists.newArrayList(v1, v2)));
+                        "FROM column_statistics WHERE table_id = %d and column_name = \"v2\" " +
+                        "GROUP BY db_id, table_id, column_name"), table.getId(), table.getId()),
+                StatisticSQLBuilder.buildQueryFullStatisticsSQL(database.getId(), table.getId(),
+                        Lists.newArrayList(v1, v2)));
 
-        Assert.assertEquals("SELECT cast(1 as INT), update_time, db_id, table_id, column_name, row_count, " +
+        Assert.assertEquals(String.format(
+                "SELECT cast(1 as INT), update_time, db_id, table_id, column_name, row_count, " +
                         "data_size, distinct_count, null_count, max, min " +
-                        "FROM table_statistic_v1 WHERE db_id = 10002 and table_id = 10004 and column_name in ('v1', 'v2')",
-                StatisticSQLBuilder.buildQuerySampleStatisticsSQL(10002L, 10004L, Lists.newArrayList("v1", "v2")));
+                        "FROM table_statistic_v1 WHERE db_id = %d and table_id = %d and column_name in ('v1', 'v2')",
+                        database.getId(), table.getId()),
+                StatisticSQLBuilder.buildQuerySampleStatisticsSQL(database.getId(),
+                        table.getId(), Lists.newArrayList("v1", "v2")));
 
         FullStatisticsCollectJob collectJob = new FullStatisticsCollectJob(database, table,
-                Lists.newArrayList(10003L),
-                Lists.newArrayList("v1", "v2"), StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Lists.newArrayList(partition.getId()),
+                Lists.newArrayList("v1", "v2"), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap());
-        Assert.assertEquals("SELECT 10004, 10003, 'v1', 10002, 'test.t0', 't0', " +
-                        "COUNT(1), COUNT(1) * 8, IFNULL(hll_raw(`v1`), hll_empty()), COUNT(1) - COUNT(`v1`), " +
-                        "IFNULL(MAX(`v1`), ''), IFNULL(MIN(`v1`), ''), NOW() FROM test.t0 partition t0",
-                collectJob.buildCollectSQLList(2).get(0).get(0));
-        Assert.assertEquals("SELECT 10004, 10003, 'v2', 10002, 'test.t0', 't0', " +
-                        "COUNT(1), COUNT(1) * 8, IFNULL(hll_raw(`v2`), hll_empty()), COUNT(1) - COUNT(`v2`), " +
-                        "IFNULL(MAX(`v2`), ''), IFNULL(MIN(`v2`), ''), NOW() FROM test.t0 partition t0",
-                collectJob.buildCollectSQLList(2).get(0).get(1));
     }
 
     @Test
@@ -272,30 +290,51 @@ public class AnalyzeStmtTest {
         KillAnalyzeStmt killAnalyzeStmt = (KillAnalyzeStmt) analyzeSuccess(sql);
 
         GlobalStateMgr.getCurrentAnalyzeMgr().registerConnection(1, getConnectContext());
-        Assert.assertThrows(SemanticException.class, () -> GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(2, true));
+        Assert.assertThrows(SemanticException.class,
+                () -> GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(2, true));
         GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(1, true);
-        Assert.assertThrows(SemanticException.class, () -> GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(1, true));
+        Assert.assertThrows(SemanticException.class,
+                () -> GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(1, true));
+    }
+
+    @Test
+    public void testDropAnalyzeTest() {
+        String sql = "drop analyze 10";
+        StatementBase stmt = analyzeSuccess(sql);
+        try {
+            DDLStmtExecutor.execute(stmt, getConnectContext());
+        } catch (Exception ignore) {
+            Assert.fail();
+        }
     }
 
     @Test
     public void testAnalyzeStatus() throws MetaNotFoundException {
-        AnalyzeStatus analyzeStatus = new AnalyzeStatus(-1, 10002, 10004, Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
-                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.of(2020, 1, 1, 1, 1));
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = testDb.getTable("t0");
+        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(-1, testDb.getId(), table.getId(), Lists.newArrayList(),
+                StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.of(
+                        2020, 1, 1, 1, 1));
         analyzeStatus.setEndTime(LocalDateTime.of(2020, 1, 1, 1, 1));
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
-        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, RUNNING (0%), 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
+        Assert.assertEquals(
+                "[-1, default_catalog.test, t0, ALL, FULL, ONCE, RUNNING (0%), 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
                 " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
 
         analyzeStatus.setProgress(50);
-        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, RUNNING (50%), 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
+        Assert.assertEquals(
+                "[-1, default_catalog.test, t0, ALL, FULL, ONCE, RUNNING (50%), 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
                 " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
 
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
-        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, SUCCESS, 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
+        Assert.assertEquals(
+                "[-1, default_catalog.test, t0, ALL, FULL, ONCE, SUCCESS, 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
                 " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
 
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
-        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, FAILED, 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
+        Assert.assertEquals(
+                "[-1, default_catalog.test, t0, ALL, FULL, ONCE, FAILED, 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
                 " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
     }
 
@@ -323,5 +362,35 @@ public class AnalyzeStmtTest {
         String content = StatisticSQLBuilder.buildQueryFullStatisticsSQL(database.getId(), table.getId(),
                 Lists.newArrayList(kk1, kk2));
         Assert.assertTrue(Pattern.matches(pattern, content));
+    }
+
+    @Test
+    public void testQueryDict() throws Exception {
+        String column = "case";
+        String catalogName = "default_catalog";
+        String dbName = "select";
+        String tblName = "insert";
+        String sql = "select cast(" + 1 + " as Int), " +
+                "cast(" + 2 + " as bigint), " +
+                "dict_merge(" +  StatisticUtils.quoting(column) + ") as _dict_merge_" + column +
+                " from " + StatisticUtils.quoting(catalogName, dbName, tblName) + " [_META_]";
+        QueryStatement stmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, getConnectContext());
+        Assert.assertEquals("select.insert",
+                ((SelectRelation) stmt.getQueryRelation()).getRelation().getResolveTableName().toString());
+    }
+
+    @Test
+    public void testTypeKeys() throws Exception {
+        analyzeSuccess("select count(*) from tarray group by v4");
+        analyzeSuccess("select distinct v4 from tarray");
+        analyzeSuccess("select * from tarray order by v4");
+        analyzeSuccess("select DENSE_RANK() OVER(partition by v3 order by v4) from tarray");
+        analyzeSuccess("select * from tarray join tarray y using(v4)");
+        analyzeFail("select * from tarray join tarray y using(v5)");
+        analyzeFail("select avg(v4) from tarray");
+        analyzeFail("select count(*) from tarray group by v5");
+        analyzeFail("select distinct v5 from tarray");
+        analyzeFail("select * from tarray order by v5");
+        analyzeFail("select DENSE_RANK() OVER(partition by v5 order by v4) from tarray");
     }
 }

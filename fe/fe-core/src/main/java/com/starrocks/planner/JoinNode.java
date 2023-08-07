@@ -83,6 +83,9 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     protected final List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
     protected final List<Integer> filter_null_value_columns = Lists.newArrayList();
     protected List<Expr> partitionExprs;
+
+    // contains both the cols required by parent node and cols required by
+    // other join conjuncts and predicates
     protected List<Integer> outputSlots;
 
     // The partitionByExprs which need to check the probe side for partition join.
@@ -322,6 +325,10 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
 
     public JoinOperator getJoinOp() {
         return joinOp;
+    }
+
+    public List<BinaryPredicate> getEqJoinConjuncts() {
+        return eqJoinConjuncts;
     }
 
     public DistributionMode getDistrMode() {

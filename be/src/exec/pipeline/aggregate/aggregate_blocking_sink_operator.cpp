@@ -14,25 +14,39 @@
 
 #include "aggregate_blocking_sink_operator.h"
 
+#include <memory>
 #include <variant>
 
+#include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
 #include "runtime/current_thread.h"
 
 namespace starrocks::pipeline {
 
 Status AggregateBlockingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get(), _mem_tracker.get()));
-    return _aggregator->open(state);
+    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
+    RETURN_IF_ERROR(_aggregator->open(state));
+
+    _agg_group_by_with_limit = (!_aggregator->is_none_group_by_exprs() &&     // has group by keys
+                                _aggregator->limit() != -1 &&                 // has limit
+                                _aggregator->conjunct_ctxs().empty() &&       // no 'having' clause
+                                _aggregator->get_aggr_phase() == AggrPhase2); // phase 2, keep it to make things safe
+    return Status::OK();
 }
 
 void AggregateBlockingSinkOperator::close(RuntimeState* state) {
+    auto* counter = ADD_COUNTER(_unique_metrics, "HashTableMemoryUsage", TUnit::BYTES);
+    counter->set(_aggregator->hash_map_memory_usage());
     _aggregator->unref(state);
     Operator::close(state);
 }
 
 Status AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
-    _is_finished = true;
+    // skip processing if cancelled
+    if (state->is_cancelled()) {
+        return Status::OK();
+    }
 
     if (!_aggregator->is_none_group_by_exprs()) {
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
@@ -54,6 +68,7 @@ Status AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
     COUNTER_UPDATE(_aggregator->input_row_count(), _aggregator->num_input_rows());
 
     _aggregator->sink_complete();
+    _is_finished = true;
     return Status::OK();
 }
 
@@ -69,26 +84,21 @@ StatusOr<ChunkPtr> AggregateBlockingSinkOperator::pull_chunk(RuntimeState* state
 Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
 
-    bool agg_group_by_with_limit =
-            (!_aggregator->is_none_group_by_exprs() &&     // has group by
-             _aggregator->limit() != -1 &&                 // has limit
-             _aggregator->conjunct_ctxs().empty() &&       // no 'having' clause
-             _aggregator->get_aggr_phase() == AggrPhase2); // phase 2, keep it to make things safe
     const auto chunk_size = chunk->num_rows();
     DCHECK_LE(chunk_size, state->chunk_size());
 
     SCOPED_TIMER(_aggregator->agg_compute_timer());
+    // try to build hash table if has group by keys
     if (!_aggregator->is_none_group_by_exprs()) {
-        if (false) {
-        }
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size, agg_group_by_with_limit));
-        _mem_tracker->set(_aggregator->hash_map_variant().reserved_memory_usage(_aggregator->mem_pool()));
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size, _agg_group_by_with_limit));
         TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
     }
+
+    // batch compute aggregate states
     if (_aggregator->is_none_group_by_exprs()) {
         RETURN_IF_ERROR(_aggregator->compute_single_agg_state(chunk.get(), chunk_size));
     } else {
-        if (agg_group_by_with_limit) {
+        if (_agg_group_by_with_limit) {
             // use `_aggregator->streaming_selection()` here to mark whether needs to filter key when compute agg states,
             // it's generated in `build_hash_map`
             size_t zero_count = SIMD::count_zero(_aggregator->streaming_selection().data(), chunk_size);
@@ -101,9 +111,23 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const Chun
             RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(chunk.get(), chunk_size));
         }
     }
+
     _aggregator->update_num_input_rows(chunk_size);
     RETURN_IF_ERROR(_aggregator->check_has_error());
 
     return Status::OK();
 }
+
+Status AggregateBlockingSinkOperatorFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(OperatorFactory::prepare(state));
+    return Status::OK();
+}
+
+OperatorPtr AggregateBlockingSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
+    // init operator
+    auto aggregator = _aggregator_factory->get_or_create(driver_sequence);
+    auto op = std::make_shared<AggregateBlockingSinkOperator>(aggregator, this, _id, _plan_node_id, driver_sequence);
+    return op;
+}
+
 } // namespace starrocks::pipeline

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
@@ -20,10 +19,11 @@ import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 // Show variables statement.
 public class ShowVariablesStmt extends ShowStmt {
@@ -50,11 +50,15 @@ public class ShowVariablesStmt extends ShowStmt {
     private Expr where;
 
     public ShowVariablesStmt(SetType type, String pattern) {
-        this.type = type;
-        this.pattern = pattern;
+        this(type, pattern, null, NodePosition.ZERO);
     }
 
     public ShowVariablesStmt(SetType type, String pattern, Expr where) {
+        this(type, pattern, where, NodePosition.ZERO);
+    }
+
+    public ShowVariablesStmt(SetType type, String pattern, Expr where, NodePosition pos) {
+        super(pos);
         this.type = type;
         this.pattern = pattern;
         this.where = where;
@@ -78,7 +82,7 @@ public class ShowVariablesStmt extends ShowStmt {
             return null;
         }
         if (type == null) {
-            type = SetType.DEFAULT;
+            type = SetType.SESSION;
         }
         // Columns
         SelectList selectList = new SelectList();
@@ -113,7 +117,7 @@ public class ShowVariablesStmt extends ShowStmt {
         where = where.substitute(aliasMap);
 
         return new QueryStatement(new SelectRelation(selectList, new TableRelation(tableName),
-                where, null, null));
+                where, null, null), this.origStmt);
     }
 
     @Override

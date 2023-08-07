@@ -1,0 +1,22 @@
+-- name: test_show_warehouse
+SHOW WAREHOUSES;
+-- result:
+0	default_warehouse	INITIALIZING	1
+-- !result
+SHOW PROC '/warehouses';
+-- result:
+0	default_warehouse	INITIALIZING	1
+-- !result
+-- name: test_show_warehouse_clusters
+SHOW CLUSTERS FROM WAREHOUSE default_warehouse;
+-- result:
+0	0	[]	-1	-1
+-- !result
+SHOW PROC '/warehouses/0';
+-- result:
+[REGEX]0	0	\[.*\]	-1	-1
+-- !result
+SHOW PROC '/warehouses/default_warehouse';
+-- result:
+[REGEX]0	0	\[.*\]	-1	-1
+-- !result

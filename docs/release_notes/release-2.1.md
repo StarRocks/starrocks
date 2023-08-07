@@ -13,7 +13,7 @@ Release date: September 6, 2022
 
 The following bugs are fixed:
 
-- An error may occur and BEs may crash when you query ARRAY columns (calculated by using the REPLACE_IF_NOT_NULL function) from a table using the Aggregate Key model. [#10144](https://github.com/StarRocks/starrocks/issues/10144)
+- An error may occur and BEs may crash when you query ARRAY columns (calculated by using the REPLACE_IF_NOT_NULL function) from a table using the Aggregate table. [#10144](https://github.com/StarRocks/starrocks/issues/10144)
 - The query result is incorrect if more than one IFNULL() function is nested in the query. [#5028](https://github.com/StarRocks/starrocks/issues/5028) [#10486](https://github.com/StarRocks/starrocks/pull/10486)
 - After a dynamic partition is truncated, the number of tablets in the partition changes from the value configured by dynamic partitioning to the default value. [#10435](https://github.com/StarRocks/starrocks/issues/10435)
 - If the Kafka cluster is stopped when you use Routine Load to load data into StarRocks, deadlocks may occur, affecting query performance. [#8947](https://github.com/StarRocks/starrocks/issues/8947)
@@ -44,7 +44,7 @@ Release date: July 9, 2022
 
 The following bugs are fixed:
 
-- Data loading into a table of the Primary Key model is suspended in the event of frequent data loads into that table.[#7763](https://github.com/StarRocks/starrocks/issues/7763)
+- Data loading into a table of the Primary Key table is suspended in the event of frequent data loads into that table.[#7763](https://github.com/StarRocks/starrocks/issues/7763)
 - Aggregate expressions are processed in an incorrect sequence during low-cardinality optimization, causing the `count distinct` function to return unexpected results. [#7659](https://github.com/StarRocks/starrocks/issues/7659)
 - No results are returned for the LIMIT clause, because the pruning rule in the clause cannot be properly processed. [#7894](https://github.com/StarRocks/starrocks/pull/7894)
 - If the global dictionary for low-cardinality optimization is applied on columns that are defined as join conditions for a query, the query returns unexpected results. [#8302](https://github.com/StarRocks/starrocks/issues/8302)
@@ -95,13 +95,13 @@ For window functions in which the frame is set to ROWS BETWEEN UNBOUNDED PRECEDI
 
 The following bugs are fixed:
 
-- When data is loaded into a table that uses the Primary Key model, data processing errors may occur if the creation time of each data version stored in the system does not monotonically increase due to reasons such as backward-moved system time and related unknown bugs. Such data processing errors cause backends (BEs) to stop. [#6046](https://github.com/StarRocks/starrocks/issues/6046)
+- When data is loaded into a table that uses the Primary Key table, data processing errors may occur if the creation time of each data version stored in the system does not monotonically increase due to reasons such as backward-moved system time and related unknown bugs. Such data processing errors cause backends (BEs) to stop. [#6046](https://github.com/StarRocks/starrocks/issues/6046)
 - Some graphical user interface (GUI) tools automatically configure the set_sql_limit variable. As a result, the SQL statement ORDER BY LIMIT is ignored, and consequently an incorrect number of rows are returned for queries. [#5966](https://github.com/StarRocks/starrocks/issues/5966)
 - If the DROP SCHEMA statement is executed on a database, the database is forcibly deleted and cannot be restored. [#6201](https://github.com/StarRocks/starrocks/issues/6201)
 - When JSON-formatted data is loaded, BEs stop if the data contains JSON format errors. For example, key-value pairs are not separated by commas (,). [#6098](https://github.com/StarRocks/starrocks/issues/6098)
 - When a large amount of data is being loaded in a highly concurrent manner, tasks that are run to write data to disks are piled up on BEs. In this situation, the BEs may stop. [#3877](https://github.com/StarRocks/starrocks/issues/3877)
 - StarRocks estimates the amount of memory that is required before it performs a schema change on a table. If the table contains a large number of STRING fields, the memory estimation result may be inaccurate. In this situation, if the estimated amount of memory that is required exceeds the maximum memory that is allowed for a single schema change operation, schema change operations that are supposed to be properly run encounter errors. [#6322](https://github.com/StarRocks/starrocks/issues/6322)
-- After a schema change is performed on a table that uses the Primary Key model, a "duplicate key xxx" error may occur when data is loaded into that table. [#5878](https://github.com/StarRocks/starrocks/issues/5878)
+- After a schema change is performed on a table that uses the Primary Key table, a "duplicate key xxx" error may occur when data is loaded into that table. [#5878](https://github.com/StarRocks/starrocks/issues/5878)
 - If low-cardinality optimization is performed during Shuffle Join operations, partitioning errors may occur. [#4890](https://github.com/StarRocks/starrocks/issues/4890)
 - If a colocation group (CG) contains a large number of tables and data is frequently loaded into the tables, the CG may not be able to stay in the stable state. In this case, the JOIN statement does not support Colocate Join operations. StarRocks has been optimized to wait for a little longer during data loading. This way, the integrity of the tablet replicas to which data is loaded can be maximized.
 
@@ -193,7 +193,7 @@ Release date: February 24, 2022
 
 - Compaction is optimized. A flat table can contain up to 10,000 columns.
 - The performance of first-time scan and page cache is optimized. Random I/O is reduced to improve first-time scan performance. The improvement is more noticeable if first-time scan occurs on SATA disks. StarRocks' page cache can store original data, which eliminates the need for bitshuffle encoding and unnecessary decoding. This improves the cache hit rate and query efficiency.
-- Schema change is supported in the primary key model. You can add, delete, and modify bitmap indexes by using `Alter table`.
+- Schema change is supported in the Primary Key table. You can add, delete, and modify bitmap indexes by using `Alter table`.
 - [Preview] The size of a string can be up to 1 MB.
 - JSON load performance is optimized. You can load more than 100 MB JSON data in a single file.
 - Bitmap index performance is optimized.

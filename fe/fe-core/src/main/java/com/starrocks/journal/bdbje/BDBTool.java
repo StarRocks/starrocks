@@ -138,7 +138,6 @@ public class BDBTool {
 
                         // meta version
                         MetaContext metaContext = new MetaContext();
-                        metaContext.setMetaVersion(options.getMetaVersion());
                         metaContext.setStarRocksMetaVersion(options.getStarRocksMetaVersion());
                         metaContext.setThreadLocalInfo();
 

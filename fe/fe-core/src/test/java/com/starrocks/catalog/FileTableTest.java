@@ -19,8 +19,9 @@ import com.starrocks.common.DdlException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.MetadataMgr;
-import com.starrocks.server.TableFactory;
+import com.starrocks.server.TableFactoryProvider;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.common.EngineType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mocked;
@@ -41,15 +42,19 @@ public class FileTableTest {
         starRocksAssert.withDatabase("db");
     }
 
+    Table createTable(CreateTableStmt stmt) throws DdlException {
+        return TableFactoryProvider.getFactory(EngineType.FILE.name()).createTable(null, null, stmt);
+    }
+
     @Test
     public void testCreateExternalTable(@Mocked MetadataMgr metadataMgr) throws Exception {
         String hdfsPath = "hdfs://127.0.0.1:10000/hive/";
 
-        String createTableSql = "create external table db.file_tbl (col1 int, col2 int) engine=file properties " +
+        String createTableSql = "create external table if not exists db.file_tbl (col1 int, col2 int) engine=file properties " +
                 "(\"path\"=\"hdfs://127.0.0.1:10000/hive/\", \"format\"=\"orc\")";
         CreateTableStmt
                 createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-        com.starrocks.catalog.Table table = TableFactory.createTable(createTableStmt, Table.TableType.FILE);
+        com.starrocks.catalog.Table table = createTable(createTableStmt);
 
         Assert.assertTrue(table instanceof FileTable);
         FileTable fileTable = (FileTable) table;
@@ -59,11 +64,12 @@ public class FileTableTest {
         Assert.assertEquals(hdfsPath, fileTable.getFileProperties().get("path"));
         Assert.assertEquals("orc", fileTable.getFileProperties().get("format"));
 
-        String createTableSql2 = "create external table db.file_tbl_parq (col1 int, col2 int) engine=file properties " +
+        String createTableSql2 = "create external table if not exists db.file_tbl_parq (col1 int, col2 int) " +
+                "engine=file properties " +
                 "(\"path\"=\"hdfs://127.0.0.1:10000/hive/\", \"format\"=\"parquet\")";
         CreateTableStmt
                 createTableStmt2 = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql2, connectContext);
-        com.starrocks.catalog.Table table2 = TableFactory.createTable(createTableStmt2, Table.TableType.FILE);
+        com.starrocks.catalog.Table table2 = createTable(createTableStmt2);
 
         Assert.assertTrue(table2 instanceof FileTable);
         FileTable fileTable2 = (FileTable) table2;
@@ -71,25 +77,28 @@ public class FileTableTest {
         Assert.assertEquals(hdfsPath, fileTable2.getTableLocation());
         Assert.assertEquals(RemoteFileInputFormat.PARQUET, fileTable2.getFileFormat());
 
-        String createTableSql3 = "create external table db.file_tbl_parq (col1 int, col2 int) engine=file properties " +
+        String createTableSql3 = "create external table  if not exists  db.file_tbl_parq (col1 int, col2 int) " +
+                "engine=file properties " +
                 "(\"path\"=\"hdfs://127.0.0.1:10000/hive/\")";
         CreateTableStmt
                 createTableStmt3 = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql3, connectContext);
         Assert.assertThrows(DdlException.class,
-                () -> TableFactory.createTable(createTableStmt3, Table.TableType.FILE));
+                () -> createTable(createTableStmt3));
 
-        String createTableSql4 = "create external table db.file_tbl_parq (col1 int, col2 int) engine=file properties " +
+        String createTableSql4 = "create external table if not exists  db.file_tbl_parq (col1 int, col2 int) " +
+                "engine=file properties " +
                 "(\"format\"=\"parquet\")";
         CreateTableStmt
                 createTableStmt4 = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql4, connectContext);
         Assert.assertThrows(DdlException.class,
-                () -> TableFactory.createTable(createTableStmt4, Table.TableType.FILE));
+                () -> createTable(createTableStmt4));
 
-        String createTableSql5 = "create external table db.file_tbl_parq (col1 int, col2 int) engine=file properties " +
+        String createTableSql5 = "create external table if not exists  db.file_tbl_parq (col1 int, col2 int) " +
+                "engine=file properties " +
                 "(\"path\"=\"hdfs://127.0.0.1:10000/hive/\", \"format\"=\"haha\")";
         CreateTableStmt
                 createTableStmt5 = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql5, connectContext);
         Assert.assertThrows(DdlException.class,
-                () -> TableFactory.createTable(createTableStmt5, Table.TableType.FILE));
+                () -> createTable(createTableStmt5));
     }
 }

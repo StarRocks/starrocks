@@ -16,6 +16,7 @@
 
 #include "column/chunk.h"
 #include "exprs/array_expr.h"
+#include "exprs/map_expr.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -98,6 +99,17 @@ public:
         return create_array_expr(type.to_thrift());
     }
 
+    static std::unique_ptr<Expr> create_map_expr(const TypeDescriptor& type) {
+        TExprNode node;
+        node.__set_node_type(TExprNodeType::MAP_EXPR);
+        node.__set_is_nullable(true);
+        node.__set_type(type.to_thrift());
+        node.__set_num_children(0);
+
+        auto* expr = MapExprFactory::from_thrift(node);
+        return std::unique_ptr<Expr>(expr);
+    }
+
     static TExprNode create_slot_expr_node(TupleId tuple_id, SlotId slot_id, TTypeDesc t_type, bool is_nullable) {
         TExprNode slot_ref;
         slot_ref.node_type = TExprNodeType::SLOT_REF;
@@ -106,7 +118,6 @@ public:
         slot_ref.__isset.slot_ref = true;
         slot_ref.slot_ref.slot_id = slot_id;
         slot_ref.slot_ref.tuple_id = tuple_id;
-        slot_ref.__set_use_vectorized(true);
         slot_ref.__set_is_nullable(is_nullable);
         return slot_ref;
     }
@@ -155,4 +166,36 @@ public:
     }
 };
 
+class TExprBuilder {
+public:
+    TExprBuilder& operator<<(const LogicalType& slot_type) {
+        TExpr expr;
+        TExprNode node;
+        node.__set_node_type(TExprNodeType::SLOT_REF);
+        TTypeDesc tdesc;
+        TTypeNode ttpe;
+        TScalarType scalar_tp;
+        scalar_tp.type = to_thrift(slot_type);
+        scalar_tp.__set_len(200);
+        scalar_tp.__set_precision(27);
+        scalar_tp.__set_scale(9);
+        ttpe.__set_scalar_type(scalar_tp);
+        ttpe.type = TTypeNodeType::SCALAR;
+        tdesc.types.push_back(std::move(ttpe));
+        node.__set_type(tdesc);
+        TSlotRef slot_ref;
+        slot_ref.__set_tuple_id(tuple_id);
+        slot_ref.__set_slot_id(column_id++);
+        node.__set_slot_ref(slot_ref);
+        expr.nodes.push_back(std::move(node));
+        res.push_back(expr);
+        return *this;
+    }
+    std::vector<TExpr> get_res() { return res; }
+
+private:
+    const int tuple_id = 0;
+    int column_id = 0;
+    std::vector<TExpr> res;
+};
 } // namespace starrocks

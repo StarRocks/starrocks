@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+if (CLANG_TIDY_PATH)
+    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
+endif()
+
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/tools")
 
 # where to put generated binaries
@@ -20,3 +24,13 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/tools")
 add_library(Tools STATIC
     meta_tool.cpp
 )
+
+# libmockjvm will be build as shared lib. we use it to mock a libjvm.so to 
+# make sure BE can start without real java runtime
+set_source_files_properties(mock_jvm.c PROPERTIES COMPILE_FLAGS "-shared")
+add_library(mockjvm SHARED mock_jvm.c)
+# define `A` SUNWprivate_1.1 symbol to mockjvm to suppress some warning 
+target_link_options(mockjvm PRIVATE "LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/mock_jvm.lds")
+install(DIRECTORY DESTINATION ${OUTPUT_DIR}/lib/)
+install(TARGETS mockjvm
+    DESTINATION ${OUTPUT_DIR}/lib/)

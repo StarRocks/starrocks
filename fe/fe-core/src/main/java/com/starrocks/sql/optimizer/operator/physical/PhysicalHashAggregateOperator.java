@@ -15,18 +15,26 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
+import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -58,11 +66,14 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     // The flag for this aggregate operator has split to
     // two stage aggregate or three stage aggregate
     private final boolean isSplit;
-    // flg for this aggregate operator could use streaming pre-aggregation
-    private boolean useStreamingPreAgg = true;
+
+    // TODO introduce builder mode to change these fields to final fields
+    // flg for this aggregate operator's parent had been pruned
+    private boolean mergedLocalAgg;
 
     private boolean useSortAgg = false;
 
+    private DataSkewInfo distinctColumnDataSkew = null;
     public PhysicalHashAggregateOperator(AggType type,
                                          List<ColumnRefOperator> groupBys,
                                          List<ColumnRefOperator> partitionByColumns,
@@ -102,9 +113,16 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     /**
      * Whether it is the first phase in three/four-phase agg whose second phase is pruned.
+     * Hence, the input data distribution has satisfied with the agg requirement. The local
+     * agg can directly do a global blocking agg job. Only local agg cannot use streaming agg
+     * means it's the result from PruneAggregateNodeRule.
      */
     public boolean isMergedLocalAgg() {
-        return type.isLocal() && !useStreamingPreAgg;
+        return mergedLocalAgg;
+    }
+
+    public void setMergedLocalAgg(boolean mergedLocalAgg) {
+        this.mergedLocalAgg = mergedLocalAgg;
     }
 
     public List<ColumnRefOperator> getPartitionByColumns() {
@@ -123,12 +141,23 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         return isSplit;
     }
 
-    public void setUseStreamingPreAgg(boolean useStreamingPreAgg) {
-        this.useStreamingPreAgg = useStreamingPreAgg;
+    public boolean canUseStreamingPreAgg() {
+        if (type.isGlobal() || type.isDistinctGlobal()) {
+            return false;
+        } else if (type.isDistinctLocal()) {
+            return CollectionUtils.isNotEmpty(groupBys);
+        } else {
+            return isSplit && CollectionUtils.isNotEmpty(groupBys) && !mergedLocalAgg;
+        }
     }
 
-    public boolean isUseStreamingPreAgg() {
-        return this.useStreamingPreAgg;
+
+    public String getNeededPreaggregationMode() {
+        String mode = ConnectContext.get().getSessionVariable().getStreamingPreaggregationMode();
+        if (canUseStreamingPreAgg() && (type.isDistinctLocal() || hasSingleDistinct())) {
+            mode = SessionVariableConstants.FORCE_PREAGGREGATION;
+        }
+        return mode;
     }
 
     public boolean isUseSortAgg() {
@@ -137,6 +166,23 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     public void setUseSortAgg(boolean useSortAgg) {
         this.useSortAgg = useSortAgg;
+    }
+
+    public void setDistinctColumnDataSkew(DataSkewInfo distinctColumnDataSkew) {
+        this.distinctColumnDataSkew = distinctColumnDataSkew;
+    }
+
+    public DataSkewInfo getDistinctColumnDataSkew() {
+        return distinctColumnDataSkew;
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        List<ColumnOutputInfo> columnOutputInfoList = Lists.newArrayList();
+        groupBys.stream().forEach(e -> columnOutputInfoList.add(new ColumnOutputInfo(e, e)));
+        aggregations.entrySet().forEach(entry -> columnOutputInfoList.add(new ColumnOutputInfo(entry.getKey(),
+                entry.getValue())));
+        return new RowOutputInfo(columnOutputInfoList);
     }
 
     @Override
@@ -149,12 +195,11 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
+
         if (!super.equals(o)) {
             return false;
         }
+
         PhysicalHashAggregateOperator that = (PhysicalHashAggregateOperator) o;
         return type == that.type && Objects.equals(aggregations, that.aggregations) &&
                 Objects.equals(groupBys, that.groupBys);
@@ -186,10 +231,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     @Override
     public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
-        ColumnRefSet dictSet = new ColumnRefSet();
-        for (Integer id : childDictColumns) {
-            dictSet.union(id);
-        }
+        Preconditions.checkState(!childDictColumns.isEmpty());
+        ColumnRefSet dictSet = ColumnRefSet.createByIds(childDictColumns);
 
         for (CallOperator operator : aggregations.values()) {
             if (couldApplyStringDict(operator, dictSet)) {
@@ -226,15 +269,15 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         getAggregations().forEach((k, v) -> {
             if (resultSet.contains(k.getId())) {
                 resultSet.union(v.getUsedColumns());
-            }
+            } else {
+                if (!couldApplyStringDict(v, dictSet)) {
+                    resultSet.union(v.getUsedColumns());
+                }
 
-            if (!couldApplyStringDict(v, dictSet)) {
-                resultSet.union(v.getUsedColumns());
-            }
-
-            // disable DictOptimize when having predicate couldn't push down
-            if (predicate != null && predicate.getUsedColumns().isIntersect(k.getUsedColumns())) {
-                resultSet.union(v.getUsedColumns());
+                // disable DictOptimize when having predicate couldn't push down
+                if (predicate != null && predicate.getUsedColumns().isIntersect(k.getUsedColumns())) {
+                    resultSet.union(v.getUsedColumns());
+                }
             }
         });
         // Now we disable DictOptimize when group by predicate couldn't push down

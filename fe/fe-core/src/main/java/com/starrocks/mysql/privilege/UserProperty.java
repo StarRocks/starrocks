@@ -42,12 +42,10 @@ import com.starrocks.catalog.AccessPrivilege;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.load.DppConfig;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SetUserPropertyVar;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -247,78 +245,27 @@ public class UserProperty implements Writable {
     }
 
     public void readFields(DataInput in) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_43) {
-            // consume the flag of empty user name
-            in.readBoolean();
-        }
-
-        // user name
-        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
-            qualifiedUser = ClusterNamespace.getFullName(Text.readString(in));
-        } else {
-            qualifiedUser = ClusterNamespace.getNameFromFullName(Text.readString(in));
-        }
-
-        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_43) {
-            int passwordLen = in.readInt();
-            password = new byte[passwordLen];
-            in.readFully(password);
-
-            isAdmin = in.readBoolean();
-
-            if (GlobalStateMgr.getCurrentStateJournalVersion() >= 1) {
-                isSuperuser = in.readBoolean();
-            }
-        }
+        // username
+        qualifiedUser = ClusterNamespace.getNameFromFullName(Text.readString(in));
 
         maxConn = in.readLong();
-
-        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_43) {
-            int numPriv = in.readInt();
-            for (int i = 0; i < numPriv; ++i) {
-                String dbName = null;
-                if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
-                    dbName = Text.readString(in);
-                } else {
-                    dbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
-                }
-                AccessPrivilege ap = AccessPrivilege.valueOf(Text.readString(in));
-                dbPrivMap.put(dbName, ap);
-            }
-        }
 
         UserResource.readIn(in);
 
         // load cluster
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_12) {
-            // Be compatible with defaultLoadCluster
-            if (in.readBoolean()) {
-                Text.readString(in);
-            }
-
-            int clusterNum = in.readInt();
-            // TODO(zc): Be compatible with dppConfig, we can assert clusterNum is 0 in version 2.5
-            for (int i = 0; i < clusterNum; ++i) {
-                Text.readString(in);
-                DppConfig dppConfig = new DppConfig();
-                dppConfig.readFields(in);
-            }
+        // Be compatible with defaultLoadCluster
+        if (in.readBoolean()) {
+            Text.readString(in);
         }
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_21) {
-            whiteList.readFields(in);
-            if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_69) {
-                whiteList.convertOldDomainPrivMap(qualifiedUser);
-            }
+        int clusterNum = in.readInt();
+        // TODO(zc): Be compatible with dppConfig, we can assert clusterNum is 0 in version 2.5
+        for (int i = 0; i < clusterNum; ++i) {
+            Text.readString(in);
+            DppConfig dppConfig = new DppConfig();
+            dppConfig.readFields(in);
         }
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_43) {
-            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_30) {
-                if (in.readBoolean()) {
-                    // consume cluster name
-                    Text.readString(in);
-                }
-            }
-        }
+        whiteList.readFields(in);
     }
 }

@@ -34,7 +34,7 @@ import static java.util.Objects.requireNonNull;
  * Scalar operator support function call
  */
 public class CallOperator extends ScalarOperator {
-    private final String fnName;
+    private String fnName;
     /**
      * TODO:
      * We need a FunctionHandle to store the required information
@@ -44,9 +44,9 @@ public class CallOperator extends ScalarOperator {
 
     protected List<ScalarOperator> arguments;
 
-    private final Function fn;
+    private Function fn;
     // The flag for distinct function
-    private final boolean isDistinct;
+    private boolean isDistinct;
 
     // Ignore nulls.
     private boolean ignoreNulls = false;
@@ -82,6 +82,10 @@ public class CallOperator extends ScalarOperator {
 
     public Function getFunction() {
         return fn;
+    }
+
+    public List<ScalarOperator> getArguments() {
+        return arguments;
     }
 
     public boolean isDistinct() {
@@ -184,6 +188,13 @@ public class CallOperator extends ScalarOperator {
         List<ScalarOperator> newArguments = Lists.newArrayList();
         this.arguments.forEach(p -> newArguments.add(p.clone()));
         operator.arguments = newArguments;
+        // copy fn
+        if (this.fn != null) {
+            operator.fn = this.fn.copy();
+        }
+        operator.fnName = this.fnName;
+        operator.isDistinct = this.isDistinct;
+        operator.ignoreNulls = this.ignoreNulls;
         return operator;
     }
 

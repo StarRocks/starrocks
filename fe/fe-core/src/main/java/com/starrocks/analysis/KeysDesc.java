@@ -41,22 +41,33 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.ColumnDef;
+import org.apache.commons.lang3.StringUtils;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 
-public class KeysDesc implements Writable {
+public class KeysDesc implements ParseNode, Writable {
     private KeysType type;
     private final List<String> keysColumnNames;
 
+    private final NodePosition pos;
+
     public KeysDesc() {
+        pos = NodePosition.ZERO;
         this.type = KeysType.AGG_KEYS;
         this.keysColumnNames = Lists.newArrayList();
     }
 
     public KeysDesc(KeysType type, List<String> keysColumnNames) {
+        this(type, keysColumnNames, NodePosition.ZERO);
+    }
+
+    public KeysDesc(KeysType type, List<String> keysColumnNames, NodePosition pos) {
+        this.pos = pos;
         this.type = type;
         this.keysColumnNames = keysColumnNames;
     }
@@ -70,7 +81,7 @@ public class KeysDesc implements Writable {
     }
 
     public boolean containsCol(String colName) {
-        return keysColumnNames.contains(colName);
+        return keysColumnNames.stream().anyMatch(e -> StringUtils.equalsIgnoreCase(e, colName));
     }
 
     // new planner framework use SemanticException instead of AnalysisException, this code will remove in future
@@ -95,7 +106,8 @@ public class KeysDesc implements Writable {
                 if (!cols.stream().anyMatch(col->col.getName().equalsIgnoreCase(keyName))) {
                     throw new SemanticException("Key column(%s) doesn't exist.", keysColumnNames.get(i));
                 }
-                throw new SemanticException("Key columns should be a ordered prefix of the schema.");
+                throw new SemanticException("Key columns must be the first few columns of the schema and the order "
+                                            + " of the key columns must be consistent with the order of the schema");
             }
 
             if (cols.get(i).getAggregateType() != null) {
@@ -131,6 +143,7 @@ public class KeysDesc implements Writable {
         }
     }
 
+    @Override
     public String toSql() {
         StringBuilder stringBuilder = new StringBuilder();
         stringBuilder.append(type.name()).append("(");
@@ -144,6 +157,11 @@ public class KeysDesc implements Writable {
         }
         stringBuilder.append(")");
         return stringBuilder.toString();
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 
     public static KeysDesc read(DataInput in) throws IOException {
@@ -172,7 +190,7 @@ public class KeysDesc implements Writable {
         }
     }
 
-    public void checkColumnDefs(List<ColumnDef> cols) {
+    public void checkColumnDefs(List<ColumnDef> cols, List<Integer> sortKeyIdxes) {
         if (type == null) {
             throw new SemanticException("Keys type is null.");
         }
@@ -188,7 +206,8 @@ public class KeysDesc implements Writable {
         for (int i = 0; i < keysColumnNames.size(); ++i) {
             String name = cols.get(i).getName();
             if (!keysColumnNames.get(i).equalsIgnoreCase(name)) {
-                throw new SemanticException("Key columns should be a ordered prefix of the schema.");
+                throw new SemanticException("Key columns must be the first few columns of the schema and the order "
+                                            + " of the key columns must be consistent with the order of the schema");
             }
 
             if (cols.get(i).getAggregateType() != null) {
@@ -219,6 +238,16 @@ public class KeysDesc implements Writable {
                     throw new SemanticException(type.name() + " table should not specify aggregate type for "
                             + "non-key column[%s]", cols.get(i).getName());
                 }
+            }
+        }
+
+        for (int i = 0; i < sortKeyIdxes.size(); i++) {
+            String name = cols.get(sortKeyIdxes.get(i)).getName();
+            ColumnDef cd = cols.get(sortKeyIdxes.get(i));
+            Type t = cd.getType();
+            if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isDate() ||
+                    t.isDatetime())) {
+                throw new SemanticException("sort key column[" + name + "] type not supported: " + t.toSql());
             }
         }
     }

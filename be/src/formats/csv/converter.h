@@ -92,6 +92,11 @@ public:
     virtual Status write_quoted_string(OutputStream* buff, const Column& column, size_t row_num,
                                        const Options& options) const = 0;
 
+    virtual bool read_string_for_adaptive_null_column(Column* column, Slice s, const Options& options) const {
+        __builtin_unreachable();
+        return true;
+    }
+
     virtual bool read_string(Column* column, Slice s, const Options& options) const = 0;
 
     virtual bool read_quoted_string(Column* column, Slice s, const Options& options) const = 0;
@@ -112,6 +117,7 @@ protected:
 };
 
 std::unique_ptr<Converter> get_converter(const TypeDescriptor& type_desc, bool nullable);
+std::unique_ptr<Converter> get_hive_converter(const TypeDescriptor& type_desc, bool nullable);
 
 } // namespace csv
 } // namespace starrocks

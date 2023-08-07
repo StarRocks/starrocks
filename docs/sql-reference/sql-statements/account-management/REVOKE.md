@@ -2,99 +2,190 @@
 
 ## Description
 
-You can use the REVOKE statement to perform the following operations:
+Revokes specific privileges or roles from a user or a role. For the privileges supported by StarRocks, see [Privileges supported by StarRocks](../../../administration/privilege_item.md).
 
-- Revoke specific privileges from a user or a role.
-- Revoke the privilege that allows a user to impersonate another user to perform operations. This feature is supported only in StarRock 2.4 and later versions.
-- Revoke a role from a user. This feature is supported only in StarRock 2.4 and later versions.
+> NOTE: Only the `user_admin` role can perform this operation.
 
 ## Syntax
 
-- Revoke specific privileges on a database and a table from a user or a role. The role from which you want to revoke privileges must already exist.
+### Revoke privileges
 
-    ```SQL
-    REVOKE privilege_list ON db_name[.tbl_name] FROM {user_identity | ROLE 'role_name'};
-    ```
+The privileges that can be revoked are object-specific. The following part describes syntax based on objects.
 
-- Revoke specific privileges on a resource from a user or a role. The role from which you want to revoke privileges must already exist.
+```SQL
+# System
 
-    ```SQL
-    REVOKE privilege_list ON RESOURCE 'resource_name' FROM {user_identity | ROLE 'role_name'};
-    ```
+REVOKE
+    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | ALL [PRIVILEGES]} 
+    ON SYSTEM
+    FROM { ROLE | USER} {<role_name>|<user_identity>}
 
-- Revoke the privilege that allows user `a` to impersonate user `b` to perform operations.
+# Resource group
 
-    ```SQL
-    REVOKE IMPERSONATE ON user_identity_b FROM user_identity_a;
-    ```
+REVOKE
+    { ALTER | DROP | ALL [PRIVILEGES] } 
+    ON { RESOURCE GROUP <resourcegroup_name> [, <resourcegroup_name>,...] ｜ ALL RESOURCE GROUPS} 
+    FROM { ROLE | USER} {<role_name>|<user_identity>}
 
-- Revoke a role from a user. The role must already exist.
+# Resource
 
-    ```SQL
-    REVOKE 'role_name' FROM user_identity;
-    ```
+REVOKE
+    { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
+    ON { RESOURCE <resource_name> [, <resource_name>,...] ｜ ALL RESOURCES} 
+    FROM { ROLE | USER} {<role_name>|<user_identity>}
+
+# User
+
+REVOKE IMPERSONATE ON USER <user_identity> FROM USER <user_identity>;
+
+# Global UDF
+
+REVOKE
+    { USAGE | DROP | ALL [PRIVILEGES]} 
+    ON { GLOBAL FUNCTION <function_name> [, <function_name>,...]    
+       | ALL GLOBAL FUNCTIONS }
+    FROM { ROLE | USER} {<role_name>|<user_identity>}
+
+# Internal catalog
+
+REVOKE 
+    { USAGE | CREATE DATABASE | ALL [PRIVILEGES]} 
+    ON CATALOG default_catalog
+    FROM { ROLE | USER} {<role_name>|<user_identity>}
+
+# External catalog
+
+REVOKE  
+   { USAGE | DROP | ALL [PRIVILEGES] } 
+   ON { CATALOG <catalog_name> [, <catalog_name>,...] | ALL CATALOGS}
+   FROM { ROLE | USER} {<role_name>|<user_identity>}
+
+# Database
+
+REVOKE 
+    { ALTER | DROP | CREATE TABLE | CREATE VIEW | CREATE FUNCTION | CREATE MATERIALIZED VIEW | ALL [PRIVILEGES] } 
+    ON { DATABASE <database_name> [, <database_name>,...] | ALL DATABASES }
+    FROM { ROLE | USER} {<role_name>|<user_identity>}
+  
+* You must first run SET CATALOG before you run this command.
+
+# Table
+
+REVOKE  
+    { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]} 
+    ON { TABLE <table_name> [, < table_name >,...]
+       | ALL TABLES} IN 
+           {  DATABASE <database_name>  | ALL DATABASES }
+    FROM { ROLE | USER} {<role_name>|<user_identity>}
+
+* You must first run SET CATALOG before you run this command. 
+* You can also use db.tbl to represent a table.
+REVOKE <priv> ON TABLE db.tbl FROM {ROLE <role_name> | USER <user_identity>}
+
+# View
+
+REVOKE  
+    { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
+    ON { VIEW <view_name> [, < view_name >,...]
+       ｜ ALL VIEWS} IN 
+           {  DATABASE <database_name> | ALL DATABASES }
+    FROM { ROLE | USER} {<role_name>|<user_identity>}
+    
+* You must first run SET CATALOG before you run this command. 
+* You can also use db.view to represent a view.
+REVOKE <priv> ON VIEW db.view FROM {ROLE <role_name> | USER <user_identity>}
+
+# Materialized view
+
+REVOKE
+    { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
+    ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
+       ｜ ALL MATERIALIZED VIEWS} IN 
+           {  DATABASE <database_name> | ALL [DATABASES] }
+    FROM { ROLE | USER} {<role_name>|<user_identity>}
+    
+* You must first run SET CATALOG before you run this command. 
+* You can also use db.mv to represent an mv.
+REVOKE <priv> ON MATERIALIZED VIEW db.mv FROM {ROLE <role_name> | USER <user_identity>}
+
+# Function
+
+REVOKE
+    { USAGE | DROP | ALL [PRIVILEGES]} 
+    ON { FUNCTION <function_name> [, < function_name >,...]
+       ｜ ALL FUNCTIONS} IN 
+           {  DATABASE <database_name> | ALL DATABASES }
+    FROM { ROLE | USER} {<role_name>|<user_identity>}
+    
+* You must first run SET CATALOG before you run this command. 
+* You can also use db.function to represent a function.
+REVOKE <priv> ON FUNCTION db.function FROM {ROLE <role_name> | USER <user_identity>}
+
+# Storage volume
+
+REVOKE
+    CREATE STORAGE VOLUME 
+    ON SYSTEM
+    FROM { ROLE | USER} {<role_name>|<user_identity>}
+
+REVOKE
+    { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
+    ON { STORAGE VOLUME < name > [, < name >,...] ｜ ALL STORAGE VOLUME} 
+    FROM { ROLE | USER} {<role_name>|<user_identity>}
+```
+
+### Revoke roles
+
+```SQL
+REVOKE <role_name> [,<role_name>, ...] FROM ROLE <role_name>
+REVOKE <role_name> [,<role_name>, ...] FROM USER <user_identity>
+```
 
 ## Parameters
 
-### privilege_list
-
-The privileges that can be revoked from a user or a role. If you want to revoke multiple privileges at a time, separate the privileges with commas (`,`). You can revoke the following privileges:
-
-- `NODE_PRIV`: the privilege to manage cluster nodes such as enabling nodes and disabling nodes. This privilege can only be granted to the root user.
-- `ADMIN_PRIV`: all privileges except `NODE_PRIV`.
-- `GRANT_PRIV`: the privilege of performing operations such as creating users and roles, deleting users and roles, granting privileges, revoking privileges, and setting passwords for accounts.
-- `SELECT_PRIV`: the read privilege on databases and tables.
-- `LOAD_PRIV`: the privilege to load data into databases and tables.
-- `ALTER_PRIV`: the privilege to change schemas of databases and tables.
-- `CREATE_PRIV`: the privilege to create databases and tables.
-- `DROP_PRIV`: the privilege to delete databases and tables.
-- `USAGE_PRIV`: the privilege to use resources.
-
-### db_name[.tbl_name]
-
-The database and table. This parameter supports the following three formats:
-
-- `*.*`: indicates all databases and tables.
-- `db.*`: indicates a specific database and all tables in this database.
-- `db.tbl`: indicates a specific table in a specific database.
-
-> Note: When you use the `db.*` or `db.tbl` format, you can specify a database or a table that does not exist.
-
-### resource_name
-
-The resource name. This parameter supports the following two formats:
-
-- `*`: indicates all the resources.
-- `resource`: indicates a specific resource.
-
-> Note: When you use the `resource` format, you can specify a resource that does not exist.
-
-### user_identity
-
-This parameter contains two parts: `user_name` and `host`. `user_name` indicates the user name. `host` indicates the IP address of the user. You can leave `host` unspecified or you can specify a domain for `host`. If you leave `host` unspecified, `host` defaults to `%`, which means you can access StarRocks from any host. If you specify a domain for `host`, it may take one minute for the privilege to take effect. The `user_identity` parameter must be created by the [CREATE USER](../account-management/CREATE%20USER.md) statement.
+| **Parameter**      | **Description**                                 |
+| ------------------ | ----------------------------------------------- |
+| role_name          | The role name.                                  |
+| user_identity      | The user identity, for example, 'jack'@'192.%'. |
+| resourcegroup_name | The resource group name                         |
+| resource_name      | The resource name.                              |
+| function_name      | The function name.                              |
+| catalog_name       | The name of the External Catalog.               |
+| database_name      | The database name.                              |
+| table_name         | The table name.                                 |
+| view_name          | The view name.                                  |
+| mv_name            | The name of the materialized view.              |
 
 ## Examples
 
-Example 1: Revoke the read privilege on `testDb` and all tables in this database from user `jack`.
+### Revoke privileges
+
+Revoke the SELECT privilege on table `sr_member` from user `jack`:
 
 ```SQL
-REVOKE SELECT_PRIV ON db1.* FROM 'jack'@'192.%';
+REVOKE SELECT ON TABLE sr_member FROM USER 'jack'@'192.%'
 ```
 
-Example 2: Revoke the privilege to use spark_resource from user `jack`.
+Revoke the USAGE privilege on resource `spark_resource` from role `test_role`:
 
 ```SQL
-REVOKE USAGE_PRIV ON RESOURCE 'spark_resource' FROM 'jack'@'192.%';
+REVOKE USAGE ON RESOURCE 'spark_resource' FROM ROLE 'test_role';
 ```
 
-Example 3: Revoke `my_role` from user `jack`.
+### Revoke roles
+
+Revoke the role `example_role` from user `jack`:
 
 ```SQL
-REVOKE 'my_role' FROM 'jack'@'%';
+REVOKE example_role FROM 'jack'@'%';
 ```
 
-Example 4: Revoke the privilege that allows user `jack` to impersonate `rose` to perform operations.
+Revoke the role `example_role` from role `test_role`:
 
 ```SQL
-REVOKE IMPERSONATE ON 'rose'@'%' FROM 'jack'@'%';
+REVOKE example_role FROM ROLE 'test_role';
 ```
+
+## References
+
+[GRANT](GRANT.md)

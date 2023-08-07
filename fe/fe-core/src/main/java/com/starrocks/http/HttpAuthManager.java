@@ -19,7 +19,7 @@ package com.starrocks.http;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
-import com.starrocks.analysis.UserIdentity;
+import com.starrocks.sql.ast.UserIdentity;
 
 import java.util.concurrent.TimeUnit;
 

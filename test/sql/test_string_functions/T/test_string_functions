@@ -1,0 +1,84 @@
+-- name: test_string_functions
+-- function: lpad
+select lpad('test', 8, '');
+select lpad('test', 8, ' ');
+select lpad('test', 8, '中文，');
+select lpad('test', 8);
+select lpad('test', 2, '');
+select lpad('test', 2, ' ');
+select lpad('test', 2, '中文，');
+select lpad('test', 2);
+select lpad('test', 0, '');
+select lpad('test', 0, ' ');
+select lpad('test', 0, '中文，');
+select lpad('test', 0);
+
+-- function: rpad
+select rpad('test', 8, '');
+select rpad('test', 8, ' ');
+select rpad('test', 8, '中文，');
+select rpad('test', 8);
+select rpad('test', 2, '');
+select rpad('test', 2, ' ');
+select rpad('test', 2, '中文，');
+select rpad('test', 2);
+select rpad('test', 0, '');
+select rpad('test', 0, ' ');
+select rpad('test', 0, '中文，');
+select rpad('test', 0);
+
+create table t0(c0 varchar(16), c1 INT(16))
+        DUPLICATE KEY(c0)
+        DISTRIBUTED BY HASH(c0)
+        BUCKETS 1
+        PROPERTIES('replication_num'='1');
+-- insert 3 rows
+insert into t0 values ('test', 8), ('test', 2), ('test', 0);
+select lpad(c0, c1, ' ') from t0;
+select lpad(c0, c1, '中文，') from t0;
+select lpad(c0, c1, '') from t0;
+select lpad(c0, c1) from t0;
+select rpad(c0, c1, ' ') from t0;
+select rpad(c0, c1, '中文，') from t0;
+select rpad(c0, c1, '') from t0;
+select rpad(c0, c1) from t0;
+
+-- function: split_part
+select split_part("hello world", " ", 1);
+select split_part("hello world", " ", 2);
+select split_part("hello world", " ", -1);
+select split_part("hello world", " ", -2);
+select split_part("2023年5月23号", "月", 1);
+select split_part("2023年5月23号", "月", -1);
+select split_part("abc##567###234", "##", 1);
+select split_part("abc##567###234", "##", 2);
+select split_part("abc##567###234", "##", -1);
+select split_part("abc##567###234", "##", -2);
+
+create table t1(c0 varchar(20), c1 varchar(20))
+        DUPLICATE KEY(c0)
+        DISTRIBUTED BY HASH(c0)
+        BUCKETS 1
+        PROPERTIES('replication_num'='1');
+-- insert 1 rows
+insert into t1 values ('hello world', 'abc##567###234');
+select split_part(c0, " ", 1) from t1;
+select split_part(c0, " ", 2) from t1;
+select split_part(c0, " ", -1) from t1;
+select split_part(c0, " ", -2) from t1;
+select split_part(c1, "##", 1) from t1;
+select split_part(c1, "##", 2) from t1;
+select split_part(c1, "##", 3) from t1;
+select split_part(c1, "##", -1) from t1;
+select split_part(c1, "##", -2) from t1;
+select split_part(c1, "##", -3) from t1;
+
+-- name: test_url_encode
+select url_encode('https://docs.starrocks.io/en-us/latest/quick_start/Deploy');
+select url_encode('https://docs.starrocks数据库.io/en-us/latest/quick_start/Deploy?name=快速');
+select url_encode(NULL);
+
+--name: test_url_decode
+select url_decode('https%3A%2F%2Fdocs.starrocks.io%2Fen-us%2Flatest%2Fquick_start%2FDeploy');
+select url_decode('https%3A%2F%2Fdocs.starrocks%E6%95%B0%E6%8D%AE%E5%BA%93.io%2Fen-us%2Flatest%2Fquick_start%2FDeploy%3Fname%3D%E5%BF%AB%E9%80%9F');
+select url_decode(NULL);

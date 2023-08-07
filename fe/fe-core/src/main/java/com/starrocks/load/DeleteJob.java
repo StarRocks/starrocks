@@ -109,7 +109,7 @@ public abstract class DeleteJob extends AbstractTxnStateChangeCallback {
             return;
         }
         setState(DeleteState.FINISHED);
-        GlobalStateMgr.getCurrentState().getDeleteHandler().recordFinishedJob(this);
+        GlobalStateMgr.getCurrentState().getDeleteMgr().recordFinishedJob(this);
         GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(getId());
         GlobalStateMgr.getCurrentState().getEditLog().logFinishMultiDelete(deleteInfo);
     }
@@ -127,7 +127,7 @@ public abstract class DeleteJob extends AbstractTxnStateChangeCallback {
 
     public abstract void clear();
 
-    public boolean cancel(DeleteHandler.CancelType cancelType, String reason) {
+    public boolean cancel(DeleteMgr.CancelType cancelType, String reason) {
         LOG.info("start to cancel delete job, transactionId: {}, cancelType: {}", getTransactionId(),
                 cancelType.name());
 
@@ -154,14 +154,14 @@ public abstract class DeleteJob extends AbstractTxnStateChangeCallback {
         TransactionStatus status = TransactionStatus.UNKNOWN;
         try {
             if (commitImpl(db, timeoutMs)) {
-                GlobalStateMgr.getCurrentState().getDeleteHandler()
+                GlobalStateMgr.getCurrentState().getDeleteMgr()
                         .updateTableDeleteInfo(GlobalStateMgr.getCurrentState(), db.getId(),
                                 getDeleteInfo().getTableId());
             }
             status = GlobalStateMgr.getCurrentGlobalTransactionMgr().
                     getTransactionState(db.getId(), getTransactionId()).getTransactionStatus();
         } catch (UserException e) {
-            if (cancel(DeleteHandler.CancelType.COMMIT_FAIL, e.getMessage())) {
+            if (cancel(DeleteMgr.CancelType.COMMIT_FAIL, e.getMessage())) {
                 throw new DdlException(e.getMessage(), e);
             } else {
                 // do nothing

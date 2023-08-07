@@ -12,16 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.scheduler;
 
+import java.util.concurrent.Future;
+
 public class SubmitResult {
-    String queryId;
-    SubmitStatus status;
+    private String queryId;
+    private SubmitStatus status;
+    private Future<Constants.TaskRunState> future;
 
     public SubmitResult(String queryId, SubmitStatus status) {
         this.queryId = queryId;
         this.status = status;
+    }
+
+    public SubmitResult(String queryId, SubmitStatus status, Future<Constants.TaskRunState> future) {
+        this.queryId = queryId;
+        this.status = status;
+        this.future = future;
     }
 
     public String getQueryId() {
@@ -40,7 +48,15 @@ public class SubmitResult {
         this.status = status;
     }
 
-    enum SubmitStatus {
+    public Future<Constants.TaskRunState> getFuture() {
+        return future;
+    }
+
+    public void setFuture(Future<Constants.TaskRunState> future) {
+        this.future = future;
+    }
+
+    public enum SubmitStatus {
         SUBMITTED,
         REJECTED,
         FAILED

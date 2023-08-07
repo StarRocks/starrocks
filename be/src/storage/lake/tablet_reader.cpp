@@ -25,6 +25,7 @@
 #include "storage/conjunctive_predicates.h"
 #include "storage/empty_iterator.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/utils.h"
 #include "storage/merge_iterator.h"
 #include "storage/predicate_parser.h"
 #include "storage/row_source_mask.h"
@@ -38,25 +39,27 @@ namespace starrocks::lake {
 
 using ConjunctivePredicates = starrocks::ConjunctivePredicates;
 using Datum = starrocks::Datum;
-using VectorizedField = starrocks::VectorizedField;
+using Field = starrocks::Field;
 using PredicateParser = starrocks::PredicateParser;
 using ZonemapPredicatesRewriter = starrocks::ZonemapPredicatesRewriter;
 
-TabletReader::TabletReader(Tablet tablet, int64_t version, VectorizedSchema schema)
+TabletReader::TabletReader(Tablet tablet, int64_t version, Schema schema)
         : ChunkIterator(std::move(schema)), _tablet(tablet), _version(version) {}
 
-TabletReader::TabletReader(Tablet tablet, int64_t version, VectorizedSchema schema, std::vector<RowsetPtr> rowsets)
+TabletReader::TabletReader(Tablet tablet, int64_t version, Schema schema, std::vector<RowsetPtr> rowsets)
         : ChunkIterator(std::move(schema)),
           _tablet(tablet),
           _version(version),
           _rowsets_inited(true),
           _rowsets(std::move(rowsets)) {}
 
-TabletReader::TabletReader(Tablet tablet, int64_t version, VectorizedSchema schema, bool is_key,
+TabletReader::TabletReader(Tablet tablet, int64_t version, Schema schema, std::vector<RowsetPtr> rowsets, bool is_key,
                            RowSourceMaskBuffer* mask_buffer)
         : ChunkIterator(std::move(schema)),
           _tablet(tablet),
           _version(version),
+          _rowsets_inited(true),
+          _rowsets(std::move(rowsets)),
           _is_vertical_merge(true),
           _is_key(is_key),
           _mask_buffer(mask_buffer) {
@@ -70,7 +73,7 @@ TabletReader::~TabletReader() {
 Status TabletReader::prepare() {
     ASSIGN_OR_RETURN(_tablet_schema, _tablet.get_schema());
     if (!_rowsets_inited) {
-        ASSIGN_OR_RETURN(_rowsets, _tablet.get_rowsets(_version));
+        ASSIGN_OR_RETURN(_rowsets, enhance_error_prompt(_tablet.get_rowsets(_version)));
         _rowsets_inited = true;
     }
     _stats.rowsets_read_count += _rowsets.size();
@@ -109,8 +112,7 @@ Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* sourc
 }
 
 // TODO: support
-//  1. primary key table
-//  2. rowid range and short key range
+//  1. rowid range and short key range
 Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters) {
     RowsetReadOptions rs_opts;
     KeysType keys_type = _tablet_schema->keys_type();
@@ -122,7 +124,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_map(&_obj_pool, rs_opts.predicates,
                                                                      &rs_opts.predicates_for_zone_map));
     rs_opts.sorted = ((keys_type != DUP_KEYS && keys_type != PRIMARY_KEYS) && !params.skip_aggregation) ||
-                     is_compaction(params.reader_type);
+                     is_compaction(params.reader_type) || params.sorted_by_keys_per_tablet;
     rs_opts.reader_type = params.reader_type;
     rs_opts.chunk_size = params.chunk_size;
     rs_opts.delete_predicates = &_delete_predicates;
@@ -133,6 +135,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.tablet_schema = _tablet_schema.get();
     rs_opts.global_dictmaps = params.global_dictmaps;
     rs_opts.unused_output_column_ids = params.unused_output_column_ids;
+    rs_opts.runtime_range_pruner = params.runtime_range_pruner;
+    rs_opts.fill_data_cache = params.fill_data_cache;
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _version;
@@ -140,8 +144,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
     for (auto& rowset : _rowsets) {
-        ASSIGN_OR_RETURN(auto iter, rowset->read(schema(), rs_opts));
-        iters->emplace_back(std::move(iter));
+        ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(rowset->read(schema(), rs_opts)));
+        iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
     }
     return Status::OK();
 }
@@ -155,7 +159,7 @@ Status TabletReader::init_predicates(const TabletReaderParams& params) {
 
 Status TabletReader::init_delete_predicates(const TabletReaderParams& params, DeletePredicates* dels) {
     PredicateParser pred_parser(*_tablet_schema);
-    ASSIGN_OR_RETURN(auto tablet_metadata, _tablet.get_metadata(_version));
+    ASSIGN_OR_RETURN(auto tablet_metadata, enhance_error_prompt(_tablet.get_metadata(_version)));
 
     for (int index = 0, size = tablet_metadata->rowsets_size(); index < size; ++index) {
         const auto& rowset_metadata = tablet_metadata->rowsets(index);
@@ -249,7 +253,7 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
 
     if (seg_iters.empty()) {
         _collect_iter = new_empty_iterator(_schema, params.chunk_size);
-    } else if (is_compaction(params.reader_type) && keys_type == DUP_KEYS) {
+    } else if (is_compaction(params.reader_type) && (keys_type == DUP_KEYS || keys_type == PRIMARY_KEYS)) {
         //             MergeIterator
         //                   |
         //       +-----------+-----------+
@@ -260,6 +264,21 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
         //
         if (_is_vertical_merge && !_is_key) {
             _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
+        } else {
+            _collect_iter = new_heap_merge_iterator(seg_iters);
+        }
+    } else if (params.sorted_by_keys_per_tablet && (keys_type == DUP_KEYS || keys_type == PRIMARY_KEYS) &&
+               seg_iters.size() > 1) {
+        if (params.profile != nullptr && (params.is_pipeline || params.profile->parent() != nullptr)) {
+            RuntimeProfile* p;
+            if (params.is_pipeline) {
+                p = params.profile;
+            } else {
+                p = params.profile->parent()->create_child("MERGE", true, true);
+            }
+            RuntimeProfile::Counter* sort_timer = ADD_TIMER(p, "Sort");
+            _collect_iter = new_heap_merge_iterator(seg_iters);
+            _collect_iter = timed_chunk_iterator(_collect_iter, sort_timer);
         } else {
             _collect_iter = new_heap_merge_iterator(seg_iters);
         }
@@ -373,13 +392,23 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
 // convert an OlapTuple to SeekTuple.
 Status TabletReader::to_seek_tuple(const TabletSchema& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
                                    MemPool* mempool) {
-    VectorizedSchema schema;
+    Schema schema;
     std::vector<Datum> values;
     values.reserve(input.size());
+    const auto& sort_key_idxes = tablet_schema.sort_key_idxes();
+    DCHECK(sort_key_idxes.empty() || sort_key_idxes.size() >= input.size());
+
+    if (sort_key_idxes.size() > 0) {
+        for (auto idx : sort_key_idxes) {
+            schema.append_sort_key_idx(idx);
+        }
+    }
+
     for (size_t i = 0; i < input.size(); i++) {
-        auto f = std::make_shared<VectorizedField>(ChunkHelper::convert_field_to_format_v2(i, tablet_schema.column(i)));
+        int idx = sort_key_idxes.empty() ? i : sort_key_idxes[i];
+        auto f = std::make_shared<Field>(ChunkHelper::convert_field(idx, tablet_schema.column(idx)));
         schema.append(f);
-        values.emplace_back(Datum());
+        values.emplace_back();
         if (input.is_null(i)) {
             continue;
         }

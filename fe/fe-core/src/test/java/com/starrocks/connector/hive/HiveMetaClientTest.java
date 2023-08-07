@@ -15,10 +15,6 @@
 
 package com.starrocks.connector.hive;
 
-import com.starrocks.connector.hive.HiveMetaClient;
-import com.starrocks.connector.hive.HiveMetaStoreThriftClient;
-import com.starrocks.connector.hive.HiveMetastoreApiConverter;
-import com.starrocks.connector.hive.TextFileFormatDesc;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -26,12 +22,13 @@ import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
+import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.RetryingMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.MetaException;
-import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
+import org.apache.thrift.TException;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -44,7 +41,7 @@ import java.util.concurrent.TimeUnit;
 
 public class HiveMetaClientTest {
     @Test
-    public void testClientPool(@Mocked HiveMetaStoreThriftClient metaStoreClient) throws Exception {
+    public void testClientPool(@Mocked HiveMetaStoreClient metaStoreClient) throws Exception {
         new Expectations() {
             {
                 metaStoreClient.getTable(anyString, anyString);
@@ -88,10 +85,67 @@ public class HiveMetaClientTest {
             es.shutdown();
             es.awaitTermination(1, TimeUnit.HOURS);
         }
-
         System.out.println("called times is " + clientNum[0]);
 
-        Assert.assertTrue(clientNum[0] >= 1 && clientNum[0] <= poolSize);
+        Assert.assertTrue(
+                clientNum[0] >= 1 && clientNum[0] <= poolSize);
+    }
+
+    @Test
+    public void testGetHiveClient() {
+        HiveConf hiveConf = new HiveConf();
+        hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90303");
+        HiveMetaClient client = new HiveMetaClient(hiveConf);
+        try {
+            client.getAllDatabaseNames();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Unable to instantiate"));
+        }
+    }
+
+    @Test
+    public void testRecyclableClient(@Mocked HiveMetaStoreClient metaStoreClient) throws TException {
+        new Expectations() {
+            {
+                metaStoreClient.getTable(anyString, anyString);
+                result = new Exception("get table failed");
+                minTimes = 0;
+            }
+        };
+
+        new MockUp<RetryingMetaStoreClient>() {
+            @Mock
+            public IMetaStoreClient getProxy(Configuration hiveConf, HiveMetaHookLoader hookLoader,
+                                             ConcurrentHashMap<String, Long> metaCallTimeMap, String mscClassName,
+                                             boolean allowEmbedded) throws MetaException {
+                return metaStoreClient;
+            }
+        };
+
+        HiveConf hiveConf = new HiveConf();
+        hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90300");
+        HiveMetaClient client = new HiveMetaClient(hiveConf);
+        try {
+            client.getTable("db", "tbl");
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Failed to get table"));
+            Assert.assertEquals(0, client.getClientSize());
+        }
+
+        new Expectations() {
+            {
+                metaStoreClient.getTable(anyString, anyString);
+                result = new Table();
+                minTimes = 0;
+            }
+        };
+
+        client.getTable("db", "tbl");
+        Assert.assertEquals(1, client.getClientSize());
+
+        client.getTable("db", "tbl");
+        Assert.assertEquals(1, client.getClientSize());
+
     }
 
     @Test
@@ -103,8 +157,28 @@ public class HiveMetaClientTest {
         Assert.assertEquals("\002", emptyDesc.getCollectionDelim());
         Assert.assertEquals("\003", emptyDesc.getMapkeyDelim());
 
+        // Check blank delimiter
+        Map<String, String> blankParameters = new HashMap<>();
+        blankParameters.put("field.delim", "");
+        blankParameters.put("line.delim", "");
+        blankParameters.put("collection.delim", "");
+        blankParameters.put("mapkey.delim", "");
+        TextFileFormatDesc blankDesc = HiveMetastoreApiConverter.toTextFileFormatDesc(blankParameters);
+        Assert.assertEquals("\001", blankDesc.getFieldDelim());
+        Assert.assertEquals("\n", blankDesc.getLineDelim());
+        Assert.assertEquals("\002", blankDesc.getCollectionDelim());
+        Assert.assertEquals("\003", blankDesc.getMapkeyDelim());
+
+        // Check is using OpenCSVSerde
+        Map<String, String> openCSVParameters = new HashMap<>();
+        openCSVParameters.put("separatorChar", ",");
+        TextFileFormatDesc openCSVDesc = HiveMetastoreApiConverter.toTextFileFormatDesc(openCSVParameters);
+        Assert.assertEquals(",", openCSVDesc.getFieldDelim());
+        Assert.assertEquals("\n", openCSVDesc.getLineDelim());
+        Assert.assertEquals("\002", openCSVDesc.getCollectionDelim());
+        Assert.assertEquals("\003", openCSVDesc.getMapkeyDelim());
+
         // Check is using custom delimiter
-        StorageDescriptor customSd = new StorageDescriptor();
         Map<String, String> parameters = new HashMap<>();
         parameters.put("field.delim", ",");
         parameters.put("line.delim", "\004");
@@ -115,6 +189,21 @@ public class HiveMetaClientTest {
         Assert.assertEquals("\004", customDesc.getLineDelim());
         Assert.assertEquals("\006", customDesc.getCollectionDelim());
         Assert.assertEquals(":", customDesc.getMapkeyDelim());
+    }
+
+    @Test
+    public void testDropTable(@Mocked HiveMetaStoreClient metaStoreClient) throws TException {
+        new Expectations() {
+            {
+                metaStoreClient.dropTable("hive_db", "hive_table", anyBoolean, anyBoolean);
+                result = any;
+            }
+        };
+
+        HiveConf hiveConf = new HiveConf();
+        hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90300");
+        HiveMetaClient client = new HiveMetaClient(hiveConf);
+        client.dropTable("hive_db", "hive_table");
     }
 }
 

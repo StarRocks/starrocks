@@ -18,7 +18,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
-
+import com.starrocks.sql.parser.NodePosition;
 
 // used to show sql's blacklist
 // format is 
@@ -38,6 +38,14 @@ public class ShowSqlBlackListStmt extends ShowStmt {
                     .addColumn(new Column("Id", ScalarType.createVarchar(20)))
                     .addColumn(new Column("Forbidden SQL", ScalarType.createVarchar(100)))
                     .build();
+
+    public ShowSqlBlackListStmt() {
+        this(NodePosition.ZERO);
+    }
+
+    public ShowSqlBlackListStmt(NodePosition pos) {
+        super(pos);
+    }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

@@ -20,6 +20,7 @@ import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.sql.analyzer.ResourceGroupAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TWorkGroupType;
 
 import java.util.ArrayList;
@@ -43,6 +44,13 @@ public class CreateResourceGroupStmt extends DdlStmt {
 
     public CreateResourceGroupStmt(String name, boolean ifNotExists, boolean replaceIfExists,
                                    List<List<Predicate>> classifiers, Map<String, String> proeprties) {
+        this(name, ifNotExists, replaceIfExists, classifiers, proeprties, NodePosition.ZERO);
+    }
+
+    public CreateResourceGroupStmt(String name, boolean ifNotExists, boolean replaceIfExists,
+                                   List<List<Predicate>> classifiers, Map<String, String> proeprties,
+                                   NodePosition pos) {
+        super(pos);
         this.name = name;
         this.ifNotExists = ifNotExists;
         this.replaceIfExists = replaceIfExists;

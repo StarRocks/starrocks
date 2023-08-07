@@ -21,7 +21,7 @@
 #include "butil/containers/flat_map.h"
 #include "column/column.h"
 #include "column/column_hash.h"
-#include "column/vectorized_schema.h"
+#include "column/schema.h"
 #include "common/global_types.h"
 #include "exec/query_cache/owner_info.h"
 #include "util/phmap/phmap.h"
@@ -56,12 +56,12 @@ public:
     using TupleHashMap = phmap::flat_hash_map<TupleId, size_t, StdHash<TupleId>>;
 
     Chunk();
-    Chunk(Columns columns, VectorizedSchemaPtr schema);
+    Chunk(Columns columns, SchemaPtr schema);
     Chunk(Columns columns, SlotHashMap slot_map);
     Chunk(Columns columns, SlotHashMap slot_map, TupleHashMap tuple_map);
 
     // Chunk with extra data implements.
-    Chunk(Columns columns, VectorizedSchemaPtr schema, ChunkExtraDataPtr extra_data);
+    Chunk(Columns columns, SchemaPtr schema, ChunkExtraDataPtr extra_data);
     Chunk(Columns columns, SlotHashMap slot_map, ChunkExtraDataPtr extra_data);
     Chunk(Columns columns, SlotHashMap slot_map, TupleHashMap tuple_map, ChunkExtraDataPtr extra_data);
 
@@ -98,8 +98,8 @@ public:
 
     void swap_chunk(Chunk& other);
 
-    const VectorizedSchemaPtr& schema() const { return _schema; }
-    VectorizedSchemaPtr& schema() { return _schema; }
+    const SchemaPtr& schema() const { return _schema; }
+    SchemaPtr& schema() { return _schema; }
 
     const Columns& columns() const { return _columns; }
     Columns& columns() { return _columns; }
@@ -108,14 +108,19 @@ public:
     std::string_view get_column_name(size_t idx) const;
 
     // schema must exist and will be updated.
-    void append_column(ColumnPtr column, const VectorizedFieldPtr& field);
+    void append_column(ColumnPtr column, const FieldPtr& field);
 
     void append_column(ColumnPtr column, SlotId slot_id);
-    void insert_column(size_t idx, ColumnPtr column, const VectorizedFieldPtr& field);
+    void insert_column(size_t idx, ColumnPtr column, const FieldPtr& field);
 
     void update_column(ColumnPtr column, SlotId slot_id);
+    void update_column_by_index(ColumnPtr column, size_t idx);
+
+    void update_rows(const Chunk& src, const uint32_t* indexes);
 
     void append_tuple_column(const ColumnPtr& column, TupleId tuple_id);
+
+    void append_default();
 
     void remove_column_by_index(size_t idx);
 
@@ -146,8 +151,13 @@ public:
     bool is_slot_exist(SlotId id) const { return _slot_id_to_index.contains(id); }
     bool is_tuple_exist(TupleId id) const { return _tuple_id_to_index.contains(id); }
     void reset_slot_id_to_index() { _slot_id_to_index.clear(); }
+    size_t get_index_by_slot_id(SlotId slot_id) { return _slot_id_to_index[slot_id]; }
 
     void set_columns(const Columns& columns) { _columns = columns; }
+
+    void set_source_filename(const std::string& source_filename) { _source_filename = source_filename; }
+
+    const std::string& source_filename() const { return _source_filename; }
 
     // Create an empty chunk with the same meta and reserve it of size chunk _num_rows
     // not clone tuple column
@@ -230,9 +240,9 @@ public:
     // Column container memory usage
     size_t container_memory_usage() const;
     // Element memory usage that is not in the container, such as memory referenced by pointer.
-    size_t element_memory_usage() const { return element_memory_usage(0, num_rows()); }
+    size_t reference_memory_usage() const { return reference_memory_usage(0, num_rows()); }
     // Element memory usage of |size| rows from |from| in chunk
-    size_t element_memory_usage(size_t from, size_t size) const;
+    size_t reference_memory_usage(size_t from, size_t size) const;
 
     // Chunk bytes usage, used for memtable data size statistic.
     // Including element data size only.
@@ -243,6 +253,12 @@ public:
     size_t bytes_usage(size_t from, size_t size) const;
 
     bool has_const_column() const;
+
+    void materialized_nullable() {
+        for (ColumnPtr& c : _columns) {
+            c->materialized_nullable();
+        }
+    }
 
 #ifndef NDEBUG
     // check whether the internal state is consistent, abort the program if check failed.
@@ -262,9 +278,11 @@ public:
 #define DCHECK_CHUNK(chunk_ptr)
 #endif
 
-    std::string debug_row(uint32_t index) const;
+    std::string debug_row(size_t index) const;
 
     std::string debug_columns() const;
+
+    std::string rebuild_csv_row(size_t index, const std::string& delimiter) const;
 
     bool capacity_limit_reached(std::string* msg = nullptr) const {
         for (const auto& column : _columns) {
@@ -284,7 +302,7 @@ private:
     void rebuild_cid_index();
 
     Columns _columns;
-    std::shared_ptr<VectorizedSchema> _schema;
+    std::shared_ptr<Schema> _schema;
     ColumnIdHashMap _cid_to_index;
     // For compatibility
     SlotHashMap _slot_id_to_index;
@@ -292,6 +310,7 @@ private:
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
     query_cache::owner_info _owner_info;
     ChunkExtraDataPtr _extra_data;
+    std::string _source_filename;
 };
 
 inline const ColumnPtr& Chunk::get_column_by_name(const std::string& column_name) const {

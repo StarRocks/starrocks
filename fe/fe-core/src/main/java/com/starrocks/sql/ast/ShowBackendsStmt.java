@@ -20,8 +20,18 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.proc.BackendsProcDir;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 public class ShowBackendsStmt extends ShowStmt {
+
+    public ShowBackendsStmt() {
+        this(NodePosition.ZERO);
+    }
+
+    public ShowBackendsStmt(NodePosition pos) {
+        super(pos);
+    }
+
     @Override
     public ShowResultSetMetaData getMetaData() {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();

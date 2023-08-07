@@ -19,7 +19,14 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.NotImplementedException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryState;
+import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Before;
@@ -41,6 +48,7 @@ import java.util.Map;
 
 public class ListPartitionInfoTest {
 
+    private static StarRocksAssert starRocksAssert;
     private ListPartitionInfo listPartitionInfo;
     private ListPartitionInfo listPartitionInfoForMulti;
 
@@ -49,12 +57,50 @@ public class ListPartitionInfoTest {
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
+        starRocksAssert = new StarRocksAssert();
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE t_recharge_detail(\n" +
+                        "    id bigint not null ,\n" +
+                        "    user_id  bigint not null ,\n" +
+                        "    recharge_money decimal(32,2) , \n" +
+                        "    province varchar(20) not null,\n" +
+                        "    dt varchar(20) not null\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(id)\n" +
+                        "PARTITION BY LIST (dt,province) (\n" +
+                        "   PARTITION p1 VALUES IN ((\"2022-04-01\", \"beijing\")),\n" +
+                        "   PARTITION p2 VALUES IN ((\"2022-04-01\", \"shanghai\"))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 10 \n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\"\n" +
+                        ");");
     }
 
     @Before
     public void setUp() throws DdlException, AnalysisException {
         this.listPartitionInfo = new ListPartitionDescTest().findSingleListPartitionInfo();
         this.listPartitionInfoForMulti = new ListPartitionDescTest().findMultiListPartitionInfo();
+    }
+
+    @Test
+    public void testListPartitionQueryPlan() throws Exception {
+        String sql = "SELECT * FROM t_recharge_detail";
+        starRocksAssert.query(sql).explainQuery();
+    }
+
+    @Test
+    public void testTruncateWithPartition() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String truncateSql = "truncate table t_recharge_detail partition(p1)";
+        TruncateTableStmt truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(truncateSql, ctx);
+        GlobalStateMgr.getCurrentState().truncateTable(truncateTableStmt);
+        String showSql = "show partitions from t_recharge_detail;";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(showSql, ctx);
+        StmtExecutor executor = new StmtExecutor(ctx, statementBase);
+        executor.execute();
+        Assert.assertNotEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
     }
 
     @Test

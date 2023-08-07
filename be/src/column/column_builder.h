@@ -32,7 +32,7 @@ public:
     using MovableType = RunTimeCppMovableType<Type>;
 
     ColumnBuilder(int32_t chunk_size) {
-        static_assert(!pt_is_decimal<Type>, "Not support Decimal32/64/128 types");
+        static_assert(!lt_is_decimal<Type>, "Not support Decimal32/64/128 types");
         _has_null = false;
         _column = RunTimeColumnType<Type>::create();
         _null_column = NullColumn::create();
@@ -45,7 +45,7 @@ public:
         _null_column = NullColumn::create();
         reserve(chunk_size);
 
-        if constexpr (pt_is_decimal<Type>) {
+        if constexpr (lt_is_decimal<Type>) {
             static constexpr auto max_precision = decimal_precision_limit<DatumType>;
             DCHECK(0 <= scale && scale <= precision && precision <= max_precision);
             auto raw_column = ColumnHelper::cast_to_raw<Type>(_column);
@@ -85,6 +85,14 @@ public:
         _has_null = true;
         _null_column->append(DATUM_NULL);
         _column->append_default();
+    }
+
+    void append_nulls(int count) {
+        _has_null = true;
+        for (int i = 0; i < count; i++) {
+            _null_column->append(DATUM_NULL);
+        }
+        _column->append_default(count);
     }
 
     ColumnPtr build(bool is_const) {

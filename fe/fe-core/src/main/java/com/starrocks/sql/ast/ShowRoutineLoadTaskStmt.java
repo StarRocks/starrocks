@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.SlotRef;
@@ -25,6 +26,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Arrays;
 import java.util.List;
@@ -58,6 +60,11 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
     private String dbFullName;
 
     public ShowRoutineLoadTaskStmt(String dbName, Expr jobNameExpr) {
+        this(dbName, jobNameExpr, NodePosition.ZERO);
+    }
+
+    public ShowRoutineLoadTaskStmt(String dbName, Expr jobNameExpr, NodePosition pos) {
+        super(pos);
         this.dbFullName = dbName;
         this.jobNameExpr = jobNameExpr;
     }
@@ -88,7 +95,7 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
                 break CHECK;
             }
             BinaryPredicate binaryPredicate = (BinaryPredicate) jobNameExpr;
-            if (binaryPredicate.getOp() != BinaryPredicate.Operator.EQ) {
+            if (binaryPredicate.getOp() != BinaryType.EQ) {
                 valid = false;
                 break CHECK;
             }

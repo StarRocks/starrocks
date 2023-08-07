@@ -3,11 +3,13 @@ package com.starrocks.analysis;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -16,15 +18,17 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import static com.starrocks.common.ErrorCode.ERROR_NO_WG_ERROR;
+import static com.starrocks.common.ErrorCode.ERROR_NO_RG_ERROR;
 
 public class ResourceGroupStmtTest {
     private static final Pattern idPattern = Pattern.compile("\\bid=(\\b\\d+\\b)");
@@ -63,7 +67,9 @@ public class ResourceGroupStmtTest {
 
     private String createRg1IfNotExistsOrReplaceSql = "create resource group if not exists or replace rg1\n" +
             "to\n" +
-            "    (user='rg1_if_not_exists_or_replace', role='rg1_role1', query_type in ('select'), source_ip='192.168.2.1/24')\n" +
+            "    (user='rg1_if_not_exists_or_replace', role='rg1_role1', " +
+            "query_type in ('select'), source_ip='192" +
+            ".168.2.1/24')\n" +
             "with (\n" +
             "    'cpu_core_limit' = '10',\n" +
             "    'mem_limit' = '20%',\n" +
@@ -123,14 +129,34 @@ public class ResourceGroupStmtTest {
             "    'type' = 'normal'\n" +
             ");";
 
+    private String createRtRg1Sql = "create resource group rt_rg1\n" +
+            "to\n" +
+            "     (user='rt_rg_user')\n" +
+            "with (\n" +
+            "    'cpu_core_limit' = '25',\n" +
+            "    'mem_limit' = '80%',\n" +
+            "    'concurrency_limit' = '10',\n" +
+            "    'type' = 'short_query'\n" +
+            ");";
+
+    private String createMVRg = "create resource group if not exists mv_rg" +
+            "   with (" +
+            "   'cpu_core_limit' = '10'," +
+            "   'mem_limit' = '20%'," +
+            "   'concurrency_limit' = '11'," +
+            "   'type' = 'mv'" +
+            "   );";
+
     @BeforeClass
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-        FeConstants.default_scheduler_interval_millisecond = 1;
+        Config.alter_scheduler_interval_millisecond = 1;
         starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withRole("rg1_role1");
-        starRocksAssert.withUser("rg1_user1", "rg1_role1");
+        starRocksAssert.withUser("rg1_user1");
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("grant rg1_role1 to rg1_user1",
+                ctx), ctx);
         List<String> databases = Arrays.asList("db1", "db2");
         for (String db : databases) {
             starRocksAssert.withDatabase(db);
@@ -138,11 +164,11 @@ public class ResourceGroupStmtTest {
     }
 
     private static String rowsToString(List<List<String>> rows) {
-
         List<String> lines = rows.stream().map(
                 row -> {
                     row.remove(1);
-                    return String.join("|", row.toArray(new String[0])).replaceAll("id=\\d+(,\\s+)?", "");
+                    return String.join("|",
+                            row.toArray(new String[0])).replaceAll("id=\\d+(,\\s+)?", "");
                 }
         ).collect(Collectors.toList());
         return String.join("\n", lines.toArray(new String[0]));
@@ -155,14 +181,15 @@ public class ResourceGroupStmtTest {
     }
 
     private void createResourceGroups() throws Exception {
-        String[] sqls = new String[] {createRg1Sql, createRg2Sql, createRg3Sql, createRg4Sql, createRg5Sql, createRg6Sql};
+        String[] sqls = new String[] {createRg1Sql, createRg2Sql,
+                createRg3Sql, createRg4Sql, createRg5Sql, createRg6Sql, createRtRg1Sql};
         for (String sql : sqls) {
             starRocksAssert.executeResourceGroupDdlSql(sql);
         }
     }
 
     private void dropResourceGroups() throws Exception {
-        String[] rgNames = new String[] {"rg1", "rg2", "rg3", "rg4", "rg5", "rg6"};
+        String[] rgNames = new String[] {"rg1", "rg2", "rg3", "rg4", "rg5", "rg6", "rt_rg1"};
         for (String name : rgNames) {
             starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP " + name);
         }
@@ -171,7 +198,7 @@ public class ResourceGroupStmtTest {
     }
 
     private void assertResourceGroupNotExist(String wg) {
-        Assert.assertThrows(ERROR_NO_WG_ERROR.formatErrorMsg(wg), AnalysisException.class,
+        Assert.assertThrows(ERROR_NO_RG_ERROR.formatErrorMsg(wg), AnalysisException.class,
                 () -> starRocksAssert.executeResourceGroupShowSql("show resource group " + wg));
     }
 
@@ -181,18 +208,25 @@ public class ResourceGroupStmtTest {
         List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
         String result = rowsToString(rows);
         String expect = "" +
-                "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=4.459375, user=rg1_user1, role=rg1_role1, query_type in (SELECT), source_ip=192.168.2.1/24)\n" +
-                "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=3.459375, user=rg1_user2, query_type in (SELECT), source_ip=192.168.3.1/24)\n" +
+                "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=4.459375, user=rg1_user1, " +
+                "role=rg1_role1, query_type in " +
+                "(SELECT), source_ip=192.168.2.1/24)\n" +
+                "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=3.459375, user=rg1_user2, " +
+                "query_type in (SELECT), " +
+                "source_ip=192.168.3.1/24)\n" +
                 "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=2.359375, user=rg1_user3, source_ip=192.168.4.1/24)\n" +
                 "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=1.0, user=rg1_user4)\n" +
-                "rg2|30|50.0%|0|0|0|20|NORMAL|(weight=3.459375, role=rg2_role1, query_type in (SELECT), source_ip=192.168.5.1/24)\n" +
+                "rg2|30|50.0%|0|0|0|20|NORMAL|(weight=3.459375, role=rg2_role1, " +
+                "query_type in (SELECT), " +
+                "source_ip=192.168.5.1/24)\n" +
                 "rg2|30|50.0%|0|0|0|20|NORMAL|(weight=2.359375, role=rg2_role2, source_ip=192.168.6.1/24)\n" +
                 "rg2|30|50.0%|0|0|0|20|NORMAL|(weight=1.0, role=rg2_role3)\n" +
                 "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=2.459375, query_type in (SELECT), source_ip=192.168.6.1/24)\n" +
                 "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=1.1, query_type in (SELECT))\n" +
                 "rg4|25|80.0%|1024|1024|1024|10|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)\n" +
                 "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='db1')\n" +
-                "rg6|32|80.0%|0|0|0|10|NORMAL|(weight=2.459375, query_type in (INSERT), source_ip=192.168.6.1/24)";
+                "rg6|32|80.0%|0|0|0|10|NORMAL|(weight=2.459375, query_type in (INSERT), source_ip=192.168.6.1/24)\n" +
+                "rt_rg1|25|80.0%|0|0|0|10|SHORT_QUERY|(weight=1.0, user=rt_rg_user)";
         Assert.assertEquals(result, expect);
         dropResourceGroups();
     }
@@ -277,7 +311,7 @@ public class ResourceGroupStmtTest {
                 "    'concurrency_limit' = '11',\n" +
                 "    'type' = 'illegal-type'" +
                 ");";
-        Assert.assertThrows("Only support 'normal' and 'short_query' type",
+        Assert.assertThrows("Only support 'normal', 'mv' and 'short_query' type",
                 SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(illegalTypeSql));
 
         String illegalDefaultTypeSql = "create resource group rg_unknown\n" +
@@ -290,7 +324,7 @@ public class ResourceGroupStmtTest {
                 "    'concurrency_limit' = '11',\n" +
                 "    'type' = 'default'" +
                 ");";
-        Assert.assertThrows("Only support 'normal' and 'short_query' type",
+        Assert.assertThrows("Only support 'normal', 'mv' and 'short_query' type",
                 SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(illegalDefaultTypeSql));
     }
 
@@ -302,7 +336,8 @@ public class ResourceGroupStmtTest {
             starRocksAssert.executeResourceGroupDdlSql(sql1);
             Assert.fail("should throw error");
         } catch (Exception e) {
-            Assert.assertEquals("Unsupported query_type: 'mv'", e.getMessage());
+            Assert.assertEquals("Getting analyzing error. Detail message: Unsupported query_type: 'mv'.",
+                    e.getMessage());
         }
 
     }
@@ -314,7 +349,11 @@ public class ResourceGroupStmtTest {
         String rgName = rows.get(0).get(0);
         List<String> classifierIds = rows.stream().filter(row -> row.get(0).equals(rgName))
                 .map(row -> getClassifierId(row.get(row.size() - 1))).collect(Collectors.toList());
-        rows = rows.stream().filter(row -> !row.get(0).equals(rgName)).collect(Collectors.toList());
+        rows = rows.stream().peek(row -> {
+            if (row.get(0).equals(rgName)) {
+                row.set(row.size() - 1, "(weight=0.0)");
+            }
+        }).distinct().collect(Collectors.toList());
         String ids = String.join(",", classifierIds);
         String alterSql = String.format("ALTER RESOURCE GROUP %s DROP (%s)", rgName, ids);
         starRocksAssert.executeResourceGroupDdlSql(alterSql);
@@ -330,6 +369,9 @@ public class ResourceGroupStmtTest {
         createResourceGroups();
         List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
         Random rand = new Random();
+        Map<String, Integer> classifierCount = new HashMap<>();
+        rows.forEach(row -> classifierCount
+                .compute(row.get(0), (rg, countClassifier) -> countClassifier == null ? 1 : countClassifier + 1));
         Iterator<List<String>> it = rows.iterator();
         while (it.hasNext()) {
             List<String> row = it.next();
@@ -339,7 +381,13 @@ public class ResourceGroupStmtTest {
             String rgName = row.get(0);
             String classifier = row.get(row.size() - 1);
             String id = getClassifierId(classifier);
-            it.remove();
+            Integer count = classifierCount.computeIfPresent(rgName, (rg, countClassifier) -> countClassifier - 1);
+            if (count != 0) {
+                // not last classifier of the rg, remove it
+                it.remove();
+            } else {
+                row.set(row.size() - 1, "(weight=0.0)");
+            }
             String alterSql = String.format("ALTER RESOURCE GROUP %s DROP (%s)", rgName, id);
             starRocksAssert.executeResourceGroupDdlSql(alterSql);
         }
@@ -355,7 +403,11 @@ public class ResourceGroupStmtTest {
         createResourceGroups();
         List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
         String rgName = "rg2";
-        rows = rows.stream().filter(row -> !row.get(0).equals(rgName)).collect(Collectors.toList());
+        rows = rows.stream().peek(row -> {
+            if (row.get(0).equals(rgName)) {
+                row.set(row.size() - 1, "(weight=0.0)");
+            }
+        }).distinct().collect(Collectors.toList());
         String alterSql = String.format("ALTER RESOURCE GROUP %s DROP ALL", rgName);
         starRocksAssert.executeResourceGroupDdlSql(alterSql);
         String expect = rowsToString(rows);
@@ -405,7 +457,9 @@ public class ResourceGroupStmtTest {
 
         starRocksAssert.executeResourceGroupDdlSql("ALTER RESOURCE GROUP rg1 DROP ALL;");
         List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource group rg1");
-        Assert.assertTrue(rows.isEmpty());
+        String actual = rowsToString(rows);
+        String expect = "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=0.0)";
+        Assert.assertEquals(actual, expect);
 
         starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
         assertResourceGroupNotExist("rg1");
@@ -418,12 +472,17 @@ public class ResourceGroupStmtTest {
         String remoteIp = "192.168.2.4";
         starRocksAssert.getCtx().setQualifiedUser(qualifiedUser);
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
+        starRocksAssert.getCtx().setCurrentRoleIds(
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationMgr().getRoleIdsByUser(
+                        new UserIdentity(qualifiedUser, "%")
+                )
+        );
         starRocksAssert.getCtx().setRemoteIP(remoteIp);
         TWorkGroup wg = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
                 starRocksAssert.getCtx(),
                 ResourceGroupClassifier.QueryType.SELECT,
                 null);
-        Assert.assertEquals(wg.getName(), "rg1");
+        Assert.assertEquals("rg1", wg.getName());
         dropResourceGroups();
     }
 
@@ -496,7 +555,9 @@ public class ResourceGroupStmtTest {
         String result = rowsToString(rows);
         String expect = "" +
                 "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='db1')\n" +
-                "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=4.459375, user=rg1_user1, role=rg1_role1, query_type in (SELECT), source_ip=192.168.2.1/24)\n" +
+                "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=4.459375, user=rg1_user1, role=rg1_role1," +
+                " query_type in " +
+                "(SELECT), source_ip=192.168.2.1/24)\n" +
                 "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=1.1, query_type in (SELECT))";
         Assert.assertEquals(result, expect);
         dropResourceGroups();
@@ -540,18 +601,25 @@ public class ResourceGroupStmtTest {
         List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("SHOW RESOURCE GROUPS all");
         String result = rowsToString(rows);
         String expect = "" +
-                "rg1|21|20.0%|0|0|0|11|NORMAL|(weight=4.459375, user=rg1_user1, role=rg1_role1, query_type in (SELECT), source_ip=192.168.2.1/24)\n" +
-                "rg1|21|20.0%|0|0|0|11|NORMAL|(weight=3.459375, user=rg1_user2, query_type in (SELECT), source_ip=192.168.3.1/24)\n" +
+                "rg1|21|20.0%|0|0|0|11|NORMAL|(weight=4.459375, user=rg1_user1, role=rg1_role1," +
+                " query_type in " +
+                "(SELECT), source_ip=192.168.2.1/24)\n" +
+                "rg1|21|20.0%|0|0|0|11|NORMAL|(weight=3.459375, user=rg1_user2, query_type in" +
+                " (SELECT), " +
+                "source_ip=192.168.3.1/24)\n" +
                 "rg1|21|20.0%|0|0|0|11|NORMAL|(weight=2.359375, user=rg1_user3, source_ip=192.168.4.1/24)\n" +
                 "rg1|21|20.0%|0|0|0|11|NORMAL|(weight=1.0, user=rg1_user4)\n" +
-                "rg2|30|37.0%|0|0|0|20|NORMAL|(weight=3.459375, role=rg2_role1, query_type in (SELECT), source_ip=192.168.5.1/24)\n" +
+                "rg2|30|37.0%|0|0|0|20|NORMAL|(weight=3.459375, role=rg2_role1, query_type" +
+                " in (SELECT), " +
+                "source_ip=192.168.5.1/24)\n" +
                 "rg2|30|37.0%|0|0|0|20|NORMAL|(weight=2.359375, role=rg2_role2, source_ip=192.168.6.1/24)\n" +
                 "rg2|30|37.0%|0|0|0|20|NORMAL|(weight=1.0, role=rg2_role3)\n" +
                 "rg3|32|80.0%|0|0|0|23|NORMAL|(weight=2.459375, query_type in (SELECT), source_ip=192.168.6.1/24)\n" +
                 "rg3|32|80.0%|0|0|0|23|NORMAL|(weight=1.1, query_type in (SELECT))\n" +
                 "rg4|13|41.0%|1024|1024|1024|23|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)\n" +
                 "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='db1')\n" +
-                "rg6|32|80.0%|0|0|0|10|NORMAL|(weight=2.459375, query_type in (INSERT), source_ip=192.168.6.1/24)";
+                "rg6|32|80.0%|0|0|0|10|NORMAL|(weight=2.459375, query_type in (INSERT), source_ip=192.168.6.1/24)\n" +
+                "rt_rg1|25|80.0%|0|0|0|10|SHORT_QUERY|(weight=1.0, user=rt_rg_user)";
         Assert.assertEquals(result, expect);
         dropResourceGroups();
     }
@@ -605,7 +673,7 @@ public class ResourceGroupStmtTest {
     }
 
     @Test
-    public void testShortQueryResourceGroup() throws Exception {
+    public void testCreateShortQueryResourceGroup() throws Exception {
         String createRtRg1ReplaceSql = "create resource group if not exists or replace rg1\n" +
                 "to\n" +
                 "     (`db`='db1')\n" +
@@ -671,5 +739,69 @@ public class ResourceGroupStmtTest {
 
         starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
         starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg2");
+    }
+
+
+    @Test
+    public void testChooseShortQueryResourceGroup() throws Exception {
+        createResourceGroups();
+
+        // Prefer the short query group regardless its classifier weight is the lowest.
+        String qualifiedUser = "rt_rg_user";
+        long dbId = GlobalStateMgr.getCurrentState().getDb("db1").getId();
+        Set<Long> dbs = ImmutableSet.of(dbId);
+        starRocksAssert.getCtx().setQualifiedUser(qualifiedUser);
+        starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
+        TWorkGroup wg = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
+                starRocksAssert.getCtx(),
+                ResourceGroupClassifier.QueryType.SELECT,
+                dbs);
+        Assert.assertEquals("rt_rg1", wg.getName());
+
+        dropResourceGroups();
+    }
+
+    @Test
+    public void testAlterMvRgAddClassifier() throws Exception {
+        starRocksAssert.executeResourceGroupDdlSql(createMVRg);
+        String sql = "" +
+                "ALTER RESOURCE GROUP mv_rg \n" +
+                "ADD \n" +
+                "   (user='rg1_user5', role='rg1_role5', source_ip='192.168.4.1/16')";
+
+        Assert.assertThrows("MV Resource Group not support classifiers.",
+                DdlException.class, () -> starRocksAssert.executeResourceGroupDdlSql(sql));
+
+        starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP mv_rg;");
+    }
+
+    @Test
+    public void testCreateMVRgWithClassifier() throws Exception {
+        String createSql = "create resource group if not exists mv_rg2" +
+                "   to" +
+                "   (user='rg1_or_replace', role='rg1_role1', query_type in ('select'), source_ip='192.168.2.1/24')" +
+                "   with (" +
+                "   'cpu_core_limit' = '10'," +
+                "   'mem_limit' = '20%'," +
+                "   'concurrency_limit' = '11'," +
+                "   'type' = 'mv'" +
+                "   );";
+
+        Assert.assertThrows("MV Resource Group not support classifiers.",
+                DdlException.class, () -> starRocksAssert.executeResourceGroupDdlSql(createSql));
+    }
+
+    @Test
+    public void testCreateNormalRgWithoutClassifier() throws Exception {
+        String createSql = "create resource group if not exists rg2" +
+                "   with (" +
+                "   'cpu_core_limit' = '10'," +
+                "   'mem_limit' = '20%'," +
+                "   'concurrency_limit' = '11'," +
+                "   'type' = 'normal'" +
+                "   );";
+
+        Assert.assertThrows("This type Resource Group need define classifiers.",
+                DdlException.class, () -> starRocksAssert.executeResourceGroupDdlSql(createSql));
     }
 }

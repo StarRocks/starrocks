@@ -40,10 +40,14 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.plugin.PluginInfo.PluginType;
 import com.starrocks.plugin.PluginLoader.PluginStatus;
 import com.starrocks.qe.AuditLogBuilder;
@@ -152,7 +156,7 @@ public class PluginMgr implements Writable {
             GlobalStateMgr.getCurrentState().getEditLog().logInstallPlugin(info);
             LOG.info("install plugin {}", info.getName());
             return info;
-        } catch (IOException | UserException e) {
+        } catch (Throwable e) {
             pluginLoader.uninstall();
             throw e;
         }
@@ -346,9 +350,7 @@ public class PluginMgr implements Writable {
     }
 
     public long loadPlugins(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_78) {
-            readFields(dis);
-        }
+        readFields(dis);
         LOG.info("finished replay plugins from image");
         return checksum;
     }
@@ -356,5 +358,30 @@ public class PluginMgr implements Writable {
     public long savePlugins(DataOutputStream dos, long checksum) throws IOException {
         write(dos);
         return checksum;
+    }
+
+    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        List<PluginInfo> pluginInfos = getAllDynamicPluginInfo();
+
+        int numJson = 1 + pluginInfos.size();
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.PLUGIN_MGR, numJson);
+        writer.writeJson(pluginInfos.size());
+        for (PluginInfo pluginInfo : pluginInfos) {
+            writer.writeJson(pluginInfo);
+        }
+
+        writer.close();
+    }
+
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        try {
+            int pluginInfoSize = reader.readInt();
+            for (int i = 0; i < pluginInfoSize; ++i) {
+                PluginInfo pluginInfo = reader.readJson(PluginInfo.class);
+                replayLoadDynamicPlugin(pluginInfo);
+            }
+        } catch (UserException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

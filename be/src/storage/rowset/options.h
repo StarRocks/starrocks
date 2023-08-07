@@ -40,6 +40,9 @@
 
 namespace starrocks {
 
+class FileSystem;
+class RandomAccessFile;
+
 static const uint32_t DEFAULT_PAGE_SIZE = 1024 * 1024; // default size: 1M
 
 class PageBuilderOptions {
@@ -49,10 +52,15 @@ public:
     uint32_t dict_page_size = DEFAULT_PAGE_SIZE;
 };
 
-class PageDecoderOptions {
+class IndexReadOptions {
 public:
-    PageHandle* page_handle = nullptr;
-    bool enable_direct_copy = false;
+    bool use_page_cache = false;
+    bool kept_in_memory = false;
+    // for lake tablet
+    bool skip_fill_data_cache = false;
+
+    RandomAccessFile* read_file = nullptr;
+    OlapReaderStatistics* stats = nullptr;
 };
 
 } // namespace starrocks

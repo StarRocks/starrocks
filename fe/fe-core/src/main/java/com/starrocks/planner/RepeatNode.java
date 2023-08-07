@@ -34,13 +34,14 @@
 
 package com.starrocks.planner;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.base.MoreObjects;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalPlanNode;
@@ -49,7 +50,9 @@ import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TRepeatNode;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.logging.log4j.util.Strings;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -164,6 +167,11 @@ public class RepeatNode extends PlanNode {
     }
 
     @Override
+    public boolean canUseRuntimeAdaptiveDop() {
+        return getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
+    }
+
+    @Override
     public void checkRuntimeFilterOnNullValue(RuntimeFilterDescription description, Expr probeExpr) {
         // note(yan): repeat node may generate null values, and if runtime filter does not accept null value
         // we have opportunity to filter those values out.
@@ -185,14 +193,19 @@ public class RepeatNode extends PlanNode {
     protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
         TNormalRepeatNode repeatNode = new TNormalRepeatNode();
         repeatNode.setOutput_tuple_id(normalizer.remapTupleId(outputTupleDesc.getId()).asInt());
+        List<Integer> allSlotIds = new ArrayList<>(allSlotId);
+        repeatNode.setAll_slot_ids(
+                normalizer.remapIntegerSlotIds(allSlotIds).stream().sorted().collect(Collectors.toList()));
         List<List<Integer>> slotIdSetList = repeatSlotIdList.stream()
-                .map(s -> normalizer.remapIntegerSlotIds(s.stream().sorted().collect(Collectors.toList())))
-                .collect(Collectors.toList());
+                .map(s -> {
+                    List<Integer> slotIds = normalizer.remapIntegerSlotIds(new ArrayList<>(s)).stream().sorted()
+                            .collect(Collectors.toList());
+                    String key = Strings.join(slotIds.stream().map(id -> "" + id).collect(Collectors.toList()), ',');
+                    return new Pair<>(slotIds, key);
+                }).sorted(Pair.comparingBySecond()).map(p -> p.first).collect(Collectors.toList());
         repeatNode.setSlot_id_set_list(slotIdSetList);
         repeatNode.setRepeat_id_list(groupingList.get(0));
         repeatNode.setGrouping_list(groupingList);
-        List<Integer> allSlotIds = allSlotId.stream().sorted().collect(Collectors.toList());
-        repeatNode.setAll_slot_ids(normalizer.remapIntegerSlotIds(allSlotIds));
         planNode.setRepeat_node(repeatNode);
         planNode.setNode_type(TPlanNodeType.REPEAT_NODE);
         normalizeConjuncts(normalizer, planNode, conjuncts);

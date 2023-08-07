@@ -7,7 +7,7 @@ Specifies the active database for your session. You can then perform operations,
 ## Syntax
 
 ```SQL
-USE [<catalog_name>.]<db_name>;
+USE [<catalog_name>.]<db_name>
 ```
 
 ## Parameters

@@ -47,6 +47,7 @@
 #include "storage/rowset/page_io.h"
 #include "storage/seek_tuple.h"
 #include "storage/short_key_index.h"
+#include "types/logical_type.h"
 #include "util/crc32c.h"
 #include "util/faststring.h"
 #include "util/json.h"
@@ -93,11 +94,15 @@ void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t column_id, co
 }
 
 Status SegmentWriter::init() {
+    return init(true);
+}
+
+Status SegmentWriter::init(bool has_key) {
     std::vector<uint32_t> all_column_indexes;
     for (uint32_t i = 0; i < _tablet_schema->num_columns(); ++i) {
         all_column_indexes.emplace_back(i);
     }
-    return init(all_column_indexes, true);
+    return init(all_column_indexes, has_key);
 }
 
 Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has_key, SegmentFooterPB* footer) {
@@ -123,7 +128,9 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
     _column_indexes.insert(_column_indexes.end(), column_indexes.begin(), column_indexes.end());
     _column_writers.reserve(_column_indexes.size());
     size_t num_columns = _tablet_schema->num_columns();
-    for (uint32_t column_index : _column_indexes) {
+    std::map<uint32_t, uint32_t> sort_column_idx_by_column_index;
+    for (uint32_t i = 0; i < _column_indexes.size(); i++) {
+        uint32_t column_index = _column_indexes[i];
         if (column_index >= num_columns) {
             return Status::InternalError(
                     strings::Substitute("column index $0 out of range $1", column_index, num_columns));
@@ -144,8 +151,12 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         // now we create zone map for key columns
         // and not support zone map for array type.
         // TODO(mofei) refactor it to type specification
-        opts.need_zone_map = column.is_key() ||
-                             (_tablet_schema->keys_type() == KeysType::DUP_KEYS && is_zone_map_key_type(column.type()));
+        const bool enable_pk_zone_map = config::enable_pk_value_column_zonemap &&
+                                        _tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
+                                        is_zone_map_key_type(column.type());
+        const bool enable_dup_zone_map =
+                _tablet_schema->keys_type() == KeysType::DUP_KEYS && is_zone_map_key_type(column.type());
+        opts.need_zone_map = column.is_key() || enable_pk_zone_map || enable_dup_zone_map || column.is_sort_key();
         if (column.type() == LogicalType::TYPE_ARRAY) {
             opts.need_zone_map = false;
         }
@@ -163,7 +174,7 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         if (column.type() == LogicalType::TYPE_VARCHAR && _opts.global_dicts != nullptr) {
             auto iter = _opts.global_dicts->find(column.name().data());
             if (iter != _opts.global_dicts->end()) {
-                opts.global_dict = &iter->second;
+                opts.global_dict = &iter->second.dict;
                 _global_dict_columns_valid_info[iter->first] = true;
             }
         }
@@ -171,6 +182,26 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         ASSIGN_OR_RETURN(auto writer, ColumnWriter::create(opts, &column, _wfile.get()));
         RETURN_IF_ERROR(writer->init());
         _column_writers.push_back(std::move(writer));
+        if (column.is_sort_key()) {
+            sort_column_idx_by_column_index[column_index] = i;
+        }
+    }
+    if (!sort_column_idx_by_column_index.empty()) {
+        for (auto& column_idx : _tablet_schema->sort_key_idxes()) {
+            auto iter = sort_column_idx_by_column_index.find(column_idx);
+            if (iter != sort_column_idx_by_column_index.end()) {
+                _sort_column_indexes.emplace_back(iter->second);
+            } else {
+                // Currently we have the following two scenarios：
+                //  1. data load or horizontal compaction, we will write the whole row data once a time
+                //  2. vertical compaction, we will first write all sort key columns and write value columns by group
+                // So the all sort key columns should be found in `_column_indexes` so far.
+                std::string err_msg =
+                        strings::Substitute("column[$0]: $1 is sort key but not find while init segment writer",
+                                            column_idx, _tablet_schema->column(column_idx).name().data());
+                return Status::InternalError(err_msg);
+            }
+        }
     }
 
     _has_key = has_key;
@@ -201,7 +232,8 @@ Status SegmentWriter::finalize(uint64_t* segment_file_size, uint64_t* index_size
 }
 
 Status SegmentWriter::finalize_columns(uint64_t* index_size) {
-    if (_has_key) {
+    if (_has_key || _num_rows == 0) {
+        // _num_rows == 0 && !_has_key means this segment not contains key columns
         _num_rows = _num_rows_written;
     } else if (_num_rows != _num_rows_written) {
         return Status::InternalError(strings::Substitute("num rows written $0 is not equal to segment num rows $1",
@@ -229,10 +261,10 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         RETURN_IF_ERROR(column_writer->write_bloom_filter_index());
         *index_size += _wfile->size() - index_offset;
 
-        // global dict
-        if (!column_writer->is_global_dict_valid()) {
-            std::string col_name(_tablet_schema->columns()[column_index].name().data(),
-                                 _tablet_schema->columns()[column_index].name().size());
+        // check global dict valid
+        const auto& column = _tablet_schema->column(column_index);
+        if (!column_writer->is_global_dict_valid() && is_string_type(column.type())) {
+            std::string col_name(column.name());
             _global_dict_columns_valid_info[col_name] = false;
         }
 
@@ -314,7 +346,8 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
             if ((_num_rows_written % _opts.num_rows_per_block) == 0) {
                 size_t keys = _tablet_schema->num_short_key_columns();
                 SeekTuple tuple(*chunk.schema(), chunk.get(i).datums());
-                std::string encoded_key = tuple.short_key_encode(keys, 0);
+                std::string encoded_key;
+                encoded_key = tuple.short_key_encode(keys, _sort_column_indexes, 0);
                 RETURN_IF_ERROR(_index_builder->add_item(encoded_key));
             }
             ++_num_rows_written;

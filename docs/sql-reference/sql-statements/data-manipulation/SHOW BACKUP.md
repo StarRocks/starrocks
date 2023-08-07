@@ -11,7 +11,7 @@ Views the last BACKUP task in a specified database. For more information, see [d
 ## Syntax
 
 ```SQL
-SHOW BACKUP [FROM db_name]
+SHOW BACKUP [FROM <db_name>]
 ```
 
 ## Parameters
@@ -34,6 +34,7 @@ SHOW BACKUP [FROM db_name]
 | UploadFinishedTime   | Snapshot upload completion time.                             |
 | FinishedTime         | Task completion Time.                                        |
 | UnfinishedTasks      | Unfinished subtask IDs in the SNAPSHOTING and UPLOADING phases. |
+| Progress             | The progress of snapshot uploading tasks.                             |
 | TaskErrMsg           | Error messages.                                              |
 | Status               | Status information.                                          |
 | Timeout              | Task timeout. Unit: second.                                  |

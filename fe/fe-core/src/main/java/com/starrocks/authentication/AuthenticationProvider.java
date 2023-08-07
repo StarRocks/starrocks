@@ -15,14 +15,14 @@
 
 package com.starrocks.authentication;
 
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.mysql.privilege.Password;
+import com.starrocks.sql.ast.UserIdentity;
 
 public interface AuthenticationProvider {
 
     /**
      * valid authentication info, and initialize the UserAuthenticationInfo structure
-     * used when creating a user or modifying user's authentication infomation
+     * used when creating a user or modifying user's authentication information
      */
     UserAuthenticationInfo validAuthenticationInfo(
             UserIdentity userIdentity,

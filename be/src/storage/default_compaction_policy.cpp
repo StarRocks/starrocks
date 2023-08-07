@@ -24,6 +24,10 @@
 namespace starrocks {
 
 bool DefaultCumulativeBaseCompactionPolicy::need_compaction(double* score, CompactionType* type) {
+    if (_tablet->tablet_state() != TABLET_RUNNING) {
+        return false;
+    }
+
     _tablet->calculate_cumulative_point();
     auto cumu_st = _pick_rowsets_to_cumulative_compact(&_cumulative_rowsets, &_cumulative_score);
     auto base_st = _pick_rowsets_to_base_compact(&_base_rowsets, &_base_score);
@@ -116,7 +120,7 @@ Status DefaultCumulativeBaseCompactionPolicy::_pick_rowsets_to_cumulative_compac
     // <4,5> means version 4,5 selected for cumulative compaction
     int64_t prev_end_version = _tablet->cumulative_layer_point() - 1;
     bool only_cal_score = false;
-    for (auto rowset : candidate_rowsets) {
+    for (const auto& rowset : candidate_rowsets) {
         if (only_cal_score) {
             compaction_score += rowset->rowset_meta()->get_compaction_score();
             continue;

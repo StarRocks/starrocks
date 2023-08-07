@@ -149,7 +149,7 @@ public:
     // get_next(). The default implementation updates runtime profile counters and calls
     // close() on the children. To ensure that close() is called on the entire plan tree,
     // each implementation should start out by calling the default implementation.
-    virtual Status close(RuntimeState* state);
+    virtual void close(RuntimeState* state);
 
     // Creates exec node tree from list of nodes contained in plan via depth-first
     // traversal. All nodes are placed in pool.
@@ -225,8 +225,6 @@ public:
 
     MemTracker* mem_tracker() const { return _mem_tracker.get(); }
 
-    bool use_vectorized() { return _use_vectorized; }
-
     RuntimeFilterProbeCollector& runtime_filter_collector() { return _runtime_filter_collector; }
 
     // local runtime filters that are conducted on this ExecNode.
@@ -243,6 +241,8 @@ public:
 
     // Names of counters shared by all exec nodes
     static const std::string ROW_THROUGHPUT_COUNTER;
+
+    static void may_add_chunk_accumulate_operator(OpFactories& ops, pipeline::PipelineBuilderContext* context, int id);
 
 protected:
     friend class DataSink;
@@ -282,8 +282,6 @@ protected:
     // Account for peak memory used by this node
     RuntimeProfile::Counter* _memory_used_counter;
 
-    bool _use_vectorized;
-
     // Mappings from input slot to output slot of ancestor nodes (include itself).
     // It is used for pipeline to rewrite runtime in filters.
     std::vector<TupleSlotMapping> _tuple_slot_mappings;
@@ -291,11 +289,6 @@ protected:
     ExecNode* child(int i) { return _children[i]; }
 
     bool is_closed() const { return _is_closed; }
-
-    // TODO(zc)
-    /// Pointer to the containing SubplanNode or NULL if not inside a subplan.
-    /// Set by SubplanNode::Init(). Not owned.
-    // SubplanNode* containing_subplan_;
 
     /// Returns true if this node is inside the right-hand side plan tree of a SubplanNode.
     /// Valid to call in or after Prepare().

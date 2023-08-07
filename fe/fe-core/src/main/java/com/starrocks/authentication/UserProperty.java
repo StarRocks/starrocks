@@ -16,10 +16,18 @@
 package com.starrocks.authentication;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
+import com.starrocks.sql.ast.SetUserPropertyVar;
+
+import java.util.List;
 
 public class UserProperty {
     @SerializedName(value = "m")
     private long maxConn = 100;
+
+    private static final String PROP_MAX_USER_CONNECTIONS = "max_user_connections";
 
     public long getMaxConn() {
         return maxConn;
@@ -27,5 +35,46 @@ public class UserProperty {
 
     public void setMaxConn(long maxConn) {
         this.maxConn = maxConn;
+    }
+
+    public void update(List<Pair<String, String>> properties) throws DdlException {
+        // copy
+        long newMaxConn = maxConn;
+
+        // update
+        for (Pair<String, String> entry : properties) {
+            String key = entry.first;
+            String value = entry.second;
+
+            String[] keyArr = key.split("\\" + SetUserPropertyVar.DOT_SEPARATOR);
+            if (keyArr[0].equalsIgnoreCase(PROP_MAX_USER_CONNECTIONS)) {
+                if (keyArr.length != 1) {
+                    throw new DdlException(PROP_MAX_USER_CONNECTIONS + " format error");
+                }
+
+                try {
+                    newMaxConn = Long.parseLong(value);
+                } catch (NumberFormatException e) {
+                    throw new DdlException(PROP_MAX_USER_CONNECTIONS + " is not a number");
+                }
+
+                if (newMaxConn <= 0 || newMaxConn > 10000) {
+                    throw new DdlException(PROP_MAX_USER_CONNECTIONS +
+                            " is not valid, the value must be between 1 and 10000");
+                }
+
+                if (newMaxConn > Config.qe_max_connection) {
+                    throw new DdlException(
+                            PROP_MAX_USER_CONNECTIONS +
+                                    " is not valid, the value must be less than qe_max_connection("
+                                    + Config.qe_max_connection + ")");
+                }
+            } else {
+                throw new DdlException("Unknown user property(" + key + ")");
+            }
+        }
+
+        // set
+        maxConn = newMaxConn;
     }
 }

@@ -7,5 +7,5 @@ This statement is used to drop a specified index on a table. Currently, only bit
 Syntax:
 
 ```sql
-DROP INDEX index_name ON [db_name.]table_name;
+DROP INDEX index_name ON [db_name.]table_name
 ```

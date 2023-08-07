@@ -17,6 +17,7 @@
 
 package com.starrocks.load.loadv2;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.load.EtlStatus;
@@ -33,13 +34,20 @@ import java.io.IOException;
  * It is used to edit the job final state.
  */
 public class LoadJobFinalOperation extends TxnCommitAttachment implements Writable {
+    @SerializedName("id")
     private long id;
+    @SerializedName("ls")
     private EtlStatus loadingStatus = new EtlStatus();
+    @SerializedName("ps")
     private int progress;
+    @SerializedName("lst")
     private long loadStartTimestamp;
+    @SerializedName("ft")
     private long finishTimestamp;
+    @SerializedName("js")
     private JobState jobState;
     // optional
+    @SerializedName("fm")
     private FailMsg failMsg;
 
     public LoadJobFinalOperation() {

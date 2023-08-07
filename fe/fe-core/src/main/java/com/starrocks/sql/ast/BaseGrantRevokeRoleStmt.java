@@ -15,55 +15,51 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.UserIdentity;
+import com.starrocks.sql.parser.NodePosition;
+
+import java.util.List;
 
 // GrantRoleStmt and RevokeRoleStmt share the same parameter and check logic with GrantRoleStmt
 // GRANT rolex TO userx
 // GRANT role1 TO ROLE role2   supported on new RBAC framework
 public abstract class BaseGrantRevokeRoleStmt extends DdlStmt {
-    protected String granteeRole;
-    protected UserIdentity userIdent;
+    protected List<String> granteeRole;
+    protected UserIdentity userIdentity;
     protected String role;
-    private String operationName;   // GRANT or REVOKE
-    private String prepositionName; // TO or FROM
 
-    protected BaseGrantRevokeRoleStmt(String granteeRole, UserIdentity userIdent, String operationName, String prepositionName) {
+    protected BaseGrantRevokeRoleStmt(List<String> granteeRole, UserIdentity userIdentity) {
+        this(granteeRole, userIdentity, NodePosition.ZERO);
+    }
+
+    protected BaseGrantRevokeRoleStmt(List<String> granteeRole, UserIdentity userIdentity, NodePosition pos) {
+        super(pos);
         this.granteeRole = granteeRole;
-        this.userIdent = userIdent;
+        this.userIdentity = userIdentity;
         this.role = null;
-        this.operationName = operationName;
-        this.prepositionName = prepositionName;
     }
 
-    protected BaseGrantRevokeRoleStmt(String granteeRole, String role, String operationName, String prepositionName) {
+    protected BaseGrantRevokeRoleStmt(List<String> granteeRole, String role) {
+        this(granteeRole, role, NodePosition.ZERO);
+
+    }
+
+    protected BaseGrantRevokeRoleStmt(List<String> granteeRole, String role, NodePosition pos) {
+        super(pos);
         this.granteeRole = granteeRole;
-        this.userIdent = null;
+        this.userIdentity = null;
         this.role = role;
-        this.operationName = operationName;
-        this.prepositionName = prepositionName;
     }
 
-    public UserIdentity getUserIdent() {
-        return userIdent;
+    public UserIdentity getUserIdentity() {
+        return userIdentity;
     }
 
-    public String getGranteeRole() {
+    public List<String> getGranteeRole() {
         return granteeRole;
     }
 
     public String getRole() {
         return role;
-    }
-
-    @Override
-    public String toString() {
-        if (role == null) {
-            return String.format("%s '%s' %s %s",
-                    operationName, granteeRole, prepositionName, userIdent.toString());
-        } else {
-            return String.format("%s '%s' %s ROLE %s",
-                    operationName, granteeRole, prepositionName, role);
-        }
     }
 
     @Override

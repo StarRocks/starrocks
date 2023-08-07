@@ -14,8 +14,10 @@
 
 #include "exec/schema_scanner/schema_task_runs_scanner.h"
 
+#include "exec/schema_scanner.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/datetime_value.h"
+#include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
 #include "util/timezone_utils.h"
 
@@ -33,7 +35,9 @@ SchemaScanner::ColumnDesc SchemaTaskRunsScanner::_s_tbls_columns[] = {
         {"EXPIRE_TIME", TYPE_DATETIME, sizeof(StringValue), true},
         {"ERROR_CODE", TYPE_BIGINT, sizeof(StringValue), true},
         {"ERROR_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"PROGRESS", TYPE_VARCHAR, sizeof(StringValue), true}};
+        {"PROGRESS", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"EXTRA_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"PROPERTIES", TYPE_VARCHAR, sizeof(StringValue), true}};
 
 SchemaTaskRunsScanner::SchemaTaskRunsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -41,9 +45,7 @@ SchemaTaskRunsScanner::SchemaTaskRunsScanner()
 SchemaTaskRunsScanner::~SchemaTaskRunsScanner() = default;
 
 Status SchemaTaskRunsScanner::start(RuntimeState* state) {
-    if (!_is_init) {
-        return Status::InternalError("used before initialized.");
-    }
+    RETURN_IF_ERROR(SchemaScanner::start(state));
     TGetTasksParams task_params;
     if (nullptr != _param->current_user_ident) {
         task_params.__set_current_user_ident(*(_param->current_user_ident));
@@ -93,7 +95,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                         nullable_column->append_nulls(1);
                     } else {
                         DateTimeValue t;
-                        t.from_unixtime(create_time, TimezoneUtils::default_time_zone);
+                        t.from_unixtime(create_time, _runtime_state->timezone_obj());
                         fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
                     }
                 } else {
@@ -113,7 +115,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                         nullable_column->append_nulls(1);
                     } else {
                         DateTimeValue t;
-                        t.from_unixtime(complete_time, TimezoneUtils::default_time_zone);
+                        t.from_unixtime(complete_time, _runtime_state->timezone_obj());
                         fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
                     }
                 } else {
@@ -163,7 +165,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                         nullable_column->append_nulls(1);
                     } else {
                         DateTimeValue t;
-                        t.from_unixtime(expire_time, TimezoneUtils::default_time_zone);
+                        t.from_unixtime(expire_time, _runtime_state->timezone_obj());
                         fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
                     }
                 } else {
@@ -214,6 +216,30 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                 }
             }
             break;
+        }
+        case 12: {
+            // extra_message
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(12);
+                if (task_run_info.__isset.extra_message) {
+                    const std::string* str = &task_run_info.extra_message;
+                    Slice value(str->c_str(), str->length());
+                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                } else {
+                    auto* nullable_column = down_cast<NullableColumn*>(column.get());
+                    nullable_column->append_nulls(1);
+                }
+            }
+            break;
+        }
+        case 13: {
+            // properties
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(13);
+                const std::string* str = &task_run_info.properties;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
         }
         default:
             break;

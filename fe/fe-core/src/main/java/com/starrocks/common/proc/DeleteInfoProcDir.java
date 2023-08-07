@@ -36,7 +36,7 @@ package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.load.DeleteHandler;
+import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.Load;
 
 import java.util.ArrayList;
@@ -50,10 +50,10 @@ public class DeleteInfoProcDir implements ProcNodeInterface {
             .build();
 
     private Load load;
-    private DeleteHandler deleteHandler;
+    private DeleteMgr deleteHandler;
     private long dbId;
 
-    public DeleteInfoProcDir(DeleteHandler deleteHandler, Load load, long dbId) {
+    public DeleteInfoProcDir(DeleteMgr deleteHandler, Load load, long dbId) {
         this.load = load;
         this.deleteHandler = deleteHandler;
         this.dbId = dbId;

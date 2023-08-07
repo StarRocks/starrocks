@@ -6,10 +6,12 @@ Deletes a custom collection task.
 
 By default, StarRocks automatically collects full statistics of a table. It checks for any data updates every 5 minutes. If data change is detected, data collection will be automatically triggered. If you do not want to use automatic full collection, you can set the FE configuration item `enable_collect_full_statistic` to `false` and customize a collection task.
 
+This statement is supported from v2.4.
+
 ## Syntax
 
 ```SQL
-DROP ANALYZE <ID>;
+DROP ANALYZE <ID>
 ```
 
 The task ID can be obtained by using the SHOW ANALYZE JOB statement.

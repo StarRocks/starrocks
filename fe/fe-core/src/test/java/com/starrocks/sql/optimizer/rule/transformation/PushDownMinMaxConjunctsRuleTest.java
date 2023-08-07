@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.Memo;
@@ -35,11 +36,10 @@ import static org.junit.Assert.assertEquals;
 public class PushDownMinMaxConjunctsRuleTest {
     @Test
     public void transformIceberg(@Mocked IcebergTable table) {
-        RemoteScanPartitionPruneRule rule0 = RemoteScanPartitionPruneRule.ICEBERG_SCAN;
-        PushDownMinMaxConjunctsRule rule1 = PushDownMinMaxConjunctsRule.ICEBERG_SCAN;
+        ExternalScanPartitionPruneRule rule0 = ExternalScanPartitionPruneRule.ICEBERG_SCAN;
 
         PredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(
-                BinaryPredicateOperator.BinaryType.EQ, new ColumnRefOperator(1, Type.INT, "id", true),
+                BinaryType.EQ, new ColumnRefOperator(1, Type.INT, "id", true),
                 ConstantOperator.createInt(1));
 
         OptExpression scan =
@@ -50,7 +50,6 @@ public class PushDownMinMaxConjunctsRuleTest {
         assertEquals(0, ((LogicalIcebergScanOperator) scan.getOp()).getScanOperatorPredicates().getMinMaxConjuncts().size());
 
         rule0.transform(scan, new OptimizerContext(new Memo(), new ColumnRefFactory()));
-        rule1.transform(scan, new OptimizerContext(new Memo(), new ColumnRefFactory()));
 
         assertEquals(2, ((LogicalIcebergScanOperator) scan.getOp()).getScanOperatorPredicates().getMinMaxConjuncts().size());
     }

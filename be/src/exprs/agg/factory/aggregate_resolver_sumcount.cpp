@@ -17,54 +17,54 @@
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "exprs/agg/sum.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
 struct SumDispatcher {
-    template <LogicalType pt>
+    template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (pt_is_decimal<pt>) {
-            resolver->add_decimal_mapping<pt, TYPE_DECIMAL128, true>("decimal_sum");
-        } else if constexpr (pt_is_numeric<pt> || pt_is_decimalv2<pt>) {
-            using SumState = SumAggregateState<RunTimeCppType<SumResultPT<pt>>>;
-            resolver->add_aggregate_mapping<pt, SumResultPT<pt>, SumState>(
-                    "sum", true, AggregateFactory::MakeSumAggregateFunction<pt>());
+        if constexpr (lt_is_decimal<lt>) {
+            resolver->add_decimal_mapping<lt, TYPE_DECIMAL128, true>("decimal_sum");
+        } else if constexpr (lt_is_numeric<lt> || lt_is_decimalv2<lt>) {
+            using SumState = SumAggregateState<RunTimeCppType<SumResultLT<lt>>>;
+            resolver->add_aggregate_mapping<lt, SumResultLT<lt>, SumState>(
+                    "sum", true, AggregateFactory::MakeSumAggregateFunction<lt>());
         }
     }
 };
 
-VALUE_GUARD(LogicalType, StorageSumPTGuard, pt_is_sum_in_storage, TYPE_BOOLEAN, TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT,
+VALUE_GUARD(LogicalType, StorageSumLTGuard, lt_is_sum_in_storage, TYPE_BOOLEAN, TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT,
             TYPE_BIGINT, TYPE_LARGEINT, TYPE_FLOAT, TYPE_DOUBLE, TYPE_DECIMAL, TYPE_DECIMALV2, TYPE_DECIMAL32,
             TYPE_DECIMAL64, TYPE_DECIMAL128);
 
 struct StorageSumDispatcher {
-    template <LogicalType pt>
+    template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (pt_is_sum_in_storage<pt>) {
-            using SumState = SumAggregateState<RunTimeCppType<pt>>;
-            resolver->add_aggregate_mapping<pt, pt, SumState>(
+        if constexpr (lt_is_sum_in_storage<lt>) {
+            using SumState = SumAggregateState<RunTimeCppType<lt>>;
+            resolver->add_aggregate_mapping<lt, lt, SumState>(
                     "sum", true,
-                    std::make_shared<SumAggregateFunction<pt, RunTimeCppType<pt>, pt, RunTimeCppType<pt>>>());
+                    std::make_shared<SumAggregateFunction<lt, RunTimeCppType<lt>, lt, RunTimeCppType<lt>>>());
         }
     }
 };
 
 struct DistinctDispatcher {
-    template <LogicalType pt>
+    template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (pt_is_aggregate<pt> || pt_is_string<pt>) {
-            using DistinctState = DistinctAggregateState<pt, SumResultPT<pt>>;
-            using DistinctState2 = DistinctAggregateStateV2<pt, SumResultPT<pt>>;
-            resolver->add_aggregate_mapping<pt, TYPE_BIGINT, DistinctState>(
-                    "multi_distinct_count", false, AggregateFactory::MakeCountDistinctAggregateFunction<pt>());
-            resolver->add_aggregate_mapping<pt, TYPE_BIGINT, DistinctState2>(
-                    "multi_distinct_count2", false, AggregateFactory::MakeCountDistinctAggregateFunctionV2<pt>());
+        if constexpr (lt_is_aggregate<lt>) {
+            using DistinctState = DistinctAggregateState<lt, SumResultLT<lt>>;
+            using DistinctState2 = DistinctAggregateStateV2<lt, SumResultLT<lt>>;
+            resolver->add_aggregate_mapping<lt, TYPE_BIGINT, DistinctState>(
+                    "multi_distinct_count", false, AggregateFactory::MakeCountDistinctAggregateFunction<lt>());
+            resolver->add_aggregate_mapping<lt, TYPE_BIGINT, DistinctState2>(
+                    "multi_distinct_count2", false, AggregateFactory::MakeCountDistinctAggregateFunctionV2<lt>());
 
-            resolver->add_aggregate_mapping<pt, SumResultPT<pt>, DistinctState>(
-                    "multi_distinct_sum", false, AggregateFactory::MakeSumDistinctAggregateFunction<pt>());
-            resolver->add_aggregate_mapping<pt, SumResultPT<pt>, DistinctState2>(
-                    "multi_distinct_sum2", false, AggregateFactory::MakeSumDistinctAggregateFunctionV2<pt>());
+            resolver->add_aggregate_mapping<lt, SumResultLT<lt>, DistinctState>(
+                    "multi_distinct_sum", false, AggregateFactory::MakeSumDistinctAggregateFunction<lt>());
+            resolver->add_aggregate_mapping<lt, SumResultLT<lt>, DistinctState2>(
+                    "multi_distinct_sum2", false, AggregateFactory::MakeSumDistinctAggregateFunctionV2<lt>());
         }
     }
 };

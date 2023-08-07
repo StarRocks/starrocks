@@ -72,7 +72,7 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
         pk_columns.push_back(static_cast<uint32_t>(i));
     }
 
-    VectorizedSchema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
+    Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
 
     std::unique_ptr<Column> pk_column;
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {

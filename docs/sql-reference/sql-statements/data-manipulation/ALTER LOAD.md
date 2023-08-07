@@ -2,7 +2,7 @@
 
 ## Description
 
-Changes the priority of a Broker Load job that is in the **QUEUEING** or **LOADING** state.
+Changes the priority of a Broker Load job that is in the **QUEUEING** or **LOADING** state. This statement is supported since v2.5.
 
 > **NOTE**
 >
@@ -15,7 +15,7 @@ ALTER LOAD FOR <label_name>
 properties
 (
     'priority'='{LOWEST | LOW | NORMAL | HIGH | HIGHEST}'
-);
+)
 ```
 
 ## Parameters

@@ -69,9 +69,11 @@ public final class GlobalVariable {
     public static final String QUERY_QUEUE_CPU_USED_PERMILLE_LIMIT = "query_queue_cpu_used_permille_limit";
     public static final String QUERY_QUEUE_PENDING_TIMEOUT_SECOND = "query_queue_pending_timeout_second";
     public static final String QUERY_QUEUE_MAX_QUEUED_QUERIES = "query_queue_max_queued_queries";
+    public static final String ACTIVATE_ALL_ROLES_ON_LOGIN = "activate_all_roles_on_login";
+    public static final String ACTIVATE_ALL_ROLES_ON_LOGIN_V2 = "activate_all_roles_on_login_v2";
 
     @VariableMgr.VarAttr(name = VERSION_COMMENT, flag = VariableMgr.READ_ONLY)
-    public static String versionComment = "StarRocks version " + Version.STARROCKS_VERSION;
+    public static String versionComment = Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH;
 
     @VariableMgr.VarAttr(name = VERSION, flag = VariableMgr.READ_ONLY)
     public static String version = Config.mysql_server_version;
@@ -151,6 +153,10 @@ public final class GlobalVariable {
     // Unlimited iff it is non-positive.
     @VariableMgr.VarAttr(name = QUERY_QUEUE_MAX_QUEUED_QUERIES, flag = VariableMgr.GLOBAL)
     private static int queryQueueMaxQueuedQueries = 1024;
+
+    @VariableMgr.VarAttr(name = ACTIVATE_ALL_ROLES_ON_LOGIN_V2, flag = VariableMgr.GLOBAL,
+            alias = ACTIVATE_ALL_ROLES_ON_LOGIN, show = ACTIVATE_ALL_ROLES_ON_LOGIN)
+    private static boolean activateAllRolesOnLogin = false;
 
     public static boolean isEnableQueryQueueSelect() {
         return enableQueryQueueSelect;
@@ -238,6 +244,14 @@ public final class GlobalVariable {
 
     public static void setQueryQueueMaxQueuedQueries(int queryQueueMaxQueuedQueries) {
         GlobalVariable.queryQueueMaxQueuedQueries = queryQueueMaxQueuedQueries;
+    }
+
+    public static boolean isActivateAllRolesOnLogin() {
+        return activateAllRolesOnLogin;
+    }
+
+    public static void setActivateAllRolesOnLogin(boolean activateAllRolesOnLogin) {
+        GlobalVariable.activateAllRolesOnLogin = activateAllRolesOnLogin;
     }
 
     // Don't allow create instance.

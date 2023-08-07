@@ -56,10 +56,6 @@ public class OptExpression {
     // MV Operator property, inferred from best plan
     private MVOperatorProperty mvOperatorProperty;
 
-    public OptExpression() {
-        this.inputs = Lists.newArrayList();
-    }
-
     public OptExpression(Operator op) {
         this.op = op;
         this.inputs = Lists.newArrayList();
@@ -77,9 +73,9 @@ public class OptExpression {
         return expr;
     }
 
-    public OptExpression(GroupExpression groupExpression) {
+    public OptExpression(GroupExpression groupExpression, List<OptExpression> inputs) {
         this.op = groupExpression.getOp();
-        this.inputs = Lists.newArrayList();
+        this.inputs = inputs;
         this.groupExpression = groupExpression;
         this.property = groupExpression.getGroup().getLogicalProperty();
     }
@@ -128,6 +124,17 @@ public class OptExpression {
     public ColumnRefSet getOutputColumns() {
         Preconditions.checkState(property != null);
         return property.getOutputColumns();
+    }
+
+    public RowOutputInfo getRowOutputInfo() {
+        return op.getRowOutputInfo(inputs);
+    }
+
+    public void initRowOutputInfo() {
+        for (OptExpression optExpression : inputs) {
+            optExpression.initRowOutputInfo();
+        }
+        getRowOutputInfo();
     }
 
     public void setRequiredProperties(List<PhysicalPropertySet> requiredProperties) {

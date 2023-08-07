@@ -18,6 +18,7 @@
 package com.starrocks.load;
 
 import com.starrocks.thrift.TEtlState;
+import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
 import org.junit.Assert;
 import org.junit.Test;
@@ -73,8 +74,16 @@ public class EtlJobStatusTest {
         List<Long> backendIds = Arrays.asList(backendId);
 
         etlJobStatus.getLoadStatistic().initLoad(loadId, fragIds, backendIds);
-        etlJobStatus.getLoadStatistic().updateLoadProgress(backendId, loadId, fragId1, 1000, true);
-        etlJobStatus.getLoadStatistic().updateLoadProgress(backendId, loadId, fragId2, 999, true);
+        TReportExecStatusParams params = new TReportExecStatusParams();
+        params.setBackend_id(backendId);
+        params.setQuery_id(loadId);
+        params.setFragment_instance_id(fragId1);
+        params.setSource_load_rows(1000);
+        params.setDone(true);
+        etlJobStatus.getLoadStatistic().updateLoadProgress(params);
+        params.setFragment_instance_id(fragId2);
+        params.setSource_load_rows(999);
+        etlJobStatus.getLoadStatistic().updateLoadProgress(params);
         String showInfoStr = etlJobStatus.getLoadStatistic().toShowInfoStr();
         etlJobStatus.write(dos);
         // stats.clear();

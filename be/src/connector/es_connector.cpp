@@ -41,6 +41,10 @@ DataSourcePtr ESDataSourceProvider::create_data_source(const TScanRange& scan_ra
     return std::make_unique<ESDataSource>(this, scan_range);
 }
 
+const TupleDescriptor* ESDataSourceProvider::tuple_descriptor(RuntimeState* state) const {
+    return state->desc_tbl().get_tuple_descriptor(_es_scan_node.tuple_id);
+}
+
 // ================================
 
 ESDataSource::ESDataSource(const ESDataSourceProvider* provider, const TScanRange& scan_range)
@@ -57,6 +61,17 @@ Status ESDataSource::open(RuntimeState* state) {
 
     if (es_scan_node.__isset.fields_context) {
         _fields_context = es_scan_node.fields_context;
+    }
+
+    {
+        const auto& it = _properties.find(ESScanReader::KEY_TIME_ZONE);
+        if (it != _properties.end()) {
+            // Use user customer timezone
+            _timezone = it->second;
+        } else {
+            // Use default timezone in StarRocks
+            _timezone = _runtime_state->timezone();
+        }
     }
 
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(es_scan_node.tuple_id);
@@ -103,10 +118,9 @@ Status ESDataSource::_build_conjuncts() {
     _predicate_idx.reserve(conjunct_sz);
 
     for (int i = 0; i < _conjunct_ctxs.size(); ++i) {
-        EsPredicate* predicate =
-                _pool->add(new EsPredicate(_conjunct_ctxs[i], _tuple_desc, _runtime_state->timezone(), _pool));
+        EsPredicate* predicate = _pool->add(new EsPredicate(_conjunct_ctxs[i], _tuple_desc, _timezone, _pool));
         predicate->set_field_context(_fields_context);
-        status = predicate->build_disjuncts_list(true);
+        status = predicate->build_disjuncts_list();
         if (status.ok()) {
             _predicates.push_back(predicate);
             _predicate_idx.push_back(i);
@@ -153,7 +167,6 @@ Status ESDataSource::_normalize_conjuncts() {
 
     for (int i = _predicate_idx.size() - 1; i >= 0; i--) {
         int conjunct_index = _predicate_idx[i];
-        _conjunct_ctxs[conjunct_index]->close(_runtime_state);
         _conjunct_ctxs.erase(_conjunct_ctxs.begin() + conjunct_index);
     }
     return Status::OK();
@@ -226,7 +239,7 @@ Status ESDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
         COUNTER_UPDATE(_read_counter, 1);
         if (_line_eof || _es_scroll_parser == nullptr) {
             RETURN_IF_ERROR(_es_reader->get_next(&_batch_eof, _es_scroll_parser));
-            _es_scroll_parser->set_params(_tuple_desc, &_docvalue_context);
+            _es_scroll_parser->set_params(_tuple_desc, &_docvalue_context, _timezone);
             if (_batch_eof) {
                 return Status::EndOfFile("");
             }

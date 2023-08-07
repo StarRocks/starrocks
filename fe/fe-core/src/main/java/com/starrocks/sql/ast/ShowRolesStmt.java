@@ -18,6 +18,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 public class ShowRolesStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA;
@@ -26,17 +27,18 @@ public class ShowRolesStmt extends ShowStmt {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
 
         builder.addColumn(new Column("Name", ScalarType.createVarchar(100)));
-        builder.addColumn(new Column("Users", ScalarType.createVarchar(100)));
-        builder.addColumn(new Column("GlobalPrivs", ScalarType.createVarchar(300)));
-        builder.addColumn(new Column("DatabasePrivs", ScalarType.createVarchar(300)));
-        builder.addColumn(new Column("TablePrivs", ScalarType.createVarchar(300)));
-        builder.addColumn(new Column("ResourcePrivs", ScalarType.createVarchar(300)));
+        builder.addColumn(new Column("Builtin", ScalarType.createVarchar(30)));
+        builder.addColumn(new Column("Comment", ScalarType.createVarchar(300)));
 
         META_DATA = builder.build();
     }
 
     public ShowRolesStmt() {
+        this(NodePosition.ZERO);
+    }
 
+    public ShowRolesStmt(NodePosition pos) {
+        super(pos);
     }
 
     @Override

@@ -26,7 +26,7 @@
 #include "exprs/runtime_filter.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
-#include "runtime/primitive_type_infra.h"
+#include "types/logical_type_infra.h"
 #include "util/defer_op.h"
 
 namespace starrocks {
@@ -45,7 +45,8 @@ Status ChunksSorterHeapSort::update(RuntimeState* state, const ChunkPtr& chunk) 
     int row_sz = chunk_holder->value()->chunk->num_rows();
     if (_sort_heap == nullptr) {
         _sort_heap = std::make_unique<CommonCursorSortHeap>(detail::ChunkCursorComparator(_sort_desc));
-        _sort_heap->reserve(_number_of_rows_to_sort());
+        // avoid exaggerated limit + offset, for an example select * from t order by col limit 9223372036854775800,1
+        _sort_heap->reserve(std::min<size_t>(_number_of_rows_to_sort(), 10'000'000ul));
         // build heap
         size_t direct_push = std::min<size_t>(_number_of_rows_to_sort(), row_sz);
         size_t i = 0;
@@ -111,15 +112,11 @@ Status ChunksSorterHeapSort::update(RuntimeState* state, const ChunkPtr& chunk) 
     return Status::OK();
 }
 
-SortedRuns ChunksSorterHeapSort::get_sorted_runs() {
-    return {SortedRun(_merged_segment.chunk, _merged_segment.order_by_columns)};
-}
-
 size_t ChunksSorterHeapSort::get_output_rows() const {
     return _merged_segment.chunk->num_rows();
 }
 
-Status ChunksSorterHeapSort::done(RuntimeState* state) {
+Status ChunksSorterHeapSort::do_done(RuntimeState* state) {
     ScopedTimer<MonotonicStopWatch> timer(_build_timer);
     if (_sort_heap) {
         auto sorted_values = _sort_heap->sorted_seq();
@@ -176,11 +173,12 @@ std::vector<JoinRuntimeFilter*>* ChunksSorterHeapSort::runtime_filters(ObjectPoo
     const auto& top_cursor = _sort_heap->top();
     const int cursor_rid = top_cursor.row_id();
     const auto& top_cursor_column = top_cursor.data_segment()->order_by_columns[0];
+    bool is_close_interval = _sort_desc.num_columns() != 1;
 
     if (_runtime_filter.empty()) {
         auto rf = type_dispatch_predicate<JoinRuntimeFilter*>(
                 (*_sort_exprs)[0]->root()->type().type, false, detail::SortRuntimeFilterBuilder(), pool,
-                top_cursor_column, cursor_rid, _sort_desc.descs[0].asc_order());
+                top_cursor_column, cursor_rid, _sort_desc.descs[0].asc_order(), is_close_interval);
         _runtime_filter.emplace_back(rf);
     } else {
         type_dispatch_predicate<std::nullptr_t>((*_sort_exprs)[0]->root()->type().type, false,
@@ -191,8 +189,7 @@ std::vector<JoinRuntimeFilter*>* ChunksSorterHeapSort::runtime_filters(ObjectPoo
 }
 
 template <LogicalType TYPE>
-void ChunksSorterHeapSort::_do_filter_data_for_type(detail::ChunkHolder* chunk_holder, Column::Filter* filter,
-                                                    int row_sz) {
+void ChunksSorterHeapSort::_do_filter_data_for_type(detail::ChunkHolder* chunk_holder, Filter* filter, int row_sz) {
     const auto& top_cursor = _sort_heap->top();
     const int cursor_rid = top_cursor.row_id();
 
@@ -273,7 +270,7 @@ int ChunksSorterHeapSort::_filter_data(detail::ChunkHolder* chunk_holder, int ro
     const int cursor_rid = top_cursor.row_id();
     const int column_sz = top_cursor.data_segment()->order_by_columns.size();
 
-    Column::Filter filter(row_sz);
+    Filter filter(row_sz);
 
     // For single column special optimization
     if (_do_filter_data) {
@@ -294,8 +291,8 @@ int ChunksSorterHeapSort::_filter_data(detail::ChunkHolder* chunk_holder, int ro
     return chunk_holder->value()->chunk->filter(filter);
 }
 
-void ChunksSorterHeapSort::setup_runtime(RuntimeProfile* profile) {
-    ChunksSorter::setup_runtime(profile);
+void ChunksSorterHeapSort::setup_runtime(RuntimeState* state, RuntimeProfile* profile, MemTracker* parent_mem_tracker) {
+    ChunksSorter::setup_runtime(state, profile, parent_mem_tracker);
     _sort_filter_costs = ADD_TIMER(profile, "SortFilterCost");
     _sort_filter_rows = ADD_COUNTER(profile, "SortFilterRows", TUnit::UNIT);
 }

@@ -30,8 +30,8 @@
 #include "gen_cpp/RuntimeFilter_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
+#include "types/logical_type.h"
 #include "util/blocking_queue.hpp"
 
 namespace starrocks {
@@ -47,8 +47,9 @@ public:
     // ==================================
     // serialization and deserialization.
     static size_t max_runtime_filter_serialized_size(const JoinRuntimeFilter* rf);
-    static size_t serialize_runtime_filter(const JoinRuntimeFilter* rf, uint8_t* data);
-    static void deserialize_runtime_filter(ObjectPool* pool, JoinRuntimeFilter** rf, const uint8_t* data, size_t size);
+    static size_t serialize_runtime_filter(RuntimeState* state, const JoinRuntimeFilter* rf, uint8_t* data);
+    static size_t serialize_runtime_filter(int serialize_version, const JoinRuntimeFilter* rf, uint8_t* data);
+    static int deserialize_runtime_filter(ObjectPool* pool, JoinRuntimeFilter** rf, const uint8_t* data, size_t size);
     static JoinRuntimeFilter* create_join_runtime_filter(ObjectPool* pool, LogicalType type);
 
     // ====================================
@@ -250,6 +251,7 @@ private:
     std::map<int32_t, RuntimeFilterProbeDescriptor*> _descriptors;
     int _wait_timeout_ms = 0;
     long _scan_wait_timeout_ms = 0L;
+    double _early_return_selectivity = 0.05;
     RuntimeProfile* _runtime_profile = nullptr;
     RuntimeBloomFilterEvalContext _eval_context;
     int _plan_node_id = -1;

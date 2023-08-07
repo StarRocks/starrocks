@@ -18,8 +18,10 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 public class ShowPluginsStmt extends ShowStmt {
+
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
                     .addColumn(new Column("Name", ScalarType.createVarchar(64)))
@@ -33,6 +35,14 @@ public class ShowPluginsStmt extends ShowStmt {
                     .addColumn(new Column("Status", ScalarType.createVarchar(20)))
                     .addColumn(new Column("Properties", ScalarType.createVarchar(250)))
                     .build();
+
+    public ShowPluginsStmt() {
+        this(NodePosition.ZERO);
+    }
+
+    public ShowPluginsStmt(NodePosition pos) {
+        super(pos);
+    }
 
     @Override
     public ShowResultSetMetaData getMetaData() {

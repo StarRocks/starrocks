@@ -147,16 +147,22 @@ public:
 
     static Status ResourceBusy(const Slice& msg) { return Status(TStatusCode::RESOURCE_BUSY, msg); }
 
+    static Status EAgain(const Slice& msg) { return Status(TStatusCode::SR_EAGAIN, msg); }
+
+    static Status RemoteFileNotFound(const Slice& msg) { return Status(TStatusCode::REMOTE_FILE_NOT_FOUND, msg); }
+
     bool ok() const { return _state == nullptr; }
 
     bool is_cancelled() const { return code() == TStatusCode::CANCELLED; }
     bool is_mem_limit_exceeded() const { return code() == TStatusCode::MEM_LIMIT_EXCEEDED; }
     bool is_thrift_rpc_error() const { return code() == TStatusCode::THRIFT_RPC_ERROR; }
     bool is_end_of_file() const { return code() == TStatusCode::END_OF_FILE; }
+    bool is_ok_or_eof() const { return ok() || is_end_of_file(); }
     bool is_not_found() const { return code() == TStatusCode::NOT_FOUND; }
     bool is_already_exist() const { return code() == TStatusCode::ALREADY_EXIST; }
     bool is_io_error() const { return code() == TStatusCode::IO_ERROR; }
     bool is_not_supported() const { return code() == TStatusCode::NOT_IMPLEMENTED_ERROR; }
+    bool is_corruption() const { return code() == TStatusCode::CORRUPTION; }
 
     /// @return @c true if the status indicates Uninitialized.
     bool is_uninitialized() const { return code() == TStatusCode::UNINITIALIZED; }
@@ -177,6 +183,8 @@ public:
     bool is_duplicate_rpc_invocation() const { return code() == TStatusCode::DUPLICATE_RPC_INVOCATION; }
 
     bool is_time_out() const { return code() == TStatusCode::TIMEOUT; }
+
+    bool is_eagain() const { return code() == TStatusCode::SR_EAGAIN; }
 
     // Convert into TStatus. Call this if 'status_container' contains an optional
     // TStatus field named 'status'. This also sets __isset.status.
@@ -274,6 +282,10 @@ inline void Status::update(Status&& new_status) {
     if (ok()) {
         *this = std::move(new_status);
     }
+}
+
+inline Status ignore_not_found(const Status& status) {
+    return status.is_not_found() ? Status::OK() : status;
 }
 
 inline std::ostream& operator<<(std::ostream& os, const Status& st) {
@@ -399,7 +411,7 @@ struct StatusInstance {
         if (UNLIKELY(!st__.ok())) {                           \
             LOG(WARNING) << (warning_prefix) << ": " << st__; \
         }                                                     \
-    } while (0);
+    } while (0)
 
 #define RETURN_IF_ERROR_WITH_WARN(stmt, warning_prefix)              \
     do {                                                             \
@@ -408,7 +420,7 @@ struct StatusInstance {
             LOG(WARNING) << (warning_prefix) << ", error: " << st__; \
             return std::move(st__);                                  \
         }                                                            \
-    } while (0);
+    } while (0)
 
 #define DCHECK_IF_ERROR(stmt)      \
     do {                           \
@@ -437,4 +449,13 @@ struct StatusInstance {
         if (UNLIKELY(cond)) {         \
             return ret;               \
         }                             \
+    } while (0)
+
+#define RETURN_IF_EXCEPTION(stmt)                   \
+    do {                                            \
+        try {                                       \
+            { stmt; }                               \
+        } catch (const std::exception& e) {         \
+            return Status::InternalError(e.what()); \
+        }                                           \
     } while (0)

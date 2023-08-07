@@ -15,10 +15,10 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 /*
  *  SHOW ALL GRANTS;
@@ -34,30 +34,41 @@ import com.starrocks.qe.ShowResultSetMetaData;
 // SHOW GRANTS;
 // SHOW GRANTS FOR user@'xxx'
 public class ShowGrantsStmt extends ShowStmt {
-
     private static final ShowResultSetMetaData META_DATA;
 
     static {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
+
         builder.addColumn(new Column("UserIdentity", ScalarType.createVarchar(100)));
+        builder.addColumn(new Column("Catalog", ScalarType.createVarchar(400)));
         builder.addColumn(new Column("Grants", ScalarType.createVarchar(400)));
+
         META_DATA = builder.build();
     }
 
-    private final boolean isAll;
     private UserIdentity userIdent;
+    private final String role;
 
-    public ShowGrantsStmt(UserIdentity userIdent, boolean isAll) {
+    public ShowGrantsStmt(UserIdentity userIdent) {
+        this(userIdent, null, NodePosition.ZERO);
+    }
+
+    public ShowGrantsStmt(String role) {
+        this(null, role, NodePosition.ZERO);
+    }
+
+    public ShowGrantsStmt(UserIdentity userIdent, String role, NodePosition pos) {
+        super(pos);
         this.userIdent = userIdent;
-        this.isAll = isAll;
+        this.role = role;
     }
 
     public UserIdentity getUserIdent() {
         return userIdent;
     }
 
-    public boolean isAll() {
-        return isAll;
+    public String getRole() {
+        return role;
     }
 
     public void setUserIdent(UserIdentity userIdent) {
@@ -73,5 +84,4 @@ public class ShowGrantsStmt extends ShowStmt {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitShowGrantsStatement(this, context);
     }
-
 }

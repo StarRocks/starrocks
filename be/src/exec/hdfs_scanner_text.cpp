@@ -14,9 +14,10 @@
 
 #include "exec/hdfs_scanner_text.h"
 
+#include <unordered_map>
+
 #include "column/column_helper.h"
 #include "exec/exec_node.h"
-#include "gen_cpp/Descriptors_types.h"
 #include "gutil/strings/substitute.h"
 #include "util/compression/compression_utils.h"
 #include "util/compression/stream_compression.h"
@@ -53,6 +54,8 @@ public:
 protected:
     Status _fill_buffer() override;
 
+    void _trim_row_delimeter(Record* record);
+
 private:
     RandomAccessFile* _file;
     size_t _offset = 0;
@@ -86,6 +89,7 @@ Status HdfsScannerCSVReader::next_record(Record* record) {
     } else {
         _remain_length -= consume;
     }
+    _trim_row_delimeter(record);
     return Status::OK();
 }
 
@@ -101,7 +105,7 @@ Status HdfsScannerCSVReader::_fill_buffer() {
     // maybe its a SequenceFile because we support to read compressed text file.
     // For uncompressed text file, we can split csv file into chunks and process chunks parallelly.
     // For compressed text file, we only can parse csv file in sequential way.
-    ASSIGN_OR_RETURN(s.size, _file->read(s.data, s.size));
+    ASSIGN_OR_RETURN(s.size, _file->read(s.data, std::min(s.size, _file_length - _offset)));
     _offset += s.size;
     _buff.add_limit(s.size);
     if (s.size == 0) {
@@ -130,15 +134,25 @@ Status HdfsScannerCSVReader::_fill_buffer() {
     return Status::OK();
 }
 
+void HdfsScannerCSVReader::_trim_row_delimeter(Record* record) {
+    // For default row delemiter which is line break, we need to trim the windows line break
+    // if the file was written in windows platfom.
+    if (_parse_options.row_delimiter == "\n") {
+        while (record->size > 0 && record->data[record->size - 1] == '\r') {
+            record->size--;
+        }
+    }
+}
+
 Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     TTextFileDesc text_file_desc = _scanner_params.scan_ranges[0]->text_file_desc;
 
     // All delimiters will not be empty.
     // Even if the user has not set it, there will be a default value.
-    DCHECK(!text_file_desc.field_delim.empty());
-    DCHECK(!text_file_desc.line_delim.empty());
-    DCHECK(!text_file_desc.collection_delim.empty());
-    DCHECK(!text_file_desc.mapkey_delim.empty());
+    if (text_file_desc.field_delim.empty() || text_file_desc.line_delim.empty() ||
+        text_file_desc.collection_delim.empty() || text_file_desc.mapkey_delim.empty()) {
+        return Status::Corruption("Hive TEXTFILE's delimiters is missing");
+    }
 
     // _field_delimiter and _record_delimiter should use std::string,
     // because the CSVReader is using std::string type as delimiter.
@@ -149,16 +163,8 @@ Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPa
     // In Hive, users can specify collection delimiter and mapkey delimiter as string type,
     // but in fact, only the first character of the delimiter will take effect.
     // So here, we only use the first character of collection_delim and mapkey_delim.
-    if (text_file_desc.collection_delim.empty() || text_file_desc.mapkey_delim.empty()) {
-        // During the StarRocks upgrade process, collection_delim and mapkey_delim may be empty,
-        // in order to prevent crash, we set _collection_delimiter
-        // and _mapkey_delimiter a default value here.
-        _collection_delimiter = '\002';
-        _mapkey_delimiter = '\003';
-    } else {
-        _collection_delimiter = text_file_desc.collection_delim.front();
-        _mapkey_delimiter = text_file_desc.mapkey_delim.front();
-    }
+    _collection_delimiter = text_file_desc.collection_delim.front();
+    _mapkey_delimiter = text_file_desc.mapkey_delim.front();
 
     // by default it's unknown compression. we will synthesise informaiton from FE and BE(file extension)
     // parse compression type from FE first.
@@ -182,15 +188,14 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(open_random_access_file());
     RETURN_IF_ERROR(_create_or_reinit_reader());
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
+    RETURN_IF_ERROR(_build_hive_column_name_2_index());
     for (const auto slot : _scanner_params.materialize_slots) {
-        // TODO slot maybe null?
         DCHECK(slot != nullptr);
-        ConverterPtr conv = csv::get_converter(slot->type(), true);
-        RETURN_IF_ERROR(_get_hive_column_index(slot->col_name()));
-        if (conv == nullptr) {
-            return Status::InternalError(strings::Substitute("Unsupported CSV type $0", slot->type().debug_string()));
-        }
-        _converters.emplace_back(std::move(conv));
+        // We don't care about _invalid_field_as_null here, if get converter failed,
+        // we use DefaultValueConverter instead.
+        auto converter = csv::get_hive_converter(slot->type(), true);
+        DCHECK(converter != nullptr);
+        _converters.emplace_back(std::move(converter));
     }
     return Status::OK();
 }
@@ -222,9 +227,6 @@ Status HdfsTextScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
 
 Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
     DCHECK_EQ(0, chunk->get()->num_rows());
-    Status status;
-    CSVReader::Record record;
-    CSVReader::Fields fields;
 
     int num_columns = chunk->get()->num_columns();
     _column_raw_ptrs.resize(num_columns);
@@ -238,10 +240,11 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
     options.array_hive_collection_delimiter = _collection_delimiter;
     options.array_hive_mapkey_delimiter = _mapkey_delimiter;
     options.array_hive_nested_level = 1;
-    options.invalid_field_as_null = true;
+    options.invalid_field_as_null = _invalid_field_as_null;
 
-    for (size_t num_rows = chunk->get()->num_rows(); num_rows < chunk_size; /**/) {
-        status = down_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&record);
+    for (size_t num_rows = chunk->get()->num_rows(); num_rows < chunk_size; num_rows++) {
+        CSVReader::Record record{};
+        Status status = down_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&record);
         if (status.is_end_of_file()) {
             if (_current_range_index == _scanner_params.scan_ranges.size() - 1) {
                 break;
@@ -253,76 +256,71 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
             RETURN_IF_ERROR(_create_or_reinit_reader());
             continue;
         } else if (!status.ok()) {
-            LOG(WARNING) << "Status is not ok " << status.get_error_msg();
+            LOG(WARNING) << strings::Substitute("Parse csv file $0 failed: $1", _file->filename(),
+                                                status.get_error_msg());
             return status;
         }
 
-        fields.clear();
+        bool validate_res = validate_utf8(record.data, record.size);
+        if (!validate_res && options.invalid_field_as_null) {
+            VLOG_ROW << "Face csv invalidate UTF-8 character line, append default value for this line";
+            chunk->get()->append_default();
+            continue;
+        } else if (!validate_res) {
+            return Status::InternalError("Face csv invalidate UTF-8 character line.");
+        }
+
+        CSVReader::Fields fields{};
         _reader->split_record(record, &fields);
 
-        if (!validate_utf8(record.data, record.size)) {
-            continue;
-        }
+        size_t num_materialize_columns = _scanner_params.materialize_slots.size();
 
-        bool has_error = false;
-        std::string error_msg;
-        int num_materialize_columns = _scanner_params.materialize_slots.size();
-        int field_size = fields.size();
-        if (_scanner_params.hive_column_names->size() != field_size) {
-            VLOG(7) << strings::Substitute("Size mismatch between hive column $0 names and fields $1!",
-                                           _scanner_params.hive_column_names->size(), fields.size());
-        }
+        // Fill materialize columns first, then fill partition column
         for (int j = 0; j < num_materialize_columns; j++) {
-            // TODO slot maybe null?
-            const auto slot = _scanner_params.materialize_slots[j];
+            const auto& slot = _scanner_params.materialize_slots[j];
             DCHECK(slot != nullptr);
 
-            int index = _scanner_params.materialize_index_in_chunk[j];
-            int column_field_index = _columns_index[_scanner_params.materialize_slots[j]->col_name()];
-            Column* column = _column_raw_ptrs[index];
-            if (column_field_index < field_size) {
-                const Slice& field = fields[column_field_index];
+            const std::string formatted_slot_name =
+                    _scanner_params.case_sensitive ? slot->col_name() : boost::to_lower_copy(slot->col_name());
+
+            size_t chunk_index = _scanner_params.materialize_index_in_chunk[j];
+            size_t csv_index = _formatted_hive_column_name_2_index[formatted_slot_name];
+            Column* column = _column_raw_ptrs[chunk_index];
+            if (csv_index < fields.size()) {
+                const Slice& field = fields[csv_index];
                 options.type_desc = &(_scanner_params.materialize_slots[j]->type());
                 if (!_converters[j]->read_string(column, field, options)) {
-                    LOG(WARNING) << "Converter encountered an error for field " << field.to_string() << ", index "
-                                 << index << ", column " << _scanner_params.materialize_slots[j]->debug_string();
-                    error_msg = strings::Substitute("CSV parse column [$0] failed, more details please see be log.",
-                                                    _scanner_params.materialize_slots[j]->debug_string());
-                    chunk->get()->set_num_rows(num_rows);
-                    has_error = true;
-                    break;
+                    return Status::InternalError(
+                            strings::Substitute("CSV converter encountered an error for field: $0, column name is: $1",
+                                                field.to_string(), formatted_slot_name));
                 }
             } else {
                 // The size of hive_column_names may be larger than fields when new columns are added.
                 // The default value should be filled when querying the extra columns that
                 // do not exist in the text file.
-                // hive only support null column
-                // TODO: support not null
-                column->append_nulls(1);
+                column->append_default();
             }
         }
-        num_rows += !has_error;
-        if (!has_error) {
-            // Partition column not stored in text file, we should append these columns
-            // when we select partition column.
-            int num_part_columns = _scanner_ctx.partition_columns.size();
-            for (int p = 0; p < num_part_columns; ++p) {
-                int index = _scanner_params.partition_index_in_chunk[p];
-                Column* column = _column_raw_ptrs[index];
-                ColumnPtr partition_value = _scanner_ctx.partition_values[p];
-                DCHECK(partition_value->is_constant());
-                auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_value);
-                const ColumnPtr& data_column = const_column->data_column();
-                if (data_column->is_nullable()) {
-                    column->append_nulls(1);
-                } else {
-                    column->append(*data_column, 0, 1);
-                }
+
+        // Start to append partition column
+        for (size_t p = 0; p < _scanner_ctx.partition_columns.size(); ++p) {
+            size_t chunk_index = _scanner_params.partition_index_in_chunk[p];
+            Column* column = _column_raw_ptrs[chunk_index];
+            ColumnPtr partition_value = _scanner_ctx.partition_values[p];
+            DCHECK(partition_value->is_constant());
+            auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_value);
+            const ColumnPtr& data_column = const_column->data_column();
+            if (data_column->is_nullable()) {
+                column->append_default();
+            } else {
+                column->append(*data_column, 0, 1);
             }
-        } else {
-            return Status::InternalError(error_msg);
         }
     }
+
+    // Check chunk's row number for each column
+    chunk->get()->check_or_die();
+
     return chunk->get()->num_rows() > 0 ? Status::OK() : Status::EndOfFile("");
 }
 
@@ -356,7 +354,22 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
     }
     {
         auto* reader = down_cast<HdfsScannerCSVReader*>(_reader.get());
-        RETURN_IF_ERROR(reader->reset(scan_range->offset, scan_range->length));
+
+        // if reading start of file, skipping UTF-8 BOM
+        bool has_bom = false;
+        if (scan_range->offset == 0) {
+            CSVReader::Record first_line;
+            reader->next_record(&first_line);
+            if (first_line.size >= 3 && (unsigned char)first_line.data[0] == 0xEF &&
+                (unsigned char)first_line.data[1] == 0xBB && (unsigned char)first_line.data[2] == 0xBF) {
+                has_bom = true;
+            }
+        }
+        if (has_bom) {
+            RETURN_IF_ERROR(reader->reset(scan_range->offset + 3, scan_range->length - 3));
+        } else {
+            RETURN_IF_ERROR(reader->reset(scan_range->offset, scan_range->length));
+        }
         if (scan_range->offset != 0) {
             // Always skip first record of scan range with non-zero offset.
             // Notice that the first record will read by previous scan range.
@@ -367,15 +380,26 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
     return Status::OK();
 }
 
-Status HdfsTextScanner::_get_hive_column_index(const std::string& column_name) {
-    for (int i = 0; i < _scanner_params.hive_column_names->size(); i++) {
-        const std::string& name = _scanner_params.hive_column_names->at(i);
-        if (name == column_name) {
-            _columns_index[name] = i;
-            return Status::OK();
+Status HdfsTextScanner::_build_hive_column_name_2_index() {
+    const bool case_sensitive = _scanner_params.case_sensitive;
+
+    for (size_t i = 0; i < _scanner_params.hive_column_names->size(); i++) {
+        const std::string formatted_column_name =
+                case_sensitive ? (*_scanner_params.hive_column_names)[i]
+                               : boost::algorithm::to_lower_copy((*_scanner_params.hive_column_names)[i]);
+        _formatted_hive_column_name_2_index.emplace(formatted_column_name, i);
+    }
+
+    // Check materialize_slots's SlotDescirptor is existed in hive table
+    for (const auto slot : _scanner_params.materialize_slots) {
+        const std::string& formatted_slot_name =
+                case_sensitive ? slot->col_name() : boost::algorithm::to_lower_copy(slot->col_name());
+        if (_formatted_hive_column_name_2_index.find(formatted_slot_name) ==
+            _formatted_hive_column_name_2_index.end()) {
+            return Status::InternalError("Can not get index of column name: " + formatted_slot_name);
         }
     }
-    return Status::InvalidArgument("Can not get index of column name " + column_name);
+    return Status::OK();
 }
 
 } // namespace starrocks

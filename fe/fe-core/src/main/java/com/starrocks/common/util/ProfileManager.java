@@ -38,18 +38,16 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
+import com.starrocks.sql.plan.ExecPlan;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Deque;
-import java.util.Iterator;
-import java.util.LinkedList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
@@ -75,27 +73,41 @@ public class ProfileManager {
     public static final String SQL_STATEMENT = "Sql Statement";
     public static final String USER = "User";
     public static final String DEFAULT_DB = "Default Db";
-    public static final String QUERY_CPU_COST = "QueryCpuCost";
-    public static final String QUERY_MEM_COST = "QueryMemCost";
     public static final String VARIABLES = "Variables";
     public static final String PROFILE_TIME = "Collect Profile Time";
 
-    public static final ArrayList<String> PROFILE_HEADERS = new ArrayList(
+    public static final ArrayList<String> PROFILE_HEADERS = new ArrayList<>(
             Arrays.asList(QUERY_ID, USER, DEFAULT_DB, SQL_STATEMENT, QUERY_TYPE,
                     START_TIME, END_TIME, TOTAL_TIME, QUERY_STATE));
 
-    private class ProfileElement {
+    public static class ProfileElement {
         public Map<String, String> infoStrings = Maps.newHashMap();
         public byte[] profileContent;
+
+        public ExecPlan plan;
+        public RuntimeProfile profile;
+
+        public List<String> toRow() {
+            List<String> res = Lists.newArrayList();
+            RuntimeProfile summary = profile.getChildList().get(0).first;
+            res.add(summary.getInfoString(QUERY_ID));
+            res.add(summary.getInfoString(START_TIME));
+            res.add(summary.getInfoString(TOTAL_TIME));
+            res.add(summary.getInfoString(QUERY_STATE));
+            String statement = summary.getInfoString(SQL_STATEMENT);
+            if (statement.length() > 128) {
+                statement = statement.substring(0, 124) + " ...";
+            }
+            res.add(statement);
+            return res;
+        }
     }
 
-    // only protect profileDeque; profileMap is concurrent, no need to protect
-    private ReentrantReadWriteLock lock;
-    private ReadLock readLock;
-    private WriteLock writeLock;
+    private final ReadLock readLock;
+    private final WriteLock writeLock;
 
-    private Deque<ProfileElement> profileDeque;
-    private Map<String, ProfileElement> profileMap; // from QueryId to RuntimeProfile
+    private final LinkedHashMap<String, ProfileElement> profileMap; // from QueryId to RuntimeProfile
+    private final LinkedHashMap<String, ProfileElement> loadProfileMap; // from LoadId to RuntimeProfile
 
     public static ProfileManager getInstance() {
         if (INSTANCE == null) {
@@ -105,11 +117,11 @@ public class ProfileManager {
     }
 
     private ProfileManager() {
-        lock = new ReentrantReadWriteLock(true);
+        ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
         readLock = lock.readLock();
         writeLock = lock.writeLock();
-        profileDeque = new LinkedList<ProfileElement>();
-        profileMap = new ConcurrentHashMap<String, ProfileElement>();
+        profileMap = new LinkedHashMap<>();
+        loadProfileMap = new LinkedHashMap<>();
     }
 
     public ProfileElement createElement(RuntimeProfile summaryProfile, String profileString) {
@@ -126,7 +138,7 @@ public class ProfileManager {
         return element;
     }
 
-    public String pushProfile(RuntimeProfile profile) {
+    private String generateProfileString(RuntimeProfile profile) {
         if (profile == null) {
             return "";
         }
@@ -144,8 +156,14 @@ public class ProfileManager {
                 profileString = profile.toString();
                 LOG.warn("unknown profile format '{}',  use default format instead.", Config.profile_info_format);
         }
+        return profileString;
+    }
 
+    public String pushProfile(ExecPlan plan, RuntimeProfile profile) {
+        String profileString = generateProfileString(profile);
         ProfileElement element = createElement(profile.getChildList().get(0).first, profileString);
+        element.plan = plan;
+        element.profile = profile;
         String queryId = element.infoStrings.get(ProfileManager.QUERY_ID);
         // check when push in, which can ensure every element in the list has QUERY_ID column,
         // so there is no need to check when remove element from list.
@@ -154,14 +172,12 @@ public class ProfileManager {
                     + "may be forget to insert 'QUERY_ID' column into infoStrings");
         }
 
-        profileMap.put(queryId, element);
         writeLock.lock();
         try {
-            if (profileDeque.size() >= Config.profile_info_reserved_num) {
-                profileMap.remove(profileDeque.getFirst().infoStrings.get(QUERY_ID));
-                profileDeque.removeFirst();
+            profileMap.put(queryId, element);
+            if (profileMap.size() >= Config.profile_info_reserved_num) {
+                profileMap.remove(profileMap.keySet().iterator().next());
             }
-            profileDeque.addLast(element);
         } finally {
             writeLock.unlock();
         }
@@ -169,20 +185,40 @@ public class ProfileManager {
         return profileString;
     }
 
+    public void pushLoadProfile(RuntimeProfile profile) {
+        String profileString = generateProfileString(profile);
+
+        ProfileElement element = createElement(profile.getChildList().get(0).first, profileString);
+        String loadId = element.infoStrings.get(ProfileManager.QUERY_ID);
+        // check when push in, which can ensure every element in the list has QUERY_ID column,
+        // so there is no need to check when remove element from list.
+        if (Strings.isNullOrEmpty(loadId)) {
+            LOG.warn("the key or value of Map is null, "
+                    + "may be forget to insert 'QUERY_ID' column into infoStrings");
+        }
+
+        writeLock.lock();
+        try {
+            loadProfileMap.put(loadId, element);
+            if (loadProfileMap.size() >= Config.load_profile_info_reserved_num) {
+                loadProfileMap.remove(loadProfileMap.keySet().iterator().next());
+            }
+        } finally {
+            writeLock.unlock();
+        }
+    }
+
     public List<List<String>> getAllQueries() {
-        List<List<String>> result = Lists.newArrayList();
+        List<List<String>> result = Lists.newLinkedList();
         readLock.lock();
         try {
-            Iterator reverse = profileDeque.descendingIterator();
-            while (reverse.hasNext()) {
-                ProfileElement element = (ProfileElement) reverse.next();
+            for (ProfileElement element : profileMap.values()) {
                 Map<String, String> infoStrings = element.infoStrings;
-
                 List<String> row = Lists.newArrayList();
                 for (String str : PROFILE_HEADERS) {
                     row.add(infoStrings.get(str));
                 }
-                result.add(row);
+                result.add(0, row);
             }
         } finally {
             readLock.unlock();
@@ -190,11 +226,11 @@ public class ProfileManager {
         return result;
     }
 
-    public String getProfile(String queryID) {
+    public String getProfile(String queryId) {
         ProfileElement element = new ProfileElement();
         readLock.lock();
         try {
-            element = profileMap.get(queryID);
+            element = profileMap.get(queryId) == null ? loadProfileMap.get(queryId) : profileMap.get(queryId);
             if (element == null) {
                 return null;
             }
@@ -204,6 +240,44 @@ public class ProfileManager {
             LOG.warn("Decompress profile content failed, length: {}, reason: {}",
                     element.profileContent.length, e.getMessage());
             return null;
+        } finally {
+            readLock.unlock();
+        }
+    }
+
+    public ProfileElement getProfileElement(String queryId) {
+        readLock.lock();
+        try {
+            return profileMap.get(queryId);
+        } finally {
+            readLock.unlock();
+        }
+    }
+
+    public List<ProfileElement> getAllProfileElements() {
+        List<ProfileElement> result = Lists.newArrayList();
+        readLock.lock();
+        try {
+            result.addAll(profileMap.values());
+        } finally {
+            readLock.unlock();
+        }
+        return result;
+    }
+
+    public long getQueryProfileCount() {
+        readLock.lock();
+        try {
+            return profileMap.size();
+        } finally {
+            readLock.unlock();
+        }
+    }
+
+    public long getLoadProfileCount() {
+        readLock.lock();
+        try {
+            return loadProfileMap.size();
         } finally {
             readLock.unlock();
         }

@@ -22,8 +22,8 @@
 #include "gutil/casts.h"
 
 namespace starrocks {
-template <LogicalType PT, typename = guard::Guard>
-inline constexpr LogicalType GroupConcatResultPT = TYPE_VARCHAR;
+template <LogicalType LT, typename = guard::Guard>
+inline constexpr LogicalType GroupConcatResultLT = TYPE_VARCHAR;
 
 struct GroupConcatAggregateState {
     // intermediate_string.
@@ -33,13 +33,13 @@ struct GroupConcatAggregateState {
     bool initial{};
 };
 
-template <LogicalType PT, typename T = RunTimeCppType<PT>, LogicalType ResultPT = GroupConcatResultPT<PT>,
-          typename TResult = RunTimeCppType<ResultPT>>
+template <LogicalType LT, typename T = RunTimeCppType<LT>, LogicalType ResultLT = GroupConcatResultLT<LT>,
+          typename TResult = RunTimeCppType<ResultLT>>
 class GroupConcatAggregateFunction
         : public AggregateFunctionBatchHelper<GroupConcatAggregateState,
-                                              GroupConcatAggregateFunction<PT, T, ResultPT, TResult>> {
+                                              GroupConcatAggregateFunction<LT, T, ResultLT, TResult>> {
 public:
-    using InputColumnType = RunTimeColumnType<ResultPT>;
+    using InputColumnType = RunTimeColumnType<ResultLT>;
     using ResultColumnType = InputColumnType;
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
@@ -52,8 +52,8 @@ public:
         DCHECK(columns[0]->is_binary());
         if (ctx->get_num_args() > 1) {
             if (!ctx->is_notnull_constant_column(1)) {
-                const InputColumnType* column_val = down_cast<const InputColumnType*>(columns[0]);
-                const InputColumnType* column_sep = down_cast<const InputColumnType*>(columns[1]);
+                const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
+                const auto* column_sep = down_cast<const InputColumnType*>(columns[1]);
 
                 std::string& result = this->data(state).intermediate_string;
 
@@ -72,7 +72,7 @@ public:
                 }
             } else {
                 auto const_column_sep = ctx->get_constant_column(1);
-                const InputColumnType* column_val = down_cast<const InputColumnType*>(columns[0]);
+                const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
                 std::string& result = this->data(state).intermediate_string;
 
                 Slice val = column_val->get_slice(row_num);
@@ -91,7 +91,7 @@ public:
                 }
             }
         } else {
-            const InputColumnType* column_val = down_cast<const InputColumnType*>(columns[0]);
+            const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
             std::string& result = this->data(state).intermediate_string;
 
             Slice val = column_val->get_slice(row_num);
@@ -113,9 +113,9 @@ public:
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
         if (ctx->get_num_args() > 1) {
-            const InputColumnType* column_val = down_cast<const InputColumnType*>(columns[0]);
+            const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
             if (!ctx->is_notnull_constant_column(1)) {
-                const InputColumnType* column_sep = down_cast<const InputColumnType*>(columns[1]);
+                const auto* column_sep = down_cast<const InputColumnType*>(columns[1]);
                 this->data(state).intermediate_string.reserve(column_val->get_bytes().size() +
                                                               column_sep->get_bytes().size());
             } else {
@@ -125,7 +125,7 @@ public:
                                                               sep.get_size() * chunk_size);
             }
         } else {
-            const InputColumnType* column_val = down_cast<const InputColumnType*>(columns[0]);
+            const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
             this->data(state).intermediate_string.reserve(column_val->get_bytes().size() + 2 * chunk_size);
         }
 
@@ -274,6 +274,9 @@ public:
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         const std::string& value = this->data(state).intermediate_string;
+        if (value.empty()) {
+            return;
+        }
         // Remove first sep_length.
         const char* data = value.data();
         uint32_t size = value.size();

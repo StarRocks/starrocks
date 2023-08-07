@@ -21,15 +21,20 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
+import org.apache.commons.collections.MapUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Map;
 
 public class TaskRunStatus implements Writable {
 
     @SerializedName("queryId")
     private String queryId;
+
+    @SerializedName("taskId")
+    private long taskId;
 
     @SerializedName("taskName")
     private String taskName;
@@ -52,6 +57,9 @@ public class TaskRunStatus implements Writable {
     @SerializedName("definition")
     private String definition;
 
+    @SerializedName("postRun")
+    private String postRun;
+
     @SerializedName("user")
     private String user;
 
@@ -71,12 +79,32 @@ public class TaskRunStatus implements Writable {
     @SerializedName("mergeRedundant")
     private boolean mergeRedundant = false;
 
+    @SerializedName("source")
+    private Constants.TaskSource source = Constants.TaskSource.CTAS;
+
+    @SerializedName("mvExtraMessage")
+    private MVTaskRunExtraMessage mvTaskRunExtraMessage = new MVTaskRunExtraMessage();
+
+    @SerializedName("properties")
+    private Map<String, String> properties;
+
+    public TaskRunStatus() {
+    }
+
     public String getQueryId() {
         return queryId;
     }
 
     public void setQueryId(String queryId) {
         this.queryId = queryId;
+    }
+
+    public long getTaskId() {
+        return taskId;
+    }
+
+    public void setTaskId(long taskId) {
+        this.taskId = taskId;
     }
 
     public String getTaskName() {
@@ -144,6 +172,14 @@ public class TaskRunStatus implements Writable {
         this.definition = definition;
     }
 
+    public String getPostRun() {
+        return postRun;
+    }
+
+    public void setPostRun(String postRun) {
+        this.postRun = postRun;
+    }
+
     public int getErrorCode() {
         return errorCode;
     }
@@ -184,6 +220,57 @@ public class TaskRunStatus implements Writable {
         this.mergeRedundant = mergeRedundant;
     }
 
+    public Constants.TaskSource getSource() {
+        return source;
+    }
+
+    public void setSource(Constants.TaskSource source) {
+        this.source = source;
+    }
+
+    public MVTaskRunExtraMessage getMvTaskRunExtraMessage() {
+        return mvTaskRunExtraMessage;
+    }
+
+    public void setMvTaskRunExtraMessage(MVTaskRunExtraMessage mvTaskRunExtraMessage) {
+        this.mvTaskRunExtraMessage = mvTaskRunExtraMessage;
+    }
+
+    public String getExtraMessage() {
+        if (source == Constants.TaskSource.MV) {
+            return GsonUtils.GSON.toJson(mvTaskRunExtraMessage);
+        } else {
+            return "";
+        }
+    }
+    public void setExtraMessage(String extraMessage) {
+        if (extraMessage == null) {
+            return;
+        }
+
+        if (source == Constants.TaskSource.MV) {
+            this.mvTaskRunExtraMessage =
+                    GsonUtils.GSON.fromJson(extraMessage, MVTaskRunExtraMessage.class);
+        } else {
+            // do nothing
+        }
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+    public String getPropertiesJson() {
+        if (MapUtils.isEmpty(properties)) {
+            return null;
+        }
+        return GsonUtils.GSON.toJson(properties);
+    }
+
+    public void setProperties(Map<String, String> properties) {
+        this.properties = properties;
+    }
+
     public static TaskRunStatus read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, TaskRunStatus.class);
@@ -206,12 +293,14 @@ public class TaskRunStatus implements Writable {
                 ", progress=" + progress + "%" +
                 ", dbName='" + getDbName() + '\'' +
                 ", definition='" + definition + '\'' +
+                ", postRun='" + postRun + '\'' +
                 ", user='" + user + '\'' +
                 ", errorCode=" + errorCode +
                 ", errorMessage='" + errorMessage + '\'' +
                 ", expireTime=" + expireTime +
                 ", priority=" + priority +
                 ", mergeRedundant=" + mergeRedundant +
+                ", extraMessage=" + getExtraMessage() +
                 '}';
     }
 }

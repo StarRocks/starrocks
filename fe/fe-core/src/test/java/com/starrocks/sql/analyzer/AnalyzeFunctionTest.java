@@ -126,7 +126,7 @@ public class AnalyzeFunctionTest {
                 "time_slice requires second parameter must be greater than 0");
 
         analyzeFail("select time_slice(th, interval 1 second, FCEILK) from tall",
-                "time_slice must use FLOOR/CEIL as third parameter");
+                "Incorrect type/value of arguments in expr 'time_slice'");
 
         analyzeFail("select time_slice('2023-12-31 03:12:04',interval -3.2 day)",
                 "time_slice requires second parameter must be a constant interval");
@@ -238,6 +238,7 @@ public class AnalyzeFunctionTest {
 
         analyzeSuccess("select password('root')");
 
+        analyzeSuccess("select ilike(ta, ta) from tall");
         analyzeSuccess("select like(ta, ta) from tall");
         analyzeSuccess("select regexp(ta, ta) from tall");
         analyzeSuccess("select rlike(ta, ta) from tall");
@@ -254,7 +255,8 @@ public class AnalyzeFunctionTest {
         analyzeSuccess("SELECT {fn ucase(`ta`)} FROM tall");
         analyzeSuccess("SELECT {fn UCASE(ucase(`ta`))} FROM tall");
         analyzeSuccess("select { fn extract(year from th)} from tall");
-        analyzeFail("select {fn date_format(th, \"%Y\")} from tall", "invalid odbc scalar function");
+        analyzeFail("select {fn date_format(th, \"%Y\")} from tall",
+                "Invalid odbc scalar function 'date_format(th, '%Y')'");
     }
 
     @Test
@@ -283,5 +285,14 @@ public class AnalyzeFunctionTest {
                 "DROP FUNCTION f(int, ...)", getConnectContext());
         UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
                 "DROP FUNCTION db.f(int, char(2))", getConnectContext());
+    }
+
+    @Test
+    public void testStatistics() throws Exception {
+        analyzeFail("select corr(v1,3) from t0");
+        analyzeFail("select covar_samp(v1,3) from t0");
+        analyzeFail("select covar_samp(3,v1) from t0");
+        analyzeFail("select covar_pop(v1,3) from t0");
+        analyzeFail("select corr(v1) from t0");
     }
 }

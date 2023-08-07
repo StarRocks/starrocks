@@ -15,7 +15,6 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableMap;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -201,10 +200,11 @@ public class PredicateStatisticsCalculator {
             selectivity =
                     Math.max(selectivity, StatisticsEstimateCoefficient.IS_NULL_PREDICATE_DEFAULT_FILTER_COEFFICIENT);
             double rowCount = statistics.getOutputRowCount() * selectivity;
-            return StatisticsEstimateUtils.adjustStatisticsByRowCount(Statistics.buildFrom(statistics).
-                    setOutputRowCount(rowCount).addColumnStatistics(
-                            ImmutableMap.of(children.get(0), ColumnStatistic.buildFrom(isNullColumnStatistic).
-                                    setNullsFraction(predicate.isNotNull() ? 0.0 : 1.0).build())).build(), rowCount);
+            Statistics.Builder builder = Statistics.buildFrom(statistics).setOutputRowCount(rowCount);
+            builder.addColumnStatistic(children.get(0), ColumnStatistic.buildFrom(isNullColumnStatistic)
+                    .setNullsFraction(predicate.isNotNull() ? 0.0 : 1.0)
+                    .build());
+            return StatisticsEstimateUtils.adjustStatisticsByRowCount(builder.build(), rowCount);
         }
 
         @Override
@@ -212,14 +212,13 @@ public class PredicateStatisticsCalculator {
             if (!checkNeedEvalEstimate(predicate)) {
                 return statistics;
             }
-            Preconditions.checkState(predicate.getChildren().size() == 2);
             ScalarOperator leftChild = predicate.getChild(0);
             ScalarOperator rightChild = predicate.getChild(1);
             Preconditions.checkState(!(leftChild.isConstantRef() && rightChild.isConstantRef()),
-                    "ConstantRef-cmp-ConstantRef not supported here, should be eliminated earlier: " +
-                            predicate.toString());
+                    "ConstantRef-cmp-ConstantRef not supported here, %s should be eliminated earlier",
+                    predicate);
             Preconditions.checkState(!(leftChild.isConstant() && rightChild.isVariable()),
-                    "Constant-cmp-Column not supported here, should be deal earlier: " + predicate.toString());
+                    "Constant-cmp-Column not supported here, %s should be deal earlier", predicate);
             // For CastOperator, we need use child as column statistics
             leftChild = getChildForCastOperator(leftChild);
             rightChild = getChildForCastOperator(rightChild);
@@ -279,15 +278,12 @@ public class PredicateStatisticsCalculator {
             }
 
             if (predicate.isAnd()) {
-                Preconditions.checkState(predicate.getChildren().size() == 2);
                 Statistics leftStatistics = predicate.getChild(0).accept(this, null);
                 Statistics andStatistics =
                         predicate.getChild(1).accept(new BaseCalculatingVisitor(leftStatistics), null);
                 return StatisticsEstimateUtils.adjustStatisticsByRowCount(andStatistics,
                         andStatistics.getOutputRowCount());
             } else if (predicate.isOr()) {
-                Preconditions.checkState(predicate.getChildren().size() == 2);
-
                 List<ScalarOperator> disjunctive = Utils.extractDisjunctive(predicate);
                 Statistics cumulativeStatistics = disjunctive.get(0).accept(this, null);
                 double rowCount = cumulativeStatistics.getOutputRowCount();
@@ -305,7 +301,6 @@ public class PredicateStatisticsCalculator {
 
                 return StatisticsEstimateUtils.adjustStatisticsByRowCount(cumulativeStatistics, rowCount);
             } else {
-                Preconditions.checkState(predicate.getChildren().size() == 1);
                 Statistics inputStatistics = predicate.getChild(0).accept(this, null);
                 double rowCount = Math.max(0, statistics.getOutputRowCount() - inputStatistics.getOutputRowCount());
                 return StatisticsEstimateUtils.adjustStatisticsByRowCount(
@@ -339,7 +334,6 @@ public class PredicateStatisticsCalculator {
 
         private ScalarOperator getChildForCastOperator(ScalarOperator operator) {
             if (operator instanceof CastOperator) {
-                Preconditions.checkState(operator.getChildren().size() == 1);
                 operator = getChildForCastOperator(operator.getChild(0));
             }
             return operator;
@@ -362,15 +356,12 @@ public class PredicateStatisticsCalculator {
             }
 
             if (predicate.isAnd()) {
-                Preconditions.checkState(predicate.getChildren().size() == 2);
                 Statistics leftStatistics = predicate.getChild(0).accept(this, null);
                 Statistics andStatistics = predicate.getChild(1)
                         .accept(new LargeOrCalculatingVisitor(leftStatistics), null);
                 return StatisticsEstimateUtils.adjustStatisticsByRowCount(andStatistics,
                         andStatistics.getOutputRowCount());
             } else if (predicate.isOr()) {
-                Preconditions.checkState(predicate.getChildren().size() == 2);
-
                 List<ScalarOperator> disjunctive = Utils.extractDisjunctive(predicate);
                 Statistics baseStatistics = disjunctive.get(0).accept(this, null);
                 double rowCount = baseStatistics.getOutputRowCount();
@@ -386,7 +377,6 @@ public class PredicateStatisticsCalculator {
 
                 return StatisticsEstimateUtils.adjustStatisticsByRowCount(baseStatistics, rowCount);
             } else {
-                Preconditions.checkState(predicate.getChildren().size() == 1);
                 Statistics inputStatistics = predicate.getChild(0).accept(this, null);
                 double rowCount = Math.max(0, statistics.getOutputRowCount() - inputStatistics.getOutputRowCount());
                 return StatisticsEstimateUtils.adjustStatisticsByRowCount(

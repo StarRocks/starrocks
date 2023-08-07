@@ -89,6 +89,7 @@ public class FileSystemManager {
     private static final String COS_SCHEME = "cosn";
     private static final String KS3_SCHEME = "ks3";
     private static final String OBS_SCHEME = "obs";
+    private static final String TOS_SCHEME = "tos";
 
     private static final String USER_NAME_KEY = "username";
     private static final String PASSWORD_KEY = "password";
@@ -153,6 +154,16 @@ public class FileSystemManager {
     // This property is used like 'fs.hdfs.impl.disable.cache'
     private static final String FS_OBS_IMPL_DISABLE_CACHE = "fs.obs.impl.disable.cache";
     private static final String FS_OBS_IMPL = "fs.obs.impl";
+
+    // arguments for tos
+    private static final String FS_TOS_ACCESS_KEY = "fs.tos.access.key";
+    private static final String FS_TOS_SECRET_KEY = "fs.tos.secret.key";
+    private static final String FS_TOS_ENDPOINT = "fs.tos.endpoint";
+    private static final String FS_TOS_REGION = "fs.tos.region";
+    // This property is used like 'fs.hdfs.impl.disable.cache'
+    private static final String FS_TOS_IMPL_DISABLE_CACHE = "fs.tos.impl.disable.cache";
+    private static final String FS_TOS_CONNECTION_SSL_ENABLED = "fs.tos.connection.ssl.enabled";
+    private static final String FS_TOS_IMPL = "fs.tos.impl";
 
     private ScheduledExecutorService handleManagementPool = Executors.newScheduledThreadPool(2);
 
@@ -220,9 +231,13 @@ public class FileSystemManager {
             brokerFileSystem = getKS3FileSystem(path, properties);
         } else if (scheme.equals(OBS_SCHEME)) {
             brokerFileSystem = getOBSFileSystem(path, properties);
+        } else if (scheme.equals(TOS_SCHEME)) {
+            brokerFileSystem = getTOSFileSystem(path, properties);
         } else {
-            throw new BrokerException(TBrokerOperationStatusCode.INVALID_INPUT_FILE_PATH,
-                    "invalid path. scheme is not supported");
+            // If all above match fails, then we will read the settings from hdfs-site.xml, core-site.xml of FE,
+            // and try to create a universal file system. The reason why we can do this is because hadoop/s3 
+            // SDK is compatible with nearly all file/object storage system
+            brokerFileSystem = getUniversalFileSystem(path, properties);
         }
         return brokerFileSystem;
     }
@@ -375,48 +390,52 @@ public class FileSystemManager {
                     }
                 }
                 if (!Strings.isNullOrEmpty(dfsNameServices)) {
-                    // ha hdfs arguments
-                    final String dfsHaNameNodesKey = DFS_HA_NAMENODES_PREFIX + dfsNameServices;
-                    if (!properties.containsKey(dfsHaNameNodesKey)) {
-                        throw new BrokerException(TBrokerOperationStatusCode.INVALID_ARGUMENT,
-                                "load request missed necessary arguments for ha mode");
-                    }
-                    String dfsHaNameNodes = properties.get(dfsHaNameNodesKey);
                     conf.set(DFS_NAMESERVICES_KEY, dfsNameServices);
-                    conf.set(dfsHaNameNodesKey, dfsHaNameNodes);
-                    String[] nameNodes = dfsHaNameNodes.split(",");
-                    if (nameNodes == null) {
-                        throw new BrokerException(TBrokerOperationStatusCode.INVALID_ARGUMENT,
-                                "invalid " + dfsHaNameNodesKey + " configuration");
-                    } else {
-                        for (String nameNode : nameNodes) {
-                            nameNode = nameNode.trim();
-                            String nameNodeRpcAddress =
-                                    DFS_HA_NAMENODE_RPC_ADDRESS_PREFIX + dfsNameServices + "." + nameNode;
-                            if (!properties.containsKey(nameNodeRpcAddress)) {
-                                throw new BrokerException(TBrokerOperationStatusCode.INVALID_ARGUMENT,
-                                        "missed " + nameNodeRpcAddress + " configuration");
-                            } else {
-                                conf.set(nameNodeRpcAddress, properties.get(nameNodeRpcAddress));
+                    logger.info("dfs.name.services:" + dfsNameServices);
+                    String[] dfsNameServiceArray = dfsNameServices.split("\\s*,\\s*");
+                    for (String dfsNameService : dfsNameServiceArray) {
+                        // ha hdfs arguments
+                        dfsNameService = dfsNameService.trim();
+                        final String dfsHaNameNodesKey = DFS_HA_NAMENODES_PREFIX + dfsNameService;
+                        if (!properties.containsKey(dfsHaNameNodesKey)) {
+                            throw new BrokerException(TBrokerOperationStatusCode.INVALID_ARGUMENT,
+                                    "load request missed necessary arguments for ha mode");
+                        }
+                        String dfsHaNameNodes = properties.get(dfsHaNameNodesKey);
+                        conf.set(dfsHaNameNodesKey, dfsHaNameNodes);
+                        String[] nameNodes = dfsHaNameNodes.split(",");
+                        if (nameNodes == null) {
+                            throw new BrokerException(TBrokerOperationStatusCode.INVALID_ARGUMENT,
+                                    "invalid " + dfsHaNameNodesKey + " configuration");
+                        } else {
+                            for (String nameNode : nameNodes) {
+                                nameNode = nameNode.trim();
+                                String nameNodeRpcAddress =
+                                        DFS_HA_NAMENODE_RPC_ADDRESS_PREFIX + dfsNameService + "." + nameNode;
+                                if (!properties.containsKey(nameNodeRpcAddress)) {
+                                    throw new BrokerException(TBrokerOperationStatusCode.INVALID_ARGUMENT,
+                                            "missed " + nameNodeRpcAddress + " configuration");
+                                } else {
+                                    conf.set(nameNodeRpcAddress, properties.get(nameNodeRpcAddress));
+                                }
                             }
                         }
-                    }
-
-                    final String dfsClientFailoverProxyProviderKey =
-                            DFS_CLIENT_FAILOVER_PROXY_PROVIDER_PREFIX + dfsNameServices;
-                    if (properties.containsKey(dfsClientFailoverProxyProviderKey)) {
-                        conf.set(dfsClientFailoverProxyProviderKey,
-                                properties.get(dfsClientFailoverProxyProviderKey));
-                    } else {
-                        conf.set(dfsClientFailoverProxyProviderKey,
-                                DEFAULT_DFS_CLIENT_FAILOVER_PROXY_PROVIDER);
-                    }
-                    if (properties.containsKey(FS_DEFAULTFS_KEY)) {
-                        conf.set(FS_DEFAULTFS_KEY, properties.get(FS_DEFAULTFS_KEY));
-                    }
-                    if (properties.containsKey(DFS_HA_NAMENODE_KERBEROS_PRINCIPAL_PATTERN)) {
-                        conf.set(DFS_HA_NAMENODE_KERBEROS_PRINCIPAL_PATTERN,
-                                properties.get(DFS_HA_NAMENODE_KERBEROS_PRINCIPAL_PATTERN));
+                        final String dfsClientFailoverProxyProviderKey =
+                                DFS_CLIENT_FAILOVER_PROXY_PROVIDER_PREFIX + dfsNameService;
+                        if (properties.containsKey(dfsClientFailoverProxyProviderKey)) {
+                            conf.set(dfsClientFailoverProxyProviderKey,
+                                    properties.get(dfsClientFailoverProxyProviderKey));
+                        } else {
+                            conf.set(dfsClientFailoverProxyProviderKey,
+                                    DEFAULT_DFS_CLIENT_FAILOVER_PROXY_PROVIDER);
+                        }
+                        if (properties.containsKey(FS_DEFAULTFS_KEY)) {
+                            conf.set(FS_DEFAULTFS_KEY, properties.get(FS_DEFAULTFS_KEY));
+                        }
+                        if (properties.containsKey(DFS_HA_NAMENODE_KERBEROS_PRINCIPAL_PATTERN)) {
+                            conf.set(DFS_HA_NAMENODE_KERBEROS_PRINCIPAL_PATTERN,
+                                    properties.get(DFS_HA_NAMENODE_KERBEROS_PRINCIPAL_PATTERN));
+                        }
                     }
                 }
 
@@ -640,6 +659,67 @@ public class FileSystemManager {
      * @throws URISyntaxException
      * @throws Exception
      */
+    public BrokerFileSystem getUniversalFileSystem(String path, Map<String, String> properties) {
+        String disableCacheHDFS = properties.getOrDefault(FS_HDFS_IMPL_DISABLE_CACHE, "true");
+        String disableCacheS3 = properties.getOrDefault(FS_HDFS_IMPL_DISABLE_CACHE, "true");
+
+        // skip xxx:// first
+        int bucketEndIndex = path.indexOf("://", 0);
+
+        // find the end of bucket, for example for xxx://abc/def, we will take xxx://abc as host
+        if (bucketEndIndex != -1) {
+            bucketEndIndex = path.indexOf("/", bucketEndIndex + 3);
+        }
+        String host = path;
+        if (bucketEndIndex != -1) {
+            host = path.substring(0, bucketEndIndex);
+        }
+
+        FileSystemIdentity fileSystemIdentity = new FileSystemIdentity(host, "");
+        cachedFileSystem.putIfAbsent(fileSystemIdentity, new BrokerFileSystem(fileSystemIdentity));
+        BrokerFileSystem fileSystem = cachedFileSystem.get(fileSystemIdentity);
+
+        if (fileSystem == null) {
+            // it means it is removed concurrently by checker thread
+            return null;
+        }
+        fileSystem.getLock().lock();
+        try {
+            if (!cachedFileSystem.containsKey(fileSystemIdentity)) {
+                // this means the file system is closed by file system checker thread
+                // it is a corner case
+                return null;
+            }
+
+            if (fileSystem.getDFSFileSystem() == null) {
+                logger.info("could not find file system for path " + path + " create a new one");
+                // create a new filesystem
+                Configuration conf = new Configuration();
+                conf.set(FS_S3A_IMPL_DISABLE_CACHE, disableCacheHDFS);
+                conf.set(FS_S3A_IMPL_DISABLE_CACHE, disableCacheS3);
+                FileSystem genericFileSystem = FileSystem.get(new Path(path).toUri(), conf);
+                fileSystem.setFileSystem(genericFileSystem);
+            }
+            return fileSystem;
+        } catch (Exception e) {
+            logger.error("errors while connect to " + path, e);
+            throw new BrokerException(TBrokerOperationStatusCode.NOT_AUTHORIZED, e);
+        } finally {
+            fileSystem.getLock().unlock();
+        }
+    }
+
+    /**
+     * visible for test
+     * <p>
+     * file system handle is cached, the identity is endpoint + bucket + accessKey_secretKey
+     *
+     * @param path
+     * @param properties
+     * @return
+     * @throws URISyntaxException
+     * @throws Exception
+     */
     public BrokerFileSystem getOSSFileSystem(String path, Map<String, String> properties) {
         WildcardURI pathUri = new WildcardURI(path);
         String accessKey = properties.getOrDefault(FS_OSS_ACCESS_KEY, "");
@@ -669,9 +749,15 @@ public class FileSystemManager {
                 logger.info("could not find file system for path " + path + " create a new one");
                 // create a new filesystem
                 Configuration conf = new Configuration();
-                conf.set(FS_OSS_ACCESS_KEY, accessKey);
-                conf.set(FS_OSS_SECRET_KEY, secretKey);
-                conf.set(FS_OSS_ENDPOINT, endpoint);
+                if (!accessKey.isEmpty()) {
+                    conf.set(FS_OSS_ACCESS_KEY, accessKey);
+                }
+                if (!secretKey.isEmpty()) {
+                    conf.set(FS_OSS_SECRET_KEY, secretKey);
+                }
+                if (!endpoint.isEmpty()) {
+                    conf.set(FS_OSS_ENDPOINT, endpoint);
+                }
                 conf.set(FS_OSS_IMPL, "org.apache.hadoop.fs.aliyun.oss.AliyunOSSFileSystem");
                 conf.set(FS_OSS_IMPL_DISABLE_CACHE, disableCache);
                 FileSystem ossFileSystem = FileSystem.get(pathUri.getUri(), conf);
@@ -736,6 +822,54 @@ public class FileSystemManager {
         }
     }
 
+    public BrokerFileSystem getTOSFileSystem(String path, Map<String, String> properties) {
+        WildcardURI pathUri = new WildcardURI(path);
+        String accessKey = properties.getOrDefault(FS_TOS_ACCESS_KEY, "");
+        String secretKey = properties.getOrDefault(FS_TOS_SECRET_KEY, "");
+        String endpoint = properties.getOrDefault(FS_TOS_ENDPOINT, "");
+        String disableCache = properties.getOrDefault(FS_TOS_IMPL_DISABLE_CACHE, "true");
+        String region = properties.getOrDefault(FS_TOS_REGION, "");
+        // endpoint is the server host, pathUri.getUri().getHost() is the bucket
+        // we should use these two params as the host identity, because FileSystem will cache both.
+        String host = TOS_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
+        String tosUgi = accessKey + "," + secretKey;
+        FileSystemIdentity fileSystemIdentity = new FileSystemIdentity(host, tosUgi);
+        BrokerFileSystem fileSystem = null;
+        cachedFileSystem.putIfAbsent(fileSystemIdentity, new BrokerFileSystem(fileSystemIdentity));
+        fileSystem = cachedFileSystem.get(fileSystemIdentity);
+        if (fileSystem == null) {
+            // it means it is removed concurrently by checker thread
+            return null;
+        }
+        fileSystem.getLock().lock();
+        try {
+            if (!cachedFileSystem.containsKey(fileSystemIdentity)) {
+                // this means the file system is closed by file system checker thread
+                // it is a corner case
+                return null;
+            }
+            if (fileSystem.getDFSFileSystem() == null) {
+                logger.info("could not find file system for path " + path + " create a new one");
+                // create a new filesystem
+                Configuration conf = new Configuration();
+                conf.set(FS_TOS_ACCESS_KEY, accessKey);
+                conf.set(FS_TOS_SECRET_KEY, secretKey);
+                conf.set(FS_TOS_ENDPOINT, endpoint);
+                conf.set(FS_TOS_REGION, region);
+                conf.set(FS_TOS_IMPL, "com.volcengine.cloudfs.fs.TosFileSystem");
+                conf.set(FS_TOS_IMPL_DISABLE_CACHE, disableCache);
+                FileSystem tosFileSystem = FileSystem.get(pathUri.getUri(), conf);
+                fileSystem.setFileSystem(tosFileSystem);
+            }
+            return fileSystem;
+        } catch (Exception e) {
+            logger.error("errors while connect to " + path, e);
+            throw new BrokerException(TBrokerOperationStatusCode.NOT_AUTHORIZED, e);
+        } finally {
+            fileSystem.getLock().unlock();
+        }
+    }
+
     public List<TBrokerFileStatus> listPath(String path, boolean fileNameOnly, Map<String, String> properties) {
         List<TBrokerFileStatus> resultFileStatus = null;
         WildcardURI pathUri = new WildcardURI(path);
@@ -771,6 +905,13 @@ public class FileSystemManager {
             logger.info("file not found: " + e.getMessage());
             throw new BrokerException(TBrokerOperationStatusCode.FILE_NOT_FOUND,
                     e, "file not found");
+        } catch (IllegalArgumentException e) {
+            logger.error("The arguments of blob store(S3/Azure) may be wrong. You can check " +
+                      "the arguments like region, IAM, instance profile and so on.");
+            throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
+                e, "The arguments of blob store(S3/Azure) may be wrong. " +
+                   "You can check the arguments like region, IAM, " +
+                   "instance profile and so on.");
         } catch (Exception e) {
             logger.error("errors while get file status ", e);
             throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,

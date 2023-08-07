@@ -18,7 +18,6 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
@@ -27,91 +26,81 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.UserIdentity;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.persist.EditLog;
-import com.starrocks.persist.GlobalVarPersistInfo;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetNamesVar;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
-import com.starrocks.sql.ast.SetVar;
+import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
-import mockit.Mocked;
 import org.junit.Assert;
-import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
+import org.junit.runners.MethodSorters;
 
 import java.util.List;
 
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class SetExecutorTest {
-    private ConnectContext ctx;
+    private static StarRocksAssert starRocksAssert;
+    private static UserIdentity testUser;
 
-    @Mocked
-    private Auth auth;
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
+        String createUserSql = "CREATE USER 'testUser' IDENTIFIED BY ''";
+        CreateUserStmt createUserStmt =
+                (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
 
-    @Before
-    public void setUp() throws DdlException {
-        ctx = new ConnectContext(null);
-        ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
-        ctx.setQualifiedUser("root");
-        ctx.setRemoteIP("192.168.1.1");
-        UserIdentity currentUser = new UserIdentity("root", "192.168.1.1");
-        currentUser.setIsAnalyzed();
-        ctx.setCurrentUserIdentity(currentUser);
-        ctx.setThreadLocalInfo();
+        AuthenticationMgr authenticationManager =
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationMgr();
+        authenticationManager.createUser(createUserStmt);
+        testUser = createUserStmt.getUserIdentity();
+    }
 
-        new Expectations() {
-            {
-                auth.checkGlobalPriv((ConnectContext) any, (PrivPredicate) any);
-                minTimes = 0;
-                result = true;
+    private static void ctxToTestUser() {
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setQualifiedUser(testUser.getQualifiedUser());
+    }
 
-                auth.checkDbPriv((ConnectContext) any, anyString, (PrivPredicate) any);
-                minTimes = 0;
-                result = true;
-
-                auth.checkTblPriv((ConnectContext) any, anyString, anyString, (PrivPredicate) any);
-                minTimes = 0;
-                result = true;
-
-                auth.setPassword((SetPassVar) any);
-                minTimes = 0;
-            }
-        };
+    private static void ctxToRoot() {
+        starRocksAssert.getCtx().setCurrentUserIdentity(UserIdentity.ROOT);
+        starRocksAssert.getCtx().setQualifiedUser(UserIdentity.ROOT.getQualifiedUser());
     }
 
     @Test
     public void testNormal() throws UserException {
-        List<SetVar> vars = Lists.newArrayList();
-        vars.add(new SetPassVar(new UserIdentity("testUser", "%"), "*88EEBA7D913688E7278E2AD071FDB5E76D76D34B"));
+        List<SetListItem> vars = Lists.newArrayList();
+        vars.add(new SetPassVar(new UserIdentity("testUser", "%"),
+                "*88EEBA7D913688E7278E2AD071FDB5E76D76D34B"));
         vars.add(new SetNamesVar("utf8"));
-        vars.add(new SetVar("query_timeout", new IntLiteral(10L)));
+        vars.add(new SystemVariable("query_timeout", new IntLiteral(10L)));
 
         SetStmt stmt = new SetStmt(vars);
-        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        SetExecutor executor = new SetExecutor(ctx, stmt);
+        ctxToTestUser();
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, starRocksAssert.getCtx());
+        SetExecutor executor = new SetExecutor(starRocksAssert.getCtx(), stmt);
 
         executor.execute();
     }
 
     @Test
-    public void testSetSessionAndGlobal(@Mocked EditLog editLog) throws Exception {
-        new Expectations(editLog) {
-            {
-                editLog.logGlobalVariableV2((GlobalVarPersistInfo) any);
-                minTimes = 1;
-            }
-        };
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
+    public void test1SetSessionAndGlobal() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant operate on system to testUser", ctx), ctx);
+        ctxToTestUser();
 
         String globalSQL = "set global query_timeout = 10";
         SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(globalSQL, ctx);
@@ -124,18 +113,19 @@ public class SetExecutorTest {
         stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sessionSQL, ctx);
         executor = new SetExecutor(ctx, stmt);
         executor.execute();
-        Assert.assertEquals(1, ctx.getModifiedSessionVariables().getSetVars().size());
+        Assert.assertEquals(1, ctx.getModifiedSessionVariables().getSetListItems().size());
         Assert.assertEquals(9, ctx.sessionVariable.getQueryTimeoutS());
     }
 
     public void testUserVariableImp(LiteralExpr value, Type type) throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
         String sql = String.format("set @var = cast(%s as %s)", value.toSql(), type.toSql());
         SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         SetExecutor executor = new SetExecutor(ctx, stmt);
         executor.execute();
         UserVariable userVariable = ctx.getUserVariables("var");
-        Assert.assertTrue(userVariable.getResolvedExpression().getType().matchesType(type));
-        Assert.assertEquals(value.getStringValue(), userVariable.getResolvedExpression().getStringValue());
+        Assert.assertTrue(userVariable.getEvaluatedExpression().getType().matchesType(type));
+        Assert.assertEquals(value.getStringValue(), userVariable.getEvaluatedExpression().getStringValue());
         String planFragment = UtFrameUtils.getPlanAndFragment(ctx, "select @var").second.
                 getExplainString(TExplainLevel.NORMAL);
         Assert.assertTrue(planFragment.contains(value.getStringValue()));
@@ -160,21 +150,22 @@ public class SetExecutorTest {
 
     @Test
     public void testUserDefineVariable2() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "set @var = cast(10 as decimal)";
         SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         SetExecutor executor = new SetExecutor(ctx, stmt);
         executor.execute();
         UserVariable userVariable = ctx.getUserVariables("var");
-        Assert.assertTrue(userVariable.getResolvedExpression().getType().isDecimalV3());
-        Assert.assertEquals("10", userVariable.getResolvedExpression().getStringValue());
+        Assert.assertTrue(userVariable.getEvaluatedExpression().getType().isDecimalV3());
+        Assert.assertEquals("10", userVariable.getEvaluatedExpression().getStringValue());
 
         sql = "set @var = cast(1 as boolean)";
         stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         executor = new SetExecutor(ctx, stmt);
         executor.execute();
         userVariable = ctx.getUserVariables("var");
-        Assert.assertTrue(userVariable.getResolvedExpression().getType().isBoolean());
-        BoolLiteral literal = (BoolLiteral) userVariable.getResolvedExpression();
+        Assert.assertTrue(userVariable.getEvaluatedExpression().getType().isBoolean());
+        BoolLiteral literal = (BoolLiteral) userVariable.getEvaluatedExpression();
         Assert.assertTrue(literal.getValue());
 
         sql = "set @var = cast(0 as boolean)";
@@ -182,8 +173,8 @@ public class SetExecutorTest {
         executor = new SetExecutor(ctx, stmt);
         executor.execute();
         userVariable = ctx.getUserVariables("var");
-        Assert.assertTrue(userVariable.getResolvedExpression().getType().isBoolean());
-        literal = (BoolLiteral) userVariable.getResolvedExpression();
+        Assert.assertTrue(userVariable.getEvaluatedExpression().getType().isBoolean());
+        literal = (BoolLiteral) userVariable.getEvaluatedExpression();
         Assert.assertFalse(literal.getValue());
     }
 
@@ -192,6 +183,6 @@ public class SetExecutorTest {
         String json = "'{\"xxx\" : 1}'";
         Type type = Type.JSON;
         String sql = String.format("set @var = cast(%s as %s)", json, type.toSql());
-        UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
     }
 }

@@ -54,7 +54,7 @@ public abstract class LogicalOperator extends Operator {
             outputCandidates.intersect(requiredCandidates);
         }
         return Utils.findSmallestColumnRef(outputCandidates.getStream().
-                mapToObj(columnRefFactory::getColumnRef).collect(Collectors.toList()));
+                map(columnRefFactory::getColumnRef).collect(Collectors.toList()));
     }
 
     // lineage means the merge of operator's column ref map, which is used to track

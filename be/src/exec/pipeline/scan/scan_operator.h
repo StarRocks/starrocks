@@ -29,7 +29,7 @@ namespace pipeline {
 
 class ChunkBufferToken;
 using ChunkBufferTokenPtr = std::unique_ptr<ChunkBufferToken>;
-
+class PipelineDriver;
 class ScanOperator : public SourceOperator {
 public:
     ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop, ScanNode* scan_node);
@@ -56,6 +56,8 @@ public:
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
+    void update_metrics(RuntimeState* state) override { _merge_chunk_source_profiles(state); }
+
     void set_scan_executor(workgroup::ScanExecutor* scan_executor) { _scan_executor = scan_executor; }
 
     void set_workgroup(workgroup::WorkGroupPtr wg) { _workgroup = std::move(wg); }
@@ -76,6 +78,18 @@ public:
 
     void set_query_ctx(const QueryContextPtr& query_ctx);
 
+    virtual int available_pickup_morsel_count() { return _io_tasks_per_scan_operator; }
+    void begin_pull_chunk(const ChunkPtr& res) {
+        _op_pull_chunks += 1;
+        _op_pull_rows += res->num_rows();
+    }
+    void end_pull_chunk(int64_t time) { _op_running_time_ns += time; }
+    virtual void begin_driver_process() {}
+    virtual void end_driver_process(PipelineDriver* driver) {}
+    virtual bool is_running_all_io_tasks() const;
+
+    virtual int64_t get_scan_table_id() const { return -1; }
+
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
 
@@ -93,16 +107,15 @@ protected:
     virtual bool is_buffer_full() const = 0;
     virtual void set_buffer_finished() = 0;
 
-private:
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
-    Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
+    virtual Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
     Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
     Status _try_to_trigger_next_scan(RuntimeState* state);
-    void _close_chunk_source_unlocked(RuntimeState* state, int index);
+    virtual void _close_chunk_source_unlocked(RuntimeState* state, int index);
     void _close_chunk_source(RuntimeState* state, int index);
-    void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns, int64_t scan_rows,
-                                   int64_t scan_bytes);
+    virtual void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns,
+                                           int64_t scan_rows, int64_t scan_bytes);
     void _detach_chunk_sources();
 
     void _merge_chunk_source_profiles(RuntimeState* state);
@@ -136,25 +149,35 @@ protected:
 
     bool _is_finished = false;
 
-private:
-    int32_t _io_task_retry_cnt = 0;
-    workgroup::ScanExecutor* _scan_executor = nullptr;
     std::atomic<int> _num_running_io_tasks = 0;
-
     mutable std::shared_mutex _task_mutex; // Protects the chunk-source from concurrent close and read
     std::vector<std::atomic<bool>> _is_io_task_running;
     std::vector<ChunkSourcePtr> _chunk_sources;
-    int32_t _chunk_source_idx = -1;
     mutable bool _unpluging = false;
 
+    std::atomic_int64_t _last_scan_rows_num = 0;
+    std::atomic_int64_t _last_scan_bytes = 0;
+
+    // The number of morsels picked up by this scan operator.
+    // A tablet may be divided into multiple morsels.
+    RuntimeProfile::Counter* _morsels_counter = nullptr;
+    RuntimeProfile::Counter* _submit_task_counter = nullptr;
+
+    int64_t _op_pull_chunks = 0;
+    int64_t _op_pull_rows = 0;
+    int64_t _op_running_time_ns = 0;
+
+private:
+    int32_t _io_task_retry_cnt = 0;
+    workgroup::ScanExecutor* _scan_executor = nullptr;
+
+    int32_t _chunk_source_idx = -1;
     mutable SpinLock _scan_status_mutex;
     Status _scan_status;
     // we should hold a weak ptr because query context may be released before running io task
     std::weak_ptr<QueryContext> _query_ctx;
 
     workgroup::WorkGroupPtr _workgroup = nullptr;
-    std::atomic_int64_t _last_scan_rows_num = 0;
-    std::atomic_int64_t _last_scan_bytes = 0;
 
     query_cache::LaneArbiterPtr _lane_arbiter = nullptr;
     query_cache::CacheOperatorPtr _cache_operator = nullptr;
@@ -164,13 +187,10 @@ private:
     RuntimeProfile::Counter* _default_buffer_capacity_counter = nullptr;
     RuntimeProfile::Counter* _buffer_capacity_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _peak_buffer_size_counter = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* _peak_scan_task_queue_size_counter = nullptr;
     // The total number of the original tablets in this fragment instance.
     RuntimeProfile::Counter* _tablets_counter = nullptr;
-    // The number of morsels picked up by this scan operator.
-    // A tablet may be divided into multiple morsels.
-    RuntimeProfile::Counter* _morsels_counter = nullptr;
-    RuntimeProfile::Counter* _buffer_unplug_counter = nullptr;
-    RuntimeProfile::Counter* _submit_task_counter = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* _peak_io_tasks_counter = nullptr;
 };
 
 class ScanOperatorFactory : public SourceOperatorFactory {
@@ -191,8 +211,14 @@ public:
     virtual void do_close(RuntimeState* state) = 0;
     virtual OperatorPtr do_create(int32_t dop, int32_t driver_sequence) = 0;
 
+    SourceOperatorFactory::AdaptiveState adaptive_state() const override { return AdaptiveState::ACTIVE; }
+
+    std::shared_ptr<workgroup::ScanTaskGroup> scan_task_group() const { return _scan_task_group; }
+
 protected:
     ScanNode* const _scan_node;
+
+    std::shared_ptr<workgroup::ScanTaskGroup> _scan_task_group;
 };
 
 pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperatorFactory> factory, ScanNode* scan_node,

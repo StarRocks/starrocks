@@ -15,12 +15,15 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.collect.Sets;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -47,13 +50,13 @@ public class UseCatalogStmtTest {
 
     @Test
     public void testParserAndAnalyzer() {
-        String sql = "USE catalog hive_catalog";
+        String sql = "USE 'catalog hive_catalog'";
         AnalyzeTestUtil.analyzeSuccess(sql);
 
-        String sql_2 = "USE catalog default_catalog";
+        String sql_2 = "USE 'catalog default_catalog'";
         AnalyzeTestUtil.analyzeSuccess(sql_2);
 
-        String sql_3 = "USE xxxx default_catalog";
+        String sql_3 = "USE 'xxxx default_catalog'";
         AnalyzeTestUtil.analyzeFail(sql_3);
     }
 
@@ -72,21 +75,23 @@ public class UseCatalogStmtTest {
         };
 
         ctx.setQueryId(UUIDUtil.genUUID());
-        StmtExecutor executor = new StmtExecutor(ctx, "use catalog hive_catalog");
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        StmtExecutor executor = new StmtExecutor(ctx, "use 'catalog hive_catalog'");
         executor.execute();
 
         Assert.assertEquals("hive_catalog", ctx.getCurrentCatalog());
 
-        executor = new StmtExecutor(ctx, "use catalog default_catalog");
+        executor = new StmtExecutor(ctx, "use 'catalog default_catalog'");
         executor.execute();
 
         Assert.assertEquals("default_catalog", ctx.getCurrentCatalog());
 
-        executor = new StmtExecutor(ctx, "use xxx default_catalog");
+        executor = new StmtExecutor(ctx, "use 'xxx default_catalog'");
         executor.execute();
         Assert.assertSame(ctx.getState().getStateType(), QueryState.MysqlStateType.ERR);
 
-        executor = new StmtExecutor(ctx, "use catalog default_catalog xxx");
+        executor = new StmtExecutor(ctx, "use 'catalog default_catalog xxx'");
         executor.execute();
         Assert.assertSame(ctx.getState().getStateType(), QueryState.MysqlStateType.ERR);
     }

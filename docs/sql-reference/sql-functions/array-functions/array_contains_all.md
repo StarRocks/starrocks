@@ -22,7 +22,7 @@ Returns a value of the BOOLEAN type.
 
 1 is returned if `arr2` is a subset of `arr1`. Otherwise, 0 is returned.
 
-If any of the two arrays is NULL， NULL is returned.
+If any of the two arrays is NULL, NULL is returned.
 
 ## Usage notes
 
@@ -43,7 +43,7 @@ If any of the two arrays is NULL， NULL is returned.
         c2 ARRAY<INT>
     ) ENGINE=OLAP
     DUPLICATE KEY(c0)
-    DISTRIBUTED BY HASH(c0) BUCKETS 8;
+    DISTRIBUTED BY HASH(c0);
 
     INSERT INTO t1 VALUES
         (1,[1,2,3],[1,2]),

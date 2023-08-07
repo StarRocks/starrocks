@@ -45,7 +45,7 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-    void _process_chunk(bthread::TaskIterator<const ChunkPtr>& iter) override;
+    void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) override;
 
     std::vector<ExprContext*> _output_expr_ctxs;
 
@@ -72,9 +72,9 @@ Status FileSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_pro
 
     bthread::ExecutionQueueOptions options;
     options.executor = SinkIOExecutor::instance();
-    _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<const ChunkPtr>>();
-    int ret = bthread::execution_queue_start<const ChunkPtr>(_exec_queue_id.get(), &options,
-                                                             &FileSinkIOBuffer::execute_io_task, this);
+    _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<ChunkPtr>>();
+    int ret = bthread::execution_queue_start<ChunkPtr>(_exec_queue_id.get(), &options,
+                                                       &FileSinkIOBuffer::execute_io_task, this);
     if (ret != 0) {
         _exec_queue_id.reset();
         return Status::InternalError("start execution queue error");
@@ -114,8 +114,12 @@ void FileSinkIOBuffer::close(RuntimeState* state) {
     SinkIOBuffer::close(state);
 }
 
-void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<const ChunkPtr>& iter) {
-    --_num_pending_chunks;
+void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
+    DeferOp op([&]() {
+        --_num_pending_chunks;
+        DCHECK(_num_pending_chunks >= 0);
+    });
+
     // close is already done, just skip
     if (_is_finished) {
         return;
@@ -123,27 +127,37 @@ void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<const ChunkPtr>& ite
 
     // cancelling has happened but close is not invoked
     if (_is_cancelled && !_is_finished) {
-        close(_state);
+        if (_num_pending_chunks == 1) {
+            close(_state);
+        }
         return;
     }
 
     if (!_is_writer_opened) {
         if (Status status = _writer->open(_state); !status.ok()) {
-            set_io_status(status);
+            status = status.clone_and_prepend("open file writer failed, error");
+            LOG(WARNING) << status;
+            _fragment_ctx->cancel(status);
             close(_state);
             return;
         }
         _is_writer_opened = true;
     }
+
     const auto& chunk = *iter;
     if (chunk == nullptr) {
         // this is the last chunk
+        DCHECK_EQ(_num_pending_chunks, 1);
         close(_state);
         return;
     }
+
     if (Status status = _writer->append_chunk(chunk.get()); !status.ok()) {
-        set_io_status(status);
+        status = status.clone_and_prepend("add chunk to file writer failed, error");
+        LOG(WARNING) << status;
+        _fragment_ctx->cancel(status);
         close(_state);
+        return;
     }
 }
 

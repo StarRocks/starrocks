@@ -19,7 +19,7 @@
 #include "column/column_viewer.h"
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
-#include "runtime/primitive_type.h"
+#include "types/logical_type.h"
 #include "util/thrift_util.h"
 
 namespace starrocks {
@@ -28,6 +28,8 @@ const int STATISTIC_DATA_VERSION1 = 1;
 const int STATISTIC_HISTOGRAM_VERSION = 2;
 const int DICT_STATISTIC_DATA_VERSION = 101;
 const int STATISTIC_TABLE_VERSION = 3;
+const int STATISTIC_BATCH_VERSION = 4;
+const int STATISTIC_EXTERNAL_VERSION = 5;
 
 StatisticResultWriter::StatisticResultWriter(BufferControlBlock* sinker,
                                              const std::vector<ExprContext*>& output_expr_ctxs,
@@ -143,6 +145,12 @@ StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(Chunk* chunk
                                   "Fill histogram statistic data failed");
     } else if (version == STATISTIC_TABLE_VERSION) {
         RETURN_IF_ERROR_WITH_WARN(_fill_table_statistic_data(version, result_columns, chunk, result.get()),
+                                  "Fill table statistic data failed");
+    } else if (version == STATISTIC_BATCH_VERSION) {
+        RETURN_IF_ERROR_WITH_WARN(_fill_full_statistic_data_v4(version, result_columns, chunk, result.get()),
+                                  "Fill table statistic data failed");
+    } else if (version == STATISTIC_EXTERNAL_VERSION) {
+        RETURN_IF_ERROR_WITH_WARN(_fill_full_statistic_data_external(version, result_columns, chunk, result.get()),
                                   "Fill table statistic data failed");
     }
     return result;
@@ -269,6 +277,116 @@ Status StatisticResultWriter::_fill_table_statistic_data(int version, const Colu
     for (int i = 0; i < num_rows; ++i) {
         data_list[i].__set_partitionId(partitionId->get(i).get_int64());
         data_list[i].__set_rowCount(rowCounts->get(i).get_int64());
+    }
+
+    result->result_batch.rows.resize(num_rows);
+    result->result_batch.__set_statistic_version(version);
+
+    ThriftSerializer serializer(true, chunk->memory_usage());
+    for (int i = 0; i < num_rows; ++i) {
+        RETURN_IF_ERROR(serializer.serialize(&data_list[i], &result->result_batch.rows[i]));
+    }
+    return Status::OK();
+}
+
+/*
+FE SQL:    
+    SELECT cast(4 as INT), 
+         cast(7164015 as BIGINT), 
+         'k1', 
+         cast(COUNT(1) as BIGINT), 
+         cast(COUNT(1) * 4 as BIGINT), 
+         hll_serialize(IFNULL(hll_raw(`k1`), hll_empty())), 
+         cast(COUNT(1) - COUNT(`k1`) as BIGINT), 
+         IFNULL(MAX(`k1`), ''), 
+         IFNULL(MIN(`k1`), '')
+    FROM xx
+*/
+Status StatisticResultWriter::_fill_full_statistic_data_v4(int version, const Columns& columns, const Chunk* chunk,
+                                                           TFetchDataResult* result) {
+    SCOPED_TIMER(_serialize_timer);
+
+    // mapping with Data.thrift.TStatisticData
+    DCHECK(columns.size() == 9);
+
+    // skip read version
+    auto pid = ColumnViewer<TYPE_BIGINT>(columns[1]);
+    auto name = ColumnViewer<TYPE_VARCHAR>(columns[2]);
+    auto rowCounts = ColumnViewer<TYPE_BIGINT>(columns[3]);
+    auto dataSizes = ColumnViewer<TYPE_BIGINT>(columns[4]);
+    auto hll = ColumnViewer<TYPE_VARCHAR>(columns[5]);
+    auto nullCounts = ColumnViewer<TYPE_BIGINT>(columns[6]);
+    auto max = ColumnViewer<TYPE_VARCHAR>(columns[7]);
+    auto min = ColumnViewer<TYPE_VARCHAR>(columns[8]);
+
+    std::vector<TStatisticData> data_list;
+    int num_rows = chunk->num_rows();
+
+    data_list.resize(num_rows);
+    for (int i = 0; i < num_rows; ++i) {
+        data_list[i].__set_partitionId(pid.value(i));
+        data_list[i].__set_columnName(name.value(i).to_string());
+        data_list[i].__set_rowCount(rowCounts.value(i));
+        data_list[i].__set_dataSize(dataSizes.value(i));
+        data_list[i].__set_hll(hll.value(i).to_string());
+        data_list[i].__set_nullCount(nullCounts.value(i));
+        data_list[i].__set_max(max.value(i).to_string());
+        data_list[i].__set_min(min.value(i).to_string());
+    }
+
+    result->result_batch.rows.resize(num_rows);
+    result->result_batch.__set_statistic_version(version);
+
+    ThriftSerializer serializer(true, chunk->memory_usage());
+    for (int i = 0; i < num_rows; ++i) {
+        RETURN_IF_ERROR(serializer.serialize(&data_list[i], &result->result_batch.rows[i]));
+    }
+    return Status::OK();
+}
+
+/*
+FE SQL:
+    SELECT cast(5 as INT),
+        'partitionName',
+        'columnName',
+        cast(COUNT(1) as BIGINT),
+        cast($dataSize as BIGINT),
+        $hllFunction,
+        cast($countNullFunction as BIGINT),
+        $maxFunction,
+        $minFunction
+    FROM xxx
+*/
+Status StatisticResultWriter::_fill_full_statistic_data_external(int version, const Columns& columns,
+                                                                 const Chunk* chunk, TFetchDataResult* result) {
+    SCOPED_TIMER(_serialize_timer);
+
+    // mapping with Data.thrift.TStatisticData
+    DCHECK(columns.size() == 9);
+
+    // skip read version
+    auto partitionName = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    auto name = ColumnViewer<TYPE_VARCHAR>(columns[2]);
+    auto rowCounts = ColumnViewer<TYPE_BIGINT>(columns[3]);
+    auto dataSizes = ColumnViewer<TYPE_BIGINT>(columns[4]);
+    auto hll = ColumnViewer<TYPE_VARCHAR>(columns[5]);
+    auto nullCounts = ColumnViewer<TYPE_BIGINT>(columns[6]);
+    auto max = ColumnViewer<TYPE_VARCHAR>(columns[7]);
+    auto min = ColumnViewer<TYPE_VARCHAR>(columns[8]);
+
+    std::vector<TStatisticData> data_list;
+    int num_rows = chunk->num_rows();
+
+    data_list.resize(num_rows);
+    for (int i = 0; i < num_rows; ++i) {
+        data_list[i].__set_partitionName(partitionName.value(i).to_string());
+        data_list[i].__set_columnName(name.value(i).to_string());
+        data_list[i].__set_rowCount(rowCounts.value(i));
+        data_list[i].__set_dataSize(dataSizes.value(i));
+        data_list[i].__set_hll(hll.value(i).to_string());
+        data_list[i].__set_nullCount(nullCounts.value(i));
+        data_list[i].__set_max(max.value(i).to_string());
+        data_list[i].__set_min(min.value(i).to_string());
     }
 
     result->result_batch.rows.resize(num_rows);

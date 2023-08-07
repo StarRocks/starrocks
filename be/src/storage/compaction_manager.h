@@ -53,15 +53,17 @@ public:
 
     bool pick_candidate(CompactionCandidate* candidate);
 
-    void update_tablet_async(TabletSharedPtr tablet);
+    void update_tablet_async(const TabletSharedPtr& tablet);
 
-    void update_tablet(TabletSharedPtr tablet);
+    void update_tablet(const TabletSharedPtr& tablet);
 
     bool register_task(CompactionTask* compaction_task);
 
     void unregister_task(CompactionTask* compaction_task);
 
     void clear_tasks();
+
+    void get_running_status(std::string* json_result);
 
     uint16_t running_tasks_num() {
         std::lock_guard lg(_tasks_mutex);
@@ -70,11 +72,12 @@ public:
 
     bool check_if_exceed_max_task_num() {
         bool exceed = false;
-        std::lock_guard lg(_tasks_mutex);
         if (config::max_compaction_concurrency == 0) {
-            LOG(WARNING) << "register compaction task failed for compaction is disabled";
+            LOG_ONCE(WARNING) << "register compaction task failed for compaction is disabled";
             exceed = true;
-        } else if (_running_tasks.size() >= _max_task_num) {
+        }
+        std::lock_guard lg(_tasks_mutex);
+        if (_running_tasks.size() >= _max_task_num) {
             VLOG(2) << "register compaction task failed for running tasks reach max limit:" << _max_task_num;
             exceed = true;
         }
@@ -98,6 +101,14 @@ public:
     void schedule();
 
     Status update_max_threads(int max_threads);
+
+    double max_score();
+
+    double last_score();
+
+    int64_t base_compaction_concurrency();
+
+    int64_t cumulative_compaction_concurrency();
 
 private:
     CompactionManager(const CompactionManager& compaction_manager) = delete;
@@ -132,6 +143,10 @@ private:
     int32_t _max_dispatch_count = 0;
 
     int32_t _max_task_num = 0;
+    int64_t _base_compaction_concurrency = 0;
+    int64_t _cumulative_compaction_concurrency = 0;
+    double _last_score = 0;
+
     bool _disable_update_tablet = false;
 
     std::atomic<bool> _bg_worker_stopped{false};

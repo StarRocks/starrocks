@@ -64,7 +64,7 @@ public:
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-        auto schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+        auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
         for (long key : keys) {
@@ -86,7 +86,7 @@ public:
         request.__set_version(1);
         request.__set_version_hash(0);
         request.tablet_schema.schema_hash = schema_hash;
-        request.tablet_schema.short_key_column_count = 6;
+        request.tablet_schema.short_key_column_count = 1;
         request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
         request.tablet_schema.storage_type = TStorageType::COLUMN;
 
@@ -194,6 +194,22 @@ TEST_F(UpdateManagerTest, testExpireEntry) {
     ASSERT_GT(_update_manager->update_state_cache().size(), 0);
     const auto remaining_size = _update_manager->update_state_cache().size();
     ASSERT_EQ(peak_size - expiring_size, remaining_size);
+}
+
+TEST_F(UpdateManagerTest, testSetEmptyCachedDeltaColumnGroup) {
+    srand(time(nullptr));
+    create_tablet(rand(), rand());
+    TabletSegmentId tsid;
+    tsid.tablet_id = _tablet->tablet_id();
+    tsid.segment_id = 1;
+    _update_manager->set_cached_empty_delta_column_group(_tablet->data_dir()->get_meta(), tsid);
+    // search this empty dcg
+    DeltaColumnGroupList dcgs;
+    // search in cache
+    ASSERT_TRUE(_update_manager->get_cached_delta_column_group(tsid, 1, &dcgs));
+    ASSERT_TRUE(dcgs.empty());
+    _update_manager->get_delta_column_group(_tablet->data_dir()->get_meta(), tsid, 1, &dcgs);
+    ASSERT_TRUE(dcgs.empty());
 }
 
 } // namespace starrocks

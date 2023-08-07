@@ -50,7 +50,7 @@ struct TTabletSchema {
     5: required list<Descriptors.TColumn> columns
     6: optional double bloom_filter_fpp
     7: optional list<Descriptors.TOlapTableIndex> indexes
-    8: optional bool is_in_memory
+    8: optional bool is_in_memory // Deprecated
     9: optional i64 id;
     10: optional list<i32> sort_key_idxes
 }
@@ -58,7 +58,7 @@ struct TTabletSchema {
 // this enum stands for different storage format in src_backends
 // V1 for Segment-V1
 // V2 for Segment-V2
-enum TStorageFormat {
+enum TStorageFormat { //Deprecated
     DEFAULT,
     V1,
     V2
@@ -68,6 +68,22 @@ enum TTabletType {
     TABLET_TYPE_DISK = 0,
     TABLET_TYPE_MEMORY = 1,
     TABLET_TYPE_LAKE = 2
+}
+
+struct TBinlogConfig {
+    // Version of the configuration, and FE should deliver it to
+    // the BE when executing 'ALTER TABLE'. The configuration with
+    // a higher version can override that with a lower version.
+    1: optional i64 version;
+    2: optional bool binlog_enable;
+    3: optional i64 binlog_ttl_second;
+    4: optional i64 binlog_max_size;
+}
+
+// If you want to add types,
+// don't forget to also add type to PersistentIndexTypePB
+enum TPersistentIndexType {
+    LOCAL = 0
 }
 
 struct TCreateTabletReq {
@@ -87,10 +103,12 @@ struct TCreateTabletReq {
     11: optional i64 allocation_term
     // indicate whether this tablet is a compute storage split mode, we call it "eco mode"
     12: optional bool is_eco_mode
-    13: optional TStorageFormat storage_format
+    13: optional TStorageFormat storage_format //Deprecated
     14: optional TTabletType tablet_type
     15: optional bool enable_persistent_index
     16: optional Types.TCompressionType compression_type = Types.TCompressionType.LZ4_FRAME
+    17: optional TBinlogConfig binlog_config;
+    18: optional TPersistentIndexType persistent_index_type;
 }
 
 struct TDropTabletReq {
@@ -105,6 +123,12 @@ struct TAlterTabletReq {
     3: required TCreateTabletReq new_tablet_req
 }
 
+struct TAlterTabletMaterializedColumnReq {
+    1: optional InternalService.TQueryGlobals query_globals
+    2: optional InternalService.TQueryOptions query_options
+    3: optional map<i32, Exprs.TExpr> mc_exprs
+}
+
 // This v2 request will replace the old TAlterTabletReq.
 // TAlterTabletReq should be deprecated after new alter job process merged.
 struct TAlterTabletReqV2 {
@@ -117,6 +141,10 @@ struct TAlterTabletReqV2 {
     7: optional list<TAlterMaterializedViewParam> materialized_view_params
     8: optional TTabletType tablet_type
     9: optional i64 txn_id
+    10: optional TAlterTabletMaterializedColumnReq materialized_column_req
+    11: optional i64 job_id
+    12: optional InternalService.TQueryGlobals query_globals
+    13: optional InternalService.TQueryOptions query_options
 }
 
 struct TAlterMaterializedViewParam {
@@ -195,6 +223,11 @@ struct TCheckConsistencyReq {
     4: required Types.TVersionHash version_hash // Deprecated
 }
 
+struct TCompactionReq {
+    1: optional list<Types.TTableId> tablet_ids
+    2: optional bool is_base_compaction
+}
+
 struct TUploadReq {
     1: required i64 job_id;
     2: required map<string, string> src_dest_map
@@ -254,6 +287,7 @@ struct TPartitionVersionInfo {
     1: required Types.TPartitionId partition_id
     2: required Types.TVersion version
     3: required Types.TVersionHash version_hash // Deprecated
+    4: optional TBinlogConfig binlog_config
 }
 
 struct TMoveDirReq {
@@ -262,6 +296,10 @@ struct TMoveDirReq {
     3: required string src
     4: required i64 job_id
     5: required bool overwrite
+}
+
+struct TDropAutoIncrementMapReq {
+    1: required i64 table_id
 }
 
 enum TAgentServiceVersion {
@@ -299,7 +337,9 @@ enum TTabletMetaType {
     INMEMORY,
     ENABLE_PERSISTENT_INDEX,
     WRITE_QUORUM,
-    REPLICATED_STORAGE
+    REPLICATED_STORAGE,
+    DISABLE_BINLOG,
+    BINLOG_CONFIG
 }
 
 struct TTabletMetaInfo {
@@ -307,8 +347,9 @@ struct TTabletMetaInfo {
     2: optional Types.TSchemaHash schema_hash
     3: optional Types.TPartitionId partition_id
     4: optional TTabletMetaType meta_type
-    5: optional bool is_in_memory
+    5: optional bool is_in_memory // Deprecated
     6: optional bool enable_persistent_index
+    7: optional TBinlogConfig binlog_config
 }
 
 struct TUpdateTabletMetaInfoReq {
@@ -350,6 +391,8 @@ struct TAgentTaskRequest {
     24: optional TAlterTabletReqV2 alter_tablet_req_v2
     25: optional i64 recv_time // time the task is inserted to queue
     26: optional TUpdateTabletMetaInfoReq update_tablet_meta_info_req
+    27: optional TDropAutoIncrementMapReq drop_auto_increment_map_req
+    28: optional TCompactionReq compaction_req
 }
 
 struct TAgentResult {

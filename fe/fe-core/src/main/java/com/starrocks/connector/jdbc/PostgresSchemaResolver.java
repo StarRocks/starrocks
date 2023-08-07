@@ -15,6 +15,7 @@
 
 package com.starrocks.connector.jdbc;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.PrimitiveType;
@@ -46,9 +47,27 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
     }
 
     @Override
-    public Table getTable(long id, String name, List<Column> schema, String dbName,
+    public List<Column> convertToSRTable(ResultSet columnSet) throws SQLException {
+        List<Column> fullSchema = Lists.newArrayList();
+        while (columnSet.next()) {
+            Type type = convertColumnType(columnSet.getInt("DATA_TYPE"),
+                    columnSet.getString("TYPE_NAME"),
+                    columnSet.getInt("COLUMN_SIZE"),
+                    columnSet.getInt("DECIMAL_DIGITS"));
+            String columnName = columnSet.getString("COLUMN_NAME");
+            if (!columnName.equals(columnName.toLowerCase())) {
+                columnName = "\"" + columnName + "\"";
+            }
+            fullSchema.add(new Column(columnName, type,
+                    columnSet.getString("IS_NULLABLE").equals("YES")));
+        }
+        return fullSchema;
+    }
+
+    @Override
+    public Table getTable(long id, String name, List<Column> schema, String dbName, String catalogName,
                           Map<String, String> properties) throws DdlException {
-        return new JDBCTable(id, dbName + "." + name, schema, "", properties);
+        return new JDBCTable(id, "\"" + dbName + "\"" + "." + "\"" + name + "\"", schema, "", catalogName, properties);
     }
 
     @Override
@@ -101,6 +120,11 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
             return ScalarType.createType(primitiveType);
         } else {
             int precision = columnSize + max(-digits, 0);
+            // if user not specify numeric precision and scale, the default value is 0,
+            // we can't defer the precision and scale, can only deal it as string.
+            if (precision == 0) {
+                return ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
+            }
             return ScalarType.createUnifiedDecimalType(precision, max(digits, 0));
         }
     }

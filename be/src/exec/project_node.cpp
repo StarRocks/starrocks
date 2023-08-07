@@ -36,8 +36,8 @@
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
-#include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -191,16 +191,16 @@ Status ProjectNode::reset(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ProjectNode::close(RuntimeState* state) {
+void ProjectNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
 
     Expr::close(_expr_ctxs, state);
     Expr::close(_common_sub_expr_ctxs, state);
     _dict_optimize_parser.close(state);
 
-    return ExecNode::close(state);
+    ExecNode::close(state);
 }
 
 void ProjectNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs) {

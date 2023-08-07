@@ -184,14 +184,31 @@ void TabletColumn::init_from_pb(const ColumnPB& column) {
     _col_name.assign(column.name());
     _type = string_to_logical_type(column.type());
 
+    // NOTE(alvin): Change _type to format v2 type to have TableColumn has only storage V2 format.
+    bool is_format_v1 = TypeUtils::specific_type_of_format_v1(_type);
+    if (is_format_v1) {
+        _type = TypeUtils::to_storage_format_v2(_type);
+        auto type_info = get_type_info(_type);
+        _length = type_info->size();
+        if (column.has_index_length()) {
+            _index_length = type_info->size();
+        }
+    } else {
+        _length = column.length();
+        if (column.has_index_length()) {
+            // https://github.com/StarRocks/starrocks/issues/677
+            // DCHECK_LE(column.index_length(), UINT8_MAX);
+            _index_length = column.index_length();
+        }
+    }
+
     _set_flag(kIsKeyShift, column.is_key());
     _set_flag(kIsNullableShift, column.is_nullable());
     _set_flag(kIsBfColumnShift, column.is_bf_column());
     _set_flag(kHasBitmapIndexShift, column.has_bitmap_index());
     _set_flag(kHasPrecisionShift, column.has_precision());
     _set_flag(kHasScaleShift, column.has_frac());
-
-    _length = column.length();
+    _set_flag(kHasAutoIncrementShift, column.is_auto_increment());
 
     if (column.has_precision()) {
         DCHECK_LE(column.precision(), UINT8_MAX);
@@ -200,11 +217,6 @@ void TabletColumn::init_from_pb(const ColumnPB& column) {
     if (column.has_frac()) {
         DCHECK_LE(column.frac(), UINT8_MAX);
         _scale = column.frac();
-    }
-    if (column.has_index_length()) {
-        // https://github.com/StarRocks/starrocks/issues/677
-        // DCHECK_LE(column.index_length(), UINT8_MAX);
-        _index_length = column.index_length();
     }
     if (column.has_aggregation()) {
         _aggregation = get_aggregation_type_by_string(column.aggregation());
@@ -227,6 +239,7 @@ void TabletColumn::to_schema_pb(ColumnPB* column) const {
     column->set_type(logical_type_to_string(_type));
     column->set_is_key(is_key());
     column->set_is_nullable(is_nullable());
+    column->set_is_auto_increment(is_auto_increment());
     if (has_default_value()) {
         column->set_default_value(default_value());
     }
@@ -252,14 +265,6 @@ void TabletColumn::add_sub_column(const TabletColumn& sub_column) {
 
 void TabletColumn::add_sub_column(TabletColumn&& sub_column) {
     _get_or_alloc_extra_fields()->sub_columns.emplace_back(std::move(sub_column));
-}
-
-bool TabletColumn::is_format_v1_column() const {
-    return TypeUtils::specific_type_of_format_v1(_type);
-}
-
-bool TabletColumn::is_format_v2_column() const {
-    return TypeUtils::specific_type_of_format_v2(_type);
 }
 
 /******************************************************************
@@ -292,32 +297,44 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchema& src_table
     return std::make_shared<TabletSchema>(partial_tablet_schema_pb);
 }
 
-void TabletSchema::_init_schema() const {
-    starrocks::VectorizedFields fields;
-    for (ColumnId cid = 0; cid < num_columns(); ++cid) {
-        auto f = ChunkHelper::convert_field_to_format_v2(cid, column(cid));
-        fields.emplace_back(std::make_shared<starrocks::VectorizedField>(std::move(f)));
+std::shared_ptr<TabletSchema> TabletSchema::create_with_uid(const TabletSchema& tablet_schema,
+                                                            const std::vector<uint32_t>& unique_column_ids) {
+    std::unordered_set<int32_t> unique_cid_filter(unique_column_ids.begin(), unique_column_ids.end());
+    std::vector<int32_t> column_indexes;
+    for (int cid = 0; cid < tablet_schema.columns().size(); cid++) {
+        if (unique_cid_filter.count(tablet_schema.column(cid).unique_id()) > 0) {
+            column_indexes.push_back(cid);
+        }
     }
-    _schema = std::make_unique<VectorizedSchema>(std::move(fields), keys_type(), _sort_key_idxes);
+    return TabletSchema::create(tablet_schema, column_indexes);
 }
 
-VectorizedSchema* TabletSchema::schema() const {
+void TabletSchema::_init_schema() const {
+    starrocks::Fields fields;
+    for (ColumnId cid = 0; cid < num_columns(); ++cid) {
+        auto f = ChunkHelper::convert_field(cid, column(cid));
+        fields.emplace_back(std::make_shared<starrocks::Field>(std::move(f)));
+    }
+    _schema = std::make_unique<Schema>(std::move(fields), keys_type(), _sort_key_idxes);
+}
+
+Schema* TabletSchema::schema() const {
     std::call_once(_init_schema_once_flag, [this] { return _init_schema(); });
     return _schema.get();
 }
 
 TabletSchema::TabletSchema(const TabletSchemaPB& schema_pb) {
     _init_from_pb(schema_pb);
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
 }
 
 TabletSchema::TabletSchema(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map) : _schema_map(schema_map) {
     _init_from_pb(schema_pb);
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
 }
 
 TabletSchema::~TabletSchema() {
-    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
     if (_schema_map != nullptr) {
         _schema_map->erase(_id);
     }
@@ -348,6 +365,9 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
             _sort_key_idxes.push_back(schema.sort_key_idxes(i));
         }
     }
+    for (auto cid : _sort_key_idxes) {
+        _cols[cid].set_is_sort_key(true);
+    }
     _num_short_key_columns = schema.num_short_key_columns();
     _num_rows_per_row_block = schema.num_rows_per_row_block();
     _next_column_unique_id = schema.next_column_unique_id();
@@ -375,36 +395,7 @@ void TabletSchema::to_schema_pb(TabletSchemaPB* tablet_schema_pb) const {
     }
     tablet_schema_pb->set_next_column_unique_id(_next_column_unique_id);
     tablet_schema_pb->set_compression_type(_compression_type);
-}
-
-bool TabletSchema::contains_format_v1_column() const {
-    return std::any_of(_cols.begin(), _cols.end(), [](const TabletColumn& col) { return col.is_format_v1_column(); });
-}
-
-bool TabletSchema::contains_format_v2_column() const {
-    return std::any_of(_cols.begin(), _cols.end(), [](const TabletColumn& col) { return col.is_format_v2_column(); });
-}
-
-std::unique_ptr<TabletSchema> TabletSchema::convert_to_format(DataFormatVersion format) const {
-    TabletSchemaPB schema_pb;
-    to_schema_pb(&schema_pb);
-    int n = schema_pb.column_size();
-    for (int i = 0; i < n; i++) {
-        auto* col_pb = schema_pb.mutable_column(i);
-        auto t1 = column(i).type();
-        auto t2 = TypeUtils::convert_to_format(t1, format);
-        if (UNLIKELY(t2 == TYPE_UNKNOWN)) {
-            return nullptr;
-        }
-        if (t1 != t2) {
-            auto* type_info = get_scalar_type_info(t2);
-            col_pb->set_type(logical_type_to_string(t2));
-            col_pb->set_length(type_info->size());
-            col_pb->set_index_length(type_info->size());
-        }
-    }
-    auto schema = std::make_unique<TabletSchema>(schema_pb);
-    return schema;
+    tablet_schema_pb->mutable_sort_key_idxes()->Add(_sort_key_idxes.begin(), _sort_key_idxes.end());
 }
 
 size_t TabletSchema::estimate_row_size(size_t variable_len) const {
@@ -412,16 +403,6 @@ size_t TabletSchema::estimate_row_size(size_t variable_len) const {
     for (const auto& col : _cols) {
         size += col.estimate_field_size(variable_len);
     }
-    return size;
-}
-
-size_t TabletSchema::row_size() const {
-    size_t size = 0;
-    for (auto& column : _cols) {
-        size += column.length();
-    }
-    size += (num_columns() + 7) / 8;
-
     return size;
 }
 

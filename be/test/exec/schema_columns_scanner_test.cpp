@@ -34,9 +34,9 @@ TEST_F(SchemaColumnsScannerTest, test_to_decimal_to_type_string) {
             {TPrimitiveType::DECIMAL128, 27, 9, false, std::string("decimal"), std::string("decimal(-1,-1)")},
     };
     for (auto& tc : test_cases) {
-        auto [ptype, precision, scale, is_set, mysql_type_string, type_string] = tc;
+        auto [ltype, precision, scale, is_set, mysql_type_string, type_string] = tc;
         TColumnDesc columnDesc;
-        columnDesc.columnType = ptype;
+        columnDesc.columnType = ltype;
         if (is_set) {
             columnDesc.__set_columnPrecision(precision);
             columnDesc.__set_columnScale(scale);

@@ -26,6 +26,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.DistributionCol;
+import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -35,7 +37,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
-import org.jetbrains.annotations.NotNull;
+import org.apache.commons.lang.StringUtils;
 
 import java.util.Collection;
 import java.util.List;
@@ -72,11 +74,11 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
                     .put(FunctionSet.MAX, Pair.create(FunctionSet.MAX, FunctionSet.MAX))
                     .put(FunctionSet.MIN, Pair.create(FunctionSet.MIN, FunctionSet.MIN))
                     .put(FunctionSet.SUM, Pair.create(FunctionSet.SUM, FunctionSet.SUM))
-                    .put(FunctionSet.HLL_UNION, Pair.create(FunctionSet.HLL_UNION, FunctionSet.HLL_UNION))
-                    .put(FunctionSet.NDV, Pair.create(FunctionSet.HLL_UNION, FunctionSet.NDV))
-                    .put(FunctionSet.BITMAP_UNION, Pair.create(FunctionSet.BITMAP_UNION, FunctionSet.BITMAP_UNION))
+                    .put(FunctionSet.HLL_UNION_AGG, Pair.create(FunctionSet.HLL_UNION, FunctionSet.HLL_UNION_AGG))
                     .put(FunctionSet.BITMAP_UNION_COUNT,
                             Pair.create(FunctionSet.BITMAP_UNION, FunctionSet.BITMAP_UNION_COUNT))
+                    .put(FunctionSet.HLL_UNION, Pair.create(FunctionSet.HLL_UNION, FunctionSet.HLL_UNION))
+                    .put(FunctionSet.BITMAP_UNION, Pair.create(FunctionSet.BITMAP_UNION, FunctionSet.BITMAP_UNION))
                     .put(FunctionSet.PERCENTILE_UNION,
                             Pair.create(FunctionSet.PERCENTILE_UNION, FunctionSet.PERCENTILE_UNION))
                     .build();
@@ -123,11 +125,18 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
             return false;
         }
 
+        if (!(scan.getDistributionSpec() instanceof HashDistributionSpec)) {
+            return false;
+        }
+
         // check distribution satisfy scan node
         List<Integer> groupBy = aggregate.getGroupingKeys().stream().map(ColumnRefOperator::getId)
                 .collect(Collectors.toList());
 
-        if (groupBy.isEmpty() || groupBy.containsAll(scan.getDistributionSpec().getShuffleColumns())) {
+        List<Integer> distributionCols = ((HashDistributionSpec) scan.getDistributionSpec()).getShuffleColumns().stream().map(
+                DistributionCol::getColId).collect(Collectors.toList());
+
+        if (groupBy.isEmpty() || groupBy.containsAll(distributionCols)) {
             return false;
         }
 
@@ -137,7 +146,7 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
         }
 
         groupBy.add(distinctColumns.get(0).getId());
-        return groupBy.containsAll(scan.getDistributionSpec().getShuffleColumns());
+        return groupBy.containsAll(distributionCols);
     }
 
     @Override
@@ -169,24 +178,16 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
 
         ColumnRefFactory factory = context.getColumnRefFactory();
         otherMap.forEach((k, v) -> {
-            Function origin = v.getFunction();
-            String firstFn = OTHER_FUNCTION_TRANS.get(origin.getFunctionName().getFunction()).first;
-            String secondFn = OTHER_FUNCTION_TRANS.get(origin.getFunctionName().getFunction()).second;
-
-            CallOperator firstAgg = genAggregation(firstFn, origin.getArgs(), v.getChildren(), v);
+            CallOperator firstAgg = transformOtherAgg(v, v.getArguments(), true);
             ColumnRefOperator firstOutput = factory.create(firstAgg, firstAgg.getType(), firstAgg.isNullable());
-
             firstAggregations.put(firstOutput, firstAgg);
 
-            CallOperator secondAgg =
-                    genAggregation(secondFn, new Type[] {firstAgg.getType()}, Lists.newArrayList(firstOutput), v);
+            CallOperator secondAgg = transformOtherAgg(v, Lists.newArrayList(firstOutput), false);
             secondAggregations.put(k, secondAgg);
         });
 
         distinctMap.forEach((k, v) -> {
-            Function origin = v.getFunction();
-            String secondFn = DISTINCT_FUNCTION_TRANS.get(origin.getFunctionName().getFunction());
-            CallOperator secondAgg = genAggregation(secondFn, origin.getArgs(), v.getChildren(), v);
+            CallOperator secondAgg = transformDistinctAgg(v);
             secondAggregations.put(k, secondAgg);
         });
 
@@ -198,19 +199,47 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
                 OptExpression.create(second.build(), OptExpression.create(first, input.getInputs())));
     }
 
-    @NotNull
-    private CallOperator genAggregation(String name, Type[] argTypes, List<ScalarOperator> args, CallOperator origin) {
-        if (FunctionSet.SUM.equals(name) || FunctionSet.MAX.equals(name) || FunctionSet.MIN.equals(name)) {
+    private CallOperator transformOtherAgg(CallOperator origin, List<ScalarOperator> args, boolean isFirst) {
+        String originFuncName = origin.getFunction().functionName();
+        if (isFirst) {
+            String firstFuncName = OTHER_FUNCTION_TRANS.get(originFuncName).first;
+            if (StringUtils.equals(originFuncName, firstFuncName)) {
+                return origin;
+            } else {
+                Function newFunc = Expr.getBuiltinFunction(firstFuncName, origin.getFunction().getArgs(),
+                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                return new CallOperator(firstFuncName, newFunc.getReturnType(), args, newFunc);
+            }
+        } else {
+            String secondFuncName = OTHER_FUNCTION_TRANS.get(originFuncName).second;
+            Type[] argTypes = args.stream().map(ScalarOperator::getType).toArray(Type[]::new);
+            Function newFunc = Expr.getBuiltinFunction(secondFuncName, argTypes,
+                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            Preconditions.checkNotNull(newFunc);
+            newFunc = newFunc.copy();
             // for decimal
-            return new CallOperator(name, origin.getType(), args, origin.getFunction());
+            newFunc = newFunc.updateArgType(argTypes);
+            newFunc.setRetType(origin.getFunction().getReturnType());
+            return new CallOperator(secondFuncName, newFunc.getReturnType(), args, newFunc);
         }
-        Function fn = Expr.getBuiltinFunction(name, argTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-        return new CallOperator(name, fn.getReturnType(), args, fn);
+    }
+
+
+    private CallOperator transformDistinctAgg(CallOperator origin) {
+        String originFuncName = origin.getFunction().functionName();
+        String newFuncName = DISTINCT_FUNCTION_TRANS.get(originFuncName);
+        if (StringUtils.equals(originFuncName, newFuncName)) {
+            return new CallOperator(originFuncName, origin.getType(), origin.getChildren(), origin.getFunction());
+        } else {
+            Function newFunc = Expr.getBuiltinFunction(newFuncName, origin.getFunction().getArgs(),
+                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            return new CallOperator(newFuncName, newFunc.getReturnType(), origin.getChildren(), newFunc);
+        }
     }
 
     private boolean isDistinct(CallOperator call) {
         return call.isDistinct() ||
-                FunctionSet.MULTI_DISTINCT_SUM.equals(call.getFunction().getFunctionName().getFunction()) ||
-                FunctionSet.MULTI_DISTINCT_COUNT.equals(call.getFunction().getFunctionName().getFunction());
+                FunctionSet.MULTI_DISTINCT_SUM.equals(call.getFunction().functionName()) ||
+                FunctionSet.MULTI_DISTINCT_COUNT.equals(call.getFunction().functionName());
     }
 }

@@ -18,6 +18,8 @@
 
 #include "column/column.h"
 #include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
 
 namespace starrocks {
 
@@ -27,7 +29,7 @@ class MapColumn final : public ColumnFactory<Column, MapColumn> {
 public:
     using ValueType = void;
 
-    MapColumn(ColumnPtr keys, ColumnPtr values, UInt32Column::Ptr offests);
+    MapColumn(ColumnPtr keys, ColumnPtr values, UInt32Column::Ptr offsets);
 
     MapColumn(const MapColumn& rhs)
             : _keys(rhs._keys->clone_shared()),
@@ -80,7 +82,7 @@ public:
 
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
-    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
+    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) override;
 
     bool append_nulls(size_t count) override;
 
@@ -96,9 +98,9 @@ public:
 
     void fill_default(const Filter& filter) override;
 
-    Status update_rows(const Column& src, const uint32_t* indexes) override;
+    void update_rows(const Column& src, const uint32_t* indexes) override;
 
-    void remove_first_n_values(size_t count) override {}
+    void remove_first_n_values(size_t count) override;
 
     uint32_t max_one_element_serialize_size() const override;
 
@@ -121,8 +123,10 @@ public:
 
     int compare_at(size_t left, size_t right, const Column& right_column, int nan_direction_hint) const override;
 
-    void crc32_hash_at(uint32_t* seed, int32_t idx) const override;
-    void fnv_hash_at(uint32_t* seed, int32_t idx) const override;
+    int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const override;
+
+    void crc32_hash_at(uint32_t* seed, uint32_t idx) const override;
+    void fnv_hash_at(uint32_t* seed, uint32_t idx) const override;
     void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
     void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
@@ -145,7 +149,7 @@ public:
         return _keys->container_memory_usage() + _values->container_memory_usage() + _offsets->container_memory_usage();
     }
 
-    size_t element_memory_usage(size_t from, size_t size) const override;
+    size_t reference_memory_usage(size_t from, size_t size) const override;
 
     void swap_column(Column& rhs) override;
 
@@ -156,7 +160,7 @@ public:
 
     bool is_nullable() const override { return false; }
 
-    std::string debug_item(uint32_t idx) const override;
+    std::string debug_item(size_t idx) const override;
 
     std::string debug_string() const override;
 
@@ -175,18 +179,23 @@ public:
 
     const Column& keys() const { return *_keys; }
     ColumnPtr& keys_column() { return _keys; }
+    ColumnPtr keys_column() const { return _keys; }
 
     const Column& values() const { return *_values; }
     ColumnPtr& values_column() { return _values; }
+    ColumnPtr values_column() const { return _values; }
 
     size_t get_map_size(size_t idx) const;
+    std::pair<size_t, size_t> get_map_offset_size(size_t idx) const;
 
     Status unfold_const_children(const starrocks::TypeDescriptor& type) override;
 
+    void remove_duplicated_keys(bool need_recursive = false);
+
 private:
-    // keys must be NullableColumn
+    // Keys must be NullableColumn to facilitate handling nested types.
     ColumnPtr _keys;
-    // values must be NullableColumn
+    // Values must be NullableColumn to facilitate handling nested types.
     ColumnPtr _values;
     // Offsets column will store the start position of every map element.
     // Offsets store more one data to indicate the end position.

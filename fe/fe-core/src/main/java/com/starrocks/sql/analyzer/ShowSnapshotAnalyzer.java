@@ -18,6 +18,7 @@ import com.google.common.base.Strings;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.backup.Repository;
@@ -78,6 +79,29 @@ public class ShowSnapshotAnalyzer {
                                 || !analyzeSubExpr(showSnapshotStmt, (BinaryPredicate) cp.getChild(1))) {
                             ok = false;
                             break CHECK;
+                        }
+                    } else if (where instanceof InPredicate) {
+                        InPredicate inPredicate = (InPredicate) where;
+                        Expr leftExpr = inPredicate.getChild(0);
+                        if (!(leftExpr instanceof SlotRef)) {
+                            throw new SemanticException("Left expr of should be snapshot");
+                        }
+                        String name = ((SlotRef) leftExpr).getColumnName();
+                        if (!name.equalsIgnoreCase("snapshot")) {
+                            throw new SemanticException("Left expr of should be snapshot");
+                        }
+
+                        for (int i = 1; i <= inPredicate.getInElementNum(); i++) {
+                            Expr expr = inPredicate.getChild(i);
+                            if (!(expr instanceof StringLiteral)) {
+                                throw new SemanticException("Child of in predicate should be string value");
+                            }
+
+                            String snapshotName = ((StringLiteral) expr).getStringValue();
+                            if (Strings.isNullOrEmpty(snapshotName)) {
+                                continue;
+                            }
+                            showSnapshotStmt.addSnapshotName(snapshotName);
                         }
                     }
                 }

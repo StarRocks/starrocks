@@ -57,7 +57,6 @@ public class OlapTableAlterJobV2Builder extends AlterJobV2Builder {
         schemaChangeJob.setBloomFilterInfo(bloomFilterColumnsChanged, bloomFilterColumns, bloomFilterFpp);
         schemaChangeJob.setAlterIndexInfo(hasIndexChanged, indexes);
         schemaChangeJob.setStartTime(startTime);
-        schemaChangeJob.setStorageFormat(newStorageFormat);
         schemaChangeJob.setSortKeyIdxes(sortKeyIdxes);
         /*
          * Create schema change job

@@ -17,9 +17,11 @@ package com.starrocks.sql.optimizer.operator.physical;
 
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 
+import java.util.List;
 import java.util.Objects;
 
 public class PhysicalCTEProduceOperator extends PhysicalOperator {
@@ -32,6 +34,11 @@ public class PhysicalCTEProduceOperator extends PhysicalOperator {
 
     public int getCteId() {
         return cteId;
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        return projectInputRow(inputs.get(0).getRowOutputInfo());
     }
 
     @Override
@@ -49,12 +56,11 @@ public class PhysicalCTEProduceOperator extends PhysicalOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
+
         if (!super.equals(o)) {
             return false;
         }
+
         PhysicalCTEProduceOperator that = (PhysicalCTEProduceOperator) o;
         return Objects.equals(cteId, that.cteId);
     }

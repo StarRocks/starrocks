@@ -15,6 +15,7 @@
         <module>jni-connector</module>
         <module>hudi-reader</module>
         <module>udf-examples</module>
+        <module>paimon-reader</module>
     </modules>
     <name>starrocks-java-extensions</name>
 
@@ -23,7 +24,7 @@
         <maven.compiler.target>1.8</maven.compiler.target>
         <java.version>1.8</java.version>
         <hikaricp.version>3.4.5</hikaricp.version>
-        <log4j.version>2.17.1</log4j.version>
+        <log4j.version>2.19.0</log4j.version>
         <compiler-plugin.version>3.8.1</compiler-plugin.version>
         <java-extensions.home>${basedir}</java-extensions.home>
     </properties>

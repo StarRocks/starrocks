@@ -46,10 +46,10 @@ RESULT SINK
 distribution type: GATHER
 cardinality: 40000
 column statistics:
-* S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
-* PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 40000.0] ESTIMATE
+* S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 1(F11)
 
@@ -62,10 +62,10 @@ OutPut Exchange Id: 25
 |  offset: 0
 |  cardinality: 40000
 |  column statistics:
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
-|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 40000.0] ESTIMATE
+|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 23:Project
 |  output columns:
@@ -84,10 +84,10 @@ OutPut Exchange Id: 25
 |  output columns: 2, 3
 |  cardinality: 40000
 |  column statistics:
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
-|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 40000.0] ESTIMATE
+|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 |----21:EXCHANGE
 |       distribution type: SHUFFLE
@@ -193,7 +193,7 @@ OutPut Exchange Id: 14
 |  build runtime filters:
 |  - filter_id = 1, build_expr = (14: PS_PARTKEY), remote = true
 |  - filter_id = 2, build_expr = (15: PS_SUPPKEY), remote = false
-|  output columns: 15
+|  output columns: 15, 16, 48
 |  cardinality: 39029703
 |  column statistics:
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
@@ -201,7 +201,7 @@ OutPut Exchange Id: 14
 |  * PS_AVAILQTY-->[1.0, 9999.0, 0.0, 4.0, 9999.0] ESTIMATE
 |  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[1.0, 1.504511322419371E14, 0.0, 8.0, 50.0] ESTIMATE
+|  * sum-->[1.0, 8.673267326732674E7, 0.0, 8.0, 50.0] ESTIMATE
 |
 |----11:EXCHANGE
 |       distribution type: SHUFFLE
@@ -215,7 +215,7 @@ OutPut Exchange Id: 14
 |  column statistics:
 |  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[1.0, 1.504511322419371E14, 0.0, 8.0, 50.0] ESTIMATE
+|  * sum-->[1.0, 8.673267326732674E7, 0.0, 8.0, 50.0] ESTIMATE
 |
 3:EXCHANGE
 distribution type: SHUFFLE
@@ -342,13 +342,13 @@ column statistics:
 * L_SHIPDATE-->[7.258176E8, 7.573536E8, 0.0, 4.0, 2526.0] ESTIMATE
 [dump]
 {
-  "statement": "select\n    s_name,\n    s_address\nfrom\n    supplier,\n    nation\nwhere\n        s_suppkey in (\n        select\n            ps_suppkey\n        from\n            partsupp\n        where\n                ps_partkey in (\n                select\n                    p_partkey\n                from\n                    part\n                where\n                        p_name like \u0027sienna%\u0027\n            )\n          and ps_availqty \u003e (\n            select\n                    0.5 * sum(l_quantity)\n            from\n                lineitem\n            where\n                    l_partkey \u003d ps_partkey\n              and l_suppkey \u003d ps_suppkey\n              and l_shipdate \u003e\u003d date \u00271993-01-01\u0027\n              and l_shipdate \u003c date \u00271994-01-01\u0027\n        )\n    )\n  and s_nationkey \u003d n_nationkey\n  and n_name \u003d \u0027ARGENTINA\u0027\norder by\n    s_name ;\n",
+  "statement": "select s_name, s_address from supplier, nation where s_suppkey in ( select ps_suppkey from partsupp where ps_partkey in ( select p_partkey from part where p_name like \u0027sienna%\u0027 ) and ps_availqty \u003e ( select 0.5 * sum(l_quantity) from lineitem where l_partkey \u003d ps_partkey and l_suppkey \u003d ps_suppkey and l_shipdate \u003e\u003d date \u00271993-01-01\u0027 and l_shipdate \u003c date \u00271994-01-01\u0027 ) ) and s_nationkey \u003d n_nationkey and n_name \u003d \u0027ARGENTINA\u0027 order by s_name ; ",
   "table_meta": {
-    "test.lineitem": "CREATE TABLE `lineitem` (\n  `L_ORDERKEY` int(11) NOT NULL COMMENT \"\",\n  `L_PARTKEY` int(11) NOT NULL COMMENT \"\",\n  `L_SUPPKEY` int(11) NOT NULL COMMENT \"\",\n  `L_LINENUMBER` int(11) NOT NULL COMMENT \"\",\n  `L_QUANTITY` double NOT NULL COMMENT \"\",\n  `L_EXTENDEDPRICE` double NOT NULL COMMENT \"\",\n  `L_DISCOUNT` double NOT NULL COMMENT \"\",\n  `L_TAX` double NOT NULL COMMENT \"\",\n  `L_RETURNFLAG` char(1) NOT NULL COMMENT \"\",\n  `L_LINESTATUS` char(1) NOT NULL COMMENT \"\",\n  `L_SHIPDATE` date NOT NULL COMMENT \"\",\n  `L_COMMITDATE` date NOT NULL COMMENT \"\",\n  `L_RECEIPTDATE` date NOT NULL COMMENT \"\",\n  `L_SHIPINSTRUCT` char(25) NOT NULL COMMENT \"\",\n  `L_SHIPMODE` char(10) NOT NULL COMMENT \"\",\n  `L_COMMENT` varchar(44) NOT NULL COMMENT \"\",\n  `PAD` char(1) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`L_ORDERKEY`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`L_ORDERKEY`) BUCKETS 20 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"storage_format\" \u003d \"DEFAULT\",\n\"enable_persistent_index\" \u003d \"false\",\n\"compression\" \u003d \"LZ4\"\n);",
-    "test.nation": "CREATE TABLE `nation` (\n  `N_NATIONKEY` int(11) NOT NULL COMMENT \"\",\n  `N_NAME` char(25) NOT NULL COMMENT \"\",\n  `N_REGIONKEY` int(11) NOT NULL COMMENT \"\",\n  `N_COMMENT` varchar(152) NULL COMMENT \"\",\n  `PAD` char(1) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`N_NATIONKEY`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`N_NATIONKEY`) BUCKETS 1 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"storage_format\" \u003d \"DEFAULT\",\n\"enable_persistent_index\" \u003d \"false\",\n\"compression\" \u003d \"LZ4\"\n);",
-    "test.part": "CREATE TABLE `part` (\n  `P_PARTKEY` int(11) NOT NULL COMMENT \"\",\n  `P_NAME` varchar(55) NOT NULL COMMENT \"\",\n  `P_MFGR` char(25) NOT NULL COMMENT \"\",\n  `P_BRAND` char(10) NOT NULL COMMENT \"\",\n  `P_TYPE` varchar(25) NOT NULL COMMENT \"\",\n  `P_SIZE` int(11) NOT NULL COMMENT \"\",\n  `P_CONTAINER` char(10) NOT NULL COMMENT \"\",\n  `P_RETAILPRICE` double NOT NULL COMMENT \"\",\n  `P_COMMENT` varchar(23) NOT NULL COMMENT \"\",\n  `PAD` char(1) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`P_PARTKEY`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`P_PARTKEY`) BUCKETS 10 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"storage_format\" \u003d \"DEFAULT\",\n\"enable_persistent_index\" \u003d \"false\",\n\"compression\" \u003d \"LZ4\"\n);",
-    "test.partsupp": "CREATE TABLE `partsupp` (\n  `PS_PARTKEY` int(11) NOT NULL COMMENT \"\",\n  `PS_SUPPKEY` int(11) NOT NULL COMMENT \"\",\n  `PS_AVAILQTY` int(11) NOT NULL COMMENT \"\",\n  `PS_SUPPLYCOST` double NOT NULL COMMENT \"\",\n  `PS_COMMENT` varchar(199) NOT NULL COMMENT \"\",\n  `PAD` char(1) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`PS_PARTKEY`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`PS_PARTKEY`) BUCKETS 10 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"storage_format\" \u003d \"DEFAULT\",\n\"enable_persistent_index\" \u003d \"false\",\n\"compression\" \u003d \"LZ4\"\n);",
-    "test.supplier": "CREATE TABLE `supplier` (\n  `S_SUPPKEY` int(11) NOT NULL COMMENT \"\",\n  `S_NAME` char(25) NOT NULL COMMENT \"\",\n  `S_ADDRESS` varchar(40) NOT NULL COMMENT \"\",\n  `S_NATIONKEY` int(11) NOT NULL COMMENT \"\",\n  `S_PHONE` char(15) NOT NULL COMMENT \"\",\n  `S_ACCTBAL` double NOT NULL COMMENT \"\",\n  `S_COMMENT` varchar(101) NOT NULL COMMENT \"\",\n  `PAD` char(1) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`S_SUPPKEY`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`S_SUPPKEY`) BUCKETS 1 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"storage_format\" \u003d \"DEFAULT\",\n\"enable_persistent_index\" \u003d \"false\",\n\"compression\" \u003d \"LZ4\"\n);"
+    "test.supplier": "CREATE TABLE `supplier` (\n  `S_SUPPKEY` int(11) NOT NULL COMMENT \"\",\n  `S_NAME` char(25) NOT NULL COMMENT \"\",\n  `S_ADDRESS` varchar(40) NOT NULL COMMENT \"\",\n  `S_NATIONKEY` int(11) NOT NULL COMMENT \"\",\n  `S_PHONE` char(15) NOT NULL COMMENT \"\",\n  `S_ACCTBAL` double NOT NULL COMMENT \"\",\n  `S_COMMENT` varchar(101) NOT NULL COMMENT \"\",\n  `PAD` char(1) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`S_SUPPKEY`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`S_SUPPKEY`) BUCKETS 1 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"enable_persistent_index\" \u003d \"false\",\n\"replicated_storage\" \u003d \"true\",\n\"compression\" \u003d \"LZ4\"\n);",
+    "test.nation": "CREATE TABLE `nation` (\n  `N_NATIONKEY` int(11) NOT NULL COMMENT \"\",\n  `N_NAME` char(25) NOT NULL COMMENT \"\",\n  `N_REGIONKEY` int(11) NOT NULL COMMENT \"\",\n  `N_COMMENT` varchar(152) NULL COMMENT \"\",\n  `PAD` char(1) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`N_NATIONKEY`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`N_NATIONKEY`) BUCKETS 1 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"enable_persistent_index\" \u003d \"false\",\n\"replicated_storage\" \u003d \"true\",\n\"compression\" \u003d \"LZ4\"\n);",
+    "test.partsupp": "CREATE TABLE `partsupp` (\n  `PS_PARTKEY` int(11) NOT NULL COMMENT \"\",\n  `PS_SUPPKEY` int(11) NOT NULL COMMENT \"\",\n  `PS_AVAILQTY` int(11) NOT NULL COMMENT \"\",\n  `PS_SUPPLYCOST` double NOT NULL COMMENT \"\",\n  `PS_COMMENT` varchar(199) NOT NULL COMMENT \"\",\n  `PAD` char(1) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`PS_PARTKEY`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`PS_PARTKEY`) BUCKETS 10 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"enable_persistent_index\" \u003d \"false\",\n\"replicated_storage\" \u003d \"true\",\n\"compression\" \u003d \"LZ4\"\n);",
+    "test.part": "CREATE TABLE `part` (\n  `P_PARTKEY` int(11) NOT NULL COMMENT \"\",\n  `P_NAME` varchar(55) NOT NULL COMMENT \"\",\n  `P_MFGR` char(25) NOT NULL COMMENT \"\",\n  `P_BRAND` char(10) NOT NULL COMMENT \"\",\n  `P_TYPE` varchar(25) NOT NULL COMMENT \"\",\n  `P_SIZE` int(11) NOT NULL COMMENT \"\",\n  `P_CONTAINER` char(10) NOT NULL COMMENT \"\",\n  `P_RETAILPRICE` double NOT NULL COMMENT \"\",\n  `P_COMMENT` varchar(23) NOT NULL COMMENT \"\",\n  `PAD` char(1) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`P_PARTKEY`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`P_PARTKEY`) BUCKETS 10 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"enable_persistent_index\" \u003d \"false\",\n\"replicated_storage\" \u003d \"true\",\n\"compression\" \u003d \"LZ4\"\n);",
+    "test.lineitem": "CREATE TABLE `lineitem` (\n  `L_ORDERKEY` int(11) NOT NULL COMMENT \"\",\n  `L_PARTKEY` int(11) NOT NULL COMMENT \"\",\n  `L_SUPPKEY` int(11) NOT NULL COMMENT \"\",\n  `L_LINENUMBER` int(11) NOT NULL COMMENT \"\",\n  `L_QUANTITY` double NOT NULL COMMENT \"\",\n  `L_EXTENDEDPRICE` double NOT NULL COMMENT \"\",\n  `L_DISCOUNT` double NOT NULL COMMENT \"\",\n  `L_TAX` double NOT NULL COMMENT \"\",\n  `L_RETURNFLAG` char(1) NOT NULL COMMENT \"\",\n  `L_LINESTATUS` char(1) NOT NULL COMMENT \"\",\n  `L_SHIPDATE` date NOT NULL COMMENT \"\",\n  `L_COMMITDATE` date NOT NULL COMMENT \"\",\n  `L_RECEIPTDATE` date NOT NULL COMMENT \"\",\n  `L_SHIPINSTRUCT` char(25) NOT NULL COMMENT \"\",\n  `L_SHIPMODE` char(10) NOT NULL COMMENT \"\",\n  `L_COMMENT` varchar(44) NOT NULL COMMENT \"\",\n  `PAD` char(1) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`L_ORDERKEY`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`L_ORDERKEY`) BUCKETS 20 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"enable_persistent_index\" \u003d \"false\",\n\"replicated_storage\" \u003d \"true\",\n\"compression\" \u003d \"LZ4\"\n);"
   },
   "table_row_count": {
     "test.nation": {

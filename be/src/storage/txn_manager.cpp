@@ -42,6 +42,7 @@
 #include <set>
 
 #include "common/tracer.h"
+#include "exec/schema_scanner/schema_be_txns_scanner.h"
 #include "storage/data_dir.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
@@ -53,6 +54,67 @@
 #include "util/time.h"
 
 namespace starrocks {
+
+// keep recently published txns in memory for a while
+static std::mutex txn_info_history_lock;
+static std::deque<TxnInfo> txn_info_history;
+
+static void add_txn_info_history(TxnInfo& info) {
+    std::lock_guard<std::mutex> l(txn_info_history_lock);
+    txn_info_history.push_back(info);
+    while (txn_info_history.size() > config::txn_info_history_size) {
+        txn_info_history.pop_front();
+    }
+}
+
+static void to_txn_info(int64_t txn_id, int64_t partition_id,
+                        const std::pair<TabletInfo, TabletTxnInfo>& tablet_load_it, TxnInfo& info) {
+    info.load_id = tablet_load_it.second.load_id;
+    info.txn_id = txn_id;
+    info.partition_id = partition_id;
+    info.tablet_id = tablet_load_it.first.tablet_id;
+    info.create_time = tablet_load_it.second.creation_time;
+    info.commit_time = tablet_load_it.second.commit_time;
+    if (tablet_load_it.second.rowset != nullptr) {
+        auto& rowset = tablet_load_it.second.rowset;
+        info.rowset_id = rowset->rowset_id().to_string();
+        info.num_segment = rowset->num_segments();
+        info.num_delfile = rowset->num_delete_files();
+        info.num_row = rowset->num_rows();
+        info.data_size = rowset->data_disk_size();
+    }
+}
+
+void TxnManager::get_txn_infos(int64_t txn_id, int64_t tablet_id, std::vector<TxnInfo>& txn_infos) {
+    for (int32_t i = 0; i < _txn_map_shard_size; i++) {
+        std::shared_lock txn_rdlock(_txn_map_locks[i]);
+        for (auto& it : _txn_tablet_maps[i]) {
+            auto& txn_key = it.first;
+            if (txn_id != -1 && txn_key.second != txn_id) {
+                continue;
+            }
+            for (auto& tablet_load_it : it.second) {
+                if (tablet_id != -1 && tablet_load_it.first.tablet_id != tablet_id) {
+                    continue;
+                }
+                auto& info = txn_infos.emplace_back();
+                to_txn_info(txn_key.second, txn_key.first, tablet_load_it, info);
+            }
+        }
+    }
+    std::lock_guard lg(txn_info_history_lock);
+    for (auto& info : txn_info_history) {
+        if (txn_id != -1 && info.txn_id != txn_id) {
+            continue;
+        }
+        if (tablet_id != -1 && info.tablet_id != tablet_id) {
+            continue;
+        }
+        txn_infos.push_back(info);
+    }
+    LOG(INFO) << "get txn infos, txn_id=" << txn_id << ", tablet_id=" << tablet_id
+              << ", txn_infos.size=" << txn_infos.size();
+}
 
 TxnManager::TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size, uint32_t store_num)
         : _txn_map_shard_size(txn_map_shard_size), _txn_shard_size(txn_shard_size) {
@@ -219,22 +281,33 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
 
     {
         std::unique_lock wrlock(_get_txn_map_lock(transaction_id));
-        TabletTxnInfo load_info(load_id, rowset_ptr);
         txn_tablet_map_t& txn_tablet_map = _get_txn_tablet_map(transaction_id);
-        txn_tablet_map[key][tablet_info] = load_info;
+        auto& tablet_txn_infos = txn_tablet_map[key];
+        auto itr = tablet_txn_infos.find(tablet_info);
+        if (itr == tablet_txn_infos.end()) {
+            TabletTxnInfo info(load_id, rowset_ptr);
+            info.commit_time = UnixSeconds();
+            tablet_txn_infos[tablet_info] = info;
+        } else {
+            itr->second.load_id = load_id;
+            itr->second.rowset = rowset_ptr;
+            itr->second.commit_time = UnixSeconds();
+        }
+        // [tablet_info] = load_info;
         _insert_txn_partition_map_unlocked(transaction_id, partition_id);
         LOG(INFO) << "Commit txn successfully. "
                   << " tablet: " << tablet_id << ", txn_id: " << key.second << ", rowsetid: " << rowset_ptr->rowset_id()
-                  << " #segment:" << rowset_ptr->num_segments() << " #delfile:" << rowset_ptr->num_delete_files();
+                  << " #segment:" << rowset_ptr->num_segments() << " #delfile:" << rowset_ptr->num_delete_files()
+                  << " #uptfiles:" << rowset_ptr->num_update_files();
     }
     return Status::OK();
 }
 
 Status TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
-                               int64_t version, const RowsetSharedPtr& rowset) {
+                               int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time) {
     if (tablet->updates() != nullptr) {
         StarRocksMetrics::instance()->update_rowset_commit_request_total.increment(1);
-        auto st = tablet->rowset_commit(version, rowset);
+        auto st = tablet->rowset_commit(version, rowset, wait_time);
         if (!st.ok()) {
             StarRocksMetrics::instance()->update_rowset_commit_request_failed.increment(1);
             return st;
@@ -254,7 +327,18 @@ Status TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr&
     TabletInfo tablet_info(tablet->tablet_id(), tablet->schema_hash(), tablet->tablet_uid());
     auto it = txn_tablet_map.find(key);
     if (it != txn_tablet_map.end()) {
-        it->second.erase(tablet_info);
+        auto tablet_txn_info_itr = it->second.find(tablet_info);
+        if (tablet_txn_info_itr != it->second.end()) {
+            TxnInfo txn_info;
+            to_txn_info(transaction_id, partition_id, *tablet_txn_info_itr, txn_info);
+            txn_info.publish_time = UnixSeconds();
+            txn_info.version = version;
+            add_txn_info_history(txn_info);
+            it->second.erase(tablet_txn_info_itr);
+            LOG(INFO) << "add txn info history. txn_id: " << transaction_id << ", partition_id: " << partition_id
+                      << ", tablet_id: " << tablet->tablet_id() << ", schema_hash: " << tablet->schema_hash()
+                      << ", rowset_id: " << rowset->rowset_id() << ", version: " << version;
+        }
         if (it->second.empty()) {
             txn_tablet_map.erase(it);
             _clear_txn_partition_map_unlocked(transaction_id, partition_id);
@@ -280,17 +364,26 @@ Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr
         persisted.insert(path);
     }
 
+    // using BThreadCountDownLatch to make sure it wouldn't block the brpc worker.
+    BThreadCountDownLatch bthread_latch(to_flush_tablet.size());
     auto token = _flush_thread_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     std::vector<std::pair<Status, int64_t>> pair_vec(to_flush_tablet.size());
     int i = 0;
     for (auto& tablet : to_flush_tablet) {
         auto dir = tablet->data_dir();
-        token->submit_func([&pair_vec, dir, i]() { pair_vec[i].first = dir->get_meta()->flush(); });
+        auto st = token->submit_func([&pair_vec, &bthread_latch, dir, i]() {
+            pair_vec[i].first = dir->get_meta()->flushWAL();
+            bthread_latch.count_down();
+        });
+        if (!st.ok()) {
+            pair_vec[i].first = st;
+            bthread_latch.count_down();
+        }
         pair_vec[i].second = tablet->tablet_id();
         i++;
     }
 
-    token->wait();
+    bthread_latch.wait();
     for (const auto& pair : pair_vec) {
         auto& st = pair.first;
         if (!st.ok()) {
@@ -312,8 +405,11 @@ void TxnManager::flush_dirs(std::unordered_set<DataDir*>& affected_dirs) {
     std::vector<std::pair<Status, std::string>> pair_vec(affected_dirs.size());
     auto token = _flush_thread_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     for (auto dir : affected_dirs) {
-        token->submit_func([&pair_vec, dir, i]() { pair_vec[i].first = dir->get_meta()->flush(); });
+        auto st = token->submit_func([&pair_vec, dir, i]() { pair_vec[i].first = dir->get_meta()->flushWAL(); });
         pair_vec[i].second = dir->path();
+        if (!st.ok()) {
+            pair_vec[i].first = std::move(st);
+        }
         i++;
     }
 

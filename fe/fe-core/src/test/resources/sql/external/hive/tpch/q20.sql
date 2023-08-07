@@ -46,10 +46,10 @@ RESULT SINK
 distribution type: GATHER
 cardinality: 40000
 column statistics:
-* s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 * s_name-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 * s_address-->[-Infinity, Infinity, 0.0, 40.0, 40000.0] ESTIMATE
-* ps_suppkey-->[1.0, 1000000.0, 0.0, 8.0, 40000.0] ESTIMATE
+* s_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+* n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 1(F13)
 
@@ -62,10 +62,10 @@ OutPut Exchange Id: 26
 |  offset: 0
 |  cardinality: 40000
 |  column statistics:
-|  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 |  * s_name-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 |  * s_address-->[-Infinity, Infinity, 0.0, 40.0, 40000.0] ESTIMATE
-|  * ps_suppkey-->[1.0, 1000000.0, 0.0, 8.0, 40000.0] ESTIMATE
+|  * s_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 24:Project
 |  output columns:
@@ -84,10 +84,10 @@ OutPut Exchange Id: 26
 |  output columns: 2, 3
 |  cardinality: 40000
 |  column statistics:
-|  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 |  * s_name-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 |  * s_address-->[-Infinity, Infinity, 0.0, 40.0, 40000.0] ESTIMATE
-|  * ps_suppkey-->[1.0, 1000000.0, 0.0, 8.0, 40000.0] ESTIMATE
+|  * s_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 |----22:EXCHANGE
 |       distribution type: SHUFFLE
@@ -139,7 +139,6 @@ TABLE: supplier
 NON-PARTITION PREDICATES: 4: s_nationkey IS NOT NULL
 partitions=1/1
 avgRowSize=73.0
-numNodes=0
 cardinality: 1000000
 probe runtime filters:
 - filter_id = 3, probe_expr = (4: s_nationkey)
@@ -168,7 +167,6 @@ NON-PARTITION PREDICATES: 9: n_name = 'ARGENTINA'
 MIN/MAX PREDICATES: 49: n_name <= 'ARGENTINA', 50: n_name >= 'ARGENTINA'
 partitions=1/1
 avgRowSize=29.0
-numNodes=0
 cardinality: 1
 column statistics:
 * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
@@ -195,7 +193,7 @@ OutPut Exchange Id: 15
 |  build runtime filters:
 |  - filter_id = 1, build_expr = (12: ps_partkey), remote = true
 |  - filter_id = 2, build_expr = (13: ps_suppkey), remote = false
-|  output columns: 13
+|  output columns: 13, 14, 43
 |  cardinality: 39032168
 |  column statistics:
 |  * ps_partkey-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
@@ -203,7 +201,7 @@ OutPut Exchange Id: 15
 |  * ps_availqty-->[1.0, 9999.0, 0.0, 4.0, 9999.0] ESTIMATE
 |  * l_partkey-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
 |  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[1.0, 1.5047014083835206E14, 0.0, 8.0, 50.0] ESTIMATE
+|  * sum-->[1.0, 8.673815217029703E7, 0.0, 8.0, 50.0] ESTIMATE
 |
 |----12:EXCHANGE
 |       distribution type: SHUFFLE
@@ -217,7 +215,7 @@ OutPut Exchange Id: 15
 |  column statistics:
 |  * l_partkey-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 |  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * sum-->[1.0, 1.5047014083835206E14, 0.0, 8.0, 50.0] ESTIMATE
+|  * sum-->[1.0, 8.673815217029703E7, 0.0, 8.0, 50.0] ESTIMATE
 |
 3:EXCHANGE
 distribution type: SHUFFLE
@@ -285,7 +283,6 @@ TABLE: part
 NON-PARTITION PREDICATES: 17: p_partkey IS NOT NULL, 18: p_name LIKE 'sienna%'
 partitions=1/1
 avgRowSize=63.0
-numNodes=0
 cardinality: 5000000
 column statistics:
 * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
@@ -302,7 +299,6 @@ TABLE: partsupp
 NON-PARTITION PREDICATES: 13: ps_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=20.0
-numNodes=0
 cardinality: 80000000
 probe runtime filters:
 - filter_id = 0, probe_expr = (12: ps_partkey)
@@ -345,7 +341,6 @@ NON-PARTITION PREDICATES: 29: l_suppkey IS NOT NULL, 37: l_shipdate >= '1993-01-
 MIN/MAX PREDICATES: 47: l_shipdate >= '1993-01-01', 48: l_shipdate < '1994-01-01'
 partitions=1/1
 avgRowSize=24.0
-numNodes=0
 cardinality: 86738152
 probe runtime filters:
 - filter_id = 1, probe_expr = (28: l_partkey)

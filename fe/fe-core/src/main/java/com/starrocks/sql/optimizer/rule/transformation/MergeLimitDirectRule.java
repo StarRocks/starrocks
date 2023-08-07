@@ -35,6 +35,7 @@ public class MergeLimitDirectRule extends TransformationRule {
     public static final MergeLimitDirectRule HUDI_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_HUDI_SCAN);
     public static final MergeLimitDirectRule DELTALAKE_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_DELTALAKE_SCAN);
     public static final MergeLimitDirectRule FILE_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_FILE_SCAN);
+    public static final MergeLimitDirectRule PAIMON_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_PAIMON_SCAN);
     public static final MergeLimitDirectRule SCHEMA_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_SCHEMA_SCAN);
     public static final MergeLimitDirectRule MYSQL_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_MYSQL_SCAN);
     public static final MergeLimitDirectRule ES_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_ES_SCAN);
@@ -46,6 +47,8 @@ public class MergeLimitDirectRule extends TransformationRule {
     public static final MergeLimitDirectRule FILTER = new MergeLimitDirectRule(OperatorType.LOGICAL_FILTER);
     public static final MergeLimitDirectRule TABLE_FUNCTION =
             new MergeLimitDirectRule(OperatorType.LOGICAL_TABLE_FUNCTION);
+    public static final MergeLimitDirectRule TABLE_FUNCTION_TABLE_SCAN =
+            new MergeLimitDirectRule(OperatorType.LOGICAL_TABLE_FUNCTION_TABLE_SCAN);
 
     private MergeLimitDirectRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_MERGE_LIMIT_DIRECT, Pattern.create(OperatorType.LOGICAL_LIMIT)

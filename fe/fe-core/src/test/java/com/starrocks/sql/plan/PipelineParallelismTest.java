@@ -127,7 +127,7 @@ public class PipelineParallelismTest extends PlanTestBase {
             assertContains(fragment0.getExplainString(TExplainLevel.NORMAL), "OLAP TABLE SINK");
             // ParallelExecNum of fragment not 1. still can not use pipeline
             Assert.assertEquals(1, fragment0.getParallelExecNum());
-            Assert.assertEquals(numHardwareCores / 2, fragment0.getPipelineDop());
+            Assert.assertEquals(numHardwareCores / 3, fragment0.getPipelineDop());
         } finally {
             Config.enable_pipeline_load = prevEnablePipelineLoad;
         }
@@ -165,7 +165,7 @@ public class PipelineParallelismTest extends PlanTestBase {
             assertContains(fragment0.getExplainString(TExplainLevel.NORMAL), "OLAP TABLE SINK");
             // enable pipeline_load by Config, so ParallelExecNum of fragment is set to 1.
             Assert.assertEquals(1, fragment0.getParallelExecNum());
-            Assert.assertEquals(numHardwareCores / 2, fragment0.getPipelineDop());
+            Assert.assertEquals(numHardwareCores / 3, fragment0.getPipelineDop());
         } finally {
             Config.enable_pipeline_load = prevEnablePipelineLoad;
         }
@@ -203,7 +203,7 @@ public class PipelineParallelismTest extends PlanTestBase {
             assertContains(fragment0.getExplainString(TExplainLevel.NORMAL), "OLAP TABLE SINK");
             // enable pipeline_load by Config, so ParallelExecNum of fragment is set to 1.
             Assert.assertEquals(1, fragment0.getParallelExecNum());
-            Assert.assertEquals(numHardwareCores / 2, fragment0.getPipelineDop());
+            Assert.assertEquals(numHardwareCores / 3, fragment0.getPipelineDop());
         } finally {
             Config.enable_pipeline_load = prevEnablePipelineLoad;
         }

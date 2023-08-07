@@ -38,4 +38,31 @@ public class BackendTest {
         Assert.assertEquals(16, BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
         Assert.assertEquals(8, BackendCoreStat.getDefaultDOP());
     }
+
+    @Test
+    public void defaultSinkDopTest() {
+        BackendCoreStat.setNumOfHardwareCoresOfBe(1, 8);
+        Assert.assertEquals(8, BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
+        Assert.assertEquals(2, BackendCoreStat.getSinkDefaultDOP());
+
+        BackendCoreStat.setNumOfHardwareCoresOfBe(1, 16);
+        Assert.assertEquals(16, BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
+        Assert.assertEquals(5, BackendCoreStat.getSinkDefaultDOP());
+
+        BackendCoreStat.setNumOfHardwareCoresOfBe(1, 24);
+        Assert.assertEquals(24, BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
+        Assert.assertEquals(8, BackendCoreStat.getSinkDefaultDOP());
+
+        BackendCoreStat.setNumOfHardwareCoresOfBe(1, 32);
+        Assert.assertEquals(32, BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
+        Assert.assertEquals(8, BackendCoreStat.getSinkDefaultDOP());
+
+        BackendCoreStat.setNumOfHardwareCoresOfBe(1, 48);
+        Assert.assertEquals(48, BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
+        Assert.assertEquals(12, BackendCoreStat.getSinkDefaultDOP());
+
+        BackendCoreStat.setNumOfHardwareCoresOfBe(1, 64);
+        Assert.assertEquals(64, BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
+        Assert.assertEquals(16, BackendCoreStat.getSinkDefaultDOP());
+    }
 }

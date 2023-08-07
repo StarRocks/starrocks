@@ -42,7 +42,6 @@ Status PushHandler::process_streaming_ingestion(const TabletSharedPtr& tablet, c
                                                 PushType push_type, std::vector<TTabletInfo>* tablet_info_vec) {
     LOG(INFO) << "begin to realtime vectorized push. tablet=" << tablet->full_name()
               << ", txn_id: " << request.transaction_id;
-    DCHECK(request.__isset.use_vectorized && request.use_vectorized);
 
     _request = request;
     std::vector<TabletVars> tablet_vars(1);
@@ -298,7 +297,7 @@ Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetShare
 
         // read data from broker and write into Rowset of cur_tablet
         VLOG(3) << "start to convert etl file to delta.";
-        auto schema = ChunkHelper::convert_schema_to_format_v2(cur_tablet->tablet_schema());
+        auto schema = ChunkHelper::convert_schema(cur_tablet->tablet_schema());
         ChunkPtr chunk = ChunkHelper::new_chunk(schema, 0);
         while (!reader->eof()) {
             st = reader->next_chunk(&chunk);

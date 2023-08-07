@@ -97,7 +97,7 @@ public:
     void merge_runtime_filter(PTransmitRuntimeFilterParams& params, RuntimeFilterRpcClosure* rpc_closure);
 
 private:
-    void _send_total_runtime_filter(int32_t filter_id, RuntimeFilterRpcClosure* rpc_closure);
+    void _send_total_runtime_filter(int rf_version, int32_t filter_id, RuntimeFilterRpcClosure* rpc_closure);
     // filter_id -> where this filter should send to
     std::map<int32_t, std::vector<TRuntimeFilterProberParams>> _targets;
     std::map<int32_t, RuntimeFilterMergerStatus> _statuses;
@@ -117,7 +117,7 @@ private:
 // - receive total RF and send it to RuntimeFilterPort
 // - send partitioned RF(for hash join node)
 // - close a query(delete runtime filter merger)
-class RuntimeFilterWorkerEvent;
+struct RuntimeFilterWorkerEvent;
 class RuntimeFilterWorker {
 public:
     RuntimeFilterWorker(ExecEnv* env);

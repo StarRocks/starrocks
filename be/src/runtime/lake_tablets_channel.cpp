@@ -39,30 +39,44 @@
 #include "storage/lake/async_delta_writer.h"
 #include "storage/memtable.h"
 #include "storage/storage_engine.h"
+#include "util/bthreads/bthread_shared_mutex.h"
 #include "util/compression/block_compression.h"
 #include "util/countdown_latch.h"
+#include "util/stack_trace_mutex.h"
 
 namespace starrocks {
+
+namespace lake {
+class TabletManager;
+}
 
 class LakeTabletsChannel : public TabletsChannel {
     using AsyncDeltaWriter = lake::AsyncDeltaWriter;
 
 public:
-    LakeTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker);
+    LakeTabletsChannel(LoadChannel* load_channel, lake::TabletManager* tablet_manager, const TabletsChannelKey& key,
+                       MemTracker* mem_tracker);
+
     ~LakeTabletsChannel() override;
 
     DISALLOW_COPY_AND_MOVE(LakeTabletsChannel);
 
     const TabletsChannelKey& key() const { return _key; }
 
-    Status open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema) override;
+    Status open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema,
+                bool is_incremental) override;
 
     void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                    PTabletWriterAddBatchResult* response) override;
 
+    Status incremental_open(const PTabletWriterOpenRequest& params,
+                            std::shared_ptr<OlapTableSchemaParam> schema) override;
+
     void cancel() override;
 
     void abort() override;
+
+    void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) override { return abort(); }
 
     MemTracker* mem_tracker() { return _mem_tracker; }
 
@@ -70,8 +84,9 @@ private:
     using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
 
     struct Sender {
-        bthread::Mutex lock;
+        StackTraceMutex<bthread::Mutex> lock;
         int64_t next_seq = 0;
+        bool has_incremental_open = false;
     };
 
     class WriteContext {
@@ -105,7 +120,7 @@ private:
     private:
         friend class LakeTabletsChannel;
 
-        mutable bthread::Mutex _mtx;
+        mutable StackTraceMutex<bthread::Mutex> _mtx;
         PTabletWriterAddBatchResult* _response;
 
         Chunk _chunk;
@@ -113,7 +128,8 @@ private:
         std::unique_ptr<uint32_t[]> _channel_row_idx_start_points;
     };
 
-    Status _create_delta_writers(const PTabletWriterOpenRequest& params);
+    // called by open() or incremental_open to build AsyncDeltaWriter for tablets
+    Status _create_delta_writers(const PTabletWriterOpenRequest& params, bool is_incremental);
 
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
 
@@ -126,6 +142,7 @@ private:
     Status _deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer);
 
     LoadChannel* _load_channel;
+    lake::TabletManager* _tablet_manager;
 
     TabletsChannelKey _key;
 
@@ -136,27 +153,32 @@ private:
     int64_t _index_id = -1;
     std::shared_ptr<OlapTableSchemaParam> _schema;
 
-    // next sequence we expect
-    std::atomic<int> _num_remaining_senders;
     std::vector<Sender> _senders;
 
-    mutable bthread::Mutex _dirty_partitions_lock;
+    mutable StackTraceMutex<bthread::Mutex> _dirty_partitions_lock;
     std::unordered_set<int64_t> _dirty_partitions;
 
-    mutable bthread::Mutex _chunk_meta_lock;
+    mutable StackTraceMutex<bthread::Mutex> _chunk_meta_lock;
     serde::ProtobufChunkMeta _chunk_meta;
     std::atomic<bool> _has_chunk_meta;
 
+    // shared mutex to protect the unordered_map
+    // * open/incremental_open needs to modify the map
+    // * other interfaces needs to read the map
+    mutable bthreads::BThreadSharedMutex _rw_mtx;
     std::unordered_map<int64_t, uint32_t> _tablet_id_to_sorted_indexes;
     std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>> _delta_writers;
 
     GlobalDictByNameMaps _global_dicts;
     std::unique_ptr<MemPool> _mem_pool;
+    bool _is_incremental_channel{false};
 };
 
-LakeTabletsChannel::LakeTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker)
+LakeTabletsChannel::LakeTabletsChannel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
+                                       const TabletsChannelKey& key, MemTracker* mem_tracker)
         : TabletsChannel(),
           _load_channel(load_channel),
+          _tablet_manager(tablet_manager),
           _key(key),
           _mem_tracker(mem_tracker),
           _mem_pool(std::make_unique<MemPool>()) {}
@@ -165,18 +187,28 @@ LakeTabletsChannel::~LakeTabletsChannel() {
     _mem_pool.reset();
 }
 
-Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema) {
+Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema,
+                                bool is_incremental) {
+    std::unique_lock<bthreads::BThreadSharedMutex> l(_rw_mtx);
     _txn_id = params.txn_id();
     _index_id = params.index_id();
     _schema = schema;
-    _num_remaining_senders.store(params.num_senders(), std::memory_order_release);
+    _is_incremental_channel = is_incremental;
+
     _senders = std::vector<Sender>(params.num_senders());
-    RETURN_IF_ERROR(_create_delta_writers(params));
+    if (_is_incremental_channel) {
+        _num_remaining_senders.fetch_add(1, std::memory_order_release);
+        _senders[params.sender_id()].has_incremental_open = true;
+    } else {
+        _num_remaining_senders.store(params.num_senders(), std::memory_order_release);
+    }
+    RETURN_IF_ERROR(_create_delta_writers(params, false));
     return Status::OK();
 }
 
 void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                                    PTabletWriterAddBatchResult* response) {
+    std::shared_lock<bthreads::BThreadSharedMutex> rolk(_rw_mtx);
     auto t0 = std::chrono::steady_clock::now();
 
     if (UNLIKELY(!request.has_sender_id())) {
@@ -276,10 +308,10 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     // Submit `AsyncDeltaWriter::finish()` tasks if needed
     if (request.eos()) {
         int unfinished_senders = _close_sender(request.partition_ids().data(), request.partition_ids().size());
-        close_channel = (unfinished_senders == 0);
-        if (!close_channel) {
+        if (unfinished_senders > 0) {
             count_down_latch.count_down(_delta_writers.size());
-        } else {
+        } else if (unfinished_senders == 0) {
+            close_channel = true;
             VLOG(5) << "Closing channel. txn_id=" << _txn_id;
             std::lock_guard l1(_dirty_partitions_lock);
             for (auto& [tablet_id, dw] : _delta_writers) {
@@ -306,13 +338,17 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                     count_down_latch.count_down();
                 });
             }
+        } else {
+            count_down_latch.count_down(_delta_writers.size());
+            context->update_status(Status::InternalError("Unexpected state: unfinished_senders < 0"));
         }
     }
 
     // Block the current bthread(not pthread) until all `write()` and `finish()` tasks finished.
     count_down_latch.wait();
 
-    if (context->_response->status().status_code() == TStatusCode::OK) {
+    if (request.eos() || context->_response->status().status_code() == TStatusCode::OK) {
+        // ^^^^^^^^^^ Reject new requests once eos request received.
         sender.next_seq++;
     }
 
@@ -322,12 +358,21 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
 
     if (close_channel) {
         _load_channel->remove_tablets_channel(_index_id);
+    } else if (request.eos() && request.wait_all_sender_close()) {
+        std::string msg = fmt::format("LakeTabletsChannel txn_id: {} load_id: {}", _txn_id, print_id(request.id()));
+        // wait for senders to be closed, may be timed out
+        auto remain = request.timeout_ms();
+        remain -= std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
+        LOG(INFO) << msg << ", wait for all senders closed ...";
+
+        // unlock write lock so that incremental open can aquire read lock
+        rolk.unlock();
+        drain_senders(remain * 1000, msg);
     }
 }
 
 int LakeTabletsChannel::_close_sender(const int64_t* partitions, size_t partitions_size) {
     int n = _num_remaining_senders.fetch_sub(1);
-    DCHECK_GE(n, 1);
     std::lock_guard l(_dirty_partitions_lock);
     for (int i = 0; i < partitions_size; i++) {
         _dirty_partitions.insert(partitions[i]);
@@ -335,7 +380,7 @@ int LakeTabletsChannel::_close_sender(const int64_t* partitions, size_t partitio
     return n - 1;
 }
 
-Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest& params) {
+Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest& params, bool is_incremental) {
     std::vector<SlotDescriptor*>* slots = nullptr;
     for (auto& index : _schema->indexes()) {
         if (index->index_id == _index_id) {
@@ -347,38 +392,64 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
         return Status::InvalidArgument(fmt::format("Unknown index_id: {}", _key.to_string()));
     }
     // init global dict info if needed
-    for (auto& slot : params.schema().slot_descs()) {
-        GlobalDictMap global_dict;
-        if (slot.global_dict_words_size()) {
-            for (size_t i = 0; i < slot.global_dict_words_size(); i++) {
-                const std::string& dict_word = slot.global_dict_words(i);
-                auto* data = _mem_pool->allocate(dict_word.size());
-                RETURN_IF_UNLIKELY_NULL(data, Status::MemoryAllocFailed("alloc mem for global dict failed"));
-                memcpy(data, dict_word.data(), dict_word.size());
-                Slice slice(data, dict_word.size());
-                global_dict.emplace(slice, i);
+    if (!is_incremental) {
+        for (auto& slot : params.schema().slot_descs()) {
+            GlobalDictMap global_dict;
+            if (slot.global_dict_words_size()) {
+                for (size_t i = 0; i < slot.global_dict_words_size(); i++) {
+                    const std::string& dict_word = slot.global_dict_words(i);
+                    auto* data = _mem_pool->allocate(dict_word.size());
+                    RETURN_IF_UNLIKELY_NULL(data, Status::MemoryAllocFailed("alloc mem for global dict failed"));
+                    memcpy(data, dict_word.data(), dict_word.size());
+                    Slice slice(data, dict_word.size());
+                    global_dict.emplace(slice, i);
+                }
+                GlobalDictsWithVersion<GlobalDictMap> dict;
+                dict.dict = std::move(global_dict);
+                dict.version = slot.has_global_dict_version() ? slot.global_dict_version() : 0;
+                _global_dicts.emplace(std::make_pair(slot.col_name(), std::move(dict)));
             }
-            _global_dicts.insert(std::make_pair(slot.col_name(), std::move(global_dict)));
         }
     }
 
     std::vector<int64_t> tablet_ids;
     tablet_ids.reserve(params.tablets_size());
     for (const PTabletWithPartition& tablet : params.tablets()) {
-        auto writer = AsyncDeltaWriter::create(tablet.tablet_id(), _txn_id, tablet.partition_id(), slots, _mem_tracker);
+        if (_delta_writers.count(tablet.tablet_id()) != 0) {
+            // already created for the tablet, usually in incremental open case
+            continue;
+        }
+        std::unique_ptr<AsyncDeltaWriter> writer;
+        if (params.miss_auto_increment_column()) {
+            writer = AsyncDeltaWriter::create(_tablet_manager, tablet.tablet_id(), _txn_id, tablet.partition_id(),
+                                              slots, params.merge_condition(), true, params.table_id(), _mem_tracker);
+        } else if (!params.merge_condition().empty()) {
+            writer = AsyncDeltaWriter::create(_tablet_manager, tablet.tablet_id(), _txn_id, tablet.partition_id(),
+                                              slots, params.merge_condition(), _mem_tracker);
+        } else {
+            writer = AsyncDeltaWriter::create(_tablet_manager, tablet.tablet_id(), _txn_id, tablet.partition_id(),
+                                              slots, _mem_tracker);
+        }
         _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());
     }
-    DCHECK_EQ(_delta_writers.size(), params.tablets_size());
-    // In order to get sorted index for each tablet
-    std::sort(tablet_ids.begin(), tablet_ids.end());
-    for (size_t i = 0; i < tablet_ids.size(); ++i) {
-        _tablet_id_to_sorted_indexes.emplace(tablet_ids[i], i);
+    if (!tablet_ids.empty()) { // has new tablets added, need rebuild the sorted index
+        tablet_ids.reserve(tablet_ids.size() + _tablet_id_to_sorted_indexes.size());
+        for (auto& iter : _tablet_id_to_sorted_indexes) {
+            tablet_ids.emplace_back(iter.first);
+        }
+        // In order to get sorted index for each tablet
+        std::sort(tablet_ids.begin(), tablet_ids.end());
+        DCHECK_EQ(_delta_writers.size(), tablet_ids.size());
+        for (size_t i = 0; i < tablet_ids.size(); ++i) {
+            _tablet_id_to_sorted_indexes.emplace(tablet_ids[i], i);
+        }
     }
     return Status::OK();
 }
 
 void LakeTabletsChannel::abort() {
+    std::shared_lock<bthreads::BThreadSharedMutex> l(_rw_mtx);
     for (auto& it : _delta_writers) {
         it.second->close();
     }
@@ -437,9 +508,21 @@ StatusOr<std::unique_ptr<LakeTabletsChannel::WriteContext>> LakeTabletsChannel::
     return std::move(context);
 }
 
-std::shared_ptr<TabletsChannel> new_lake_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
-                                                         MemTracker* mem_tracker) {
-    return std::make_shared<LakeTabletsChannel>(load_channel, key, mem_tracker);
+Status LakeTabletsChannel::incremental_open(const PTabletWriterOpenRequest& params,
+                                            std::shared_ptr<OlapTableSchemaParam> schema) {
+    std::unique_lock<bthreads::BThreadSharedMutex> l(_rw_mtx);
+    RETURN_IF_ERROR(_create_delta_writers(params, true));
+    // properly set incremental flags and counters
+    if (_is_incremental_channel && !_senders[params.sender_id()].has_incremental_open) {
+        _num_remaining_senders.fetch_add(1, std::memory_order_release);
+        _senders[params.sender_id()].has_incremental_open = true;
+    }
+    return Status::OK();
+}
+
+std::shared_ptr<TabletsChannel> new_lake_tablets_channel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
+                                                         const TabletsChannelKey& key, MemTracker* mem_tracker) {
+    return std::make_shared<LakeTabletsChannel>(load_channel, tablet_manager, key, mem_tracker);
 }
 
 } // namespace starrocks

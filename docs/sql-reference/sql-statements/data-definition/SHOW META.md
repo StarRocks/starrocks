@@ -2,14 +2,16 @@
 
 ## Description
 
-Views metadata of statistics, including basic statistics and histograms.
+Views metadata of CBO statistics, including basic statistics and histograms.
+
+This statement is supported from v2.4.
 
 ### View metadata of basic statistics
 
 #### Syntax
 
 ```SQL
-SHOW STATS META [WHERE];
+SHOW STATS META [WHERE]
 ```
 
 This statement returns the following columns.

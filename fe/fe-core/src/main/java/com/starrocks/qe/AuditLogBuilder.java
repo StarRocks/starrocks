@@ -69,7 +69,7 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
 
     @Override
     public boolean eventFilter(EventType type) {
-        return type == EventType.AFTER_QUERY;
+        return type == EventType.AFTER_QUERY || type == EventType.CONNECTION;
     }
 
     @Override
@@ -126,18 +126,22 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
             }
 
             String auditLog = sb.toString();
-            AuditLog.getQueryAudit().log(auditLog);
-            // slow query
-            if (queryTime > Config.qe_slow_log_ms) {
-                AuditLog.getSlowAudit().log(auditLog);
-            }
+            if (event.type == EventType.CONNECTION) {
+                AuditLog.getConnectionAudit().log(auditLog);
+            } else {
+                AuditLog.getQueryAudit().log(auditLog);
+                // slow query
+                if (queryTime > Config.qe_slow_log_ms) {
+                    AuditLog.getSlowAudit().log(auditLog);
+                }
 
-            if (isBigQuery(event)) {
-                sb.append("|bigQueryLogCPUSecondThreshold=").append(event.bigQueryLogCPUSecondThreshold);
-                sb.append("|bigQueryLogScanBytesThreshold=").append(event.bigQueryLogScanBytesThreshold);
-                sb.append("|bigQueryLogScanRowsThreshold=").append(event.bigQueryLogScanRowsThreshold);
-                String bigQueryLog = sb.toString();
-                AuditLog.getBigQueryAudit().log(bigQueryLog);
+                if (isBigQuery(event)) {
+                    sb.append("|bigQueryLogCPUSecondThreshold=").append(event.bigQueryLogCPUSecondThreshold);
+                    sb.append("|bigQueryLogScanBytesThreshold=").append(event.bigQueryLogScanBytesThreshold);
+                    sb.append("|bigQueryLogScanRowsThreshold=").append(event.bigQueryLogScanRowsThreshold);
+                    String bigQueryLog = sb.toString();
+                    AuditLog.getBigQueryAudit().log(bigQueryLog);
+                }
             }
         } catch (Exception e) {
             LOG.debug("failed to process audit event", e);

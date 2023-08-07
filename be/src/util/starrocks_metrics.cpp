@@ -37,7 +37,6 @@
 #include <unistd.h>
 
 #include "fs/fs.h"
-#include "util/debug_util.h"
 #include "util/system_metrics.h"
 
 namespace starrocks {
@@ -69,6 +68,12 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(update_del_vector_bytes_total);
     REGISTER_STARROCKS_METRIC(update_del_vector_deletes_total);
     REGISTER_STARROCKS_METRIC(update_del_vector_deletes_new);
+    REGISTER_STARROCKS_METRIC(column_partial_update_apply_total);
+    REGISTER_STARROCKS_METRIC(column_partial_update_apply_duration_us);
+    REGISTER_STARROCKS_METRIC(delta_column_group_get_total);
+    REGISTER_STARROCKS_METRIC(delta_column_group_get_hit_cache);
+    REGISTER_STARROCKS_METRIC(delta_column_group_get_non_pk_total);
+    REGISTER_STARROCKS_METRIC(delta_column_group_get_non_pk_hit_cache);
 
     // push request
     _metrics.register_metric("push_requests_total", MetricLabels().add("status", "SUCCESS"),
@@ -175,13 +180,6 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(max_disk_io_util_percent);
     REGISTER_STARROCKS_METRIC(max_network_send_bytes_rate);
     REGISTER_STARROCKS_METRIC(max_network_receive_bytes_rate);
-
-#ifndef USE_JEMALLOC
-    REGISTER_STARROCKS_METRIC(tcmalloc_total_bytes_reserved);
-    REGISTER_STARROCKS_METRIC(tcmalloc_pageheap_unmapped_bytes);
-    REGISTER_STARROCKS_METRIC(tcmalloc_bytes_in_use);
-#else
-#endif
 
     _metrics.register_hook(_s_hook_name, [this] { _update(); });
 

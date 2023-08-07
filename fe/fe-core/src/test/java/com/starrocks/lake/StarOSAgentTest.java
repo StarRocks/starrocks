@@ -24,14 +24,18 @@ import com.staros.proto.CreateShardGroupInfo;
 import com.staros.proto.CreateShardInfo;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
+import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
+import com.staros.proto.S3FileStoreInfo;
 import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
+import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerInfo;
 import com.staros.proto.WorkerState;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.UserException;
@@ -47,6 +51,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -67,6 +72,7 @@ public class StarOSAgentTest {
     public void setUp() throws Exception {
         starosAgent = new StarOSAgent();
         starosAgent.init(null);
+        Config.cloud_native_storage_type = "S3";
     }
 
     @Test
@@ -140,23 +146,59 @@ public class StarOSAgentTest {
     }
 
     @Test
-    public void testAllocateFilePath() throws StarClientException, DdlException {
+    public void testAllocateFilePath() throws StarClientException {
+        long tableId = 123;
+
         new Expectations() {
             {
-                FilePathInfo pathInfo = client.allocateFilePath("1", FileStoreType.S3, "123");
-                result = pathInfo;
+                client.allocateFilePath("1", FileStoreType.S3, Long.toString(tableId));
+                result = FilePathInfo.newBuilder().build();
                 minTimes = 0;
+
+                client.allocateFilePath("2", FileStoreType.S3, Long.toString(tableId));
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked exception");
             }
         };
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Config.cloud_native_storage_type = "s3";
+        ExceptionChecker.expectThrowsNoException(() -> starosAgent.allocateFilePath(tableId));
+
+        Config.cloud_native_storage_type = "ss";
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Invalid cloud native storage type: ss",
+                () -> starosAgent.allocateFilePath(tableId));
+
+        Config.cloud_native_storage_type = "s3";
+        Deencapsulation.setField(starosAgent, "serviceId", "2");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Failed to allocate file path from StarMgr, error: INVALID_ARGUMENT:mocked exception",
+                () -> starosAgent.allocateFilePath(tableId));
+
+        new Expectations() {
+            {
+                client.allocateFilePath("1", "test-fskey", Long.toString(tableId));
+                result = FilePathInfo.newBuilder().build();
+                minTimes = 0;
+
+                client.allocateFilePath("2", "test-fskey", Long.toString(tableId));
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked exception");
+            }
+        };
+        Config.cloud_native_storage_type = "s3";
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        ExceptionChecker.expectThrowsNoException(() -> starosAgent.allocateFilePath("test-fskey", tableId));
+
+        Deencapsulation.setField(starosAgent, "serviceId", "2");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Failed to allocate file path from StarMgr, error: INVALID_ARGUMENT:mocked exception",
+                () -> starosAgent.allocateFilePath("test-fskey", tableId));
     }
 
     @Test
     public void testAddAndRemoveWorker() throws Exception {
         new Expectations() {
             {
-                client.addWorker("1", "127.0.0.1:8090");
+                client.addWorker("1", "127.0.0.1:8090", StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 minTimes = 0;
                 result = 10;
 
@@ -168,7 +210,7 @@ public class StarOSAgentTest {
 
         String workerHost = "127.0.0.1:8090";
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-        starosAgent.addWorker(5, workerHost);
+        starosAgent.addWorker(5, workerHost, 0);
         Assert.assertEquals(10, starosAgent.getWorkerId(workerHost));
 
         starosAgent.removeWorker(workerHost);
@@ -176,10 +218,44 @@ public class StarOSAgentTest {
     }
 
     @Test
+    public void testAddWillRemovePreviousWorker() throws Exception {
+        final String workerHost = "127.0.0.1:8090";
+        final long workerId1 = 10;
+        final long workerId2 = 11;
+        new Expectations() {
+            {
+                client.addWorker("1", workerHost, 0);
+                minTimes = 1;
+                result = workerId1;
+            }
+        };
+
+        long backendId = 5;
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        starosAgent.addWorker(backendId, workerHost, 0);
+        Assert.assertEquals(workerId1, starosAgent.getWorkerIdByBackendId(backendId));
+
+        final String workerHost2 = "127.0.0.1:8091";
+        new Expectations() {
+            {
+                client.addWorker("1", workerHost2, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                minTimes = 1;
+                result = workerId2;
+
+                client.removeWorker("1", workerId1);
+                minTimes = 1;
+                result = null;
+            }
+        };
+        starosAgent.addWorker(backendId, workerHost2, 0);
+        Assert.assertEquals(workerId2, starosAgent.getWorkerIdByBackendId(backendId));
+    }
+
+    @Test
     public void testAddWorkerException() throws Exception {
         new Expectations() {
             {
-                client.addWorker("1", "127.0.0.1:8090");
+                client.addWorker("1", "127.0.0.1:8090", StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 minTimes = 0;
                 result = new StarClientException(StatusCode.ALREADY_EXIST, "worker already exists");
 
@@ -191,13 +267,13 @@ public class StarOSAgentTest {
 
         String workerHost = "127.0.0.1:8090";
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-        starosAgent.addWorker(5, workerHost);
+        starosAgent.addWorker(5, workerHost, 0);
         Assert.assertEquals(6, starosAgent.getWorkerId(workerHost));
         Assert.assertEquals(6, starosAgent.getWorkerIdByBackendId(5));
 
         new Expectations() {
             {
-                client.addWorker("1", "127.0.0.1:8091");
+                client.addWorker("1", "127.0.0.1:8091", StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 minTimes = 0;
                 result = new StarClientException(StatusCode.ALREADY_EXIST,
                         "worker already exists");
@@ -208,7 +284,7 @@ public class StarOSAgentTest {
                         "network error");
             }
         };
-        starosAgent.addWorker(10, "127.0.0.1:8091");
+        starosAgent.addWorker(10, "127.0.0.1:8091", 0);
         ExceptionChecker.expectThrows(NullPointerException.class,
                 () -> starosAgent.getWorkerId("127.0.0.1:8091"));
     }
@@ -281,7 +357,7 @@ public class StarOSAgentTest {
         // test create shards
         FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
         FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
-        Assert.assertEquals(Lists.newArrayList(10L, 11L), starosAgent.createShards(2, 1, pathInfo, cacheInfo, 333));
+        Assert.assertEquals(Lists.newArrayList(10L, 11L), starosAgent.createShards(2, pathInfo, cacheInfo, 333));
 
         // list shard group
         List<ShardGroupInfo> realGroupIds = starosAgent.listShardGroup();
@@ -304,7 +380,6 @@ public class StarOSAgentTest {
         // test delete shard group
         ExceptionChecker.expectThrowsNoException(() -> starosAgent.deleteShardGroup(Lists.newArrayList(1L, 2L)));
     }
-
 
     @Test
     public void testGetBackendByShard() throws StarClientException, UserException {
@@ -337,6 +412,11 @@ public class StarOSAgentTest {
             public long getBackendIdWithStarletPort(String host, int starletPort) {
                 return -1L;
             }
+
+            @Mock
+            public long getComputeNodeIdWithStarletPort(String host, int starletPort) {
+                return -1L;
+            }
         };
 
         new MockUp<WorkerInfo>() {
@@ -348,7 +428,7 @@ public class StarOSAgentTest {
 
         new Expectations() {
             {
-                client.getShardInfo("1", Lists.newArrayList(10L));
+                client.getShardInfo("1", Lists.newArrayList(10L), StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 minTimes = 0;
                 result = shards;
             }
@@ -359,10 +439,10 @@ public class StarOSAgentTest {
         Deencapsulation.setField(starosAgent, "workerToBackend", workerToBackend);
 
         ExceptionChecker.expectThrowsWithMsg(UserException.class,
-                "Failed to get backend by worker. worker id",
-                () -> starosAgent.getPrimaryBackendIdByShard(10L));
+                "Failed to get primary backend. shard id: 10",
+                () -> starosAgent.getPrimaryComputeNodeIdByShard(10L));
 
-        Assert.assertEquals(Sets.newHashSet(), starosAgent.getBackendIdsByShard(10L));
+        Assert.assertEquals(Sets.newHashSet(), starosAgent.getBackendIdsByShard(10L, 0));
 
         workerToBackend.put(1L, 10001L);
         workerToBackend.put(2L, 10002L);
@@ -370,8 +450,9 @@ public class StarOSAgentTest {
         Deencapsulation.setField(starosAgent, "workerToBackend", workerToBackend);
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-        Assert.assertEquals(10001L, starosAgent.getPrimaryBackendIdByShard(10L));
-        Assert.assertEquals(Sets.newHashSet(10001L, 10002L, 10003L), starosAgent.getBackendIdsByShard(10L));
+        Assert.assertEquals(10001L, starosAgent.getPrimaryComputeNodeIdByShard(10L));
+        Assert.assertEquals(Sets.newHashSet(10001L, 10002L, 10003L),
+                starosAgent.getBackendIdsByShard(10L, 0));
     }
 
     @Test
@@ -386,4 +467,210 @@ public class StarOSAgentTest {
         ExceptionChecker.expectThrows(NullPointerException.class, () -> starosAgent.getWorkerId(workerHost));
     }
 
+    private WorkerInfo newWorkerInfo(long workerId, String ipPort, int beHeartbeatPort, int bePort, int beHttpPort,
+                                     int beBrpcPort) {
+        return WorkerInfo.newBuilder().setWorkerId(workerId).setIpPort(ipPort)
+                .putWorkerProperties("be_heartbeat_port", String.valueOf(beHeartbeatPort))
+                .putWorkerProperties("be_port", String.valueOf(bePort))
+                .putWorkerProperties("be_http_port", String.valueOf(beHttpPort))
+                .putWorkerProperties("be_brpc_port", String.valueOf(beBrpcPort))
+                .build();
+    }
+
+    @Test
+    public void testGetWorkers() throws StarClientException, UserException {
+        String serviceId = "1";
+        Deencapsulation.setField(starosAgent, "serviceId", serviceId);
+
+        long workerId0 = 10000L;
+        WorkerInfo worker0 = newWorkerInfo(workerId0, "127.0.0.1:8090", 9050, 9060, 8040, 8060);
+        long workerId1 = 10001L;
+        WorkerInfo worker1 = newWorkerInfo(workerId1, "127.0.0.2:8091", 9051, 9061, 8041, 8061);
+        long groupId0 = 10L;
+        WorkerGroupDetailInfo group0 = WorkerGroupDetailInfo.newBuilder().setGroupId(groupId0).addWorkersInfo(worker0)
+                .addWorkersInfo(worker1).build();
+
+        long workerId2 = 10002L;
+        WorkerInfo worker2 = newWorkerInfo(workerId2, "127.0.0.3:8092", 9052, 9062, 8042, 8062);
+        long groupId1 = 11L;
+        WorkerGroupDetailInfo group1 = WorkerGroupDetailInfo.newBuilder().setGroupId(groupId1).addWorkersInfo(worker2)
+                .build();
+
+        new Expectations() {
+            {
+                client.getWorkerInfo(serviceId, workerId0);
+                minTimes = 0;
+                result = worker0;
+
+                client.listWorkerGroup(serviceId, Lists.newArrayList(groupId0), true);
+                minTimes = 0;
+                result = Lists.newArrayList(group0);
+
+                client.listWorkerGroup(serviceId, Lists.newArrayList(), true);
+                minTimes = 0;
+                result = Lists.newArrayList(group0, group1);
+            }
+        };
+
+        List<Long> nodes = starosAgent.getWorkersByWorkerGroup(groupId0);
+        Assert.assertEquals(2, nodes.size());
+    }
+
+    @Test
+    public void testAddFileStore() throws StarClientException, DdlException {
+        S3FileStoreInfo s3FsInfo = S3FileStoreInfo.newBuilder()
+                .setRegion("region").setEndpoint("endpoint").build();
+        FileStoreInfo fsInfo = FileStoreInfo.newBuilder().setFsKey("test-fskey")
+                .setFsName("test-fsname").setFsType(FileStoreType.S3).setS3FsInfo(s3FsInfo).build();
+        new Expectations() {
+            {
+                client.addFileStore(fsInfo, "1");
+                result = fsInfo.getFsKey();
+                minTimes = 0;
+
+                client.addFileStore(fsInfo, "2");
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked exception");
+            }
+        };
+
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Assert.assertEquals("test-fskey", starosAgent.addFileStore(fsInfo));
+
+        Deencapsulation.setField(starosAgent, "serviceId", "2");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Failed to add file store, error: INVALID_ARGUMENT:mocked exception",
+                () -> starosAgent.addFileStore(fsInfo));
+    }
+
+    @Test
+    public void testListFileStore() throws StarClientException, DdlException {
+        S3FileStoreInfo s3FsInfo = S3FileStoreInfo.newBuilder()
+                .setRegion("region").setEndpoint("endpoint").build();
+        FileStoreInfo fsInfo = FileStoreInfo.newBuilder().setFsKey("test-fskey")
+                .setFsName("test-fsname").setFsType(FileStoreType.S3).setS3FsInfo(s3FsInfo).build();
+        new Expectations() {
+            {
+                client.listFileStore("1");
+                result = new ArrayList<>(Arrays.asList(fsInfo));
+                minTimes = 0;
+
+                client.listFileStore("2");
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked exception");
+            }
+        };
+
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Assert.assertEquals(1, starosAgent.listFileStore().size());
+        Assert.assertEquals("test-fskey", starosAgent.listFileStore().get(0).getFsKey());
+
+        Deencapsulation.setField(starosAgent, "serviceId", "2");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Failed to list file store, error: INVALID_ARGUMENT:mocked exception",
+                () -> starosAgent.listFileStore());
+    }
+
+    @Test
+    public void testUpdateFileStore() throws StarClientException, DdlException {
+        S3FileStoreInfo s3FsInfo = S3FileStoreInfo.newBuilder()
+                .setRegion("region").setEndpoint("endpoint").build();
+        FileStoreInfo fsInfo = FileStoreInfo.newBuilder().setFsKey("test-fskey")
+                .setFsName("test-fsname").setFsType(FileStoreType.S3).setS3FsInfo(s3FsInfo).build();
+        new Expectations() {
+            {
+                client.updateFileStore(fsInfo, "1");
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked exception");
+            }
+        };
+
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Failed to update file store, error: INVALID_ARGUMENT:mocked exception",
+                () -> starosAgent.updateFileStore(fsInfo));
+    }
+
+    @Test
+    public void testRemoveFileStoreByName() throws StarClientException, DdlException {
+        new Expectations() {
+            {
+                client.removeFileStoreByName("test-fsname", "1");
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked exception");
+            }
+        };
+
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Failed to remove file store, error: INVALID_ARGUMENT:mocked exception",
+                () -> starosAgent.removeFileStoreByName("test-fsname"));
+    }
+
+    @Test
+    public void testGetFileStoreByName() throws StarClientException, DdlException {
+        S3FileStoreInfo s3FsInfo = S3FileStoreInfo.newBuilder()
+                .setRegion("region").setEndpoint("endpoint").build();
+        FileStoreInfo fsInfo = FileStoreInfo.newBuilder().setFsKey("test-fskey")
+                .setFsName("test-fsname").setFsType(FileStoreType.S3).setS3FsInfo(s3FsInfo).build();
+        new Expectations() {
+            {
+                client.getFileStoreByName("test-fsname", "1");
+                result = fsInfo;
+                minTimes = 0;
+
+                client.getFileStoreByName("test-fsname", "2");
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked exception");
+            }
+        };
+
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Assert.assertEquals("test-fskey", starosAgent.getFileStoreByName("test-fsname").getFsKey());
+
+        Deencapsulation.setField(starosAgent, "serviceId", "2");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Failed to get file store, error: INVALID_ARGUMENT:mocked exception",
+                () -> starosAgent.getFileStoreByName("test-fsname"));
+    }
+
+    @Test
+    public void testGetFileStore() throws StarClientException, DdlException {
+        S3FileStoreInfo s3FsInfo = S3FileStoreInfo.newBuilder()
+                .setRegion("region").setEndpoint("endpoint").build();
+        FileStoreInfo fsInfo = FileStoreInfo.newBuilder().setFsKey("test-fskey")
+                .setFsName("test-fsname").setFsType(FileStoreType.S3).setS3FsInfo(s3FsInfo).build();
+        new Expectations() {
+            {
+                client.getFileStore("test-fskey", "1");
+                result = fsInfo;
+                minTimes = 0;
+
+                client.getFileStore("test-fskey", "2");
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked exception");
+            }
+        };
+
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Assert.assertEquals("test-fskey", starosAgent.getFileStore("test-fskey").getFsKey());
+
+        Deencapsulation.setField(starosAgent, "serviceId", "2");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Failed to get file store, error: INVALID_ARGUMENT:mocked exception",
+                () -> starosAgent.getFileStore("test-fskey"));
+    }
+
+    @Test
+    public void testListDefaultWorkerGroupIpPort() throws StarClientException, DdlException, UserException {
+        new MockUp<StarClient>() {
+            @Mock
+            public List<WorkerGroupDetailInfo> listWorkerGroup(String serviceId, List<Long> groupIds, boolean include) {
+                long workerId0 = 10000L;
+                WorkerInfo worker0 = newWorkerInfo(workerId0, "127.0.0.1:8090", 9050, 9060, 8040, 8060);
+                long workerId1 = 10001L;
+                WorkerInfo worker1 = newWorkerInfo(workerId1, "127.0.0.2:8091", 9051, 9061, 8041, 8061);
+                WorkerGroupDetailInfo group = WorkerGroupDetailInfo.newBuilder().addWorkersInfo(worker0)
+                        .addWorkersInfo(worker1).build();
+                return Lists.newArrayList(group);
+            }
+        };
+        List<String> addresses = starosAgent.listDefaultWorkerGroupIpPort();
+        Assert.assertEquals("127.0.0.1:8090", addresses.get(0));
+        Assert.assertEquals("127.0.0.2:8091", addresses.get(1));
+    }
 }

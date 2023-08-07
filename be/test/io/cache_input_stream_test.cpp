@@ -51,16 +51,19 @@ private:
 class CacheInputStreamTest : public ::testing::Test {
 public:
     static void SetUpTestCase() {
-        ASSERT_TRUE(fs::create_directories("./ut_dir/block_disk_cache").ok());
         auto cache = BlockCache::instance();
         CacheOptions options;
-        options.mem_space_size = 20 * 1024 * 1024;
-        options.disk_spaces.push_back({.path = "./ut_dir/block_disk_cache", .size = 50 * 1024 * 1024});
+        options.mem_space_size = 100 * 1024 * 1024;
+#ifdef WITH_STARCACHE
+        options.engine = "starcache";
+#else
+        options.engine = "cachelib";
+#endif
         options.block_size = block_size;
         ASSERT_OK(cache->init(options));
     }
 
-    static void TearDownTestCase() { ASSERT_TRUE(fs::remove_all("./ut_dir").ok()); }
+    static void TearDownTestCase() { BlockCache::instance()->shutdown(); }
 
     void SetUp() override {}
     void TearDown() override {}
@@ -94,14 +97,15 @@ public:
 const int64_t CacheInputStreamTest::block_size = 1024 * 1024;
 
 TEST_F(CacheInputStreamTest, test_aligned_read) {
-    const int64_t block_count = 4;
+    const int64_t block_count = 3;
 
     int64_t data_size = block_size * block_count;
     char data[data_size + 1];
     gen_test_data(data, data_size, block_size);
 
     std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
-    io::CacheInputStream cache_stream("test_file1", stream);
+    io::CacheInputStream cache_stream(stream, "test_file1", data_size, 1000000);
+    cache_stream.set_enable_populate_cache(true);
     auto& stats = cache_stream.stats();
 
     // first read from backend
@@ -123,14 +127,15 @@ TEST_F(CacheInputStreamTest, test_aligned_read) {
 }
 
 TEST_F(CacheInputStreamTest, test_random_read) {
-    const int64_t block_count = 4;
+    const int64_t block_count = 3;
 
     const int64_t data_size = block_size * block_count;
     char data[data_size + 1];
     gen_test_data(data, data_size, block_size);
 
     std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
-    io::CacheInputStream cache_stream("test_file2", stream);
+    io::CacheInputStream cache_stream(stream, "test_file2", data_size, 1000000);
+    cache_stream.set_enable_populate_cache(true);
     auto& stats = cache_stream.stats();
 
     // first read from backend
@@ -153,9 +158,49 @@ TEST_F(CacheInputStreamTest, test_random_read) {
 
     ASSERT_TRUE(check_data_content(buffer, block_size - off_in_block, 'a' + 1));
     ASSERT_TRUE(check_data_content(buffer + block_size - off_in_block, block_size, 'a' + 2));
-    ASSERT_TRUE(check_data_content(buffer + 2 * block_size - off_in_block, off_in_block, 'a' + 3));
 
-    ASSERT_EQ(stats.read_cache_count, 3);
+    ASSERT_EQ(stats.read_cache_count, 2);
+}
+
+TEST_F(CacheInputStreamTest, test_file_overwrite) {
+    const int64_t block_count = 3;
+
+    int64_t data_size = block_size * block_count;
+    char data[data_size + 1];
+    gen_test_data(data, data_size, block_size);
+
+    std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
+    io::CacheInputStream cache_stream(stream, "test_file3", data_size, 1000);
+    cache_stream.set_enable_populate_cache(true);
+    auto& stats = cache_stream.stats();
+
+    // first read from backend
+    for (int i = 0; i < block_count; ++i) {
+        char buffer[block_size];
+        read_stream_data(&cache_stream, i * block_size, block_size, buffer);
+        ASSERT_TRUE(check_data_content(buffer, block_size, 'a' + i));
+    }
+    ASSERT_EQ(stats.read_cache_count, 0);
+    ASSERT_EQ(stats.write_cache_count, block_count);
+
+    // first read from cache
+    for (int i = 0; i < block_count; ++i) {
+        char buffer[block_size];
+        read_stream_data(&cache_stream, i * block_size, block_size, buffer);
+        ASSERT_TRUE(check_data_content(buffer, block_size, 'a' + i));
+    }
+    ASSERT_EQ(stats.read_cache_count, block_count);
+
+    // With different modification time, the old cache cannot be used
+    io::CacheInputStream cache_stream2(stream, "test_file3", data_size, 2000);
+    cache_stream2.set_enable_populate_cache(true);
+    auto& stats2 = cache_stream2.stats();
+    for (int i = 0; i < block_count; ++i) {
+        char buffer[block_size];
+        read_stream_data(&cache_stream2, i * block_size, block_size, buffer);
+        ASSERT_TRUE(check_data_content(buffer, block_size, 'a' + i));
+    }
+    ASSERT_EQ(stats2.read_cache_count, 0);
 }
 
 } // namespace starrocks::io

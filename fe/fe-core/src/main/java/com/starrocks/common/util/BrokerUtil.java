@@ -120,7 +120,8 @@ public class BrokerUtil {
             }
         } catch (TException e) {
             LOG.warn("Broker list path exception, path={}, address={}, exception={}", path, address, e);
-            throw new UserException("Broker list path exception. path=" + path + ", broker=" + address);
+            throw new UserException("Broker list path exception. path=" + path +
+                    ", broker=" + address + " exception: " + e.getMessage());
         } finally {
             returnClient(client, address, failed);
         }

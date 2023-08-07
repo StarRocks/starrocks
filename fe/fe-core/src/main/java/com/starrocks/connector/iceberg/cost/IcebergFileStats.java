@@ -38,17 +38,17 @@ import static java.util.stream.Collectors.toSet;
  * Aggregated statistics for a collection of files.
  */
 public class IcebergFileStats {
-    private final Map<Integer, Type.PrimitiveType> idToTypeMapping;
-    private final List<Types.NestedField> nonPartitionPrimitiveColumns;
-    private final StructLike values;
+    private Map<Integer, Type.PrimitiveType> idToTypeMapping;
+    private List<Types.NestedField> nonPartitionPrimitiveColumns;
+    private StructLike values;
     private long recordCount;
     private long fileCount;
     private long size;
-    private final Map<Integer, Object> minValues;
-    private final Map<Integer, Object> maxValues;
-    private final Map<Integer, Long> nullCounts;
-    private final Map<Integer, Long> columnSizes;
-    private final Set<Integer> corruptedStats;
+    private Map<Integer, Object> minValues;
+    private Map<Integer, Object> maxValues;
+    private Map<Integer, Long> nullCounts;
+    private Map<Integer, Long> columnSizes;
+    private Set<Integer> corruptedStats;
     private boolean hasValidColumnMetrics;
 
     public IcebergFileStats(
@@ -87,6 +87,10 @@ public class IcebergFileStats {
             this.columnSizes = columnSizes != null ? new HashMap<>(columnSizes) : null;
             hasValidColumnMetrics = true;
         }
+    }
+
+    public IcebergFileStats(long recordCount) {
+        this.recordCount = recordCount;
     }
 
     public Map<Integer, Type.PrimitiveType> getIdToTypeMapping() {

@@ -48,7 +48,7 @@ public class EliminateLimitZeroRule extends TransformationRule {
         ColumnRefSet outputColumnIds =
                 ((LogicalLimitOperator) input.getOp()).getOutputColumns(new ExpressionContext(input));
 
-        List<ColumnRefOperator> outputColumns = outputColumnIds.getStream().mapToObj(
+        List<ColumnRefOperator> outputColumns = outputColumnIds.getStream().map(
                 id -> context.getColumnRefFactory().getColumnRef(id)).collect(Collectors.toList());
         LogicalValuesOperator emptyOperator = new LogicalValuesOperator(
                 outputColumns,

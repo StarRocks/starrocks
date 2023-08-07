@@ -36,9 +36,11 @@ package com.starrocks.backup;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.Daemon;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -53,10 +55,11 @@ import java.util.concurrent.locks.ReentrantLock;
 /*
  * A manager to manage all backup repositories
  */
-public class RepositoryMgr extends Daemon implements Writable {
+public class RepositoryMgr extends Daemon implements Writable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(RepositoryMgr.class);
 
     // all key should be in lower case
+    @SerializedName("rp")
     private final Map<String, Repository> repoNameMap = Maps.newConcurrentMap();
     private final Map<Long, Repository> repoIdMap = Maps.newConcurrentMap();
 
@@ -159,6 +162,13 @@ public class RepositoryMgr extends Daemon implements Writable {
         for (int i = 0; i < size; i++) {
             Repository repo = Repository.read(in);
             repoNameMap.put(repo.getName(), repo);
+            repoIdMap.put(repo.getId(), repo);
+        }
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        for (Repository repo : repoNameMap.values()) {
             repoIdMap.put(repo.getId(), repo);
         }
     }

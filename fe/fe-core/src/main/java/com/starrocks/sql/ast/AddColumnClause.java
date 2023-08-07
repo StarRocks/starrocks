@@ -16,8 +16,8 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.ColumnPosition;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
@@ -25,10 +25,14 @@ import java.util.Map;
 public class AddColumnClause extends AlterTableColumnClause {
     private final ColumnDef columnDef;
     // Column position
-    private final ColumnPosition colPos;
+    private ColumnPosition colPos;
 
     public ColumnPosition getColPos() {
         return colPos;
+    }
+
+    public void setColPos(ColumnPosition colPos) {
+        this.colPos = colPos;
     }
 
     public ColumnDef getColumnDef() {
@@ -37,7 +41,12 @@ public class AddColumnClause extends AlterTableColumnClause {
 
     public AddColumnClause(ColumnDef columnDef, ColumnPosition colPos, String rollupName,
                            Map<String, String> properties) {
-        super(AlterOpType.SCHEMA_CHANGE, rollupName, properties);
+        this(columnDef, colPos, rollupName, properties, NodePosition.ZERO);
+    }
+
+    public AddColumnClause(ColumnDef columnDef, ColumnPosition colPos, String rollupName,
+                           Map<String, String> properties, NodePosition pos) {
+        super(AlterOpType.SCHEMA_CHANGE, rollupName, properties, pos);
         this.columnDef = columnDef;
         this.colPos = colPos;
     }

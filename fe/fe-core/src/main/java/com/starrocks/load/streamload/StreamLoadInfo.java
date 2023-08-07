@@ -35,6 +35,7 @@ import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
+import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
@@ -77,6 +78,9 @@ public class StreamLoadInfo {
     private TCompressionType compressionType = TCompressionType.NO_COMPRESSION;
     private int loadParallelRequestNum = 0;
     private boolean enableReplicatedStorage = false;
+    private String confluentSchemaRegistryUrl;
+    private long logRejectedRecordNum = 0;
+    private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.UNKNOWN_MODE;
 
     public StreamLoadInfo(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType) {
         this.id = id;
@@ -97,12 +101,24 @@ public class StreamLoadInfo {
         this.timeout = timeout;
     }
 
+    public String getConfluentSchemaRegistryUrl() {
+        return confluentSchemaRegistryUrl;
+    }
+
+    public void setConfluentSchemaRegistryUrl(String confluentSchemaRegistryUrl) {
+        this.confluentSchemaRegistryUrl = confluentSchemaRegistryUrl;
+    }
+
     public TUniqueId getId() {
         return id;
     }
 
     public long getTxnId() {
         return txnId;
+    }
+
+    public void setTxnId(long txnId) {
+        this.txnId = txnId;
     }
 
     public TFileType getFileType() {
@@ -123,6 +139,10 @@ public class StreamLoadInfo {
 
     public String getMergeConditionStr() {
         return mergeConditionStr;
+    }
+
+    public TPartialUpdateMode getPartialUpdateMode() {
+        return partialUpdateMode;
     }
 
     public ColumnSeparator getColumnSeparator() {
@@ -151,6 +171,10 @@ public class StreamLoadInfo {
 
     public PartitionNames getPartitions() {
         return partitions;
+    }
+
+    public boolean isSpecifiedPartitions() {
+        return partitions != null;
     }
 
     public String getPath() {
@@ -215,6 +239,14 @@ public class StreamLoadInfo {
 
     public int getLoadParallelRequestNum() {
         return loadParallelRequestNum;
+    }
+
+    public long getLogRejectedRecordNum() {
+        return logRejectedRecordNum;
+    }
+
+    public void setLogRejectedRecordNum(long logRejectedRecordNum) {
+        this.logRejectedRecordNum = logRejectedRecordNum;
     }
 
     public static StreamLoadInfo fromStreamLoadContext(TUniqueId id, long txnId, int timeout, StreamLoadParam context)
@@ -288,6 +320,15 @@ public class StreamLoadInfo {
         if (context.loadDop != -1) {
             loadParallelRequestNum = context.loadDop;
         }
+        if (context.partialUpdateMode != null) {
+            if (context.partialUpdateMode.equals("column")) {
+                partialUpdateMode = TPartialUpdateMode.COLUMN_UPSERT_MODE;
+            } else if (context.partialUpdateMode.equals("auto")) {
+                partialUpdateMode = TPartialUpdateMode.AUTO_MODE;
+            } else if (context.partialUpdateMode.equals("row")) {
+                partialUpdateMode = TPartialUpdateMode.ROW_MODE;
+            }
+        }
     }
 
     public static StreamLoadInfo fromTStreamLoadPutRequest(TStreamLoadPutRequest request, Database db)
@@ -321,7 +362,7 @@ public class StreamLoadInfo {
             escape = request.getEscape();
         }
         if (request.isSetTrimSpace()) {
-            trimSpace = request.isSetTrimSpace();
+            trimSpace = request.isTrimSpace();
         }
         if (request.isSetPartitions()) {
             String[] partNames = PART_NAME_SPLIT.split(request.getPartitions().trim());
@@ -362,9 +403,6 @@ public class StreamLoadInfo {
             }
             stripOuterArray = request.isStrip_outer_array();
         }
-        if (request.isSetPartial_update()) {
-            partialUpdate = request.isPartial_update();
-        }
         if (request.isSetTransmission_compression_type()) {
             compressionType = CompressionUtils.findTCompressionByName(request.getTransmission_compression_type());
         }
@@ -379,6 +417,18 @@ public class StreamLoadInfo {
         if (request.isSetMerge_condition()) {
             mergeConditionStr = request.getMerge_condition();
         }
+
+        if (request.isSetLog_rejected_record_num()) {
+            logRejectedRecordNum = request.getLog_rejected_record_num();
+        }
+        
+        if (request.isSetPartial_update()) {
+            partialUpdate = request.isPartial_update();
+        }
+
+        if (request.isSetPartial_update_mode()) {
+            partialUpdateMode = request.getPartial_update_mode();
+        }
     }
 
     public static StreamLoadInfo fromRoutineLoadJob(RoutineLoadJob routineLoadJob) throws UserException {
@@ -387,9 +437,13 @@ public class StreamLoadInfo {
         if (routineLoadJob.getFormat().equals("json")) {
             fileFormatType = TFileFormatType.FORMAT_JSON;
         }
+        if (routineLoadJob.getFormat().equals("avro")) {
+            fileFormatType = TFileFormatType.FORMAT_AVRO;
+        }
         StreamLoadInfo streamLoadInfo = new StreamLoadInfo(dummyId, -1L /* dummy txn id */,
                 TFileType.FILE_STREAM, fileFormatType);
         streamLoadInfo.setOptionalFromRoutineLoadJob(routineLoadJob);
+        streamLoadInfo.setLogRejectedRecordNum(routineLoadJob.getLogRejectedRecordNum());
         return streamLoadInfo;
     }
 
@@ -406,7 +460,7 @@ public class StreamLoadInfo {
         partitions = routineLoadJob.getPartitions();
         strictMode = routineLoadJob.isStrictMode();
         timezone = routineLoadJob.getTimezone();
-        timeout = (int) Config.routine_load_task_timeout_second;
+        timeout = (int) routineLoadJob.getTaskTimeoutSecond();
         if (!routineLoadJob.getJsonPaths().isEmpty()) {
             jsonPaths = routineLoadJob.getJsonPaths();
         }
@@ -415,6 +469,7 @@ public class StreamLoadInfo {
         }
         stripOuterArray = routineLoadJob.isStripOuterArray();
         partialUpdate = routineLoadJob.isPartialUpdate();
+        partialUpdateMode = TPartialUpdateMode.ROW_MODE;
         if (routineLoadJob.getSessionVariables().containsKey(SessionVariable.EXEC_MEM_LIMIT)) {
             execMemLimit = Long.parseLong(routineLoadJob.getSessionVariables().get(SessionVariable.EXEC_MEM_LIMIT));
         } else {
@@ -424,6 +479,10 @@ public class StreamLoadInfo {
             compressionType = CompressionUtils.findTCompressionByName(
                     routineLoadJob.getSessionVariables().get(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE));
         }
+        confluentSchemaRegistryUrl = routineLoadJob.getConfluentSchemaRegistryUrl();
+        trimSpace = routineLoadJob.isTrimspace();
+        enclose = routineLoadJob.getEnclose();
+        escape = routineLoadJob.getEscape();
     }
 
     // used for stream load

@@ -1,0 +1,98 @@
+-- name: test_join_struct
+CREATE TABLE struct_test (
+pk bigint not null,
+s0  struct<c0 int,c1 string>,
+s1  struct<c0 DECIMAL(16, 3),c1 varchar(30)>,
+s2  struct<c0 int,c1 array<string>>,
+s3  struct<c0 string,c1 map<int, varchar(30)>>,
+s4  struct<c0 int,c1 json>,
+s5  struct<c0 INT,c1 STRUCT<c INT, b string>>
+) ENGINE=OLAP
+DUPLICATE KEY(pk)
+DISTRIBUTED BY HASH(pk) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false"
+);
+
+-- error tests
+insert into struct_test (pk,s0) values (7,row(3,'',null,null));
+insert into struct_test values (0, row(0,'ab'),row(0,'ab'),row(0,['1','2']),row('1',map(1,'abc')),row(1,json_object('name','abc','age',23)),row(0, row(1,'a')));
+insert into struct_test values (1, row(1, null),row(null,''),row(1,[]),row('11',map(1,'abc','',null)),row(null,json_object('name',null)),row(null, row(null,null)));
+insert into struct_test values (2, row(null,null),row(null,null),row(null,null),row(null,map(null,null)),row(null,null),row(null, row(null,null)));
+insert into struct_test values (3, row(3,''),row(3,''),row(3,['3',null, null,null]),row('3',map(3,'a33c',null,null)),row(null,json_object('name','abc','age',23)),row(null, row(3,'a')));
+insert into struct_test values (4, null,null,null,null,null,null);
+
+select t.s0, s.s0 from struct_test t join struct_test s on s.s0 = t.s0 order by t.pk;
+select t.s1, s.s1 from struct_test t join struct_test s on s.s1 = t.s1 order by t.pk;
+select t.s2, s.s2 from struct_test t join struct_test s on s.s2 = t.s2 order by t.pk;
+select t.s5, s.s5 from struct_test t join struct_test s on s.s5 = t.s5 order by t.pk;
+select t.s0, s.s0 from struct_test t join struct_test s where s.s0 = t.s0 order by t.pk;
+select t.s1, s.s1 from struct_test t join struct_test s where s.s1 = t.s1 order by t.pk;
+select t.s2, s.s2 from struct_test t join struct_test s where s.s2 = t.s2 order by t.pk;
+select t.s3, s.s3 from struct_test t join struct_test s where s.s3 = t.s3 order by t.pk;
+select t.s2, s.s3 from struct_test t join struct_test s where s.s2 = t.s3 order by t.pk;
+
+select t.s0, s.s0 from struct_test t join struct_test s on s.s0 <=> t.s0 order by t.pk;
+select t.s1, s.s1 from struct_test t join struct_test s on s.s1 <=> t.s1 order by t.pk;
+select t.s5, s.s5 from struct_test t join struct_test s on s.s5 <=> t.s5 order by t.pk;
+select t.s0, s.s0 from struct_test t join struct_test s where s.s0 <=> t.s0 order by t.pk;
+select t.s1, s.s1 from struct_test t join struct_test s where s.s1 <=> t.s1 order by t.pk;
+select t.s2, s.s2 from struct_test t join struct_test s where s.s2 <=> t.s2 order by t.pk;
+select t.s3, s.s3 from struct_test t join struct_test s where s.s3 <=> t.s3 order by t.pk;
+
+select t.s4, s.s5 from struct_test t join struct_test s where s.s4 <=> t.s5 order by t.pk;
+select t.s0, s.s0 from struct_test t join struct_test s on s.s0 < t.s0 order by t.pk;
+select t.s4, s.s4 from struct_test t join struct_test s where s.s4 > t.s4 order by t.pk;
+select t.s0, s.s0 from struct_test t join struct_test s on s.s0 >= t.s0 order by t.pk;
+select t.s4, s.s5 from struct_test t join struct_test s where s.s4 >= t.s5 order by t.pk;
+
+select s0 from struct_test t where exists (select 1 from struct_test s where t.s0 = s.s5);
+select s1 from struct_test t where exists (select 1 from struct_test s where t.s1 = s.s5);
+select s2 from struct_test t where exists (select 1 from struct_test s where t.s2 = s.s5);
+select s2 from struct_test t where exists (select 1 from struct_test s where t.s2 <=> s.s2);
+select s3 from struct_test t where exists (select 1 from struct_test s where t.s3 <=> s.s2);
+select s4 from struct_test t where exists (select 1 from struct_test s where t.s4 <=> s.s2);
+select s5 from struct_test t where exists (select 1 from struct_test s where t.s5 <=> s.s2);
+
+select s0 from struct_test t where exists (select 1 from struct_test s where t.s0 < s.s1);
+select s1 from struct_test t where exists (select 1 from struct_test s where t.s1 < s.s1);
+select s2 from struct_test t where exists (select 1 from struct_test s where t.s2 < s.s1);
+select s2 from struct_test t where not exists (select 1 from struct_test s where t.s2 <=> s.s5);
+select s3 from struct_test t where not exists (select 1 from struct_test s where t.s3 <=> s.s5);
+select s4 from struct_test t where not exists (select 1 from struct_test s where t.s4 <=> s.s5);
+select s5 from struct_test t where not exists (select 1 from struct_test s where t.s5 <=> s.s5);
+
+select s2 from struct_test t where s2 in (select s0 from struct_test s);
+select s4 from struct_test t where s4 in (select s1 from struct_test s);
+select s0 from struct_test t where s0 in (select s5 from struct_test s);
+select s5 from struct_test t where s5 not in (select s5 from struct_test s);
+select s0 from struct_test t where s0 not in (select s5 from struct_test s);
+
+select s0 in (select s0 from struct_test s) from struct_test;
+select s0 in (select s1 from struct_test s) from struct_test;
+select s5 in (select s5 from struct_test s) from struct_test;
+select s0 not in (select s0 from struct_test s) from struct_test;
+select s0 not in (select s2 from struct_test s) from struct_test;
+select s0 not in (select s5 from struct_test s) from struct_test;
+
+select t.s4, s.s5 from struct_test t left join struct_test s where s.s4 <=> t.s5 order by t.pk;
+select t.s0, s.s0 from struct_test t left join struct_test s on s.s0 = t.s0 order by t.pk;
+select t.s1, s.s2 from struct_test t left join struct_test s on s.s1 = t.s2 order by t.pk;
+select t.s1, s.s3 from struct_test t left join struct_test s on s.s1 < t.s3 order by t.pk;
+select t.s0, s.s0 from struct_test t left join struct_test s where s.s0 = t.s0 order by t.pk;
+select t.s1, s.s1 from struct_test t left join struct_test s where s.s1 <= t.s1 order by t.pk;
+
+select t.s4, s.s5 from struct_test t right join struct_test s where s.s4 <=> t.s5 order by t.pk;
+select t.s0, s.s0 from struct_test t right join struct_test s on s.s0 = t.s0 order by t.pk;
+select t.s1, s.s2 from struct_test t right join struct_test s on s.s1 = t.s2 order by t.pk;
+select t.s1, s.s3 from struct_test t right join struct_test s on s.s1 < t.s3 order by t.pk;
+select t.s0, s.s0 from struct_test t right join struct_test s on s.s0 = t.s0 order by t.pk;
+select t.s1, s.s1 from struct_test t right join struct_test s where s.s1 <= t.s1 order by t.pk;
+
+select t.s4, s.s5 from struct_test t full join struct_test s on s.s4 <=> t.s5 order by t.pk;
+select t.s0, s.s0 from struct_test t full join struct_test s on s.s0 = t.s0 order by t.pk;
+select t.s1, s.s2 from struct_test t full join struct_test s on s.s1 = t.s2 order by t.pk;
+select t.s1, s.s3 from struct_test t full join struct_test s on s.s1 < t.s3 order by t.pk;
+select t.s0, s.s0 from struct_test t full join struct_test s where s.s0 = t.s0 order by t.pk;
+select t.s1, s.s1 from struct_test t full join struct_test s where s.s1 <= t.s1 order by t.pk;

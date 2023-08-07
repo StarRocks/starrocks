@@ -17,6 +17,7 @@
 #include <utility>
 
 #include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
 #include "simd/simd.h"
 #include "util/coding.h"
 
@@ -43,7 +44,7 @@ void ConstColumn::append_selective(const Column& src, const uint32_t* indexes, u
     append(src, indexes[from], size);
 }
 
-void ConstColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
+void ConstColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) {
     append(src, index, size);
 }
 
@@ -55,8 +56,8 @@ void ConstColumn::fill_default(const Filter& filter) {
     CHECK(false) << "ConstColumn does not support update";
 }
 
-Status ConstColumn::update_rows(const Column& src, const uint32_t* indexes) {
-    return Status::NotSupported("ConstColumn does not support update");
+void ConstColumn::update_rows(const Column& src, const uint32_t* indexes) {
+    throw std::runtime_error("ConstColumn does not support update_rows");
 }
 
 void ConstColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
@@ -75,7 +76,7 @@ int64_t ConstColumn::xor_checksum(uint32_t from, uint32_t to) const {
     return 0;
 }
 
-size_t ConstColumn::filter_range(const Column::Filter& filter, size_t from, size_t to) {
+size_t ConstColumn::filter_range(const Filter& filter, size_t from, size_t to) {
     size_t count = SIMD::count_nonzero(&filter[from], to - from);
     this->resize(from + count);
     return from + count;
@@ -85,6 +86,11 @@ int ConstColumn::compare_at(size_t left, size_t right, const Column& rhs, int na
     DCHECK(rhs.is_constant());
     const auto& rhs_data = static_cast<const ConstColumn&>(rhs)._data;
     return _data->compare_at(0, 0, *rhs_data, nan_direction_hint);
+}
+
+int ConstColumn::equals(size_t left, const Column& rhs, size_t right, bool safe_eq) const {
+    const auto& rhs_data = static_cast<const ConstColumn&>(rhs)._data;
+    return _data->equals(0, *rhs_data, right, safe_eq);
 }
 
 void ConstColumn::check_or_die() const {

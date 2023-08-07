@@ -36,6 +36,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -49,7 +50,11 @@ public class GroupingFunctionCallExpr extends FunctionCallExpr {
     private List<Expr> realChildren;
 
     public GroupingFunctionCallExpr(String functionName, List<Expr> params) {
-        super(functionName, params);
+        this(functionName, params, NodePosition.ZERO);
+    }
+
+    public GroupingFunctionCallExpr(String functionName, List<Expr> params, NodePosition pos) {
+        super(functionName, params, pos);
         childrenReseted = false;
     }
 

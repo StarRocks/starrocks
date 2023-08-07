@@ -46,6 +46,7 @@
 #include "common/status.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/query_context.h"
+#include "fs/fs_util.h"
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -68,8 +69,8 @@ RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOp
           _per_fragment_instance_idx(0),
           _num_rows_load_total_from_source(0),
           _num_bytes_load_from_source(0),
-          _num_rows_load_from_sink(0),
-          _num_bytes_load_from_sink(0),
+          _num_rows_load_sink(0),
+          _num_bytes_load_sink(0),
           _num_rows_load_filtered(0),
           _num_rows_load_unselected(0),
           _num_print_error_rows(0) {
@@ -85,8 +86,8 @@ RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_
           _per_fragment_instance_idx(0),
           _num_rows_load_total_from_source(0),
           _num_bytes_load_from_source(0),
-          _num_rows_load_from_sink(0),
-          _num_bytes_load_from_sink(0),
+          _num_rows_load_sink(0),
+          _num_bytes_load_sink(0),
           _num_rows_load_filtered(0),
           _num_rows_load_unselected(0),
           _num_print_error_rows(0) {
@@ -122,6 +123,10 @@ RuntimeState::~RuntimeState() {
         _error_log_file->close();
         delete _error_log_file;
         _error_log_file = nullptr;
+    }
+    // close rejected record file
+    if (_rejected_record_file != nullptr && _rejected_record_file->is_open()) {
+        _rejected_record_file->close();
     }
 }
 
@@ -170,30 +175,32 @@ void RuntimeState::_init(const TUniqueId& fragment_instance_id, const TQueryOpti
 void RuntimeState::init_mem_trackers(const TUniqueId& query_id, MemTracker* parent) {
     bool has_query_mem_tracker = _query_options.__isset.mem_limit && (_query_options.mem_limit > 0);
     int64_t bytes_limit = has_query_mem_tracker ? _query_options.mem_limit : -1;
-    auto* mem_tracker_counter = ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES);
+    auto* mem_tracker_counter =
+            ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL);
     mem_tracker_counter->set(bytes_limit);
 
     if (parent == nullptr) {
-        parent = _exec_env->query_pool_mem_tracker();
+        parent = GlobalEnv::GetInstance()->query_pool_mem_tracker();
     }
 
     _query_mem_tracker =
             std::make_shared<MemTracker>(MemTracker::QUERY, bytes_limit, runtime_profile()->name(), parent);
-    _instance_mem_tracker =
-            std::make_shared<MemTracker>(_profile.get(), -1, runtime_profile()->name(), _query_mem_tracker.get());
+    _instance_mem_tracker = std::make_shared<MemTracker>(_profile.get(), std::make_tuple(true, true, true), "Instance",
+                                                         -1, runtime_profile()->name(), _query_mem_tracker.get());
     _instance_mem_pool = std::make_unique<MemPool>();
 }
 
 void RuntimeState::init_mem_trackers(const std::shared_ptr<MemTracker>& query_mem_tracker) {
     DCHECK(query_mem_tracker != nullptr);
 
-    auto* mem_tracker_counter = ADD_COUNTER(_profile.get(), "QueryMemoryLimit", TUnit::BYTES);
+    auto* mem_tracker_counter =
+            ADD_COUNTER_SKIP_MERGE(_profile.get(), "QueryMemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL);
     mem_tracker_counter->set(query_mem_tracker->limit());
 
     // all fragment instances in a BE shared a common query_mem_tracker.
     _query_mem_tracker = query_mem_tracker;
-    _instance_mem_tracker =
-            std::make_shared<MemTracker>(_profile.get(), -1L, runtime_profile()->name(), _query_mem_tracker.get());
+    _instance_mem_tracker = std::make_shared<MemTracker>(_profile.get(), std::make_tuple(true, true, true), "Instance",
+                                                         -1, runtime_profile()->name(), _query_mem_tracker.get());
     _instance_mem_pool = std::make_unique<MemPool>();
 }
 
@@ -241,6 +248,16 @@ void RuntimeState::get_unreported_errors(std::vector<std::string>* new_errors) {
         new_errors->assign(_error_log.begin() + _unreported_error_idx, _error_log.end());
         _unreported_error_idx = _error_log.size();
     }
+}
+
+bool RuntimeState::use_page_cache() {
+    if (config::disable_storage_page_cache) {
+        return false;
+    }
+    if (_query_options.__isset.use_page_cache) {
+        return _query_options.use_page_cache;
+    }
+    return true;
 }
 
 Status RuntimeState::set_mem_limit_exceeded(MemTracker* tracker, int64_t failed_allocation_size,
@@ -305,6 +322,23 @@ Status RuntimeState::create_error_log_file() {
     return Status::OK();
 }
 
+Status RuntimeState::create_rejected_record_file() {
+    auto rejected_record_absolute_path = _exec_env->load_path_mgr()->get_load_rejected_record_absolute_path(
+            "", _db, _load_label, _txn_id, _fragment_instance_id);
+    RETURN_IF_ERROR(fs::create_directories(std::filesystem::path(rejected_record_absolute_path).parent_path()));
+
+    _rejected_record_file = std::make_unique<std::ofstream>(rejected_record_absolute_path, std::ifstream::out);
+    if (!_rejected_record_file->is_open()) {
+        std::stringstream error_msg;
+        error_msg << "Fail to open rejected record file: [" << rejected_record_absolute_path << "].";
+        LOG(WARNING) << error_msg.str();
+        return Status::InternalError(error_msg.str());
+    }
+    LOG(WARNING) << "rejected record file path " << rejected_record_absolute_path;
+    _rejected_record_file_path = rejected_record_absolute_path;
+    return Status::OK();
+}
+
 bool RuntimeState::has_reached_max_error_msg_num(bool is_summary) {
     if (_num_print_error_rows.load(std::memory_order_relaxed) > MAX_ERROR_NUM && !is_summary) {
         return true;
@@ -352,6 +386,32 @@ void RuntimeState::append_error_msg_to_file(const std::string& line, const std::
     }
 }
 
+void RuntimeState::append_rejected_record_to_file(const std::string& record, const std::string& error_msg,
+                                                  const std::string& source) {
+    std::lock_guard<std::mutex> l(_rejected_record_lock);
+    // Only load job need to write rejected record
+    if (_query_options.query_type != TQueryType::LOAD) {
+        return;
+    }
+
+    // If file havn't been opened, open it here
+    if (_rejected_record_file == nullptr) {
+        Status status = create_rejected_record_file();
+        if (!status.ok()) {
+            LOG(WARNING) << "Create rejected record file failed. because: " << status.get_error_msg();
+            if (_rejected_record_file != nullptr) {
+                _rejected_record_file->close();
+                _rejected_record_file.reset();
+            }
+            return;
+        }
+    }
+    _num_log_rejected_rows.fetch_add(1, std::memory_order_relaxed);
+
+    // TODO(meegoo): custom delimiter
+    (*_rejected_record_file) << record << "\t" << error_msg << "\t" << source << std::endl;
+}
+
 int64_t RuntimeState::get_load_mem_limit() const {
     if (_query_options.__isset.load_mem_limit && _query_options.load_mem_limit > 0) {
         return _query_options.load_mem_limit;
@@ -372,14 +432,15 @@ GlobalDictMaps* RuntimeState::mutable_query_global_dict_map() {
 }
 
 Status RuntimeState::init_query_global_dict(const GlobalDictLists& global_dict_list) {
-    return _build_global_dict(global_dict_list, &_query_global_dicts);
+    return _build_global_dict(global_dict_list, &_query_global_dicts, nullptr);
 }
 
 Status RuntimeState::init_load_global_dict(const GlobalDictLists& global_dict_list) {
-    return _build_global_dict(global_dict_list, &_load_global_dicts);
+    return _build_global_dict(global_dict_list, &_load_global_dicts, &_load_dict_versions);
 }
 
-Status RuntimeState::_build_global_dict(const GlobalDictLists& global_dict_list, GlobalDictMaps* result) {
+Status RuntimeState::_build_global_dict(const GlobalDictLists& global_dict_list, GlobalDictMaps* result,
+                                        phmap::flat_hash_map<uint32_t, int64_t>* column_id_to_version) {
     for (const auto& global_dict : global_dict_list) {
         DCHECK_EQ(global_dict.ids.size(), global_dict.strings.size());
         GlobalDictMap dict_map;
@@ -395,25 +456,30 @@ Status RuntimeState::_build_global_dict(const GlobalDictLists& global_dict_list,
             rdict_map.emplace(global_dict.ids[i], slice);
         }
         result->emplace(uint32_t(global_dict.columnId), std::make_pair(std::move(dict_map), std::move(rdict_map)));
+        if (column_id_to_version != nullptr) {
+            column_id_to_version->emplace(uint32_t(global_dict.columnId), global_dict.version);
+        }
     }
     return Status::OK();
 }
 
-bool RuntimeState::enable_query_statistic() const {
-    return _query_options.__isset.enable_pipeline_query_statistic && _query_options.enable_pipeline_query_statistic;
-}
-
 std::shared_ptr<QueryStatistics> RuntimeState::intermediate_query_statistic() {
-    if (!enable_query_statistic()) {
-        return nullptr;
-    }
     return _query_ctx->intermediate_query_statistic();
 }
 
 std::shared_ptr<QueryStatisticsRecvr> RuntimeState::query_recv() {
-    if (!enable_query_statistic()) {
-        return nullptr;
-    }
     return _query_ctx->maintained_query_recv();
 }
+
+std::atomic_int64_t* RuntimeState::mutable_total_spill_bytes() {
+    return _query_ctx->mutable_total_spill_bytes();
+}
+
+Status RuntimeState::reset_epoch() {
+    std::lock_guard<std::mutex> l(_tablet_infos_lock);
+    _tablet_commit_infos.clear();
+    _tablet_fail_infos.clear();
+    return Status::OK();
+}
+
 } // end namespace starrocks

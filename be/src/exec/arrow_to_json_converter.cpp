@@ -31,10 +31,14 @@ using namespace arrow;
 using ArrowStatus = Status;
 
 // Convert multi-row Array to JsonColumn
-static Status convert_multi_arrow_list(const ListArray* array, JsonColumn* output);
-static Status convert_multi_arrow_struct(const StructArray* array, JsonColumn* output);
-static Status convert_multi_arrow_map(const MapArray* array, JsonColumn* output);
-static Status convert_multi_arrow_primitive(const Array* array, JsonColumn* output);
+static Status convert_multi_arrow_list(const ListArray* array, JsonColumn* output, size_t array_start_idx,
+                                       size_t num_elements);
+static Status convert_multi_arrow_struct(const StructArray* array, JsonColumn* output, size_t array_start_idx,
+                                         size_t num_elements);
+static Status convert_multi_arrow_map(const MapArray* array, JsonColumn* output, size_t array_start_idx,
+                                      size_t num_elements);
+static Status convert_multi_arrow_primitive(const Array* array, JsonColumn* output, size_t array_start_idx,
+                                            size_t num_elements);
 
 // Convert a single row in Array to json
 static Status convert_single_arrow_list(const ListArray* array, int offset, vpack::Builder* builder);
@@ -100,8 +104,9 @@ static bool inline is_physical_signed(Type::type type) {
     return false;
 }
 
-static Status convert_multi_arrow_list(const ListArray* array, JsonColumn* output) {
-    for (int i = 0; i < array->length(); i++) {
+static Status convert_multi_arrow_list(const ListArray* array, JsonColumn* output, size_t array_start_idx,
+                                       size_t num_elements) {
+    for (int i = array_start_idx; i < array_start_idx + num_elements; i++) {
         vpack::Builder builder;
         RETURN_IF_ERROR(convert_single_arrow_list(array, i, &builder));
         JsonValue json(builder.slice());
@@ -110,8 +115,9 @@ static Status convert_multi_arrow_list(const ListArray* array, JsonColumn* outpu
     return Status::OK();
 }
 
-static Status convert_multi_arrow_struct(const StructArray* array, JsonColumn* output) {
-    for (int i = 0; i < array->length(); i++) {
+static Status convert_multi_arrow_struct(const StructArray* array, JsonColumn* output, size_t array_start_idx,
+                                         size_t num_elements) {
+    for (int i = array_start_idx; i < array_start_idx + num_elements; i++) {
         vpack::Builder builder;
         RETURN_IF_ERROR(convert_single_arrow_struct(array, i, &builder));
         JsonValue json(builder.slice());
@@ -120,8 +126,9 @@ static Status convert_multi_arrow_struct(const StructArray* array, JsonColumn* o
     return Status::OK();
 }
 
-static Status convert_multi_arrow_map(const MapArray* array, JsonColumn* output) {
-    for (int i = 0; i < array->length(); i++) {
+static Status convert_multi_arrow_map(const MapArray* array, JsonColumn* output, size_t array_start_idx,
+                                      size_t num_elements) {
+    for (int i = array_start_idx; i < array_start_idx + num_elements; i++) {
         vpack::Builder builder;
         RETURN_IF_ERROR(convert_single_arrow_map(array, i, &builder));
         JsonValue json(builder.slice());
@@ -130,28 +137,29 @@ static Status convert_multi_arrow_map(const MapArray* array, JsonColumn* output)
     return Status::OK();
 }
 
-static Status convert_multi_arrow_primitive(const Array* array, JsonColumn* output) {
+static Status convert_multi_arrow_primitive(const Array* array, JsonColumn* output, size_t array_start_idx,
+                                            size_t num_elements) {
     auto type_id = array->type_id();
 
-#define M(type)                                                                \
-    case type: {                                                               \
-        using TypeClass = TypeIdTraits<type>::Type;                            \
-        using ArrayType = TypeTraits<TypeClass>::ArrayType;                    \
-        auto real_array = down_cast<const ArrayType*>(array);                  \
-        for (int i = 0; i < array->length(); i++) {                            \
-            vpack::Builder builder;                                            \
-            if (is_physical_signed(type)) {                                    \
-                JsonValue json = JsonValue::from_int(real_array->Value(i));    \
-                output->append(std::move(json));                               \
-            } else if (arrow::is_unsigned_integer(type)) {                     \
-                JsonValue json = JsonValue::from_uint(real_array->Value(i));   \
-                output->append(std::move(json));                               \
-            } else if (is_floating(type)) {                                    \
-                JsonValue json = JsonValue::from_double(real_array->Value(i)); \
-                output->append(std::move(json));                               \
-            }                                                                  \
-        }                                                                      \
-        break;                                                                 \
+#define M(type)                                                                  \
+    case type: {                                                                 \
+        using TypeClass = TypeIdTraits<type>::Type;                              \
+        using ArrayType = TypeTraits<TypeClass>::ArrayType;                      \
+        auto real_array = down_cast<const ArrayType*>(array);                    \
+        for (int i = array_start_idx; i < array_start_idx + num_elements; i++) { \
+            vpack::Builder builder;                                              \
+            if (is_physical_signed(type)) {                                      \
+                JsonValue json = JsonValue::from_int(real_array->Value(i));      \
+                output->append(std::move(json));                                 \
+            } else if (arrow::is_unsigned_integer(type)) {                       \
+                JsonValue json = JsonValue::from_uint(real_array->Value(i));     \
+                output->append(std::move(json));                                 \
+            } else if (is_floating(type)) {                                      \
+                JsonValue json = JsonValue::from_double(real_array->Value(i));   \
+                output->append(std::move(json));                                 \
+            }                                                                    \
+        }                                                                        \
+        break;                                                                   \
     }
 
     switch (type_id) {
@@ -366,22 +374,22 @@ static Status convert_arrow_to_json_array(const BooleanArray* array, vpack::Buil
 
 // Convert array to a json column
 // Support all arrow types, including primitive types and nested data types
-Status convert_arrow_to_json(const Array* array, JsonColumn* output) {
+Status convert_arrow_to_json(const Array* array, JsonColumn* output, size_t array_start_idx, size_t num_elements) {
     // std::cerr << "convert_arrow_to_json: " << array->type()->ToString() << std::endl;
     auto type = array->type_id();
     switch (type) {
     case Type::LIST:
-        return convert_multi_arrow_list(down_cast<const ListArray*>(array), output);
+        return convert_multi_arrow_list(down_cast<const ListArray*>(array), output, array_start_idx, num_elements);
     case Type::STRUCT:
-        return convert_multi_arrow_struct(down_cast<const StructArray*>(array), output);
+        return convert_multi_arrow_struct(down_cast<const StructArray*>(array), output, array_start_idx, num_elements);
     case Type::MAP:
-        return convert_multi_arrow_map(down_cast<const MapArray*>(array), output);
+        return convert_multi_arrow_map(down_cast<const MapArray*>(array), output, array_start_idx, num_elements);
 
     case Type::STRING:
     case Type::BOOL:
 #define M(type) \
     case type:  \
-        return convert_multi_arrow_primitive(array, output);
+        return convert_multi_arrow_primitive(array, output, array_start_idx, num_elements);
 
         APPLY_FOR_ALL_NUMERIC(M)
         APPLY_FOR_ALL_TEMPORAL(M)

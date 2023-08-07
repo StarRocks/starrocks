@@ -17,16 +17,30 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
+import com.starrocks.sql.parser.NodePosition;
 
 public class DropStatsStmt extends StatementBase {
     private final TableName tbl;
-
+    private boolean isExternal = false;
     public DropStatsStmt(TableName tbl) {
+        this(tbl, NodePosition.ZERO);
+    }
+
+    public DropStatsStmt(TableName tbl, NodePosition pos) {
+        super(pos);
         this.tbl = tbl;
     }
 
     public TableName getTableName() {
         return tbl;
+    }
+
+    public boolean isExternal() {
+        return isExternal;
+    }
+
+    public void setExternal(boolean isExternal) {
+        this.isExternal = isExternal;
     }
 
     @Override

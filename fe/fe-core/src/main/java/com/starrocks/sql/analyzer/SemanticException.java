@@ -14,22 +14,62 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.Expr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.parser.NodePosition;
+import org.apache.commons.lang3.StringUtils;
 
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static java.lang.String.format;
 
 public class SemanticException extends StarRocksPlannerException {
+
+    protected final String detailMsg;
+
+    protected final NodePosition pos;
+
+
     public SemanticException(String formatString) {
-        super(formatString, ErrorType.USER_ERROR);
+        this(formatString, NodePosition.ZERO);
+    }
+
+
+    public SemanticException(String detailMsg, NodePosition pos) {
+        super(detailMsg, ErrorType.USER_ERROR);
+        this.detailMsg = detailMsg;
+        this.pos = pos;
     }
 
     public SemanticException(String formatString, Object... args) {
-        super(format(formatString, args), ErrorType.USER_ERROR);
+        this(format(formatString, args), NodePosition.ZERO);
     }
 
-    public static SemanticException missingAttributeException(Expr node) throws SemanticException {
-        throw new SemanticException("Column '%s' cannot be resolved", node.toSql());
+
+    @Override
+    public String getMessage() {
+        StringBuilder builder = new StringBuilder("Getting analyzing error");
+        if (pos == null || pos.isZero()) {
+            // no position info. do nothing.
+
+        } else if (pos.getLine() == pos.getEndLine() && pos.getCol() == pos.getEndCol()) {
+            builder.append(" ");
+            builder.append(PARSER_ERROR_MSG.nodePositionPoint(pos.getLine(), pos.getCol()));
+        } else {
+            builder.append(" ");
+            builder.append(PARSER_ERROR_MSG.nodePositionRange(pos.getLine(), pos.getCol(),
+                    pos.getEndLine(), pos.getEndCol()));
+        }
+
+        if (StringUtils.isNotEmpty(detailMsg)) {
+            builder.append(". Detail message: ");
+            builder.append(detailMsg);
+            builder.append(".");
+        }
+        return builder.toString();
     }
+
+    public String getDetailMsg() {
+        return detailMsg;
+    }
+
 }

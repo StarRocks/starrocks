@@ -4,10 +4,14 @@
 
 Shows the information of all BE nodes in the cluster.
 
+> **CAUTION**
+>
+> Only users with the OPERATE or NODE privilege on the SYSTEM level can perform this operation.
+
 ## Syntax
 
 ```SQL
-SHOW BACKENDS;
+SHOW BACKENDS
 ```
 
 ## Return

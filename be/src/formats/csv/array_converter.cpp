@@ -62,7 +62,10 @@ bool ArrayConverter::read_string(Column* column, Slice s, const Options& options
     }
     size_t old_size = elements->size();
     Options sub_options = options;
-    sub_options.invalid_field_as_null = false;
+    if (options.array_format_type != ArrayFormatType::kHive) {
+        // For broker load, invalid_field_as_null is always false for array's element
+        sub_options.invalid_field_as_null = false;
+    }
     sub_options.array_hive_nested_level++;
     DCHECK_EQ(old_size, offsets->get_data().back());
     for (const auto& f : fields) {

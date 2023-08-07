@@ -18,6 +18,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 // Used to test show executor.
 public class ShowAuthorStmt extends ShowStmt {
@@ -27,6 +28,14 @@ public class ShowAuthorStmt extends ShowStmt {
                     .addColumn(new Column("Location", ScalarType.createVarchar(30)))
                     .addColumn(new Column("Comment", ScalarType.createVarchar(30)))
                     .build();
+
+    public ShowAuthorStmt() {
+        this(NodePosition.ZERO);
+    }
+
+    public ShowAuthorStmt(NodePosition pos) {
+        super(pos);
+    }
 
     @Override
     public ShowResultSetMetaData getMetaData() {

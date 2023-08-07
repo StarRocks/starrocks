@@ -35,7 +35,7 @@
 package com.starrocks.load.loadv2;
 
 import com.starrocks.common.Config;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -44,12 +44,12 @@ import org.apache.logging.log4j.Logger;
  * And it will not handle the job which the corresponding transaction is started.
  * For those jobs, global transaction manager cancel the corresponding job while aborting the timeout transaction.
  */
-public class LoadTimeoutChecker extends LeaderDaemon {
+public class LoadTimeoutChecker extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(LoadTimeoutChecker.class);
 
-    private LoadManager loadManager;
+    private LoadMgr loadManager;
 
-    public LoadTimeoutChecker(LoadManager loadManager) {
+    public LoadTimeoutChecker(LoadMgr loadManager) {
         super("Load job timeout checker", Config.load_checker_interval_second * 1000L);
         this.loadManager = loadManager;
     }

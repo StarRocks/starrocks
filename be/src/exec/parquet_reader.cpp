@@ -20,7 +20,10 @@
 
 #include <utility>
 
+#include "common/config.h"
 #include "common/logging.h"
+#include "fmt/format.h"
+#include "parquet/schema.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks {
@@ -45,6 +48,7 @@ ParquetReaderWrap::ParquetReaderWrap(std::shared_ptr<arrow::io::RandomAccessFile
     _properties = parquet::ReaderProperties();
     _properties.enable_buffered_stream();
     _properties.set_buffer_size(8 * 1024 * 1024);
+    _filename = (reinterpret_cast<ParquetChunkFile*>(_parquet.get()))->filename();
 }
 
 Status ParquetReaderWrap::next_selected_row_group() {
@@ -68,15 +72,26 @@ Status ParquetReaderWrap::next_selected_row_group() {
     return Status::EndOfFile("End of row group");
 }
 
-Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs,
-                                              const std::string& timezone) {
+Status ParquetReaderWrap::_init_parquet_reader() {
     try {
+        parquet::ArrowReaderProperties arrow_reader_properties;
+        /*
+        * timestamp unit to use for INT96-encoded timestamps in parquet.
+        * SECOND, MICRO, MILLI, NANO
+        * We use MICRO second as the unit to parse int96 timestamp, which is the precision of DATETIME/TIMESTAMP in MySQL.
+        * https://dev.mysql.com/doc/refman/8.0/en/datetime.html
+        * A DATETIME or TIMESTAMP value can include a trailing fractional seconds part in up to microseconds (6 digits) precision
+        */
+        arrow_reader_properties.set_coerce_int96_timestamp_unit(arrow::TimeUnit::MICRO);
+
         // new file reader for parquet file
         auto st = parquet::arrow::FileReader::Make(arrow::default_memory_pool(),
-                                                   parquet::ParquetFileReader::Open(_parquet, _properties), &_reader);
+                                                   parquet::ParquetFileReader::Open(_parquet, _properties),
+                                                   arrow_reader_properties, &_reader);
         if (!st.ok()) {
-            LOG(WARNING) << "failed to create parquet file reader, errmsg=" << st.ToString();
-            return Status::InternalError("Failed to create file reader");
+            LOG(WARNING) << "Failed to create parquet file reader. error: " << st.ToString()
+                         << ", filename: " << _filename;
+            return Status::InternalError(fmt::format("Failed to create file reader. filename: {}", _filename));
         }
 
         if (!_reader || !_reader->parquet_reader()) {
@@ -88,6 +103,8 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
             LOG(INFO) << "Ignore the parquet file because of unexpected nullptr FileMetaData";
             return Status::EndOfFile("Unexpected nullptr FileMetaData");
         }
+
+        _num_rows = _file_metadata->num_rows();
         // initial members
         _total_groups = _file_metadata->num_row_groups();
         if (_total_groups == 0) {
@@ -108,15 +125,25 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
             }
         }
 
-        _timezone = timezone;
+        return Status::OK();
+    } catch (parquet::ParquetException& e) {
+        std::stringstream str_error;
+        str_error << "Init parquet reader fail. " << e.what() << ", filename: " << _filename;
+        LOG(WARNING) << str_error.str();
+        return Status::InternalError(str_error.str());
+    }
+}
 
+Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs) {
+    RETURN_IF_ERROR(_init_parquet_reader());
+    try {
         if (_current_line_of_group == 0) { // the first read
             RETURN_IF_ERROR(column_indices(tuple_slot_descs));
             arrow::Status status = _reader->GetRecordBatchReader({_current_group}, _parquet_column_ids, &_rb_batch);
 
             if (!status.ok()) {
-                LOG(WARNING) << "Get RecordBatch Failed. " << status.ToString();
-                return Status::InternalError(status.ToString());
+                LOG(WARNING) << "Get RecordBatch Failed. error: " << status.ToString() << ", filename: " << _filename;
+                return Status::InternalError(fmt::format("{}. filename: {}", status.ToString(), _filename));
             }
             if (!_rb_batch) {
                 LOG(INFO) << "Ignore the parquet file because of an unexpected nullptr "
@@ -125,8 +152,8 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
             }
             status = _rb_batch->ReadNext(&_batch);
             if (!status.ok()) {
-                LOG(WARNING) << "The first read record. " << status.ToString();
-                return Status::InternalError(status.ToString());
+                LOG(WARNING) << "The first read record. error: " << status.ToString() << ", filename: " << _filename;
+                return Status::InternalError(fmt::format("{}. filename: {}", status.ToString(), _filename));
             }
             if (!_batch) {
                 LOG(INFO) << "Ignore the parquet file because of an expected nullptr RecordBatch";
@@ -136,7 +163,7 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
             //save column type
             std::shared_ptr<arrow::Schema> field_schema = _batch->schema();
             if (!field_schema) {
-                LOG(INFO) << "Ignore the parquet file because of an expected nullptr VectorizedSchema";
+                LOG(INFO) << "Ignore the parquet file because of an expected nullptr Schema";
                 return Status::EndOfFile("Unexpected nullptr RecordBatch");
             }
         }
@@ -144,9 +171,105 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
     } catch (parquet::ParquetException& e) {
         std::stringstream str_error;
         str_error << "Init parquet reader fail. " << e.what();
-        LOG(WARNING) << str_error.str();
-        return Status::InternalError(str_error.str());
+        LOG(WARNING) << str_error.str() << " filename: " << _filename;
+        return Status::InternalError(fmt::format("{}. filename: {}", str_error.str(), _filename));
     }
+}
+
+Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
+    RETURN_IF_ERROR(_init_parquet_reader());
+
+    const auto& file_schema = _file_metadata->schema();
+
+    for (auto i = 0; i < file_schema->group_node()->field_count(); i++) {
+        const auto& field = file_schema->group_node()->field(i);
+        const auto& name = field->name();
+
+        if (!field->is_primitive()) {
+            // Now, we treat all nested types as VARCHAR.
+            schema->emplace_back(i, name, TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH));
+            continue;
+        }
+
+        auto column = file_schema->Column(file_schema->ColumnIndex(*field));
+
+        auto physical_type = column->physical_type();
+        auto logical_type = column->logical_type();
+
+        // See detail in https://arrow.apache.org/docs/cpp/parquet.html
+        TypeDescriptor tp;
+        switch (physical_type) {
+        case parquet::Type::BOOLEAN:
+            tp = TypeDescriptor(TYPE_BOOLEAN);
+            break;
+        case parquet::Type::FLOAT:
+            tp = TypeDescriptor(TYPE_FLOAT);
+            break;
+        case parquet::Type::DOUBLE:
+            tp = TypeDescriptor(TYPE_DOUBLE);
+            break;
+        case parquet::Type::INT32:
+            if (logical_type->is_int()) {
+                tp = TypeDescriptor(TYPE_INT);
+            } else if (logical_type->is_date()) {
+                tp = TypeDescriptor(TYPE_DATE);
+            } else if (logical_type->is_time()) {
+                tp = TypeDescriptor(TYPE_TIME);
+            } else if (logical_type->is_decimal()) {
+                auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
+                tp = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, decimal_logical_type->precision(),
+                                                           decimal_logical_type->scale());
+            } else {
+                tp = TypeDescriptor(TYPE_INT);
+            }
+            break;
+        case parquet::Type::INT64:
+            if (logical_type->is_int()) {
+                tp = TypeDescriptor(TYPE_BIGINT);
+            } else if (logical_type->is_time()) {
+                tp = TypeDescriptor(TYPE_TIME);
+            } else if (logical_type->is_timestamp()) {
+                tp = TypeDescriptor(TYPE_DATETIME);
+            } else if (logical_type->is_decimal()) {
+                auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
+                tp = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, decimal_logical_type->precision(),
+                                                           decimal_logical_type->scale());
+            } else {
+                tp = TypeDescriptor(TYPE_BIGINT);
+            }
+            break;
+        case parquet::Type::INT96:
+            tp = TypeDescriptor(TYPE_DATETIME);
+            break;
+        case parquet::Type::BYTE_ARRAY:
+            if (logical_type->is_string()) {
+                tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            } else if (logical_type->is_decimal()) {
+                auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
+                tp = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, decimal_logical_type->precision(),
+                                                           decimal_logical_type->scale());
+            } else {
+                tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            }
+            break;
+        case parquet::Type::FIXED_LEN_BYTE_ARRAY: {
+            if (logical_type->is_decimal()) {
+                auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
+                tp = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, decimal_logical_type->precision(),
+                                                           decimal_logical_type->scale());
+            } else {
+                tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            }
+            break;
+        }
+        default:
+            return Status::NotSupported(
+                    fmt::format("Unkown supported parquet physical type: {}, column name: {}", physical_type, name));
+        }
+        schema->emplace_back(i, name, tp);
+    }
+
+    return Status::OK();
 }
 
 void ParquetReaderWrap::close() {
@@ -203,19 +326,19 @@ Status ParquetReaderWrap::read_record_batch(const std::vector<SlotDescriptor*>& 
         // read batch
         arrow::Status status = _reader->GetRecordBatchReader({_current_group}, _parquet_column_ids, &_rb_batch);
         if (!status.ok()) {
-            return Status::InternalError("Get RecordBatchReader Failed.");
+            return Status::InternalError(fmt::format("Get RecordBatchReader Failed. filename: {}", _filename));
         }
         status = _rb_batch->ReadNext(&_batch);
         if (!status.ok()) {
-            return Status::InternalError("Read Batch Error With Libarrow.");
+            return Status::InternalError(fmt::format("Read Batch Error With Libarrow. filename: {}", _filename));
         }
 
         // arrow::RecordBatchReader::ReadNext returns null at end of stream.
         // Since we count the batches read, EOF implies reader source failure.
         if (_batch == nullptr) {
             LOG(WARNING) << "Unexpected EOF. Row groups less than expected. expected: " << _total_groups
-                         << " got: " << _current_group;
-            return Status::InternalError("Unexpected EOF");
+                         << " got: " << _current_group << ", filename" << _filename;
+            return Status::InternalError(fmt::format("Unexpected EOF. filename: {}", _filename));
         }
 
         _current_line_of_batch = 0;
@@ -225,15 +348,15 @@ Status ParquetReaderWrap::read_record_batch(const std::vector<SlotDescriptor*>& 
                 << " is larger than batch size:" << _batch->num_rows() << ". start to read next batch";
         arrow::Status status = _rb_batch->ReadNext(&_batch);
         if (!status.ok()) {
-            return Status::InternalError("Read Batch Error With Libarrow.");
+            return Status::InternalError(fmt::format("Read Batch Error With Libarrow. filename: {}", _filename));
         }
 
         // arrow::RecordBatchReader::ReadNext returns null at end of stream.
         // Since we count the batches read, EOF implies reader source failure.
         if (_batch == nullptr) {
             LOG(WARNING) << "Unexpected EOF. Row groups less than expected. expected: " << _total_groups
-                         << " got: " << _current_group;
-            return Status::InternalError("Unexpected EOF");
+                         << " got: " << _current_group << ", filename: " << _filename;
+            return Status::InternalError(fmt::format("Unexpected EOF. filename: {}", _filename));
         }
 
         _current_line_of_batch = 0;
@@ -259,10 +382,14 @@ ParquetChunkReader::~ParquetChunkReader() {
     _parquet_reader->close();
 }
 
+int64_t ParquetChunkReader::total_num_rows() const {
+    return _parquet_reader->num_rows();
+}
+
 Status ParquetChunkReader::next_batch(RecordBatchPtr* batch) {
     switch (_state) {
     case State::UNINITIALIZED: {
-        RETURN_IF_ERROR(_parquet_reader->init_parquet_reader(_src_slot_descs, _time_zone));
+        RETURN_IF_ERROR(_parquet_reader->init_parquet_reader(_src_slot_descs));
         _state = INITIALIZED;
         break;
     }
@@ -285,6 +412,11 @@ Status ParquetChunkReader::next_batch(RecordBatchPtr* batch) {
     }
     *batch = _parquet_reader->get_batch();
     return Status::OK();
+}
+
+Status ParquetChunkReader::get_schema(std::vector<SlotDescriptor>* schema) {
+    RETURN_IF_ERROR(_parquet_reader->init_parquet_reader(_src_slot_descs));
+    return _parquet_reader->get_schema(schema);
 }
 
 using StarRocksStatusCode = ::starrocks::TStatusCode::type;
@@ -347,6 +479,10 @@ arrow::Result<std::shared_ptr<arrow::Buffer>> ParquetChunkFile::Read(int64_t nby
     } else {
         return arrow::SliceBuffer(read_buf, 0, bytes_read_res.ValueOrDie());
     }
+}
+
+const std::string& ParquetChunkFile::filename() const {
+    return _file->filename();
 }
 
 } // namespace starrocks

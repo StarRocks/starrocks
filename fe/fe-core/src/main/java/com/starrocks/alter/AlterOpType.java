@@ -54,6 +54,13 @@ public enum AlterOpType {
     // others operation, such as add/drop backend. currently we do not care about them
     ALTER_OTHER,
     SWAP,
+    COMPACT,
+
+    // comment
+    ALTER_COMMENT,
+
+    //Alter View
+    ALTER_VIEW,
 
     INVALID_OP; // INVALID_OP must be the last one
 
@@ -73,6 +80,8 @@ public enum AlterOpType {
         COMPATIBITLITY_MATRIX[DROP_ROLLUP.ordinal()][DROP_ROLLUP.ordinal()] = true;
         // schema change, such as add/modify/drop columns can be processed in batch
         COMPATIBITLITY_MATRIX[SCHEMA_CHANGE.ordinal()][SCHEMA_CHANGE.ordinal()] = true;
+        COMPATIBITLITY_MATRIX[SCHEMA_CHANGE.ordinal()][COMPACT.ordinal()] = true;
+        COMPATIBITLITY_MATRIX[ADD_ROLLUP.ordinal()][COMPACT.ordinal()] = true;
     }
 
     public boolean needCheckCapacity() {

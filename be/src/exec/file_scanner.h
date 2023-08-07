@@ -25,6 +25,8 @@ class RandomAccessFile;
 
 namespace starrocks {
 
+const int64_t MAX_ERROR_LINES_IN_FILE = 50;
+
 struct ScannerCounter {
     int64_t num_rows_filtered = 0;
     int64_t num_rows_unselected = 0;
@@ -46,7 +48,7 @@ struct ScannerCounter {
 class FileScanner {
 public:
     FileScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRangeParams& params,
-                ScannerCounter* counter);
+                ScannerCounter* counter, bool schema_only = false);
     virtual ~FileScanner();
 
     virtual Status init_expr_ctx();
@@ -56,6 +58,8 @@ public:
     virtual StatusOr<ChunkPtr> get_next() = 0;
 
     virtual void close();
+
+    virtual Status get_schema(std::vector<SlotDescriptor>* schema) { return Status::NotSupported("not implemented"); }
 
     Status create_random_access_file(const TBrokerRangeDesc& range_desc, const TNetworkAddress& address,
                                      const TBrokerScanRangeParams& params, CompressionTypePB compression,
@@ -93,5 +97,9 @@ protected:
     // index: destination slot id
     // value: source slot desc
     std::vector<SlotDescriptor*> _dest_slot_desc_mappings;
+
+    bool _case_sensitive = true;
+
+    bool _schema_only;
 };
 } // namespace starrocks

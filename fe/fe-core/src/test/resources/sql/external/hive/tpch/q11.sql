@@ -150,10 +150,10 @@ OutPut Exchange Id: 23
 |  output columns: 21, 22
 |  cardinality: 3200000
 |  column statistics:
-|  * ps_suppkey-->[1.0, 1000000.0, 0.0, 8.0, 40000.0] ESTIMATE
 |  * ps_availqty-->[1.0, 9999.0, 0.0, 4.0, 9999.0] ESTIMATE
 |  * ps_supplycost-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
-|  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
+|  * s_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * expr-->[1.0, 9999000.0, 0.0, 16.0, 99864.0] ESTIMATE
 |
 |----19:EXCHANGE
@@ -165,7 +165,6 @@ TABLE: partsupp
 NON-PARTITION PREDICATES: 20: ps_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=20.0
-numNodes=0
 cardinality: 80000000
 probe runtime filters:
 - filter_id = 3, probe_expr = (20: ps_suppkey)
@@ -208,7 +207,6 @@ TABLE: supplier
 NON-PARTITION PREDICATES: 24: s_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=8.0
-numNodes=0
 cardinality: 1000000
 probe runtime filters:
 - filter_id = 2, probe_expr = (27: s_nationkey)
@@ -235,7 +233,6 @@ NON-PARTITION PREDICATES: 32: n_name = 'PERU'
 MIN/MAX PREDICATES: 39: n_name <= 'PERU', 40: n_name >= 'PERU'
 partitions=1/1
 avgRowSize=29.0
-numNodes=0
 cardinality: 1
 column statistics:
 * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
@@ -265,10 +262,10 @@ OutPut Exchange Id: 10
 |  cardinality: 3200000
 |  column statistics:
 |  * ps_partkey-->[1.0, 2.0E7, 0.0, 8.0, 3200000.0] ESTIMATE
-|  * ps_suppkey-->[1.0, 1000000.0, 0.0, 8.0, 40000.0] ESTIMATE
 |  * ps_availqty-->[1.0, 9999.0, 0.0, 4.0, 9999.0] ESTIMATE
 |  * ps_supplycost-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
-|  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
+|  * s_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * expr-->[1.0, 9999000.0, 0.0, 16.0, 99864.0] ESTIMATE
 |
 |----7:EXCHANGE
@@ -280,7 +277,6 @@ TABLE: partsupp
 NON-PARTITION PREDICATES: 2: ps_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=28.0
-numNodes=0
 cardinality: 80000000
 probe runtime filters:
 - filter_id = 1, probe_expr = (2: ps_suppkey)
@@ -324,7 +320,6 @@ TABLE: supplier
 NON-PARTITION PREDICATES: 6: s_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=8.0
-numNodes=0
 cardinality: 1000000
 probe runtime filters:
 - filter_id = 0, probe_expr = (9: s_nationkey)
@@ -351,7 +346,6 @@ NON-PARTITION PREDICATES: 14: n_name = 'PERU'
 MIN/MAX PREDICATES: 41: n_name <= 'PERU', 42: n_name >= 'PERU'
 partitions=1/1
 avgRowSize=29.0
-numNodes=0
 cardinality: 1
 column statistics:
 * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE

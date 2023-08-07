@@ -14,6 +14,7 @@
 
 package com.starrocks.sql;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
@@ -128,6 +129,8 @@ public class LoadPlanner {
     // Routine load related structs
     TRoutineLoadTask routineLoadTask;
 
+    private Boolean missAutoIncrementColumn = Boolean.FALSE;
+
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, OlapTable destTable,
                        boolean strictMode, String timezone, long timeoutS,
                        long startTime, boolean partialUpdate, ConnectContext context,
@@ -149,7 +152,7 @@ public class LoadPlanner {
             this.context = new ConnectContext();
         }
         if (this.context.getSessionVariable().getEnableAdaptiveSinkDop()) {
-            this.parallelInstanceNum = this.context.getSessionVariable().getDegreeOfParallelism();
+            this.parallelInstanceNum = this.context.getSessionVariable().getSinkDegreeOfParallelism();
         } else {
             this.parallelInstanceNum = Config.load_parallel_instance_num;
         }
@@ -171,10 +174,10 @@ public class LoadPlanner {
     }
 
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, String dbName, OlapTable destTable,
-            boolean strictMode, String timezone, boolean partialUpdate, ConnectContext context,
-            Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
-            boolean routimeStreamLoadNegative, int parallelInstanceNum,
-            List<ImportColumnDesc> columnDescs, StreamLoadInfo streamLoadInfo) {
+                       boolean strictMode, String timezone, boolean partialUpdate, ConnectContext context,
+                       Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
+                       boolean routimeStreamLoadNegative, int parallelInstanceNum,
+                       List<ImportColumnDesc> columnDescs, StreamLoadInfo streamLoadInfo) {
         this.loadJobId = loadJobId;
         this.loadId = loadId;
         this.txnId = txnId;
@@ -204,17 +207,16 @@ public class LoadPlanner {
     }
 
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, String dbName, OlapTable destTable,
-            boolean strictMode, String timezone, boolean partialUpdate, ConnectContext context,
-            Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
-            boolean routimeStreamLoadNegative, int parallelInstanceNum, List<ImportColumnDesc> columnDescs,
-            StreamLoadInfo streamLoadInfo, String label, long timeoutS) {
+                       boolean strictMode, String timezone, boolean partialUpdate, ConnectContext context,
+                       Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
+                       boolean routimeStreamLoadNegative, int parallelInstanceNum, List<ImportColumnDesc> columnDescs,
+                       StreamLoadInfo streamLoadInfo, String label, long timeoutS) {
         this(loadJobId, loadId, txnId, dbId, dbName, destTable, strictMode, timezone, partialUpdate, context,
                 sessionVariables, loadMemLimit, execMemLimit, routimeStreamLoadNegative, parallelInstanceNum,
                 columnDescs, streamLoadInfo);
         this.label = label;
         this.timeoutS = timeoutS;
         this.etlJobType = EtlJobType.STREAM_LOAD;
-        this.context.getSessionVariable().setEnableResourceGroup(false);
         if (Config.enable_pipeline_load) {
             this.context.getSessionVariable().setEnablePipelineEngine(true);
         }
@@ -241,14 +243,20 @@ public class LoadPlanner {
         } else if (!isPrimaryKey && partialUpdate) {
             throw new DdlException("Only primary key table support partial update");
         }
+        List<Boolean> isMissAutoIncrementColumn = Lists.newArrayList();
         if (partialUpdate) {
             if (this.etlJobType == EtlJobType.BROKER) {
-                destColumns = Load.getPartialUpateColumns(destTable, fileGroups.get(0).getColumnExprList());
+                destColumns = Load.getPartialUpateColumns(destTable, fileGroups.get(0).getColumnExprList(),
+                        isMissAutoIncrementColumn);
             } else {
-                destColumns = Load.getPartialUpateColumns(destTable, columnDescs);
+                destColumns = Load.getPartialUpateColumns(destTable, columnDescs, isMissAutoIncrementColumn);
             }
         } else {
             destColumns = destTable.getFullSchema();
+        }
+
+        if (isMissAutoIncrementColumn.size() != 0) {
+            this.missAutoIncrementColumn = isMissAutoIncrementColumn.get(0);
         }
 
         generateTupleDescriptor(destColumns, isPrimaryKey);
@@ -259,32 +267,36 @@ public class LoadPlanner {
         // 3. Exchange node for primary table
         PlanFragment sinkFragment = null;
         boolean needShufflePlan = false;
+        boolean forceReplicatedStorage = false;
         if (Config.enable_shuffle_load && needShufflePlan()) {
+            if (!Config.eliminate_shuffle_load_by_replicated_storage) {
+                // scan fragment
+                PlanFragment scanFragment = new PlanFragment(new PlanFragmentId(0), scanNode, DataPartition.RANDOM);
+                scanFragment.setParallelExecNum(parallelInstanceNum);
 
-            // scan fragment
-            PlanFragment scanFragment = new PlanFragment(new PlanFragmentId(0), scanNode, DataPartition.RANDOM);
-            scanFragment.setParallelExecNum(parallelInstanceNum);
+                fragments.add(scanFragment);
 
-            fragments.add(scanFragment);
+                // Exchange node
+                List<Column> keyColumns = olapDestTable.getKeyColumnsByIndexId(olapDestTable.getBaseIndexId());
+                List<Expr> partitionExprs = Lists.newArrayList();
+                keyColumns.forEach(column -> {
+                    partitionExprs.add(new SlotRef(tupleDesc.getColumnSlot(column.getName())));
+                });
 
-            // Exchange node
-            List<Column> keyColumns = olapDestTable.getKeyColumnsByIndexId(olapDestTable.getBaseIndexId());
-            List<Expr> partitionExprs = Lists.newArrayList();
-            keyColumns.forEach(column -> {
-                partitionExprs.add(new SlotRef(tupleDesc.getColumnSlot(column.getName())));
-            });
+                DataPartition dataPartition = new DataPartition(TPartitionType.HASH_PARTITIONED, partitionExprs);
+                ExchangeNode exchangeNode = new ExchangeNode(new PlanNodeId(planNodeGenerator.getNextId().asInt()),
+                        scanFragment.getPlanRoot(), dataPartition);
 
-            DataPartition dataPartition = new DataPartition(TPartitionType.HASH_PARTITIONED, partitionExprs);
-            ExchangeNode exchangeNode = new ExchangeNode(new PlanNodeId(planNodeGenerator.getNextId().asInt()),
-                    scanFragment.getPlanRoot(), dataPartition);
+                // add exchange node to scan fragment and sink fragment
+                sinkFragment = new PlanFragment(new PlanFragmentId(1), exchangeNode, dataPartition);
+                exchangeNode.setFragment(sinkFragment);
+                scanFragment.setDestination(exchangeNode);
+                scanFragment.setOutputPartition(dataPartition);
 
-            // add exchange node to scan fragment and sink fragment
-            sinkFragment = new PlanFragment(new PlanFragmentId(1), exchangeNode, dataPartition);
-            exchangeNode.setFragment(sinkFragment);
-            scanFragment.setDestination(exchangeNode);
-            scanFragment.setOutputPartition(dataPartition);
-
-            needShufflePlan = true;
+                needShufflePlan = true;
+            } else {
+                forceReplicatedStorage = true;
+            }
         }
 
         // 4. Prepare sink fragment
@@ -292,7 +304,7 @@ public class LoadPlanner {
         if (!needShufflePlan) {
             sinkFragment = new PlanFragment(new PlanFragmentId(0), scanNode, DataPartition.RANDOM);
         }
-        prepareSinkFragment(sinkFragment, partitionIds, true, true);
+        prepareSinkFragment(sinkFragment, partitionIds, true, true, forceReplicatedStorage);
         if (this.context != null) {
             if (this.context.getSessionVariable().isEnablePipelineEngine() && Config.enable_pipeline_load) {
                 if (needShufflePlan) {
@@ -377,13 +389,46 @@ public class LoadPlanner {
         return scanNode;
     }
 
+    private boolean checkNullExprInAutoIncrement() {
+        boolean nullExprInAutoIncrement = false;
+        for (ScanNode node : scanNodes) {
+            if (this.etlJobType == EtlJobType.BROKER) {
+                if (((FileScanNode) node).nullExprInAutoIncrement()) {
+                    nullExprInAutoIncrement = true;
+                }
+            } else if (this.etlJobType == EtlJobType.STREAM_LOAD || this.etlJobType == EtlJobType.ROUTINE_LOAD) {
+                if (((StreamLoadScanNode) node).nullExprInAutoIncrement()) {
+                    nullExprInAutoIncrement = true;
+                }
+            }
+
+            if (nullExprInAutoIncrement) {
+                break;
+            }
+        }
+
+        return nullExprInAutoIncrement;
+    }
+
     private void prepareSinkFragment(PlanFragment sinkFragment, List<Long> partitionIds, boolean canUsePipeLine,
-                                     boolean completeTabletSink) throws UserException {
+                                     boolean completeTabletSink, boolean forceReplicatedStorage) throws UserException {
         DataSink dataSink = null;
         if (destTable instanceof OlapTable) {
             // 4. Olap table sink
-            dataSink = new OlapTableSink((OlapTable) destTable, tupleDesc, partitionIds, canUsePipeLine,
-                    ((OlapTable) destTable).writeQuorum(), ((OlapTable) destTable).enableReplicatedStorage());
+            OlapTable olapTable = (OlapTable) destTable;
+            boolean enableAutomaticPartition;
+            if (fileGroups != null && fileGroups.stream().anyMatch(BrokerFileGroup::isSpecifyPartition)) {
+                enableAutomaticPartition = false;
+            } else {
+                enableAutomaticPartition = olapTable.supportedAutomaticPartition();
+            }
+            Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
+            dataSink = new OlapTableSink(olapTable, tupleDesc, partitionIds, canUsePipeLine,
+                    olapTable.writeQuorum(), forceReplicatedStorage ? true : ((OlapTable) destTable).enableReplicatedStorage(),
+                    checkNullExprInAutoIncrement(), enableAutomaticPartition);
+            if (this.missAutoIncrementColumn == Boolean.TRUE) {
+                ((OlapTableSink) dataSink).setMissAutoIncrementColumn();
+            }
             if (completeTabletSink) {
                 ((OlapTableSink) dataSink).init(loadId, txnId, dbId, timeoutS);
                 ((OlapTableSink) dataSink).complete();

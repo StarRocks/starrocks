@@ -35,6 +35,8 @@
 
 #include "util/timezone_utils.h"
 
+#include <cctz/time_zone.h>
+
 #include <charconv>
 #include <string_view>
 #include <utility>
@@ -45,12 +47,14 @@
 
 namespace starrocks {
 
-RE2 TimezoneUtils::time_zone_offset_format_reg(R"(^[+-]{1}\d{2}\:\d{2}$)", re2::RE2::Quiet);
-
 const std::string TimezoneUtils::default_time_zone = "+08:00";
 
 static phmap::flat_hash_map<std::string_view, cctz::time_zone> _s_cached_timezone;
 static phmap::flat_hash_map<std::pair<std::string_view, std::string_view>, int64_t> _s_cached_offsets;
+
+cctz::time_zone TimezoneUtils::local_time_zone() {
+    return cctz::local_time_zone();
+}
 
 void TimezoneUtils::init_time_zones() {
     // timezone cache list
@@ -91,28 +95,52 @@ void TimezoneUtils::init_time_zones() {
     }
 }
 
+// _match_cctz_time_zone use regular expressions to match timezone.
+bool TimezoneUtils::_match_cctz_time_zone(std::string_view timezone, cctz::time_zone& ctz) {
+    re2::StringPiece value;
+
+    // RE2 obj is thread safe
+    // +8:00
+    static RE2 reg1(R"(^[+-]{1}\d{2}\:\d{2}$)", re2::RE2::Quiet);
+    // GMT+8:00
+    static RE2 reg2(R"(^GMT[+-]{1}\d{2}\:\d{2}$)", re2::RE2::Quiet);
+
+    if (reg1.Match(re2::StringPiece(timezone.data(), timezone.size()), 0, timezone.size(), RE2::UNANCHORED, &value,
+                   1)) {
+        // Do nothing.
+    } else if (reg2.Match(re2::StringPiece(timezone.data(), timezone.size()), 0, timezone.size(), RE2::UNANCHORED,
+                          &value, 1)) {
+        // remove GMT header.
+        value = value.substr(3);
+    } else {
+        // all regular expressions return empty.
+        return false;
+    }
+
+    bool positive = (value[0] != '-');
+
+    //Regular expression guarantees hour and minute mush be int
+    int hour = std::stoi(value.substr(1, 2).as_string());
+    int minute = std::stoi(value.substr(4, 2).as_string());
+
+    // timezone offsets around the world extended from -12:00 to +14:00
+    if (!positive && hour > 12) {
+        return false;
+    } else if (positive && hour > 14) {
+        return false;
+    }
+    int offset = hour * 60 * 60 + minute * 60;
+    offset *= positive ? 1 : -1;
+    ctz = cctz::fixed_time_zone(cctz::seconds(offset));
+    return true;
+}
+
 bool TimezoneUtils::find_cctz_time_zone(std::string_view timezone, cctz::time_zone& ctz) {
     re2::StringPiece value;
     if (auto iter = _s_cached_timezone.find(timezone); iter != _s_cached_timezone.end()) {
         ctz = iter->second;
         return true;
-    } else if (time_zone_offset_format_reg.Match(re2::StringPiece(timezone.data(), timezone.size()), 0, timezone.size(),
-                                                 RE2::UNANCHORED, &value, 1)) {
-        bool positive = (value[0] != '-');
-
-        //Regular expression guarantees hour and minute mush be int
-        int hour = std::stoi(value.substr(1, 2).as_string());
-        int minute = std::stoi(value.substr(4, 2).as_string());
-
-        // timezone offsets around the world extended from -12:00 to +14:00
-        if (!positive && hour > 12) {
-            return false;
-        } else if (positive && hour > 14) {
-            return false;
-        }
-        int offset = hour * 60 * 60 + minute * 60;
-        offset *= positive ? 1 : -1;
-        ctz = cctz::fixed_time_zone(cctz::seconds(offset));
+    } else if (_match_cctz_time_zone(timezone, ctz)) {
         return true;
     } else if (timezone == "CST") {
         // Supports offset and region timezone type, "CST" use here is compatibility purposes.

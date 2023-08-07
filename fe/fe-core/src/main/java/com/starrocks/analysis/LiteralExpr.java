@@ -41,6 +41,7 @@ import com.starrocks.common.NotImplementedException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -50,7 +51,12 @@ import java.nio.charset.StandardCharsets;
 
 public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr> {
     public LiteralExpr() {
+        super();
         numDistinctValues = 1;
+    }
+
+    protected LiteralExpr(NodePosition pos) {
+        super(pos);
     }
 
     protected LiteralExpr(LiteralExpr other) {
@@ -204,7 +210,11 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
         if ((obj instanceof StringLiteral && !(this instanceof StringLiteral))
                 || (this instanceof StringLiteral && !(obj instanceof StringLiteral))
                 || (obj instanceof DecimalLiteral && !(this instanceof DecimalLiteral))
-                || (this instanceof DecimalLiteral && !(obj instanceof DecimalLiteral))) {
+                || (this instanceof DecimalLiteral && !(obj instanceof DecimalLiteral))
+                || (obj instanceof BoolLiteral && !(this instanceof BoolLiteral))
+                || (this instanceof BoolLiteral && !(obj instanceof BoolLiteral))
+                || (obj instanceof FloatLiteral && !(this instanceof FloatLiteral))
+                || (this instanceof FloatLiteral && !(obj instanceof FloatLiteral))) {
             return false;
         }
         return this.compareLiteral(((LiteralExpr) obj)) == 0;
@@ -212,6 +222,10 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
 
     @Override
     public boolean isNullable() {
+        return this instanceof NullLiteral;
+    }
+
+    public boolean isConstantNull() {
         return this instanceof NullLiteral;
     }
 

@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
@@ -23,9 +24,10 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 // SHOW TABLES
 public class ShowTableStmt extends ShowStmt {
@@ -39,28 +41,20 @@ public class ShowTableStmt extends ShowStmt {
     private String catalogName;
 
     public ShowTableStmt(String db, boolean isVerbose, String pattern) {
-        this.db = db;
-        this.isVerbose = isVerbose;
-        this.pattern = pattern;
-        this.where = null;
-    }
-
-    public ShowTableStmt(String db, boolean isVerbose, String pattern, Expr where) {
-        this.db = db;
-        this.isVerbose = isVerbose;
-        this.pattern = pattern;
-        this.where = where;
+        this(db, isVerbose, pattern, null, null, NodePosition.ZERO);
     }
 
     public ShowTableStmt(String db, boolean isVerbose, String pattern, String catalogName) {
-        this.db = db;
-        this.isVerbose = isVerbose;
-        this.pattern = pattern;
-        this.where = null;
-        this.catalogName = catalogName;
+        this(db, isVerbose, pattern, null, catalogName, NodePosition.ZERO);
     }
 
     public ShowTableStmt(String db, boolean isVerbose, String pattern, Expr where, String catalogName) {
+        this(db, isVerbose, pattern, where, catalogName, NodePosition.ZERO);
+    }
+
+    public ShowTableStmt(String db, boolean isVerbose, String pattern, Expr where,
+                         String catalogName, NodePosition pos) {
+        super(pos);
         this.db = db;
         this.isVerbose = isVerbose;
         this.pattern = pattern;
@@ -105,7 +99,7 @@ public class ShowTableStmt extends ShowStmt {
         where = where.substitute(aliasMap);
         // where databases_name = currentdb
         Expr whereDbEQ = new BinaryPredicate(
-                BinaryPredicate.Operator.EQ,
+                BinaryType.EQ,
                 new SlotRef(TABLE_NAME, "TABLE_SCHEMA"),
                 new StringLiteral(db));
         // old where + and + db where
@@ -114,7 +108,7 @@ public class ShowTableStmt extends ShowStmt {
                 whereDbEQ,
                 where);
         return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
-                finalWhere, null, null));
+                finalWhere, null, null), this.origStmt);
     }
 
     @Override

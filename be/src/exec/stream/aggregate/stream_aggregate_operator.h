@@ -22,7 +22,6 @@
 #include "exec/aggregator.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/stream/aggregate/stream_aggregator.h"
-#include "exec/stream/stream_fdw.h"
 
 namespace starrocks::stream {
 using StreamAggregatorPtr = std::shared_ptr<StreamAggregator>;
@@ -53,7 +52,7 @@ public:
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
-    Status prepare(RuntimeState* state);
+    Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
 private:

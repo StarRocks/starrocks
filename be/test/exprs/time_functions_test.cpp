@@ -19,6 +19,8 @@
 #include <gtest/gtest.h>
 
 #include <cstring>
+#include <utility>
+#include <vector>
 
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -29,10 +31,10 @@
 #include "exprs/function_context.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/datetime_value.h"
-#include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "runtime/time_types.h"
 #include "testutil/function_utils.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -135,6 +137,49 @@ TEST_F(TimeFunctionsTest, yearAddTest) {
         ASSERT_EQ(TimestampValue::create(2000 + k, 1, 1, 0, 30, 30), v->get_data()[k]);
         ASSERT_FALSE(result->is_null(k));
     }
+}
+
+TEST_F(TimeFunctionsTest, quarterAddTest) {
+    Columns columns;
+
+    auto tc = TimestampColumn::create();
+    auto quarter = Int32Column::create();
+
+    tc->append(TimestampValue::create(2000, 1, 1, 0, 30, 30));
+    quarter->append(2);
+
+    columns.emplace_back(tc);
+    columns.emplace_back(quarter);
+
+    ColumnPtr result = TimeFunctions::quarters_add(_utils->get_fn_ctx(), columns).value();
+    ASSERT_TRUE(result->is_nullable());
+    auto v = ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+
+    ASSERT_EQ(TimestampValue::create(2000, 7, 1, 0, 30, 30), v->get_data()[0]);
+    ASSERT_FALSE(result->is_null(0));
+}
+
+TEST_F(TimeFunctionsTest, millisAddTest) {
+    Columns columns;
+
+    auto tc = TimestampColumn::create();
+    auto millis = Int32Column::create();
+
+    tc->append(TimestampValue::create(2000, 1, 1, 0, 30, 30));
+    millis->append(200);
+
+    columns.emplace_back(tc);
+    columns.emplace_back(millis);
+
+    ColumnPtr result = TimeFunctions::millis_add(_utils->get_fn_ctx(), columns).value();
+    ASSERT_TRUE(result->is_nullable());
+    auto v = ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+
+    TimestampValue check_ts;
+    check_ts.from_timestamp(2000, 1, 1, 0, 30, 30, 200 * 1000);
+
+    ASSERT_EQ(check_ts, v->get_data()[0]);
+    ASSERT_FALSE(result->is_null(0));
 }
 
 TEST_F(TimeFunctionsTest, yearOverflowTest) {
@@ -260,6 +305,32 @@ TEST_F(TimeFunctionsTest, weekOfYearTest) {
     }
 }
 
+TEST_F(TimeFunctionsTest, weekOfYearIsoTest) {
+    auto tc = TimestampColumn::create();
+    tc->append(TimestampValue::create(2023, 1, 5, 0, 5, 0));
+    tc->append(TimestampValue::create(2023, 1, 9, 0, 9, 0));
+    tc->append(TimestampValue::create(2023, 1, 2, 0, 2, 0));
+    tc->append(TimestampValue::create(2023, 1, 6, 0, 6, 0));
+    tc->append(TimestampValue::create(2023, 1, 3, 0, 3, 0));
+    tc->append(TimestampValue::create(2023, 1, 7, 0, 7, 0));
+    tc->append(TimestampValue::create(2023, 1, 10, 0, 10, 0));
+    tc->append(TimestampValue::create(2023, 1, 1, 0, 1, 0));
+    tc->append(TimestampValue::create(2023, 1, 4, 0, 4, 0));
+    tc->append(TimestampValue::create(2023, 1, 8, 0, 8, 0));
+
+    int weeks[] = {1, 2, 1, 1, 1, 1, 2, 52, 1, 1};
+
+    Columns columns;
+    columns.emplace_back(tc);
+
+    ColumnPtr result = TimeFunctions::week_of_year_iso(_utils->get_fn_ctx(), columns).value();
+
+    auto year_weeks = ColumnHelper::cast_to<TYPE_INT>(result);
+    for (size_t i = 0; i < sizeof(weeks) / sizeof(weeks[0]); ++i) {
+        ASSERT_EQ(weeks[i], year_weeks->get_data()[i]);
+    }
+}
+
 TEST_F(TimeFunctionsTest, weekWithDefaultModeTest) {
     auto tc = TimestampColumn::create();
     tc->append(TimestampValue::create(2007, 1, 1, 0, 0, 0));
@@ -277,6 +348,25 @@ TEST_F(TimeFunctionsTest, weekWithDefaultModeTest) {
     auto year_weeks = ColumnHelper::cast_to<TYPE_INT>(result);
     for (size_t i = 0; i < sizeof(weeks) / sizeof(weeks[0]); ++i) {
         ASSERT_EQ(weeks[i], year_weeks->get_data()[i]);
+    }
+}
+
+TEST_F(TimeFunctionsTest, dayofweekisoTest) {
+    auto tc = TimestampColumn::create();
+    tc->append(TimestampValue::create(2023, 1, 1, 0, 5, 0));
+    tc->append(TimestampValue::create(2023, 1, 2, 0, 9, 0));
+    tc->append(TimestampValue::create(2023, 1, 3, 0, 2, 0));
+
+    int days[] = {7, 1, 2};
+
+    Columns columns;
+    columns.emplace_back(tc);
+
+    ColumnPtr result = TimeFunctions::day_of_week_iso(_utils->get_fn_ctx(), columns).value();
+
+    auto ret = ColumnHelper::cast_to<TYPE_INT>(result);
+    for (size_t i = 0; i < sizeof(days) / sizeof(days[0]); ++i) {
+        ASSERT_EQ(days[i], ret->get_data()[i]);
     }
 }
 
@@ -539,7 +629,7 @@ TEST_F(TimeFunctionsTest, now) {
         ASSERT_TRUE(ptr->is_constant());
         ASSERT_FALSE(ptr->is_timestamp());
         auto v = ColumnHelper::as_column<ConstColumn>(ptr);
-        ASSERT_EQ("2019-08-06 01:38:57", v->get(0).get_timestamp().to_string());
+        ASSERT_EQ("2019-08-06 01:38:57.000805", v->get(0).get_timestamp().to_string());
     }
 
     {
@@ -554,7 +644,7 @@ TEST_F(TimeFunctionsTest, now) {
         ASSERT_TRUE(ptr->is_constant());
         ASSERT_FALSE(ptr->is_timestamp());
         auto v = ColumnHelper::as_column<ConstColumn>(ptr);
-        ASSERT_EQ(TimestampValue::create(2019, 8, 6, 1, 38, 57), v->get(0).get_timestamp());
+        ASSERT_EQ(TimestampValue::create(2019, 8, 6, 1, 38, 57, 805), v->get(0).get_timestamp());
     }
 }
 
@@ -766,7 +856,7 @@ TEST_F(TimeFunctionsTest, toUnixForNow) {
     {
         Columns columns;
 
-        ColumnPtr result = TimeFunctions::to_unix_for_now(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::to_unix_for_now_32(_utils->get_fn_ctx(), columns).value();
 
         ASSERT_TRUE(result->is_constant());
 
@@ -786,7 +876,7 @@ TEST_F(TimeFunctionsTest, toUnixFromDatetime) {
 
         columns.emplace_back(tc1);
 
-        ColumnPtr result = TimeFunctions::to_unix_from_datetime(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::to_unix_from_datetime_32(_utils->get_fn_ctx(), columns).value();
 
         ASSERT_TRUE(result->is_numeric());
 
@@ -806,7 +896,7 @@ TEST_F(TimeFunctionsTest, toUnixFromDate) {
 
         columns.emplace_back(tc1);
 
-        ColumnPtr result = TimeFunctions::to_unix_from_date(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::to_unix_from_date_32(_utils->get_fn_ctx(), columns).value();
 
         ASSERT_TRUE(result->is_numeric());
 
@@ -830,7 +920,7 @@ TEST_F(TimeFunctionsTest, toUnixFromDatetimeWithFormat) {
         columns.emplace_back(tc1);
         columns.emplace_back(tc2);
 
-        ColumnPtr result = TimeFunctions::to_unix_from_datetime_with_format(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::to_unix_from_datetime_with_format_32(_utils->get_fn_ctx(), columns).value();
 
         ASSERT_TRUE(result->is_numeric());
 
@@ -851,7 +941,7 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetime) {
 
         columns.emplace_back(tc1);
 
-        ColumnPtr result = TimeFunctions::from_unix_to_datetime(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::from_unix_to_datetime_32(_utils->get_fn_ctx(), columns).value();
 
         //ASSERT_TRUE(result->is_numeric());
 
@@ -884,7 +974,7 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithFormat) {
                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
-        ColumnPtr result = TimeFunctions::from_unix_to_datetime_with_format(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::from_unix_to_datetime_with_format_32(_utils->get_fn_ctx(), columns).value();
 
         //ASSERT_TRUE(result->is_numeric());
 
@@ -918,7 +1008,7 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithConstFormat) {
                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
-        ColumnPtr result = TimeFunctions::from_unix_to_datetime_with_format(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::from_unix_to_datetime_with_format_32(_utils->get_fn_ctx(), columns).value();
 
         //ASSERT_TRUE(result->is_numeric());
 
@@ -943,7 +1033,7 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithConstFormat) {
         ASSERT_TRUE(TimeFunctions::from_unix_prepare(_utils->get_fn_ctx(),
                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
-        ColumnPtr result = TimeFunctions::from_unix_to_datetime_with_format(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::from_unix_to_datetime_with_format_32(_utils->get_fn_ctx(), columns).value();
         ASSERT_TRUE(result->only_null());
         ASSERT_TRUE(TimeFunctions::from_unix_close(_utils->get_fn_ctx(),
                                                    FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -1526,6 +1616,351 @@ TEST_F(TimeFunctionsTest, date_format) {
     }
 }
 
+TEST_F(TimeFunctionsTest, jodatime_format) {
+    FunctionContext* ctx = FunctionContext::create_test_context();
+    auto ptr = std::unique_ptr<FunctionContext>(ctx);
+
+    auto date_col = DateColumn::create();
+    date_col->append(DateValue::create(2013, 5, 1));
+    auto dt_col = TimestampColumn::create();
+    dt_col->append(TimestampValue::create(2020, 6, 25, 15, 58, 21));
+    // jodadate_format
+    {
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("dd,MM,yy"), 1);
+
+        Columns columns;
+        columns.emplace_back(date_col);
+        columns.emplace_back(fmt_col);
+        ctx->set_constant_columns(columns);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::jodadate_format(ctx, columns).value();
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result->is_binary());
+        ASSERT_EQ(1, result->size());
+        auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+        ASSERT_EQ(Slice("01,05,2013"), v->get_data()[0]);
+    }
+    {
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyyMMdd"), 1);
+
+        Columns columns;
+        columns.emplace_back(date_col);
+        columns.emplace_back(fmt_col);
+        ctx->set_constant_columns(columns);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::jodadate_format(ctx, columns).value();
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result->is_binary());
+        ASSERT_EQ(1, result->size());
+        auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+        ASSERT_EQ(Slice("20130501"), v->get_data()[0]);
+    }
+    {
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyy-MM-dd"), 1);
+
+        Columns columns;
+        columns.emplace_back(date_col);
+        columns.emplace_back(fmt_col);
+        ctx->set_constant_columns(columns);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::jodadate_format(ctx, columns).value();
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result->is_binary());
+        ASSERT_EQ(1, result->size());
+        auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+        ASSERT_EQ(Slice("2013-05-01"), v->get_data()[0]);
+    }
+    {
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyy-MM-dd HH:mm:ss"), 1);
+
+        Columns columns;
+        columns.emplace_back(date_col);
+        columns.emplace_back(fmt_col);
+        ctx->set_constant_columns(columns);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::jodadate_format(ctx, columns).value();
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result->is_binary());
+        ASSERT_EQ(1, result->size());
+        auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+        ASSERT_EQ(Slice("2013-05-01 00:00:00"), v->get_data()[0]);
+    }
+    {
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyy-MM-ddTHH:mm:ss"), 1);
+
+        Columns columns;
+        columns.emplace_back(date_col);
+        columns.emplace_back(fmt_col);
+        ctx->set_constant_columns(columns);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::jodadate_format(ctx, columns).value();
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result->is_binary());
+        ASSERT_EQ(1, result->size());
+        auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+        ASSERT_EQ(Slice("2013-05-01T00:00:00"), v->get_data()[0]);
+    }
+    {
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("bcfbcf"), 1);
+
+        Columns columns;
+        columns.emplace_back(date_col);
+        columns.emplace_back(fmt_col);
+        ctx->set_constant_columns(columns);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::jodadate_format(ctx, columns).value();
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result->is_binary());
+        ASSERT_EQ(1, result->size());
+        auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+        ASSERT_EQ(Slice("bcfbcf"), v->get_data()[0]);
+    }
+    {
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("", 0), 1);
+
+        Columns columns;
+        columns.emplace_back(date_col);
+        columns.emplace_back(fmt_col);
+        ctx->set_constant_columns(columns);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::jodadate_format(ctx, columns).value();
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result->only_null());
+    }
+    {
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("G C Y x w e E y D M d"), 1);
+
+        Columns columns;
+        columns.emplace_back(date_col);
+        columns.emplace_back(fmt_col);
+        ctx->set_constant_columns(columns);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::jodadate_format(ctx, columns).value();
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result->is_binary());
+        ASSERT_EQ(1, result->size());
+        auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+        ASSERT_EQ(Slice("AD 20 2013 2013 18 3 Wed 2013 121 5 1"), v->get_data()[0]);
+    }
+    {
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyy MMM dd EEEE ee"), 1);
+
+        Columns columns;
+        columns.emplace_back(date_col);
+        columns.emplace_back(fmt_col);
+        ctx->set_constant_columns(columns);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::jodadate_format(ctx, columns).value();
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result->is_binary());
+        ASSERT_EQ(1, result->size());
+        auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+        ASSERT_EQ(Slice("2013 May 01 Wednesday 03"), v->get_data()[0]);
+    }
+    {
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyy MMM 'abcd'"), 1);
+
+        Columns columns;
+        columns.emplace_back(date_col);
+        columns.emplace_back(fmt_col);
+        ctx->set_constant_columns(columns);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::jodadate_format(ctx, columns).value();
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result->is_binary());
+        ASSERT_EQ(1, result->size());
+        auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+        ASSERT_EQ(Slice("2013 May abcd"), v->get_data()[0]);
+    }
+
+    {
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("'abcd' yyyyMM"), 1);
+
+        Columns columns;
+        columns.emplace_back(date_col);
+        columns.emplace_back(fmt_col);
+        ctx->set_constant_columns(columns);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::jodadate_format(ctx, columns).value();
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result->is_binary());
+        ASSERT_EQ(1, result->size());
+        auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+        ASSERT_EQ(Slice("abcd 201305"), v->get_data()[0]);
+    }
+
+    // datetime_format
+    {
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("dd,MM,yy"), 1);
+
+        Columns columns;
+        columns.emplace_back(dt_col);
+        columns.emplace_back(fmt_col);
+        ctx->set_constant_columns(columns);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::jodadatetime_format(ctx, columns).value();
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result->is_binary());
+        ASSERT_EQ(1, result->size());
+        auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+        ASSERT_EQ(Slice("25,06,2020"), v->get_data()[0]);
+    }
+    {
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyyMMdd"), 1);
+
+        Columns columns;
+        columns.emplace_back(dt_col);
+        columns.emplace_back(fmt_col);
+        ctx->set_constant_columns(columns);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::jodadatetime_format(ctx, columns).value();
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result->is_binary());
+        ASSERT_EQ(1, result->size());
+        auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+        ASSERT_EQ(Slice("20200625"), v->get_data()[0]);
+    }
+    {
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyy-MM-dd"), 1);
+
+        Columns columns;
+        columns.emplace_back(dt_col);
+        columns.emplace_back(fmt_col);
+        ctx->set_constant_columns(columns);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::jodadatetime_format(ctx, columns).value();
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result->is_binary());
+        ASSERT_EQ(1, result->size());
+        auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+        ASSERT_EQ(Slice("2020-06-25"), v->get_data()[0]);
+    }
+    {
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyy-MM-dd HH:mm:ss"), 1);
+
+        Columns columns;
+        columns.emplace_back(dt_col);
+        columns.emplace_back(fmt_col);
+        ctx->set_constant_columns(columns);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::jodadatetime_format(ctx, columns).value();
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result->is_binary());
+        ASSERT_EQ(1, result->size());
+        auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+        ASSERT_EQ(Slice("2020-06-25 15:58:21"), v->get_data()[0]);
+    }
+    {
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyy-MM-ddTHH:mm:ss"), 1);
+
+        Columns columns;
+        columns.emplace_back(dt_col);
+        columns.emplace_back(fmt_col);
+        ctx->set_constant_columns(columns);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::jodadatetime_format(ctx, columns).value();
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result->is_binary());
+        ASSERT_EQ(1, result->size());
+        auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+        ASSERT_EQ(Slice("2020-06-25T15:58:21"), v->get_data()[0]);
+    }
+    {
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("bcfbcf"), 1);
+
+        Columns columns;
+        columns.emplace_back(dt_col);
+        columns.emplace_back(fmt_col);
+        ctx->set_constant_columns(columns);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::jodadatetime_format(ctx, columns).value();
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result->is_binary());
+        ASSERT_EQ(1, result->size());
+        auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+        ASSERT_EQ(Slice("bcfbcf"), v->get_data()[0]);
+    }
+    {
+        // stack-buffer-overflow test
+        std::string test_string;
+        for (int i = 0; i < 10000; ++i) {
+            test_string.append("x");
+        }
+        auto fmt_col =
+                ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(test_string.c_str(), test_string.size()), 1);
+        Columns columns;
+        columns.emplace_back(dt_col);
+        columns.emplace_back(fmt_col);
+
+        ctx->set_constant_columns(columns);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::jodadatetime_format(ctx, columns).value();
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_EQ(true, result->is_null(0));
+    }
+
+    {
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("", 0), 1);
+
+        Columns columns;
+        columns.emplace_back(date_col);
+        columns.emplace_back(fmt_col);
+        ctx->set_constant_columns(columns);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::jodadatetime_format(ctx, columns).value();
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result->only_null());
+    }
+
+    {
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("a K h H k m s S"), 1);
+
+        Columns columns;
+        columns.emplace_back(dt_col);
+        columns.emplace_back(fmt_col);
+        ctx->set_constant_columns(columns);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::jodadatetime_format(ctx, columns).value();
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result->is_binary());
+        ASSERT_EQ(1, result->size());
+        auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+        ASSERT_EQ(Slice("PM 3 3 15 15 58 21 0"), v->get_data()[0]);
+    }
+
+    {
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("a K 'abcd'"), 1);
+
+        Columns columns;
+        columns.emplace_back(dt_col);
+        columns.emplace_back(fmt_col);
+        ctx->set_constant_columns(columns);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::jodadatetime_format(ctx, columns).value();
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result->is_binary());
+        ASSERT_EQ(1, result->size());
+        auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+        ASSERT_EQ(Slice("PM 3 abcd"), v->get_data()[0]);
+    }
+
+    {
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("'abcd' yyyyMM"), 1);
+
+        Columns columns;
+        columns.emplace_back(dt_col);
+        columns.emplace_back(fmt_col);
+        ctx->set_constant_columns(columns);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::jodadatetime_format(ctx, columns).value();
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result->is_binary());
+        ASSERT_EQ(1, result->size());
+        auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+        ASSERT_EQ(Slice("abcd 202006"), v->get_data()[0]);
+    }
+}
+
 TEST_F(TimeFunctionsTest, daynameTest) {
     auto tc = TimestampColumn::create();
     tc->append(TimestampValue::create(2020, 1, 1, 21, 22, 1));
@@ -1679,6 +2114,37 @@ TEST_F(TimeFunctionsTest, utctimestampTest) {
         ASSERT_FALSE(ptr->is_timestamp());
         auto v = ColumnHelper::as_column<ConstColumn>(ptr);
         ASSERT_EQ(TimestampValue::create(2019, 8, 6, 8, 38, 57), v->get(0).get_timestamp());
+    }
+}
+
+TEST_F(TimeFunctionsTest, utctimeTest) {
+    // without RuntimeState
+    {
+        ColumnPtr utc_timestamp = TimeFunctions::utc_timestamp(_utils->get_fn_ctx(), Columns()).value();
+        ColumnPtr ptr = TimeFunctions::utc_time(_utils->get_fn_ctx(), Columns()).value();
+        ASSERT_TRUE(ptr->is_constant());
+        ASSERT_FALSE(ptr->is_numeric());
+        TimestampValue ts = ColumnHelper::as_column<ConstColumn>(utc_timestamp)->get(0).get_timestamp();
+        auto v = ColumnHelper::as_column<ConstColumn>(ptr);
+
+        int h, m, s, us;
+        ts.to_time(&h, &m, &s, &us);
+        ASSERT_EQ(h * 3600 + m * 60 + s, v->get(0).get_double());
+    }
+    // with RuntimeState
+    {
+        TQueryGlobals globals;
+        globals.__set_now_string("2019-08-06 01:38:57");
+        globals.__set_timestamp_ms(1565080737805);
+        globals.__set_time_zone("America/Los_Angeles");
+        starrocks::RuntimeState state(globals);
+        starrocks::FunctionUtils futils(&state);
+        FunctionContext* ctx = futils.get_fn_ctx();
+        ColumnPtr ptr = TimeFunctions::utc_time(ctx, Columns()).value();
+        ASSERT_TRUE(ptr->is_constant());
+        ASSERT_FALSE(ptr->is_numeric());
+        auto v = ColumnHelper::as_column<ConstColumn>(ptr);
+        ASSERT_EQ(8 * 3600 + 38 * 60 + 57, v->get(0).get_double());
     }
 }
 
@@ -2060,10 +2526,36 @@ TEST_F(TimeFunctionsTest, dateTruncTest) {
     tc->append(DateValue::create(2020, 5, 9));
     tc->append(DateValue::create(2020, 11, 3));
 
-    //day
-    {
+    std::vector<std::pair<std::string, std::vector<DateValue>>> test_cases = {
+            {/*fmt*/ "day",
+             /*expected_date */ {DateValue::create(2020, 1, 1), DateValue::create(2020, 2, 2),
+                                 DateValue::create(2020, 3, 6), DateValue::create(2020, 4, 8),
+                                 DateValue::create(2020, 5, 9), DateValue::create(2020, 11, 3)}},
+            {"DAY",
+             {DateValue::create(2020, 1, 1), DateValue::create(2020, 2, 2), DateValue::create(2020, 3, 6),
+              DateValue::create(2020, 4, 8), DateValue::create(2020, 5, 9), DateValue::create(2020, 11, 3)}},
+            {"month",
+             {DateValue::create(2020, 1, 1), DateValue::create(2020, 2, 1), DateValue::create(2020, 3, 1),
+              DateValue::create(2020, 4, 1), DateValue::create(2020, 5, 1), DateValue::create(2020, 11, 1)}},
+            {"MONTH",
+             {DateValue::create(2020, 1, 1), DateValue::create(2020, 2, 1), DateValue::create(2020, 3, 1),
+              DateValue::create(2020, 4, 1), DateValue::create(2020, 5, 1), DateValue::create(2020, 11, 1)}},
+            {"year",
+             {DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1),
+              DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1)}},
+            {"YEAR",
+             {DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1),
+              DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1)}},
+            {"week",
+             {DateValue::create(2019, 12, 30), DateValue::create(2020, 1, 27), DateValue::create(2020, 3, 2),
+              DateValue::create(2020, 4, 6), DateValue::create(2020, 5, 4), DateValue::create(2020, 11, 2)}},
+            {"WEEK",
+             {DateValue::create(2019, 12, 30), DateValue::create(2020, 1, 27), DateValue::create(2020, 3, 2),
+              DateValue::create(2020, 4, 6), DateValue::create(2020, 5, 4), DateValue::create(2020, 11, 2)}}};
+
+    for (const auto& test_case : test_cases) {
         auto text = BinaryColumn::create();
-        text->append("day");
+        text->append(test_case.first);
         auto format = ConstColumn::create(text, 1);
 
         Columns columns;
@@ -2083,137 +2575,7 @@ TEST_F(TimeFunctionsTest, dateTruncTest) {
 
         auto datetimes = ColumnHelper::cast_to<TYPE_DATE>(result);
 
-        DateValue check_result[6] = {DateValue::create(2020, 1, 1), DateValue::create(2020, 2, 2),
-                                     DateValue::create(2020, 3, 6), DateValue::create(2020, 4, 8),
-                                     DateValue::create(2020, 5, 9), DateValue::create(2020, 11, 3)};
-
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
-            ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
-        }
-    }
-
-    //month
-    {
-        auto text = BinaryColumn::create();
-        text->append("month");
-        auto format = ConstColumn::create(text, 1);
-
-        Columns columns;
-        columns.emplace_back(format);
-        columns.emplace_back(tc);
-
-        _utils->get_fn_ctx()->set_constant_columns(columns);
-
-        ASSERT_TRUE(TimeFunctions::date_trunc_prepare(_utils->get_fn_ctx(),
-                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
-
-        ColumnPtr result = TimeFunctions::date_trunc(_utils->get_fn_ctx(), columns).value();
-        ASSERT_TRUE(TimeFunctions::date_trunc_close(
-                            _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
-
-        auto datetimes = ColumnHelper::cast_to<TYPE_DATE>(result);
-
-        DateValue check_result[6] = {DateValue::create(2020, 1, 1), DateValue::create(2020, 2, 1),
-                                     DateValue::create(2020, 3, 1), DateValue::create(2020, 4, 1),
-                                     DateValue::create(2020, 5, 1), DateValue::create(2020, 11, 1)};
-
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
-            ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
-        }
-    }
-
-    //year
-    {
-        auto text = BinaryColumn::create();
-        text->append("year");
-        auto format = ConstColumn::create(text, 1);
-
-        Columns columns;
-        columns.emplace_back(format);
-        columns.emplace_back(tc);
-
-        _utils->get_fn_ctx()->set_constant_columns(columns);
-
-        ASSERT_TRUE(TimeFunctions::date_trunc_prepare(_utils->get_fn_ctx(),
-                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
-
-        ColumnPtr result = TimeFunctions::date_trunc(_utils->get_fn_ctx(), columns).value();
-        ASSERT_TRUE(TimeFunctions::date_trunc_close(
-                            _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
-
-        auto datetimes = ColumnHelper::cast_to<TYPE_DATE>(result);
-
-        DateValue check_result[6] = {DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1),
-                                     DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1),
-                                     DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1)};
-
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
-            ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
-        }
-    }
-
-    //week
-    {
-        auto text = BinaryColumn::create();
-        text->append("week");
-        auto format = ConstColumn::create(text, 1);
-
-        Columns columns;
-        columns.emplace_back(format);
-        columns.emplace_back(tc);
-
-        _utils->get_fn_ctx()->set_constant_columns(columns);
-
-        ASSERT_TRUE(TimeFunctions::date_trunc_prepare(_utils->get_fn_ctx(),
-                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
-
-        ColumnPtr result = TimeFunctions::date_trunc(_utils->get_fn_ctx(), columns).value();
-        ASSERT_TRUE(TimeFunctions::date_trunc_close(
-                            _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
-
-        auto datetimes = ColumnHelper::cast_to<TYPE_DATE>(result);
-
-        DateValue check_result[6] = {DateValue::create(2019, 12, 30), DateValue::create(2020, 1, 27),
-                                     DateValue::create(2020, 3, 2),   DateValue::create(2020, 4, 6),
-                                     DateValue::create(2020, 5, 4),   DateValue::create(2020, 11, 2)};
-
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
-            ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
-        }
-    }
-
-    //quarter
-    {
-        auto text = BinaryColumn::create();
-        text->append("quarter");
-        auto format = ConstColumn::create(text, 1);
-
-        Columns columns;
-        columns.emplace_back(format);
-        columns.emplace_back(tc);
-
-        _utils->get_fn_ctx()->set_constant_columns(columns);
-
-        ASSERT_TRUE(TimeFunctions::date_trunc_prepare(_utils->get_fn_ctx(),
-                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
-
-        ColumnPtr result = TimeFunctions::date_trunc(_utils->get_fn_ctx(), columns).value();
-        ASSERT_TRUE(TimeFunctions::date_trunc_close(
-                            _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
-
-        auto datetimes = ColumnHelper::cast_to<TYPE_DATE>(result);
-
-        DateValue check_result[6] = {DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1),
-                                     DateValue::create(2020, 1, 1), DateValue::create(2020, 4, 1),
-                                     DateValue::create(2020, 4, 1), DateValue::create(2020, 10, 1)};
+        auto check_result = test_case.second;
 
         for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
@@ -2385,8 +2747,8 @@ TEST_F(TimeFunctionsTest, timeSliceFloorTest) {
     tc->append(TimestampValue::create(2022, 11, 3, 23, 41, 37));
 
     std::vector<FunctionContext::TypeDesc> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DATETIME))};
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DATETIME));
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DATETIME))};
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DATETIME));
     std::unique_ptr<FunctionContext> time_slice_context(
             FunctionContext::create_test_context(std::move(arg_types), return_type));
 
@@ -2761,8 +3123,8 @@ TEST_F(TimeFunctionsTest, timeSliceCeilTest) {
     tc->append(TimestampValue::create(2022, 11, 3, 23, 41, 37));
 
     std::vector<FunctionContext::TypeDesc> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DATETIME))};
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DATETIME));
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DATETIME))};
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DATETIME));
     std::unique_ptr<FunctionContext> time_slice_context(
             FunctionContext::create_test_context(std::move(arg_types), return_type));
 
@@ -2817,8 +3179,8 @@ TEST_F(TimeFunctionsTest, timeSliceTestWithThrowExceptions) {
     tc->append(TimestampValue::create(0000, 1, 1, 0, 0, 0));
 
     std::vector<FunctionContext::TypeDesc> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DATETIME))};
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DATETIME));
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DATETIME))};
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DATETIME));
     std::unique_ptr<FunctionContext> time_slice_context(
             FunctionContext::create_test_context(std::move(arg_types), return_type));
 
@@ -2869,8 +3231,8 @@ TEST_F(TimeFunctionsTest, DateSliceFloorTest) {
     tc->append(DateValue::create(2022, 11, 3));
 
     std::vector<FunctionContext::TypeDesc> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DATE))};
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DATE));
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DATE))};
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DATE));
     std::unique_ptr<FunctionContext> time_slice_context(
             FunctionContext::create_test_context(std::move(arg_types), return_type));
 
@@ -3105,8 +3467,8 @@ TEST_F(TimeFunctionsTest, DateSliceCeilTest) {
     tc->append(DateValue::create(2022, 11, 3));
 
     std::vector<FunctionContext::TypeDesc> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DATE))};
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DATE));
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DATE))};
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DATE));
     std::unique_ptr<FunctionContext> time_slice_context(
             FunctionContext::create_test_context(std::move(arg_types), return_type));
 
@@ -3155,4 +3517,62 @@ TEST_F(TimeFunctionsTest, DateSliceCeilTest) {
     }
 }
 
+TEST_F(TimeFunctionsTest, MakeDateTest) {
+    auto year_value = Int32Column::create();
+    auto day_of_year_value = Int32Column::create();
+
+    year_value->append(0);
+    day_of_year_value->append(1);
+
+    year_value->append(2023);
+    day_of_year_value->append(0);
+
+    year_value->append(2023);
+    day_of_year_value->append(32);
+
+    year_value->append(2023);
+    day_of_year_value->append(365);
+
+    year_value->append(2023);
+    day_of_year_value->append(366);
+
+    year_value->append(9999);
+    day_of_year_value->append(1);
+
+    year_value->append(9999);
+    day_of_year_value->append(365);
+
+    year_value->append(9999);
+    day_of_year_value->append(366);
+
+    year_value->append(10000);
+    day_of_year_value->append(1);
+
+    year_value->append(1);
+    day_of_year_value->append(-1);
+
+    year_value->append(1);
+    (void)day_of_year_value->append_nulls(1);
+
+    Columns columns;
+    columns.emplace_back(year_value);
+    columns.emplace_back(day_of_year_value);
+
+    ColumnPtr result = TimeFunctions::make_date(_utils->get_fn_ctx(), columns).value();
+    ASSERT_TRUE(result->is_nullable());
+
+    NullableColumn::Ptr nullable_col = ColumnHelper::as_column<NullableColumn>(result);
+
+    ASSERT_EQ(DateValue::create(0000, 1, 1), nullable_col->get(0).get_date());
+    ASSERT_TRUE(nullable_col->is_null(1));
+    ASSERT_EQ(DateValue::create(2023, 2, 1), nullable_col->get(2).get_date());
+    ASSERT_EQ(DateValue::create(2023, 12, 31), nullable_col->get(3).get_date());
+    ASSERT_TRUE(nullable_col->is_null(4));
+    ASSERT_EQ(DateValue::create(9999, 1, 1), nullable_col->get(5).get_date());
+    ASSERT_EQ(DateValue::create(9999, 12, 31), nullable_col->get(6).get_date());
+    ASSERT_TRUE(nullable_col->is_null(7));
+    ASSERT_TRUE(nullable_col->is_null(8));
+    ASSERT_TRUE(nullable_col->is_null(9));
+    ASSERT_TRUE(nullable_col->is_null(10));
+}
 } // namespace starrocks

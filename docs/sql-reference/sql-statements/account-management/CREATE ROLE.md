@@ -2,20 +2,35 @@
 
 ## Description
 
-This statement allows users to create a role.
+Creates a role. After a role is created, you can grant privileges to the role and then assign this role to a user or another role. This way, the privileges associated with this role are passed on to users or roles.
 
- Syntax:
+Only users with the `user_admin` role or the `GRANT` privilege can create a role.
+
+## Syntax
 
 ```sql
-CREATE ROLE role1;
+CREATE ROLE <role_name>
 ```
 
-It creates a role with no permission which could be added to the role though "GRANT" command.  
+## Parameters
+
+`role_name`: the name of the role. Naming conventions:
+
+- It can only contain digits (0-9), letters, or underscores (_) and must start with a letter.
+- It cannot exceed 64 characters in length.
+
+Note that the created role name cannot be the same as [system-defined roles](../../../administration/privilege_overview.md#system-defined-roles).
 
 ## Examples
 
- 1. Create a role
+ Create a role.
 
   ```sql
   CREATE ROLE role1;
   ```
+
+## References
+
+- [GRANT](GRANT.md)
+- [SHOW ROLES](SHOW%20ROLES.md)
+- [DROP ROLE](DROP%20ROLE.md)

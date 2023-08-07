@@ -1,0 +1,83 @@
+-- name: test_grant_database
+create database test_grant_to_system_table;
+-- result:
+-- !result
+create user IF NOT EXISTS u1;
+-- result:
+-- !result
+grant create table on database test_grant_to_system_table to u1;
+-- result:
+-- !result
+select GRANTEE, OBJECT_TYPE, PRIVILEGE_TYPE from sys.grants_to_users where GRANTEE="'u1'@'%'" and OBJECT_DATABASE="test_grant_to_system_table";
+-- result:
+'u1'@'%'	DATABASE	CREATE TABLE
+-- !result
+-- name: test_grant_table
+CREATE TABLE `t1` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` varchar(20) NULL COMMENT ""
+) DISTRIBUTED BY HASH(`v1`) BUCKETS 3
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+create user IF NOT EXISTS u2;
+-- result:
+-- !result
+grant select on table t1 to u2;
+-- result:
+-- !result
+select GRANTEE, OBJECT_TYPE, PRIVILEGE_TYPE from sys.grants_to_users where GRANTEE="'u2'@'%'" and OBJECT_DATABASE=database() and OBJECT_NAME="t1" and PRIVILEGE_TYPE="SELECT";
+-- result:
+'u2'@'%'	TABLE	SELECT
+-- !result
+-- name: test_grant_view
+CREATE TABLE `t1` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` varchar(20) NULL COMMENT ""
+) DISTRIBUTED BY HASH(`v1`) BUCKETS 3
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+create view v as select * from t1;
+-- result:
+-- !result
+create user IF NOT EXISTS u3;
+-- result:
+-- !result
+grant select on view v to u3;
+-- result:
+-- !result
+select GRANTEE, OBJECT_TYPE, PRIVILEGE_TYPE from sys.grants_to_users where GRANTEE="'u3'@'%'" and OBJECT_DATABASE=database() and OBJECT_NAME="v" and PRIVILEGE_TYPE="SELECT";
+-- result:
+'u3'@'%'	VIEW	SELECT
+-- !result
+-- name: test_grant_materialized_view
+CREATE TABLE `t1` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` varchar(20) NULL COMMENT ""
+) DISTRIBUTED BY HASH(`v1`) BUCKETS 3
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+create materialized view mv DISTRIBUTED BY HASH(`v1`) BUCKETS 12 REFRESH ASYNC as select v1,v2,v3 from t1;
+-- result:
+-- !result
+create user IF NOT EXISTS u4;
+-- result:
+-- !result
+grant select on materialized view mv to u4;
+-- result:
+-- !result
+select GRANTEE, OBJECT_TYPE, PRIVILEGE_TYPE from sys.grants_to_users where GRANTEE="'u4'@'%'" and OBJECT_DATABASE=database() and OBJECT_NAME="mv" and PRIVILEGE_TYPE="SELECT";
+-- result:
+'u4'@'%'	MATERIALIZED VIEW	SELECT
+-- !result

@@ -86,13 +86,13 @@ struct AggHashSet {
 };
 
 // handle one number hash key
-template <LogicalType primitive_type, typename HashSet>
-struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumberKey<primitive_type, HashSet>> {
+template <LogicalType logical_type, typename HashSet>
+struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumberKey<logical_type, HashSet>> {
     using KeyType = typename HashSet::key_type;
     using Iterator = typename HashSet::iterator;
-    using ColumnType = RunTimeColumnType<primitive_type>;
+    using ColumnType = RunTimeColumnType<logical_type>;
     using ResultVector = typename ColumnType::Container;
-    using FieldType = RunTimeCppType<primitive_type>;
+    using FieldType = RunTimeCppType<logical_type>;
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash set key size needs to be larger than the actual element");
 
     AggHashSetOfOneNumberKey(int32_t chunk_size) {}
@@ -129,14 +129,14 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
     ResultVector results;
 };
 
-template <LogicalType primitive_type, typename HashSet>
+template <LogicalType logical_type, typename HashSet>
 struct AggHashSetOfOneNullableNumberKey
-        : public AggHashSet<HashSet, AggHashSetOfOneNullableNumberKey<primitive_type, HashSet>> {
+        : public AggHashSet<HashSet, AggHashSetOfOneNullableNumberKey<logical_type, HashSet>> {
     using KeyType = typename HashSet::key_type;
     using Iterator = typename HashSet::iterator;
-    using ColumnType = RunTimeColumnType<primitive_type>;
+    using ColumnType = RunTimeColumnType<logical_type>;
     using ResultVector = typename ColumnType::Container;
-    using FieldType = RunTimeCppType<primitive_type>;
+    using FieldType = RunTimeCppType<logical_type>;
 
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash set key size needs to be larger than the actual element");
 

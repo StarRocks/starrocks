@@ -22,17 +22,18 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter_bank.h"
-#include "formats/orc/fill_function.h"
 #include "formats/orc/orc_mapping.h"
+#include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
-#include "util/buffered_stream.h"
 namespace starrocks {
+
+class RandomAccessFile;
 
 class ORCHdfsFileStream : public orc::InputStream {
 public:
     // |file| must outlive ORCHdfsFileStream
-    ORCHdfsFileStream(RandomAccessFile* file, uint64_t length);
+    ORCHdfsFileStream(RandomAccessFile* file, uint64_t length, io::SharedBufferedInputStream* sb_stream);
 
     ~ORCHdfsFileStream() override = default;
 
@@ -74,7 +75,6 @@ private:
     uint64_t _length;
     std::vector<char> _cache_buffer;
     uint64_t _cache_offset;
-    SharedBufferedInputStream _buffer_stream;
-    bool _buffer_stream_enabled = false;
+    io::SharedBufferedInputStream* _sb_stream;
 };
 } // namespace starrocks

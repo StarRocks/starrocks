@@ -20,6 +20,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Table;
@@ -653,7 +654,7 @@ public class ScalarApply2AnalyticRule extends TransformationRule {
             if (compareChildrenOfBinaryOperator(predicate, peer)) {
                 return true;
             }
-            if (BinaryPredicateOperator.BinaryType.EQ.equals(predicate.getBinaryType())) {
+            if (BinaryType.EQ.equals(predicate.getBinaryType())) {
                 // For equal, we need to compare children in another order
                 return compareChildrenOfBinaryOperator(predicate, peer)
                         || compareChildrenOfBinaryOperator(predicate, peer.commutative());

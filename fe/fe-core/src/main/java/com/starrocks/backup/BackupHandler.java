@@ -38,6 +38,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.AbstractJob.JobType;
 import com.starrocks.backup.BackupJob.BackupJobState;
@@ -47,17 +48,18 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.LeaderDaemon;
-import com.starrocks.lake.backup.LakeBackupJob;
-import com.starrocks.lake.backup.LakeRestoreJob;
+import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AbstractBackupStmt;
 import com.starrocks.sql.ast.BackupStmt;
@@ -91,7 +93,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class BackupHandler extends LeaderDaemon implements Writable {
+public class BackupHandler extends FrontendDaemon implements Writable {
     private static final Logger LOG = LogManager.getLogger(BackupHandler.class);
 
     public static final int SIGNATURE_VERSION = 1;
@@ -100,6 +102,7 @@ public class BackupHandler extends LeaderDaemon implements Writable {
 
     public static final Path TEST_BACKUP_ROOT_DIR = Paths.get(Config.tmp_dir, "test_backup").normalize();
 
+    @SerializedName("rm")
     private RepositoryMgr repoMgr = new RepositoryMgr();
 
     // db id -> last running or finished backup/restore jobs
@@ -300,7 +303,6 @@ public class BackupHandler extends LeaderDaemon implements Writable {
         // Also calculate the signature for incremental backup check.
         List<TableRef> tblRefs = stmt.getTableRefs();
         BackupMeta curBackupMeta = null;
-        TableType t = TableType.OLAP;
         db.readLock();
         try {
             List<Table> backupTbls = Lists.newArrayList();
@@ -311,30 +313,21 @@ public class BackupHandler extends LeaderDaemon implements Writable {
                     ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
                     return;
                 }
-                if (!tbl.isOlapOrLakeTable()) {
+                if (!tbl.isOlapTable()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, tblName);
-                }
-
-                if (tbl.isLakeTable()) {
-                    t = TableType.LAKE;
-                }
-
-                if (t == TableType.LAKE && tbl.isOlapTable()) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
-                    return;
                 }
 
                 OlapTable olapTbl = (OlapTable) tbl;
                 if (olapTbl.existTempPartitions()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
-                            "Do not support backup table with temp partitions");
+                            "Do not support backing up table with temp partitions");
                 }
 
                 PartitionNames partitionNames = tblRef.getPartitionNames();
                 if (partitionNames != null) {
                     if (partitionNames.isTemp()) {
                         ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
-                                "Do not support backuping temp partitions");
+                                "Do not support backing up temp partitions");
                     }
 
                     for (String partName : partitionNames.getPartitionNames()) {
@@ -395,14 +388,8 @@ public class BackupHandler extends LeaderDaemon implements Writable {
         }
 
         // Create a backup job
-        BackupJob backupJob = null;
-        if (t == TableType.OLAP) {
-            backupJob = new BackupJob(stmt.getLabel(), db.getId(), db.getOriginName(), tblRefs, stmt.getTimeoutMs(),
-                    globalStateMgr, repository.getId());
-        } else if (t == TableType.LAKE) {
-            backupJob = new LakeBackupJob(stmt.getLabel(), db.getId(), db.getOriginName(), tblRefs, stmt.getTimeoutMs(),
-                    globalStateMgr, repository.getId());
-        }
+        BackupJob backupJob = new BackupJob(stmt.getLabel(), db.getId(), db.getOriginName(), tblRefs,
+                stmt.getTimeoutMs(), globalStateMgr, repository.getId());
         // write log
         globalStateMgr.getEditLog().logBackupJob(backupJob);
 
@@ -432,30 +419,21 @@ public class BackupHandler extends LeaderDaemon implements Writable {
             checkAndFilterRestoreObjsExistInSnapshot(jobInfo, stmt.getTableRefs());
         }
 
-        TableType t = TableType.OLAP;
         BackupMeta backupMeta = downloadAndDeserializeMetaInfo(jobInfo, repository, stmt);
+
         // Create a restore job
         RestoreJob restoreJob = null;
         if (backupMeta != null) {
             for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
                 Table remoteTbl = backupMeta.getTable(tblInfo.name);
-                if (remoteTbl.isLakeTable()) {
-                    t = TableType.LAKE;
-                }
-                if (t == TableType.LAKE && remoteTbl.isOlapTable()) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, remoteTbl.getName());
+                if (remoteTbl.isCloudNativeTable()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, remoteTbl.getName());
                 }
             }
         }
-        if (t == TableType.OLAP) {
-            restoreJob = new RestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
-                    db.getId(), db.getOriginName(), jobInfo, stmt.allowLoad(), stmt.getReplicationNum(),
-                    stmt.getTimeoutMs(), globalStateMgr, repository.getId(), backupMeta);
-        } else {
-            restoreJob = new LakeRestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
-                    db.getId(), db.getOriginName(), jobInfo, stmt.allowLoad(), stmt.getReplicationNum(),
-                    stmt.getTimeoutMs(), globalStateMgr, repository.getId(), backupMeta);
-        }
+        restoreJob = new RestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
+                db.getId(), db.getOriginName(), jobInfo, stmt.allowLoad(), stmt.getReplicationNum(),
+                stmt.getTimeoutMs(), globalStateMgr, repository.getId(), backupMeta);
         globalStateMgr.getEditLog().logRestoreJob(restoreJob);
 
         // must put to dbIdToBackupOrRestoreJob after edit log, otherwise the state of job may be changed.
@@ -694,12 +672,36 @@ public class BackupHandler extends LeaderDaemon implements Writable {
     }
 
     public long loadBackupHandler(DataInputStream dis, long checksum, GlobalStateMgr globalStateMgr) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_42) {
-            readFields(dis);
-        }
+        readFields(dis);
         setGlobalStateMgr(globalStateMgr);
         LOG.info("finished replay backupHandler from image");
         return checksum;
+    }
+
+    public void saveBackupHandlerV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos,
+                SRMetaBlockID.BACKUP_MGR, 2 + dbIdToBackupOrRestoreJob.size());
+        writer.writeJson(this);
+        writer.writeJson(dbIdToBackupOrRestoreJob.size());
+        for (AbstractJob job : dbIdToBackupOrRestoreJob.values()) {
+            writer.writeJson(job);
+        }
+        writer.close();
+    }
+
+    public void loadBackupHandlerV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        BackupHandler data = reader.readJson(BackupHandler.class);
+        this.repoMgr = data.repoMgr;
+        int size = reader.readInt();
+        long currentTimeMs = System.currentTimeMillis();
+        while (size-- > 0) {
+            AbstractJob job = reader.readJson(AbstractJob.class);
+            if (isJobExpired(job, currentTimeMs)) {
+                LOG.warn("skip expired job {}", job);
+                continue;
+            }
+            dbIdToBackupOrRestoreJob.put(job.getDbId(), job);
+        }
     }
 
     /**

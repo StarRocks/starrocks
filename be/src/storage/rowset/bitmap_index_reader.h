@@ -39,6 +39,7 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
+#include "storage/range.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/indexed_column_reader.h"
 #include "util/once.h"
@@ -47,10 +48,11 @@ namespace starrocks {
 
 class FileSystem;
 class TypeInfo;
-class SparseRange;
 class BitmapIndexIterator;
 class IndexedColumnReader;
 class IndexedColumnIterator;
+
+using Roaring = roaring::Roaring;
 
 class BitmapIndexReader {
 public:
@@ -65,12 +67,11 @@ public:
     //
     // Return true if the index data was successfully loaded by the caller, false if
     // the data was loaded by another caller.
-    StatusOr<bool> load(FileSystem* fs, const std::string& filename, const BitmapIndexPB& meta, bool use_page_cache,
-                        bool kept_in_memory);
+    StatusOr<bool> load(const IndexReadOptions& opts, const BitmapIndexPB& meta);
 
     // create a new column iterator. Client should delete returned iterator
     // REQUIRES: the index data has been successfully `load()`ed into memory.
-    Status new_iterator(BitmapIndexIterator** iterator);
+    Status new_iterator(const IndexReadOptions& opts, BitmapIndexIterator** iterator);
 
     // REQUIRES: the index data has been successfully `load()`ed into memory.
     int64_t bitmap_nums() { return _bitmap_column_reader->num_values(); }
@@ -95,8 +96,7 @@ private:
 
     void _reset();
 
-    Status _do_load(FileSystem* fs, const std::string& filename, const BitmapIndexPB& meta, bool use_page_cache,
-                    bool kept_in_memory);
+    Status _do_load(const IndexReadOptions& opts, const BitmapIndexPB& meta);
 
     OnceFlag _load_once;
     TypeInfoPtr _typeinfo;
@@ -147,7 +147,7 @@ public:
     // for (size_t i = 0; i < range.size(); i++) {
     //     read_union_bitmap(range[i].begin(), range[i].end(), &result);
     // }
-    Status read_union_bitmap(const SparseRange& range, Roaring* result);
+    Status read_union_bitmap(const SparseRange<>& range, Roaring* result);
 
     rowid_t bitmap_nums() const { return _num_bitmap; }
 

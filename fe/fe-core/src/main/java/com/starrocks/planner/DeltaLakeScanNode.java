@@ -19,9 +19,11 @@ import com.google.common.base.MoreObjects;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.delta.DeltaLakeConnector;
@@ -247,8 +249,14 @@ public class DeltaLakeScanNode extends ScanNode {
         output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
         output.append("\n");
 
-        output.append(prefix).append(String.format("numNodes=%s", numNodes));
-        output.append("\n");
+        if (detailLevel == TExplainLevel.VERBOSE) {
+            for (SlotDescriptor slotDescriptor : desc.getSlots()) {
+                Type type = slotDescriptor.getOriginType();
+                if (type.isComplexType()) {
+                    output.append(prefix).append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
+                }
+            }
+        }
 
         return output.toString();
     }
@@ -284,10 +292,18 @@ public class DeltaLakeScanNode extends ScanNode {
             cloudConfiguration.toThrift(tCloudConfiguration);
             msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
         }
+
+        msg.hdfs_scan_node.setCan_use_any_column(canUseAnyColumn);
+        msg.hdfs_scan_node.setCan_use_min_max_count_opt(canUseMinMaxCountOpt);
     }
 
     @Override
     public boolean canUsePipeLine() {
+        return true;
+    }
+
+    @Override
+    public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }
 }

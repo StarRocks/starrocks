@@ -43,6 +43,7 @@ import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.NullLiteral;
@@ -68,7 +69,9 @@ import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.Load;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TBrokerScanRange;
@@ -84,6 +87,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -142,9 +146,8 @@ public class FileScanNode extends LoadScanNode {
     private List<List<TBrokerFileStatus>> fileStatusesList;
     // file num
     private int filesAdded;
-
-    // Only used for external table in select statement
-    private List<Backend> backends;
+    
+    private List<ComputeNode> nodes;
     private int nextBe = 0;
 
     private Analyzer analyzer;
@@ -155,6 +158,7 @@ public class FileScanNode extends LoadScanNode {
     // 3. use vectorized engine
     private boolean useVectorizedLoad;
 
+    private boolean nullExprInAutoIncrement;
     private static class ParamCreateContext {
         public BrokerFileGroup fileGroup;
         public TBrokerScanRangeParams params;
@@ -173,6 +177,7 @@ public class FileScanNode extends LoadScanNode {
         this.filesAdded = filesAdded;
         this.parallelInstanceNum = 1;
         this.useVectorizedLoad = false;
+        this.nullExprInAutoIncrement = true;
     }
 
     @Override
@@ -181,14 +186,25 @@ public class FileScanNode extends LoadScanNode {
 
         this.analyzer = analyzer;
         if (desc.getTable() != null) {
-            BrokerTable brokerTable = (BrokerTable) desc.getTable();
-            try {
-                fileGroups = Lists.newArrayList(new BrokerFileGroup(brokerTable));
-            } catch (AnalysisException e) {
-                throw new UserException(e.getMessage());
+            Table tbl = desc.getTable();
+            if (tbl instanceof BrokerTable) {
+                BrokerTable brokerTable = (BrokerTable) tbl;
+                try {
+                    fileGroups = Lists.newArrayList(new BrokerFileGroup(brokerTable));
+                } catch (AnalysisException e) {
+                    throw new UserException(e.getMessage());
+                }
+                brokerDesc = new BrokerDesc(brokerTable.getBrokerName(), brokerTable.getBrokerProperties());
+            } else if (tbl instanceof TableFunctionTable) {
+                TableFunctionTable funcTable = (TableFunctionTable) tbl;
+                try {
+                    fileGroups = Lists.newArrayList(new BrokerFileGroup(funcTable));
+                } catch (AnalysisException e) {
+                    throw new UserException(e.getMessage());
+                }
+                brokerDesc = new BrokerDesc(funcTable.getProperties());
             }
-            brokerDesc = new BrokerDesc(brokerTable.getBrokerName(), brokerTable.getBrokerProperties());
-            targetTable = brokerTable;
+            targetTable = tbl;
         }
 
         // Get all broker file status
@@ -242,6 +258,10 @@ public class FileScanNode extends LoadScanNode {
         this.useVectorizedLoad = useVectorizedLoad;
     }
 
+    public boolean nullExprInAutoIncrement() {
+        return nullExprInAutoIncrement;
+    }
+
     // Called from init, construct source tuple information
     private void initParams(ParamCreateContext context)
             throws UserException {
@@ -279,6 +299,10 @@ public class FileScanNode extends LoadScanNode {
         params.setStrict_mode(strictMode);
         params.setProperties(brokerDesc.getProperties());
         params.setUse_broker(brokerDesc.hasBroker());
+        params.setSkip_header(fileGroup.getSkipHeader());
+        params.setTrim_space(fileGroup.isTrimspace());
+        params.setEnclose(fileGroup.getEnclose());
+        params.setEscape(fileGroup.getEscape());
         initColumns(context);
         initWhereExpr(fileGroup.getWhereExpr(), analyzer);
     }
@@ -348,8 +372,11 @@ public class FileScanNode extends LoadScanNode {
                                     + column.getDefaultExpr().getExpr());
                         }
                     } else if (defaultValueType == Column.DefaultValueType.NULL) {
-                        if (column.isAllowNull()) {
+                        if (column.isAllowNull() || column.isAutoIncrement()) {
                             expr = NullLiteral.create(column.getType());
+                            if (column.isAutoIncrement()) {
+                                nullExprInAutoIncrement = false;
+                            }
                         } else {
                             throw new UserException("Unknown slot ref("
                                     + destSlotDesc.getColumn().getName() + ") in source file");
@@ -394,8 +421,8 @@ public class FileScanNode extends LoadScanNode {
 
     private TScanRangeLocations newLocations(TBrokerScanRangeParams params, String brokerName, boolean hasBroker)
             throws UserException {
-        Backend selectedBackend = backends.get(nextBe++);
-        nextBe = nextBe % backends.size();
+        ComputeNode selectedBackend = nodes.get(nextBe++);
+        nextBe = nextBe % nodes.size();
 
         // Generate on broker scan range
         TBrokerScanRange brokerScanRange = new TBrokerScanRange();
@@ -473,27 +500,38 @@ public class FileScanNode extends LoadScanNode {
 
         // numInstances:
         // min(totalBytes / min_bytes_per_broker_scanner,
-        //     backends_size * parallelInstanceNum,
-        //     max_broker_concurrency)
+        //     backends_size * parallelInstanceNum)
         numInstances = (int) (totalBytes / Config.min_bytes_per_broker_scanner);
-        numInstances = Math.min(backends.size() * parallelInstanceNum, numInstances);
-        numInstances = Math.min(numInstances, Config.max_broker_concurrency);
+        numInstances = Math.min(nodes.size() * parallelInstanceNum, numInstances);
         numInstances = Math.max(1, numInstances);
 
         bytesPerInstance = (totalBytes + numInstances - 1) / (numInstances != 0 ? numInstances : 1);
     }
 
     private void assignBackends() throws UserException {
-        backends = Lists.newArrayList();
-        for (Backend be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
-            if (be.isAvailable()) {
-                backends.add(be);
+        nodes = Lists.newArrayList();
+
+        // TODO: need to refactor after be split into cn + dn
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+            for (long cnId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+                ComputeNode cn = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(cnId);
+                if (cn != null && cn.isAvailable()) {
+                    nodes.add(cn);
+                }
+            }
+        } else {
+            for (ComputeNode be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
+                if (be.isAvailable()) {
+                    nodes.add(be);
+                }
             }
         }
-        if (backends.isEmpty()) {
+
+        if (nodes.isEmpty()) {
             throw new UserException("No available backends");
         }
-        Collections.shuffle(backends, random);
+        Collections.shuffle(nodes, random);
     }
 
     private TFileFormatType formatType(String fileFormat, String path) {
@@ -606,6 +644,8 @@ public class FileScanNode extends LoadScanNode {
             totalBytes += fileStatus.size;
         }
         long numInstances = bytesPerInstance == 0 ? 1 : (totalBytes + bytesPerInstance - 1) / bytesPerInstance;
+        // totalBytes may be 0, so numInstances may be 0
+        numInstances = Math.max(numInstances, (long) 1);
 
         for (int i = 0; i < numInstances; ++i) {
             locationsHeap.add(Pair.create(newLocations(context.params, brokerDesc.getName(), brokerDesc.hasBroker()), 0L));
@@ -671,7 +711,7 @@ public class FileScanNode extends LoadScanNode {
             return;
         }
 
-        Set<Long> aliveBes = backends.stream().map(Backend::getId).collect(Collectors.toSet());
+        Set<Long> aliveBes = nodes.stream().map(ComputeNode::getId).collect(Collectors.toSet());
         nextBe = 0;
         for (TScanRangeLocations locations : locationsList) {
             TScanRangeLocation scanRangeLocation = locations.getLocations().get(0);

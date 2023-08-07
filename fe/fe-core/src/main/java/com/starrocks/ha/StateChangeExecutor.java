@@ -43,7 +43,11 @@ public class StateChangeExecutor extends Daemon {
     }
 
     public StateChangeExecutor() {
-        super("stateChangeExecutor", STATE_CHANGE_CHECK_INTERVAL_MS);
+        this("stateChangeExecutor");
+    }
+
+    public StateChangeExecutor(String name) {
+        super(name, STATE_CHANGE_CHECK_INTERVAL_MS);
         typeTransferQueue = Queues.newLinkedBlockingDeque();
         executions = new ArrayList<>();
     }
@@ -172,7 +176,7 @@ public class StateChangeExecutor extends Daemon {
                     break;
             } // end switch formerFeType
 
-            LOG.info("finished to transfer FE type to {}", feType);
+            LOG.info("finished to transfer FE type from {} to {}", feType, newType);
         }
     } // end runOneCycle
 }

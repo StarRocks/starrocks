@@ -30,6 +30,7 @@
 #include "common/type_list.h"
 #include "gutil/dynamic_annotations.h"
 #include "runtime/current_thread.h"
+#include "util/json.h"
 
 namespace starrocks {
 
@@ -195,8 +196,8 @@ class CACHELINE_ALIGNED ColumnPool {
     };
 
 public:
-    void set_mem_tracker(MemTracker* mem_tracker) { _mem_tracker = mem_tracker; }
-    MemTracker* mem_tracker() { return _mem_tracker; }
+    void set_mem_tracker(std::shared_ptr<MemTracker> mem_tracker) { _mem_tracker = std::move(mem_tracker); }
+    MemTracker* mem_tracker() { return _mem_tracker.get(); }
 
     static std::enable_if_t<std::is_default_constructible_v<T>, ColumnPool*> singleton() {
         static ColumnPool p;
@@ -235,7 +236,8 @@ public:
         if (now - _first_push_time > 3) {
             //    ^^^^^^^^^^^^^^^^ read without lock by intention.
             std::lock_guard<std::mutex> l(_free_blocks_lock);
-            int n = implicit_cast<int>(_free_blocks.size() * (1 - free_ratio));
+            int n = implicit_cast<int>(static_cast<base::identity_<int>::type>(
+                    static_cast<double>(_free_blocks.size()) * (1 - free_ratio)));
             tmp.insert(tmp.end(), _free_blocks.begin() + n, _free_blocks.end());
             _free_blocks.resize(n);
         }
@@ -368,7 +370,7 @@ private:
 
     ~ColumnPool() = default;
 
-    MemTracker* _mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _mem_tracker = nullptr;
 
     static __thread LocalPool* _local_pool; // NOLINT
     static std::atomic<long> _nlocal;       // NOLINT

@@ -37,6 +37,7 @@ package com.starrocks.planner;
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.TupleId;
+import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 
@@ -58,7 +59,6 @@ public class EmptySetNode extends PlanNode {
     public void computeStats(Analyzer analyzer) {
         avgRowSize = 0;
         cardinality = 0;
-        numNodes = 1;
     }
 
     @Override
@@ -73,5 +73,15 @@ public class EmptySetNode extends PlanNode {
     @Override
     public boolean canUsePipeLine() {
         return true;
+    }
+
+    @Override
+    public boolean canUseRuntimeAdaptiveDop() {
+        return getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
+    }
+
+    @Override
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
+        planNode.setNode_type(TPlanNodeType.EXCHANGE_NODE);
     }
 }

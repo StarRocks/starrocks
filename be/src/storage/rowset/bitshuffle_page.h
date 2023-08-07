@@ -239,7 +239,7 @@ private:
 template <LogicalType Type>
 class BitShufflePageDecoder final : public PageDecoder {
 public:
-    BitShufflePageDecoder(Slice data, const PageDecoderOptions& options) : _data(data), _options(options) {}
+    BitShufflePageDecoder(Slice data) : _data(data) {}
 
     Status init() override {
         CHECK(!_parsed);
@@ -346,7 +346,7 @@ public:
 
     Status next_batch(size_t* count, Column* dst) override;
 
-    Status next_batch(const SparseRange& range, Column* dst) override;
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
 
     uint32_t count() const override { return _num_elements; }
 
@@ -368,7 +368,6 @@ private:
     enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
 
     Slice _data;
-    PageDecoderOptions _options;
     uint32_t _num_elements{0};
     size_t _compressed_size{0};
     size_t _num_element_after_padding{0};
@@ -380,26 +379,26 @@ private:
 
 template <LogicalType Type>
 inline Status BitShufflePageDecoder<Type>::next_batch(size_t* count, Column* dst) {
-    SparseRange read_range;
+    SparseRange<> read_range;
     uint32_t begin = current_index();
-    read_range.add(Range(begin, begin + *count));
+    read_range.add(Range<>(begin, begin + *count));
     RETURN_IF_ERROR(next_batch(read_range, dst));
     *count = current_index() - begin;
     return Status::OK();
 }
 
 template <LogicalType Type>
-inline Status BitShufflePageDecoder<Type>::next_batch(const SparseRange& range, Column* dst) {
+inline Status BitShufflePageDecoder<Type>::next_batch(const SparseRange<>& range, Column* dst) {
     DCHECK(_parsed);
     if (PREDICT_FALSE(_cur_index >= _num_elements)) {
         return Status::OK();
     }
 
     size_t to_read = std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_elements - _cur_index));
-    SparseRangeIterator iter = range.new_iterator();
+    SparseRangeIterator<> iter = range.new_iterator();
     while (to_read > 0) {
         _cur_index = iter.begin();
-        Range r = iter.next(to_read);
+        Range<> r = iter.next(to_read);
         int n = dst->append_numbers(get_data(_cur_index * SIZE_OF_TYPE), r.span_size() * SIZE_OF_TYPE);
         DCHECK_EQ(r.span_size(), n);
         _cur_index += r.span_size();

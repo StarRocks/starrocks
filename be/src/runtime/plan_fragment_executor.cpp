@@ -87,12 +87,11 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     DCHECK(_runtime_state->chunk_size() > 0);
 
     _runtime_state->set_be_number(request.backend_num);
-    if (request.__isset.load_job_id) {
-        _runtime_state->set_load_job_id(request.load_job_id);
-    }
-
     if (request.query_options.__isset.enable_profile) {
         enable_profile = request.query_options.enable_profile;
+    }
+    if (request.query_options.__isset.load_profile_collect_second) {
+        load_profile_collect_second = request.query_options.load_profile_collect_second;
     }
 
     // set up desc tbl
@@ -312,6 +311,12 @@ void PlanFragmentExecutor::send_report(bool done) {
         return;
     }
 
+    auto start_timestamp = _runtime_state->timestamp_ms() / 1000;
+    auto now = std::time(nullptr);
+    if (load_profile_collect_second != -1 && now - start_timestamp < load_profile_collect_second) {
+        return;
+    }
+
     // This will send a report even if we are cancelled.  If the query completed correctly
     // but fragments still need to be cancelled (e.g. limit reached), the coordinator will
     // be waiting for a final report and profile.
@@ -390,11 +395,6 @@ void PlanFragmentExecutor::cancel() {
         }
         _stream_load_contexts.resize(0);
     }
-
-    if (_sink != nullptr) {
-        _sink->cancel();
-    }
-
     _runtime_state->exec_env()->stream_mgr()->cancel(_runtime_state->fragment_instance_id());
     _runtime_state->exec_env()->result_mgr()->cancel(_runtime_state->fragment_instance_id());
 

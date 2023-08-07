@@ -39,12 +39,11 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.TablePattern;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -80,9 +79,9 @@ public class WhiteList implements Writable {
     }
 
     // handle new resolved IPs.
-    // it will only modify password entry of these resolved IPs. All other privileges are binded
+    // it will only modify password entry of these resolved IPs. All other privileges are bound
     // to the domain, so no need to modify.
-    public void addUserPrivEntriesByResovledIPs(String user, Map<String, Set<String>> resolvedIPsMap) {
+    public void addUserPrivEntriesByResolvedIPs(String user, Map<String, Set<String>> resolvedIPsMap) {
         // the parameter "resolvedIPsMap" contains all resolved domains.
         // "newResolvedIPsMap" will only save the domains contained in this white list.
         Map<String, Set<String>> newResolvedIPsMap = Maps.newHashMap();
@@ -154,70 +153,13 @@ public class WhiteList implements Writable {
     }
 
     public void readFields(DataInput in) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_43) {
-            if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_69) {
-                // db priv map
-                int size = in.readInt();
-                for (int i = 0; i < size; i++) {
-                    String domain = Text.readString(in);
-                    Map<TablePattern, PrivBitSet> privsMap = Maps.newConcurrentMap();
-                    oldDomainPrivsMap.put(domain, privsMap);
-
-                    int count = in.readInt();
-                    for (int j = 0; j < count; j++) {
-                        TablePattern tablePattern = TablePattern.read(in);
-                        PrivBitSet privs = PrivBitSet.read(in);
-                        privsMap.put(tablePattern, privs);
-                    }
-                }
-
-                // password
-                if (in.readBoolean()) {
-                    int passwordLen = in.readInt();
-                    oldPassword = new byte[passwordLen];
-                    in.readFully(oldPassword);
-                } else {
-                    oldPassword = new byte[0];
-                }
-
-                // convert to password map
-                for (String domain : oldDomainPrivsMap.keySet()) {
-                    passwordMap.put(domain, oldPassword);
-                }
-            } else {
-                // meta version >= FeMetaVersion.VERSION_66
-                int size = in.readInt();
-                for (int i = 0; i < size; i++) {
-                    String domain = Text.readString(in);
-                    int passLen = in.readInt();
-                    byte[] password = new byte[passLen];
-                    in.readFully(password);
-                    passwordMap.put(domain, password);
-                }
-            }
-        }
-    }
-
-    // in previous implementation(before meta version 67), we save privs in the domainPrivsMap.
-    // and now, these privs which corresponding to the domains should be saved directly in priv tables.
-    // so we need to convert them.
-    public void convertOldDomainPrivMap(String user) {
-        Preconditions.checkState(GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_69);
-        for (Map.Entry<String, Map<TablePattern, PrivBitSet>> domainEntry : oldDomainPrivsMap.entrySet()) {
-            String domain = domainEntry.getKey();
-            for (Map.Entry<TablePattern, PrivBitSet> privEntry : domainEntry.getValue().entrySet()) {
-                TablePattern tablePattern = privEntry.getKey();
-                PrivBitSet privBitSet = privEntry.getValue();
-                UserIdentity userIdent = UserIdentity.createAnalyzedUserIdentWithDomain(user, domain);
-                try {
-                    GlobalStateMgr.getCurrentState().getAuth().grantPrivs(userIdent, tablePattern, privBitSet,
-                            false /* err on non exist */);
-                } catch (DdlException e) {
-                    // this may happen if priv entry is already set by user. just print a log here.
-                    LOG.warn("failed to grant privs {} on {} to user {} when convert old domain priv map.",
-                            privBitSet, tablePattern, userIdent, e);
-                }
-            }
+        int size = in.readInt();
+        for (int i = 0; i < size; i++) {
+            String domain = Text.readString(in);
+            int passLen = in.readInt();
+            byte[] password = new byte[passLen];
+            in.readFully(password);
+            passwordMap.put(domain, password);
         }
     }
 }

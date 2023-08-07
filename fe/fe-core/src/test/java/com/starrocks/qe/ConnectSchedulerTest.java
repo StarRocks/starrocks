@@ -67,7 +67,7 @@ public class ConnectSchedulerTest {
                 // mock negotiate
                 MysqlProto.negotiate((ConnectContext) any);
                 minTimes = 0;
-                result = true;
+                result = new MysqlProto.NegotiateResult(null, true);
 
                 MysqlProto.sendResponsePacket((ConnectContext) any);
                 minTimes = 0;
@@ -87,12 +87,6 @@ public class ConnectSchedulerTest {
 
         Thread.sleep(1000);
         Assert.assertNull(scheduler.getContext(0));
-    }
-
-    @Test
-    public void testSubmitFail() throws InterruptedException {
-        ConnectScheduler scheduler = new ConnectScheduler(10);
-        Assert.assertFalse(scheduler.submit(null));
     }
 
     @Test

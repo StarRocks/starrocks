@@ -132,7 +132,7 @@ public:
 
     static void rowset_writer_add_rows(std::unique_ptr<RowsetWriter>& writer, const TabletSchema& tablet_schema) {
         std::vector<std::string> test_data;
-        auto schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema);
+        auto schema = ChunkHelper::convert_schema(tablet_schema);
         auto chunk = ChunkHelper::new_chunk(schema, 1024);
         for (size_t i = 0; i < 1024; ++i) {
             test_data.push_back("well" + std::to_string(i));
@@ -337,6 +337,7 @@ int main(int argc, char** argv) {
     starrocks::fs::create_directories(root_path_2);
 
     starrocks::config::storage_root_path = root_path_1 + ";" + root_path_2;
+    starrocks::config::storage_flood_stage_left_capacity_bytes = 10485600;
 
     starrocks::CpuInfo::init();
     starrocks::DiskInfo::init();
@@ -369,9 +370,10 @@ int main(int argc, char** argv) {
                 s.to_string().c_str());
         return -1;
     }
+    auto* global_env = starrocks::GlobalEnv::GetInstance();
+    global_env->init();
     auto* exec_env = starrocks::ExecEnv::GetInstance();
-    exec_env->init_mem_tracker();
-    starrocks::ExecEnv::init(exec_env, paths);
+    exec_env->init(paths);
     int r = RUN_ALL_TESTS();
 
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
@@ -383,7 +385,8 @@ int main(int argc, char** argv) {
     delete engine;
     // destroy exec env
     starrocks::tls_thread_status.set_mem_tracker(nullptr);
-    starrocks::ExecEnv::destroy(exec_env);
+    exec_env->destroy();
+    global_env->stop();
 
     return r;
 }

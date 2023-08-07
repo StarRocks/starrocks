@@ -35,7 +35,7 @@ public:
     // *from_executor* means that the executor thread puts the driver back to the queue.
     virtual void put_back_from_executor(const DriverRawPtr driver) = 0;
 
-    virtual StatusOr<DriverRawPtr> take() = 0;
+    virtual StatusOr<DriverRawPtr> take(const bool block) = 0;
     virtual void cancel(DriverRawPtr driver) = 0;
 
     // Update statistics of the driver's workgroup,
@@ -78,7 +78,7 @@ public:
 
     void put(const DriverRawPtr driver);
     void cancel(const DriverRawPtr driver);
-    DriverRawPtr take();
+    DriverRawPtr take(const bool block);
     inline bool empty() const { return num_drivers == 0; }
 
     inline size_t size() const { return num_drivers; }
@@ -109,7 +109,7 @@ public:
     void update_statistics(const DriverRawPtr driver) override;
 
     // Return cancelled status, if the queue is closed.
-    StatusOr<DriverRawPtr> take() override;
+    StatusOr<DriverRawPtr> take(const bool block) override;
 
     void cancel(DriverRawPtr driver) override;
 
@@ -117,8 +117,8 @@ public:
 
     bool should_yield(const DriverRawPtr driver, int64_t unaccounted_runtime_ns) const override { return false; }
 
+    static double ratio_of_adjacent_queue() { return config::pipeline_driver_queue_ratio_of_adjacent_queue; }
     static constexpr size_t QUEUE_SIZE = 8;
-    static constexpr double RATIO_OF_ADJACENT_QUEUE = 1.2;
 
 private:
     // When the driver at the i-th level costs _level_time_slices[i],
@@ -127,9 +127,10 @@ private:
 
 private:
     // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns,
-    // so when a driver's execution time exceeds 0.2s, 0.6s, 1.2s, 2s, 3s, 4.2s, 5.6s, and 7.2s,
+    // so when a driver's execution time exceeds 0.2s, 0.6s, 1.2s, 2.0s, 3.0s, 4.2s, 5.6s, 7.4s.
     // it will move to next level.
-    static constexpr int64_t LEVEL_TIME_SLICE_BASE_NS = 200'000'000L;
+    const int64_t LEVEL_TIME_SLICE_BASE_NS = config::pipeline_driver_queue_level_time_slice_base_ns;
+    const double RATIO_OF_ADJACENT_QUEUE = ratio_of_adjacent_queue();
 
     SubQuerySharedDriverQueue _queues[QUEUE_SIZE];
     // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns.
@@ -162,7 +163,7 @@ public:
     // Return cancelled status, if the queue is closed.
     // Firstly, select the work group with the minimum vruntime.
     // Secondly, select the proper driver from the driver queue of this work group.
-    StatusOr<DriverRawPtr> take() override;
+    StatusOr<DriverRawPtr> take(const bool block) override;
 
     void cancel(DriverRawPtr driver) override;
 
@@ -213,6 +214,8 @@ private:
     WorkgroupSet _wg_entities;
 
     size_t _sum_cpu_limit = 0;
+
+    size_t _num_drivers = 0;
 
     // Cache the minimum entity, used to check should_yield() without lock.
     std::atomic<workgroup::WorkGroupDriverSchedEntity*> _min_wg_entity = nullptr;

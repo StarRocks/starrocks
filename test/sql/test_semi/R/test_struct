@@ -1,0 +1,297 @@
+-- name: test_prune_column @system
+CREATE TABLE `sc2` (
+  `v1` bigint(20) NULL COMMENT "",
+  `map1` MAP<int(11),MAP<int(11),MAP<int(11),int(11)>>> NULL COMMENT "",
+  `st1` STRUCT<s1 int(11), sm2 MAP<int(11),int(11)>, sm3 MAP<int(11),MAP<int(11),int(11)>>> NULL COMMENT "",
+  `st2` STRUCT<s1 int(11), sa2 ARRAY<int(11)>, ss3 STRUCT<sss1 int(11), sss2 STRUCT<ssss1 int(11), ssss2 int(11)>>> NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+CREATE TABLE `t1` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into t1 values (1, 2, 3);
+-- result:
+-- !result
+insert into t1 values (2, 2, 2);
+-- result:
+-- !result
+insert into t1 values (3, 3, 3);
+-- result:
+-- !result
+insert into t1 values (4, 4, 4);
+-- result:
+-- !result
+insert into t1 values (5, 5, 5);
+-- result:
+-- !result
+insert into sc2 values (1, map{1: map{10:map{100: 101}}}, row(1, map{10: 101}, map{10: map{100: 101}}), row(1, [1,10,101], row(1, row(10, 11))));
+-- result:
+-- !result
+insert into sc2 values (2, map{2: map{20:map{200: 202}}}, row(2, map{20: 202}, map{20: map{200: 202}}), row(2, [2,20,202], row(2, row(20, 22))));
+-- result:
+-- !result
+insert into sc2 values (3, map{3: map{30:map{300: 303}}}, row(3, map{30: 303}, map{30: map{300: 303}}), row(3, [3,30,303], row(3, row(30, 33))));
+-- result:
+-- !result
+insert into sc2 values (4, map{4: map{40:map{400: 404}}}, row(4, map{40: 404}, map{40: map{400: 404}}), row(4, [4,40,404], row(4, row(40, 44))));
+-- result:
+-- !result
+insert into sc2 values (5, map{5: map{50:map{500: 505}}}, row(5, map{50: 505}, map{50: map{500: 505}}), row(5, [5,50,505], row(5, row(50, 55))));
+-- result:
+-- !result
+insert into sc2 values (5, map{5: map{50:map{500: 506}}}, row(5, map{50: 506}, map{50: map{500: 506}}), row(5, [5,50,506], row(5, row(50, 56))));
+-- result:
+-- !result
+insert into sc2 values (5, map{5: map{50:map{500: 507}}}, row(5, map{50: 507}, map{50: map{500: 507}}), row(5, [5,50,507], row(5, row(50, 57))));
+-- result:
+-- !result
+insert into sc2 values (5, map{5: map{50:map{500: 508}}}, row(5, map{50: 508}, map{50: map{500: 508}}), row(5, [5,50,508], row(5, row(50, 58))));
+-- result:
+-- !result
+select st1.s1, st2.sa2 from sc2;
+-- result:
+2	[2,20,202]
+1	[1,10,101]
+5	[5,50,505]
+4	[4,40,404]
+3	[3,30,303]
+5	[5,50,506]
+5	[5,50,507]
+5	[5,50,508]
+-- !result
+select st1.sm2[10], map_size(map1[3][30]), st2.sa2[1]  from sc2;
+-- result:
+None	None	2
+101	None	1
+None	None	5
+None	1	3
+None	None	4
+None	None	5
+None	None	5
+None	None	5
+-- !result
+select st2.ss3.sss1, st2.ss3.sss2.ssss2, st2.ss3 from sc2;
+-- result:
+2	22	{"sss1":2,"sss2":{"ssss1":20,"ssss2":22}}
+1	11	{"sss1":1,"sss2":{"ssss1":10,"ssss2":11}}
+3	33	{"sss1":3,"sss2":{"ssss1":30,"ssss2":33}}
+5	55	{"sss1":5,"sss2":{"ssss1":50,"ssss2":55}}
+4	44	{"sss1":4,"sss2":{"ssss1":40,"ssss2":44}}
+5	56	{"sss1":5,"sss2":{"ssss1":50,"ssss2":56}}
+5	57	{"sss1":5,"sss2":{"ssss1":50,"ssss2":57}}
+5	58	{"sss1":5,"sss2":{"ssss1":50,"ssss2":58}}
+-- !result
+select * from t1 join sc2 on t1.v2 = sc2.v1;
+-- result:
+1	2	3	2	{2:{20:{200:202}}}	{"s1":2,"sm2":{20:202},"sm3":{20:{200:202}}}	{"s1":2,"sa2":[2,20,202],"ss3":{"sss1":2,"sss2":{"ssss1":20,"ssss2":22}}}
+2	2	2	2	{2:{20:{200:202}}}	{"s1":2,"sm2":{20:202},"sm3":{20:{200:202}}}	{"s1":2,"sa2":[2,20,202],"ss3":{"sss1":2,"sss2":{"ssss1":20,"ssss2":22}}}
+4	4	4	4	{4:{40:{400:404}}}	{"s1":4,"sm2":{40:404},"sm3":{40:{400:404}}}	{"s1":4,"sa2":[4,40,404],"ss3":{"sss1":4,"sss2":{"ssss1":40,"ssss2":44}}}
+5	5	5	5	{5:{50:{500:505}}}	{"s1":5,"sm2":{50:505},"sm3":{50:{500:505}}}	{"s1":5,"sa2":[5,50,505],"ss3":{"sss1":5,"sss2":{"ssss1":50,"ssss2":55}}}
+3	3	3	3	{3:{30:{300:303}}}	{"s1":3,"sm2":{30:303},"sm3":{30:{300:303}}}	{"s1":3,"sa2":[3,30,303],"ss3":{"sss1":3,"sss2":{"ssss1":30,"ssss2":33}}}
+5	5	5	5	{5:{50:{500:506}}}	{"s1":5,"sm2":{50:506},"sm3":{50:{500:506}}}	{"s1":5,"sa2":[5,50,506],"ss3":{"sss1":5,"sss2":{"ssss1":50,"ssss2":56}}}
+5	5	5	5	{5:{50:{500:507}}}	{"s1":5,"sm2":{50:507},"sm3":{50:{500:507}}}	{"s1":5,"sa2":[5,50,507],"ss3":{"sss1":5,"sss2":{"ssss1":50,"ssss2":57}}}
+5	5	5	5	{5:{50:{500:508}}}	{"s1":5,"sm2":{50:508},"sm3":{50:{500:508}}}	{"s1":5,"sa2":[5,50,508],"ss3":{"sss1":5,"sss2":{"ssss1":50,"ssss2":58}}}
+-- !result
+select st1.sm2, map_keys(map1) from t1 join[broadcast] sc2 on t1.v2 = sc2.v1;
+-- result:
+{20:202}	[2]
+{30:303}	[3]
+{20:202}	[2]
+{40:404}	[4]
+{50:508}	[5]
+{50:507}	[5]
+{50:506}	[5]
+{50:505}	[5]
+-- !result
+select st1.sm2, map_keys(map1) from t1 join[shuffle] sc2 on t1.v2 = sc2.v1;
+-- result:
+{20:202}	[2]
+{30:303}	[3]
+{20:202}	[2]
+{40:404}	[4]
+{50:508}	[5]
+{50:507}	[5]
+{50:506}	[5]
+{50:505}	[5]
+-- !result
+select * from sc2 union all select * from sc2;
+-- result:
+2	{2:{20:{200:202}}}	{"s1":2,"sm2":{20:202},"sm3":{20:{200:202}}}	{"s1":2,"sa2":[2,20,202],"ss3":{"sss1":2,"sss2":{"ssss1":20,"ssss2":22}}}
+1	{1:{10:{100:101}}}	{"s1":1,"sm2":{10:101},"sm3":{10:{100:101}}}	{"s1":1,"sa2":[1,10,101],"ss3":{"sss1":1,"sss2":{"ssss1":10,"ssss2":11}}}
+5	{5:{50:{500:505}}}	{"s1":5,"sm2":{50:505},"sm3":{50:{500:505}}}	{"s1":5,"sa2":[5,50,505],"ss3":{"sss1":5,"sss2":{"ssss1":50,"ssss2":55}}}
+3	{3:{30:{300:303}}}	{"s1":3,"sm2":{30:303},"sm3":{30:{300:303}}}	{"s1":3,"sa2":[3,30,303],"ss3":{"sss1":3,"sss2":{"ssss1":30,"ssss2":33}}}
+4	{4:{40:{400:404}}}	{"s1":4,"sm2":{40:404},"sm3":{40:{400:404}}}	{"s1":4,"sa2":[4,40,404],"ss3":{"sss1":4,"sss2":{"ssss1":40,"ssss2":44}}}
+2	{2:{20:{200:202}}}	{"s1":2,"sm2":{20:202},"sm3":{20:{200:202}}}	{"s1":2,"sa2":[2,20,202],"ss3":{"sss1":2,"sss2":{"ssss1":20,"ssss2":22}}}
+5	{5:{50:{500:506}}}	{"s1":5,"sm2":{50:506},"sm3":{50:{500:506}}}	{"s1":5,"sa2":[5,50,506],"ss3":{"sss1":5,"sss2":{"ssss1":50,"ssss2":56}}}
+1	{1:{10:{100:101}}}	{"s1":1,"sm2":{10:101},"sm3":{10:{100:101}}}	{"s1":1,"sa2":[1,10,101],"ss3":{"sss1":1,"sss2":{"ssss1":10,"ssss2":11}}}
+5	{5:{50:{500:507}}}	{"s1":5,"sm2":{50:507},"sm3":{50:{500:507}}}	{"s1":5,"sa2":[5,50,507],"ss3":{"sss1":5,"sss2":{"ssss1":50,"ssss2":57}}}
+5	{5:{50:{500:505}}}	{"s1":5,"sm2":{50:505},"sm3":{50:{500:505}}}	{"s1":5,"sa2":[5,50,505],"ss3":{"sss1":5,"sss2":{"ssss1":50,"ssss2":55}}}
+4	{4:{40:{400:404}}}	{"s1":4,"sm2":{40:404},"sm3":{40:{400:404}}}	{"s1":4,"sa2":[4,40,404],"ss3":{"sss1":4,"sss2":{"ssss1":40,"ssss2":44}}}
+5	{5:{50:{500:508}}}	{"s1":5,"sm2":{50:508},"sm3":{50:{500:508}}}	{"s1":5,"sa2":[5,50,508],"ss3":{"sss1":5,"sss2":{"ssss1":50,"ssss2":58}}}
+3	{3:{30:{300:303}}}	{"s1":3,"sm2":{30:303},"sm3":{30:{300:303}}}	{"s1":3,"sa2":[3,30,303],"ss3":{"sss1":3,"sss2":{"ssss1":30,"ssss2":33}}}
+5	{5:{50:{500:506}}}	{"s1":5,"sm2":{50:506},"sm3":{50:{500:506}}}	{"s1":5,"sa2":[5,50,506],"ss3":{"sss1":5,"sss2":{"ssss1":50,"ssss2":56}}}
+5	{5:{50:{500:507}}}	{"s1":5,"sm2":{50:507},"sm3":{50:{500:507}}}	{"s1":5,"sa2":[5,50,507],"ss3":{"sss1":5,"sss2":{"ssss1":50,"ssss2":57}}}
+5	{5:{50:{500:508}}}	{"s1":5,"sm2":{50:508},"sm3":{50:{500:508}}}	{"s1":5,"sa2":[5,50,508],"ss3":{"sss1":5,"sss2":{"ssss1":50,"ssss2":58}}}
+-- !result
+select x1.st1.sm2, x1.st2.ss3 from sc2 x1 union all select x2.st1.sm3[10], x2.st2.ss3 from sc2 x2;
+-- result:
+{20:202}	{"sss1":2,"sss2":{"ssss1":20,"ssss2":22}}
+{10:101}	{"sss1":1,"sss2":{"ssss1":10,"ssss2":11}}
+{50:505}	{"sss1":5,"sss2":{"ssss1":50,"ssss2":55}}
+{30:303}	{"sss1":3,"sss2":{"ssss1":30,"ssss2":33}}
+{40:404}	{"sss1":4,"sss2":{"ssss1":40,"ssss2":44}}
+{50:506}	{"sss1":5,"sss2":{"ssss1":50,"ssss2":56}}
+{50:507}	{"sss1":5,"sss2":{"ssss1":50,"ssss2":57}}
+{50:508}	{"sss1":5,"sss2":{"ssss1":50,"ssss2":58}}
+None	{"sss1":2,"sss2":{"ssss1":20,"ssss2":22}}
+{100:101}	{"sss1":1,"sss2":{"ssss1":10,"ssss2":11}}
+None	{"sss1":3,"sss2":{"ssss1":30,"ssss2":33}}
+None	{"sss1":4,"sss2":{"ssss1":40,"ssss2":44}}
+None	{"sss1":5,"sss2":{"ssss1":50,"ssss2":55}}
+None	{"sss1":5,"sss2":{"ssss1":50,"ssss2":56}}
+None	{"sss1":5,"sss2":{"ssss1":50,"ssss2":57}}
+None	{"sss1":5,"sss2":{"ssss1":50,"ssss2":58}}
+-- !result
+select x.st2.ss3 from (select * from sc2 union all select * from sc2) x;
+-- result:
+{"sss1":2,"sss2":{"ssss1":20,"ssss2":22}}
+{"sss1":1,"sss2":{"ssss1":10,"ssss2":11}}
+{"sss1":3,"sss2":{"ssss1":30,"ssss2":33}}
+{"sss1":5,"sss2":{"ssss1":50,"ssss2":55}}
+{"sss1":4,"sss2":{"ssss1":40,"ssss2":44}}
+{"sss1":5,"sss2":{"ssss1":50,"ssss2":56}}
+{"sss1":5,"sss2":{"ssss1":50,"ssss2":57}}
+{"sss1":5,"sss2":{"ssss1":50,"ssss2":58}}
+{"sss1":2,"sss2":{"ssss1":20,"ssss2":22}}
+{"sss1":1,"sss2":{"ssss1":10,"ssss2":11}}
+{"sss1":3,"sss2":{"ssss1":30,"ssss2":33}}
+{"sss1":4,"sss2":{"ssss1":40,"ssss2":44}}
+{"sss1":5,"sss2":{"ssss1":50,"ssss2":55}}
+{"sss1":5,"sss2":{"ssss1":50,"ssss2":56}}
+{"sss1":5,"sss2":{"ssss1":50,"ssss2":57}}
+{"sss1":5,"sss2":{"ssss1":50,"ssss2":58}}
+-- !result
+select row(1,2,3);
+-- result:
+{"col1":1,"col2":2,"col3":3}
+-- !result
+select * from t1;
+-- result:
+2	2	2
+3	3	3
+1	2	3
+4	4	4
+5	5	5
+-- !result
+select row(1,v1,'a') from t1;
+-- result:
+{"col1":1,"col2":2,"col3":"a"}
+{"col1":1,"col2":3,"col3":"a"}
+{"col1":1,"col2":1,"col3":"a"}
+{"col1":1,"col2":4,"col3":"a"}
+{"col1":1,"col2":5,"col3":"a"}
+-- !result
+select named_struct('a',v1,'b', v2) from t1;
+-- result:
+{"a":2,"b":2}
+{"a":3,"b":3}
+{"a":1,"b":2}
+{"a":4,"b":4}
+{"a":5,"b":5}
+-- !result
+select struct(v1,v2,v3) from t1;
+-- result:
+{"col1":2,"col2":2,"col3":2}
+{"col1":3,"col2":3,"col3":3}
+{"col1":1,"col2":2,"col3":3}
+{"col1":4,"col2":4,"col3":4}
+{"col1":5,"col2":5,"col3":5}
+-- !result
+select row(map1) from sc2;
+-- result:
+{"col1":{2:{20:{200:202}}}}
+{"col1":{1:{10:{100:101}}}}
+{"col1":{3:{30:{300:303}}}}
+{"col1":{4:{40:{400:404}}}}
+{"col1":{5:{50:{500:505}}}}
+{"col1":{5:{50:{500:506}}}}
+{"col1":{5:{50:{500:507}}}}
+{"col1":{5:{50:{500:508}}}}
+-- !result
+select row(map1), row(map1).col1 from sc2;
+-- result:
+{"col1":{2:{20:{200:202}}}}	{2:{20:{200:202}}}
+{"col1":{1:{10:{100:101}}}}	{1:{10:{100:101}}}
+{"col1":{3:{30:{300:303}}}}	{3:{30:{300:303}}}
+{"col1":{4:{40:{400:404}}}}	{4:{40:{400:404}}}
+{"col1":{5:{50:{500:505}}}}	{5:{50:{500:505}}}
+{"col1":{5:{50:{500:506}}}}	{5:{50:{500:506}}}
+{"col1":{5:{50:{500:507}}}}	{5:{50:{500:507}}}
+{"col1":{5:{50:{500:508}}}}	{5:{50:{500:508}}}
+-- !result
+select named_struct('a', st1, 'b', st2) from sc2;
+-- result:
+{"a":{"s1":2,"sm2":{20:202},"sm3":{20:{200:202}}},"b":{"s1":2,"sa2":[2,20,202],"ss3":{"sss1":2,"sss2":{"ssss1":20,"ssss2":22}}}}
+{"a":{"s1":1,"sm2":{10:101},"sm3":{10:{100:101}}},"b":{"s1":1,"sa2":[1,10,101],"ss3":{"sss1":1,"sss2":{"ssss1":10,"ssss2":11}}}}
+{"a":{"s1":5,"sm2":{50:505},"sm3":{50:{500:505}}},"b":{"s1":5,"sa2":[5,50,505],"ss3":{"sss1":5,"sss2":{"ssss1":50,"ssss2":55}}}}
+{"a":{"s1":3,"sm2":{30:303},"sm3":{30:{300:303}}},"b":{"s1":3,"sa2":[3,30,303],"ss3":{"sss1":3,"sss2":{"ssss1":30,"ssss2":33}}}}
+{"a":{"s1":4,"sm2":{40:404},"sm3":{40:{400:404}}},"b":{"s1":4,"sa2":[4,40,404],"ss3":{"sss1":4,"sss2":{"ssss1":40,"ssss2":44}}}}
+{"a":{"s1":5,"sm2":{50:506},"sm3":{50:{500:506}}},"b":{"s1":5,"sa2":[5,50,506],"ss3":{"sss1":5,"sss2":{"ssss1":50,"ssss2":56}}}}
+{"a":{"s1":5,"sm2":{50:507},"sm3":{50:{500:507}}},"b":{"s1":5,"sa2":[5,50,507],"ss3":{"sss1":5,"sss2":{"ssss1":50,"ssss2":57}}}}
+{"a":{"s1":5,"sm2":{50:508},"sm3":{50:{500:508}}},"b":{"s1":5,"sa2":[5,50,508],"ss3":{"sss1":5,"sss2":{"ssss1":50,"ssss2":58}}}}
+-- !result
+select named_struct('a', st1, 'b', st2)[1] from sc2;
+-- result:
+{"s1":2,"sm2":{20:202},"sm3":{20:{200:202}}}
+{"s1":1,"sm2":{10:101},"sm3":{10:{100:101}}}
+{"s1":3,"sm2":{30:303},"sm3":{30:{300:303}}}
+{"s1":5,"sm2":{50:505},"sm3":{50:{500:505}}}
+{"s1":4,"sm2":{40:404},"sm3":{40:{400:404}}}
+{"s1":5,"sm2":{50:506},"sm3":{50:{500:506}}}
+{"s1":5,"sm2":{50:507},"sm3":{50:{500:507}}}
+{"s1":5,"sm2":{50:508},"sm3":{50:{500:508}}}
+-- !result
+select named_struct('a', st1, 'b', st2)[1].sm2 from sc2;
+-- result:
+{20:202}
+{30:303}
+{10:101}
+{50:505}
+{50:506}
+{40:404}
+{50:507}
+{50:508}
+-- !result
+select cast(row(1,2,3) as STRUCT<a double, b string, c BIGINT>);
+-- result:
+{"a":1,"b":"2","c":3}
+-- !result
+select cast(named_struct('1', 1, '2', 2, '3', 3) as STRUCT<a double, b string, c BIGINT>);
+-- result:
+{"a":1,"b":"2","c":3}
+-- !result

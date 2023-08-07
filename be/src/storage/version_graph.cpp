@@ -76,7 +76,7 @@ void TimestampedVersionTracker::get_stale_version_path_json_doc(rapidjson::Docum
         auto path_id_str = std::to_string(path_id);
         rapidjson::Value path_id_value;
         path_id_value.SetString(path_id_str.c_str(), path_id_str.length(), path_arr.GetAllocator());
-        item.AddMember("path id", path_id_value, path_arr.GetAllocator());
+        item.AddMember("path_id", path_id_value, path_arr.GetAllocator());
 
         // add max create time to item
         auto time_zone = cctz::local_time_zone();
@@ -86,26 +86,27 @@ void TimestampedVersionTracker::get_stale_version_path_json_doc(rapidjson::Docum
 
         rapidjson::Value create_time_value;
         create_time_value.SetString(create_time_str.c_str(), create_time_str.length(), path_arr.GetAllocator());
-        item.AddMember("last create time", create_time_value, path_arr.GetAllocator());
+        item.AddMember("last_create_time", create_time_value, path_arr.GetAllocator());
 
         // add path list to item
         std::stringstream path_list_stream;
-        path_list_stream << path_id_str;
         auto path_list_ptr = path_version_path->timestamped_versions();
         auto path_list_iter = path_list_ptr.begin();
         while (path_list_iter != path_list_ptr.end()) {
-            path_list_stream << " -> ";
             path_list_stream << "[";
             path_list_stream << (*path_list_iter)->version().first;
             path_list_stream << "-";
             path_list_stream << (*path_list_iter)->version().second;
             path_list_stream << "]";
             path_list_iter++;
+            if (path_list_iter != path_list_ptr.end()) {
+                path_list_stream << "->";
+            }
         }
         std::string path_list = path_list_stream.str();
         rapidjson::Value path_list_value;
         path_list_value.SetString(path_list.c_str(), path_list.length(), path_arr.GetAllocator());
-        item.AddMember("path list", path_list_value, path_arr.GetAllocator());
+        item.AddMember("path_list", path_list_value, path_arr.GetAllocator());
 
         // add item to path_arr
         path_arr.PushBack(item, path_arr.GetAllocator());
@@ -116,6 +117,10 @@ void TimestampedVersionTracker::get_stale_version_path_json_doc(rapidjson::Docum
 
 int64_t TimestampedVersionTracker::get_max_continuous_version() const {
     return _version_graph.max_continuous_version();
+}
+
+void TimestampedVersionTracker::update_max_continuous_version() {
+    _version_graph.update_max_continuous_version();
 }
 
 int64_t TimestampedVersionTracker::get_min_readable_version() const {
@@ -236,6 +241,10 @@ std::vector<TimestampedVersionSharedPtr>& TimestampedVersionPathContainer::times
     return _timestamped_versions_container;
 }
 
+void VersionGraph::update_max_continuous_version() {
+    _max_continuous_version = _get_max_continuous_version_from(0);
+}
+
 void VersionGraph::construct_version_graph(const std::vector<RowsetMetaSharedPtr>& rs_metas, int64_t* max_version) {
     _version_graph.clear();
     _max_continuous_version = -1;
@@ -277,7 +286,7 @@ void VersionGraph::add_version_to_graph(const Version& version) {
         // 2. We create a new tablet B releated A, and we will create a initial rowset and _max_continuous_version
         //    will be updated to 1
         // 3. Tablet A has a rowset R with version (0, m)
-        // 4. VectorizedSchema change will try convert R
+        // 4. Schema change will try convert R
         // 5. The start version of R (0) is not equal to `_max_continuous_version + 1`, and the _max_continuous_version
         //    will not update
         _max_continuous_version = _get_max_continuous_version_from(0);

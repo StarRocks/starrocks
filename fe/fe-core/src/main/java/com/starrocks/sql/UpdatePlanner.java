@@ -21,11 +21,15 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.SchemaTableSink;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -39,6 +43,7 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
 
 import java.util.List;
@@ -49,18 +54,24 @@ public class UpdatePlanner {
         QueryRelation query = updateStmt.getQueryStatement().getQueryRelation();
         List<String> colNames = query.getColumnOutputNames();
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
+        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, session).transform(query);
 
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
         boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(updateStmt.getTable());
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
+        boolean prevIsEnableLocalShuffleAgg = session.getSessionVariable().isEnableLocalShuffleAgg();
         try {
             if (forceDisablePipeline) {
                 session.getSessionVariable().setEnablePipelineEngine(false);
             }
+            // Non-query must use the strategy assign scan ranges per driver sequence, which local shuffle agg cannot use.
+            session.getSessionVariable().setEnableLocalShuffleAgg(false);
 
+            Table table = updateStmt.getTable();
+            long tableId = table.getId();
             Optimizer optimizer = new Optimizer();
+            optimizer.setUpdateTableId(tableId);
             OptExpression optimizedPlan = optimizer.optimize(
                     session,
                     logicalPlan.getRoot(),
@@ -73,9 +84,13 @@ public class UpdatePlanner {
             TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
 
             List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
-            OlapTable table = (OlapTable) updateStmt.getTable();
-            long tableId = table.getId();
             for (Column column : table.getFullSchema()) {
+                if (updateStmt.usePartialUpdate() && !column.isMaterializedColumn() &&
+                        !updateStmt.isAssignmentColumn(column.getName()) && !column.isKey()) {
+                    // When using partial update, skip columns which aren't key column and not be assign, except for
+                    // generated column
+                    continue;
+                }
                 SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
                 slotDescriptor.setIsMaterialized(true);
                 slotDescriptor.setType(column.getType());
@@ -90,30 +105,47 @@ public class UpdatePlanner {
             }
             olapTuple.computeMemLayout();
 
-            List<Long> partitionIds = Lists.newArrayList();
-            for (Partition partition : table.getPartitions()) {
-                partitionIds.add(partition.getId());
+            if (table instanceof OlapTable) {
+                List<Long> partitionIds = Lists.newArrayList();
+                for (Partition partition : table.getPartitions()) {
+                    partitionIds.add(partition.getId());
+                }
+                OlapTable olapTable = (OlapTable) table;
+                DataSink dataSink =
+                        new OlapTableSink(olapTable, olapTuple, partitionIds, olapTable.writeQuorum(),
+                                olapTable.enableReplicatedStorage(), false, olapTable.supportedAutomaticPartition());
+                if (updateStmt.usePartialUpdate()) {
+                    // using column mode partial update in UPDATE stmt
+                    ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.COLUMN_UPDATE_MODE);
+                }
+                execPlan.getFragments().get(0).setSink(dataSink);
+                execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
+            } else if (table instanceof SystemTable) {
+                DataSink dataSink = new SchemaTableSink((SystemTable) table);
+                execPlan.getFragments().get(0).setSink(dataSink);
+            } else {
+                throw new SemanticException("Unsupported table type: " + table.getClass().getName());
             }
-            DataSink dataSink = new OlapTableSink(table, olapTuple, partitionIds, table.writeQuorum(),
-                    table.enableReplicatedStorage());
-            execPlan.getFragments().get(0).setSink(dataSink);
-            execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
             if (canUsePipeline) {
                 PlanFragment sinkFragment = execPlan.getFragments().get(0);
                 if (ConnectContext.get().getSessionVariable().getEnableAdaptiveSinkDop()) {
-                    sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getDegreeOfParallelism());
+                    sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism());
                 } else {
                     sinkFragment
                             .setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
                 }
-                sinkFragment.setHasOlapTableSink();
+                if (table instanceof OlapTable) {
+                    sinkFragment.setHasOlapTableSink();
+                }
                 sinkFragment.setForceSetTableSinkDop();
                 sinkFragment.setForceAssignScanRangesPerDriverSeq();
+                sinkFragment.disableRuntimeAdaptiveDop();
             } else {
                 execPlan.getFragments().get(0).setPipelineDop(1);
             }
             return execPlan;
         } finally {
+            session.getSessionVariable().setEnableLocalShuffleAgg(prevIsEnableLocalShuffleAgg);
             if (forceDisablePipeline) {
                 session.getSessionVariable().setEnablePipelineEngine(true);
             }

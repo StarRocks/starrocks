@@ -34,14 +34,15 @@
 
 #pragma once
 
+#include <climits>
 #include <functional>
 #include <map>
 #include <mutex>
 
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/routine_load/data_consumer_pool.h"
-#include "util/priority_thread_pool.hpp"
 #include "util/starrocks_metrics.h"
+#include "util/threadpool.h"
 #include "util/uid_util.h"
 
 namespace starrocks {
@@ -59,22 +60,27 @@ class RoutineLoadTaskExecutor {
 public:
     typedef std::function<void(StreamLoadContext*)> ExecFinishCallback;
 
-    RoutineLoadTaskExecutor(ExecEnv* exec_env)
-            : _exec_env(exec_env),
-              _thread_pool("routine_load", config::routine_load_thread_pool_size,
-                           config::routine_load_thread_pool_size),
-              _data_consumer_pool(10) {
+    RoutineLoadTaskExecutor(ExecEnv* exec_env) : _exec_env(exec_env), _data_consumer_pool(10) {
         REGISTER_GAUGE_STARROCKS_METRIC(routine_load_task_count, [this]() {
             std::lock_guard<std::mutex> l(_lock);
             return _task_map.size();
         });
-
+        auto st = ThreadPoolBuilder("routine_load")
+                          .set_min_threads(0)
+                          .set_max_threads(INT_MAX)
+                          .set_max_queue_size(INT_MAX)
+                          .build(&_thread_pool);
+        DCHECK(st.ok());
         _data_consumer_pool.start_bg_worker();
     }
 
     ~RoutineLoadTaskExecutor() noexcept {
-        _thread_pool.shutdown();
-        _thread_pool.join();
+        // _thread_pool.shutdown();
+        // _thread_pool.join();
+
+        if (_thread_pool) {
+            _thread_pool->shutdown();
+        }
 
         for (auto& it : _task_map) {
             auto ctx = it.second;
@@ -89,10 +95,10 @@ public:
     Status submit_task(const TRoutineLoadTask& task);
 
     Status get_kafka_partition_meta(const PKafkaMetaProxyRequest& request, std::vector<int32_t>* partition_ids,
-                                    int timeout);
+                                    int timeout, std::string* group_id);
 
     Status get_kafka_partition_offset(const PKafkaOffsetProxyRequest& request, std::vector<int64_t>* beginning_offsets,
-                                      std::vector<int64_t>* latest_offsets, int timeout);
+                                      std::vector<int64_t>* latest_offsets, int timeout, std::string* group_id);
 
     Status get_pulsar_partition_meta(const PPulsarMetaProxyRequest& request, std::vector<std::string>* partitions);
 
@@ -109,7 +115,7 @@ private:
 
 private:
     ExecEnv* _exec_env;
-    PriorityThreadPool _thread_pool;
+    std::unique_ptr<ThreadPool> _thread_pool;
     DataConsumerPool _data_consumer_pool;
 
     std::mutex _lock;

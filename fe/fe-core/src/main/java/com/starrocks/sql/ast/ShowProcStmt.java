@@ -24,6 +24,7 @@ import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.NodePosition;
 
 // SHOW PROC statement. Used to show proc information, only admin can use.
 public class ShowProcStmt extends ShowStmt {
@@ -42,8 +43,14 @@ public class ShowProcStmt extends ShowStmt {
     private ProcNodeInterface node;
 
     public ShowProcStmt(String path) {
+        this(path, NodePosition.ZERO);
+    }
+
+    public ShowProcStmt(String path, NodePosition pos) {
+        super(pos);
         this.path = path;
     }
+
 
     public ProcNodeInterface getNode() {
         return node;

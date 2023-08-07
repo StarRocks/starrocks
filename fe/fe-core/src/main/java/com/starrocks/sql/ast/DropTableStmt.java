@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TableName;
+import com.starrocks.sql.parser.NodePosition;
 
 // DROP TABLE
 public class DropTableStmt extends DdlStmt {
@@ -25,13 +26,15 @@ public class DropTableStmt extends DdlStmt {
     private final boolean forceDrop;
 
     public DropTableStmt(boolean ifExists, TableName tableName, boolean forceDrop) {
-        this.ifExists = ifExists;
-        this.tableName = tableName;
-        this.isView = false;
-        this.forceDrop = forceDrop;
+        this(ifExists, tableName, false, forceDrop, NodePosition.ZERO);
     }
 
     public DropTableStmt(boolean ifExists, TableName tableName, boolean isView, boolean forceDrop) {
+        this(ifExists, tableName, isView, forceDrop, NodePosition.ZERO);
+    }
+
+    public DropTableStmt(boolean ifExists, TableName tableName, boolean isView, boolean forceDrop, NodePosition pos) {
+        super(pos);
         this.ifExists = ifExists;
         this.tableName = tableName;
         this.isView = isView;
@@ -44,6 +47,10 @@ public class DropTableStmt extends DdlStmt {
 
     public TableName getTbl() {
         return tableName;
+    }
+
+    public String getCatalogName() {
+        return tableName.getCatalog();
     }
 
     public String getDbName() {

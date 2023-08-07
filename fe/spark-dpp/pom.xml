@@ -66,8 +66,9 @@ under the License.
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.jmockit/jmockit -->
+        <!-- https://mvnrepository.com/artifact/com.github.hazendaz.jmockit/jmockit -->
         <dependency>
-            <groupId>org.jmockit</groupId>
+            <groupId>com.github.hazendaz.jmockit</groupId>
             <artifactId>jmockit</artifactId>
             <scope>test</scope>
         </dependency>
@@ -77,13 +78,6 @@ under the License.
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
             <scope>test</scope>
-        </dependency>
-
-        <!-- https://mvnrepository.com/artifact/log4j/log4j -->
-        <dependency>
-            <groupId>log4j</groupId>
-            <artifactId>log4j</artifactId>
-            <scope>provided</scope>
         </dependency>
 
         <dependency>
@@ -97,6 +91,12 @@ under the License.
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-core_2.12</artifactId>
             <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <artifactId>stream</artifactId>
+                    <groupId>com.clearspring.analytics</groupId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-sql_2.12 -->
@@ -158,6 +158,12 @@ under the License.
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j-impl</artifactId>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -174,7 +180,7 @@ under the License.
                     <!-->not reuse forked jvm, so that each unit test will run in separate jvm. to avoid singleton confict<-->
                     <reuseForks>false</reuseForks>
                     <argLine>
-                        -javaagent:${settings.localRepository}/org/jmockit/jmockit/1.48/jmockit-1.48.jar
+                        -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar
                     </argLine>
                 </configuration>
             </plugin>

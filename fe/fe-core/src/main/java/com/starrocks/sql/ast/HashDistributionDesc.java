@@ -24,6 +24,7 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -36,11 +37,15 @@ public class HashDistributionDesc extends DistributionDesc {
     private final List<String> distributionColumnNames;
 
     public HashDistributionDesc() {
-        type = DistributionInfoType.HASH;
-        distributionColumnNames = Lists.newArrayList();
+        this(0, Lists.newArrayList(), NodePosition.ZERO);
     }
 
     public HashDistributionDesc(int numBucket, List<String> distributionColumnNames) {
+        this(numBucket, distributionColumnNames, NodePosition.ZERO);
+    }
+
+    public HashDistributionDesc(int numBucket, List<String> distributionColumnNames, NodePosition pos) {
+        super(pos);
         type = DistributionInfoType.HASH;
         this.numBucket = numBucket;
         this.distributionColumnNames = distributionColumnNames;

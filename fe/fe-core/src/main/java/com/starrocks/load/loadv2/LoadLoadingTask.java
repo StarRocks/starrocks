@@ -51,14 +51,15 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.FailMsg;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.Coordinator;
+import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TLoadJobType;
-import com.starrocks.thrift.TQueryType;
+import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
@@ -93,6 +94,7 @@ public class LoadLoadingTask extends LoadTask {
     private final Map<String, String> sessionVariables;
     private final TLoadJobType loadJobType;
     private String mergeConditionStr;
+    private TPartialUpdateMode partialUpdateMode;
 
     private LoadingTaskPlanner planner;
     private ConnectContext context;
@@ -101,11 +103,12 @@ public class LoadLoadingTask extends LoadTask {
     private final OriginStatement originStmt;
 
     public LoadLoadingTask(Database db, OlapTable table, BrokerDesc brokerDesc, List<BrokerFileGroup> fileGroups,
-            long jobDeadlineMs, long execMemLimit, boolean strictMode,
-            long txnId, LoadTaskCallback callback, String timezone,
-            long timeoutS, long createTimestamp, boolean partialUpdate, String mergeConditionStr,
-            Map<String, String> sessionVariables,
-            ConnectContext context, TLoadJobType loadJobType, int priority, OriginStatement originStmt) {
+                           long jobDeadlineMs, long execMemLimit, boolean strictMode,
+                           long txnId, LoadTaskCallback callback, String timezone,
+                           long timeoutS, long createTimestamp, boolean partialUpdate, String mergeConditionStr,
+                           Map<String, String> sessionVariables,
+                           ConnectContext context, TLoadJobType loadJobType, int priority, OriginStatement originStmt,
+                           TPartialUpdateMode partialUpdateMode) {
         super(callback, TaskType.LOADING, priority);
         this.db = db;
         this.table = table;
@@ -126,19 +129,21 @@ public class LoadLoadingTask extends LoadTask {
         this.context = context;
         this.loadJobType = loadJobType;
         this.originStmt = originStmt;
+        this.partialUpdateMode = partialUpdateMode;
     }
 
     public void init(TUniqueId loadId, List<List<TBrokerFileStatus>> fileStatusList, int fileNum) throws UserException {
         this.loadId = loadId;
         if (!Config.enable_pipeline_load) {
             planner = new LoadingTaskPlanner(callback.getCallbackId(), txnId, db.getId(), table, brokerDesc, fileGroups,
-                    strictMode, timezone, timeoutS, createTimestamp, partialUpdate, sessionVariables, mergeConditionStr);
+                    strictMode, timezone, timeoutS, createTimestamp, partialUpdate, sessionVariables, mergeConditionStr,
+                    partialUpdateMode);
             planner.setConnectContext(context);
             planner.plan(loadId, fileStatusList, fileNum);
         } else {
             loadPlanner = new LoadPlanner(callback.getCallbackId(), loadId, txnId, db.getId(), table, strictMode,
-                timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit, 
-                brokerDesc, fileGroups, fileStatusList, fileNum);
+                    timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit,
+                    brokerDesc, fileGroups, fileStatusList, fileNum);
             loadPlanner.plan();
         }
     }
@@ -159,26 +164,23 @@ public class LoadLoadingTask extends LoadTask {
         executeOnce();
     }
 
+    private Coordinator.Factory getCoordinatorFactory() {
+        return new DefaultCoordinator.Factory();
+    }
+
     private void executeOnce() throws Exception {
         // New one query id,
         Coordinator curCoordinator;
         if (!Config.enable_pipeline_load) {
-            curCoordinator = new Coordinator(callback.getCallbackId(), loadId, planner.getDescTable(),
+            curCoordinator = getCoordinatorFactory().createNonPipelineBrokerLoadScheduler(
+                    callback.getCallbackId(), loadId,
+                    planner.getDescTable(),
                     planner.getFragments(), planner.getScanNodes(),
-                    planner.getTimezone(), planner.getStartTime(), sessionVariables, context);
-            /*
-            * For broker load job, user only need to set mem limit by 'exec_mem_limit' property.
-            * And the variable 'load_mem_limit' does not make any effect.
-            * However, in order to ensure the consistency of semantics when executing on the BE side,
-            * and to prevent subsequent modification from incorrectly setting the load_mem_limit,
-            * here we use exec_mem_limit to directly override the load_mem_limit property.
-            */
-            curCoordinator.setQueryType(TQueryType.LOAD);
-            curCoordinator.setExecMemoryLimit(execMemLimit);
-            curCoordinator.setLoadMemLimit(execMemLimit);
-            curCoordinator.setTimeout((int) (getLeftTimeMs() / 1000));
+                    planner.getTimezone(), planner.getStartTime(), sessionVariables, context, execMemLimit);
+
+            curCoordinator.setTimeoutSecond((int) (getLeftTimeMs() / 1000));
         } else {
-            curCoordinator = new Coordinator(loadPlanner);
+            curCoordinator = getCoordinatorFactory().createBrokerLoadScheduler(loadPlanner);
         }
         curCoordinator.setLoadJobType(loadJobType);
 
@@ -187,7 +189,7 @@ public class LoadLoadingTask extends LoadTask {
             long beginTimeInNanoSecond = TimeUtils.getStartTime();
             actualExecute(curCoordinator);
 
-            if (context.getSessionVariable().isEnableProfile()) {
+            if (context.getSessionVariable().isEnableLoadProfile()) {
                 RuntimeProfile profile = new RuntimeProfile("Load");
                 RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
                 summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(context.getExecutionId()));
@@ -213,6 +215,8 @@ public class LoadLoadingTask extends LoadTask {
                     sb.append("load_parallel_instance_num=").append(Config.load_parallel_instance_num).append(",");
                     sb.append(SessionVariable.PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM).append("=")
                             .append(variables.getParallelExecInstanceNum()).append(",");
+                    sb.append(SessionVariable.MAX_PARALLEL_SCAN_INSTANCE_NUM).append("=")
+                            .append(variables.getMaxParallelScanInstanceNum()).append(",");
                     sb.append(SessionVariable.PIPELINE_DOP).append("=").append(variables.getPipelineDop()).append(",");
                     sb.append(SessionVariable.ENABLE_ADAPTIVE_SINK_DOP).append("=")
                             .append(variables.getEnableAdaptiveSinkDop())
@@ -231,12 +235,11 @@ public class LoadLoadingTask extends LoadTask {
                 curCoordinator.getQueryProfile().getCounterTotalTime()
                         .setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
                 curCoordinator.endProfile();
-                curCoordinator.mergeIsomorphicProfiles();
-                profile.addChild(curCoordinator.getQueryProfile());
+                profile.addChild(curCoordinator.buildMergedQueryProfile(null));
 
                 StringBuilder builder = new StringBuilder();
                 profile.prettyPrint(builder, "");
-                String profileContent = ProfileManager.getInstance().pushProfile(profile);
+                String profileContent = ProfileManager.getInstance().pushProfile(null, profile);
                 if (context.getQueryDetail() != null) {
                     context.getQueryDetail().setProfile(profileContent);
                 }
@@ -267,7 +270,8 @@ public class LoadLoadingTask extends LoadTask {
                         curCoordinator.getLoadCounters(),
                         curCoordinator.getTrackingUrl(),
                         TabletCommitInfo.fromThrift(curCoordinator.getCommitInfos()),
-                        TabletFailInfo.fromThrift(curCoordinator.getFailInfos()));
+                        TabletFailInfo.fromThrift(curCoordinator.getFailInfos()),
+                        curCoordinator.getRejectedRecordPaths());
             } else {
                 throw new LoadException(status.getErrorMsg());
             }

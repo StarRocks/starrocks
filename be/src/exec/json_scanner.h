@@ -44,14 +44,15 @@ public:
 
     // Close this scanner
     void close() override;
+    static Status parse_json_paths(const std::string& jsonpath, std::vector<std::vector<SimpleJsonPath>>* path_vecs);
 
 private:
     Status _construct_json_types();
     Status _construct_cast_exprs();
-    static Status _parse_json_paths(const std::string& jsonpath, std::vector<std::vector<SimpleJsonPath>>* path_vecs);
     Status _create_src_chunk(ChunkPtr* chunk);
     Status _open_next_reader();
     StatusOr<ChunkPtr> _cast_chunk(const ChunkPtr& src_chunk);
+    void _materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chunk);
 
     friend class JsonReader;
 
@@ -91,6 +92,16 @@ public:
 
     Status close();
 
+    struct PreviousParsedItem {
+        PreviousParsedItem(const std::string_view& key) : key(key), column_index(-1) {}
+        PreviousParsedItem(const std::string_view& key, int column_index, const TypeDescriptor& type)
+                : key(key), type(type), column_index(column_index) {}
+
+        std::string key;
+        TypeDescriptor type;
+        int column_index;
+    };
+
 private:
     template <typename ParserType>
     Status _read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_read);
@@ -126,6 +137,14 @@ private:
 
     std::unique_ptr<JsonParser> _parser;
     bool _empty_parser = true;
+
+    // record the chunk column position for previous parsed json object
+    std::vector<PreviousParsedItem> _prev_parsed_position;
+    // record the parsed column index for current json object
+    std::vector<uint8_t> _parsed_columns;
+    // record the "__op" column's index
+    int _op_col_index;
+
     // only used in unit test.
     // TODO: The semantics of Streaming Load And Routine Load is non-consistent.
     //       Import a json library supporting streaming parse.

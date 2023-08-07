@@ -31,11 +31,9 @@ import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ExprId;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
@@ -48,41 +46,30 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
-import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarFunction;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
-import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.FieldId;
-import com.starrocks.sql.analyzer.FunctionAnalyzer;
-import com.starrocks.sql.analyzer.RelationFields;
-import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.ResolvedField;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ArrayExpr;
-import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.common.TypeManager;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
-import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 
 import java.math.BigInteger;
 import java.util.Arrays;
@@ -92,7 +79,6 @@ import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static com.starrocks.sql.analyzer.AnalyticAnalyzer.verifyAnalyticExpression;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
@@ -102,7 +88,6 @@ import static com.starrocks.sql.common.UnsupportedException.unsupportedException
 // the column valid, focus on analyze functions, and this analyzer do not support analyze
 // UDF
 public class SimpleExpressionAnalyzer {
-    private static final Pattern HAS_TIME_PART = Pattern.compile("^.*[HhIiklrSsT]+.*$");
 
     public void analyze(Expr expression, AnalyzeState analyzeState) {
         SimpleExpressionAnalyzer.Visitor visitor = new SimpleExpressionAnalyzer.Visitor(analyzeState);
@@ -191,10 +176,11 @@ public class SimpleExpressionAnalyzer {
         visitor.visit(expression);
     }
 
-    static class Visitor extends AstVisitor<Void, Scope> {
+    static class Visitor extends ExpressionAnalyzer.Visitor {
         private final AnalyzeState analyzeState;
 
         public Visitor(AnalyzeState analyzeState) {
+            super(analyzeState, null);
             this.analyzeState = analyzeState;
         }
 
@@ -215,14 +201,19 @@ public class SimpleExpressionAnalyzer {
             // TODO(SmithCruise) We should handle this problem in parser in the future.
             Preconditions.checkArgument(child.getType().isStructType(),
                     String.format("%s must be a struct type, check if you are using `'`", child.toSql()));
-            StructType structType = (StructType) child.getType();
-            StructField structField = structType.getField(node.getFieldName());
 
-            if (structField == null) {
-                throw new SemanticException("Struct subfield '%s' cannot be resolved", node.getFieldName());
+            List<String> fieldNames = node.getFieldNames();
+            Type tmpType = child.getType();
+            for (String fieldName : fieldNames) {
+                StructType structType = (StructType) tmpType;
+                StructField structField = structType.getField(fieldName);
+                if (structField == null) {
+                    throw new SemanticException("Struct subfield '%s' cannot be resolved", fieldName);
+                }
+                tmpType = structField.getType();
             }
 
-            node.setType(structField.getType());
+            node.setType(tmpType);
             return null;
         }
 
@@ -252,11 +243,6 @@ public class SimpleExpressionAnalyzer {
                                 node.getChildren().stream().map(Expr::getType).collect(Collectors.toList()));
                     }
 
-                    // Array<DECIMALV3> type is not supported in current version, turn it into DECIMALV2 type
-                    if (targetItemType.isDecimalV3()) {
-                        targetItemType = ScalarType.DECIMALV2;
-                    }
-
                     for (int i = 0; i < node.getChildren().size(); i++) {
                         if (!node.getChildren().get(i).getType().matchesType(targetItemType)) {
                             node.castChild(targetItemType, i);
@@ -268,7 +254,7 @@ public class SimpleExpressionAnalyzer {
                     throw new SemanticException(e.getMessage());
                 }
             } else {
-                node.setType(new ArrayType(Type.NULL));
+                node.setType(Type.ARRAY_NULL);
             }
             return null;
         }
@@ -401,8 +387,7 @@ public class SimpleExpressionAnalyzer {
             Type type1 = node.getChild(0).getType();
             Type type2 = node.getChild(1).getType();
 
-            Type compatibleType =
-                    TypeManager.getCompatibleTypeForBinary(node.getOp().isNotRangeComparison(), type1, type2);
+            Type compatibleType = TypeManager.getCompatibleTypeForBinary(node.getOp(), type1, type2);
             // check child type can be cast
             final String ERROR_MSG = "Column type %s does not support binary predicate operation.";
             if (!Type.canCastTo(type1, compatibleType)) {
@@ -668,237 +653,6 @@ public class SimpleExpressionAnalyzer {
 
             cast.setType(castType);
             return null;
-        }
-
-        @Override
-        public Void visitFunctionCall(FunctionCallExpr node, Scope scope) {
-            Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
-
-            if (node.isNondeterministicBuiltinFnName()) {
-                ExprId exprId = analyzeState.getNextNondeterministicId();
-                node.setNondeterministicId(exprId);
-            }
-
-            Function fn;
-            String fnName = node.getFnName().getFunction();
-
-            if (fnName.equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
-                //Compatible with the logic of the original search function "count distinct"
-                //TODO: fix how we equal count distinct.
-                fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {argumentTypes[0]},
-                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            } else if (fnName.equals(FunctionSet.EXCHANGE_BYTES) || fnName.equals(FunctionSet.EXCHANGE_SPEED)) {
-                fn = Expr.getBuiltinFunction(fnName, argumentTypes,
-                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-                fn.setArgsType(argumentTypes); // as accepting various types
-                fn.setIsNullable(false);
-            } else if (FunctionSet.decimalRoundFunctions.contains(fnName) ||
-                    Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3)) {
-                // Since the priority of decimal version is higher than double version (according functionId),
-                // and in `Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF` mode, `Expr.getBuiltinFunction` always
-                // return decimal version even if the input parameters are not decimal, such as (INT, INT),
-                // lacking of specific decimal type process defined in `getDecimalV3Function`. So we force round functions
-                // to go through `getDecimalV3Function` here
-                if (FunctionSet.varianceFunctions.contains(fnName)) {
-                    // When decimal values are too small, the stddev and variance alogrithm of decimal-version do not
-                    // work incorrectly. because we use decimal128(38,9) multiplication in this algorithm,
-                    // decimal128(38,9) * decimal128(38,9) produces a result of decimal128(38,9). if two numbers are
-                    // too small, for an example, 0.000000001 * 0.000000001 produces 0.000000000, so the algorithm
-                    // can not work. Because of this reason, stddev and variance on very small decimal numbers always
-                    // yields a zero, so we use double instead of decimal128(38,9) to compute stddev and variance of
-                    // decimal types.
-                    Type[] doubleArgTypes = Stream.of(argumentTypes).map(t -> Type.DOUBLE).toArray(Type[]::new);
-                    fn = Expr.getBuiltinFunction(fnName, doubleArgTypes,
-                            Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-                } else {
-                    fn = getDecimalV3Function(node, argumentTypes);
-                }
-            } else if (Arrays.stream(argumentTypes).anyMatch(arg -> arg.matchesType(Type.TIME))) {
-                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-                if (fn instanceof AggregateFunction) {
-                    throw new SemanticException("Time Type can not used in %s function",
-                            fnName);
-                }
-            } else if (FunctionSet.STR_TO_DATE.equals(fnName)) {
-                fn = getStrToDateFunction(node, argumentTypes);
-            } else if (fnName.equals(FunctionSet.ARRAY_FILTER)) {
-                if (node.getChildren().size() != 2) {
-                    throw new SemanticException(
-                            FunctionSet.ARRAY_FILTER + " should have 2 array inputs or lambda functions.");
-                }
-                if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
-                    throw new SemanticException("The first input of " + FunctionSet.ARRAY_FILTER +
-                            " should be an array or a lambda function.");
-                }
-                if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
-                    throw new SemanticException("The second input of " + FunctionSet.ARRAY_FILTER +
-                            " should be an array or a lambda function.");
-                }
-                // force the second array be of Type.ARRAY_BOOLEAN
-                node.setChild(1, new CastExpr(Type.ARRAY_BOOLEAN, node.getChild(1)));
-                argumentTypes[1] = Type.ARRAY_BOOLEAN;
-                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            } else if (fnName.equals(FunctionSet.TIME_SLICE) || fnName.equals(FunctionSet.DATE_SLICE)) {
-                if (!(node.getChild(1) instanceof IntLiteral)) {
-                    throw new SemanticException(
-                            fnName + " requires second parameter must be a constant interval");
-                }
-                if (((IntLiteral) node.getChild(1)).getValue() <= 0) {
-                    throw new SemanticException(
-                            fnName + " requires second parameter must be greater than 0");
-                }
-                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            } else if (fnName.equals(FunctionSet.ARRAY_SLICE)) {
-                // Default type is TINYINT, it would match to a wrong function
-                for (int i = 1; i < argumentTypes.length; i++) {
-                    argumentTypes[i] = Type.BIGINT;
-                }
-                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_SUPERTYPE_OF);
-            } else {
-                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            }
-
-            if (fn == null) {
-                throw new SemanticException("No matching function with signature: %s(%s).",
-                        fnName,
-                        node.getParams().isStar() ? "*" : Joiner.on(", ")
-                                .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
-            }
-
-            if (fn instanceof TableFunction) {
-                throw unsupportedException("Table function cannot be used in expression");
-            }
-
-            // check params type, don't check var args type
-            for (int i = 0; i < fn.getNumArgs(); i++) {
-                if (!argumentTypes[i].matchesType(fn.getArgs()[i]) &&
-                        !Type.canCastToAsFunctionParameter(argumentTypes[i], fn.getArgs()[i])) {
-                    throw new SemanticException("No matching function with signature: %s(%s).", fnName,
-                            node.getParams().isStar() ? "*" : Joiner.on(", ")
-                                    .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
-                }
-            }
-
-            node.setFn(fn);
-            node.setType(fn.getReturnType());
-            FunctionAnalyzer.analyze(node);
-            return null;
-        }
-
-        private Function getStrToDateFunction(FunctionCallExpr node, Type[] argumentTypes) {
-            /*
-             * @TODO: Determine the return type of this function
-             * If is format is constant and don't contains time part, return date type, to compatible with mysql.
-             * In fact we don't want to support str_to_date return date like mysql, reason:
-             * 1. The return type of FE/BE str_to_date function signature is datetime, return date
-             *    let type different, it's will throw unpredictable error
-             * 2. Support return date and datetime at same time in one function is complicated.
-             * 3. The meaning of the function is confusing. In mysql, will return date if format is a constant
-             *    string and it's not contains "%H/%M/%S" pattern, but it's a trick logic, if format is a variable
-             *    expression, like: str_to_date(col1, col2), and the col2 is '%Y%m%d', the result always be
-             *    datetime.
-             */
-            Function fn = Expr.getBuiltinFunction(node.getFnName().getFunction(),
-                    argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-
-            if (fn == null) {
-                return null;
-            }
-
-            if (!node.getChild(1).isConstant()) {
-                return fn;
-            }
-
-            ExpressionMapping expressionMapping =
-                    new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()),
-                            com.google.common.collect.Lists.newArrayList());
-
-            ScalarOperator format = SqlToScalarOperatorTranslator.translate(node.getChild(1), expressionMapping,
-                    new ColumnRefFactory());
-            if (format.isConstantRef() && !HAS_TIME_PART.matcher(format.toString()).matches()) {
-                return Expr.getBuiltinFunction("str2date", argumentTypes,
-                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            }
-
-            return fn;
-        }
-
-        Function getDecimalV3Function(FunctionCallExpr node, Type[] argumentTypes) {
-            Function fn;
-            String fnName = node.getFnName().getFunction();
-            Type commonType = DecimalV3FunctionAnalyzer.normalizeDecimalArgTypes(argumentTypes, fnName);
-            fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-
-            if (fn == null) {
-                throw new SemanticException("No matching function with signature: %s(%s).", fnName,
-                        node.getParams().isStar() ? "*" : Joiner.on(", ")
-                                .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
-            }
-
-            if (DecimalV3FunctionAnalyzer.DECIMAL_AGG_FUNCTION.contains(fnName)) {
-                Type argType = node.getChild(0).getType();
-                // stddev/variance always use decimal128(38,9) to computing result.
-                if (DecimalV3FunctionAnalyzer.DECIMAL_AGG_VARIANCE_STDDEV_TYPE
-                        .contains(fnName) && argType.isDecimalV3()) {
-                    argType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
-                    node.setChild(0, TypeManager.addCastExpr(node.getChild(0), argType));
-                }
-                fn = DecimalV3FunctionAnalyzer
-                        .rectifyAggregationFunction((AggregateFunction) fn, argType, commonType);
-            } else if (DecimalV3FunctionAnalyzer.DECIMAL_UNARY_FUNCTION_SET.contains(fnName) ||
-                    DecimalV3FunctionAnalyzer.DECIMAL_IDENTICAL_TYPE_FUNCTION_SET.contains(fnName) ||
-                    FunctionSet.IF.equals(fnName) || FunctionSet.MAX_BY.equals(fnName)) {
-                // DecimalV3 types in resolved fn's argument should be converted into commonType so that right CastExprs
-                // are interpolated into FunctionCallExpr's children whose type does match the corresponding argType of fn.
-                List<Type> argTypes;
-                if (FunctionSet.MONEY_FORMAT.equals(fnName)) {
-                    argTypes = Arrays.asList(argumentTypes);
-                } else {
-                    argTypes = Arrays.stream(fn.getArgs()).map(t -> t.isDecimalV3() ? commonType : t)
-                            .collect(Collectors.toList());
-                }
-
-                Type returnType = fn.getReturnType();
-                // Decimal v3 function return type maybe need change
-                if (returnType.isDecimalV3() && commonType.isValid()) {
-                    returnType = commonType;
-                }
-
-                if (FunctionSet.MAX_BY.equals(fnName)) {
-                    AggregateFunction newFn = new AggregateFunction(fn.getFunctionName(),
-                            Arrays.asList(argumentTypes), returnType,
-                            Type.VARCHAR, fn.hasVarArgs());
-                    newFn.setFunctionId(fn.getFunctionId());
-                    newFn.setChecksum(fn.getChecksum());
-                    newFn.setBinaryType(fn.getBinaryType());
-                    newFn.setHasVarArgs(fn.hasVarArgs());
-                    newFn.setId(fn.getId());
-                    newFn.setUserVisible(fn.isUserVisible());
-                    newFn.setisAnalyticFn(true);
-                    fn = newFn;
-                    return fn;
-                }
-
-                ScalarFunction newFn = new ScalarFunction(fn.getFunctionName(), argTypes, returnType,
-                        fn.getLocation(), ((ScalarFunction) fn).getSymbolName(),
-                        ((ScalarFunction) fn).getPrepareFnSymbol(),
-                        ((ScalarFunction) fn).getCloseFnSymbol());
-                newFn.setFunctionId(fn.getFunctionId());
-                newFn.setChecksum(fn.getChecksum());
-                newFn.setBinaryType(fn.getBinaryType());
-                newFn.setHasVarArgs(fn.hasVarArgs());
-                newFn.setId(fn.getId());
-                newFn.setUserVisible(fn.isUserVisible());
-
-                fn = newFn;
-            } else if (FunctionSet.decimalRoundFunctions.contains(fnName)) {
-                // Decimal version of truncate/round/round_up_to may change the scale, we need to calculate the scale of the return type
-                // And we need to downgrade to double version if second param is neither int literal nor SlotRef expression
-                List<Type> argTypes = Arrays.stream(fn.getArgs()).map(t -> t.isDecimalV3() ? commonType : t)
-                        .collect(Collectors.toList());
-                fn = DecimalV3FunctionAnalyzer.getFunctionOfRound(node, fn, argTypes);
-            }
-            return fn;
         }
 
         @Override

@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
 import com.starrocks.analysis.AnalyticExpr;
+import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.GroupByClause;
@@ -41,6 +42,7 @@ import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.common.StarRocksPlannerException;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -105,6 +107,10 @@ public class SelectAnalyzer {
                     selectList.getItems().stream().anyMatch(SelectListItem::isStar) &&
                     !selectList.isDistinct()) {
                 throw new SemanticException("cannot combine '*' in select list with GROUP BY: *");
+            }
+
+            if (!aggregates.isEmpty() && selectList.isDistinct()) {
+                throw new SemanticException("cannot combine SELECT DISTINCT with aggregate functions or GROUP BY");
             }
 
             new AggregationAnalyzer(session, analyzeState, groupByExpressions, sourceScope, null)
@@ -216,7 +222,7 @@ public class SelectAnalyzer {
                     if (item.getTblName() != null) {
                         throw new SemanticException("Unknown table '%s'", item.getTblName());
                     }
-                    if (fromRelation != null) {
+                    if (fromRelation == null) {
                         throw new SemanticException("SELECT * not allowed in queries without FROM clause");
                     }
                     throw new StarRocksPlannerException("SELECT * not allowed from relation that has no columns",
@@ -250,9 +256,11 @@ public class SelectAnalyzer {
 
                 if (item.getExpr() instanceof SlotRef) {
                     outputFields.add(new Field(name, item.getExpr().getType(),
-                            ((SlotRef) item.getExpr()).getTblNameWithoutAnalyzed(), item.getExpr()));
+                            ((SlotRef) item.getExpr()).getTblNameWithoutAnalyzed(), item.getExpr(),
+                            true, item.getExpr().isNullable()));
                 } else {
-                    outputFields.add(new Field(name, item.getExpr().getType(), null, item.getExpr()));
+                    outputFields.add(new Field(name, item.getExpr().getType(), null, item.getExpr(),
+                            true, item.getExpr().isNullable()));
                 }
 
                 // outputExprInOrderByScope is used to record which expressions in outputExpression are to be
@@ -340,7 +348,7 @@ public class SelectAnalyzer {
             }
 
             if (!expression.getType().canOrderBy()) {
-                throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
+                throw new SemanticException(Type.NOT_SUPPORT_ORDER_ERROR_MSG);
             }
 
             orderByElement.setExpr(expression);
@@ -389,8 +397,12 @@ public class SelectAnalyzer {
         AnalyzerUtils.verifyNoWindowFunctions(predicate, "WHERE");
         AnalyzerUtils.verifyNoGroupingFunctions(predicate, "WHERE");
 
-        if (!predicate.getType().matchesType(Type.BOOLEAN) && !predicate.getType().matchesType(Type.NULL)) {
-            throw new SemanticException("WHERE clause must evaluate to a boolean: actual type %s", predicate.getType());
+        if (predicate.getType().isBoolean() || predicate.getType().isNull()) {
+            // do nothing
+        } else if (!session.getSessionVariable().isEnableStrictType() && Type.canCastTo(predicate.getType(), Type.BOOLEAN)) {
+            predicate = new CastExpr(Type.BOOLEAN, predicate);
+        } else {
+            throw new SemanticException("WHERE clause %s can not be converted to boolean type", predicate.toSql());
         }
 
         analyzeState.setPredicate(predicate);
@@ -418,10 +430,17 @@ public class SelectAnalyzer {
         TreeNode.collect(outputAndOrderByExpressions, Expr.isAggregatePredicate()::apply, aggregations);
         aggregations.forEach(e -> analyzeExpression(e, analyzeState, sourceScope));
 
-        if (aggregations.stream().filter(FunctionCallExpr::isDistinct).count() > 1) {
-            for (FunctionCallExpr agg : aggregations) {
-                if (agg.isDistinct() && agg.getChildren().size() > 0 && agg.getChild(0).getType().isArrayType()) {
-                    throw new SemanticException("No matching function with signature: multi_distinct_count(ARRAY)");
+        long distinctNum = aggregations.stream().filter(FunctionCallExpr::isDistinct).count();
+        for (FunctionCallExpr agg : aggregations) {
+            if (agg.isDistinct() && agg.getChildren().size() > 0) {
+                Type[] args = agg.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+                if (Arrays.stream(args).anyMatch(t -> t.isComplexType() || t.isJsonType())) {
+                    // only select single count(distinct array) can be rewritten to group by array
+                    if (distinctNum == 1 && args[0].isArrayType()) {
+                        continue;
+                    }
+                    throw new SemanticException("No matching function with signature: multi_distinct_count(" +
+                            Arrays.stream(args).map(Type::toSql).collect(Collectors.joining(",")) + ")");
                 }
             }
         }
@@ -452,7 +471,7 @@ public class SelectAnalyzer {
                     }
 
                     if (!groupingExpr.getType().canGroupBy()) {
-                        throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
+                        throw new SemanticException(Type.NOT_SUPPORT_GROUP_BY_ERROR_MSG);
                     }
 
                     if (analyzeState.getColumnReferences().get(groupingExpr) == null) {
@@ -530,11 +549,12 @@ public class SelectAnalyzer {
         if (havingClause != null) {
             Expr predicate = pushNegationToOperands(havingClause);
 
+            RewriteAliasVisitor visitor = new RewriteAliasVisitor(sourceScope, outputScope, outputExprs, session);
+            predicate = predicate.accept(visitor, null);
+
             AnalyzerUtils.verifyNoWindowFunctions(predicate, "HAVING");
             AnalyzerUtils.verifyNoGroupingFunctions(predicate, "HAVING");
 
-            RewriteAliasVisitor visitor = new RewriteAliasVisitor(sourceScope, outputScope, outputExprs, session);
-            predicate = predicate.accept(visitor, null);
             analyzeExpression(predicate, analyzeState, sourceScope);
 
             if (!predicate.getType().matchesType(Type.BOOLEAN) && !predicate.getType().matchesType(Type.NULL)) {
@@ -547,7 +567,7 @@ public class SelectAnalyzer {
 
     // If alias is same with table column name, we directly use table name.
     // otherwise, we use output expression according to the alias
-    private static class RewriteAliasVisitor extends AstVisitor<Expr, Void> {
+    public static class RewriteAliasVisitor extends AstVisitor<Expr, Void> {
         private final Scope sourceScope;
         private final Scope outputScope;
         private final List<Expr> outputExprs;

@@ -37,8 +37,8 @@ package com.starrocks.catalog;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.authentication.AuthenticationManager;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.mysql.privilege.Auth;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -57,13 +57,13 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * DomainResolver resolve the domain name saved in user property to list of IPs,
  * and refresh password entries in user priv table, periodically.
  */
-public class DomainResolver extends LeaderDaemon {
+public class DomainResolver extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(DomainResolver.class);
     // this is only available in BAIDU, for resolving BNS
     private static final String BNS_RESOLVER_TOOLS_PATH = "/usr/bin/get_instance_by_service";
 
     private Auth auth;
-    private AuthenticationManager authenticationManager;
+    private AuthenticationMgr authenticationManager;
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     public DomainResolver(Auth auth) {
@@ -72,7 +72,7 @@ public class DomainResolver extends LeaderDaemon {
         this.authenticationManager = null;
     }
 
-    public DomainResolver(AuthenticationManager authenticationManager) {
+    public DomainResolver(AuthenticationMgr authenticationManager) {
         super("domain resolver", 10L * 1000);
         this.auth = null;
         this.authenticationManager = authenticationManager;
@@ -82,7 +82,7 @@ public class DomainResolver extends LeaderDaemon {
      * if a follower has just transfered to leader, or if it is replaying a AuthUpgrade journal.
      * this function will be called to switch from using Auth to using AuthenticationManager.
      */
-    public void setAuthenticationManager(AuthenticationManager manager) {
+    public void setAuthenticationManager(AuthenticationMgr manager) {
         lock.writeLock().lock();
         try {
             this.auth = null;
@@ -121,7 +121,7 @@ public class DomainResolver extends LeaderDaemon {
 
             // refresh user priv table by resolved IPs
             if (auth != null) {
-                auth.refreshUserPrivEntriesByResovledIPs(resolvedIPsMap);
+                auth.refreshUserPrivEntriesByResolvedIPs(resolvedIPsMap);
             } else {
                 authenticationManager.setHostnameToIpSet(resolvedIPsMap);
             }
@@ -134,7 +134,7 @@ public class DomainResolver extends LeaderDaemon {
     /**
      * Check if domain name is valid
      *
-     * @param host: currently is the user's whitelist bns or dns name
+     * @param domainName: currently is the user's whitelist bns or dns name
      * @return true of false
      */
     public boolean isValidDomain(String domainName) {

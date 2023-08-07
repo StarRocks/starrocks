@@ -77,16 +77,22 @@ public class QueryState {
     private int warningRows = 0;
     // make it public for easy to use
     public int serverStatus = 0;
+    private boolean isFinished = false;
 
     public QueryState() {
     }
 
     public void reset() {
         stateType = MysqlStateType.OK;
+        errorMessage = "";
         errorCode = null;
         infoMessage = null;
-        serverStatus = 0;
+        errType = ErrType.OTHER_ERR;
         isQuery = false;
+        affectedRows = 0;
+        warningRows = 0;
+        serverStatus = 0;
+        isFinished = false;
     }
 
     public MysqlStateType getStateType() {
@@ -95,6 +101,7 @@ public class QueryState {
 
     public void setEof() {
         stateType = MysqlStateType.EOF;
+        isFinished = true;
     }
 
     public void setOk() {
@@ -106,11 +113,13 @@ public class QueryState {
         this.warningRows = warningRows;
         this.infoMessage = infoMessage;
         stateType = MysqlStateType.OK;
+        isFinished = true;
     }
 
     public void setError(String errorMsg) {
         this.stateType = MysqlStateType.ERR;
-        this.errorMessage = errorMsg;
+        this.setMsg(errorMsg);
+        isFinished = true;
     }
 
     public boolean isError() {
@@ -118,7 +127,7 @@ public class QueryState {
     }
 
     public boolean isRunning() {
-        return stateType == MysqlStateType.OK;
+        return !isFinished;
     }
 
     public void setStateType(MysqlStateType stateType) {
@@ -126,7 +135,7 @@ public class QueryState {
     }
 
     public void setMsg(String msg) {
-        this.errorMessage = msg;
+        this.errorMessage = msg == null ? "" : msg;
     }
 
     public void setErrType(ErrType errType) {
@@ -181,6 +190,16 @@ public class QueryState {
                 break;
         }
         return packet;
+    }
+
+    public String toProfileString() {
+        if (stateType == MysqlStateType.ERR) {
+            return "Error";
+        } else if (isFinished) {
+            return "Finished";
+        } else {
+            return "Running";
+        }
     }
 
     @Override

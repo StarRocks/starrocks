@@ -40,6 +40,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TIntLiteral;
@@ -71,7 +72,11 @@ public class IntLiteral extends LiteralExpr {
     }
 
     public IntLiteral(long value) {
-        super();
+        this(value, NodePosition.ZERO);
+    }
+
+    public IntLiteral(long value, NodePosition pos) {
+        super(pos);
         init(value);
         analysisDone();
     }
@@ -383,7 +388,8 @@ public class IntLiteral extends LiteralExpr {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), value);
+        // IntLiteral(0) equals to LargeIntLiteral(0), so their hash codes must equal.
+        return Objects.hash(getLongValue());
     }
 
     @Override

@@ -25,6 +25,7 @@ import java.util.Objects;
 
 public class HudiSliceScannerFactory implements ScannerFactory {
     static ChildFirstClassLoader classLoader;
+
     static {
         String basePath = System.getenv("STARROCKS_HOME");
         File dir = new File(basePath + "/lib/hudi-reader-lib");
@@ -37,7 +38,7 @@ public class HudiSliceScannerFactory implements ScannerFactory {
                         throw new RuntimeException("Cannot init hudi slice classloader.", e);
                     }
                 }).toArray(URL[]::new);
-        classLoader = new ChildFirstClassLoader(jars, Thread.currentThread().getContextClassLoader());
+        classLoader = new ChildFirstClassLoader(jars, ClassLoader.getSystemClassLoader());
     }
 
     /**

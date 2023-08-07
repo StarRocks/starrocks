@@ -88,7 +88,9 @@ public class AnalyzeJoinTest {
         analyzeSuccess("select * from tnotnull inner join (select * from t0) t using (v1)");
 
         analyzeSuccess("select * from (t0 join tnotnull using(v1)) , t1");
-        analyzeFail("select * from (t0 join tnotnull using(v1)) t , t1", "the right syntax to use near 't'");
+        analyzeFail("select * from (t0 join tnotnull using(v1)) t , t1",
+                "Getting syntax error at line 1, column 43. Detail message: Unexpected input 't', " +
+                        "the most similar input is {<EOF>, ';'}.");
         analyzeFail("select v1 from (t0 join tnotnull using(v1)), t1", "Column 'v1' is ambiguous");
         analyzeSuccess("select a.v1 from (t0 a join tnotnull b using(v1)), t1");
     }
@@ -139,7 +141,7 @@ public class AnalyzeJoinTest {
                 (QueryStatement) analyzeSuccess("select v1 from t0 inner join [broadcast] t1 on t0.v1 = t1.v4");
         SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
         JoinRelation joinRelation = (JoinRelation) selectRelation.getRelation();
-        Assert.assertEquals("broadcast", joinRelation.getJoinHint());
+        Assert.assertEquals("BROADCAST", joinRelation.getJoinHint());
     }
 
     @Test
@@ -188,7 +190,8 @@ public class AnalyzeJoinTest {
         analyzeSuccess(sql);
 
         sql = "select * from (t0 a, (t1) b)";
-        analyzeFail(sql, "the right syntax to use near 'b'");
+        analyzeFail(sql, "Getting syntax error at line 1, column 26. " +
+                "Detail message: Unexpected input 'b', the most similar input is {')'}.");
 
         sql = "select * from (t0 a, t1 a)";
         analyzeFail(sql, "Not unique table/alias: 'a'");
@@ -203,7 +206,8 @@ public class AnalyzeJoinTest {
         analyzeFail(sql, "Not unique table/alias: 't1'");
 
         sql = "select * from (t0 join t1) t,t1";
-        analyzeFail(sql, "the right syntax to use near 't'");
+        analyzeFail(sql, "Getting syntax error at line 1, column 27. " +
+                "Detail message: Unexpected input 't', the most similar input is {<EOF>, ';'}.");
 
         sql = "select * from (t0 join t1 t) ,t1";
         analyzeSuccess(sql);

@@ -57,7 +57,9 @@ public class PushDownLimitJoinRule extends TransformationRule {
             return Lists.newArrayList(result);
         }
 
-        if (joinType.isSemiAntiJoin()) {
+        // TODO: Push down the limit to the full outer join if BE can output
+        // the matched rows first.
+        if (joinType.isSemiAntiJoin() || joinType.isFullOuterJoin()) {
             return Lists.newArrayList(result);
         } else if (joinType.isInnerJoin() && newJoin.getOnPredicate() != null) {
             return Lists.newArrayList(result);

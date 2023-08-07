@@ -187,7 +187,7 @@ public class ColocateTableTest {
         Assert.assertTrue(index.isSameGroup(firstTblId, secondTblId));
 
         // drop first
-        index.removeTable(firstTblId);
+        index.removeTable(firstTblId, null, false);
         Assert.assertEquals(1, Deencapsulation.<Multimap<GroupId, Long>>getField(index, "group2Tables").size());
         Assert.assertEquals(1, index.getAllGroupIds().size());
         Assert.assertEquals(1, Deencapsulation.<Map<Long, GroupId>>getField(index, "table2Group").size());
@@ -200,7 +200,7 @@ public class ColocateTableTest {
         Assert.assertFalse(index.isSameGroup(firstTblId, secondTblId));
 
         // drop second
-        index.removeTable(secondTblId);
+        index.removeTable(secondTblId, null, false);
         Assert.assertEquals(0, Deencapsulation.<Multimap<GroupId, Long>>getField(index, "group2Tables").size());
         Assert.assertEquals(0, index.getAllGroupIds().size());
         Assert.assertEquals(0, Deencapsulation.<Map<Long, GroupId>>getField(index, "table2Group").size());
@@ -295,7 +295,7 @@ public class ColocateTableTest {
                 ");");
 
         expectedEx.expect(DdlException.class);
-        expectedEx.expectMessage("Colocate tables distribution columns size must be same : 2");
+        expectedEx.expectMessage("Colocate tables distribution columns size must be the same : 2");
         createTable("create table " + dbName + "." + tableName2 + " (\n" +
                 " `k1` int NULL COMMENT \"\",\n" +
                 " `k2` varchar(10) NULL COMMENT \"\"\n" +
@@ -324,7 +324,8 @@ public class ColocateTableTest {
                 ");");
 
         expectedEx.expect(DdlException.class);
-        expectedEx.expectMessage("Colocate tables distribution columns must have the same data type: k2 should be INT");
+        expectedEx.expectMessage("Colocate tables distribution columns must have the same data type");
+        expectedEx.expectMessage("current col: k2, should be: INT");
         createTable("create table " + dbName + "." + tableName2 + " (\n" +
                 " `k1` int NULL COMMENT \"\",\n" +
                 " `k2` varchar(10) NULL COMMENT \"\"\n" +

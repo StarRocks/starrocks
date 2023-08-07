@@ -36,14 +36,14 @@ under the License.
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
-        <hadoop.version>3.3.4</hadoop.version>
-        <guava.version>30.1.1-jre</guava.version>
+        <hadoop.version>3.3.6</hadoop.version>
+        <guava.version>32.0.1-jre</guava.version>
         <zookeeper.version>3.4.14</zookeeper.version>
         <protobuf.version>3.16.3</protobuf.version>
         <thrift.version>0.14.1</thrift.version>
-        <tomcat.version>8.5.70</tomcat.version>
+        <tomcat.version>8.5.88</tomcat.version>
         <log4j.version>2.17.1</log4j.version>
-        <jackson.version>2.13.4.1</jackson.version>
+        <jackson.version>2.13.4.2</jackson.version>
     </properties>
 
     <profiles>
@@ -287,13 +287,6 @@ under the License.
             <groupId>org.apache.tomcat</groupId>
             <artifactId>tomcat-annotations-api</artifactId>
             <version>${tomcat.version}</version>
-        </dependency>
-
-        <!-- https://mvnrepository.com/artifact/log4j/log4j -->
-        <dependency>
-            <groupId>log4j</groupId>
-            <artifactId>log4j</artifactId>
-            <version>1.2.17-cloudera1</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-api -->

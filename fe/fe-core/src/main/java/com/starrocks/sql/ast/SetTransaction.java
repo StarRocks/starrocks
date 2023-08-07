@@ -12,8 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-public class SetTransaction extends SetVar {
+import com.starrocks.sql.parser.NodePosition;
+
+public class SetTransaction extends SetListItem {
+
+    public SetTransaction() {
+        this(NodePosition.ZERO);
+    }
+
+    public SetTransaction(NodePosition pos) {
+        super(pos);
+    }
 }

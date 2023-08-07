@@ -53,9 +53,7 @@ SelectNode::~SelectNode() {
 
 Status SelectNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
-    if (use_vectorized()) {
-        _conjunct_evaluate_timer = ADD_TIMER(_runtime_profile, "ConjunctEvaluateTime");
-    }
+    _conjunct_evaluate_timer = ADD_TIMER(_runtime_profile, "ConjunctEvaluateTime");
     return Status::OK();
 }
 
@@ -98,11 +96,11 @@ Status SelectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     return Status::OK();
 }
 
-Status SelectNode::close(RuntimeState* state) {
+void SelectNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
-    return ExecNode::close(state);
+    ExecNode::close(state);
 }
 
 pipeline::OpFactories SelectNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {

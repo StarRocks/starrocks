@@ -16,7 +16,7 @@
 
 #include <vector>
 
-#include "column/vectorized_schema.h"
+#include "column/schema.h"
 #include "common/statusor.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
@@ -33,6 +33,7 @@ namespace starrocks {
 
 Status HorizontalCompactionTask::run_impl() {
     Statistics statistics;
+    RETURN_IF_ERROR(_shortcut_compact(&statistics));
     RETURN_IF_ERROR(_horizontal_compact_data(&statistics));
 
     TRACE_COUNTER_INCREMENT("merged_rows", statistics.merged_rows);
@@ -49,6 +50,9 @@ Status HorizontalCompactionTask::run_impl() {
 }
 
 Status HorizontalCompactionTask::_horizontal_compact_data(Statistics* statistics) {
+    if (_output_rowset != nullptr) {
+        return Status::OK();
+    }
     TRACE("[Compaction] start horizontal comapction data");
     // 1: init
     int64_t max_rows_per_segment = CompactionUtils::get_segment_max_rows(
@@ -58,7 +62,7 @@ Status HorizontalCompactionTask::_horizontal_compact_data(Statistics* statistics
     RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(
             _tablet.get(), max_rows_per_segment, _task_info.algorithm, _task_info.output_version, &output_rs_writer));
 
-    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     TabletReader reader(std::static_pointer_cast<Tablet>(_tablet->shared_from_this()), output_rs_writer->version(),
                         schema);
     TabletReaderParams reader_params;
@@ -111,11 +115,14 @@ Status HorizontalCompactionTask::_horizontal_compact_data(Statistics* statistics
         statistics->filtered_rows = reader.stats().rows_del_filtered;
     }
 
+    if (config::enable_rowset_verify) {
+        RETURN_IF_ERROR(_output_rowset->verify());
+    }
+
     return Status::OK();
 }
 
-StatusOr<size_t> HorizontalCompactionTask::_compact_data(int32_t chunk_size, TabletReader& reader,
-                                                         const VectorizedSchema& schema,
+StatusOr<size_t> HorizontalCompactionTask::_compact_data(int32_t chunk_size, TabletReader& reader, const Schema& schema,
                                                          RowsetWriter* output_rs_writer) {
     TRACE("[Compaction] start to compact data");
     auto status = Status::OK();

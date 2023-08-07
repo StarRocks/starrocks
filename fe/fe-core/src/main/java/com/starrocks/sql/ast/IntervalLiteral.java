@@ -18,6 +18,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 
 public class IntervalLiteral extends LiteralExpr {
@@ -25,6 +26,11 @@ public class IntervalLiteral extends LiteralExpr {
     private final UnitIdentifier unitIdentifier;
 
     public IntervalLiteral(Expr value, UnitIdentifier unitIdentifier) {
+        this(value, unitIdentifier, value.getPos());
+    }
+
+    public IntervalLiteral(Expr value, UnitIdentifier unitIdentifier, NodePosition pos) {
+        super(pos);
         this.value = value;
         this.unitIdentifier = unitIdentifier;
     }
@@ -49,7 +55,7 @@ public class IntervalLiteral extends LiteralExpr {
 
     @Override
     public Expr clone() {
-        return new IntervalLiteral(this.value, this.unitIdentifier);
+        return new IntervalLiteral(this.value, this.unitIdentifier, this.pos);
     }
 
     @Override

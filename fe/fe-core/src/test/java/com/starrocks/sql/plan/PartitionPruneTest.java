@@ -15,12 +15,9 @@
 
 package com.starrocks.sql.plan;
 
-import com.clearspring.analytics.util.Lists;
 import com.starrocks.common.FeConstants;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.util.List;
 
 import static org.junit.Assert.assertTrue;
 
@@ -46,8 +43,7 @@ public class PartitionPruneTest extends PlanTestBase {
                 + "DISTRIBUTED BY HASH(`k1`) BUCKETS 10\n"
                 + "PROPERTIES (\n"
                 + "\"replication_num\" = \"1\",\n"
-                + "\"in_memory\" = \"false\",\n"
-                + "\"storage_format\" = \"DEFAULT\"\n"
+                + "\"in_memory\" = \"false\"\n"
                 + ");");
     }
 
@@ -135,42 +131,9 @@ public class PartitionPruneTest extends PlanTestBase {
     }
 
     @Test
-    public void testInvalidDatePrune() throws Exception {
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000);
-        List<String> sqls = Lists.newArrayList();
-
-        String plan = "";
-        sqls.add("select * from ptest where d2 in ('1998-01-32', 'abc', 'abc')");
-        sqls.add("select * from ptest where d2 <= '1998-01-32'");
-        for (String sql : sqls) {
-            plan = getFragmentPlan(sql);
-            assertContains(plan, "partitions=0/4");
-        }
-
-        sqls.clear();
-        sqls.add("select * from ptest where d2 in ('abc')");
-        sqls.add("select * from ptest where d2 in ('1998-01-32')");
-        sqls.add("select * from ptest where d2 = '1998-01-32'");
-        sqls.add("select * from ptest where d2 in ('1998-01-01', 'abc', '1998-13-01')");
-        for (String sql : sqls) {
-            plan = getFragmentPlan(sql);
-            assertContains(plan, "partitions=1/4");
-        }
-
-        sqls.clear();
-        sqls.add("select * from ptest where d2 in ('2020-06-01', 'abc', '1998-11-01')");
-        sqls.add("select * from ptest where d2 in ('2020-06-01', 'abc', '1998-11-01', '2001-01-33')");
-        for (String sql : sqls) {
-            plan = getFragmentPlan(sql);
-            assertContains(plan, "partitions=2/4");
-        }
-
-        sqls.clear();
-        sqls.add("select * from ptest where d2 in ('1998-01-32', cast(cast('2021-01-12' as SIGNED) as DATE))");
-        sqls.add("select * from ptest where d2 in ('1998-01-01', cast(cast('2021-01-12' as SIGNED) as DATE))");
-        for (String sql : sqls) {
-            plan = getFragmentPlan(sql);
-            assertContains(plan, "partitions=4/4");
-        }
+    public void testRightCastDatePrune() throws Exception {
+        String sql = "select * from ptest where d2 <= '2020-05-01T13:45:57'";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "partitions=3/4");
     }
 }

@@ -42,9 +42,10 @@ protected:
 
     Tablet* _tablet;
     std::vector<RowsetSharedPtr> _rowsets;
-    double _score;
+    double _score = 0;
     CompactionType _compaction_type;
     int64_t _max_level_size;
+    int64_t _level_multiple;
 };
 
 } // namespace starrocks
