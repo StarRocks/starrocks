@@ -885,3 +885,35 @@ select d1, optional, last_day(d1, optional), d2, optional, last_day(d2, optional
 2023-05-29	year	2023-12-31	2023-05-29 08:08:14	year	2023-12-31
 -- !result
 drop database test_last_day_db;
+
+-- name: test_to_iso8601
+CREATE TABLE IF NOT EXISTS `to_iso8601_test`(
+  `d1` DATE,
+  `d2` DATETIME
+)
+DISTRIBUTED BY HASH(`d1`)
+PROPERTIES(
+  "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO `to_iso8601_test`(d1, d2)
+VALUES ('2020-01-01','2020-01-01 00:00:00'),
+  ('2020-01-02', '2020-01-01 00:00:00.1'),
+  ('2020-01-03', '2020-01-01 00:00:00.12'),
+  ('2020-01-04', '2020-01-01 00:00:00.123'),
+  ('2020-01-05', '2020-01-01 00:00:00.1234');
+-- result:
+-- !result
+select to_iso8601(d1),to_iso8601(d2) from to_iso8601_test order by d1;
+-- result:
+2020-01-01	2020-01-01T00:00:00.000000
+2020-01-02	2020-01-01T00:00:00.100000
+2020-01-03	2020-01-01T00:00:00.120000
+2020-01-04	2020-01-01T00:00:00.123000
+2020-01-05	2020-01-01T00:00:00.123400
+-- !result
+select to_iso8601(date'2020-01-01'), to_iso8601(datetime'2020-01-01 00:00:00'),to_iso8601(datetime'2020-01-01 00:00:00.1');
+-- result:
+2020-01-01	2020-01-01T00:00:00.000000	2020-01-01T00:00:00.100000
+-- !result
