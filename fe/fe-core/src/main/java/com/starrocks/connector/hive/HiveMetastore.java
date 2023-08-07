@@ -84,6 +84,11 @@ public class HiveMetastore implements IHiveMetastore {
         return HiveMetastoreApiConverter.toDatabase(db);
     }
 
+    @Override
+    public void dropTable(String dbName, String tableName) {
+        client.dropTable(dbName, tableName);
+    }
+
     public Table getTable(String dbName, String tableName) {
         org.apache.hadoop.hive.metastore.api.Table table = client.getTable(dbName, tableName);
         StorageDescriptor sd = table.getSd();

@@ -212,7 +212,8 @@ public class MetadataMgr {
                 metadata.dropTable(stmt);
             } catch (DdlException e) {
                 LOG.error("Failed to drop table {}.{}.{}", catalogName, dbName, tableName, e);
-                throw new StarRocksConnectorException("Failed to drop table {}.{}.{}", catalogName, dbName, tableName);
+                throw new StarRocksConnectorException("Failed to drop table %s.%s.%s. msg: %s",
+                        catalogName, dbName, tableName, e.getMessage());
             }
         });
     }
