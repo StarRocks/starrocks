@@ -190,5 +190,20 @@ public class HiveMetaClientTest {
         Assert.assertEquals("\006", customDesc.getCollectionDelim());
         Assert.assertEquals(":", customDesc.getMapkeyDelim());
     }
+
+    @Test
+    public void testDropTable(@Mocked HiveMetaStoreClient metaStoreClient) throws TException {
+        new Expectations() {
+            {
+                metaStoreClient.dropTable("hive_db", "hive_table", anyBoolean, anyBoolean);
+                result = any;
+            }
+        };
+
+        HiveConf hiveConf = new HiveConf();
+        hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90300");
+        HiveMetaClient client = new HiveMetaClient(hiveConf);
+        client.dropTable("hive_db", "hive_table");
+    }
 }
 

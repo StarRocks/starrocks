@@ -190,6 +190,9 @@ public class HiveMetastoreTest {
         }
 
         public void dropDatabase(String dbName, boolean deleteData) {
+        }
+
+        public void dropTable(String dbName, String tableName) {
 
         }
 

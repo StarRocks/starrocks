@@ -113,6 +113,10 @@ public class HiveMetastoreOperations {
         return metastore.getAllTableNames(dbName);
     }
 
+    public void dropTable(String dbName, String tableName) {
+        metastore.dropTable(dbName, tableName);
+    }
+
     public List<String> getPartitionKeys(String dbName, String tableName) {
         return metastore.getPartitionKeysByValue(dbName, tableName, HivePartitionValue.ALL_PARTITION_VALUES);
     }

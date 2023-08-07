@@ -237,6 +237,13 @@ public class HiveMetadata implements ConnectorMetadata {
                     .getMetadata().getTable(dbName, tableName);
             cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTable(
                     hmsTable.getDbName(), hmsTable.getTableName(), hmsTable.getTableLocation()));
+        } else {
+            if (!stmt.isForceDrop()) {
+                throw new DdlException(String.format("Table location will be cleared." +
+                        " 'Force' must be set when dropping a hive table." +
+                        " Please execute 'drop table %s.%s.%s force'", stmt.getCatalogName(), dbName, tableName));
+            }
+            hmsOps.dropTable(dbName, tableName);
         }
     }
 

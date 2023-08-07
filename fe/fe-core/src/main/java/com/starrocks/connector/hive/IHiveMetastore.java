@@ -37,6 +37,8 @@ public interface IHiveMetastore {
 
     List<String> getAllTableNames(String dbName);
 
+    void dropTable(String dbName, String tableName);
+
     Table getTable(String dbName, String tableName);
 
     List<String> getPartitionKeysByValue(String dbName, String tableName, List<Optional<String>> partitionValues);
