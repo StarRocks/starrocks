@@ -75,6 +75,10 @@ static int tablet_tablet_state(Tablet& tablet) {
     return static_cast<int>(tablet.tablet_state());
 }
 
+static std::string tablet_set_tablet_state(Tablet& tablet, int state) {
+    return tablet.set_tablet_state(static_cast<TabletState>(state)).to_string();
+}
+
 static const TabletSchema& tablet_tablet_schema(Tablet& tablet) {
     return tablet.tablet_schema();
 }
@@ -333,6 +337,7 @@ public:
             cls.funcExt<tablet_data_dir>("data_dir");
             cls.funcExt<tablet_keys_type_int>("keys_type_as_int");
             cls.funcExt<tablet_tablet_state>("tablet_state_as_int");
+            cls.funcExt<tablet_set_tablet_state>("set_tablet_state_as_int");
             REG_METHOD(Tablet, tablet_footprint);
             REG_METHOD(Tablet, num_rows);
             REG_METHOD(Tablet, version_count);
