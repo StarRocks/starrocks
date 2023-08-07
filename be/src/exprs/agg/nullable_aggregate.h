@@ -13,6 +13,11 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "exprs/agg/maxmin.h"
+<<<<<<< HEAD
+=======
+#include "exprs/function_context.h"
+#include "exprs/function_helper.h"
+>>>>>>> 6f25c531a3 (update tests)
 #include "simd/simd.h"
 #include "udf/udf.h"
 
@@ -713,6 +718,9 @@ public:
         const Column* data_columns[column_size];
 
         for (size_t i = 0; i < column_size; i++) {
+            if (columns[i]->only_null()) {
+                return;
+            }
             if (columns[i]->is_nullable()) {
                 if (columns[i]->is_null(row_num)) {
                     // If at least one column has a null value in the current row,
@@ -739,6 +747,11 @@ public:
     void update_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                                   AggDataPtr* states, const std::vector<uint8_t>& selection) const override {
         auto column_size = ctx->get_num_args();
+        for (size_t i = 0; i < column_size; i++) {
+            if (columns[i]->only_null()) {
+                return;
+            }
+        }
         // This container stores the columns we really pass to the nested function.
         const Column* data_columns[column_size];
 
@@ -830,7 +843,8 @@ public:
             if (i->is_nullable()) {
                 has_nullable_column = true;
 
-                const auto* nullable_column = down_cast<const NullableColumn*>(i.get());
+                const auto* nullable_column = down_cast<const NullableColumn*>(
+                        ColumnHelper::unpack_and_duplicate_const_column(i->size(), i).get());
                 data_columns.emplace_back(nullable_column->data_column());
                 if (i->has_null()) {
                     dst_nullable_column->set_has_null(true);
@@ -862,7 +876,6 @@ public:
             this->nested_function->convert_to_serialize_format(ctx, data_columns, chunk_size,
                                                                &dst_nullable_column->data_column());
         }
-        std::cout << fmt::format("convert_to_serialize_format res = {}", (*dst)->debug_string()) << std::endl;
     }
 };
 

@@ -158,7 +158,12 @@ public class AggregateFunction extends Function {
         isAggregateFn = other.isAggregateFn;
         returnsNonNullOnEmpty = other.returnsNonNullOnEmpty;
         symbolName = other.symbolName;
+<<<<<<< HEAD
 
+=======
+        isAscOrder = other.isAscOrder;
+        nullsFirst = other.nullsFirst;
+>>>>>>> 6f25c531a3 (update tests)
     }
 
     public String getSymbolName() {

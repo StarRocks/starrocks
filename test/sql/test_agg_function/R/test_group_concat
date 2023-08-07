@@ -1,0 +1,733 @@
+-- name: testForEmptySetInput
+CREATE TABLE IF NOT EXISTS `lineorder` (
+    `lo_orderkey` int(11) NOT NULL COMMENT "",
+    `lo_shipmode` varchar(11) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`lo_orderkey`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 48
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+SELECT GROUP_CONCAT(lo_shipmode) orgs FROM lineorder WHERE 1 = 2;
+-- result:
+None
+-- !result
+CREATE TABLE `ss` (
+  `id` int(11) NULL COMMENT "",
+  `name` varchar(255) NULL COMMENT "",
+  `subject` varchar(255) NULL COMMENT "",
+  `score` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into ss values (1,"Tom","English",90);
+-- result:
+-- !result
+insert into ss values (1,"Tom","Math",80);
+-- result:
+-- !result
+insert into ss values (2,"Tom","English",NULL);
+-- result:
+-- !result
+insert into ss values (2,"Tom",NULL,NULL);
+-- result:
+-- !result
+insert into ss values (3,"May",NULL,NULL);
+-- result:
+-- !result
+insert into ss values (3,"Ti","English",98);
+-- result:
+-- !result
+insert into ss values (NULL,NULL,NULL,NULL);
+-- result:
+-- !result
+insert into ss values (NULL,"Ti","Phy",98);
+-- result:
+-- !result
+select group_concat(distinct name,subject order by 1,2), count(distinct id), group_concat(name) from ss group by id order by 1;
+-- result:
+TiEnglish	1	May,Ti
+TiPhy	0	Ti
+TomEnglish	1	Tom,Tom
+TomEnglish,TomMath	1	Tom,Tom
+-- !result
+select group_concat(distinct name,subject order by 1,2) from ss group by id order by id;
+-- result:
+TiPhy
+TomEnglish,TomMath
+TomEnglish
+TiEnglish
+-- !result
+select group_concat(name,subject order by 1,2), group_concat(name,score) from ss group by id order by 1;
+-- result:
+TiEnglish	Ti98
+TiPhy	Ti98
+TomEnglish	None
+TomEnglish,TomMath	Tom90,Tom80
+-- !result
+select group_concat(name,subject order by 1,2), group_concat(distinct name,score) from ss group by id order by 1;
+-- result:
+TiEnglish	Ti98
+TiPhy	Ti98
+TomEnglish	None
+TomEnglish,TomMath	Tom80,Tom90
+-- !result
+select group_concat(distinct name,subject order by 1,2), group_concat(distinct score) from ss group by id order by 1;
+-- result:
+TiEnglish	98
+TiPhy	98
+TomEnglish	None
+TomEnglish,TomMath	80,90
+-- !result
+select group_concat(distinct name,subject order by 1,2) from ss group by id order by 1;
+-- result:
+TiEnglish
+TiPhy
+TomEnglish
+TomEnglish,TomMath
+-- !result
+select group_concat(distinct name,subject order by 1,score) from ss group by id order by 1;
+-- result:
+None
+TiEnglish
+TiPhy
+TomMath,TomEnglish
+-- !result
+select group_concat(distinct name,subject order by score), count(distinct id), max(score)  from ss group by id order by 1;
+-- result:
+None	1	None
+TiEnglish	1	98
+TiPhy	0	98
+TomMath,TomEnglish	1	90
+-- !result
+select group_concat(distinct name,subject order by score,4) from ss group by id order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 58. Detail message: ORDER BY position 4 is not in group_concat output list.')
+-- !result
+select group_concat(distinct name,subject order by score,4.00) from ss group by id order by 1;
+-- result:
+None
+TiEnglish
+TiPhy
+TomMath,TomEnglish
+-- !result
+select group_concat(distinct name,null order by score,4.00) from ss group by id order by 1;
+-- result:
+None
+None
+None
+None
+-- !result
+select group_concat(distinct name,subject order by null) from ss group by id order by 1;
+-- result:
+None
+None
+None
+None
+-- !result
+select group_concat(distinct null order by score,4.00) from ss group by id order by 1;
+-- result:
+None
+None
+None
+None
+-- !result
+select group_concat(distinct name order by score,4.00),group_concat(subject order by score,4.00),array_agg(subject order by score,4.00)  from ss group by id order by 1;
+-- result:
+None	None	["English",null]
+Ti	English	[null,"English"]
+Ti	Phy	[null,"Phy"]
+Tom,Tom	Math,English	["Math","English"]
+-- !result
+select group_concat(distinct score order by 1,2) from ss group by id order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 47. Detail message: ORDER BY position 2 is not in group_concat output list.')
+-- !result
+select group_concat(distinct score order by 1,name) from ss group by id order by 1;
+-- result:
+None
+80,90
+98
+98
+-- !result
+select group_concat(distinct 1,2 order by 1,2) from ss group by id order by 1;
+-- result:
+E: (1064, 'Unknown error')
+-- !result
+select group_concat(distinct 1,2 order by score,2) from ss group by id order by 1;
+-- result:
+None
+12
+12
+12,12
+-- !result
+select group_concat(distinct 3.1323,subject order by 1,-20) from ss group by id order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 58. Detail message: ORDER BY position -20 is not in group_concat output list.')
+-- !result
+select group_concat( name,subject order by 1,2), count(distinct id), max(score) from ss group by id order by 1;
+-- result:
+TiEnglish	1	98
+TiPhy	0	98
+TomEnglish	1	None
+TomEnglish,TomMath	1	90
+-- !result
+select group_concat( name,subject order by 1,score), count(distinct id), max(score)  from ss group by id order by 1;
+-- result:
+None	1	None
+TiEnglish	1	98
+TiPhy	0	98
+TomMath,TomEnglish	1	90
+-- !result
+select group_concat( name,subject order by score), count(distinct id), max(score)  from ss group by id order by 1;
+-- result:
+None	1	None
+TiEnglish	1	98
+TiPhy	0	98
+TomMath,TomEnglish	1	90
+-- !result
+select group_concat( name,subject order by score,4), count(distinct id), max(score)  from ss group by id order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 50. Detail message: ORDER BY position 4 is not in group_concat output list.')
+-- !result
+select group_concat( name,subject order by score,4.00), count(distinct id), max(score)  from ss group by id order by 1;
+-- result:
+None	1	None
+TiEnglish	1	98
+TiPhy	0	98
+TomMath,TomEnglish	1	90
+-- !result
+select group_concat( name,null order by score,4.00) from ss group by id order by 1;
+-- result:
+None
+None
+None
+None
+-- !result
+select group_concat( name,subject order by null) from ss group by id order by 1;
+-- result:
+None
+None
+None
+None
+-- !result
+select group_concat( null order by score,4.00) from ss group by id order by 1;
+-- result:
+None
+None
+None
+None
+-- !result
+select group_concat( score order by 1,2) from ss group by id order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 39. Detail message: ORDER BY position 2 is not in group_concat output list.')
+-- !result
+select group_concat( score order by 1,name) from ss group by id order by 1;
+-- result:
+None
+80,90
+98
+98
+-- !result
+select group_concat( 1,2 order by 1,2) from ss group by id order by 1;
+-- result:
+12,12
+12,12
+12,12
+12,12
+-- !result
+select group_concat( 1,2 order by score,2) from ss group by id order by 1;
+-- result:
+None
+12
+12
+12,12
+-- !result
+select group_concat( 3.1323,subject order by 1,-20) from ss group by id order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 50. Detail message: ORDER BY position -20 is not in group_concat output list.')
+-- !result
+select group_concat(distinct name,subject order by 1,2), count(distinct id), group_concat(name) from ss order by 1;
+-- result:
+TiEnglish,TiPhy,TomEnglish,TomMath	3	Tom,Tom,May,Ti,Ti,Tom,Tom
+-- !result
+select group_concat(distinct name,subject order by 1,2) from ss order by 1;
+-- result:
+TiEnglish,TiPhy,TomEnglish,TomMath
+-- !result
+select group_concat(name,subject order by 1,2), group_concat(name,score) from ss order by 1;
+-- result:
+TiEnglish,TiPhy,TomEnglish,TomEnglish,TomMath	Tom90,Tom80,Ti98,Ti98
+-- !result
+select group_concat(name,subject order by 1,2), group_concat(distinct name,score) from ss order by 1;
+-- result:
+TiEnglish,TiPhy,TomEnglish,TomEnglish,TomMath	Tom90,Tom80,Ti98
+-- !result
+select group_concat(distinct name,subject order by 1,2), group_concat(distinct score) from ss order by 1;
+-- result:
+TiEnglish,TiPhy,TomEnglish,TomMath	98,80,90
+-- !result
+select group_concat(distinct name,subject order by 1,2) from ss order by 1;
+-- result:
+TiEnglish,TiPhy,TomEnglish,TomMath
+-- !result
+select group_concat(distinct name,subject order by 1,score) from ss order by 1;
+-- result:
+TiPhy,TiEnglish,TomMath,TomEnglish
+-- !result
+select group_concat(distinct name,subject order by score), count(distinct id), max(score)  from ss order by 1;
+-- result:
+TomMath,TomEnglish,TiPhy,TiEnglish	3	98
+-- !result
+select group_concat(distinct name,subject order by score,4) from ss order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 58. Detail message: ORDER BY position 4 is not in group_concat output list.')
+-- !result
+select group_concat(distinct name,subject order by score,4.00) from ss order by 1;
+-- result:
+TomMath,TomEnglish,TiEnglish,TiPhy
+-- !result
+select group_concat(distinct name,null order by score,4.00) from ss order by 1;
+-- result:
+None
+-- !result
+select group_concat(distinct name,subject order by null) from ss order by 1;
+-- result:
+None
+-- !result
+select group_concat(distinct null order by score,4.00) from ss order by 1;
+-- result:
+None
+-- !result
+select group_concat(distinct name order by score,4.00),group_concat(subject order by score,4.00),array_agg(subject order by score,4.00)  from ss order by 1;
+-- result:
+Tom,Tom,Ti	Math,English,English,Phy	[null,null,"English",null,"Math","English","English","Phy"]
+-- !result
+select group_concat(distinct score order by 1,2) from ss order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 47. Detail message: ORDER BY position 2 is not in group_concat output list.')
+-- !result
+select group_concat(distinct score order by 1,name) from ss order by 1;
+-- result:
+80,90,98
+-- !result
+select group_concat(distinct 1,2 order by 1,2) from ss order by 1;
+-- result:
+E: (1064, 'Unknown error')
+-- !result
+select group_concat(distinct 1,2 order by score,2) from ss order by 1;
+-- result:
+12,12,12
+-- !result
+select group_concat(distinct 3.1323,subject order by 1,-20) from ss order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 58. Detail message: ORDER BY position -20 is not in group_concat output list.')
+-- !result
+select group_concat( name,subject order by 1,2), count(distinct id), max(score) from ss order by 1;
+-- result:
+TiEnglish,TiPhy,TomEnglish,TomEnglish,TomMath	3	98
+-- !result
+select group_concat( name,subject order by 1,score), count(distinct id), max(score)  from ss order by 1;
+-- result:
+TiPhy,TiEnglish,TomMath,TomEnglish	3	98
+-- !result
+select group_concat( name,subject order by score), count(distinct id), max(score)  from ss order by 1;
+-- result:
+TomMath,TomEnglish,TiEnglish,TiPhy	3	98
+-- !result
+select group_concat( name,subject order by score,4), count(distinct id), max(score)  from ss order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 50. Detail message: ORDER BY position 4 is not in group_concat output list.')
+-- !result
+select group_concat( name,subject order by score,4.00), count(distinct id), max(score)  from ss order by 1;
+-- result:
+TomMath,TomEnglish,TiPhy,TiEnglish	3	98
+-- !result
+select group_concat( name,null order by score,4.00) from ss order by 1;
+-- result:
+None
+-- !result
+select group_concat( name,subject order by null) from ss order by 1;
+-- result:
+None
+-- !result
+select group_concat( null order by score,4.00) from ss order by 1;
+-- result:
+None
+-- !result
+select group_concat( score order by 1,2) from ss order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 39. Detail message: ORDER BY position 2 is not in group_concat output list.')
+-- !result
+select group_concat( score order by 1,name) from ss order by 1;
+-- result:
+80,90,98,98
+-- !result
+select group_concat( 1,2 order by 1,2) from ss order by 1;
+-- result:
+12,12,12,12,12,12,12,12
+-- !result
+select group_concat( 1,2 order by score,2) from ss order by 1;
+-- result:
+12,12,12,12
+-- !result
+select group_concat( 3.1323,subject order by 1,-20) from ss order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 50. Detail message: ORDER BY position -20 is not in group_concat output list.')
+-- !result
+set new_planner_agg_stage = 2;
+-- result:
+-- !result
+set streaming_preaggregation_mode = force_streaming;
+-- result:
+-- !result
+select group_concat(name,subject order by 1,2), group_concat(name,score) from ss group by id;
+-- result:
+TomEnglish,TomMath	Tom90,Tom80
+TiEnglish	Ti98
+TomEnglish	None
+TiPhy	Ti98
+-- !result
+select group_concat(distinct name,subject order by 1,2), count(distinct id), group_concat(name) from ss group by id order by 1;
+-- result:
+TiEnglish	1	May,Ti
+TiPhy	0	Ti
+TomEnglish	1	Tom,Tom
+TomEnglish,TomMath	1	Tom,Tom
+-- !result
+select group_concat(distinct name,subject order by 1,2) from ss group by id order by id;
+-- result:
+TiPhy
+TomEnglish,TomMath
+TomEnglish
+TiEnglish
+-- !result
+select group_concat(name,subject order by 1,2), group_concat(name,score) from ss group by id order by 1;
+-- result:
+TiEnglish	Ti98
+TiPhy	Ti98
+TomEnglish	None
+TomEnglish,TomMath	Tom90,Tom80
+-- !result
+select group_concat(name,subject order by 1,2), group_concat(distinct name,score) from ss group by id order by 1;
+-- result:
+TiEnglish	Ti98
+TiPhy	Ti98
+TomEnglish	None
+TomEnglish,TomMath	Tom80,Tom90
+-- !result
+select group_concat(distinct name,subject order by 1,2), group_concat(distinct score) from ss group by id order by 1;
+-- result:
+TiEnglish	98
+TiPhy	98
+TomEnglish	None
+TomEnglish,TomMath	80,90
+-- !result
+select group_concat(distinct name,subject order by 1,2) from ss group by id order by 1;
+-- result:
+TiEnglish
+TiPhy
+TomEnglish
+TomEnglish,TomMath
+-- !result
+select group_concat(distinct name,subject order by 1,score) from ss group by id order by 1;
+-- result:
+None
+TiEnglish
+TiPhy
+TomMath,TomEnglish
+-- !result
+select group_concat(distinct name,subject order by score), count(distinct id), max(score)  from ss group by id order by 1;
+-- result:
+None	1	None
+TiEnglish	1	98
+TiPhy	0	98
+TomMath,TomEnglish	1	90
+-- !result
+select group_concat(distinct name,subject order by score,4) from ss group by id order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 58. Detail message: ORDER BY position 4 is not in group_concat output list.')
+-- !result
+select group_concat(distinct name,subject order by score,4.00) from ss group by id order by 1;
+-- result:
+None
+TiEnglish
+TiPhy
+TomMath,TomEnglish
+-- !result
+select group_concat(distinct name,null order by score,4.00) from ss group by id order by 1;
+-- result:
+None
+None
+None
+None
+-- !result
+select group_concat(distinct name,subject order by null) from ss group by id order by 1;
+-- result:
+None
+None
+None
+None
+-- !result
+select group_concat(distinct null order by score,4.00) from ss group by id order by 1;
+-- result:
+None
+None
+None
+None
+-- !result
+select group_concat(distinct name order by score,4.00),group_concat(subject order by score,4.00),array_agg(subject order by score,4.00)  from ss group by id order by 1;
+-- result:
+None	None	["English",null]
+Ti	English	[null,"English"]
+Ti	Phy	[null,"Phy"]
+Tom,Tom	Math,English	["Math","English"]
+-- !result
+select group_concat(distinct score order by 1,2) from ss group by id order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 47. Detail message: ORDER BY position 2 is not in group_concat output list.')
+-- !result
+select group_concat(distinct score order by 1,name) from ss group by id order by 1;
+-- result:
+None
+80,90
+98
+98
+-- !result
+select group_concat(distinct 1,2 order by 1,2) from ss group by id order by 1;
+-- result:
+E: (1064, 'Unknown error')
+-- !result
+select group_concat(distinct 1,2 order by score,2) from ss group by id order by 1;
+-- result:
+None
+12
+12
+12,12
+-- !result
+select group_concat(distinct 3.1323,subject order by 1,-20) from ss group by id order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 58. Detail message: ORDER BY position -20 is not in group_concat output list.')
+-- !result
+select group_concat( name,subject order by 1,2), count(distinct id), max(score) from ss group by id order by 1;
+-- result:
+TiEnglish	1	98
+TiPhy	0	98
+TomEnglish	1	None
+TomEnglish,TomMath	1	90
+-- !result
+select group_concat( name,subject order by 1,score), count(distinct id), max(score)  from ss group by id order by 1;
+-- result:
+None	1	None
+TiEnglish	1	98
+TiPhy	0	98
+TomMath,TomEnglish	1	90
+-- !result
+select group_concat( name,subject order by score), count(distinct id), max(score)  from ss group by id order by 1;
+-- result:
+None	1	None
+TiEnglish	1	98
+TiPhy	0	98
+TomMath,TomEnglish	1	90
+-- !result
+select group_concat( name,subject order by score,4), count(distinct id), max(score)  from ss group by id order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 50. Detail message: ORDER BY position 4 is not in group_concat output list.')
+-- !result
+select group_concat( name,subject order by score,4.00), count(distinct id), max(score)  from ss group by id order by 1;
+-- result:
+None	1	None
+TiEnglish	1	98
+TiPhy	0	98
+TomMath,TomEnglish	1	90
+-- !result
+select group_concat( name,null order by score,4.00) from ss group by id order by 1;
+-- result:
+None
+None
+None
+None
+-- !result
+select group_concat( name,subject order by null) from ss group by id order by 1;
+-- result:
+None
+None
+None
+None
+-- !result
+select group_concat( null order by score,4.00) from ss group by id order by 1;
+-- result:
+None
+None
+None
+None
+-- !result
+select group_concat( score order by 1,2) from ss group by id order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 39. Detail message: ORDER BY position 2 is not in group_concat output list.')
+-- !result
+select group_concat( score order by 1,name) from ss group by id order by 1;
+-- result:
+None
+80,90
+98
+98
+-- !result
+select group_concat( 1,2 order by 1,2) from ss group by id order by 1;
+-- result:
+12,12
+12,12
+12,12
+12,12
+-- !result
+select group_concat( 1,2 order by score,2) from ss group by id order by 1;
+-- result:
+None
+12
+12
+12,12
+-- !result
+select group_concat( 3.1323,subject order by 1,-20) from ss group by id order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 50. Detail message: ORDER BY position -20 is not in group_concat output list.')
+-- !result
+select group_concat(distinct name,subject order by 1,2), count(distinct id), group_concat(name) from ss order by 1;
+-- result:
+TiEnglish,TiPhy,TomEnglish,TomMath	3	Tom,Tom,Ti,Tom,Tom,May,Ti
+-- !result
+select group_concat(distinct name,subject order by 1,2) from ss order by 1;
+-- result:
+TiEnglish,TiPhy,TomEnglish,TomMath
+-- !result
+select group_concat(name,subject order by 1,2), group_concat(name,score) from ss order by 1;
+-- result:
+TiEnglish,TiPhy,TomEnglish,TomEnglish,TomMath	Tom90,Tom80,Ti98,Ti98
+-- !result
+select group_concat(name,subject order by 1,2), group_concat(distinct name,score) from ss order by 1;
+-- result:
+TiEnglish,TiPhy,TomEnglish,TomEnglish,TomMath	Tom80,Ti98,Tom90
+-- !result
+select group_concat(distinct name,subject order by 1,2), group_concat(distinct score) from ss order by 1;
+-- result:
+TiEnglish,TiPhy,TomEnglish,TomMath	98,90,80
+-- !result
+select group_concat(distinct name,subject order by 1,2) from ss order by 1;
+-- result:
+TiEnglish,TiPhy,TomEnglish,TomMath
+-- !result
+select group_concat(distinct name,subject order by 1,score) from ss order by 1;
+-- result:
+TiEnglish,TiPhy,TomMath,TomEnglish
+-- !result
+select group_concat(distinct name,subject order by score), count(distinct id), max(score)  from ss order by 1;
+-- result:
+TomMath,TomEnglish,TiPhy,TiEnglish	3	98
+-- !result
+select group_concat(distinct name,subject order by score,4) from ss order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 58. Detail message: ORDER BY position 4 is not in group_concat output list.')
+-- !result
+select group_concat(distinct name,subject order by score,4.00) from ss order by 1;
+-- result:
+TomMath,TomEnglish,TiEnglish,TiPhy
+-- !result
+select group_concat(distinct name,null order by score,4.00) from ss order by 1;
+-- result:
+None
+-- !result
+select group_concat(distinct name,subject order by null) from ss order by 1;
+-- result:
+None
+-- !result
+select group_concat(distinct null order by score,4.00) from ss order by 1;
+-- result:
+None
+-- !result
+select group_concat(distinct name order by score,4.00),group_concat(subject order by score,4.00),array_agg(subject order by score,4.00)  from ss order by 1;
+-- result:
+Tom,Tom,Ti	Math,English,English,Phy	["English",null,null,null,"Math","English","English","Phy"]
+-- !result
+select group_concat(distinct score order by 1,2) from ss order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 47. Detail message: ORDER BY position 2 is not in group_concat output list.')
+-- !result
+select group_concat(distinct score order by 1,name) from ss order by 1;
+-- result:
+80,90,98
+-- !result
+select group_concat(distinct 1,2 order by 1,2) from ss order by 1;
+-- result:
+E: (1064, 'Unknown error')
+-- !result
+select group_concat(distinct 1,2 order by score,2) from ss order by 1;
+-- result:
+12,12,12
+-- !result
+select group_concat(distinct 3.1323,subject order by 1,-20) from ss order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 58. Detail message: ORDER BY position -20 is not in group_concat output list.')
+-- !result
+select group_concat( name,subject order by 1,2), count(distinct id), max(score) from ss order by 1;
+-- result:
+TiEnglish,TiPhy,TomEnglish,TomEnglish,TomMath	3	98
+-- !result
+select group_concat( name,subject order by 1,score), count(distinct id), max(score)  from ss order by 1;
+-- result:
+TiEnglish,TiPhy,TomMath,TomEnglish	3	98
+-- !result
+select group_concat( name,subject order by score), count(distinct id), max(score)  from ss order by 1;
+-- result:
+TomMath,TomEnglish,TiPhy,TiEnglish	3	98
+-- !result
+select group_concat( name,subject order by score,4), count(distinct id), max(score)  from ss order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 50. Detail message: ORDER BY position 4 is not in group_concat output list.')
+-- !result
+select group_concat( name,subject order by score,4.00), count(distinct id), max(score)  from ss order by 1;
+-- result:
+TomMath,TomEnglish,TiPhy,TiEnglish	3	98
+-- !result
+select group_concat( name,null order by score,4.00) from ss order by 1;
+-- result:
+None
+-- !result
+select group_concat( name,subject order by null) from ss order by 1;
+-- result:
+None
+-- !result
+select group_concat( null order by score,4.00) from ss order by 1;
+-- result:
+None
+-- !result
+select group_concat( score order by 1,2) from ss order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 39. Detail message: ORDER BY position 2 is not in group_concat output list.')
+-- !result
+select group_concat( score order by 1,name) from ss order by 1;
+-- result:
+80,90,98,98
+-- !result
+select group_concat( 1,2 order by 1,2) from ss order by 1;
+-- result:
+12,12,12,12,12,12,12,12
+-- !result
+select group_concat( 1,2 order by score,2) from ss order by 1;
+-- result:
+12,12,12,12
+-- !result
+select group_concat( 3.1323,subject order by 1,-20) from ss order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 50. Detail message: ORDER BY position -20 is not in group_concat output list.')
+-- !result
