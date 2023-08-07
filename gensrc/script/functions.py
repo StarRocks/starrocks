@@ -423,6 +423,9 @@ vectorized_functions = [
     [50260, 'jodatime_format', 'VARCHAR', ['DATETIME', 'VARCHAR'], 'TimeFunctions::jodadatetime_format', 'TimeFunctions::jodatime_format_prepare', 'TimeFunctions::jodatime_format_close'],
     [50261, 'jodatime_format', 'VARCHAR', ['DATE', 'VARCHAR'], 'TimeFunctions::jodadate_format', 'TimeFunctions::jodatime_format_prepare', 'TimeFunctions::jodatime_format_close'],
 
+    [50262, 'to_iso8601', 'VARCHAR', ['DATETIME'], 'TimeFunctions::datetime_to_iso8601'],
+    [50263, 'to_iso8601', 'VARCHAR', ['DATE'], 'TimeFunctions::date_to_iso8601'],
+
     [50300, 'unix_timestamp', 'INT', [], 'TimeFunctions::to_unix_for_now'],
     [50301, 'unix_timestamp', 'INT', ['DATETIME'], 'TimeFunctions::to_unix_from_datetime'],
     [50302, 'unix_timestamp', 'INT', ['DATE'], 'TimeFunctions::to_unix_from_date'],
