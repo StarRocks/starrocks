@@ -83,6 +83,7 @@
   + [外部表](/data_source/External_table.md)
   + [文件外部表](/data_source/file_external_table.md)
   + [Data Cache](/data_source/data_cache.md)
+  + [数据湖相关 FAQ](/data_source/datalake_faq.md)
 + 查询加速
   + [CBO 统计信息](/using_starrocks/Cost_based_optimizer.md)
   + [同步物化视图](/using_starrocks/Materialized_view-single_table.md)

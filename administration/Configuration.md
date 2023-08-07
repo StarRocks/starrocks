@@ -414,6 +414,9 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 |配置项|默认值|描述|
 |---|---|---|
+|hdfs_client_enable_hedged_read           | false  | 指定是否开启 Hedged Read 功能。该参数从 3.0 版本起支持。 |
+|hdfs_client_hedged_read_threadpool_size  | 128    | 指定 HDFS 客户端侧 Hedged Read 线程池的大小，即 HDFS 客户端侧允许有多少个线程用于服务 Hedged Read。该参数从 3.0 版本起支持，对应 HDFS 集群配置文件 `hdfs-site.xml` 中的 `dfs.client.hedged.read.threadpool.size` 参数。 |
+|hdfs_client_hedged_read_threshold_millis | 2500   | 指定发起 Hedged Read 请求前需要等待多少毫秒。例如，假设该参数设置为 `30`，那么如果一个 Read 任务未能在 30 毫秒内返回结果，则 HDFS 客户端会立即发起一个 Hedged Read，从目标数据块的副本上读取数据。该参数从 3.0 版本起支持，对应 HDFS 集群配置文件 `hdfs-site.xml` 中的 `dfs.client.hedged.read.threshold.millis` 参数。 |
 |be_port|9060|BE 上 thrift server 的端口，用于接收来自 FE 的请求。|
 |brpc_port|8060|BRPC 的端口，可以查看 BRPC 的一些网络统计信息。|
 |brpc_num_threads|-1|BRPC 的 bthreads 线程数量，-1 表示和 CPU 核数一样。|
