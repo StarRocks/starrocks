@@ -404,6 +404,11 @@ if (${WITH_CACHELIB} STREQUAL "ON")
     endforeach()
 endif()
 
+if (${WITH_STARCACHE} STREQUAL "ON")
+    add_library(starcachelib STATIC IMPORTED)
+    set_target_properties(starcachelib PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libstarcache.a)
+endif()
+
 if ("${USE_STAROS}" STREQUAL "ON")
     if (DEFINED ENV{STARLET_INSTALL_DIR})
         set(STARLET_INSTALL_DIR "$ENV{STARLET_INSTALL_DIR}")
@@ -464,11 +469,6 @@ if ("${USE_STAROS}" STREQUAL "ON")
     set(azure-storage-blobs-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/share/azure-storage-blobs-cpp" CACHE PATH "azure storage blobs search path")
     find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
     set(AZURE_SDK_LIB Azure::azure-identity Azure::azure-storage-blobs Azure::azure-core Azure::azure-storage-common)
-
-    set(starcache_DIR "${STARLET_INSTALL_DIR}/starlet_install/lib/cmake/starcache" CACHE PATH "starcachelib search path")
-    find_package(starcache CONFIG REQUIRED)
-    set_target_properties(starcache::starcache PROPERTIES IMPORTED_GLOBAL TRUE)
-    add_library(starcachelib ALIAS starcache::starcache)
 
     set(starlet_DIR "${STARLET_INSTALL_DIR}/starlet_install/lib/cmake" CACHE PATH "starlet search path")
     find_package(starlet CONFIG REQUIRED)
@@ -808,6 +808,16 @@ if (${WITH_CACHELIB} STREQUAL "ON")
         ${WL_START_GROUP}
         ${Boost_LIBRARIES}
         ${CACHELIB_DEPENDENCIES}
+        ${WL_END_GROUP}
+    )
+endif()
+
+if (${WITH_STARCACHE} STREQUAL "ON")
+    set(STARROCKS_DEPENDENCIES
+        ${STARROCKS_DEPENDENCIES}
+        ${WL_START_GROUP}
+        brpc
+        starcachelib
         ${WL_END_GROUP}
     )
 endif()

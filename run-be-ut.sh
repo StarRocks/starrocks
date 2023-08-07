@@ -140,6 +140,14 @@ elif [[ -z ${WITH_CACHELIB} ]]; then
     WITH_CACHELIB=OFF
 fi
 
+if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+    # Force turn off starcache on arm platform
+    # We will support starcache on arm platform soon
+    WITH_STARCACHE=OFF
+elif [[ -z ${WITH_STARCACHE} ]]; then
+    WITH_STARCACHE=ON
+fi
+
 source ${STARROCKS_HOME}/bin/common.sh
 
 update_submodules
@@ -162,7 +170,7 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
             -DWITH_GCOV=${WITH_GCOV} \
             -DWITH_CACHELIB=${WITH_CACHELIB} \
-            -DWITH_STARCACHE=${USE_STAROS} \
+            -DWITH_STARCACHE=${WITH_STARCACHE} \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
 
 ${BUILD_SYSTEM} -j${PARALLEL}

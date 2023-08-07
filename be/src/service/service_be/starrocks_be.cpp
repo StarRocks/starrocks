@@ -84,6 +84,7 @@ void init_block_cache() {
         cache_options.max_parcel_memory_mb = config::block_cache_max_parcel_memory_mb;
         cache_options.max_concurrent_inserts = config::block_cache_max_concurrent_inserts;
         cache_options.lru_insertion_point = config::block_cache_lru_insertion_point;
+        cache_options.enable_page_cache = config::block_cache_page_cache_enable;
         cache_options.engine = config::block_cache_engine;
         EXIT_IF_ERROR(cache->init(cache_options));
     }
