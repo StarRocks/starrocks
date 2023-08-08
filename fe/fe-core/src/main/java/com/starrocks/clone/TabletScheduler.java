@@ -1315,11 +1315,11 @@ public class TabletScheduler extends LeaderDaemon {
     }
 
     private void sendDeleteReplicaTask(long backendId, long tabletId, int schemaHash) {
-        DropReplicaTask task = new DropReplicaTask(backendId, tabletId, schemaHash, false);
+        DropReplicaTask task = new DropReplicaTask(backendId, tabletId, schemaHash, true);
         AgentBatchTask batchTask = new AgentBatchTask();
         batchTask.addTask(task);
         AgentTaskExecutor.submit(batchTask);
-        LOG.info("send delete replica task for tablet {} in backend {}", tabletId, backendId);
+        LOG.info("send forceful replica delete task for tablet {} on backend {}", tabletId, backendId);
     }
 
     /**
