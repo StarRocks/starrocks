@@ -95,7 +95,6 @@ public:
 
     int64_t total_row_size() { return _rowset_meta_pb->total_row_size(); }
 
-
     void set_total_row_size(int64_t total_size) { _rowset_meta_pb->set_total_row_size(total_size); }
 
     int64_t total_update_row_size() { return _rowset_meta_pb->total_update_row_size(); }
@@ -109,7 +108,6 @@ public:
     void set_data_disk_size(size_t data_size) { _rowset_meta_pb->set_data_disk_size(data_size); }
 
     size_t index_disk_size() const { return _rowset_meta_pb->index_disk_size(); }
-
 
     void set_index_disk_size(int64_t index_disk_size) { _rowset_meta_pb->set_index_disk_size(index_disk_size); }
 
@@ -148,7 +146,6 @@ public:
     int64_t partition_id() const { return _rowset_meta_pb->partition_id(); }
 
     int64_t num_segments() const { return _rowset_meta_pb->num_segments(); }
-
 
     void set_num_segments(int64_t num_segments) { _rowset_meta_pb->set_num_segments(num_segments); }
 
@@ -206,7 +203,6 @@ public:
     }
 
     int64_t mem_usage() const { return _mem_usage; }
-
 
     uint32_t get_rowset_seg_id() const { return _rowset_meta_pb->rowset_seg_id(); }
 

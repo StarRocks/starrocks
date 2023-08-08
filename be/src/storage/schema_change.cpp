@@ -380,8 +380,7 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
         WritableFileOptions opts{.sync_on_close = true};
         ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(opts, path));
         SegmentWriterOptions writer_options;
-        auto segment_writer =
-                std::make_unique<SegmentWriter>(std::move(wfile), idx, cols_file_schema, writer_options);
+        auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), idx, cols_file_schema, writer_options);
         RETURN_IF_ERROR(segment_writer->init(false));
 
         uint64_t segment_file_size = 0;
