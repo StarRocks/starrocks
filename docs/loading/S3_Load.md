@@ -4,27 +4,27 @@
 
 StarRocks provides two options for loading data from S3:
 
-1. Asynchronous loading using a *broker*
+1. Asynchronous loading using Broker Load (`WITH BROKER`)
 2. Synchronous loading using the `FILES()` table function
 
-Small datasets are often loaded synchronously using the `FILES()` table function, and large datasets are often loaded asynchronously using a broker. The two methods have different advantages and are described below.
+Small datasets are often loaded synchronously using the `FILES()` table function, and large datasets are often loaded asynchronously using Broker Load. The two methods have different advantages and are described below.
 
-## Asynchronous loading using a broker
+## Asynchronous loading using Broker Load
 
-An asynchronous *broker* process handles making the connection to S3, pulling the data, and storing the data in the StarRocks datastore.
+An asynchronous Broker Load process handles making the connection to S3, pulling the data, and storing the data in the StarRocks datastore.
 
 ### Advantages of asynchronous loading
 
 - Broker Load supports data transformation, UPSERT, and DELETE operations during loading.
 - Because asynchronous jobs run in the background a client does not need to stay connected for the job to continue. Check the progress of a load job by connecting a client and querying the load job state.
-- Asynchronous loading is preferred for long running jobs. The default timeout for a broker load job is 4 hours.
-- In addition to Parquet and ORC file format, the asynchronous broker supports CSV files.
+- Asynchronous loading is preferred for long running jobs. The default timeout for a Broker Load job is 4 hours.
+- In addition to Parquet and ORC file format, Broker Load supports CSV files.
 
 ### Data flow
 
 1. The user creates a load job
-1. The frontend (FE) creates a query plan and distributes the plan to the backend nodes (BE)
-1. The backend (BE) nodes pull the data from the source and load the data into StarRocks
+2. The frontend (FE) creates a query plan and distributes the plan to the backend nodes (BE)
+3. The backend (BE) nodes pull the data from the source and load the data into StarRocks
 
 ![Workflow of Broker Load](../assets/broker_load_how-to-work_en.png)
 
@@ -116,8 +116,8 @@ SHOW LOAD WHERE label = 'user_behavior';
 
 |JobId|Label|State|Progress|Type|Priority|ScanRows|FilteredRows|UnselectedRows|SinkRows|EtlInfo|TaskInfo|ErrorMsg|CreateTime|EtlStartTime|EtlFinishTime|LoadStartTime|LoadFinishTime|TrackingSQL|JobDetails|
 |----|------|-----|--------|----|--------|--------|------------|--------------|--------|-------|--------|--------|----------|------------|-------------|-------------|--------------|-----------|----------|
-|10104|user_behavior|CANCELLED|ETL:N/A; LOAD:N/A|BROKER|NORMAL  |0       |0           |0             |0     |      |resource:N/A; timeout(s):72000; max_filter_ratio:0.0|type:ETL_RUN_FAIL; msg:unknown error when get file status: s3a://starrocks-datasets/user_behavior_sample_data.parquet: getFileStatus on s3a://starrocks-datasets/user_behavior_sample_data.parquet: com.amazonaws.services.s3.model.AmazonS3Exception: Forbidde|2023-08-04 15:58:51|                   |                   |                   |2023-08-04 15:58:57|           |{"All backends":{},"FileNumber":0,"FileSize":0,"InternalTableLoadBytes":0,"InternalTableLoadRows":0,"ScanBytes":0,"ScanRows":0,"TaskNumber":0,"Unfinished backends":{}} |
-|10110|user_behavior|LOADING  |ETL:100%; LOAD:0%|BROKER|NORMAL  |0|0|0|0||resource:N/A; timeout(s):72000; max_filter_ratio:0.0||2023-08-04 16:22:27|2023-08-04 16:22:30|2023-08-04 16:22:30|2023-08-04 16:22:30|||{"All backends":{"563ec0b9-1bd6-4a39-aa30-1332fc0fee04":[10004]},"FileNumber":1,"FileSize":1225637388,"InternalTableLoadBytes":0,"InternalTableLoadRows":0,"ScanBytes":0,"ScanRows":0,"TaskNumber":1,"Unfinished backends":{"563ec0b9-1bd6-4a39-aa30-1332fc0fee|
+|10104|user\_behavior|CANCELLED|ETL:N/A; LOAD:N/A|BROKER|NORMAL  |0       |0           |0             |0     |      |resource:N/A; timeout(s):72000; max\_filter\_ratio:0.0|type:ETL\_RUN\_FAIL; msg:unknown error when get file status: s3a://starrocks-datasets/user\_behavior\_sample\_data.parquet: getFileStatus on s3a://starrocks-datasets/user\_behavior\_sample\_data.parquet: com.amazonaws.services.s3.model.AmazonS3Exception: Forbidde|2023-08-04 15:58:51|                   |                   |                   |2023-08-04 15:58:57|           |{"All backends":{},"FileNumber":0,"FileSize":0,"InternalTableLoadBytes":0,"InternalTableLoadRows":0,"ScanBytes":0,"ScanRows":0,"TaskNumber":0,"Unfinished backends":{}} |
+|10110|user\_behavior|LOADING  |ETL:100%; LOAD:0%|BROKER|NORMAL  |0|0|0|0||resource:N/A; timeout(s):72000; max\_filter\_ratio:0.0||2023-08-04 16:22:27|2023-08-04 16:22:30|2023-08-04 16:22:30|2023-08-04 16:22:30|||{"All backends":{"563ec0b9-1bd6-4a39-aa30-1332fc0fee04":\[10004]},"FileNumber":1,"FileSize":1225637388,"InternalTableLoadBytes":0,"InternalTableLoadRows":0,"ScanBytes":0,"ScanRows":0,"TaskNumber":1,"Unfinished backends":{"563ec0b9-1bd6-4a39-aa30-1332fc0fee|
 
 ## Synchronous loading using the `FILES()` table function
 
@@ -269,10 +269,6 @@ INSERT INTO user_behavior_declared
 
 ## More information
 
-- For more details on synchronous and asynchronous data loading please see the [overview of data laoding](/docs/loading/Loading_intro.md) documentation.
-
+- For more details on synchronous and asynchronous data loading please see the [overview of data loading](/docs/loading/Loading_intro.md) documentation.
 - Learn about how the broker supports data transformation during loading at [Transform data at loading](../loading/Etl_in_loading.md) and [Change data through loading](../loading/Load_to_Primary_Key_tables.md).
-
-- You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
-
-- You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you can deploy brokers by following the instructions provided in [Deploy a broker](../deployment/deploy_broker.md).
+- You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [`GRANT`](../sql-reference/sql-statements/account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
