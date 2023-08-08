@@ -17,6 +17,7 @@ package com.starrocks.load.pipe;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
@@ -26,6 +27,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.VariableMgr;
@@ -262,6 +264,7 @@ public class Pipe implements GsonPostProcessable {
                     loadStatus.loadedFiles += piece.getNumFiles();
                     loadStatus.loadedBytes += piece.getTotalBytes();
                     loadStatus.loadRows += piece.getTotalRows();
+                    loadStatus.lastLoadedTime = LocalDateTime.now(ZoneId.systemDefault());
                 }
             }
             for (long taskId : removeTaskId) {
@@ -504,6 +507,15 @@ public class Pipe implements GsonPostProcessable {
         return lastPolledTime;
     }
 
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+    public String getPropertiesJson() {
+        Gson gsonObj = new Gson();
+        return gsonObj.toJson(properties);
+    }
+
     @VisibleForTesting
     public void setLastPolledTime(long value) {
         this.lastPolledTime = value;
@@ -557,18 +569,21 @@ public class Pipe implements GsonPostProcessable {
         // Display it, but not persist it
         @SerializedName(value = "loadingFiles")
         public long loadingFiles = 0;
+        @SerializedName(value = "lastLoadedTime")
+        public LocalDateTime lastLoadedTime;
 
         // TODO: account loaded rows
         // @SerializedName(value = "load_rows")
         public long loadRows = 0;
 
         public String toJson() {
-            return GsonUtils.GSON.toJson(this);
+            return DateUtils.GSON_PRINTER.toJson(this);
         }
 
         @Override
         public void gsonPostProcess() throws IOException {
             loadingFiles = 0;
+            lastLoadedTime = null;
         }
     }
 
@@ -587,7 +602,7 @@ public class Pipe implements GsonPostProcessable {
             if (StringUtils.isEmpty(errorMessage)) {
                 return null;
             }
-            return GsonUtils.GSON.toJson(this);
+            return DateUtils.GSON_PRINTER.toJson(this);
         }
     }
 
