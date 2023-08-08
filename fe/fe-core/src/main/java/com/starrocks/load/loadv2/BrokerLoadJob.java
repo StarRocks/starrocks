@@ -174,7 +174,7 @@ public class BrokerLoadJob extends BulkLoadJob {
     protected void unprotectedExecuteJob() throws LoadException {
         LoadTask task = new BrokerLoadPendingTask(this, fileGroupAggInfo.getAggKeyToFileGroups(), brokerDesc);
         idToTasks.put(task.getSignature(), task);
-        submitTask(GlobalStateMgr.getCurrentState().getPendingLoadTaskScheduler(), task);
+        submitTask(GlobalStateMgr.getCurrentState().getPendingBrokerLoadTaskScheduler(), task);
     }
 
     /**

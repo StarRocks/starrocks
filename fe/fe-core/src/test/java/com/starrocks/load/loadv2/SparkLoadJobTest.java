@@ -227,7 +227,7 @@ public class SparkLoadJobTest {
                 pendingTask.init();
                 pendingTask.getSignature();
                 result = pendingTaskId;
-                globalStateMgr.getPendingLoadTaskScheduler();
+                globalStateMgr.getPendingSparkLoadTaskScheduler();
                 result = executor;
                 executor.submit((SparkLoadPendingTask) any);
                 result = true;
