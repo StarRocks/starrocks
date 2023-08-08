@@ -2407,7 +2407,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  output: multi_distinct_count(1: v1), multi_distinct_count(2: v2)\n" +
                 "  |  group by: 3: v3");
 
-        sql = "select /*+ SET_VAR (prefer_cte_reuse_rewrite = true) */ count(distinct v1), count(distinct v2) from t0 " +
+        sql = "select /*+ SET_VAR (prefer_cte_rewrite = true) */ count(distinct v1), count(distinct v2) from t0 " +
                 "limit 10";
         plan = getFragmentPlan(sql);
         assertContains(plan, " 18:NESTLOOP JOIN\n" +
@@ -2415,7 +2415,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  limit: 10");
 
-        sql = "select /*+ SET_VAR (prefer_cte_reuse_rewrite = true) */ count(distinct v1), count(distinct v2) from t0 " +
+        sql = "select /*+ SET_VAR (prefer_cte_rewrite = true) */ count(distinct v1), count(distinct v2) from t0 " +
                 "group by v3 limit 10";
         plan = getFragmentPlan(sql);
         assertContains(plan, "13:HASH JOIN\n" +
