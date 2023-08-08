@@ -820,10 +820,6 @@ public class DatabaseTransactionMgr {
                             // which means publish version task finished in replica  
                             for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 if (!errReplicas.contains(replica.getId())) {
-                                    // if replica not in can load state, skip it.
-                                    if (!replica.getState().canLoad()) {
-                                        continue;
-                                    }
                                     // success healthy replica condition:
                                     // 1. version is equal to partition's visible version
                                     // 2. publish version task in this replica has finished
@@ -965,10 +961,6 @@ public class DatabaseTransactionMgr {
                             for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 if (!errorReplicaIds.contains(replica.getId())
                                         && replica.getLastFailedVersion() < 0) {
-                                    // if replica not in can load state, skip it.
-                                    if (!replica.getState().canLoad()) {
-                                        continue;
-                                    }
                                     // if replica not commit yet, skip it. This may happen when it's just create by clone.
                                     if (!transactionState.tabletCommitInfosContainsReplica(tablet.getId(), 
                                             replica.getBackendId())) {
