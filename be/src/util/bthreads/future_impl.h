@@ -65,9 +65,6 @@ class Future;
 template <typename R>
 class SharedFuture;
 
-template <typename _Signature>
-class packaged_task;
-
 template <typename R>
 class Promise;
 
