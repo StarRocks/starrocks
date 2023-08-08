@@ -36,6 +36,8 @@ import java.util.stream.Collectors;
 public class FilePipeSource implements GsonPostProcessable {
 
     private static final Logger LOG = LogManager.getLogger(FilePipeSource.class);
+    public static final String FILE_FUNCTION = "FILES";
+    public static final String FILE_FUNCTION_REGEX = "(?i)FILES\\(.*\\)";
 
     @SerializedName(value = "pipe_id")
     private PipeId pipeId;

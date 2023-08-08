@@ -205,7 +205,7 @@ public class Pipe implements GsonPostProcessable {
             lock.writeLock().lock();
 
             // TODO: structural replace ?
-            String sqlTask = originSql.replaceAll("(?i)TABLE\\(.*\\)", buildFileSelectSource(piece));
+            String sqlTask = originSql.replaceAll(FilePipeSource.FILE_FUNCTION_REGEX, buildFileSelectSource(piece));
             long taskId = GlobalStateMgr.getCurrentState().getNextId();
             PipeId pipeId = getPipeId();
             String uniqueName = PipeTaskDesc.genUniqueTaskName(getName(), taskId, 0);
@@ -303,7 +303,7 @@ public class Pipe implements GsonPostProcessable {
     private String buildFileSelectSource(FilePipePiece piece) {
         FilePipeSource fileSource = (FilePipeSource) pipeSource;
         StringBuilder sb = new StringBuilder();
-        sb.append("TABLE(");
+        sb.append(FilePipeSource.FILE_FUNCTION).append("(");
         boolean isFirst = true;
         for (Map.Entry<String, String> entry : fileSource.getTableProperties().entrySet()) {
             if (!isFirst) {
