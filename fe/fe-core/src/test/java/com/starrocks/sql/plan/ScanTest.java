@@ -14,12 +14,18 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.Collection;
 import java.util.List;
 
 public class ScanTest extends PlanTestBase {
@@ -453,6 +459,25 @@ public class ScanTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "2:AGGREGATE (update finalize)\n" +
                 "  |  output: multi_distinct_count((CAST(1: v1 AS BOOLEAN)) OR (CAST(2: v2 AS BOOLEAN)))");
+    }
+
+    @Test
+    public void testHint() throws Exception {
+        OlapTable tb = getOlapTable("t0");
+        Long replicaId = null;
+        Collection<Partition> partitions = tb.getPartitions();
+        acquireReplica:
+        for (Partition partition : partitions) {
+            MaterializedIndex index = partition.getIndex(tb.getBaseIndexId());
+            for (Tablet tablet : index.getTablets()) {
+                replicaId = ((LocalTablet) tablet).getImmutableReplicas().get(0).getId();
+                break acquireReplica;
+            }
+        }
+        String sql = "select count(distinct v1||v2) from t0 replica(" + replicaId + ")";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  0:OlapScanNode\n" +
+                "     TABLE: t0");
     }
 
     @Test

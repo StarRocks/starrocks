@@ -41,6 +41,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
     private boolean hasTableHints;
     private List<Long> selectedTabletId;
     private List<Long> hintsTabletIds;
+    private List<Long> hintsReplicaIds;
 
     private List<ScalarOperator> prunedPartitionPredicates;
     private boolean usePkIndex;
@@ -67,6 +68,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
                 false,
                 Lists.newArrayList(),
                 Lists.newArrayList(),
+                Lists.newArrayList(),
                 false);
     }
 
@@ -83,6 +85,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             boolean hasTableHints,
             List<Long> selectedTabletId,
             List<Long> hintsTabletIds,
+            List<Long> hintsReplicaIds,
             boolean usePkIndex) {
         super(OperatorType.LOGICAL_OLAP_SCAN, table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate,
                 null);
@@ -95,6 +98,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         this.hasTableHints = hasTableHints;
         this.selectedTabletId = selectedTabletId;
         this.hintsTabletIds = hintsTabletIds;
+        this.hintsReplicaIds = hintsReplicaIds;
         this.prunedPartitionPredicates = Lists.newArrayList();
         this.usePkIndex = usePkIndex;
     }
@@ -126,6 +130,10 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
     public List<Long> getHintsTabletIds() {
         return hintsTabletIds;
+    }
+
+    public List<Long> getHintsReplicaIds() {
+        return hintsReplicaIds;
     }
 
     public boolean hasTableHints() {
@@ -165,13 +173,14 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
                 Objects.equals(selectedPartitionId, that.selectedPartitionId) &&
                 Objects.equals(partitionNames, that.partitionNames) &&
                 Objects.equals(selectedTabletId, that.selectedTabletId) &&
-                Objects.equals(hintsTabletIds, that.hintsTabletIds);
+                Objects.equals(hintsTabletIds, that.hintsTabletIds) &&
+                Objects.equals(hintsReplicaIds, that.hintsReplicaIds);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), selectedIndexId, selectedPartitionId,
-                selectedTabletId, hintsTabletIds);
+                selectedTabletId, hintsTabletIds, hintsReplicaIds);
     }
 
     public static Builder builder() {
@@ -196,6 +205,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             builder.hasTableHints = scanOperator.hasTableHints;
             builder.selectedTabletId = scanOperator.selectedTabletId;
             builder.hintsTabletIds = scanOperator.hintsTabletIds;
+            builder.hintsReplicaIds = scanOperator.hintsReplicaIds;
             builder.prunedPartitionPredicates = scanOperator.prunedPartitionPredicates;
             builder.usePkIndex = scanOperator.usePkIndex;
             return this;
@@ -233,6 +243,11 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
         public Builder setHintsTabletIds(List<Long> hintsTabletIds) {
             builder.hintsTabletIds = ImmutableList.copyOf(hintsTabletIds);
+            return this;
+        }
+
+        public Builder setHintsReplicaIds(List<Long> hintsReplicaIds) {
+            builder.hintsReplicaIds = ImmutableList.copyOf(hintsReplicaIds);
             return this;
         }
 

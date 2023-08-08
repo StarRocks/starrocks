@@ -1767,7 +1767,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new ShowClustersStmt(whName, createPos(context));
     }
 
-
     // ------------------------------------------- DML Statement -------------------------------------------------------
     @Override
     public ParseNode visitInsertStatement(StarRocksParser.InsertStatementContext context) {
@@ -2632,7 +2631,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         return new CancelCompactionStmt(txnIdExpr, createPos(context));
     }
-
 
     // ------------------------------------------- Show Statement ------------------------------------------------------
 
@@ -3638,7 +3636,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                             PARSER_ERROR_MSG.materializedColumnLimit("rollupName", "ADD MATERIALIZED COLUMN"),
                             columnDef.getPos());
                 }
-    
+
                 if (properties.size() != 0) {
                     throw new ParsingException(
                             PARSER_ERROR_MSG.materializedColumnLimit("properties", "ADD MATERIALIZED COLUMN"),
@@ -4331,7 +4329,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     .map(Long::parseLong).collect(toList());
         }
 
-        TableRelation tableRelation = new TableRelation(tableName, partitionNames, tabletIds, createPos(start, stop));
+        List<Long> replicaLists = Lists.newArrayList();
+        if (context.replicaList() != null) {
+            stop = context.replicaList().stop;
+            replicaLists = context.replicaList().INTEGER_VALUE().stream().map(ParseTree::getText).map(Long::parseLong)
+                    .collect(toList());
+        }
+
+        TableRelation tableRelation =
+                new TableRelation(tableName, partitionNames, tabletIds, replicaLists, createPos(start, stop));
         if (context.bracketHint() != null) {
             for (Identifier identifier : visit(context.bracketHint().identifier(), Identifier.class)) {
                 // just ignore the hint if failed to add it which is the same as the previous behaviour
