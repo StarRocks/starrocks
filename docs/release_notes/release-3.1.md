@@ -10,7 +10,7 @@ Release date: August 7, 2023
 
 - Added support for Primary Key tables, on which persistent indexes cannot be enabled.
 - Supports the [AUTO_INCREMENT](../sql-reference/sql-statements/auto_increment.md) column attribute, which enables a globally unique ID for each data row and thus simplifies data management.
-- Supports [automatically creating partitions during loading and using partitioning expressions to define partitioning rules](../table_design/automatic_partitioning.md), thereby making partition creation easier to use and more flexible.
+- Supports [automatically creating partitions during loading and using partitioning expressions to define partitioning rules](../table_design/expression_partitioning.md), thereby making partition creation easier to use and more flexible.
 - Supports [abstraction of storage volumes](../deployment/deploy_shared_data.md#create-default-storage-volume), in which users can configure storage location and authentication information, in StarRocks shared-data clusters. Users can directly reference an existing storage volume when creating a database or table, making authentication configuration easier.
 
 #### Data Lake analytics
