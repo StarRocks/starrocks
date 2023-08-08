@@ -101,14 +101,11 @@ public class ColumnFilterConverter {
             return;
         }
 
-        // rewrite invalid date cast expr to NullLiteral
-        ScalarOperator rewritePredicate = rewriteInvalidDateCast(predicate);
-
-        if (rewritePredicate.getChildren().stream().skip(1).anyMatch(d -> !OperatorType.CONSTANT.equals(d.getOpType()))) {
+        if (predicate.getChildren().stream().skip(1).anyMatch(d -> !OperatorType.CONSTANT.equals(d.getOpType()))) {
             return;
         }
 
-        rewritePredicate.accept(COLUMN_FILTER_VISITOR, result);
+        predicate.accept(COLUMN_FILTER_VISITOR, result);
     }
 
     private static boolean checkColumnRefCanPartition(ScalarOperator right, Table table) {
@@ -193,31 +190,6 @@ public class ColumnFilterConverter {
                 (Objects.equals(exprTimeArg, callTimeArg) ||
                         (TIME_MAP.containsKey(exprTimeArg) && TIME_MAP.containsKey(callTimeArg) &&
                                 TIME_MAP.get(exprTimeArg) > TIME_MAP.get(callTimeArg)));
-    }
-
-    // only rewrite cast invalid date value to null like cast('abc' as date)
-    private static ScalarOperator rewriteInvalidDateCast(ScalarOperator scalarOperator) {
-        ScalarOperator copy = scalarOperator.clone();
-        List<ScalarOperator> children = copy.getChildren();
-
-        for (int i = 1; i < children.size(); i++) {
-            ScalarOperator child = children.get(i);
-            if (child instanceof CastOperator) {
-                CastOperator cast = (CastOperator) child;
-                Type toType = cast.getType();
-                if (cast.getChildren().size() == 1
-                        && cast.getChildren().get(0).isConstantRef()
-                        && toType.isDateType()) {
-                    ConstantOperator value = (ConstantOperator) cast.getChildren().get(0);
-                    try {
-                        value.castTo(toType);
-                    } catch (Exception e) {
-                        children.set(i, ConstantOperator.createNull(toType));
-                    }
-                }
-            }
-        }
-        return copy;
     }
 
     private static class ColumnFilterVisitor

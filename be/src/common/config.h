@@ -934,6 +934,7 @@ CONF_Bool(block_cache_report_stats, "false");
 CONF_Int64(block_cache_lru_insertion_point, "1");
 // cachelib, starcache
 CONF_String(block_cache_engine, "starcache");
+CONF_Bool(block_cache_direct_io_enable, "false");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
