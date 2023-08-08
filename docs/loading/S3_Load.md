@@ -1,7 +1,5 @@
 # Load data from Amazon S3
 
-## Overview
-
 StarRocks provides two options for loading data from S3:
 
 1. Asynchronous loading using Broker Load (`WITH BROKER`)
@@ -9,24 +7,24 @@ StarRocks provides two options for loading data from S3:
 
 Small datasets are often loaded synchronously using the `FILES()` table function, and large datasets are often loaded asynchronously using Broker Load. The two methods have different advantages and are described below.
 
-## Asynchronous loading using Broker Load
+## Using Broker Load
 
-An asynchronous Broker Load process handles making the connection to S3, pulling the data, and storing the data in the StarRocks datastore.
+An asynchronous Broker Load process handles making the connection to S3, pulling the data, and storing the data in StarRocks.
 
-### Advantages of asynchronous loading
+### Advantages of Broker Load
 
 - Broker Load supports data transformation, UPSERT, and DELETE operations during loading.
-- Because asynchronous jobs run in the background a client does not need to stay connected for the job to continue. Check the progress of a load job by connecting a client and querying the load job state.
-- Asynchronous loading is preferred for long running jobs. The default timeout for a Broker Load job is 4 hours.
+- Broker Load runs in the background and clients don't need to stay connected for the job to continue.
+- Broker Load is preferred for long running jobs, the default timeout is 4 hours.
 - In addition to Parquet and ORC file format, Broker Load supports CSV files.
 
 ### Data flow
 
+![Workflow of Broker Load](../assets/broker_load_how-to-work_en.png)
+
 1. The user creates a load job
 2. The frontend (FE) creates a query plan and distributes the plan to the backend nodes (BE)
 3. The backend (BE) nodes pull the data from the source and load the data into StarRocks
-
-![Workflow of Broker Load](../assets/broker_load_how-to-work_en.png)
 
 ### Typical example
 
@@ -68,7 +66,7 @@ Loading data from S3 requires having the:
 - S3 region
 - Access key and secret
 
-#### Start an asynchronous load
+#### Start a Broker Load
 
 This `LOAD` job has four main sections:
 
@@ -119,9 +117,9 @@ SHOW LOAD WHERE label = 'user_behavior';
 |10104|user\_behavior|CANCELLED|ETL:N/A; LOAD:N/A|BROKER|NORMAL  |0       |0           |0             |0     |      |resource:N/A; timeout(s):72000; max\_filter\_ratio:0.0|type:ETL\_RUN\_FAIL; msg:unknown error when get file status: s3a://starrocks-datasets/user\_behavior\_sample\_data.parquet: getFileStatus on s3a://starrocks-datasets/user\_behavior\_sample\_data.parquet: com.amazonaws.services.s3.model.AmazonS3Exception: Forbidde|2023-08-04 15:58:51|                   |                   |                   |2023-08-04 15:58:57|           |{"All backends":{},"FileNumber":0,"FileSize":0,"InternalTableLoadBytes":0,"InternalTableLoadRows":0,"ScanBytes":0,"ScanRows":0,"TaskNumber":0,"Unfinished backends":{}} |
 |10110|user\_behavior|LOADING  |ETL:100%; LOAD:0%|BROKER|NORMAL  |0|0|0|0||resource:N/A; timeout(s):72000; max\_filter\_ratio:0.0||2023-08-04 16:22:27|2023-08-04 16:22:30|2023-08-04 16:22:30|2023-08-04 16:22:30|||{"All backends":{"563ec0b9-1bd6-4a39-aa30-1332fc0fee04":\[10004]},"FileNumber":1,"FileSize":1225637388,"InternalTableLoadBytes":0,"InternalTableLoadRows":0,"ScanBytes":0,"ScanRows":0,"TaskNumber":1,"Unfinished backends":{"563ec0b9-1bd6-4a39-aa30-1332fc0fee|
 
-## Synchronous loading using the `FILES()` table function
+## Using the `FILES()` table function
 
-### Advantages of the `FILES()` table function
+### `FILES()` advantages
 
 - `FILES()` can infer the data types of the columns of the Parquet data and generate the schema for a StarRocks table. This provides the ability to query the file directly from S3 with a `SELECT` or to create the table structure in StarRocks as part of the data loading process.
 
@@ -137,7 +135,7 @@ There are three examples using the `FILES()` table function:
 >
 > The dataset used in these examples is available in a StarRocks S3 bucket any valid `aws.s3.access_key` and `aws.s3.secret_key`. Substitute your credentials for `AAA` and `BBB` in the commands below.
 
-#### Querying the data directly from S3
+#### Querying directly from S3
 
 ```sql
 SELECT * FROM FILES(
@@ -168,7 +166,7 @@ UserID|ItemID |CategoryID|BehaviorType|Timestamp          |
      1|2951368|   1080785|pv          |2017-11-27 02:47:08|
 ```
 
-#### Creating and loading the table using schema inference
+#### Creating a table with schema inference
 
 > Note
 >
@@ -231,7 +229,7 @@ UserID|ItemID|CategoryID|BehaviorType|Timestamp          |
 171146|478802|    541347|pv          |2017-12-02 04:52:39|
 ```
 
-#### Creating a table by hand and then loading the data
+#### Loading into an existing table
 
 By querying the data directly from S3 it is possible to decide the:
 
@@ -269,6 +267,6 @@ INSERT INTO user_behavior_declared
 
 ## More information
 
-- For more details on synchronous and asynchronous data loading please see the [overview of data loading](/docs/loading/Loading_intro.md) documentation.
+- For more details on synchronous and asynchronous data loading please see the [overview of data loading](../loading/Loading_intro.md) documentation.
 - Learn about how the broker supports data transformation during loading at [Transform data at loading](../loading/Etl_in_loading.md) and [Change data through loading](../loading/Load_to_Primary_Key_tables.md).
 - You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [`GRANT`](../sql-reference/sql-statements/account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
