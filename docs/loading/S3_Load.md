@@ -23,7 +23,7 @@ An asynchronous *broker* process handles making the connection to S3, pulling th
 ### Data flow
 
 1. The user creates a load job
-1. The frontend (FE) creates a query plan and distributes the plan to the backend nodes (BE) 
+1. The frontend (FE) creates a query plan and distributes the plan to the backend nodes (BE)
 1. The backend (BE) nodes pull the data from the source and load the data into StarRocks
 
 ![Workflow of Broker Load](../assets/broker_load_how-to-work_en.png)
@@ -134,6 +134,7 @@ SHOW LOAD WHERE label = 'user_behavior';
 ### Typical examples
 
 There are three examples using the `FILES()` table function:
+
 - Querying the data directly from S3
 - Creating and loading the table using schema inference
 - Creating a table by hand and then loading the data
@@ -212,6 +213,7 @@ Timestamp   |varchar(1048576)|YES |false|       |     |
 > Note
 >
 > Compare the inferred schema with the schema created by hand:
+>
 > - data types
 > - nullable
 > - key fields
