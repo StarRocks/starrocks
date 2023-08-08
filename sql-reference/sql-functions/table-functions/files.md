@@ -41,9 +41,9 @@ StorageCredentialParams ::=
 
 StarRocks 访问存储系统的认证配置。
 
-StarRocks 当前仅支持通过 IAM user-based 认证访问 AWS S3，以及通过简单认证接入访问 HDFS 集群。
+StarRocks 当前仅支持通过 IAM User 认证访问 AWS S3，以及通过简单认证接入访问 HDFS 集群。
 
-- 如果您使用 IAM user-based 认证访问 AWS S3：
+- 如果您使用 IAM User 认证访问 AWS S3：
 
   ```SQL
   "aws.s3.access_key" = "xxxxxxxxxx",
