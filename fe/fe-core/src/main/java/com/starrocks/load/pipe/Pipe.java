@@ -216,6 +216,7 @@ public class Pipe implements GsonPostProcessable {
             taskDesc.setErrorLimit(FAILED_TASK_THRESHOLD);
 
             runningTasks.put(taskId, taskDesc);
+            loadStatus.loadingFiles += piece.getNumFiles();
             LOG.debug("pipe {} build task: {}", name, taskDesc);
         } finally {
             lock.writeLock().unlock();
@@ -248,6 +249,7 @@ public class Pipe implements GsonPostProcessable {
                 if (task.isFinished() || task.tooManyErrors()) {
                     removeTaskId.add(task.getId());
                     pipeSource.finishPiece(task);
+                    loadStatus.loadingFiles -= task.getPiece().getNumFiles();
                 }
                 if (task.isError()) {
                     failedTaskExecutionCount++;
@@ -257,8 +259,8 @@ public class Pipe implements GsonPostProcessable {
                 }
                 if (task.isFinished()) {
                     FilePipePiece piece = task.getPiece();
-                    loadStatus.loadFiles++;
-                    loadStatus.loadBytes += piece.getTotalBytes();
+                    loadStatus.loadedFiles += piece.getNumFiles();
+                    loadStatus.loadedBytes += piece.getTotalBytes();
                     loadStatus.loadRows += piece.getTotalRows();
                 }
             }
@@ -546,11 +548,15 @@ public class Pipe implements GsonPostProcessable {
         return Objects.hash(name, id);
     }
 
-    public static class LoadStatus {
-        @SerializedName(value = "loadFiles")
-        public long loadFiles = 0;
-        @SerializedName(value = "loadBytes")
-        public long loadBytes = 0;
+    public static class LoadStatus implements GsonPostProcessable {
+        @SerializedName(value = "loadedFiles")
+        public long loadedFiles = 0;
+        @SerializedName(value = "loadedBytes")
+        public long loadedBytes = 0;
+
+        // Display it, but not persist it
+        @SerializedName(value = "loadingFiles")
+        public long loadingFiles = 0;
 
         // TODO: account loaded rows
         // @SerializedName(value = "load_rows")
@@ -558,6 +564,11 @@ public class Pipe implements GsonPostProcessable {
 
         public String toJson() {
             return GsonUtils.GSON.toJson(this);
+        }
+
+        @Override
+        public void gsonPostProcess() throws IOException {
+            loadingFiles = 0;
         }
     }
 
