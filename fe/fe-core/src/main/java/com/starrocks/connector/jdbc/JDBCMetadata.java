@@ -15,7 +15,6 @@
 
 package com.starrocks.connector.jdbc;
 
-import com.google.common.cache.CacheBuilder;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
@@ -36,8 +35,6 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-
-import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class JDBCMetadata implements ConnectorMetadata {
 
@@ -131,20 +128,6 @@ public class JDBCMetadata implements ConnectorMetadata {
             LOG.warn(e.getMessage());
             return null;
         }
-    }
-
-    private static CacheBuilder<Object, Object> newCacheBuilder(long expiresAfterWriteSec, long refreshSec, long maximumSize) {
-        CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
-        if (expiresAfterWriteSec >= 0) {
-            cacheBuilder.expireAfterWrite(expiresAfterWriteSec, SECONDS);
-        }
-
-        if (refreshSec > 0 && expiresAfterWriteSec > refreshSec) {
-            cacheBuilder.refreshAfterWrite(refreshSec, SECONDS);
-        }
-
-        cacheBuilder.maximumSize(maximumSize);
-        return cacheBuilder;
     }
 
 }
