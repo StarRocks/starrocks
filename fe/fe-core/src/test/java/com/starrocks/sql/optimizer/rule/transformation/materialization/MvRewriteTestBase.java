@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.alter.AlterJobV2;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
@@ -40,12 +41,14 @@ import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import org.apache.hadoop.util.ThreadUtil;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
 
 public class MvRewriteTestBase {
     protected static ConnectContext connectContext;
@@ -340,6 +343,23 @@ public class MvRewriteTestBase {
         }
         for (OptExpression child : root.getInputs()) {
             getScanOperators(child, name, results);
+        }
+    }
+
+    protected void waitingRollupJobV2Finish() throws Exception {
+        // waiting alterJobV2 finish
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
+        //Assert.assertEquals(1, alterJobs.size());
+
+        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
+            if (alterJobV2.getType() != AlterJobV2.JobType.ROLLUP) {
+                continue;
+            }
+            while (!alterJobV2.getJobState().isFinalState()) {
+                System.out.println(
+                        "rollup job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
+                ThreadUtil.sleepAtLeastIgnoreInterrupts(1000L);
+            }
         }
     }
 }
