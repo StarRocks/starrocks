@@ -42,10 +42,13 @@ import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -88,6 +91,7 @@ public class Pipe implements GsonPostProcessable {
 
     private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     private Map<Long, PipeTaskDesc> runningTasks = new HashMap<>();
+    private ErrorInfo lastErrorInfo = new ErrorInfo();
     private int failedTaskExecutionCount = 0;
     private int pollIntervalSecond = DEFAULT_POLL_INTERVAL;
     private long lastPolledTime = 0;
@@ -340,6 +344,8 @@ public class Pipe implements GsonPostProcessable {
                         TaskRunStatus status = tm.getTaskRunHistory().getTaskByName(taskDesc.getUniqueTaskName());
                         if (status != null) {
                             taskDesc.onError(status.getErrorMessage());
+                            lastErrorInfo.errorMessage = status.getErrorMessage();
+                            lastErrorInfo.errorTime = LocalDateTime.now(ZoneId.systemDefault());
                         }
                         taskDesc.onError(null);
                     }
@@ -484,6 +490,10 @@ public class Pipe implements GsonPostProcessable {
         return loadStatus;
     }
 
+    public ErrorInfo getLastErrorInfo() {
+        return lastErrorInfo;
+    }
+
     public long getCreatedTime() {
         return createdTime;
     }
@@ -501,6 +511,7 @@ public class Pipe implements GsonPostProcessable {
     public void gsonPostProcess() throws IOException {
         this.runningTasks = new HashMap<>();
         this.lock = new ReentrantReadWriteLock();
+        this.lastErrorInfo = new ErrorInfo();
         pipeSource.initPipeId(id);
         processProperties();
     }
@@ -536,12 +547,37 @@ public class Pipe implements GsonPostProcessable {
     }
 
     public static class LoadStatus {
-        @SerializedName(value = "load_files")
+        @SerializedName(value = "loadFiles")
         public long loadFiles = 0;
-        @SerializedName(value = "load_rows")
-        public long loadRows = 0;
-        @SerializedName(value = "load_bytes")
+        @SerializedName(value = "loadBytes")
         public long loadBytes = 0;
+
+        // TODO: account loaded rows
+        // @SerializedName(value = "load_rows")
+        public long loadRows = 0;
+
+        public String toJson() {
+            return GsonUtils.GSON.toJson(this);
+        }
+    }
+
+    /**
+     * Last error information of pipe
+     */
+    public static class ErrorInfo {
+        @SerializedName(value = "errorMessage")
+        public String errorMessage;
+        @SerializedName(value = "errorTime")
+        public LocalDateTime errorTime;
+
+        // TODO: file locator
+
+        public String toJson() {
+            if (StringUtils.isEmpty(errorMessage)) {
+                return null;
+            }
+            return GsonUtils.GSON.toJson(this);
+        }
     }
 
     public enum State {

@@ -41,9 +41,8 @@ public class ShowPipeStmt extends ShowStmt {
                     .addColumn(new Column("NAME", ScalarType.createVarchar(64)))
                     .addColumn(new Column("TABLE_NAME", ScalarType.createVarchar(64)))
                     .addColumn(new Column("STATE", ScalarType.createVarcharType(8)))
-                    .addColumn(new Column("LOADED_FILES", ScalarType.BIGINT))
-                    .addColumn(new Column("LOADED_ROWS", ScalarType.BIGINT))
-                    .addColumn(new Column("LOADED_BYTES", ScalarType.BIGINT))
+                    .addColumn(new Column("LOAD_STATUS", ScalarType.createVarchar(512)))
+                    .addColumn(new Column("LAST_ERROR", ScalarType.createVarchar(1024)))
                     .addColumn(new Column("CREATED_TIME", ScalarType.DATETIME))
                     .build();
 
@@ -68,15 +67,13 @@ public class ShowPipeStmt extends ShowStmt {
      * NOTE: Must be consistent with the META_DATA
      */
     public static void handleShow(List<Comparable> row, Pipe pipe) {
-        Pipe.LoadStatus loadStatus = pipe.getLoadStatus();
         row.add(String.valueOf(pipe.getPipeId().getDbId()));
         row.add(String.valueOf(pipe.getPipeId().getId()));
         row.add(pipe.getName());
         row.add(Optional.ofNullable(pipe.getTargetTable()).map(TableName::toString).orElse(""));
         row.add(String.valueOf(pipe.getState()));
-        row.add(String.valueOf(loadStatus.loadFiles));
-        row.add(String.valueOf(loadStatus.loadRows));
-        row.add(String.valueOf(loadStatus.loadBytes));
+        row.add(pipe.getLoadStatus().toJson());
+        row.add(pipe.getLastErrorInfo().toJson());
         if (pipe.getCreatedTime() == -1) {
             row.add(null);
         } else {
