@@ -7,14 +7,28 @@ This topic describes how to check the query profile. A query profile records the
 For StarRocks versions earlier than v2.5, you can enable query profile by setting the variable `is_report_success` to `true`:
 
 ```SQL
-set is_report_success = true;
+SET is_report_success = true;
 ```
 
 For StarRocks v2.5 or later versions, you can enable query profile by setting the variable `enable_profile` to `true`:
 
 ```SQL
-set enable_profile = true;
+SET enable_profile = true;
 ```
+
+### Runtime Profile
+
+From v3.1 onwards, StarRocks supports the runtime profile feature, empowering you to access query profiles even before the queries are completed.
+
+To use this feature, you need to set the session variable `runtime_profile_report_interval` in addition to setting `enable_profile` to `true`. `runtime_profile_report_interval` (Unit: second, Default: `10`), which governs the profile report interval, is set by default to 10 seconds, meaning that whenever a query takes longer than 10 seconds, the runtime profile feature is automatically enabled.
+
+```SQL
+SET runtime_profile_report_interval = 10;
+```
+
+A runtime profile shows the same information as any query profile does. You can analyze it just like a regular query profile to gain valuable insights into the performance of the running query.
+
+However, a runtime profile can be incomplete because some operators of the execution plan may depend on others. To easily distinguish the running operators from the finished ones, the running operators are marked with `Status: Running`.
 
 ## Access query profiles
 
@@ -22,7 +36,7 @@ set enable_profile = true;
 >
 > If you are using the Enterprise Edition of StarRocks, you can use StarRocks Manager to access and visualize your query profiles.
 
-If you are not, follow these steps to access your query profiles:
+If you are using the Community Edition of StarRocks, follow these steps to access your query profiles:
 
 1. Enter `http://<fe_ip>:<fe_http_port>` in your browser.
 2. On the page this is displayed, click **queries** on the top navigation pane.
@@ -222,33 +236,26 @@ Usually, a noticeable difference between MIN and MAX values indicates the data i
                - __MIN_OF_OperatorTotalTime: 279.170us
 ```
 
-## Runtime Profile
+## Perform text-based profile analysis
 
-StarRocks v3.1 and later versions support the runtime profile feature, empowering users to access query profiles even before the query completes.
+From v3.1 onwards, StarRocks offers a more user-friendly text-based profile analysis feature. This feature allows you to efficiently identify bottlenecks and opportunities for query optimization.
 
-To enable this feature, utilize the existing session variable named `enable_profile`. Additionally, there's another session variable called `runtime_profile_report_interval` that governs the profile report interval, set by default to 10 seconds.
+### Analyze an existing query
 
-Whenever a query takes longer than 10 seconds, the runtime profile feature will be automatically enabled. Subsequently, you can analyze it just like a regular profile to gain valuable insights into query performance.
+You can analyze the profile of an existing query via its `QueryID`, regardless of whether the query is running or completed.
 
-There may be dependencies between different parts of the plan execution, which can lead to incomplete runtime profiles. To easily distinguish running operators from finished ones, the running operator will be marked with `Status: Running`.
+#### List profiles
 
-
-## Text-based profile analysis
-
-Starting from StarRocks v3.1 and later versions, both the Community Edition and Enterprise Edition offer a user-friendly text-based profile analysis feature. This powerful functionality allows users to efficiently identify bottlenecks and opportunities for query optimization.
-
-### List profile
-
-StarRocks offers a statement to list concise information about the existing profiles:
+Execute the following SQL statement to list the existing profiles:
 
 ```sql
-SHOW PROFILELIST [limit n]
+SHOW PROFILELIST;
 ```
 
-Following is an example:
+Example:
 
 ```sql
-MySQL root@172.26.94.12:tpch> show profilelist;
+MySQL > show profilelist;
 +--------------------------------------+---------------------+-------+----------+--------------------------------------------------------------------------------------------------------------------------------------+
 | QueryId                              | StartTime           | Time  | State    | Statement                                                                                                                            |
 +--------------------------------------+---------------------+-------+----------+--------------------------------------------------------------------------------------------------------------------------------------+
@@ -262,7 +269,7 @@ MySQL root@172.26.94.12:tpch> show profilelist;
 Time: 0.006s
 
 
-MySQL root@172.26.94.12:tpch> show profilelist limit 1;
+MySQL > show profilelist limit 1;
 +--------------------------------------+---------------------+------+----------+-------------------------------------------------------------------------------------------------------------------------------------+
 | QueryId                              | StartTime           | Time | State    | Statement                                                                                                                           |
 +--------------------------------------+---------------------+------+----------+-------------------------------------------------------------------------------------------------------------------------------------+
@@ -272,51 +279,49 @@ MySQL root@172.26.94.12:tpch> show profilelist limit 1;
 Time: 0.005s
 ```
 
-By utilizing this statement, you can easily obtain the QueryId associated with each query. This QueryId serves as a crucial identifier for conducting further profile analysis and investigations.
+This SQL statement allow you to easily obtain the `QueryId` associated with each query. The `QueryId` serves as a crucial identifier for further profile analysis and investigations.
 
-### Analyze profile
+#### Analyze profile
 
-Once you have obtained the QueryId, you can perform a more detailed analysis of the specific query using the analyze profile statement. This command provides deeper insights and facilitates a comprehensive examination of the query's performance characteristics and optimizations.
+Once you have obtained the `QueryId`, you can perform a more detailed analysis on the specific query using the ANALYZE PROFILE statement. This SQL statement provides deeper insights and facilitates a comprehensive examination of the query's performance characteristics and optimizations.
 
 ```sql
-ANALYZE PROFILE FROM '<query_id>' [, <plan_node_id>]...
+ANALYZE PROFILE FROM '<QueryId>' [, <plan_node_id>, ...]
 ```
 
-The analyze profile statement takes the QueryId as its first parameter, which can be obtained from the `show profilelist` statement. By default, the analysis output presents only the most crucial metrics for each operator. However, you have the flexibility to specify one or more plan node IDs if you wish to view all the detailed metrics for enhanced analysis and understanding. This feature allows for a more comprehensive examination of the query's performance and facilitates targeted optimizations.
+By default, the analysis output presents only the most crucial metrics for each operator. However, you can specify the ID of one or more plan nodes to view the corresponding metrics. This feature allows for a more comprehensive examination of the query's performance and facilitates targeted optimizations.
 
-Here is an example without specifying plan node id list:
+Example 1: Analyze the profile without specifying plan node ID:
 
 ![img](../assets/profile-16.png)
 
-Here is another example with plan node id list:
+Example 2: Analyze the profile and specify the ID of plan nodes:
 
 ![img](../assets/profile-17.png)
 
-### Explain analyze
+The ANALYZE PROFILE statement offers an enhanced approach to analyzing and comprehending the runtime profile. It distinguishes operators with different states, such as blocked, running, and finished. Moreover, this statement provides a comprehensive view of the entire progress as well as the progress of individual operators based on the processed row numbers, enabling a deeper understanding of query execution and performance. This feature further facilitates the profiling and optimization of queries in StarRocks.
 
-StarRocks offers a straightforward and direct approach for analyzing a given query, with a syntax that looks like this:
+Example 3: Analyze the runtime profile of a running query:
+
+![img](../assets/profile-20.png)
+
+### Analyze a simulated query
+
+You can also simulate a given query and analyze its profile using the EXPLAIN ANALYZE statement.
 
 ```sql
 EXPLAIN ANALYZE <sql>
 ```
 
-Currently, StarRocks supports analysis for two types of statements: the query statement and the insert into statement, specifically designed for native OLAP tables. It's important to note that when using the insert into statement, no data will actually be inserted. By default, the transaction will be aborted, ensuring that no unintended changes are made to the data in the process of analysis. This safeguard prevents accidental data modifications during the profiling and analysis operations.
+Currently, StarRocks supports analyzing the profiles of two types of SQL statements: the query (SELECT) statement and the INSERT INTO statement. Analyzing the profiles of the INSERT INTO statement is specifically designed for StarRocks' native OLAP tables. Please note that when you analyze the profiles of the INSERT INTO statement, no data will actually be inserted. By default, the transaction is aborted, ensuring that no unintended changes are made to the data in the process of profile analysis.
 
-Here is an example of normal query:
+Example 1: Analyze the profile of a given query:
 
 ![img](../assets/profile-18.png)
 
-Here is another example of insert into statement:
+Example 1: Analyze the profile of an INSERT INTO operation:
 
 ![img](../assets/profile-19.png)
-
-### Runtime profile
-
-The `analyze profile` statement offers an enhanced approach to analyze and comprehend the runtime profile. It distinguishes operators with different states, such as blocked, running, and finished. Moreover, this statement provides a comprehensive view of the entire progress. Additionally, it offers insights into the progress of individual operators based on the processed row numbers, enabling a detailed understanding of query execution and performance. This advanced feature facilitates more effective profiling and optimization of queries in StarRocks.
-
-Here is an example of runtime profile analysis:
-
-![img](../assets/profile-20.png)
 
 ## Visualize a query profile
 
