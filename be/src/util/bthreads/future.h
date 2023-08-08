@@ -43,15 +43,15 @@ public:
     }
 
     template <typename _Rep, typename _Period>
-    future_status wait_for(const std::chrono::duration<_Rep, _Period>& __rel) const {
+    future_status wait_for(const std::chrono::duration<_Rep, _Period>& rel) const {
         SharedStateBase::check_state(_state);
-        return _state->wait_for(__rel);
+        return _state->wait_for(rel);
     }
 
     template <typename _Clock, typename _Duration>
-    future_status wait_until(const std::chrono::time_point<_Clock, _Duration>& __abs) const {
+    future_status wait_until(const std::chrono::time_point<_Clock, _Duration>& abs) const {
         SharedStateBase::check_state(_state);
-        return _state->wait_until(__abs);
+        return _state->wait_until(abs);
     }
 
     SharedFuture<R> share() { return SharedFuture<R>(std::move(_state)); }
