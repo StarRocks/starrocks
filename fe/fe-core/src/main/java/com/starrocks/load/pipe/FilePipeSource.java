@@ -123,10 +123,14 @@ public class FilePipeSource implements GsonPostProcessable {
         return piece;
     }
 
-    public void finishPiece(FilePipePiece piece, PipeTaskDesc.PipeTaskState taskState) {
-        FileListRepo.PipeFileState state =
-                taskState == PipeTaskDesc.PipeTaskState.ERROR ?
+    public void finishPiece(PipeTaskDesc taskDesc) {
+        FilePipePiece piece = taskDesc.getPiece();
+        PipeTaskDesc.PipeTaskState taskState = taskDesc.getState();
+        FileListRepo.PipeFileState state = taskState == PipeTaskDesc.PipeTaskState.ERROR ?
                         FileListRepo.PipeFileState.ERROR : FileListRepo.PipeFileState.LOADED;
+        // TODO: distinguish file granular error message
+        String errorMsg = taskDesc.getErrorMsg();
+        piece.getFiles().forEach(file -> file.errorMessage = errorMsg);
         fileListRepo.updateFileState(piece.getFiles(), state);
     }
 

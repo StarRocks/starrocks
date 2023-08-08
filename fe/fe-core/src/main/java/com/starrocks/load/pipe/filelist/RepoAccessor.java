@@ -18,6 +18,7 @@ package com.starrocks.load.pipe.filelist;
 import com.google.common.base.Preconditions;
 import com.starrocks.load.pipe.PipeFileRecord;
 import com.starrocks.thrift.TResultBatch;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.util.Strings;
@@ -147,8 +148,14 @@ public class RepoAccessor {
     }
 
     protected String buildSqlUpdateState(List<PipeFileRecord> records, FileListRepo.PipeFileState state) {
+        // FIXME: update error message for each file, use partial update capability
+        String errorMessage = records.stream()
+                .filter(x -> StringUtils.isNotEmpty(x.getErrorMessage()))
+                .findFirst()
+                .map(PipeFileRecord::toErrorInfo).orElse("");
         StringBuilder sb = new StringBuilder();
-        sb.append(String.format(FileListTableRepo.UPDATE_FILE_STATE, Strings.quote(state.toString())));
+        sb.append(String.format(FileListTableRepo.UPDATE_FILE_STATE,
+                Strings.quote(state.toString()), Strings.quote(errorMessage)));
         sb.append(records.stream().map(PipeFileRecord::toUniqueLocator).collect(Collectors.joining(" OR ")));
         return sb.toString();
     }

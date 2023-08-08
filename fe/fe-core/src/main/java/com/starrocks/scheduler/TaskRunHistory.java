@@ -29,9 +29,16 @@ public class TaskRunHistory {
     // The same task-id may contain multi history task run status, so use query_id instead.
     private final Map<String, TaskRunStatus> historyTaskRunMap =
             Collections.synchronizedMap(Maps.newLinkedHashMap());
+    private final Map<String, TaskRunStatus> taskName2Status =
+            Collections.synchronizedMap(Maps.newLinkedHashMap());
 
     public void addHistory(TaskRunStatus status) {
         historyTaskRunMap.put(status.getQueryId(), status);
+        taskName2Status.put(status.getTaskName(), status);
+    }
+
+    public TaskRunStatus getTaskByName(String taskName) {
+        return taskName2Status.get(taskName);
     }
 
     public TaskRunStatus getTask(String queryId) {
@@ -45,7 +52,8 @@ public class TaskRunHistory {
         if (queryId == null) {
             return;
         }
-        historyTaskRunMap.remove(queryId);
+        TaskRunStatus task = historyTaskRunMap.remove(queryId);
+        taskName2Status.remove(task.getTaskName());
     }
 
     // Reserve historyTaskRunMap values to keep the last insert at the first.
@@ -60,7 +68,7 @@ public class TaskRunHistory {
         List<TaskRunStatus> allHistory = getAllHistory();
         int startIndex = Math.max(0, allHistory.size() - Config.task_runs_max_history_number);
         allHistory.subList(startIndex, allHistory.size())
-                .forEach(taskRunStatus -> historyTaskRunMap.remove(taskRunStatus.getQueryId()));
+                .forEach(taskRunStatus -> removeTask(taskRunStatus.getQueryId()));
     }
 
     public long getTaskRunCount() {

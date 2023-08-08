@@ -35,6 +35,7 @@ import com.starrocks.scheduler.SubmitResult;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.PipeAnalyzer;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
@@ -242,7 +243,7 @@ public class Pipe implements GsonPostProcessable {
             for (PipeTaskDesc task : runningTasks.values()) {
                 if (task.isFinished() || task.tooManyErrors()) {
                     removeTaskId.add(task.getId());
-                    pipeSource.finishPiece(task.getPiece(), task.getState());
+                    pipeSource.finishPiece(task);
                 }
                 if (task.isError()) {
                     failedTaskExecutionCount++;
@@ -335,7 +336,12 @@ public class Pipe implements GsonPostProcessable {
                         taskDesc.onFinished();
                         LOG.info("finish pipe {} task {}", this, taskDesc);
                     } else {
-                        taskDesc.onError(String.format("task execution state: " + taskRunState.toString()));
+                        TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+                        TaskRunStatus status = tm.getTaskRunHistory().getTaskByName(taskDesc.getUniqueTaskName());
+                        if (status != null) {
+                            taskDesc.onError(status.getErrorMessage());
+                        }
+                        taskDesc.onError(null);
                     }
                 } catch (Throwable e) {
                     taskDesc.onError(String.format("task exception: " + e.getMessage()));
