@@ -21,6 +21,7 @@ import com.starrocks.catalog.system.sys.GrantsTo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeEntry;
@@ -48,7 +49,6 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -317,7 +317,7 @@ public class InfoSchemaDbTest {
     }
 
     @Test
-    public void testShowExternalCatalogPrivilege(@Mocked HiveMetaStoreClient metaStoreThriftClient) throws Exception {
+    public void testShowExternalCatalogPrivilege(@Mocked HiveMetastore hiveMetastore) throws Exception {
 
         String createCatalog = "CREATE EXTERNAL CATALOG hive_catalog_1 COMMENT \"hive_catalog\" PROPERTIES(\"type\"=\"hive\", " +
                 "\"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\");";
@@ -330,11 +330,11 @@ public class InfoSchemaDbTest {
 
         new Expectations() {
             {
-                metaStoreThriftClient.getAllDatabases();
+                hiveMetastore.getAllDatabaseNames();
                 result = Lists.newArrayList("db");
                 minTimes = 0;
 
-                metaStoreThriftClient.getAllTables("db");
+                hiveMetastore.getAllTableNames("db");
                 result = Lists.newArrayList("tbl");
                 minTimes = 0;
             }
@@ -394,7 +394,8 @@ public class InfoSchemaDbTest {
         item3.setObject_catalog("hive_catalog_1");
         item3.setObject_database("db");
         item3.setObject_type("DATABASE");
-        item3.setPrivilege_type("CREATE TABLE, DROP, ALTER, CREATE VIEW, CREATE FUNCTION, CREATE MATERIALIZED VIEW");
+        item3.setPrivilege_type("CREATE TABLE, DROP, ALTER, CREATE VIEW, CREATE FUNCTION, CREATE MATERIALIZED VIEW, " +
+                "CREATE MASKING POLICY, CREATE ROW ACCESS POLICY");
         item3.setIs_grantable(false);
         Assert.assertTrue(GrantsTo.getGrantsTo(request).grants_to.contains(item3));
 
