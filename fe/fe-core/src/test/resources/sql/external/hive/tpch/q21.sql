@@ -50,7 +50,7 @@ limit: 100
 cardinality: 100
 column statistics:
 * s_name-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
-* count-->[0.0, 1600097.871799456, 0.0, 8.0, 40000.0] ESTIMATE
+* count-->[0.0, 1600097.8717994562, 0.0, 8.0, 40000.0] ESTIMATE
 
 PLAN FRAGMENT 1(F15)
 
@@ -65,7 +65,7 @@ OutPut Exchange Id: 31
 |  cardinality: 100
 |  column statistics:
 |  * s_name-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
-|  * count-->[0.0, 1600097.871799456, 0.0, 8.0, 40000.0] ESTIMATE
+|  * count-->[0.0, 1600097.8717994562, 0.0, 8.0, 40000.0] ESTIMATE
 |
 29:AGGREGATE (merge finalize)
 |  aggregate: count[([71: count, BIGINT, false]); args: ; result: BIGINT; args nullable: true; result nullable: false]
@@ -73,7 +73,7 @@ OutPut Exchange Id: 31
 |  cardinality: 40000
 |  column statistics:
 |  * s_name-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
-|  * count-->[0.0, 1600097.871799456, 0.0, 8.0, 40000.0] ESTIMATE
+|  * count-->[0.0, 1600097.8717994562, 0.0, 8.0, 40000.0] ESTIMATE
 |
 28:EXCHANGE
 distribution type: SHUFFLE
@@ -93,7 +93,7 @@ OutPut Exchange Id: 28
 |  cardinality: 40000
 |  column statistics:
 |  * s_name-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
-|  * count-->[0.0, 1600097.871799456, 0.0, 8.0, 40000.0] ESTIMATE
+|  * count-->[0.0, 1600097.8717994562, 0.0, 8.0, 40000.0] ESTIMATE
 |
 26:Project
 |  output columns:
@@ -111,11 +111,9 @@ OutPut Exchange Id: 28
 |  output columns: 2, 10, 39
 |  cardinality: 1600098
 |  column statistics:
+|  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 |  * s_name-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
-|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1600097.871799456] ESTIMATE
 |  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
-|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1600097.871799456] ESTIMATE
-|  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |
 |----24:EXCHANGE
 |       distribution type: SHUFFLE
@@ -153,11 +151,10 @@ OutPut Exchange Id: 24
 |  output columns: 2, 8, 10, 56
 |  cardinality: 1600099
 |  column statistics:
+|  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 |  * s_name-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 |  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1600099.4718989278] ESTIMATE
 |  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
-|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1600099.4718989278] ESTIMATE
-|  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |
 |----21:Project
 |    |  output columns:
