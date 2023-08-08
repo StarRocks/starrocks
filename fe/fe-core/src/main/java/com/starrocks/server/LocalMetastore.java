@@ -45,7 +45,7 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.staros.proto.FilePathInfo;
-import com.starrocks.alter.AlterJobMgr;
+import com.starrocks.alter.AlterJobExecutor;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
@@ -2627,7 +2627,7 @@ public class LocalMetastore implements ConnectorMetadata {
      */
     @Override
     public void alterView(AlterViewStmt stmt) throws UserException {
-        stateMgr.getAlterJobMgr().processAlterView(stmt, ConnectContext.get());
+        new AlterJobExecutor().process(stmt, ConnectContext.get());
     }
 
     @Override
@@ -3869,15 +3869,9 @@ public class LocalMetastore implements ConnectorMetadata {
 
         if (existed) {
             // already existed, need to alter the view
-            AlterJobMgr alterJobMgr = GlobalStateMgr.getCurrentState().getAlterJobMgr();
-            try {
-                AlterViewStmt alterViewStmt = AlterViewStmt.fromReplaceStmt(stmt);
-                alterJobMgr.processAlterView(alterViewStmt, ConnectContext.get());
-                LOG.info("replace view {} successfully", tableName);
-            } catch (DdlException e) {
-                LOG.warn("replace view failed due to {}", e.getMessage(), e);
-                throw new DdlException("replace view failed due to " + e.getMessage(), e);
-            }
+            AlterViewStmt alterViewStmt = AlterViewStmt.fromReplaceStmt(stmt);
+            new AlterJobExecutor().process(alterViewStmt, ConnectContext.get());
+            LOG.info("replace view {} successfully", tableName);
         } else {
             List<Column> columns = stmt.getColumns();
             long tableId = getNextId();
