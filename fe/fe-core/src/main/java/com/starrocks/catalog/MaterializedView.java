@@ -1238,16 +1238,19 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return Sets.newHashSet();
         }
 
-        // check mv's query rewrite consistency mode property
-        TableProperty.QueryRewriteConsistencyMode mvConsistencyRewriteMode = tableProperty.getQueryRewriteConsistencyMode();
-        switch (mvConsistencyRewriteMode) {
-            case DISABLE:
-                return getPartitionNames();
-            case LOOSE:
-                return Sets.newHashSet();
-            case CHECKED:
-            default:
-                break;
+        // check mv's query rewrite consistency mode property only in query rewrite.
+        if (isQueryRewrite) {
+            TableProperty.QueryRewriteConsistencyMode mvConsistencyRewriteMode
+                    = tableProperty.getQueryRewriteConsistencyMode();
+            switch (mvConsistencyRewriteMode) {
+                case DISABLE:
+                    return getPartitionNames();
+                case LOOSE:
+                    return Sets.newHashSet();
+                case CHECKED:
+                default:
+                    break;
+            }
         }
 
         if (partitionInfo instanceof SinglePartitionInfo) {

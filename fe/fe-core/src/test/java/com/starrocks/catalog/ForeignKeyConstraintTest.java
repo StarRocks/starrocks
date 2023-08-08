@@ -234,4 +234,35 @@ public class ForeignKeyConstraintTest {
         Assert.assertEquals("hive_ssb_1g_csv", foreignKeyConstraints4.get(0).getChildTableInfo().getDbName());
         Assert.assertEquals("lineorder", foreignKeyConstraints4.get(0).getChildTableInfo().getTableName());
     }
+
+    @Test
+    public void testParseExternalCatalog2() {
+        String constraintDescs = "iceberg_catalog_c22c9c10_35ad_11ee_abf5_c9d28a9636a8.iceberg_ssb_1g_orc_lz4" +
+                ".lineorder:7920f06f-df49-472f-9662-97ac5c32da96(lo_custkey) REFERENCES " +
+                "iceberg_catalog_c22c9c10_35ad_11ee_abf5_c9d28a9636a8.iceberg_ssb_1g_orc_lz4.customer:c3eb9381-3d18-4" +
+                "60a-9995-de97a0e0afd3(c_custkey);iceberg_catalog_c22c9c10_35ad_11ee_abf5_c9d28a9636a8" +
+                ".iceberg_ssb_1g_orc_lz4.lineorder:7920f06f-df49-472f-9662-97ac5c32da96(lo_partkey) REFERENCES " +
+                "iceberg_catalog_c22c9c10_35ad_11ee_abf5_c9d28a9636a8.iceberg_ssb_1g_orc_lz4" +
+                ".part:1e085393-64c7-4380-a4bb-109623ff9466(p_partkey);iceberg_catalog_c22c9c10_35ad_11ee_abf5_c9d28a" +
+                "9636a8.iceberg_ssb_1g_orc_lz4.lineorder:7920f06f-df49-472f-9662-97ac5c32da96(lo_suppkey) " +
+                "REFERENCES iceberg_catalog_c22c9c10_35ad_11ee_abf5_c9d28a9636a8.iceberg_ssb_1g_orc_lz4" +
+                ".supplier:f217f38c-25e9-48ce-9094-39444cc60606(s_suppkey);" +
+                "iceberg_catalog_c22c9c10_35ad_11ee_abf5_c9d28a9636a8.iceberg_ssb_1g_orc_lz4" +
+                ".lineorder:7920f06f-df49-472f-9662-97ac5c32da9" +
+                "6(lo_orderdate) REFERENCES iceberg_catalog_c22c9c10_35ad_11ee_abf5_c9d28a9636a8" +
+                ".iceberg_ssb_1g_orc_lz4.dates:cfe2fcdf-e8c6-4835-9e4b-c470ea73977b(d_datekey)";
+        List<ForeignKeyConstraint> foreignKeyConstraints1 = ForeignKeyConstraint.parse(constraintDescs);
+        Assert.assertEquals(4, foreignKeyConstraints1.size());
+
+        Assert.assertEquals("iceberg_catalog_c22c9c10_35ad_11ee_abf5_c9d28a9636a8",
+                foreignKeyConstraints1.get(0).getParentTableInfo().getCatalogName());
+        Assert.assertEquals("iceberg_ssb_1g_orc_lz4", foreignKeyConstraints1.get(0).getParentTableInfo().getDbName());
+        Assert.assertEquals("customer:c3eb9381-3d18-460a-9995-de97a0e0afd3",
+                foreignKeyConstraints1.get(0).getParentTableInfo().getTableIdentifier());
+        Assert.assertEquals("customer", foreignKeyConstraints1.get(0).getParentTableInfo().getTableName());
+
+        Assert.assertEquals(1, foreignKeyConstraints1.get(0).getColumnRefPairs().size());
+        Assert.assertEquals("lo_custkey", foreignKeyConstraints1.get(0).getColumnRefPairs().get(0).first);
+        Assert.assertEquals("c_custkey", foreignKeyConstraints1.get(0).getColumnRefPairs().get(0).second);
+    }
 }

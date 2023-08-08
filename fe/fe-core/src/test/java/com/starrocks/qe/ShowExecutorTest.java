@@ -215,7 +215,7 @@ public class ShowExecutorTest {
         };
 
         BaseTableInfo baseTableInfo = new BaseTableInfo(
-                "default_catalog", "testDb", "testTbl");
+                "default_catalog", "testDb", "testTbl", null);
 
         // mock materialized view
         MaterializedView mv = new MaterializedView();
