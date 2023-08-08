@@ -47,22 +47,16 @@ Create a table. This schema matches a sample dataset that you can load from a St
 DROP TABLE IF EXISTS user_behavior;
 
 CREATE TABLE `user_behavior` (
-    `UserID` int(11) NULL COMMENT "",
-    `ItemID` int(11) NULL COMMENT "",
-    `CategoryID` int(11) NULL COMMENT "",
-    `BehaviorType` varchar(65533) NULL COMMENT "",
-    `Timestamp` datetime NULL COMMENT ""
+    `UserID` int(11),
+    `ItemID` int(11),
+    `CategoryID` int(11),
+    `BehaviorType` varchar(65533),
+    `Timestamp` datetime
 ) ENGINE=OLAP 
 DUPLICATE KEY(`UserID`)
-COMMENT "OLAP"
 DISTRIBUTED BY HASH(`UserID`) BUCKETS 1 
 PROPERTIES (
-    "replication_num" = "1",
-    "in_memory" = "false",
-    "storage_format" = "DEFAULT",
-    "enable_persistent_index" = "false",
-    "replicated_storage" = "true",
-    "compression" = "LZ4"
+    "replication_num" = "1"
 );
 ```
 
@@ -245,26 +239,18 @@ By querying the data directly from S3 it is possible to decide the:
 - column names
 - columns to use in the key
 
-This may be the schema that you decide to use, although you may find that there are no nulls in the data:
-
 ```SQL
 CREATE TABLE `user_behavior_declared` (
-    `UserID` int(11) NULL COMMENT "",
-    `ItemID` int(11) NULL COMMENT "",
-    `CategoryID` int(11) NULL COMMENT "",
-    `BehaviorType` varchar(65533) NULL COMMENT "",
-    `Timestamp` datetime NULL COMMENT ""
+    `UserID` int(11),
+    `ItemID` int(11),
+    `CategoryID` int(11),
+    `BehaviorType` varchar(65533),
+    `Timestamp` datetime
 ) ENGINE=OLAP 
 DUPLICATE KEY(`UserID`)
-COMMENT "OLAP"
 DISTRIBUTED BY HASH(`UserID`) BUCKETS 1 
 PROPERTIES (
-    "replication_num" = "1",
-    "in_memory" = "false",
-    "storage_format" = "DEFAULT",
-    "enable_persistent_index" = "false",
-    "replicated_storage" = "true",
-    "compression" = "LZ4"
+    "replication_num" = "1"
 );
 ```
 
