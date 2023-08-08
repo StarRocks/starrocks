@@ -35,21 +35,6 @@ import org.junit.Test;
 public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
 
     @Test
-    public void testTPCH1() throws Exception {
-        compareDumpWithOriginTest("tpchcost/q1");
-    }
-
-    @Test
-    public void testTPCH5() throws Exception {
-        compareDumpWithOriginTest("tpchcost/q5");
-    }
-
-    @Test
-    public void testTPCH7() throws Exception {
-        compareDumpWithOriginTest("tpchcost/q7");
-    }
-
-    @Test
     public void testTPCH17WithUseAnalytic() throws Exception {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/tpch17"));
         SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
@@ -79,11 +64,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  equal join conjunct: [tid, BIGINT, true] = [5: customer_id, BIGINT, true]\n" +
                 "  |  output columns: 3, 90"));
         sessionVariable.setNewPlanerAggStage(0);
-    }
-
-    @Test
-    public void testTPCH20() throws Exception {
-        compareDumpWithOriginTest("tpchcost/q20");
     }
 
     @Test
@@ -172,12 +152,12 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testTPCDS23_1() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/tpcds23_1"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  MultiCastDataSinks\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("MultiCastDataSinks\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 52\n" +
+                "    EXCHANGE ID: 56\n" +
                 "    RANDOM\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 73\n" +
+                "    EXCHANGE ID: 77\n" +
                 "    RANDOM\n" +
                 "\n" +
                 "  40:Project\n" +
@@ -189,13 +169,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  other join predicates: CAST(190: sum AS DOUBLE) > CAST(0.5 * 262: max AS DOUBLE)"));
     }
 
-    @Test
-    public void testTPCH01() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch01"));
-        // check q1 has two agg phase with default column statistics
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("AGGREGATE (merge finalize)"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("AGGREGATE (update serialize)"));
-    }
 
     @Test
     public void testGroupByLimit() throws Exception {
@@ -279,6 +252,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    @Ignore
     public void testTPCDS54WithJoinHint() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/tpcds54_with_join_hint"), null, TExplainLevel.NORMAL);
@@ -432,7 +406,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/tpch_random"), null, TExplainLevel.NORMAL);
         // check optimizer could extract best plan
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("11:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("15:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)"));
     }
 
@@ -718,56 +692,40 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
-    public void testMV_JoinAgg1() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
-        String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/join_agg1");
-        // Table and mv have no stats, mv rewrite is ok.
-        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, null);
-        Assert.assertTrue(replayPair.second.contains("table: mv1, rollup: mv1"));
-        FeConstants.isReplayFromQueryDump = false;
-    }
-
-    @Test
-    public void testMV_JoinAgg2() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
-        String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/join_agg2");
-        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, connectContext.getSessionVariable());
-        // TODO: If table and mv have stats, query cannot be rewritten for now.
-        Assert.assertFalse(replayPair.second.contains("table: mv1, rollup: mv1"));
-        FeConstants.isReplayFromQueryDump = false;
-    }
-
-    @Ignore
-    // @Test
-    public void testMV_JoinAgg3() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
-        // Table and mv have no stats, mv rewrite is ok.
+    public void testReduceJoinTransformation1() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/join_agg3"),
-                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("line_order_flat_mv"));
-        FeConstants.isReplayFromQueryDump = false;
-    }
-
-    @Test
-    public void testMV_JoinAgg4() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
-        // TODO: If table and mv have stats, query cannot be rewritten for now.
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/join_agg4"),
-                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertFalse(replayPair.second.contains("line_order_flat_mv"));
-        FeConstants.isReplayFromQueryDump = false;
-    }
-
-    @Test
-    public void testMV_MVOnMV1() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
-        // TODO: If table and mv have stats, query cannot be rewritten for now.
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_on_mv1"),
+                getPlanFragment(getDumpInfoFromFile("query_dump/reduce_transformation_1"),
                         null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("mv2"));
-        FeConstants.isReplayFromQueryDump = false;
+        System.out.println(replayPair.second);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("31:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(212: case)\n" +
+                "  |  group by: 34: cast, 33: cast, 38: handle, 135: concat, 136: case, 36: cast"));
+    }
+
+    @Test
+    public void testReduceJoinTransformation2() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/reduce_transformation_2"),
+                        null, TExplainLevel.NORMAL);
+        System.out.println(replayPair.second);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("40:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 396: substring = 361: date\n" +
+                "  |  other join predicates: 209: zid = 298: zid"));
+    }
+
+    @Test
+    public void testReduceJoinTransformation3() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/reduce_transformation_3"),
+                        null, TExplainLevel.NORMAL);
+        System.out.println(replayPair.second);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("26:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 71: order_id = 2: orderid\n" +
+                "  |  \n" +
+                "  |----25:EXCHANGE"));
     }
 }

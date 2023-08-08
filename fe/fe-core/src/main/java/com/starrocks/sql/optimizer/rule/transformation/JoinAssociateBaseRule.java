@@ -60,11 +60,15 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
 
     protected final int[] newBotJoinRightChildLoc;
 
-    protected JoinAssociateBaseRule(RuleType type, Pattern pattern, List<int[]> mode) {
+    // indicate whether the botJoin is inner/cross join.
+    protected final boolean isInnerMode;
+
+    protected JoinAssociateBaseRule(RuleType type, Pattern pattern, List<int[]> mode, boolean isInnerMode) {
         super(type, pattern);
         this.newTopJoinChildLoc = mode.get(0);
         this.newBotJoinLeftChildLoc = mode.get(1);
         this.newBotJoinRightChildLoc = mode.get(2);
+        this.isInnerMode = isInnerMode;
     }
 
     public abstract ScalarOperator rewriteNewTopOnCondition(JoinOperator topJoinType, ProjectionSplitter splitter,
@@ -74,6 +78,8 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
 
     public abstract OptExpression createNewTopJoinExpr(LogicalJoinOperator newTopJoin, OptExpression newTopJoinChild,
                                                        OptExpression newBotJoinExpr);
+
+    public abstract int createTransformMask(boolean isTop);
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
@@ -159,6 +165,7 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
                 .setPredicate(newBotPredicate)
                 .setOnPredicate(newBotOnCondition)
                 .setProjection(newBotJoinProjection)
+                .setTransformMask(createTransformMask(false))
                 .build();
         OptExpression newBotJoinExpr = OptExpression.create(newBotJoin, newBotJoinLeftChild, newBotJoinRightChild);
         Projection newTopJoinProjection = null;
@@ -172,6 +179,7 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
                 .setProjection(newTopJoinProjection)
                 .setOnPredicate(newTopOnCondition)
                 .setPredicate(newTopPredicate)
+                .setTransformMask(topJoin.getTransformMask() | createTransformMask(true))
                 .build();
 
         OptExpression newTopJoinExpr = createNewTopJoinExpr(newTopJoin, newTopJoinChild, newBotJoinExpr);

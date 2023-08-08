@@ -50,6 +50,8 @@ public class LogicalJoinOperator extends LogicalOperator {
     // where-predicates. Take care to pass through original on-predicates when creating a new JoinOperator.
     private ScalarOperator originalOnPredicate;
 
+    private int transformMask;
+
     public LogicalJoinOperator(JoinOperator joinType, ScalarOperator onPredicate) {
         this(joinType, onPredicate, "", Operator.DEFAULT_LIMIT, null, false, onPredicate);
     }
@@ -119,6 +121,10 @@ public class LogicalJoinOperator extends LogicalOperator {
 
     public String getJoinHint() {
         return joinHint;
+    }
+
+    public int getTransformMask() {
+        return transformMask;
     }
 
     public ColumnRefSet getRequiredChildInputColumns() {
@@ -264,6 +270,11 @@ public class LogicalJoinOperator extends LogicalOperator {
 
         public Builder setOriginalOnPredicate(ScalarOperator originalOnPredicate) {
             builder.originalOnPredicate = originalOnPredicate;
+            return this;
+        }
+
+        public Builder setTransformMask(int mask) {
+            builder.transformMask = mask;
             return this;
         }
     }

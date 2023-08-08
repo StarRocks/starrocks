@@ -532,7 +532,6 @@ CTEAnchor(cteid=1)
 [end]
 
 /* test QuantifiedApply2OuterJoinRule */
-/* test QuantifiedApply2OuterJoinRule */
 
 [sql]
 select v1, v2 in (select v5 + v4 from t1 where v1 = 1 and v1 = v4 and v2 + v5 = v6) from t0;
@@ -586,21 +585,21 @@ select v1, v4 in (select t1a from test_all_type where t1a + v1 = v4 + t1c and v2
 CTEAnchor(cteid=1)
     CTEProducer(cteid=1)
         SCAN (columns[7: t1a, 9: t1c] predicate[null])
-    LEFT OUTER JOIN (join-predicate [add(25: cast, cast(1: v1 as double)) = cast(add(4: v4, 26: cast) as double) AND 2: v2 = 1 AND 5: v5 = 1] post-join-predicate [null])
-        LEFT OUTER JOIN (join-predicate [29: cast = 21: cast AND add(22: cast, cast(1: v1 as double)) = cast(add(4: v4, 23: cast) as double) AND 2: v2 = 1 AND 5: v5 = 1] post-join-predicate [null])
+    LEFT OUTER JOIN (join-predicate [29: cast = 21: cast AND add(22: cast, cast(1: v1 as double)) = cast(add(4: v4, 23: cast) as double) AND 2: v2 = 1 AND 5: v5 = 1] post-join-predicate [null])
+        LEFT OUTER JOIN (join-predicate [add(25: cast, cast(1: v1 as double)) = cast(add(4: v4, 26: cast) as double) AND 2: v2 = 1 AND 5: v5 = 1] post-join-predicate [null])
             CROSS JOIN (join-predicate [null] post-join-predicate [null])
                 SCAN (columns[1: v1, 2: v2] predicate[null])
                 EXCHANGE BROADCAST
                     SCAN (columns[4: v4, 5: v5] predicate[null])
             EXCHANGE BROADCAST
-                AGGREGATE ([GLOBAL] aggregate [{}] group by [[21: cast, 22: cast, 23: cast]] having [null]
-                    EXCHANGE SHUFFLE[21, 22, 23]
-                        AGGREGATE ([LOCAL] aggregate [{}] group by [[21: cast, 22: cast, 23: cast]] having [null]
+                AGGREGATE ([GLOBAL] aggregate [{27: countRows=count(27: countRows), 28: countNotNulls=count(28: countNotNulls)}] group by [[25: cast, 26: cast]] having [null]
+                    EXCHANGE SHUFFLE[25, 26]
+                        AGGREGATE ([LOCAL] aggregate [{27: countRows=count(1), 28: countNotNulls=count(24: cast)}] group by [[25: cast, 26: cast]] having [null]
                             CTEConsumer(cteid=1)
         EXCHANGE BROADCAST
-            AGGREGATE ([GLOBAL] aggregate [{27: countRows=count(27: countRows), 28: countNotNulls=count(28: countNotNulls)}] group by [[25: cast, 26: cast]] having [null]
-                EXCHANGE SHUFFLE[25, 26]
-                    AGGREGATE ([LOCAL] aggregate [{27: countRows=count(1), 28: countNotNulls=count(24: cast)}] group by [[25: cast, 26: cast]] having [null]
+            AGGREGATE ([GLOBAL] aggregate [{}] group by [[21: cast, 22: cast, 23: cast]] having [null]
+                EXCHANGE SHUFFLE[21, 22, 23]
+                    AGGREGATE ([LOCAL] aggregate [{}] group by [[21: cast, 22: cast, 23: cast]] having [null]
                         CTEConsumer(cteid=1)
 [end]
 
@@ -635,22 +634,22 @@ select t0.v1, case when t0.v1 > 1 then v1 when t1.v4 > 1 then v4 else t1.v5 end 
 CTEAnchor(cteid=1)
     CTEProducer(cteid=1)
         SCAN (columns[7: t1a, 9: t1c, 10: t1d] predicate[null])
-    LEFT OUTER JOIN (join-predicate [add(26: cast, 3: v3) = subtract(25: t1d, 6: v6)] post-join-predicate [null])
-        LEFT OUTER JOIN (join-predicate [29: cast = 21: abs AND add(23: cast, 3: v3) = subtract(22: t1d, 6: v6)] post-join-predicate [null])
+    LEFT OUTER JOIN (join-predicate [29: cast = 21: abs AND add(23: cast, 3: v3) = subtract(22: t1d, 6: v6)] post-join-predicate [null])
+        LEFT OUTER JOIN (join-predicate [add(26: cast, 3: v3) = subtract(25: t1d, 6: v6)] post-join-predicate [null])
             RIGHT OUTER JOIN (join-predicate [6: v6 = 3: v3] post-join-predicate [null])
                 EXCHANGE SHUFFLE[6]
                     SCAN (columns[4: v4, 5: v5, 6: v6] predicate[null])
                 EXCHANGE SHUFFLE[3]
                     SCAN (columns[1: v1, 3: v3] predicate[null])
             EXCHANGE BROADCAST
-                AGGREGATE ([GLOBAL] aggregate [{}] group by [[21: abs, 22: t1d, 23: cast]] having [null]
-                    EXCHANGE SHUFFLE[21, 22, 23]
-                        AGGREGATE ([LOCAL] aggregate [{}] group by [[21: abs, 22: t1d, 23: cast]] having [null]
+                AGGREGATE ([GLOBAL] aggregate [{27: countRows=count(27: countRows), 28: countNotNulls=count(28: countNotNulls)}] group by [[25: t1d, 26: cast]] having [null]
+                    EXCHANGE SHUFFLE[25, 26]
+                        AGGREGATE ([LOCAL] aggregate [{27: countRows=count(1), 28: countNotNulls=count(24: abs)}] group by [[25: t1d, 26: cast]] having [null]
                             CTEConsumer(cteid=1)
         EXCHANGE BROADCAST
-            AGGREGATE ([GLOBAL] aggregate [{27: countRows=count(27: countRows), 28: countNotNulls=count(28: countNotNulls)}] group by [[25: t1d, 26: cast]] having [null]
-                EXCHANGE SHUFFLE[25, 26]
-                    AGGREGATE ([LOCAL] aggregate [{27: countRows=count(1), 28: countNotNulls=count(24: abs)}] group by [[25: t1d, 26: cast]] having [null]
+            AGGREGATE ([GLOBAL] aggregate [{}] group by [[21: abs, 22: t1d, 23: cast]] having [null]
+                EXCHANGE SHUFFLE[21, 22, 23]
+                    AGGREGATE ([LOCAL] aggregate [{}] group by [[21: abs, 22: t1d, 23: cast]] having [null]
                         CTEConsumer(cteid=1)
 [end]
 
@@ -706,21 +705,21 @@ select v1, v4 not in (select t1a from test_all_type where t1a + v1 = v4 + t1c an
 CTEAnchor(cteid=1)
     CTEProducer(cteid=1)
         SCAN (columns[7: t1a, 9: t1c] predicate[null])
-    LEFT OUTER JOIN (join-predicate [add(25: cast, cast(1: v1 as double)) = cast(add(4: v4, 26: cast) as double) AND 2: v2 = 1 AND 5: v5 = 1] post-join-predicate [null])
-        LEFT OUTER JOIN (join-predicate [29: cast = 21: cast AND add(22: cast, cast(1: v1 as double)) = cast(add(4: v4, 23: cast) as double) AND 2: v2 = 1 AND 5: v5 = 1] post-join-predicate [null])
+    LEFT OUTER JOIN (join-predicate [29: cast = 21: cast AND add(22: cast, cast(1: v1 as double)) = cast(add(4: v4, 23: cast) as double) AND 2: v2 = 1 AND 5: v5 = 1] post-join-predicate [null])
+        LEFT OUTER JOIN (join-predicate [add(25: cast, cast(1: v1 as double)) = cast(add(4: v4, 26: cast) as double) AND 2: v2 = 1 AND 5: v5 = 1] post-join-predicate [null])
             CROSS JOIN (join-predicate [null] post-join-predicate [null])
                 SCAN (columns[1: v1, 2: v2] predicate[null])
                 EXCHANGE BROADCAST
                     SCAN (columns[4: v4, 5: v5] predicate[null])
             EXCHANGE BROADCAST
-                AGGREGATE ([GLOBAL] aggregate [{}] group by [[21: cast, 22: cast, 23: cast]] having [null]
-                    EXCHANGE SHUFFLE[21, 22, 23]
-                        AGGREGATE ([LOCAL] aggregate [{}] group by [[21: cast, 22: cast, 23: cast]] having [null]
+                AGGREGATE ([GLOBAL] aggregate [{27: countRows=count(27: countRows), 28: countNotNulls=count(28: countNotNulls)}] group by [[25: cast, 26: cast]] having [null]
+                    EXCHANGE SHUFFLE[25, 26]
+                        AGGREGATE ([LOCAL] aggregate [{27: countRows=count(1), 28: countNotNulls=count(24: cast)}] group by [[25: cast, 26: cast]] having [null]
                             CTEConsumer(cteid=1)
         EXCHANGE BROADCAST
-            AGGREGATE ([GLOBAL] aggregate [{27: countRows=count(27: countRows), 28: countNotNulls=count(28: countNotNulls)}] group by [[25: cast, 26: cast]] having [null]
-                EXCHANGE SHUFFLE[25, 26]
-                    AGGREGATE ([LOCAL] aggregate [{27: countRows=count(1), 28: countNotNulls=count(24: cast)}] group by [[25: cast, 26: cast]] having [null]
+            AGGREGATE ([GLOBAL] aggregate [{}] group by [[21: cast, 22: cast, 23: cast]] having [null]
+                EXCHANGE SHUFFLE[21, 22, 23]
+                    AGGREGATE ([LOCAL] aggregate [{}] group by [[21: cast, 22: cast, 23: cast]] having [null]
                         CTEConsumer(cteid=1)
 [end]
 
@@ -755,25 +754,27 @@ select t0.v1, case when t0.v1 > 1 then v1 when t1.v4 > 1 then v4 else t1.v5 end 
 CTEAnchor(cteid=1)
     CTEProducer(cteid=1)
         SCAN (columns[7: t1a, 9: t1c, 10: t1d] predicate[null])
-    LEFT OUTER JOIN (join-predicate [add(26: cast, 3: v3) = subtract(25: t1d, 6: v6)] post-join-predicate [null])
-        LEFT OUTER JOIN (join-predicate [29: cast = 21: abs AND add(23: cast, 3: v3) = subtract(22: t1d, 6: v6)] post-join-predicate [null])
+    LEFT OUTER JOIN (join-predicate [29: cast = 21: abs AND add(23: cast, 3: v3) = subtract(22: t1d, 6: v6)] post-join-predicate [null])
+        LEFT OUTER JOIN (join-predicate [add(26: cast, 3: v3) = subtract(25: t1d, 6: v6)] post-join-predicate [null])
             RIGHT OUTER JOIN (join-predicate [6: v6 = 3: v3] post-join-predicate [null])
                 EXCHANGE SHUFFLE[6]
                     SCAN (columns[4: v4, 5: v5, 6: v6] predicate[null])
                 EXCHANGE SHUFFLE[3]
                     SCAN (columns[1: v1, 3: v3] predicate[null])
             EXCHANGE BROADCAST
-                AGGREGATE ([GLOBAL] aggregate [{}] group by [[21: abs, 22: t1d, 23: cast]] having [null]
-                    EXCHANGE SHUFFLE[21, 22, 23]
-                        AGGREGATE ([LOCAL] aggregate [{}] group by [[21: abs, 22: t1d, 23: cast]] having [null]
+                AGGREGATE ([GLOBAL] aggregate [{27: countRows=count(27: countRows), 28: countNotNulls=count(28: countNotNulls)}] group by [[25: t1d, 26: cast]] having [null]
+                    EXCHANGE SHUFFLE[25, 26]
+                        AGGREGATE ([LOCAL] aggregate [{27: countRows=count(1), 28: countNotNulls=count(24: abs)}] group by [[25: t1d, 26: cast]] having [null]
                             CTEConsumer(cteid=1)
         EXCHANGE BROADCAST
-            AGGREGATE ([GLOBAL] aggregate [{27: countRows=count(27: countRows), 28: countNotNulls=count(28: countNotNulls)}] group by [[25: t1d, 26: cast]] having [null]
-                EXCHANGE SHUFFLE[25, 26]
-                    AGGREGATE ([LOCAL] aggregate [{27: countRows=count(1), 28: countNotNulls=count(24: abs)}] group by [[25: t1d, 26: cast]] having [null]
+            AGGREGATE ([GLOBAL] aggregate [{}] group by [[21: abs, 22: t1d, 23: cast]] having [null]
+                EXCHANGE SHUFFLE[21, 22, 23]
+                    AGGREGATE ([LOCAL] aggregate [{}] group by [[21: abs, 22: t1d, 23: cast]] having [null]
                         CTEConsumer(cteid=1)
 [end]
 
+/* test QuantifiedApply2JoinRule */
+/* test QuantifiedApply2JoinRule */
 /* test QuantifiedApply2JoinRule */
 /* test QuantifiedApply2JoinRule */
 
