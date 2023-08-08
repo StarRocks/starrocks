@@ -109,12 +109,12 @@ import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.ActionSet;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.CatalogPEntryObject;
 import com.starrocks.privilege.DbPEntryObject;
 import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeEntry;
 import com.starrocks.privilege.PrivilegeException;
@@ -132,6 +132,7 @@ import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.InformationSchemaDataSource;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
@@ -448,18 +449,25 @@ public class ShowExecutor {
                     mvTable.getBaseTableInfos().forEach(baseTableInfo -> {
                         Table baseTable = baseTableInfo.getTable();
                         // TODO: external table should check table action after AuthorizationManager support it.
-                        if (baseTable != null && baseTable.isNativeTableOrMaterializedView() && !PrivilegeActions.
-                                checkTableAction(connectContext, baseTableInfo.getDbName(),
+                        if (baseTable != null && baseTable.isNativeTableOrMaterializedView()) {
+                            try {
+                                Authorizer.checkTableAction(connectContext.getCurrentUserIdentity(),
+                                        connectContext.getCurrentRoleIds(), baseTableInfo.getDbName(),
                                         baseTableInfo.getTableName(),
-                                        PrivilegeType.SELECT)) {
-                            baseTableHasPrivilege.set(false);
+                                        PrivilegeType.SELECT);
+                            } catch (AccessDeniedException e) {
+                                baseTableHasPrivilege.set(false);
+                            }
                         }
                     });
                     if (!baseTableHasPrivilege.get()) {
                         continue;
                     }
-                    if (!PrivilegeActions.checkAnyActionOnMaterializedView(connectContext, db.getFullName(),
-                            mvTable.getName())) {
+
+                    try {
+                        Authorizer.checkAnyActionOnMaterializedView(connectContext.getCurrentUserIdentity(),
+                                connectContext.getCurrentRoleIds(), new TableName(db.getFullName(), mvTable.getName()));
+                    } catch (AccessDeniedException e) {
                         continue;
                     }
 
@@ -734,14 +742,18 @@ public class ShowExecutor {
             // like predicate
             if (showStmt.getWild() == null || showStmt.like(function.functionName())) {
                 if (showStmt.getIsGlobal()) {
-                    if (!PrivilegeActions.checkAnyActionOnGlobalFunction(connectContext, function.getFunctionId())) {
+                    try {
+                        Authorizer.checkAnyActionOnGlobalFunction(connectContext.getCurrentUserIdentity(),
+                                connectContext.getCurrentRoleIds(), function);
+                    } catch (AccessDeniedException e) {
                         continue;
                     }
                 } else if (!showStmt.getIsBuiltin()) {
                     Database db = connectContext.getGlobalStateMgr().getDb(showStmt.getDbName());
-                    if (!PrivilegeActions.checkAnyActionOnFunction(
-                            connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
-                            db.getId(), function.getFunctionId())) {
+                    try {
+                        Authorizer.checkAnyActionOnFunction(connectContext.getCurrentUserIdentity(),
+                                connectContext.getCurrentRoleIds(), db.getFullName(), function);
+                    } catch (AccessDeniedException e) {
                         continue;
                     }
                 }
@@ -813,7 +825,10 @@ public class ShowExecutor {
                 continue;
             }
 
-            if (!PrivilegeActions.checkAnyActionOnOrInDb(connectContext, catalogName, dbName)) {
+            try {
+                Authorizer.checkAnyActionOnOrInDb(connectContext.getCurrentUserIdentity(),
+                        connectContext.getCurrentRoleIds(), catalogName, dbName);
+            } catch (AccessDeniedException e) {
                 continue;
             }
 
@@ -855,18 +870,19 @@ public class ShowExecutor {
                         continue;
                     }
 
-                    if (tbl.isView()) {
-                        if (!PrivilegeActions.checkAnyActionOnView(
-                                connectContext, db.getFullName(), tbl.getName())) {
-                            continue;
+                    try {
+                        if (tbl.isView()) {
+                            Authorizer.checkAnyActionOnView(
+                                    connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                                    new TableName(db.getFullName(), tbl.getName()));
+                        } else if (tbl.isMaterializedView()) {
+                            Authorizer.checkAnyActionOnMaterializedView(connectContext.getCurrentUserIdentity(),
+                                    connectContext.getCurrentRoleIds(), new TableName(db.getFullName(), tbl.getName()));
+                        } else {
+                            Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
+                                    connectContext.getCurrentRoleIds(), new TableName(db.getFullName(), tbl.getName()));
                         }
-                    } else if (tbl.isMaterializedView()) {
-                        if (!PrivilegeActions.checkAnyActionOnMaterializedView(
-                                connectContext, db.getFullName(), tbl.getName())) {
-                            continue;
-                        }
-                    } else if (!PrivilegeActions.checkAnyActionOnTable(
-                            connectContext, db.getFullName(), tbl.getName())) {
+                    } catch (AccessDeniedException e) {
                         continue;
                     }
 
@@ -887,10 +903,13 @@ public class ShowExecutor {
                     LOG.warn("table {}.{}.{} does not exist", catalogName, dbName, tableName);
                     continue;
                 }
-                if (!PrivilegeActions.checkAnyActionOnTable(connectContext,
-                        catalogName, dbName, tableName)) {
+                try {
+                    Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
+                            connectContext.getCurrentRoleIds(), new TableName(catalogName, dbName, tableName));
+                } catch (AccessDeniedException e) {
                     continue;
                 }
+
                 tableMap.put(tableName, table.getMysqlType());
             }
         }
@@ -924,8 +943,10 @@ public class ShowExecutor {
                         continue;
                     }
 
-
-                    if (!PrivilegeActions.checkAnyActionOnTable(connectContext, db.getFullName(), table.getName())) {
+                    try {
+                        Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
+                                connectContext.getCurrentRoleIds(), new TableName(db.getFullName(), table.getName()));
+                    } catch (AccessDeniedException e) {
                         continue;
                     }
 
@@ -1419,9 +1440,11 @@ public class ShowExecutor {
             while (iterator.hasNext()) {
                 RoutineLoadJob routineLoadJob = iterator.next();
                 try {
-                    if (!PrivilegeActions.checkAnyActionOnTable(connectContext,
-                            routineLoadJob.getDbFullName(),
-                            routineLoadJob.getTableName())) {
+                    try {
+                        Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
+                                connectContext.getCurrentRoleIds(), new TableName(routineLoadJob.getDbFullName(),
+                                        routineLoadJob.getTableName()));
+                    } catch (AccessDeniedException e) {
                         iterator.remove();
                     }
                 } catch (MetaNotFoundException e) {
@@ -1480,7 +1503,10 @@ public class ShowExecutor {
                     "The table metadata of job has been changed. The job will be cancelled automatically", e);
         }
         // In new privilege framework(RBAC), user needs any action on the table to show routine load job on it.
-        if (!PrivilegeActions.checkAnyActionOnTable(connectContext, dbFullName, tableName)) {
+        try {
+            Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
+                    connectContext.getCurrentRoleIds(), new TableName(dbFullName, tableName));
+        } catch (AccessDeniedException e) {
             // if we have no privilege, return an empty result set
             resultSet = new ShowResultSet(showRoutineLoadTaskStmt.getMetaData(), rows);
             return;
@@ -1625,8 +1651,10 @@ public class ShowExecutor {
                 SortedSet<Table> sortedTables = new TreeSet<>(Comparator.comparing(Table::getName));
 
                 for (Table table : tables) {
-
-                    if (!PrivilegeActions.checkAnyActionOnTable(connectContext, dbName, table.getName())) {
+                    try {
+                        Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
+                                connectContext.getCurrentRoleIds(), new TableName(dbName, table.getName()));
+                    } catch (AccessDeniedException e) {
                         continue;
                     }
 
@@ -1678,8 +1706,10 @@ public class ShowExecutor {
                 List<String> leftRow = Arrays.asList("Left", readableLeft, String.valueOf(replicaCountLeft));
                 totalRows.add(leftRow);
             } else {
-
-                if (!PrivilegeActions.checkAnyActionOnTable(connectContext, dbName, tableName)) {
+                try {
+                    Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
+                            connectContext.getCurrentRoleIds(), new TableName(dbName, tableName));
+                } catch (AccessDeniedException e) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SHOW DATA",
                             connectContext.getQualifiedUser(),
                             connectContext.getRemoteIP(),
@@ -2051,8 +2081,10 @@ public class ShowExecutor {
             AtomicBoolean privilegeDeny = new AtomicBoolean(false);
             tableRefs.forEach(tableRef -> {
                 TableName tableName = tableRef.getName();
-                if (!PrivilegeActions.checkTableAction(connectContext, tableName.getDb(), tableName.getTbl(),
-                        PrivilegeType.EXPORT)) {
+                try {
+                    Authorizer.checkTableAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                            tableName.getDb(), tableName.getTbl(), PrivilegeType.EXPORT);
+                } catch (AccessDeniedException e) {
                     privilegeDeny.set(true);
                 }
             });
@@ -2311,8 +2343,10 @@ public class ShowExecutor {
                         continue;
                     }
 
-                    if (!PrivilegeActions.checkAnyActionOnTable(ConnectContext.get(),
-                            db.getFullName(), olapTable.getName())) {
+                    try {
+                        Authorizer.checkAnyActionOnTable(ConnectContext.get().getCurrentUserIdentity(),
+                                ConnectContext.get().getCurrentRoleIds(), new TableName(db.getFullName(), olapTable.getName()));
+                    } catch (AccessDeniedException e) {
                         continue;
                     }
 
@@ -2482,9 +2516,16 @@ public class ShowExecutor {
         List<List<String>> rowSet = catalogMgr.getCatalogsInfo().stream()
                 .filter(row -> {
                             if (!InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equals(row.get(0))) {
-                                return PrivilegeActions.checkAnyActionOnOrInCatalog(
-                                        connectContext.getCurrentUserIdentity(),
-                                        connectContext.getCurrentRoleIds(), row.get(0));
+
+                                try {
+                                    Authorizer.checkAnyActionOnOrInCatalog(
+                                            connectContext.getCurrentUserIdentity(),
+                                            connectContext.getCurrentRoleIds(), row.get(0));
+                                } catch (AccessDeniedException e) {
+                                    return false;
+                                }
+
+                                return true;
                             }
                             return true;
                         }
@@ -2587,8 +2628,16 @@ public class ShowExecutor {
         PatternMatcher finalMatcher = matcher;
         storageVolumeNames = storageVolumeNames.stream()
                 .filter(storageVolumeName -> finalMatcher == null || finalMatcher.match(storageVolumeName))
-                .filter(storageVolumeName -> PrivilegeActions.checkAnyActionOnStorageVolume(connectContext, storageVolumeName))
-                .collect(Collectors.toList());
+                .filter(storageVolumeName -> {
+                                try {
+                                    Authorizer.checkAnyActionOnStorageVolume(connectContext.getCurrentUserIdentity(),
+                                            connectContext.getCurrentRoleIds(), storageVolumeName);
+                                } catch (AccessDeniedException e) {
+                                    return false;
+                                }
+                                return true;
+                            }
+                ).collect(Collectors.toList());
         for (String storageVolumeName : storageVolumeNames) {
             rows.add(Lists.newArrayList(storageVolumeName));
         }

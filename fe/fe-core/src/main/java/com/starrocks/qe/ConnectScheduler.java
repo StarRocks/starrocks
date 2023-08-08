@@ -41,8 +41,9 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.nio.NConnectContext;
-import com.starrocks.privilege.PrivilegeActions;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.sql.analyzer.Authorizer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -166,10 +167,13 @@ public class ConnectScheduler {
         ConnectContext currContext = connectContext == null ? ConnectContext.get() : connectContext;
 
         for (ConnectContext ctx : connectionMap.values()) {
-
-            if (!ctx.getQualifiedUser().equals(user) &&
-                    !PrivilegeActions.checkSystemAction(currContext, PrivilegeType.OPERATE)) {
-                continue;
+            if (!ctx.getQualifiedUser().equals(user)) {
+                try {
+                    Authorizer.checkSystemAction(currContext.getCurrentUserIdentity(),
+                            currContext.getCurrentRoleIds(), PrivilegeType.OPERATE);
+                } catch (AccessDeniedException e) {
+                    continue;
+                }
             }
 
             infos.add(ctx.toThreadInfo());

@@ -110,6 +110,10 @@ public enum ErrorCode {
 
     ERR_NOT_SUPPORTED_AUTH_MODE(1251, new byte[] {'0', '8', '0', '0', '4'},
             "Client does not support authentication protocol requested by server; consider upgrading MySQL client"),
+
+    ERR_ACCESS_DENIED(1252, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation"),
+
     ERR_UNKNOWN_STORAGE_ENGINE(1286, new byte[] {'4', '2', '0', '0', '0'}, "Unknown storage engine '%s'"),
     ERR_UNKNOWN_TIME_ZONE(1298, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown or incorrect time zone: '%s'"),
     ERR_WRONG_OBJECT(1347, new byte[] {'H', 'Y', '0', '0', '0'}, "'%s'.'%s' is not '%s'"),
@@ -301,7 +305,7 @@ public enum ErrorCode {
     ERR_PRIVILEGE_DB_NOT_FOUND(5086, new byte[] {'4', '2', '0', '0', '0'},
             "Db [%s] not found when checking privilege"),
     ERR_PRIVILEGE_ACCESS_RESOURCE_DENIED(5087, new byte[] {'4', '2', '0', '0', '0'},
-            "%s denied to user '%s'@'%s' for resoure '%s' when checking privilege"),
+            "%s denied to user '%s'@'%s' for resource '%s' when checking privilege"),
     ERR_PRIVILEGE_ACCESS_TABLE_DENIED(5088, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied for user '%s' to table '%s' when checking privilege"),
     ERR_PRIVILEGE_ROUTINELODE_JOB_NOT_FOUND(5089, new byte[] {'4', '2', '0', '0', '0'},
