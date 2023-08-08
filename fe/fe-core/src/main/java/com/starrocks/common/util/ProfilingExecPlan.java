@@ -198,7 +198,8 @@ public class ProfilingExecPlan {
         if (sink instanceof MultiCastDataSink || sink instanceof ResultSink) {
             element = new ProfilingElement(-1, sink.getClass());
         } else {
-            element = new ProfilingElement(sink.getExchNodeId().asInt(), sink.getClass());
+            element = new ProfilingElement(sink.getExchNodeId() == null ? -1 : sink.getExchNodeId().asInt(),
+                    sink.getClass());
         }
 
         DataPartition outputPartition = null;

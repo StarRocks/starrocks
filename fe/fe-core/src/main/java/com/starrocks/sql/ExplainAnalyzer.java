@@ -159,9 +159,15 @@ public class ExplainAnalyzer {
 
     public ExplainAnalyzer(ProfilingExecPlan plan, RuntimeProfile queryProfile, List<Integer> planNodeIds) {
         this.plan = plan;
-        this.summaryProfile = queryProfile.getChild("Summary");
-        this.plannerProfile = queryProfile.getChild("Planner");
-        this.executionProfile = queryProfile.getChild("Execution");
+        if (this.plan == null) {
+            this.summaryProfile = null;
+            this.plannerProfile = null;
+            this.executionProfile = null;
+        } else {
+            this.summaryProfile = queryProfile.getChild("Summary");
+            this.plannerProfile = queryProfile.getChild("Planner");
+            this.executionProfile = queryProfile.getChild("Execution");
+        }
         if (CollectionUtils.isNotEmpty(planNodeIds)) {
             detailPlanNodeIds.addAll(planNodeIds);
         }
