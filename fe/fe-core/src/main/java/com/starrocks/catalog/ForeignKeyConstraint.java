@@ -37,8 +37,9 @@ import java.util.stream.Collectors;
 // a table may have multi foreign key constraints.
 public class ForeignKeyConstraint {
     private static final Logger LOG = LogManager.getLogger(ForeignKeyConstraint.class);
-    private static final String FOREIGN_KEY_REGEX = "((\\.?\\w+:?)*)\\s*\\(((,?\\s*\\w+\\s*)+)\\)\\s+((?i)REFERENCES)\\s+" +
-            "((\\.?\\w+:?)+)\\s*\\(((,?\\s*\\w+\\s*)+)\\)";
+
+    private static final String FOREIGN_KEY_REGEX = "((\\.?\\w+:?-?)*)\\s*\\(((,?\\s*\\w+\\s*)+)\\)\\s+((?i)REFERENCES)\\s+" +
+            "((\\.?\\w+:?-?)+)\\s*\\(((,?\\s*\\w+\\s*)+)\\)";
 
     public static final Pattern FOREIGN_KEY_PATTERN = Pattern.compile(FOREIGN_KEY_REGEX);
 
@@ -114,7 +115,7 @@ public class ForeignKeyConstraint {
             }
             Matcher foreignKeyMatcher = FOREIGN_KEY_PATTERN.matcher(constraintDesc);
             if (!foreignKeyMatcher.find()) {
-                LOG.warn("invalid constraint:{}", foreignKeyConstraintDescs);
+                LOG.warn("invalid constraint:{}", constraintDesc);
                 continue;
             }
 
@@ -134,7 +135,13 @@ public class ForeignKeyConstraint {
             String targetCatalogName = targetTableParts[0];
             String targetDb = targetTableParts[1];
             String targetTable = targetTableParts[2];
-            BaseTableInfo parentTableInfo = getTableBaseInfo(targetCatalogName, targetDb, targetTable);
+            BaseTableInfo parentTableInfo;
+            String[] targetTableSplits = targetTable.split(":");
+            if (targetTableSplits.length != 2) {
+                parentTableInfo = getTableBaseInfo(targetCatalogName, targetDb, targetTable, null);
+            } else {
+                parentTableInfo = getTableBaseInfo(targetCatalogName, targetDb, targetTableSplits[0], targetTable);
+            }
 
             BaseTableInfo childTableInfo = null;
             if (!Strings.isNullOrEmpty(sourceTablePath)) {
@@ -143,7 +150,12 @@ public class ForeignKeyConstraint {
                 String sourceCatalogName = sourceTableParts[0];
                 String sourceDb = sourceTableParts[1];
                 String sourceTable = sourceTableParts[2];
-                childTableInfo = getTableBaseInfo(sourceCatalogName, sourceDb, sourceTable);
+                String[] sourceTableSplits = sourceTable.split(":");
+                if (sourceTableSplits.length != 2) {
+                    childTableInfo = getTableBaseInfo(sourceCatalogName, sourceDb, sourceTable, null);
+                } else {
+                    childTableInfo = getTableBaseInfo(sourceCatalogName, sourceDb, sourceTableSplits[0], sourceTable);
+                }
             }
 
             List<Pair<String, String>> columnRefPairs =
@@ -153,12 +165,12 @@ public class ForeignKeyConstraint {
         return foreignKeyConstraints;
     }
 
-    private static BaseTableInfo getTableBaseInfo(String catalog, String db, String table) {
+    private static BaseTableInfo getTableBaseInfo(String catalog, String db, String table, String tableIdentifier) {
         BaseTableInfo baseTableInfo;
         if (catalog.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
             baseTableInfo = new BaseTableInfo(Long.parseLong(db), Long.parseLong(table));
         } else {
-            baseTableInfo = new BaseTableInfo(catalog, db, table);
+            baseTableInfo = new BaseTableInfo(catalog, db, table, tableIdentifier);
         }
         return baseTableInfo;
     }
