@@ -313,7 +313,7 @@ You can also simulate a given query and analyze its profile using the EXPLAIN AN
 EXPLAIN ANALYZE <sql>
 ```
 
-Currently, StarRocks supports analyzing the profiles of two types of SQL statements: the query (SELECT) statement and the INSERT INTO statement. Analyzing the profiles of the INSERT INTO statement is specifically designed for StarRocks' native OLAP tables. Please note that when you analyze the profiles of the INSERT INTO statement, no data will actually be inserted. By default, the transaction is aborted, ensuring that no unintended changes are made to the data in the process of profile analysis.
+Currently, EXPLAIN ANALYZE supports two types of SQL statements: the query (SELECT) statement and the INSERT INTO statement. You can only simulate the INSERT INTO statement and analyze its profiles on StarRocks' native OLAP tables. Please note that when you analyze the profiles of an INSERT INTO statement, no data will actually be inserted. By default, the transaction is aborted, ensuring that no unintended changes are made to the data in the process of profile analysis.
 
 Example 1: Analyze the profile of a given query:
 
