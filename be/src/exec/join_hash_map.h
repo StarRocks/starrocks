@@ -484,7 +484,6 @@ public:
             _probe_state->count = (*probe_chunk)->num_rows();
             _probe_output(probe_chunk, chunk);
             _build_output(chunk);
-            _probe_state->count = 0;
             break;
         }
         default: {
@@ -501,9 +500,7 @@ public:
         return;
     }
 
-    void lazy_output_remain(ChunkPtr* src_chunk, ChunkPtr* dest_chunk) {
-        return;
-    }
+    void lazy_output_remain(ChunkPtr* src_chunk, ChunkPtr* dest_chunk) { return; }
 
     void lazy_output(ChunkPtr* probe_chunk, ChunkPtr* src_chunk, ChunkPtr* dest_chunk) {
         if ((*src_chunk)->num_rows() < _probe_state->count) {
@@ -513,6 +510,7 @@ public:
 
         lazy_probe_output(probe_chunk, src_chunk, dest_chunk);
         lazy_build_output(src_chunk, dest_chunk);
+        _probe_state->count = 0;
     }
 
     void lazy_probe_output(ChunkPtr* probe_chunk, ChunkPtr* src_chunk, ChunkPtr* dest_chunk) {
@@ -588,10 +586,12 @@ private:
             }
         }
         _probe_state->probe_index_column->resize(_probe_state->count);
-        for (size_t i=0; i < _probe_state->count; i++) {
+        for (size_t i = 0; i < _probe_state->count; i++) {
             _probe_state->probe_index_column->get_data()[i] = i;
         }
-        (*chunk)->append_column(_probe_state->probe_index_column, INT32_MAX - 1);
+        ColumnPtr nullable_column =
+                NullableColumn::create(_probe_state->probe_index_column, NullColumn::create(_probe_state->count, 0));
+        (*chunk)->append_column(nullable_column, INT32_MAX - 1);
     }
 
     void _build_output(ChunkPtr* chunk) {
@@ -609,8 +609,8 @@ private:
             }
         }
 
-        _probe_state->build_index_column->resize(_probe_state->count);
-        (*chunk)->append_column(_probe_state->build_index_column, INT32_MAX - 2);
+        //_probe_state->build_index_column->resize(_probe_state->count);
+        //(*chunk)->append_column(_probe_state->build_index_column, INT32_MAX - 2);
     }
 
     JoinHashTableItems* _table_items = nullptr;

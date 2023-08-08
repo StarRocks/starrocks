@@ -631,7 +631,10 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_output(ChunkPtr* probe_chunk,
     _probe_state->probe_index_column->resize(0);
     _probe_state->probe_index_column->append_numbers((const void*)_probe_state->probe_index.data(),
                                                      _probe_state->count * sizeof(uint32_t));
-    (*chunk)->append_column(_probe_state->probe_index_column, INT32_MAX - 1);
+
+    ColumnPtr nullable_column =
+            NullableColumn::create(_probe_state->probe_index_column, NullColumn::create(_probe_state->count, 0));
+    (*chunk)->append_column(nullable_column, INT32_MAX - 1);
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
@@ -742,7 +745,10 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_build_output(ChunkPtr* chunk) {
     _probe_state->build_index_column->resize(0);
     _probe_state->build_index_column->append_numbers((const void*)_probe_state->build_index.data(),
                                                      _probe_state->count * sizeof(uint32_t));
-    (*chunk)->append_column(_probe_state->build_index_column, INT32_MAX - 2);
+
+    ColumnPtr nullable_column =
+            NullableColumn::create(_probe_state->build_index_column, NullColumn::create(_probe_state->count, 0));
+    (*chunk)->append_column(nullable_column, INT32_MAX - 2);
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
