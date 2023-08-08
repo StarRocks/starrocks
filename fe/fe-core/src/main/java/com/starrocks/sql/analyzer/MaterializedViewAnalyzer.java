@@ -88,6 +88,7 @@ import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.logging.log4j.LogManager;
@@ -99,6 +100,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -410,31 +412,41 @@ public class MaterializedViewAnalyzer {
             }
 
             if (keyCols.isEmpty()) {
-                throw new SemanticException("The number of sort key is 0");
+                throw new SemanticException("Sort key of materialized view is empty");
             }
 
             if (keyCols.size() > mvColumns.size()) {
                 throw new SemanticException("The number of sort key should be less than the number of columns.");
             }
 
-            for (int i = 0; i < keyCols.size(); i++) {
-                Column column = mvColumns.get(i);
-                if (!column.getName().equalsIgnoreCase(keyCols.get(i))) {
-                    String keyName = keyCols.get(i);
-                    if (mvColumns.stream().noneMatch(col -> col.getName().equalsIgnoreCase(keyName))) {
-                        throw new SemanticException("Sort key(%s) doesn't exist.", keyCols.get(i));
-                    }
-                    throw new SemanticException("Sort key should be a ordered prefix of select cols.");
-                }
-
-                Type keyColType = column.getType();
-                if (!keyColType.canBeMVKey()) {
-                    throw new SemanticException("This col(%s) can't be mv sort key", keyCols.get(i));
-                }
-                column.setIsKey(true);
-                column.setAggregationType(null, false);
+            if (CollectionUtils.isEmpty(statement.getSortKeys())) {
+                return mvColumns;
             }
-            return mvColumns;
+
+            // Reorder the MV columns according to sort-key
+            List<Column> reorderedColumns = new ArrayList<>();
+            Map<String, Column> columnMap = mvColumns.stream().collect(Collectors.toMap(Column::getName, col -> col));
+            Set<String> usedColumns = new HashSet<>();
+            for (String columnName : keyCols) {
+                Column keyColumn = columnMap.get(columnName);
+                if (keyColumn == null) {
+                    throw new SemanticException("Sort key not exists: " + columnName);
+                }
+                Type keyColType = keyColumn.getType();
+                if (!keyColType.canBeMVKey()) {
+                    throw new SemanticException("Type %s cannot be sort key: %s", keyColType, columnName);
+                }
+                keyColumn.setIsKey(true);
+                keyColumn.setAggregationType(null, false);
+                reorderedColumns.add(keyColumn);
+                usedColumns.add(columnName);
+            }
+            for (Column col : mvColumns) {
+                if (!usedColumns.contains(col.getName())) {
+                    reorderedColumns.add(col);
+                }
+            }
+            return reorderedColumns;
         }
 
         private void checkExpInColumn(CreateMaterializedViewStatement statement) {

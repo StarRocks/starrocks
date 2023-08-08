@@ -1577,6 +1577,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 distributionDesc = (DistributionDesc) visit(desc.distributionDesc());
             }
 
+            // Order By
             if (desc.orderByDesc() != null) {
                 sortKeys = visit(desc.orderByDesc().identifierList().identifier(), Identifier.class)
                         .stream().map(Identifier::getValue).collect(toList());
