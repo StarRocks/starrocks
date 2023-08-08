@@ -14,6 +14,11 @@ shell: ossutil64 mkdir oss://${oss_bucket}/test_orc_count_star_opt/${uuid0}/stru
 0
 
 -- !result
+shell: ossutil64 mkdir oss://${oss_bucket}/test_orc_count_star_opt/${uuid0}/empty_row_index >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
 shell: ossutil64 cp --force ../be/test/exec/test_data/orc_scanner/array_data_only.orc oss://${oss_bucket}/test_orc_count_star_opt/${uuid0}/array_data_only/array_data_only.orc | grep -Pv "(average|elapsed)"
 -- result:
 0
@@ -31,6 +36,12 @@ shell: ossutil64 cp --force ../be/test/exec/test_data/orc_scanner/struct_data_on
 0
 
 Succeed: Total num: 1, size: 342. OK num: 1(upload 1 files).
+-- !result
+shell: ossutil64 cp --force ../be/test/exec/test_data/orc_scanner/empty_row_index.orc oss://${oss_bucket}/test_orc_count_star_opt/${uuid0}/empty_row_index/empty_row_index.orc | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 369. OK num: 1(upload 1 files).
 -- !result
 CREATE EXTERNAL TABLE array_data_only
 (
@@ -97,6 +108,33 @@ set enable_count_star_optimization = true;
 select count(*) from struct_data_only;
 -- result:
 63
+-- !result
+CREATE EXTERNAL TABLE empty_row_index
+(
+    `id` int,
+    name string
+) 
+ENGINE=file
+PROPERTIES 
+(
+    "path" = "oss://${oss_bucket}/test_orc_count_star_opt/${uuid0}/empty_row_index/", 
+    "format" = "orc"
+);
+-- result:
+-- !result
+set enable_count_star_optimization = true;
+-- result:
+-- !result
+select count(*) from empty_row_index;
+-- result:
+0
+-- !result
+set enable_count_star_optimization = false;
+-- result:
+-- !result
+select count(*) from empty_row_index;
+-- result:
+1
 -- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_orc_count_star_opt/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
 -- result:

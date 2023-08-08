@@ -3,17 +3,20 @@
 shell: ossutil64 mkdir oss://${oss_bucket}/test_orc_count_star_opt/${uuid0}/array_data_only >/dev/null || echo "exit 0" >/dev/null
 shell: ossutil64 mkdir oss://${oss_bucket}/test_orc_count_star_opt/${uuid0}/map_data_only >/dev/null || echo "exit 0" >/dev/null
 shell: ossutil64 mkdir oss://${oss_bucket}/test_orc_count_star_opt/${uuid0}/struct_data_only >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 mkdir oss://${oss_bucket}/test_orc_count_star_opt/${uuid0}/empty_row_index >/dev/null || echo "exit 0" >/dev/null
+
 
 shell: ossutil64 cp --force ../be/test/exec/test_data/orc_scanner/array_data_only.orc oss://${oss_bucket}/test_orc_count_star_opt/${uuid0}/array_data_only/array_data_only.orc | grep -Pv "(average|elapsed)"
 shell: ossutil64 cp --force ../be/test/exec/test_data/orc_scanner/map_data_only.orc oss://${oss_bucket}/test_orc_count_star_opt/${uuid0}/map_data_only/map_data_only.orc | grep -Pv "(average|elapsed)"
 shell: ossutil64 cp --force ../be/test/exec/test_data/orc_scanner/struct_data_only.orc oss://${oss_bucket}/test_orc_count_star_opt/${uuid0}/struct_data_only/struct_data_only.orc | grep -Pv "(average|elapsed)"
+shell: ossutil64 cp --force ../be/test/exec/test_data/orc_scanner/empty_row_index.orc oss://${oss_bucket}/test_orc_count_star_opt/${uuid0}/empty_row_index/empty_row_index.orc | grep -Pv "(average|elapsed)"
 
 CREATE EXTERNAL TABLE array_data_only
 (
     data array<int>    
 ) 
 ENGINE=file
-PROPERTIES 
+PROPERTIES
 (
     "path" = "oss://${oss_bucket}/test_orc_count_star_opt/${uuid0}/array_data_only/", 
     "format" = "orc"
@@ -57,5 +60,21 @@ set enable_count_star_optimization = true;
 select count(*) from struct_data_only;
 -- set enable_count_star_optimization = false;
 -- select count(*) from struct_data_only;
+
+CREATE EXTERNAL TABLE empty_row_index
+(
+    `id` int,
+    name string
+) 
+ENGINE=file
+PROPERTIES 
+(
+    "path" = "oss://${oss_bucket}/test_orc_count_star_opt/${uuid0}/empty_row_index/", 
+    "format" = "orc"
+);
+set enable_count_star_optimization = true;
+select count(*) from empty_row_index;
+set enable_count_star_optimization = false;
+select count(*) from empty_row_index;
 
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_orc_count_star_opt/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
