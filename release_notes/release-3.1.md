@@ -10,7 +10,7 @@
 
 - 新增支持主键模型（Primary Key）表，暂不支持持久化索引。
 - 支持自增列属性 [AUTO_INCREMENT](../sql-reference/sql-statements/auto_increment.md)，提供表内全局唯一 ID，简化数据管理。
-- 支持[导入时自动创建分区和使用分区表达式定义分区规则](../table_design/automatic_partitioning.md)，提高了分区创建的易用性和灵活性。
+- 支持[导入时自动创建分区和使用分区表达式定义分区规则](../table_design/expression_partitioning.md)，提高了分区创建的易用性和灵活性。
 - 支持[存储卷（Storage Volume）抽象](../deployment/deploy_shared_data.md#创建默认存储卷)，方便在存算分离架构中配置存储位置及鉴权等相关信息。后续创建库表时可以直接引用，提升易用性。
 
 #### 数据湖分析
