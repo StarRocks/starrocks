@@ -35,7 +35,6 @@ public:
                                  const MetaFileBuilder* builder);
 
 private:
-    DataDir* _meta_dir = nullptr;
     std::string _path;
 };
 
