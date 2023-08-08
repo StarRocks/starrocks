@@ -75,12 +75,12 @@ TEST(FutureTest, test_exception_no_state01) {
                 try {
                     f.get();
                     EXPECT_FALSE(true) << "unreachable";
-                } catch (const FutureError& e) {
+                } catch (const future_error& e) {
                     EXPECT_EQ(std::make_error_code(future_errc::no_state), e.code());
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 }
 
 TEST(FutureTest, test_exception_no_state02) {
@@ -94,12 +94,12 @@ TEST(FutureTest, test_exception_no_state02) {
                 try {
                     f.get();
                     EXPECT_FALSE(true) << "unreachable";
-                } catch (const FutureError& e) {
+                } catch (const future_error& e) {
                     EXPECT_EQ(std::make_error_code(future_errc::no_state), e.code());
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 }
 
 TEST(FutureTest, test_exception_no_state03) {
@@ -112,12 +112,12 @@ TEST(FutureTest, test_exception_no_state03) {
                 try {
                     f.get();
                     EXPECT_FALSE(true) << "unreachable";
-                } catch (const FutureError& e) {
+                } catch (const future_error& e) {
                     EXPECT_EQ(std::make_error_code(future_errc::no_state), e.code());
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 }
 
 static int value = 99;

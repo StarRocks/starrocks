@@ -71,12 +71,12 @@ TEST(SharedFutureTest, test_exception_01) {
                 try {
                     f.get();
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::no_state));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 }
 
 TEST(SharedFutureTest, test_exception02) {
@@ -86,12 +86,12 @@ TEST(SharedFutureTest, test_exception02) {
                 try {
                     f.get();
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::no_state));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 }
 
 TEST(SharedFutureTest, test_exception03) {
@@ -99,7 +99,7 @@ TEST(SharedFutureTest, test_exception03) {
     try {
         f.get();
         EXPECT_TRUE(false);
-    } catch (FutureError& e) {
+    } catch (future_error& e) {
         EXPECT_TRUE(e.code() == std::make_error_code(future_errc::no_state));
     }
 }

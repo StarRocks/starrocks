@@ -48,11 +48,11 @@ inline std::error_condition make_error_condition(starrocks::bthreads::future_err
 
 namespace starrocks::bthreads {
 
-class FutureError : public std::system_error {
+class future_error : public std::system_error {
 public:
-    explicit FutureError(future_errc code) : std::system_error(std::make_error_code(code)) {}
+    explicit future_error(future_errc code) : std::system_error(std::make_error_code(code)) {}
 
-    ~FutureError() override = default;
+    ~future_error() override = default;
 };
 
 template <typename R>
@@ -79,7 +79,7 @@ public:
 
     template <typename T>
     static void check_state(const std::shared_ptr<T>& p) {
-        if (!static_cast<bool>(p)) throw FutureError(future_errc::no_state);
+        if (!static_cast<bool>(p)) throw future_error(future_errc::no_state);
     }
 
 protected:
@@ -98,7 +98,7 @@ protected:
             _exception = exception;
             mark_ready_ant_notify();
         } else {
-            throw FutureError(future_errc::promise_already_satisfied);
+            throw future_error(future_errc::promise_already_satisfied);
         }
     }
 
@@ -135,7 +135,7 @@ protected:
     }
 
     void set_retrieved_flag() {
-        if (_retrieved.test_and_set()) throw FutureError(future_errc::future_already_retrieved);
+        if (_retrieved.test_and_set()) throw future_error(future_errc::future_already_retrieved);
     }
 
     void break_promise() {
@@ -143,7 +143,7 @@ protected:
         // provider is abandoning this shared state, so noone can be
         // trying to make the shared state ready at the same time
         if (_status->load(butil::memory_order_acquire) != Status::kReady) {
-            set_exception(std::make_exception_ptr(FutureError(future_errc::broken_promise)));
+            set_exception(std::make_exception_ptr(future_error(future_errc::broken_promise)));
         }
     }
 
@@ -179,7 +179,7 @@ private:
             }
             mark_ready_ant_notify();
         } else {
-            throw FutureError(future_errc::promise_already_satisfied);
+            throw future_error(future_errc::promise_already_satisfied);
         }
     }
 
@@ -193,7 +193,7 @@ private:
             }
             mark_ready_ant_notify();
         } else {
-            throw FutureError(future_errc::promise_already_satisfied);
+            throw future_error(future_errc::promise_already_satisfied);
         }
     }
 
@@ -222,7 +222,7 @@ private:
             _result = &value;
             mark_ready_ant_notify();
         } else {
-            throw FutureError(future_errc::promise_already_satisfied);
+            throw future_error(future_errc::promise_already_satisfied);
         }
     }
 
@@ -247,7 +247,7 @@ private:
         if (_status->compare_exchange_strong(expect_status, Status::kWriting, butil::memory_order_acq_rel)) {
             mark_ready_ant_notify();
         } else {
-            throw FutureError(future_errc::promise_already_satisfied);
+            throw future_error(future_errc::promise_already_satisfied);
         }
     }
 };

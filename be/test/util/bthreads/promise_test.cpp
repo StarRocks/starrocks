@@ -44,12 +44,12 @@ TEST(PromiseTest, test_move_ctor) {
                 try {
                     p1.get_future();
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::no_state));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 }
 
 TEST(PromiseTest, test_move_assign) {
@@ -63,12 +63,12 @@ TEST(PromiseTest, test_move_assign) {
                 try {
                     p1.get_future();
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::no_state));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 }
 
 TEST(PromiseTest, test_get_future01) {
@@ -95,12 +95,12 @@ TEST(PromiseTest, test_get_future02) {
                 try {
                     p1.get_future();
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::future_already_retrieved));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 }
 
 TEST(PromiseTest, test_get_future03) {
@@ -112,12 +112,12 @@ TEST(PromiseTest, test_get_future03) {
                 try {
                     p1.get_future();
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::future_already_retrieved));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 }
 TEST(PromiseTest, test_get_future04) {
     Promise<void> p1;
@@ -128,12 +128,12 @@ TEST(PromiseTest, test_get_future04) {
                 try {
                     p1.get_future();
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::future_already_retrieved));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 }
 
 TEST(PromiseTest, test_exception01) {
@@ -183,12 +183,12 @@ TEST(PromiseTest, test_exception04) {
                 try {
                     p1.set_exception(std::make_exception_ptr(1));
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::promise_already_satisfied));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 
     EXPECT_THROW(
             {
@@ -214,12 +214,12 @@ TEST(PromiseTest, test_exception05) {
                 try {
                     p1.set_exception(std::make_exception_ptr(0));
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::promise_already_satisfied));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 }
 
 TEST(PromiseTest, test_exception06) {
@@ -233,12 +233,12 @@ TEST(PromiseTest, test_exception06) {
                 try {
                     p1.set_exception(std::make_exception_ptr(1));
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::promise_already_satisfied));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 
     EXPECT_THROW(
             {
@@ -265,12 +265,12 @@ TEST(PromiseTest, test_exception07) {
                 try {
                     p1.set_exception(std::make_exception_ptr(0));
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::promise_already_satisfied));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 }
 
 TEST(PromiseTest, test_exception08) {
@@ -284,12 +284,12 @@ TEST(PromiseTest, test_exception08) {
                 try {
                     p1.set_exception(std::make_exception_ptr(1));
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::promise_already_satisfied));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 
     EXPECT_THROW(
             {
@@ -315,12 +315,12 @@ TEST(PromiseTest, test_exception09) {
                 try {
                     p1.set_exception(std::make_exception_ptr(0));
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::promise_already_satisfied));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 }
 
 TEST(PromiseTest, test_exception10) {
@@ -331,12 +331,12 @@ TEST(PromiseTest, test_exception10) {
                 try {
                     p1.set_exception(std::make_exception_ptr(1));
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::no_state));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 }
 
 TEST(PromiseTest, test_exception11) {
@@ -347,12 +347,12 @@ TEST(PromiseTest, test_exception11) {
                 try {
                     p1.set_exception(std::make_exception_ptr(1));
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::no_state));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 }
 
 TEST(PromiseTest, test_exception12) {
@@ -363,12 +363,12 @@ TEST(PromiseTest, test_exception12) {
                 try {
                     p1.set_exception(std::make_exception_ptr(1));
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::no_state));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 }
 
 TEST(PromiseTest, test_set_value01) {
@@ -461,12 +461,12 @@ TEST(PromiseTest, test_set_value05) {
                 try {
                     p1.set_value(2);
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::promise_already_satisfied));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 
     std::chrono::milliseconds delay(1);
     EXPECT_TRUE(f1.wait_for(delay) == future_status::ready);
@@ -484,12 +484,12 @@ TEST(PromiseTest, test_set_value06) {
                 try {
                     p1.set_exception(std::make_exception_ptr(4));
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::promise_already_satisfied));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 
     std::chrono::milliseconds delay(1);
     EXPECT_TRUE(f1.wait_for(delay) == future_status::ready);
@@ -507,12 +507,12 @@ TEST(PromiseTest, test_set_value07) {
                 try {
                     p1.set_value(3);
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::promise_already_satisfied));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 
     std::chrono::milliseconds delay(1);
     EXPECT_TRUE(f1.wait_for(delay) == future_status::ready);
@@ -541,12 +541,12 @@ TEST(PromiseTest, test_set_value08) {
                 try {
                     p1.set_value(i);
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::promise_already_satisfied));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 
     std::chrono::milliseconds delay(1);
     EXPECT_TRUE(f1.wait_for(delay) == future_status::ready);
@@ -565,12 +565,12 @@ TEST(PromiseTest, test_set_value09) {
                 try {
                     p1.set_exception(std::make_exception_ptr(4));
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::promise_already_satisfied));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 
     std::chrono::milliseconds delay(1);
     EXPECT_TRUE(f1.wait_for(delay) == future_status::ready);
@@ -589,12 +589,12 @@ TEST(PromiseTest, test_set_value10) {
                     int i = 3;
                     p1.set_value(i);
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::promise_already_satisfied));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 
     std::chrono::milliseconds delay(1);
     EXPECT_TRUE(f1.wait_for(delay) == future_status::ready);
@@ -622,12 +622,12 @@ TEST(PromiseTest, test_set_value11) {
                 try {
                     p1.set_value();
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::promise_already_satisfied));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 
     std::chrono::milliseconds delay(1);
     EXPECT_TRUE(f1.wait_for(delay) == future_status::ready);
@@ -645,12 +645,12 @@ TEST(PromiseTest, test_set_value12) {
                 try {
                     p1.set_exception(std::make_exception_ptr(4));
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::promise_already_satisfied));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 
     std::chrono::milliseconds delay(1);
     EXPECT_TRUE(f1.wait_for(delay) == future_status::ready);
@@ -668,12 +668,12 @@ TEST(PromiseTest, test_set_value13) {
                 try {
                     p1.set_value();
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::promise_already_satisfied));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 
     std::chrono::milliseconds delay(1);
     EXPECT_TRUE(f1.wait_for(delay) == future_status::ready);
@@ -700,12 +700,12 @@ TEST(PromiseTest, test_set_value14) {
                 try {
                     p1.set_value(1);
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::no_state));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 }
 
 TEST(PromiseTest, test_set_value15) {
@@ -717,12 +717,12 @@ TEST(PromiseTest, test_set_value15) {
                     int i = 0;
                     p1.set_value(i);
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::no_state));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 }
 
 TEST(PromiseTest, test_set_value16) {
@@ -733,12 +733,12 @@ TEST(PromiseTest, test_set_value16) {
                 try {
                     p1.set_value();
                     EXPECT_TRUE(false);
-                } catch (FutureError& e) {
+                } catch (future_error& e) {
                     EXPECT_TRUE(e.code() == std::make_error_code(future_errc::no_state));
                     throw;
                 }
             },
-            FutureError);
+            future_error);
 }
 
 namespace {

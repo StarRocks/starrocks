@@ -63,7 +63,7 @@ protected:
 
     void wait_and_check_exception() const {
         if (!static_cast<bool>(_state)) {
-            throw FutureError(future_errc::no_state);
+            throw future_error(future_errc::no_state);
         }
         this->_state->wait();
         if (this->_state->get_exception_ptr() != nullptr) {
