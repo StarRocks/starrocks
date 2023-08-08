@@ -15,7 +15,7 @@ An asynchronous *broker* process handles making the connection to S3, pulling th
 
 ### Advantages of asynchronous loading
 
-- Broker Load supports data transformation, UPSERT, and DELETE operations during loading. 
+- Broker Load supports data transformation, UPSERT, and DELETE operations during loading.
 - Because asynchronous jobs run in the background a client does not need to stay connected for the job to continue. Check the progress of a load job by connecting a client and querying the load job state.
 - Asynchronous loading is preferred for long running jobs. The default timeout for a broker load job is 4 hours.
 - In addition to Parquet and ORC file format, the asynchronous broker supports CSV files.
@@ -69,6 +69,7 @@ PROPERTIES (
 #### Gather connection details
 
 Loading data from S3 requires having the:
+
 - S3 endpoint
 - S3 region
 - Access key and secret
@@ -237,6 +238,7 @@ UserID|ItemID|CategoryID|BehaviorType|Timestamp          |
 #### Creating a table by hand and then loading the data
 
 By querying the data directly from S3 it is possible to decide the:
+
 - column data types
 - column names
 - columns to use in the key
@@ -286,4 +288,3 @@ INSERT INTO user_behavior_declared
 - You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
 
 - You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you can deploy brokers by following the instructions provided in [Deploy a broker](../deployment/deploy_broker.md).
-
