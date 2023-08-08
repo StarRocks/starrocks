@@ -109,8 +109,8 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         // load segments (footer and column index) every time if segments are not in the cache.
         //
         // test case: 4k columns, 150 segments, 60w rows
-        // compaction task cost: 272s (fill cache) vs 2400s (not fill cache)
-        ASSIGN_OR_RETURN(auto segments, rowset->segments(true));
+        // compaction task cost: 272s (fill metadata cache) vs 2400s (not fill metadata cache)
+        ASSIGN_OR_RETURN(auto segments, rowset->segments(false, true));
         for (auto& segment : segments) {
             for (auto column_index : column_group) {
                 const auto* column_reader = segment->column(column_index);

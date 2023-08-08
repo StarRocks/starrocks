@@ -205,6 +205,7 @@ set(EXEC_FILES
         ./storage/lake/delta_writer_test.cpp
         ./storage/lake/vacuum_test.cpp
         ./storage/lake/location_provider_test.cpp
+        ./storage/lake/rowset_test.cpp
         ./storage/lake/schema_change_test.cpp
         ./storage/lake/tablet_manager_test.cpp
         ./storage/lake/partial_update_test.cpp
