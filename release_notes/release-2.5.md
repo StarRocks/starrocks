@@ -34,9 +34,10 @@
 - 开启 Join Reorder 后，某些情况下查询会报 unknown error。 [#27472](https://github.com/StarRocks/starrocks/pull/27472)
 - 主键模型部分列更新时平均 row size 预估不准导致内存占用过多。 [#27485](https://github.com/StarRocks/starrocks/pull/27485)
 - 低基数优化开启时，某些情况下 INSERT 导入报错 `[42000][1064] Dict Decode failed, Dict can't take cover all key :0`。 [#26463](https://github.com/StarRocks/starrocks/pull/26463)
-- 使用 Broker Load 从 HDFS 导入数据时，如果作业中认证方式设置为 `simple` 则会导致作业失败。 [#27774](https://github.com/StarRocks/starrocks/pull/27774)
+- 使用 Broker Load 从 HDFS 导入数据时，如果作业中认证方式 (`hadoop.security.authentication`) 设置为 `simple` 则会导致作业失败。 [#27774](https://github.com/StarRocks/starrocks/pull/27774)
 - 物化视图在修改刷新模式时会导致元数据不一致。[#28082](https://github.com/StarRocks/starrocks/pull/28082) [#28097](https://github.com/StarRocks/starrocks/pull/28097)
 - 使用 SHOW CREATE CATALOG、SHOW RESOURCES 查看某些特殊信息时，PASSWORD 未被隐藏。 [#28059](https://github.com/StarRocks/starrocks/pull/28059)
+- LabelCleaner 线程卡死导致 FE 内存泄漏。 [#28311](https://github.com/StarRocks/starrocks/pull/28311)
 
 ## 2.5.9
 
