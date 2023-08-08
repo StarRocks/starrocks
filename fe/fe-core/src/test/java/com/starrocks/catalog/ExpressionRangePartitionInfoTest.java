@@ -443,16 +443,16 @@ public class ExpressionRangePartitionInfoTest {
     public void testExpressionRangePartitionInfoSerialized() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE table_hitcount (\n" +
-                "databaseName varchar(200) NULL COMMENT \"数据库名\",\n" +
-                "tableName varchar(200) NULL COMMENT \"表名称\",\n" +
-                "queryTime varchar(50) NULL COMMENT \"查询时间\",\n" +
+                "databaseName varchar(200) NULL COMMENT \"\",\n" +
+                "tableName varchar(200) NULL COMMENT \"\",\n" +
+                "queryTime varchar(50) NULL COMMENT \"\",\n" +
                 "queryId varchar(50) NULL COMMENT \"\",\n" +
-                "partitionHitSum int(11) NULL COMMENT \"查询分区数量\",\n" +
-                "partitionSum int(11) NULL COMMENT \"查询分区总数\",\n" +
-                "tabletHitNum int(11) NULL COMMENT \"查询tablet数量\",\n" +
-                "tabletSum int(11) NULL COMMENT \"查询分区中tablet总数\",\n" +
-                "startHitPartition varchar(20) NULL COMMENT \"查询开始分区\",\n" +
-                "dt date NULL COMMENT \"分区日期\",\n" +
+                "partitionHitSum int(11) NULL COMMENT \"\",\n" +
+                "partitionSum int(11) NULL COMMENT \"\",\n" +
+                "tabletHitNum int(11) NULL COMMENT \"\",\n" +
+                "tabletSum int(11) NULL COMMENT \"\",\n" +
+                "startHitPartition varchar(20) NULL COMMENT \"\",\n" +
+                "dt date NULL COMMENT \"\",\n" +
                 "clusterAddress varchar(50) NULL COMMENT \"\",\n" +
                 "costTime int(11) NULL COMMENT \"\",\n" +
                 "tableQueryCount int(11) NULL COMMENT \"\"\n" +
