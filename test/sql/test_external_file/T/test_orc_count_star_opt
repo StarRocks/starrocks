@@ -18,7 +18,7 @@ CREATE EXTERNAL TABLE array_data_only
 ENGINE=file
 PROPERTIES
 (
-    "path" = "oss://${oss_bucket}/test_orc_count_star_opt/array_data_only/", 
+    "path" = "oss://${oss_bucket}/test_orc_count_star_opt/${uuid0}/array_data_only/", 
     "format" = "orc"
 );
 
@@ -35,7 +35,7 @@ CREATE EXTERNAL TABLE map_data_only
 ENGINE=file
 PROPERTIES 
 (
-    "path" = "oss://${oss_bucket}/test_orc_count_star_opt/map_data_only/", 
+    "path" = "oss://${oss_bucket}/test_orc_count_star_opt/${uuid0}/map_data_only/", 
     "format" = "orc"
 );
 set enable_count_star_optimization = true;
@@ -53,14 +53,13 @@ CREATE EXTERNAL TABLE struct_data_only
 ENGINE=file
 PROPERTIES 
 (
-    "path" = "oss://${oss_bucket}/test_orc_count_star_opt/struct_data_only/", 
+    "path" = "oss://${oss_bucket}/test_orc_count_star_opt/${uuid0}/struct_data_only/", 
     "format" = "orc"
 );
 set enable_count_star_optimization = true;
 select count(*) from struct_data_only;
 -- set enable_count_star_optimization = false;
 -- select count(*) from struct_data_only;
-
 
 CREATE EXTERNAL TABLE empty_row_index
 (

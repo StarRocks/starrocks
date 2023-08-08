@@ -50,7 +50,7 @@ CREATE EXTERNAL TABLE array_data_only
 ENGINE=file
 PROPERTIES 
 (
-    "path" = "oss://${oss_bucket}/test_orc_count_star_opt/array_data_only/", 
+    "path" = "oss://${oss_bucket}/test_orc_count_star_opt/${uuid0}/array_data_only/", 
     "format" = "orc"
 );
 -- result:
@@ -76,7 +76,7 @@ CREATE EXTERNAL TABLE map_data_only
 ENGINE=file
 PROPERTIES 
 (
-    "path" = "oss://${oss_bucket}/test_orc_count_star_opt/map_data_only/", 
+    "path" = "oss://${oss_bucket}/test_orc_count_star_opt/${uuid0}/map_data_only/", 
     "format" = "orc"
 );
 -- result:
@@ -97,7 +97,7 @@ CREATE EXTERNAL TABLE struct_data_only
 ENGINE=file
 PROPERTIES 
 (
-    "path" = "oss://${oss_bucket}/test_orc_count_star_opt/struct_data_only/", 
+    "path" = "oss://${oss_bucket}/test_orc_count_star_opt/${uuid0}/struct_data_only/", 
     "format" = "orc"
 );
 -- result:
