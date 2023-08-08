@@ -27,6 +27,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+>>>>>>> dfa6935dcf ([Enhancement] Support ignore show external catalog privilege item in grantsTo system table (#28644))
 import com.starrocks.privilege.ActionSet;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.CatalogPEntryObject;
@@ -50,6 +55,7 @@ import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
 import com.starrocks.thrift.TGrantsToType;
 import com.starrocks.thrift.TSchemaTableType;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -134,11 +140,16 @@ public class GrantsTo {
                 if (ObjectType.CATALOG.equals(privEntry.getKey())) {
                     CatalogPEntryObject catalogPEntryObject = (CatalogPEntryObject) privilegeEntry.getObject();
                     if (catalogPEntryObject.getId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
-                        List<String> catalogs = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().keySet()
-                                .stream().filter(catalogName ->
-                                        !CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)
-                                ).collect(Collectors.toList());
+                        List<String> catalogs = new ArrayList<>();
                         catalogs.add(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+
+                        if (Config.enable_show_external_catalog_privilege) {
+                            catalogs.addAll(GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().keySet()
+                                    .stream().filter(catalogName ->
+                                            !CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)
+                                    ).collect(Collectors.toList()));
+                        }
+
                         for (String catalogName : catalogs) {
                             objects.add(Lists.newArrayList(catalogName, null, null));
                         }
@@ -147,16 +158,23 @@ public class GrantsTo {
                         if (catalogName == null) {
                             continue;
                         }
+                        if (!catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                                && !Config.enable_show_external_catalog_privilege) {
+                            continue;
+                        }
                         objects.add(Lists.newArrayList(catalogName, null, null));
                     }
                 } else if (ObjectType.DATABASE.equals(privEntry.getKey())) {
                     DbPEntryObject dbPEntryObject = (DbPEntryObject) privilegeEntry.getObject();
                     if (dbPEntryObject.getCatalogId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
-                        List<String> catalogs = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().keySet()
-                                .stream().filter(catalogName ->
-                                        !CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)
-                                ).collect(Collectors.toList());
+                        List<String> catalogs = new ArrayList<>();
                         catalogs.add(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+                        if (Config.enable_show_external_catalog_privilege) {
+                            catalogs.addAll(GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().keySet()
+                                    .stream().filter(catalogName ->
+                                            !CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)
+                                    ).collect(Collectors.toList()));
+                        }
 
                         for (String catalogName : catalogs) {
                             objects.addAll(expandAllDatabases(metadataMgr, catalogName));
@@ -164,6 +182,10 @@ public class GrantsTo {
                     } else {
                         String catalogName = getCatalogName(dbPEntryObject.getCatalogId());
                         if (catalogName == null) {
+                            continue;
+                        }
+                        if (!catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                                && !Config.enable_show_external_catalog_privilege) {
                             continue;
                         }
 
@@ -192,11 +214,14 @@ public class GrantsTo {
                         || ObjectType.MATERIALIZED_VIEW.equals(privEntry.getKey())) {
                     TablePEntryObject tablePEntryObject = (TablePEntryObject) privilegeEntry.getObject();
                     if (tablePEntryObject.getCatalogId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
-                        List<String> catalogs = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().keySet()
-                                .stream().filter(catalogName ->
-                                        !CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)
-                                ).collect(Collectors.toList());
+                        List<String> catalogs = new ArrayList<>();
                         catalogs.add(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+                        if (Config.enable_show_external_catalog_privilege) {
+                            catalogs.addAll(GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().keySet()
+                                    .stream().filter(catalogName ->
+                                            !CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)
+                                    ).collect(Collectors.toList()));
+                        }
 
                         for (String catalogName : catalogs) {
                             objects.addAll(expandAllDatabaseAndTables(metadataMgr, catalogName, privEntry.getKey()));
@@ -204,6 +229,10 @@ public class GrantsTo {
                     } else {
                         String catalogName = getCatalogName(tablePEntryObject.getCatalogId());
                         if (catalogName == null) {
+                            continue;
+                        }
+                        if (!catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                                && !Config.enable_show_external_catalog_privilege) {
                             continue;
                         }
 
@@ -384,6 +413,10 @@ public class GrantsTo {
 
     private static Set<List<String>> expandAllDatabases(MetadataMgr metadataMgr, String catalogName) {
         Set<List<String>> objects = new HashSet<>();
+        if (!catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                && !Config.enable_show_external_catalog_privilege) {
+            return objects;
+        }
 
         List<String> dbNames = metadataMgr.listDbNames(catalogName);
         for (String dbName : dbNames) {
@@ -420,8 +453,10 @@ public class GrantsTo {
                 objects.add(Lists.newArrayList(catalogName, dbName, table.getName()));
             }
         } else {
-            for (String tableName : tableNames) {
-                objects.add(Lists.newArrayList(catalogName, dbName, tableName));
+            if (Config.enable_show_external_catalog_privilege) {
+                for (String tableName : tableNames) {
+                    objects.add(Lists.newArrayList(catalogName, dbName, tableName));
+                }
             }
         }
         return objects;
@@ -430,6 +465,11 @@ public class GrantsTo {
     private static Set<List<String>> expandAllDatabaseAndTables(MetadataMgr metadataMgr, String catalogName,
                                                                 ObjectType objectType) {
         Set<List<String>> objects = new HashSet<>();
+        if (!catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                && !Config.enable_show_external_catalog_privilege) {
+            return objects;
+        }
+
         List<String> dbNames = metadataMgr.listDbNames(catalogName);
         for (String dbName : dbNames) {
             Database database = metadataMgr.getDb(catalogName, dbName);
