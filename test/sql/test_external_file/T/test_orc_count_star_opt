@@ -16,7 +16,7 @@ CREATE EXTERNAL TABLE array_data_only
     data array<int>    
 ) 
 ENGINE=file
-PROPERTIES 
+PROPERTIES
 (
     "path" = "oss://${oss_bucket}/test_orc_count_star_opt/array_data_only/", 
     "format" = "orc"
