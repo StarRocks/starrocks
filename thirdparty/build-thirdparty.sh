@@ -1217,10 +1217,10 @@ build_serdes
 build_datasketches
 build_async_profiler
 build_fiu
-build_libdeflate
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
+    build_libdeflate
 fi
 
 # strip unnecessary debug symbol for binaries in thirdparty
