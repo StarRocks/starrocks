@@ -181,8 +181,8 @@ Status HashJoinNode::prepare(RuntimeState* state) {
     _init_hash_table_param(&param);
     _ht.create(param);
 
-    _probe_column_count = _ht.get_probe_column_count();
-    _build_column_count = _ht.get_build_column_count();
+    _probe_column_count = _ht.get_first_probe_column_count();
+    _build_column_count = _ht.get_first_build_column_count();
 
     return Status::OK();
 }

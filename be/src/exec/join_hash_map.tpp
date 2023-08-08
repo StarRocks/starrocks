@@ -631,10 +631,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_output(ChunkPtr* probe_chunk,
     _probe_state->probe_index_column->resize(0);
     _probe_state->probe_index_column->append_numbers((const void*)_probe_state->probe_index.data(),
                                                      _probe_state->count * sizeof(uint32_t));
-
-    ColumnPtr nullable_column =
-            NullableColumn::create(_probe_state->probe_index_column, NullColumn::create(_probe_state->count, 0));
-    (*chunk)->append_column(nullable_column, INT32_MAX - 1);
+    (*chunk)->append_column(_probe_state->probe_index_column, INT32_MAX - 1);
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
@@ -745,10 +742,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_build_output(ChunkPtr* chunk) {
     _probe_state->build_index_column->resize(0);
     _probe_state->build_index_column->append_numbers((const void*)_probe_state->build_index.data(),
                                                      _probe_state->count * sizeof(uint32_t));
-
-    ColumnPtr nullable_column =
-            NullableColumn::create(_probe_state->build_index_column, NullColumn::create(_probe_state->count, 0));
-    (*chunk)->append_column(nullable_column, INT32_MAX - 2);
+    (*chunk)->append_column(_probe_state->build_index_column, INT32_MAX - 2);
 }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
@@ -832,7 +826,8 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_build_default_output(ChunkPtr* chun
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_lazy_copy_probe_column(ColumnPtr* src_column, ChunkPtr* chunk,
                                                                     const SlotDescriptor* slot, bool to_nullable) {
-    const auto& probe_index = _probe_state->probe_index_column->get_data();
+    const auto& probe_index =
+            ColumnHelper::as_raw_column<UInt32Column>(_probe_state->probe_index_column->data_column())->get_data();
     if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE) {
         if (to_nullable) {
             ColumnPtr dest_column = NullableColumn::create(*src_column, NullColumn::create((*src_column)->size()));
@@ -885,7 +880,8 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_probe_column(ColumnPtr* src_co
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_lazy_copy_probe_nullable_column(ColumnPtr* src_column, ChunkPtr* chunk,
                                                                              const SlotDescriptor* slot) {
-    const auto& probe_index = _probe_state->probe_index_column->get_data();
+    const auto& probe_index =
+            ColumnHelper::as_raw_column<UInt32Column>(_probe_state->probe_index_column->data_column())->get_data();
     if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE) {
         (*chunk)->append_column(*src_column, slot->id());
     } else if (_probe_state->match_flag == JoinMatchFlag::MOST_MATCH_ONE) {
@@ -916,7 +912,10 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_probe_nullable_column(ColumnPt
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_lazy_copy_build_column(const ColumnPtr& src_column, ChunkPtr* chunk,
                                                                     const SlotDescriptor* slot, bool to_nullable) {
-    const auto& build_index = _probe_state->build_index_column->get_data();
+    const auto& build_index =
+            ColumnHelper::as_raw_column<UInt32Column>(_probe_state->build_index_column->data_column())->get_data();
+    const auto& null_index =
+            ColumnHelper::as_raw_column<NullColumn>(_probe_state->build_index_column->null_column())->get_data();
     if (to_nullable) {
         auto data_column = src_column->clone_empty();
         data_column->append_selective_shallow_copy(*src_column, build_index.data(), 0, _probe_state->count);
@@ -928,7 +927,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_lazy_copy_build_column(const Column
         auto null_column = NullColumn::create(_probe_state->count, 0);
         size_t end = _probe_state->count;
         for (size_t i = 0; i < end; i++) {
-            if (build_index[i] == 0) {
+            if (build_index[i] == 0 || null_index[i] == 1) {
                 null_column->get_data()[i] = 1;
             }
         }
@@ -974,7 +973,10 @@ template <LogicalType LT, class BuildFunc, class ProbeFunc>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_lazy_copy_build_nullable_column(const ColumnPtr& src_column,
                                                                              ChunkPtr* chunk,
                                                                              const SlotDescriptor* slot) {
-    const auto& build_index = _probe_state->build_index_column->get_data();
+    const auto& build_index =
+            ColumnHelper::as_raw_column<UInt32Column>(_probe_state->build_index_column->data_column())->get_data();
+    const auto& null_index =
+            ColumnHelper::as_raw_column<NullColumn>(_probe_state->build_index_column->null_column())->get_data();
     ColumnPtr dest_column = src_column->clone_empty();
 
     dest_column->append_selective_shallow_copy(*src_column, build_index.data(), 0, _probe_state->count);
@@ -986,7 +988,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_lazy_copy_build_nullable_column(con
     auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(dest_column);
     size_t end = _probe_state->count;
     for (size_t i = 0; i < end; i++) {
-        if (build_index[i] == 0) {
+        if (build_index[i] == 0 || null_index[i] == 1) {
             null_column->set_null(i);
         }
     }

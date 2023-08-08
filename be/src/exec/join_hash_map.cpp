@@ -303,10 +303,12 @@ void JoinHashTable::create(const HashTableParam& param) {
             if (param.output_slots.empty()) {
                 hash_table_slot.need_output = true;
                 hash_table_slot.need_materialize = true;
+                _table_items->first_build_column_count++;
             } else if (std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
                        param.predicate_slots.end()) {
                 hash_table_slot.need_output = true;
                 hash_table_slot.need_materialize = true;
+                _table_items->first_build_column_count++;
             } else if (std::find(param.output_slots.begin(), param.output_slots.end(), slot->id()) !=
                        param.output_slots.end()) {
                 hash_table_slot.need_output = true;
@@ -323,6 +325,7 @@ void JoinHashTable::create(const HashTableParam& param) {
             _table_items->output_probe_tuple_ids.emplace_back(tuple_desc->id());
         }
     }
+    _table_items->first_build_column_count++;
 
     const auto& build_desc = *param.build_row_desc;
     for (const auto& tuple_desc : build_desc.tuple_descriptors()) {
@@ -332,10 +335,12 @@ void JoinHashTable::create(const HashTableParam& param) {
             if (param.output_slots.empty()) {
                 hash_table_slot.need_output = true;
                 hash_table_slot.need_materialize = true;
+                _table_items->first_probe_column_count++;
             } else if (std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
                        param.predicate_slots.end()) {
                 hash_table_slot.need_output = true;
                 hash_table_slot.need_materialize = true;
+                _table_items->first_probe_column_count++;
             } else if (std::find(param.output_slots.begin(), param.output_slots.end(), slot->id()) !=
                        param.output_slots.end()) {
                 hash_table_slot.need_output = true;
@@ -360,6 +365,7 @@ void JoinHashTable::create(const HashTableParam& param) {
             _table_items->output_build_tuple_ids.emplace_back(tuple_desc->id());
         }
     }
+    _table_items->first_probe_column_count++;
 
     for (const auto& key_desc : _table_items->join_keys) {
         if (key_desc.col_ref) {

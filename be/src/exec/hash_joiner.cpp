@@ -109,8 +109,8 @@ Status HashJoiner::prepare_builder(RuntimeState* state, RuntimeProfile* runtime_
     _hash_join_builder->create(hash_table_param());
     auto& ht = _hash_join_builder->hash_table();
 
-    _probe_column_count = ht.get_probe_column_count();
-    _build_column_count = ht.get_build_column_count();
+    _probe_column_count = ht.get_first_probe_column_count();
+    _build_column_count = ht.get_first_build_column_count();
 
     return Status::OK();
 }

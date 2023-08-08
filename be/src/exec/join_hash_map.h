@@ -118,6 +118,8 @@ struct JoinHashTableItems {
     uint32_t row_count = 0; // real row count
     size_t build_column_count = 0;
     size_t probe_column_count = 0;
+    size_t first_build_column_count = 0;
+    size_t first_probe_column_count = 0;
     bool with_other_conjunct = false;
     bool need_create_tuple_columns = true;
     bool left_to_nullable = false;
@@ -134,8 +136,8 @@ struct HashTableProbeState {
     //TODO: memory release
     Buffer<uint8_t> is_nulls;
     Buffer<uint32_t> buckets;
-    std::shared_ptr<UInt32Column> build_index_column;
-    std::shared_ptr<UInt32Column> probe_index_column;
+    std::shared_ptr<NullableColumn> build_index_column;
+    std::shared_ptr<NullableColumn> probe_index_column;
     Buffer<uint32_t> build_index;
     Buffer<uint32_t> probe_index;
     Buffer<uint32_t> next;
@@ -175,11 +177,12 @@ struct HashTableProbeState {
     RuntimeProfile::Counter* output_tuple_column_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
 
-    HashTableProbeState()
-            : build_index_column(std::make_shared<UInt32Column>()),
-              probe_index_column(std::make_shared<UInt32Column>()),
-              build_index(),
-              probe_index() {}
+    HashTableProbeState() {
+            auto build_data_column = std::make_shared<UInt32Column>();
+            auto probe_data_column = std::make_shared<UInt32Column>();
+            build_index_column = NullableColumn::create(build_data_column, NullColumn::create());
+            probe_index_column = NullableColumn::create(probe_data_column, NullColumn::create());
+    }
     ~HashTableProbeState() = default;
 
     HashTableProbeState(const HashTableProbeState& rhs)
@@ -187,10 +190,10 @@ struct HashTableProbeState {
               buckets(rhs.buckets),
               build_index_column(rhs.build_index_column == nullptr
                                          ? nullptr
-                                         : std::make_shared<UInt32Column>(*rhs.build_index_column)),
+                                         : std::make_shared<NullableColumn>(*rhs.build_index_column)),
               probe_index_column(rhs.probe_index_column == nullptr
                                          ? nullptr
-                                         : std::make_shared<UInt32Column>(*rhs.probe_index_column)),
+                                         : std::make_shared<NullableColumn>(*rhs.probe_index_column)),
               build_index(rhs.build_index),
               probe_index(rhs.probe_index),
               next(rhs.next),
@@ -587,11 +590,11 @@ private:
         }
         _probe_state->probe_index_column->resize(_probe_state->count);
         for (size_t i = 0; i < _probe_state->count; i++) {
-            _probe_state->probe_index_column->get_data()[i] = i;
+            ColumnHelper::as_raw_column<UInt32Column>(_probe_state->probe_index_column->data_column())->get_data()[i] = i;
+            _probe_state->probe_index_column->null_column()->get_data()[i] = 0;
+            _probe_state->probe_index_column->set_has_null(false);
         }
-        ColumnPtr nullable_column =
-                NullableColumn::create(_probe_state->probe_index_column, NullColumn::create(_probe_state->count, 0));
-        (*chunk)->append_column(nullable_column, INT32_MAX - 1);
+        (*chunk)->append_column(_probe_state->probe_index_column, INT32_MAX - 1);
     }
 
     void _build_output(ChunkPtr* chunk) {
@@ -609,6 +612,8 @@ private:
             }
         }
 
+        _probe_state->build_index_column->append_nulls(_probe_state->count);
+        (*chunk)->append_column(_probe_state->probe_index_column, INT32_MAX - 2);
         //_probe_state->build_index_column->resize(_probe_state->count);
         //(*chunk)->append_column(_probe_state->build_index_column, INT32_MAX - 2);
     }
@@ -791,7 +796,9 @@ public:
     Columns& get_key_columns() { return _table_items->key_columns; }
     uint32_t get_row_count() const { return _table_items->row_count; }
     size_t get_probe_column_count() const { return _table_items->probe_column_count; }
+    size_t get_first_probe_column_count() const { return _table_items->first_probe_column_count; }
     size_t get_build_column_count() const { return _table_items->build_column_count; }
+    size_t get_first_build_column_count() const { return _table_items->first_build_column_count; }
     size_t get_bucket_size() const { return _table_items->bucket_size; }
     size_t get_used_bucket_count() const;
 
