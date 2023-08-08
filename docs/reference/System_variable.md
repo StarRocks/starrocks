@@ -491,7 +491,7 @@ The variables are described in alphabetical order. Variables with the `global` l
 
 * runtime_profile_report_interval
 
-  The time interval at which runtime profiles are reported.
+  The time interval at which runtime profiles are reported. This variable is supported from v3.1.0 onwards.
 
   Unit: second, Default: `10`.
 
