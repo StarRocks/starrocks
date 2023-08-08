@@ -1,10 +1,10 @@
 -- name: testParquetReadRange
-shell: ossutil64 mkdir oss://${oss_bucket}/test_external_file/test_parquet_read_range >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 mkdir oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
 -- result:
 0
 
 -- !result
-shell: ossutil64 cp --force ../be/test/formats/parquet/test_data/read_range_test.parquet oss://${oss_bucket}/test_external_file/test_parquet_read_range/read_range_test.parquet | grep -Pv "(average|elapsed)"
+shell: ossutil64 cp --force ../be/test/formats/parquet/test_data/read_range_test.parquet oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/read_range_test.parquet | grep -Pv "(average|elapsed)"
 -- result:
 0
 
@@ -18,7 +18,7 @@ CREATE EXTERNAL TABLE read_range_test (
 )
 ENGINE=file
 PROPERTIES (
-    "path" = "oss://${oss_bucket}/test_external_file/test_parquet_read_range/read_range_test.parquet",
+    "path" = "oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/read_range_test.parquet",
     "format" = "parquet"
 );
 -- result:
@@ -93,4 +93,9 @@ select * from read_range_test where c0 < 3 or c0 > 19998;
 2	19999	2	[2,null,999]
 19999	2	99	[999,null,2]
 20000	1	None	None
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
 -- !result
