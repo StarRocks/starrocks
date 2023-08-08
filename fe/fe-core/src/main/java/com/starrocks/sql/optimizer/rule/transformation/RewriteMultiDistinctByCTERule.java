@@ -151,7 +151,7 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
             return true;
         }
 
-        if (agg.hasLimit() && !ConnectContext.get().getSessionVariable().isPreferCTEReuseRewrite()) {
+        if (agg.hasLimit() && !ConnectContext.get().getSessionVariable().isPreferCTERewrite()) {
             return false;
         }
 
