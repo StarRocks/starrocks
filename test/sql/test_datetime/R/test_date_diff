@@ -1,0 +1,278 @@
+-- name: test_date_diff
+set sql_dialect='StarRocks';
+-- result:
+-- !result
+select date_diff('year', '2017-02-28', '2016-02-28');
+-- result:
+1
+-- !result
+select date_diff('year', '2017-02-28', '2016-02-28 00:00:00.01');
+-- result:
+1
+-- !result
+select date_diff('year', '2017-02-28', '2016-02-29');
+-- result:
+1
+-- !result
+select date_diff('year', '2017-02-28', '2016-02-29 00:00:00.01');
+-- result:
+0
+-- !result
+select date_diff('year', '2017-02-28', '2016-03-01');
+-- result:
+0
+-- !result
+select date_diff('year', '2016-02-29', '2015-02-28');
+-- result:
+1
+-- !result
+select date_diff('year', '2016-02-29', '2015-02-28 00:00:00.01');
+-- result:
+1
+-- !result
+select date_diff('year', '2016-02-28', '2015-02-28');
+-- result:
+1
+-- !result
+select date_diff('year', '2016-02-28', '2015-02-28 00:00:00.01');
+-- result:
+0
+-- !result
+select date_diff('year', '2017-06-30', '2016-05-30');
+-- result:
+1
+-- !result
+select date_diff('quarter', '2016-05-29', '2016-02-28');
+-- result:
+1
+-- !result
+select date_diff('quarter', '2016-05-29', '2016-02-29');
+-- result:
+1
+-- !result
+select date_diff('quarter', '2016-05-29', '2016-03-01');
+-- result:
+0
+-- !result
+select date_diff('month', '2016-05-29', '2016-02-28');
+-- result:
+3
+-- !result
+select date_diff('month', '2016-05-29', '2016-02-28 00:00:00.001');
+-- result:
+3
+-- !result
+select date_diff('month', '2016-05-29', '2016-02-29');
+-- result:
+3
+-- !result
+select date_diff('month', '2016-05-29', '2016-02-29 00:00:00.001');
+-- result:
+2
+-- !result
+select date_diff('month', '2016-05-29', '2016-03-01');
+-- result:
+2
+-- !result
+select date_diff('month', '2016-02-29', '2015-02-28');
+-- result:
+12
+-- !result
+select date_diff('month', '2016-02-29', '2015-02-28 00:00:00.01');
+-- result:
+12
+-- !result
+select date_diff('month', '2016-02-28', '2015-02-28');
+-- result:
+12
+-- !result
+select date_diff('month', '2016-02-28', '2015-02-28 00:00:00.01');
+-- result:
+11
+-- !result
+select date_diff('month', '2016-06-30', '2016-04-30');
+-- result:
+2
+-- !result
+select date_diff('month', '2016-06-30', '2016-04-30 00:00:00.01');
+-- result:
+1
+-- !result
+select date_diff('month', '2017-02-28', '2016-02-28');
+-- result:
+12
+-- !result
+select date_diff('month', '2017-02-28', '2016-02-28 00:00:00.001');
+-- result:
+12
+-- !result
+select date_diff('month', '2017-02-28', '2016-02-29');
+-- result:
+12
+-- !result
+select date_diff('month', '2017-02-28', '2016-02-29 00:00:00.001');
+-- result:
+11
+-- !result
+select date_diff('day', '2016-02-29', '2016-02-28');
+-- result:
+1
+-- !result
+select date_diff('day', '2016-02-29', '2016-02-28 00:00:00.01');
+-- result:
+0
+-- !result
+select date_diff('day', '2016-02-29 00:00:00.01', '2016-02-28');
+-- result:
+1
+-- !result
+select date_diff('day', '2016-02-29 00:00:00.02', '2016-02-28 00:00:00.01');
+-- result:
+1
+-- !result
+select date_diff('day', '2016-02-29 00:00:00.02', '2016-02-28 00:00:00.02');
+-- result:
+1
+-- !result
+select date_diff('hour', '2016-02-29', '2016-02-28');
+-- result:
+24
+-- !result
+select date_diff('hour', '2016-02-29', '2016-02-28 00:00:00.001')
+select date_diff('hour', '2016-02-29 00:00:00.002', '2016-02-28 00:00:00.001')
+
+select date_diff('minute', '2016-03-01 00:00:00.000', '2016-02-27 00:00:00.001');
+-- result:
+E: (1064, "Getting syntax error at line 2, column 0. Detail message: Unexpected input 'select', the most similar input is {<EOF>, ';'}.")
+-- !result
+select date_diff('second', '2016-03-01 00:00:00.000', '2016-02-27 00:00:00.001');
+-- result:
+259199
+-- !result
+select date_diff('millisecond', '2016-03-01 00:00:00.000', '2016-02-27 00:00:00.001');
+-- result:
+259199999
+-- !result
+select date_diff(NULL, '2016-03-01', '2016-02-27');
+-- result:
+None
+-- !result
+select date_diff('unknown_unit', '2016-03-01', '2016-02-27');
+-- result:
+[REGEX].*type column should be one of day/hour/minute/second/millisecond*
+-- !result
+select date_diff('day', NULL, '2016-02-27');
+-- result:
+None
+-- !result
+select date_diff('day', '2016-02-27', NULL);
+-- result:
+None
+-- !result
+set sql_dialect='Trino';
+-- result:
+-- !result
+select date_diff('year', timestamp '2017-02-28', timestamp '2016-02-28');
+-- result:
+-1
+-- !result
+select date_diff('year', timestamp '2017-02-28', timestamp '2016-02-28 00:00:00.01');
+-- result:
+-1
+-- !result
+select date_diff('year', timestamp '2017-02-28', timestamp '2016-02-29');
+-- result:
+-1
+-- !result
+select date_diff('year', timestamp '2017-02-28', timestamp '2016-02-29 00:00:00.01');
+-- result:
+0
+-- !result
+select date_diff('year', timestamp '2017-02-28', timestamp '2016-03-01');
+-- result:
+0
+-- !result
+select date_diff('quarter', timestamp '2016-05-29', timestamp '2016-02-28');
+-- result:
+-1
+-- !result
+select date_diff('quarter', timestamp '2016-05-29', timestamp '2016-02-29');
+-- result:
+-1
+-- !result
+select date_diff('quarter', timestamp '2016-05-29', timestamp '2016-03-01');
+-- result:
+0
+-- !result
+select date_diff('month', timestamp '2016-05-29', timestamp '2016-02-28');
+-- result:
+-3
+-- !result
+select date_diff('month', timestamp '2016-05-29', timestamp '2016-02-28 00:00:00.001');
+-- result:
+-3
+-- !result
+select date_diff('month', timestamp '2016-05-29', timestamp '2016-02-29');
+-- result:
+-3
+-- !result
+select date_diff('month', timestamp '2016-05-29', timestamp '2016-02-29 00:00:00.001');
+-- result:
+-2
+-- !result
+select date_diff('month', timestamp '2016-05-29', timestamp '2016-03-01');
+-- result:
+-2
+-- !result
+select date_diff('month', timestamp '2016-05-30', timestamp '2016-06-30');
+-- result:
+1
+-- !result
+select date_diff('month', timestamp '2016-05-31', timestamp '2016-06-30');
+-- result:
+1
+-- !result
+select date_diff('day', timestamp '2016-02-29', timestamp '2016-02-28');
+-- result:
+-1
+-- !result
+select date_diff('day', timestamp '2016-02-29', timestamp '2016-02-28 00:00:00.01');
+-- result:
+0
+-- !result
+select date_diff('day', timestamp '2016-02-29 00:00:00.01', timestamp '2016-02-28');
+-- result:
+-1
+-- !result
+select date_diff('day', timestamp '2016-02-29 00:00:00.02', timestamp '2016-02-28 00:00:00.01');
+-- result:
+-1
+-- !result
+select date_diff('day', timestamp '2016-02-29 00:00:00.02', timestamp '2016-02-28 00:00:00.02');
+-- result:
+-1
+-- !result
+select date_diff('hour', timestamp '2016-02-29', timestamp '2016-02-28');
+-- result:
+-24
+-- !result
+select date_diff('hour', timestamp '2016-02-29', timestamp '2016-02-28 00:00:00.001');
+-- result:
+-23
+-- !result
+select date_diff('hour', timestamp '2016-02-29 00:00:00.002', timestamp '2016-02-28 00:00:00.001');
+-- result:
+-24
+-- !result
+select date_diff('minute', timestamp '2016-03-01 00:00:00.000', timestamp '2016-02-27 00:00:00.001');
+-- result:
+-4319
+-- !result
+select date_diff('second', timestamp '2016-03-01 00:00:00.000', timestamp '2016-02-27 00:00:00.001');
+-- result:
+-259199
+-- !result
+select date_diff('millisecond', timestamp '2016-03-01 00:00:00.000', timestamp '2016-02-27 00:00:00.001');
+-- result:
+-259199999
+-- !result
