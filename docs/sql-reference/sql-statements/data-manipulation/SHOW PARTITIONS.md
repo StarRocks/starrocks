@@ -50,7 +50,7 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
 
 ## Examples
 
-1. Display information of all regular partitions from the specified table under the specified db
+1. Display information of all regular partitions from the specified table under the specified db.
 
     ```SQL
     MySQL [test]> show partitions from test.site_access\G
@@ -75,13 +75,13 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
     1 row in set (0.00 sec)
     ```
 
-2. Display information of all temporary partitions from the specified table under the specified db
+2. Display information of all temporary partitions from the specified table under the specified db.
 
     ```sql
     SHOW TEMPORARY PARTITIONS FROM example_db.table_name;
     ```
 
-3. Display the information of the specified partition of the specified table under the specified db
+3. Display the information of the specified partition of the specified table under the specified db.
 
     ```sql
     -- Common partition
@@ -90,7 +90,7 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
     SHOW TEMPORARY PARTITIONS FROM example_db.table_name WHERE PartitionName = "p1";
     ```
 
-4. Display the latest partition information of the specified table under the specified db
+4. Display the latest partition information of the specified table under the specified db.
 
     ```sql
     -- Common partition
