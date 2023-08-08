@@ -1521,4 +1521,34 @@ public class MvRewriteTest extends MvRewriteTestBase {
                     "     rollup: test_partition_tbl_mv1");
         }
     }
+
+    @Test
+    public void testPartitionPrune_SyncMV1() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `sync_tbl_t1` (\n" +
+                "                  `dt` date NOT NULL COMMENT \"\",\n" +
+                "                  `a` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "                  `b` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "                  `c` bigint(20) NOT NULL COMMENT \"\"\n" +
+                "                ) \n" +
+                "                DUPLICATE KEY(`dt`)\n" +
+                "                COMMENT \"OLAP\"\n" +
+                "                PARTITION BY RANGE(`dt`)\n" +
+                "                (PARTITION p20220501 VALUES [('2022-05-01'), ('2022-05-02')),\n" +
+                "                 PARTITION p20220502 VALUES [('2022-05-02'), ('2022-05-03')),\n" +
+                "                PARTITION p20220503 VALUES [('2022-05-03'), ('2022-05-04')))\n" +
+                "                DISTRIBUTED BY HASH(`a`) BUCKETS 32\n" +
+                "                PROPERTIES (\n" +
+                "                \"in_memory\" = \"false\",\n" +
+                "                \"storage_format\" = \"DEFAULT\",\n" +
+                "                \"enable_persistent_index\" = \"false\"\n" +
+                "                );");
+        cluster.runSql("test",  "insert into sync_tbl_t1 values ('2022-05-01',1,2,3), " +
+                "('2022-05-01',2,2,2), ('2022-05-01',3,2,3);");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW sync_mv1 AS " +
+                "select a, b*10 as col2, c+1 as col3 from sync_tbl_t1;");
+        waitingRollupJobV2Finish();
+        String query = "select a, b*10 as col2, c+1 as col3 from sync_tbl_t1 order by a;";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "sync_mv1");
+    }
 }
