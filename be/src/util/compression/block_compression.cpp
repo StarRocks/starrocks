@@ -34,7 +34,9 @@
 
 #include "util/compression/block_compression.h"
 
+#ifdef __x86_64__
 #include <libdeflate.h>
+#endif
 #include <lz4/lz4.h>
 #include <lz4/lz4frame.h>
 #include <snappy/snappy-sinksource.h>
@@ -967,6 +969,7 @@ private:
     const static int MEM_LEVEL = 8;
 };
 
+#ifdef __x86_64__
 class GzipBlockCompressionV2 final : public GzipBlockCompression {
 public:
     GzipBlockCompressionV2() : GzipBlockCompression() {}
@@ -999,6 +1002,7 @@ public:
         return Status::OK();
     }
 };
+#endif
 
 Status get_block_compression_codec(CompressionTypePB type, const BlockCompressionCodec** codec) {
     switch (type) {
@@ -1021,7 +1025,11 @@ Status get_block_compression_codec(CompressionTypePB type, const BlockCompressio
         *codec = ZstdBlockCompression::instance();
         break;
     case CompressionTypePB::GZIP:
+#ifdef __x86_64__
         *codec = GzipBlockCompressionV2::instance();
+#else
+        *codec = GzipBlockCompression::instance();
+#endif
         break;
     case CompressionTypePB::LZ4_HADOOP:
         *codec = Lz4HadoopBlockCompression::instance();
