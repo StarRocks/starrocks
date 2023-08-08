@@ -1202,7 +1202,7 @@ public class Config extends ConfigBase {
      * balance behavior.
      */
     @ConfField(mutable = true)
-    public static boolean tablet_sched_disable_colocate_overall_balance = false;
+    public static boolean tablet_sched_disable_colocate_overall_balance = true;
 
     @ConfField(mutable = true)
     public static long[] tablet_sched_colocate_balance_high_prio_backends = {};
