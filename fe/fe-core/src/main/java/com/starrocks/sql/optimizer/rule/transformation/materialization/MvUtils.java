@@ -777,7 +777,9 @@ public class MvUtils {
         return partitionPredicates;
     }
 
-    public static ScalarOperator compensatePartitionPredicate(OptExpression plan, ColumnRefFactory columnRefFactory) {
+    public static ScalarOperator compensatePartitionPredicate(OptExpression plan,
+                                                              ColumnRefFactory columnRefFactory,
+                                                              boolean isCompensate) {
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(plan);
         if (scanOperators.isEmpty()) {
             return ConstantOperator.createBoolean(true);
@@ -787,27 +789,31 @@ public class MvUtils {
         for (LogicalScanOperator scanOperator : scanOperators) {
             List<ScalarOperator> partitionPredicate = null;
             if (scanOperator instanceof LogicalOlapScanOperator) {
-                // NOTE: It's not safe to get table's pruned partition predicates by
-                // `LogicalOlapScanOperator#getPrunedPartitionPredicates` :
-                //  - partitionPredicate is null if olap scan operator cannot prune partitions.
-                //  - partitionPredicate is not exact even if olap scan operator has pruned partitions.
-                // eg:
-                // t1:
-                //  PARTITION p1 VALUES [("0000-01-01"), ("2020-01-01")), has data
-                //  PARTITION p2 VALUES [("2020-01-01"), ("2020-02-01")), has data
-                //  PARTITION p3 VALUES [("2020-02-01"), ("2020-03-01")), has data
-                //  PARTITION p4 VALUES [("2020-03-01"), ("2020-04-01")), no data
-                //  PARTITION p5 VALUES [("2020-04-01"), ("2020-05-01")), no data
-                //
-                // TODO: support partition prune for this later.
-                // query1 : SELECT k1, sum(v1) as sum_v1 FROM t1 where k1>='2020-02-11' group by k1;
-                // `partitionPredicate` : null
-                //
-                // query2 : SELECT k1, sum(v1) as sum_v1 FROM t1 where k1>='2020-02-01' group by k1;
-                // `partitionPredicate` : k1>='2020-02-11'
-                // however for mv  we need: k1>='2020-02-11' and k1 < "2020-03-01"
-                partitionPredicate = compensatePartitionPredicateForOlapScan((LogicalOlapScanOperator) scanOperator,
-                        columnRefFactory);
+                if (!isCompensate) {
+                    partitionPredicate = ((LogicalOlapScanOperator) scanOperator).getPrunedPartitionPredicates();
+                } else {
+                    // NOTE: It's not safe to get table's pruned partition predicates by
+                    // `LogicalOlapScanOperator#getPrunedPartitionPredicates` :
+                    //  - partitionPredicate is null if olap scan operator cannot prune partitions.
+                    //  - partitionPredicate is not exact even if olap scan operator has pruned partitions.
+                    // eg:
+                    // t1:
+                    //  PARTITION p1 VALUES [("0000-01-01"), ("2020-01-01")), has data
+                    //  PARTITION p2 VALUES [("2020-01-01"), ("2020-02-01")), has data
+                    //  PARTITION p3 VALUES [("2020-02-01"), ("2020-03-01")), has data
+                    //  PARTITION p4 VALUES [("2020-03-01"), ("2020-04-01")), no data
+                    //  PARTITION p5 VALUES [("2020-04-01"), ("2020-05-01")), no data
+                    //
+                    // TODO: support partition prune for this later.
+                    // query1 : SELECT k1, sum(v1) as sum_v1 FROM t1 where k1>='2020-02-11' group by k1;
+                    // `partitionPredicate` : null
+                    //
+                    // query2 : SELECT k1, sum(v1) as sum_v1 FROM t1 where k1>='2020-02-01' group by k1;
+                    // `partitionPredicate` : k1>='2020-02-11'
+                    // however for mv  we need: k1>='2020-02-11' and k1 < "2020-03-01"
+                    partitionPredicate = compensatePartitionPredicateForOlapScan((LogicalOlapScanOperator) scanOperator,
+                            columnRefFactory);
+                }
             } else if (scanOperator instanceof LogicalHiveScanOperator) {
                 partitionPredicate = compensatePartitionPredicateForHiveScan((LogicalHiveScanOperator) scanOperator);
             } else {
