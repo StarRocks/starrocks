@@ -495,6 +495,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                         .setPartitionNames(node.getPartitionNames())
                         .setSelectedTabletId(Lists.newArrayList())
                         .setHintsTabletIds(node.getTabletIds())
+                        .setHintsReplicaIds(node.getReplicaIds())
                         .setHasTableHints(node.hasTableHints())
                         .setUsePkIndex(node.isUsePkIndex())
                         .build();

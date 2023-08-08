@@ -384,6 +384,7 @@ public class MvRewritePreprocessor {
                 .setPartitionNames(partitionNames)
                 .setSelectedTabletId(selectTabletIds)
                 .setHintsTabletIds(Collections.emptyList())
+                .setHintsReplicaIds(Collections.emptyList())
                 .setHasTableHints(false)
                 .setUsePkIndex(false)
                 .build();

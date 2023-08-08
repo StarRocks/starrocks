@@ -146,7 +146,8 @@ public class DistributionPrunerRuleTest {
                         inPredicateOperator2, inPredicateOperator3, inPredicateOperator4);
         LogicalOlapScanOperator operator =
                 new LogicalOlapScanOperator(olapTable, scanColumnMap, Maps.newHashMap(), null, -1, predicate,
-                        1, Lists.newArrayList(1L), null, false, Lists.newArrayList(), Lists.newArrayList(), false);
+                        1, Lists.newArrayList(1L), null, false, Lists.newArrayList(), Lists.newArrayList(), null,
+                        false);
         operator.setPredicate(predicate);
 
         new Expectations() {
