@@ -132,7 +132,7 @@ public class WarehouseManager implements Writable {
 
     // warehouse meta persistence api
     public long saveWarehouses(DataOutputStream out, long checksum) throws IOException {
-        checksum ^= idToWh.size();
+        checksum ^= 0;
         write(out);
         return checksum;
     }
