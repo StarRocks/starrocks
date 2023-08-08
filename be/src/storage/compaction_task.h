@@ -191,6 +191,8 @@ public:
 
     void set_input_segments_num(size_t input_segments_num) { _task_info.input_segments_num = input_segments_num; }
 
+    size_t input_segments_num() { return _task_info.input_segments_num; }
+
     void set_start_time(int64_t start_time) { _task_info.start_time = start_time; }
 
     int64_t get_start_time() { return _task_info.start_time; }
@@ -208,6 +210,8 @@ public:
     void set_output_num_rows(size_t output_num_rows) { _task_info.output_num_rows = output_num_rows; }
 
     void set_mem_tracker(MemTracker* mem_tracker) { _mem_tracker = mem_tracker; }
+
+    int get_progress() { return _task_info.get_progress(); }
 
     std::string get_task_info() {
         _task_info.elapsed_time = _watch.elapsed_time() / 1000;

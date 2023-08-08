@@ -1395,7 +1395,6 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
         // 4. write meta
         const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
         if (rowset_meta_pb.has_txn_meta()) {
-            full_rowset_size = rowset->total_segment_data_size();
             rowset->rowset_meta()->clear_txn_meta();
             rowset->rowset_meta()->set_total_row_size(full_row_size);
             rowset->rowset_meta()->set_total_disk_size(full_rowset_size);
@@ -1616,6 +1615,12 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
     vector<RowsetSharedPtr> input_rowsets(info->inputs.size());
     {
         std::lock_guard<std::mutex> lg(_rowsets_lock);
+        std::lock_guard<std::mutex> rl(_compaction_metric_lock);
+        // metric compaction info
+        _current_compaction_task_info = std::make_unique<CompactionMetric>();
+        _current_compaction_task_info->start_time = UnixMillis();
+        _current_compaction_task_info->input_rowsets_num = info->inputs.size();
+
         for (size_t i = 0; i < info->inputs.size(); i++) {
             auto itr = _rowsets.find(info->inputs[i]);
             if (itr == _rowsets.end()) {
@@ -1629,8 +1634,10 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
                 input_rowsets[i] = itr->second;
                 input_rowsets_size += input_rowsets[i]->data_disk_size();
                 input_row_num += input_rowsets[i]->num_rows();
+                _current_compaction_task_info->input_segments_num += input_rowsets[i]->num_segments();
             }
         }
+        _current_compaction_task_info->input_data_size = input_rowsets_size;
     }
 
     CompactionAlgorithm algorithm = CompactionUtils::choose_compaction_algorithm(
@@ -2366,14 +2373,20 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
               << PrettyPrinter::print(total_bytes_after_compaction, TUnit::BYTES) << "(estimate)";
 
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker);
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    DeferOp op([&] {
+        std::lock_guard<std::mutex> rl(_compaction_metric_lock);
+        tls_thread_status.set_mem_tracker(prev_tracker);
+        _current_compaction_task_info = nullptr;
+    });
 
     Status st = _do_compaction(&info);
     if (!st.ok()) {
         _compaction_running = false;
         _last_compaction_failure_millis = UnixMillis();
+        _last_compaction_cost_time = 0;
     } else {
         _last_compaction_success_millis = UnixMillis();
+        _last_compaction_cost_time = UnixMillis() - _current_compaction_task_info->start_time;
     }
     return st;
 }
@@ -2490,14 +2503,20 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker, const vector<uint32_t>
               << "->" << PrettyPrinter::print(total_bytes_after_compaction, TUnit::BYTES) << "(estimate)";
 
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker);
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    DeferOp op([&] {
+        std::lock_guard<std::mutex> rl(_compaction_metric_lock);
+        tls_thread_status.set_mem_tracker(prev_tracker);
+        _current_compaction_task_info = nullptr;
+    });
 
     Status st = _do_compaction(&info);
     if (!st.ok()) {
         _compaction_running = false;
         _last_compaction_failure_millis = UnixMillis();
+        _last_compaction_cost_time = 0;
     } else {
         _last_compaction_success_millis = UnixMillis();
+        _last_compaction_cost_time = UnixMillis() - _current_compaction_task_info->start_time;
     }
     return st;
 }
@@ -2583,12 +2602,41 @@ void TabletUpdates::get_compaction_status(std::string* json_result) {
     compaction_status.SetString(compaction_status_value.c_str(), compaction_status_value.length(), root.GetAllocator());
     root.AddMember("compaction_status", compaction_status, root.GetAllocator());
 
+    float divided = 1024 * 1024;
+
+    // print current task
+    {
+    std::lock_guard<std::mutex> rl(_compaction_metric_lock);
+    rapidjson::Value current_task(rapidjson::kObjectType);
+    current_task.SetObject();
+    if (_current_compaction_task_info) {
+    current_task.AddMember("input_rowset_num", _current_compaction_task_info->input_rowsets_num,
+    root.GetAllocator());
+    current_task.AddMember("input_segment_num", _current_compaction_task_info->input_segments_num,
+    root.GetAllocator());
+    rapidjson::Value input_data_size;
+    format_str = std::to_string(_current_compaction_task_info->input_data_size / divided) + "MB";
+    input_data_size.SetString(format_str.c_str(), format_str.length(), root.GetAllocator());
+    current_task.AddMember("input_data_size", input_data_size, root.GetAllocator());
+    rapidjson::Value start_time;
+    format_str = ToStringFromUnixMillis(_current_compaction_task_info->start_time);
+    start_time.SetString(format_str.c_str(), format_str.length(), root.GetAllocator());
+    current_task.AddMember("start_time", start_time, root.GetAllocator());
+    }
+    root.AddMember("current task", current_task, root.GetAllocator());
+    }
+
     rapidjson::Value last_compaction_success_time;
     std::string format_str = ToStringFromUnixMillis(_last_compaction_success_millis.load());
     last_compaction_success_time.SetString(format_str.c_str(), format_str.length(), root.GetAllocator());
     root.AddMember("last compaction success time", last_compaction_success_time, root.GetAllocator());
 
-    rapidjson::Value last_compaction_failure_time;
+    rapidjson::Value last_compaction_cost_time;
+    format_str = std::to_string(_last_compaction_cost_time.load() / 1000.0) + "s";
+    last_compaction_cost_time.SetString(format_str.c_str(), format_str.length(), root.GetAllocator());
+    root.AddMember("last compaction cost time", last_compaction_cost_time, root.GetAllocator());
+
+        rapidjson::Value last_compaction_failure_time;
     format_str = ToStringFromUnixMillis(_last_compaction_failure_millis.load());
     last_compaction_failure_time.SetString(format_str.c_str(), format_str.length(), root.GetAllocator());
     root.AddMember("last compaction failure time", last_compaction_failure_time, root.GetAllocator());

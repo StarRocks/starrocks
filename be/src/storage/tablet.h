@@ -219,6 +219,10 @@ public:
     int64_t last_base_compaction_success_time() { return _last_base_compaction_success_millis; }
     void set_last_base_compaction_success_time(int64_t millis) { _last_base_compaction_success_millis = millis; }
 
+    void set_last_base_compaction_cost_time(int64_t time_cost) { _last_base_compaction_cost_time = time_cost; }
+
+    void set_last_cumu_compaction_cost_time(int64_t time_cost) { _last_cumu_compaction_cost_time = time_cost; }
+
     void delete_all_files();
 
     bool check_rowset_id(const RowsetId& rowset_id);
@@ -407,6 +411,10 @@ private:
     std::atomic<int64_t> _last_cumu_compaction_success_millis{0};
     // timestamp of last base compaction success
     std::atomic<int64_t> _last_base_compaction_success_millis{0};
+    // cost time of last cumu compaction task, 0 if compaction failed or has not been compacted yet
+    std::atomic<int64_t> _last_cumu_compaction_cost_time{0};
+    // cost time of last base compaction success, 0 if compaction failed or has not been compacted yet
+    std::atomic<int64_t> _last_base_compaction_cost_time{0};
 
     TStatusCode::type _last_cumu_compaction_failure_status = TStatusCode::OK;
 

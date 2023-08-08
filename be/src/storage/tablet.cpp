@@ -1275,6 +1275,14 @@ void Tablet::get_compaction_status(std::string* json_result) {
     format_str = ToStringFromUnixMillis(_last_base_compaction_success_millis.load());
     base_success_value.SetString(format_str.c_str(), format_str.length(), root.GetAllocator());
     root.AddMember("last_base_success_time", base_success_value, root.GetAllocator());
+    rapidjson::Value last_base_cost_value;
+    format_str = std::to_string(_last_base_compaction_cost_time.load() / 1000.0) + "s";
+    last_base_cost_value.SetString(format_str.c_str(), format_str.length(), root.GetAllocator());
+    root.AddMember("last_base_cost_time", last_base_cost_value, root.GetAllocator());
+    rapidjson::Value last_cumu_cost_value;
+    format_str = std::to_string(_last_cumu_compaction_cost_time.load() / 1000.0) + "s";
+    last_cumu_cost_value.SetString(format_str.c_str(), format_str.length(), root.GetAllocator());
+    root.AddMember("last_cumulative_cost_time", last_cumu_cost_value, root.GetAllocator());
 
     rapidjson::Value rowsets_count;
     rowsets_count.SetUint64(rowsets.size());
