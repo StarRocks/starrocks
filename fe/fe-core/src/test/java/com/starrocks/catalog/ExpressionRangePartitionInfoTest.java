@@ -22,10 +22,17 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc.PartitionRangeType;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -45,8 +52,12 @@ public class ExpressionRangePartitionInfoTest {
     private Column k2;
     private FunctionCallExpr functionCallExpr;
 
+    private static ConnectContext connectContext;
+    private static StarRocksAssert starRocksAssert;
+
+
     @Before
-    public void setUp() {
+    public void setUp() throws Exception {
         partitionExprs = Lists.newArrayList();
         singleRangePartitionDescs = Lists.newArrayList();
         tableName = new TableName("test", "tbl1");
@@ -58,6 +69,15 @@ public class ExpressionRangePartitionInfoTest {
         functionCallExpr = new FunctionCallExpr("date_trunc", fnChildren);
         functionCallExpr.setFn(Expr.getBuiltinFunction(
                 "date_trunc", new Type[] {Type.VARCHAR, Type.DATETIME}, Function.CompareMode.IS_IDENTICAL));
+
+        FeConstants.runningUnitTest = true;
+        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.addMockBackend(10002);
+        // create connect context
+        connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
+
+        starRocksAssert.withDatabase("test").useDatabase("test");
     }
 
     @Test
@@ -417,6 +437,49 @@ public class ExpressionRangePartitionInfoTest {
             singleRangePartitionDesc.analyze(columns, null);
             partitionInfo.handleNewSinglePartitionDesc(singleRangePartitionDesc, 20000L, false);
         }
+    }
+
+    @Test
+    public void testExpressionRangePartitionInfoSerialized() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createSQL = "CREATE TABLE table_hitcount (\n" +
+                "databaseName varchar(200) NULL COMMENT \"数据库名\",\n" +
+                "tableName varchar(200) NULL COMMENT \"表名称\",\n" +
+                "queryTime varchar(50) NULL COMMENT \"查询时间\",\n" +
+                "queryId varchar(50) NULL COMMENT \"\",\n" +
+                "partitionHitSum int(11) NULL COMMENT \"查询分区数量\",\n" +
+                "partitionSum int(11) NULL COMMENT \"查询分区总数\",\n" +
+                "tabletHitNum int(11) NULL COMMENT \"查询tablet数量\",\n" +
+                "tabletSum int(11) NULL COMMENT \"查询分区中tablet总数\",\n" +
+                "startHitPartition varchar(20) NULL COMMENT \"查询开始分区\",\n" +
+                "dt date NULL COMMENT \"分区日期\",\n" +
+                "clusterAddress varchar(50) NULL COMMENT \"\",\n" +
+                "costTime int(11) NULL COMMENT \"\",\n" +
+                "tableQueryCount int(11) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(databaseName, tableName)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY date_trunc('day', dt)\n" +
+                "DISTRIBUTED BY HASH(databaseName) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ");";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("table_hitcount");
+        // serialize
+        String json = GsonUtils.GSON.toJson(table);
+        // deserialize
+        OlapTable readTable = GsonUtils.GSON.fromJson(json, OlapTable.class);
+        ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) readTable.getPartitionInfo();
+        List<Expr> readPartitionExprs = expressionRangePartitionInfo.getPartitionExprs();
+        Function fn = readPartitionExprs.get(0).getFn();
+        Assert.assertNotNull(fn);
     }
 
 }
