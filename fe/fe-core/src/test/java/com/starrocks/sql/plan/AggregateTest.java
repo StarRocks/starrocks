@@ -2393,4 +2393,35 @@ public class AggregateTest extends PlanTestBase {
                         "  8:EXCHANGE");
 
     }
+
+    @Test
+    public void testCountDistinctWithLimit() throws Exception {
+        String sql = "select count(distinct v1), count(distinct v2) from t0 limit 10";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(1: v1), multi_distinct_count(2: v2)");
+
+        sql = "select count(distinct v1), count(distinct v2) from t0 group by v3 limit 10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(1: v1), multi_distinct_count(2: v2)\n" +
+                "  |  group by: 3: v3");
+
+        sql = "select /*+ SET_VAR (prefer_cte_rewrite = true) */ count(distinct v1), count(distinct v2) from t0 " +
+                "limit 10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, " 18:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  limit: 10");
+
+        sql = "select /*+ SET_VAR (prefer_cte_rewrite = true) */ count(distinct v1), count(distinct v2) from t0 " +
+                "group by v3 limit 10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "13:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 7: v3 <=> 9: v3\n" +
+                "  |  limit: 10");
+    }
 }

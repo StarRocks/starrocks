@@ -23,6 +23,7 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -150,7 +151,7 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
             return true;
         }
 
-        if (agg.hasLimit()) {
+        if (agg.hasLimit() && !ConnectContext.get().getSessionVariable().isPreferCTERewrite()) {
             return false;
         }
 
