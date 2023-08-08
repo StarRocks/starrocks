@@ -6,7 +6,7 @@ Displays partition information, including common partitions and [temporary parti
 
 > **NOTE**
 >
-> For v3.0 and later, this operation requires only one TABLE-level privilege.
+> For v3.0 and later, this operation requires any one TABLE-level privilege.
 
 ## Syntax
 
