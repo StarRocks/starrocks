@@ -1,0 +1,43 @@
+-- name: test_revoke_policy
+create database test_revoke_policy;
+use test_revoke_policy;
+create masking policy mp1 as (v1 bigint) returns bigint -> v1 + 1;
+create masking policy mp2 as (v1 bigint) returns bigint -> v1 + 2;
+create masking policy mp3 as (v1 bigint) returns bigint -> v1 + 3;
+create row access policy rp1 as (v1 bigint) returns boolean -> true;
+create row access policy rp2 as (v1 bigint) returns boolean -> true;
+create row access policy rp3 as (v1 bigint) returns boolean -> true;
+
+CREATE TABLE `t0` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`, `v2`, `v3`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+alter table t0 modify column v1 set masking policy mp1;
+select * from sys.policy_references where POLICY_DATABASE="test_revoke_policy";
+alter table t0 modify column v1 set masking policy mp1;
+
+alter table t0 add row access policy rp1;
+select * from sys.policy_references where POLICY_DATABASE="test_revoke_policy";
+alter table t0 add row access policy rp1;
+
+alter table t0 add row access policy rp2;
+select * from sys.policy_references where POLICY_DATABASE="test_revoke_policy";
+alter table t0 add row access policy rp3;
+select * from sys.policy_references where POLICY_DATABASE="test_revoke_policy";
+alter table t0 drop all row access policies;
+select * from sys.policy_references where POLICY_DATABASE="test_revoke_policy";
+alter table t0 drop all row access policies;
+alter table t0 modify column v1 unset masking policy;
+alter table t0 modify column v1 unset masking policy;
+select * from sys.policy_references where POLICY_DATABASE="test_revoke_policy";

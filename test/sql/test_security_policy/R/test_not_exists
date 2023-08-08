@@ -1,0 +1,25 @@
+-- name: test_not_exists
+alter row access policy row_access_policy01 set BODY -> current_role() = 'root' and col = 'aaaa' ;
+-- result:
+E: (1064, "Unexpected exception: Getting analyzing error. Detail message: Can't find policy row_access_policy01.")
+-- !result
+show create ROW ACCESS policy row_access_policy01 ;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Can't find policy row_access_policy01.")
+-- !result
+drop row access policy row_access_policy01;
+-- result:
+E: (1064, "Unexpected exception: Getting analyzing error. Detail message: Can't find policy row_access_policy01.")
+-- !result
+alter masking policy masking_policy01 set BODY -> case when current_role() = 'root' then concat(col, "ccc") else '****' end;
+-- result:
+E: (1064, "Unexpected exception: Getting analyzing error. Detail message: Can't find policy masking_policy01.")
+-- !result
+show create MASKING policy masking_policy01 ;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Can't find policy masking_policy01.")
+-- !result
+drop MASKING policy masking_policy01 ;
+-- result:
+E: (1064, "Unexpected exception: Getting analyzing error. Detail message: Can't find policy masking_policy01.")
+-- !result

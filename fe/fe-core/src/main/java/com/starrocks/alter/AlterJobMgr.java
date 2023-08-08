@@ -341,7 +341,7 @@ public class AlterJobMgr {
     }
 
     private void processChangeMaterializedViewStatus(String status, String dbName,
-                                                        MaterializedView materializedView, Database db)
+                                                     MaterializedView materializedView, Database db)
             throws DdlException, MetaNotFoundException {
         if (!db.writeLockAndCheckExist()) {
             throw new DmlException("update meta failed. database:" + db.getFullName() + " not exist");
@@ -1271,7 +1271,7 @@ public class AlterJobMgr {
                     RevokeRowAccessPolicyClause revokeRowAccessPolicyClause = (RevokeRowAccessPolicyClause) alterClause;
                     GlobalStateMgr.getCurrentState().getSecurityPolicyManager().revokeRowAccessPolicyContext(
                             tableName.getCatalog(), tableName.getDb(), tableName.getTbl(),
-                            revokeRowAccessPolicyClause.getPolicyId());
+                            revokeRowAccessPolicyClause.getPolicyName());
                     break;
                 }
                 case REVOKE_ALL_ROW_ACCESS_POLICY: {

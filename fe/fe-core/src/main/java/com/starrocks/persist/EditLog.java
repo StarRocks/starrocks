@@ -1107,13 +1107,13 @@ public class EditLog {
                 }
                 case OperationTypeEPack.OP_APPLY_MASKING_POLICY: {
                     ApplyOrRevokeMaskingPolicyLog applyMaskingPolicyInfo = (ApplyOrRevokeMaskingPolicyLog) journal.getData();
-                    globalStateMgr.getSecurityPolicyManager().replayApplyMaskingPolicyContext(applyMaskingPolicyInfo);
+                    globalStateMgr.getSecurityPolicyManager().registerMaskingPolicyContext(applyMaskingPolicyInfo);
                     break;
                 }
                 case OperationTypeEPack.OP_APPLY_ROW_ACCESS_POLICY: {
                     ApplyOrRevokeRowAccessPolicyLog applyRowAccessPolicyInfo =
                             (ApplyOrRevokeRowAccessPolicyLog) journal.getData();
-                    globalStateMgr.getSecurityPolicyManager().replayApplyRowAccessPolicyContext(applyRowAccessPolicyInfo);
+                    globalStateMgr.getSecurityPolicyManager().registerRowAccessPolicyContext(applyRowAccessPolicyInfo);
                     break;
                 }
                 case OperationTypeEPack.OP_REVOKE_MASKING_POLICY: {

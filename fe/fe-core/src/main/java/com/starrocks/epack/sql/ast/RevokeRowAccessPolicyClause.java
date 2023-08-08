@@ -10,9 +10,6 @@ import com.starrocks.sql.parser.NodePosition;
 public class RevokeRowAccessPolicyClause extends AlterTableClause {
     private final PolicyName policyName;
 
-    //Resolved by Analyzer
-    private Long policyId;
-
     public RevokeRowAccessPolicyClause(PolicyName policyName, NodePosition nodePosition) {
         super(AlterOpType.REVOKE_ROW_ACCESS_POLICY, nodePosition);
         this.policyName = policyName;
@@ -25,14 +22,6 @@ public class RevokeRowAccessPolicyClause extends AlterTableClause {
 
     public PolicyName getPolicyName() {
         return policyName;
-    }
-
-    public Long getPolicyId() {
-        return policyId;
-    }
-
-    public void setPolicyId(Long policyId) {
-        this.policyId = policyId;
     }
 
     @Override

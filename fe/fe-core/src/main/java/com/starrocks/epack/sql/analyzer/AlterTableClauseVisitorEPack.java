@@ -2,18 +2,14 @@
 
 package com.starrocks.epack.sql.analyzer;
 
-import com.starrocks.epack.privilege.Policy;
-import com.starrocks.epack.privilege.SecurityPolicyMgr;
+import com.starrocks.alter.AlterOpType;
 import com.starrocks.epack.sql.ast.ApplyMaskingPolicyClause;
 import com.starrocks.epack.sql.ast.ApplyRowAccessPolicyClause;
 import com.starrocks.epack.sql.ast.PolicyName;
-import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.epack.sql.ast.RevokeMaskingPolicyClause;
 import com.starrocks.epack.sql.ast.RevokeRowAccessPolicyClause;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AlterTableClauseVisitor;
-import com.starrocks.sql.analyzer.SemanticException;
 
 public class AlterTableClauseVisitorEPack extends AlterTableClauseVisitor {
     @Override
@@ -35,15 +31,10 @@ public class AlterTableClauseVisitorEPack extends AlterTableClauseVisitor {
 
     @Override
     public Void visitRevokeRowAccessPolicyClause(RevokeRowAccessPolicyClause clause, ConnectContext context) {
-        PolicyName policyName = clause.getPolicyName();
-        AnalyzerUtilsEPack.normalizationPolicyName(context, policyName);
-
-        SecurityPolicyMgr securityPolicyManager = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
-        Policy policy = securityPolicyManager.getPolicyByName(PolicyType.ROW_ACCESS, policyName);
-        if (policy == null) {
-            throw new SemanticException("Can't find masking policy : " + policyName.getName());
+        if (clause.getOpType().equals(AlterOpType.REVOKE_ROW_ACCESS_POLICY)) {
+            PolicyName policyName = clause.getPolicyName();
+            AnalyzerUtilsEPack.normalizationPolicyName(context, policyName);
         }
-        clause.setPolicyId(policy.getPolicyId());
         return null;
     }
 }

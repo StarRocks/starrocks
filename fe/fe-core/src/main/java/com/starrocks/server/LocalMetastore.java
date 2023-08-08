@@ -2040,14 +2040,14 @@ public class LocalMetastore implements ConnectorMetadata {
                 SecurityPolicyMgr securityManager = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
                 if (columnMaskingPolicyMap != null) {
                     for (Map.Entry<String, WithColumnMaskingPolicy> withColumnMaskingPolicy : columnMaskingPolicyMap.entrySet()) {
-                        securityManager.applyMaskingPolicyContext(new TableName(db.getFullName(), table.getName()),
+                        securityManager.registerMaskingPolicyContext(new TableName(db.getFullName(), table.getName()),
                                 withColumnMaskingPolicy.getKey(), withColumnMaskingPolicy.getValue());
                     }
                 }
 
                 if (rowAccessPolicies != null) {
                     for (WithRowAccessPolicy withRowAccessPolicy : rowAccessPolicies) {
-                        securityManager.applyRowAccessPolicyContext(new TableName(db.getFullName(), table.getName()),
+                        securityManager.registerRowAccessPolicyContext(new TableName(db.getFullName(), table.getName()),
                                 withRowAccessPolicy);
                     }
                 }
@@ -2113,13 +2113,13 @@ public class LocalMetastore implements ConnectorMetadata {
         List<ApplyOrRevokeMaskingPolicyLog> applyOrRevokeMaskingPolicyLogs = info.getApplyOrRevokeMaskingPolicyLogs();
         if (applyOrRevokeMaskingPolicyLogs != null) {
             for (ApplyOrRevokeMaskingPolicyLog applyOrRevokeMaskingPolicyLog : applyOrRevokeMaskingPolicyLogs) {
-                securityManager.replayApplyMaskingPolicyContext(applyOrRevokeMaskingPolicyLog);
+                securityManager.registerMaskingPolicyContext(applyOrRevokeMaskingPolicyLog);
             }
         }
         List<ApplyOrRevokeRowAccessPolicyLog> rowAccessPolicies = info.getApplyOrRevokeRowAccessPolicyLogs();
         if (rowAccessPolicies != null) {
             for (ApplyOrRevokeRowAccessPolicyLog applyOrRevokeRowAccessPolicyLog : rowAccessPolicies) {
-                securityManager.replayApplyRowAccessPolicyContext(applyOrRevokeRowAccessPolicyLog);
+                securityManager.registerRowAccessPolicyContext(applyOrRevokeRowAccessPolicyLog);
             }
         }
     }

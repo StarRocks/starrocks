@@ -69,11 +69,9 @@ public class SecurityPolicyAnalyzer {
             QueryStatement queryStatement = new QueryStatement(selectRelation);
             Analyzer.analyze(queryStatement, session);
 
-            if (statement.getPolicyType().equals(PolicyType.MASKING)) {
-                Expr result = queryStatement.getQueryRelation().getOutputExpression().get(0);
-                //Check compatible between expr result type and return type
-                TypeManager.addCastExpr(result, statement.getReturnType().getType());
-            }
+            Expr result = queryStatement.getQueryRelation().getOutputExpression().get(0);
+            //Check compatible between expr result type and return type
+            TypeManager.addCastExpr(result, statement.getReturnType().getType());
 
             return null;
         }

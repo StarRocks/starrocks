@@ -107,6 +107,9 @@ public class PolicyPEntryObject implements PEntryObject {
             } else {
                 Policy policy = mgr.getSecurityPolicyManager().getPolicyByName(policyType,
                         new PolicyName(catalogName, database.getFullName(), tokens.get(1), NodePosition.ZERO));
+                if (policy == null) {
+                    throw new PrivObjNotFoundException("cannot find policy : " + tokens.get(1));
+                }
                 policyId = policy.getPolicyId();
             }
         }

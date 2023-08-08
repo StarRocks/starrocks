@@ -1,0 +1,7 @@
+-- name: test_not_exists
+alter row access policy row_access_policy01 set BODY -> current_role() = 'root' and col = 'aaaa' ;
+show create ROW ACCESS policy row_access_policy01 ;
+drop row access policy row_access_policy01;
+alter masking policy masking_policy01 set BODY -> case when current_role() = 'root' then concat(col, "ccc") else '****' end;
+show create MASKING policy masking_policy01 ;
+drop MASKING policy masking_policy01 ;
