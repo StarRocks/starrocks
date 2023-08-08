@@ -98,6 +98,12 @@ set(UTIL_FILES
   debug/query_trace_impl.cpp
   random.cc
   stack_trace_mutex.cpp
+<<<<<<< HEAD
+=======
+  failpoint/fail_point.cpp
+  bthreads/future.h
+  bthreads/future_impl.cpp
+>>>>>>> 93e9bdad3e ([Enhancement] Implement bthread support for future/promise (#28753))
 )
 
 add_library(Util STATIC
