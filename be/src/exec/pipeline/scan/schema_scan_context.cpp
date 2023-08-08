@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/scan/olap_schema_scan_context.h"
+#include "exec/pipeline/scan/schema_scan_context.h"
 
 #include <boost/algorithm/string.hpp>
 
@@ -21,7 +21,7 @@
 
 namespace starrocks::pipeline {
 
-Status OlapSchemaScanContext::prepare(RuntimeState* state) {
+Status SchemaScanContext::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::create_expr_trees(&_obj_pool, _tnode.conjuncts, &_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
@@ -29,7 +29,7 @@ Status OlapSchemaScanContext::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status OlapSchemaScanContext::_prepare_params(RuntimeState* state) {
+Status SchemaScanContext::_prepare_params(RuntimeState* state) {
     _param = std::make_shared<SchemaScannerParam>();
     if (_tnode.schema_scan_node.__isset.catalog_name) {
         _param->catalog = _obj_pool.add(new std::string(_tnode.schema_scan_node.catalog_name));
