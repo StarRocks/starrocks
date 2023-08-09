@@ -1,7 +1,7 @@
 -- name: testParquetReadRange
 
-shell: ossutil64 mkdir oss://${oss_bucket}/test_external_file/test_parquet_read_range >/dev/null || echo "exit 0" >/dev/null
-shell: ossutil64 cp --force ../be/test/formats/parquet/test_data/read_range_test.parquet oss://${oss_bucket}/test_external_file/test_parquet_read_range/read_range_test.parquet | grep -Pv "(average|elapsed)"
+shell: ossutil64 mkdir oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ../be/test/formats/parquet/test_data/read_range_test.parquet oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/read_range_test.parquet | grep -Pv "(average|elapsed)"
 
 CREATE EXTERNAL TABLE read_range_test (
     c0 int,
@@ -11,7 +11,7 @@ CREATE EXTERNAL TABLE read_range_test (
 )
 ENGINE=file
 PROPERTIES (
-    "path" = "oss://${oss_bucket}/test_external_file/test_parquet_read_range/read_range_test.parquet",
+    "path" = "oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/read_range_test.parquet",
     "format" = "parquet"
 );
 
@@ -49,3 +49,5 @@ select * from read_range_test where (c0 >= 900 and c0 < 902) or (c0 >= 10900 and
 
 -- last page
 select * from read_range_test where c0 < 3 or c0 > 19998;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
