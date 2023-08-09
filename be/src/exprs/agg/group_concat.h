@@ -657,10 +657,11 @@ public:
                     return;
                 }
                 auto str = binary_cols[i]->get_slice(j);
-                if (str_len + str.get_size() < ctx->get_group_concat_max_len()) {
+                if (str_len + str.get_size() <= ctx->get_group_concat_max_len()) {
                     memcpy(bytes.data() + offset, str.get_data(), str.get_size());
                     offset += str.get_size();
                     str_len += str.get_size();
+                    overflow = str_len == ctx->get_group_concat_max_len();
                 } else { // make the last utf8 character valid
                     std::vector<size_t> index;
                     get_utf8_index(str, &index);
