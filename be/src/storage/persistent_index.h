@@ -653,9 +653,9 @@ public:
 
     bool is_error() { return _error; }
 
-    Status bg_compaction(Tablet* tablet);
+    Status major_compaction(Tablet* tablet);
 
-    Status TEST_bg_compaction(PersistentIndexMetaPB& index_meta);
+    Status TEST_major_compaction(PersistentIndexMetaPB& index_meta);
 
     double get_write_amp_score() const;
 
@@ -711,17 +711,17 @@ private:
     void _get_stat_from_immutable_index(ImmutableIndex* immu_index, uint32_t key_size, size_t& total_size,
                                         size_t& total_usage);
 
-    Status _async_compaction(PersistentIndexMetaPB* index_meta);
+    Status _minor_compaction(PersistentIndexMetaPB* index_meta);
 
     uint64_t _l1_l2_file_size() const;
 
     void _get_l2_stat(const std::vector<std::unique_ptr<ImmutableIndex>>& l2_vec,
                       std::map<uint32_t, std::pair<int64_t, int64_t>>& usage_and_size_stat);
 
-    StatusOr<EditVersion> _bg_compaction_impl(const std::vector<EditVersion>& l2_versions,
-                                              const std::vector<std::unique_ptr<ImmutableIndex>>& l2_vec);
+    StatusOr<EditVersion> _major_compaction_impl(const std::vector<EditVersion>& l2_versions,
+                                                 const std::vector<std::unique_ptr<ImmutableIndex>>& l2_vec);
 
-    bool _enable_async_compaction();
+    bool _enable_minor_compaction();
 
     void _calc_write_amp_score();
 
@@ -771,9 +771,9 @@ private:
     std::vector<KeysInfo> _found_keys_info;
     // make update index and compaction l2 concurrently safe.
     mutable std::mutex _meta_lock;
-    // set if bg compaction is running
-    std::atomic<bool> _bg_compaction_running{false};
-    // write amplification score, 0.0 means this index doesn't need bg compaction
+    // set if major compaction is running
+    std::atomic<bool> _major_compaction_running{false};
+    // write amplification score, 0.0 means this index doesn't need major compaction
     std::atomic<double> _write_amp_score{0.0};
 };
 

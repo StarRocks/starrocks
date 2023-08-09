@@ -2484,15 +2484,12 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
                                                      index_meta.l2_versions(i).minor(),
                                                      index_meta.l2_version_merged(i) ? MergeSuffix : "");
             ASSIGN_OR_RETURN(auto l2_rfile, _fs->new_random_access_file(l2_block_path));
-            auto l2_st = ImmutableIndex::load(std::move(l2_rfile));
-            if (!l2_st.ok()) {
-                return l2_st.status();
-            }
+            ASSIGN_OR_RETURN(auto l2_index, ImmutableIndex::load(std::move(l2_rfile)));
             {
                 std::unique_lock wrlock(_lock);
                 _l2_versions.emplace_back(index_meta.l2_versions(i));
                 _l2_version_merged.push_back(index_meta.l2_version_merged(i));
-                _l2_vec.emplace_back(std::move(l2_st).value());
+                _l2_vec.emplace_back(std::move(l2_index));
             }
         }
     }
@@ -2879,12 +2876,12 @@ uint64_t PersistentIndex::_l1_l2_file_size() const {
     return total_l1_l2_file_size;
 }
 
-bool PersistentIndex::_enable_async_compaction() {
-    if (config::enable_pindex_async_compaction) {
+bool PersistentIndex::_enable_minor_compaction() {
+    if (config::enable_pindex_minor_compaction) {
         if (_l2_versions.size() < config::max_allow_pindex_l2_num) {
             return true;
         } else {
-            LOG(WARNING) << "PersistentIndex stop do async compaction, path: " << _path
+            LOG(WARNING) << "PersistentIndex stop do minor compaction, path: " << _path
                          << " , current l2 cnt: " << _l2_versions.size();
         }
     }
@@ -2893,7 +2890,7 @@ bool PersistentIndex::_enable_async_compaction() {
 
 // There are four cases as below in commit
 //   1. _flush_l0
-//   2. _merge_compaction or _async_compaction
+//   2. _merge_compaction or _minor_compaction
 //   3. _dump_snapshot
 //   4. append_wal
 // both case1 and case2 will create a new l1 file and a new empty l0 file
@@ -2910,12 +2907,12 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
     // In addition, there may be I/O waste because we append wals firstly and do _flush_l0 or _merge_compaction.
     const auto l0_mem_size = _l0->memory_usage();
     uint64_t l1_l2_file_size = _l1_l2_file_size();
-    bool do_async_compaction = false;
+    bool do_minor_compaction = false;
     // if l1 is not empty,
     if (_flushed) {
-        if (_enable_async_compaction()) {
-            RETURN_IF_ERROR(_async_compaction(index_meta));
-            do_async_compaction = true;
+        if (_enable_minor_compaction()) {
+            RETURN_IF_ERROR(_minor_compaction(index_meta));
+            do_minor_compaction = true;
         } else {
             RETURN_IF_ERROR(_merge_compaction());
         }
@@ -2929,9 +2926,9 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
             if (l0_mem_size * config::l0_l1_merge_ratio > l1_l2_file_size) {
                 // do l0 l1 merge compaction
                 _flushed = true;
-                if (_enable_async_compaction()) {
-                    RETURN_IF_ERROR(_async_compaction(index_meta));
-                    do_async_compaction = true;
+                if (_enable_minor_compaction()) {
+                    RETURN_IF_ERROR(_minor_compaction(index_meta));
+                    do_minor_compaction = true;
                 } else {
                     RETURN_IF_ERROR(_merge_compaction());
                 }
@@ -2953,7 +2950,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
     }
     _dump_snapshot |= !_flushed && _l0->file_size() - _l0->memory_usage() > config::l0_max_file_size;
     // for case1 and case2
-    if (do_async_compaction) {
+    if (do_minor_compaction) {
         // clear _l0 and reload l1 and l2s
         RETURN_IF_ERROR(_reload(*index_meta));
     } else if (_flushed) {
@@ -2975,7 +2972,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
         RETURN_IF_ERROR(_l0->commit(l0_meta, _version, kSnapshot));
         if (index_meta->l2_versions_size() < _l2_versions.size()) {
-            // bg compaction happen, reload
+            // major compaction happen, reload
             RETURN_IF_ERROR(_reload(*index_meta));
         }
     } else {
@@ -2986,7 +2983,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
         RETURN_IF_ERROR(_l0->commit(l0_meta, _version, kAppendWAL));
         if (index_meta->l2_versions_size() < _l2_versions.size()) {
-            // bg compaction happen, reload
+            // major compaction happen, reload
             RETURN_IF_ERROR(_reload(*index_meta));
         }
     }
@@ -3532,7 +3529,7 @@ Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version
     return FileSystem::Default()->iterate_dir(_path, cb);
 }
 
-static bool skip_bg_compaction_tmp_index_file(const std::string& full) {
+static bool skip_major_compaction_tmp_index_file(const std::string& full) {
     std::string suffix = ".merged.tmp";
     if (full.length() >= suffix.length() &&
         full.compare(full.length() - suffix.length(), suffix.length(), suffix) == 0) {
@@ -3549,7 +3546,7 @@ Status PersistentIndex::_delete_tmp_index_file() {
         std::string full(name);
         if (full.length() >= suffix.length() &&
             full.compare(full.length() - suffix.length(), suffix.length(), suffix) == 0 &&
-            !skip_bg_compaction_tmp_index_file(full)) {
+            !skip_major_compaction_tmp_index_file(full)) {
             std::string path = dir + "/" + full;
             VLOG(1) << "delete tmp index file " << path;
             Status st = FileSystem::Default()->delete_file(path);
@@ -3953,7 +3950,7 @@ size_t PersistentIndex::_get_tmp_l1_count() {
     return _has_l1 ? _l1_vec.size() - 1 : _l1_vec.size();
 }
 
-// There are a few steps in async compaction:
+// There are a few steps in minor compaction:
 // 1. flush l0 to l1:
 //    a. if there is only one tmp-l1 file, move this tmp-l1 to l1 file.
 //    b. if there are > 2 tmp-l1 file, then merge l0 and tmp-l1 files to new l1 file.
@@ -3961,7 +3958,7 @@ size_t PersistentIndex::_get_tmp_l1_count() {
 //    d. if there is not l1 file exists, flush l0 to l1 file.
 // 2. move old l1 to l2. only if old l1 exist
 // 3. modify PersistentIndex meta
-Status PersistentIndex::_async_compaction(PersistentIndexMetaPB* index_meta) {
+Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta) {
     // 1. flush l0 to l1
     const std::string new_l1_filename =
             strings::Substitute("$0/index.l1.$1.$2", _path, _version.major(), _version.minor());
@@ -3977,7 +3974,7 @@ Status PersistentIndex::_async_compaction(PersistentIndexMetaPB* index_meta) {
             // check if need to append wal
             need_append_wal = true;
         }
-        LOG(INFO) << "PersistentIndex async compaction, link from tmp-l1: " << tmp_l1_filename
+        LOG(INFO) << "PersistentIndex minor compaction, link from tmp-l1: " << tmp_l1_filename
                   << " to l1: " << new_l1_filename;
     } else if (tmp_l1_cnt > 1) {
         // step 1.b
@@ -3990,19 +3987,19 @@ Status PersistentIndex::_async_compaction(PersistentIndexMetaPB* index_meta) {
                                                    _usage_and_size_by_key_length, _l2_vec.empty() ? false : true,
                                                    nullptr));
         RETURN_IF_ERROR(writer->finish());
-        LOG(INFO) << "PersistentIndex async compaction, merge tmp l1, merge cnt: " << _l1_vec.size()
+        LOG(INFO) << "PersistentIndex minor compaction, merge tmp l1, merge cnt: " << _l1_vec.size()
                   << ", output: " << new_l1_filename;
     } else if (_l1_vec.size() == 1) {
         // step 1.c
         RETURN_IF_ERROR(_flush_l0());
         DCHECK(_has_l1);
-        LOG(INFO) << "PersistentIndex async compaction, flush l0, old l1: " << _l1_version
+        LOG(INFO) << "PersistentIndex minor compaction, flush l0, old l1: " << _l1_version
                   << ", output: " << new_l1_filename;
     } else {
         // step 1.d
         RETURN_IF_ERROR(_flush_l0());
         DCHECK(!_has_l1);
-        LOG(INFO) << "PersistentIndex async compaction, flush l0, "
+        LOG(INFO) << "PersistentIndex minor compaction, flush l0, "
                   << "output: " << new_l1_filename;
     }
     // 2. move old l1 to l2.
@@ -4012,7 +4009,7 @@ Status PersistentIndex::_async_compaction(PersistentIndexMetaPB* index_meta) {
                 strings::Substitute("$0/index.l2.$1.$2", _path, _l1_version.major(), _l1_version.minor());
         const std::string old_l1_file_path =
                 strings::Substitute("$0/index.l1.$1.$2", _path, _l1_version.major(), _l1_version.minor());
-        LOG(INFO) << "PersistentIndex async compaction, link from " << old_l1_file_path << " to " << l2_file_path;
+        LOG(INFO) << "PersistentIndex minor compaction, link from " << old_l1_file_path << " to " << l2_file_path;
         RETURN_IF_ERROR(FileSystem::Default()->link_file(old_l1_file_path, l2_file_path));
         _l1_version.to_pb(index_meta->add_l2_versions());
         index_meta->add_l2_version_merged(false);
@@ -4158,10 +4155,11 @@ static void generate_all_key_size(size_t key_size, std::vector<size_t>& key_size
     }
 }
 
-static void bg_compaction_debug_str(const std::vector<EditVersion>& l2_versions,
-                                    const std::vector<std::unique_ptr<ImmutableIndex>>& l2_vec,
-                                    const EditVersion& output_version,
-                                    const std::unique_ptr<ImmutableIndexWriter>& writer, std::stringstream& debug_str) {
+static void major_compaction_debug_str(const std::vector<EditVersion>& l2_versions,
+                                       const std::vector<std::unique_ptr<ImmutableIndex>>& l2_vec,
+                                       const EditVersion& output_version,
+                                       const std::unique_ptr<ImmutableIndexWriter>& writer,
+                                       std::stringstream& debug_str) {
     debug_str << "input : [";
     for (int i = 0; i < l2_versions.size(); i++) {
         debug_str << "(ver: " << l2_versions[i] << ", file_sz: " << l2_vec[i]->file_size()
@@ -4171,8 +4169,8 @@ static void bg_compaction_debug_str(const std::vector<EditVersion>& l2_versions,
               << ", kv_cnt: " << writer->total_kv_size() << ") ";
 }
 
-StatusOr<EditVersion> PersistentIndex::_bg_compaction_impl(const std::vector<EditVersion>& l2_versions,
-                                                           const std::vector<std::unique_ptr<ImmutableIndex>>& l2_vec) {
+StatusOr<EditVersion> PersistentIndex::_major_compaction_impl(
+        const std::vector<EditVersion>& l2_versions, const std::vector<std::unique_ptr<ImmutableIndex>>& l2_vec) {
     DCHECK(l2_versions.size() == l2_vec.size());
     MonotonicStopWatch watch;
     watch.start();
@@ -4253,7 +4251,7 @@ StatusOr<EditVersion> PersistentIndex::_bg_compaction_impl(const std::vector<Edi
     RETURN_IF_ERROR(writer->finish());
     _write_amp_score.store(0.0);
     std::stringstream debug_str;
-    bg_compaction_debug_str(l2_versions, l2_vec, new_l2_version, writer, debug_str);
+    major_compaction_debug_str(l2_versions, l2_vec, new_l2_version, writer, debug_str);
     LOG(INFO) << "PersistentIndex background compact l2 : " << debug_str.str() << " cost: " << watch.elapsed_time();
     return new_l2_version;
 }
@@ -4290,7 +4288,7 @@ static void modify_l2_versions(const std::vector<EditVersion>& input_l2_versions
     }
 }
 
-Status PersistentIndex::TEST_bg_compaction(PersistentIndexMetaPB& index_meta) {
+Status PersistentIndex::TEST_major_compaction(PersistentIndexMetaPB& index_meta) {
     if (index_meta.l2_versions_size() <= 1) {
         return Status::OK();
     }
@@ -4303,29 +4301,26 @@ Status PersistentIndex::TEST_bg_compaction(PersistentIndexMetaPB& index_meta) {
                                                  index_meta.l2_versions(i).minor(),
                                                  index_meta.l2_version_merged(i) ? MergeSuffix : "");
         ASSIGN_OR_RETURN(auto l2_rfile, _fs->new_random_access_file(l2_block_path));
-        auto l2_st = ImmutableIndex::load(std::move(l2_rfile));
-        if (!l2_st.ok()) {
-            return l2_st.status();
-        }
-        l2_vec.emplace_back(std::move(l2_st).value());
+        ASSIGN_OR_RETURN(auto l2_index, ImmutableIndex::load(std::move(l2_rfile)));
+        l2_vec.emplace_back(std::move(l2_index));
     }
     // 2. merge l2 files to new l2 file
-    ASSIGN_OR_RETURN(EditVersion new_l2_version, _bg_compaction_impl(l2_versions, l2_vec));
+    ASSIGN_OR_RETURN(EditVersion new_l2_version, _major_compaction_impl(l2_versions, l2_vec));
     modify_l2_versions(l2_versions, new_l2_version, index_meta);
     return Status::OK();
 }
 
-// merge compaction l2 files, contains a few steps:
+// Major compaction will merge compaction l2 files, contains a few steps:
 // 1. load current l2 vec
 // 2. merge l2 files to new l2 file
 // 3. modify PersistentIndexMetaPB and make this step atomic.
-Status PersistentIndex::bg_compaction(Tablet* tablet) {
+Status PersistentIndex::major_compaction(Tablet* tablet) {
     bool expect_running_state = false;
-    if (!_bg_compaction_running.compare_exchange_strong(expect_running_state, true)) {
+    if (!_major_compaction_running.compare_exchange_strong(expect_running_state, true)) {
         // already in compaction
         return Status::OK();
     }
-    DeferOp defer([&]() { _bg_compaction_running.store(false); });
+    DeferOp defer([&]() { _major_compaction_running.store(false); });
     // merge all l2 files
     PersistentIndexMetaPB prev_index_meta;
     RETURN_IF_ERROR(
@@ -4342,14 +4337,11 @@ Status PersistentIndex::bg_compaction(Tablet* tablet) {
                                                  prev_index_meta.l2_versions(i).minor(),
                                                  prev_index_meta.l2_version_merged(i) ? MergeSuffix : "");
         ASSIGN_OR_RETURN(auto l2_rfile, _fs->new_random_access_file(l2_block_path));
-        auto l2_st = ImmutableIndex::load(std::move(l2_rfile));
-        if (!l2_st.ok()) {
-            return l2_st.status();
-        }
-        l2_vec.emplace_back(std::move(l2_st).value());
+        ASSIGN_OR_RETURN(auto l2_index, ImmutableIndex::load(std::move(l2_rfile)));
+        l2_vec.emplace_back(std::move(l2_index));
     }
     // 2. merge l2 files to new l2 file
-    ASSIGN_OR_RETURN(EditVersion new_l2_version, _bg_compaction_impl(l2_versions, l2_vec));
+    ASSIGN_OR_RETURN(EditVersion new_l2_version, _major_compaction_impl(l2_versions, l2_vec));
     // 3. modify PersistentIndexMetaPB and make this step atomic.
     std::lock_guard<std::mutex> guard(_meta_lock);
     PersistentIndexMetaPB index_meta;
@@ -4410,7 +4402,7 @@ void PersistentIndex::_calc_write_amp_score() {
 }
 
 double PersistentIndex::get_write_amp_score() const {
-    if (_bg_compaction_running.load()) {
+    if (_major_compaction_running.load()) {
         return 0.0;
     } else {
         return _write_amp_score.load();

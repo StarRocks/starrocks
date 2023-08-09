@@ -3786,17 +3786,17 @@ double TabletUpdates::get_pk_index_write_amp_score() {
     return score;
 }
 
-Status TabletUpdates::pk_index_bg_compaction() {
+Status TabletUpdates::pk_index_major_compaction() {
     Status st = Status::OK();
     auto& index_cache = StorageEngine::instance()->update_manager()->index_cache();
     auto index_entry = index_cache.get(_tablet.tablet_id());
     if (index_entry != nullptr) {
         auto& index = index_entry->value();
-        st = index.bg_compaction(&_tablet);
+        st = index.major_compaction(&_tablet);
         index_cache.release(index_entry);
     }
     if (!st.ok()) {
-        LOG(WARNING) << "PerstentIndex bg compaction failed, tablet_id: " << _tablet.tablet_id() << " st: " << st;
+        LOG(WARNING) << "PerstentIndex major compaction failed, tablet_id: " << _tablet.tablet_id() << " st: " << st;
     }
     return st;
 }

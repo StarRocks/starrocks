@@ -3701,10 +3701,10 @@ TEST_F(TabletUpdatesTest, test_pk_index_compaction) {
     }
     ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys), 60000).ok());
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    auto tablets = StorageEngine::instance()->tablet_manager()->pick_tablets_to_do_pk_index_bg_compaction();
+    auto tablets = StorageEngine::instance()->tablet_manager()->pick_tablets_to_do_pk_index_major_compaction();
     EXPECT_TRUE(!tablets.empty());
     // trigger pk index compaction
-    ASSERT_OK(tablets[0].first->updates()->pk_index_bg_compaction());
+    ASSERT_OK(tablets[0].first->updates()->pk_index_major_compaction());
 }
 
 } // namespace starrocks

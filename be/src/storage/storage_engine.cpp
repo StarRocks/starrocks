@@ -612,7 +612,7 @@ void StorageEngine::stop() {
     JOIN_THREADS(_manual_compaction_threads)
     JOIN_THREADS(_tablet_checkpoint_threads)
 
-    JOIN_THREAD(_pk_index_bg_compaction_thread);
+    JOIN_THREAD(_pk_index_major_compaction_thread);
 
     JOIN_THREAD(_fd_cache_clean_thread)
     JOIN_THREAD(_adjust_cache_thread)

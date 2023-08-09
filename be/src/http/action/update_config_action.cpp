@@ -105,11 +105,11 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             StorageEngine::instance()->increase_update_compaction_thread(
                     config::update_compaction_num_threads_per_disk);
         });
-        _config_callback.emplace("pindex_bg_compaction_num_threads", [&]() {
+        _config_callback.emplace("pindex_major_compaction_num_threads", [&]() {
             PersistentIndexCompactionManager* mgr =
                     StorageEngine::instance()->update_manager()->get_pindex_compaction_mgr();
             if (mgr != nullptr) {
-                (void)mgr->update_max_threads(config::pindex_bg_compaction_num_threads);
+                (void)mgr->update_max_threads(config::pindex_major_compaction_num_threads);
             }
         });
         _config_callback.emplace("update_memory_limit_percent", [&]() {

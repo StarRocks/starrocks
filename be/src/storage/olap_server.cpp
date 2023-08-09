@@ -92,8 +92,8 @@ Status StorageEngine::start_bg_threads() {
     _disk_stat_monitor_thread = std::thread([this] { _disk_stat_monitor_thread_callback(nullptr); });
     Thread::set_thread_name(_disk_stat_monitor_thread, "disk_monitor");
 
-    _pk_index_bg_compaction_thread = std::thread([this] { _pk_index_bg_compaction_thread_callback(nullptr); });
-    Thread::set_thread_name(_pk_index_bg_compaction_thread, "pk_index_compaction_scheduler");
+    _pk_index_major_compaction_thread = std::thread([this] { _pk_index_major_compaction_thread_callback(nullptr); });
+    Thread::set_thread_name(_pk_index_major_compaction_thread, "pk_index_compaction_scheduler");
 
     // convert store map to vector
     std::vector<DataDir*> data_dirs;
@@ -377,12 +377,12 @@ void* StorageEngine::_base_compaction_thread_callback(void* arg, DataDir* data_d
     return nullptr;
 }
 
-void* StorageEngine::_pk_index_bg_compaction_thread_callback(void* arg) {
+void* StorageEngine::_pk_index_major_compaction_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
-        SLEEP_IN_BG_WORKER(config::pindex_bg_compaction_schedule_interval_seconds);
+        SLEEP_IN_BG_WORKER(config::pindex_major_compaction_schedule_interval_seconds);
         // schedule persistent index compaction
         _update_manager->get_pindex_compaction_mgr()->schedule();
     }

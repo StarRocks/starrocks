@@ -1399,9 +1399,9 @@ double PrimaryIndex::get_write_amp_score() {
     }
 }
 
-Status PrimaryIndex::bg_compaction(Tablet* tablet) {
+Status PrimaryIndex::major_compaction(Tablet* tablet) {
     if (_persistent_index != nullptr) {
-        return _persistent_index->bg_compaction(tablet);
+        return _persistent_index->major_compaction(tablet);
     } else {
         return Status::OK();
     }

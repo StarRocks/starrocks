@@ -29,8 +29,8 @@ PersistentIndexCompactionManager::~PersistentIndexCompactionManager() {
 }
 
 Status PersistentIndexCompactionManager::init() {
-    int max_pk_index_compaction_thread_cnt = config::pindex_bg_compaction_num_threads > 0
-                                                     ? config::pindex_bg_compaction_num_threads
+    int max_pk_index_compaction_thread_cnt = config::pindex_major_compaction_num_threads > 0
+                                                     ? config::pindex_major_compaction_num_threads
                                                      : CpuInfo::num_cores();
     RETURN_IF_ERROR(ThreadPoolBuilder("pk_index_compaction_worker")
                             .set_min_threads(1)
@@ -42,13 +42,13 @@ Status PersistentIndexCompactionManager::init() {
     return Status::OK();
 }
 
-class PkIndexBgCompactionTask : public Runnable {
+class PkIndexMajorCompactionTask : public Runnable {
 public:
-    PkIndexBgCompactionTask(TabletSharedPtr tablet, PersistentIndexCompactionManager* mgr)
+    PkIndexMajorCompactionTask(TabletSharedPtr tablet, PersistentIndexCompactionManager* mgr)
             : _tablet(std::move(tablet)), _mgr(mgr) {}
 
     void run() override {
-        _tablet->updates()->pk_index_bg_compaction();
+        _tablet->updates()->pk_index_major_compaction();
         _mgr->unmark_running(_tablet->tablet_id());
     }
 
@@ -64,14 +64,14 @@ void PersistentIndexCompactionManager::schedule() {
         return;
     }
     std::vector<TabletAndScore> pick_tablets =
-            StorageEngine::instance()->tablet_manager()->pick_tablets_to_do_pk_index_bg_compaction();
+            StorageEngine::instance()->tablet_manager()->pick_tablets_to_do_pk_index_major_compaction();
     for (auto& tablet_score : pick_tablets) {
         const int64_t tablet_id = tablet_score.first->tablet_id();
         if (_need_skip(tablet_id)) {
             continue;
         }
         mark_running(tablet_id);
-        std::shared_ptr<Runnable> r = std::make_shared<PkIndexBgCompactionTask>(tablet_score.first, this);
+        std::shared_ptr<Runnable> r = std::make_shared<PkIndexMajorCompactionTask>(tablet_score.first, this);
         auto st = _worker_thread_pool->submit(std::move(r));
         if (!st.ok()) {
             unmark_running(tablet_id);

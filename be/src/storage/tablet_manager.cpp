@@ -688,7 +688,7 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
 }
 
 // pick tablets to do primary index compaction
-std::vector<TabletAndScore> TabletManager::pick_tablets_to_do_pk_index_bg_compaction() {
+std::vector<TabletAndScore> TabletManager::pick_tablets_to_do_pk_index_major_compaction() {
     std::vector<TabletAndScore> pick_tablets;
     // 1. pick valid tablet, which score is larger than 0
     for (const auto& tablets_shard : _tablets_shards) {
@@ -704,7 +704,7 @@ std::vector<TabletAndScore> TabletManager::pick_tablets_to_do_pk_index_bg_compac
 
             double score = tablet_ptr->updates()->get_pk_index_write_amp_score();
             if (score <= 0) {
-                // score == 0 means this tablet's pk index doesn't need bg compaction
+                // score == 0 means this tablet's pk index doesn't need major compaction
                 continue;
             }
 
@@ -718,7 +718,7 @@ std::vector<TabletAndScore> TabletManager::pick_tablets_to_do_pk_index_bg_compac
         return a.second < b.second;
     });
     if (!pick_tablets.empty()) {
-        LOG(INFO) << fmt::format("found {} tablets to do pk index bg compaction", pick_tablets.size());
+        LOG(INFO) << fmt::format("found {} tablets to do pk index major compaction", pick_tablets.size());
     }
     return pick_tablets;
 }

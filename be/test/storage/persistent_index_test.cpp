@@ -1829,7 +1829,7 @@ PARALLEL_TEST(PersistentIndexTest, test_multi_l2_not_tmp_l1) {
 
     {
         // 3. verify after l2 compaction
-        ASSERT_OK(index.TEST_bg_compaction(index_meta));
+        ASSERT_OK(index.TEST_major_compaction(index_meta));
         verify_fn(index);
     }
 
@@ -1925,7 +1925,7 @@ PARALLEL_TEST(PersistentIndexTest, test_multi_l2_not_tmp_l1_fixlen) {
         verify_fn(index);
 
         // 3. verify after l2 compaction
-        ASSERT_OK(index.TEST_bg_compaction(index_meta));
+        ASSERT_OK(index.TEST_major_compaction(index_meta));
         verify_fn(index);
     }
 

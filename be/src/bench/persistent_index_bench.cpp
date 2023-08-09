@@ -144,9 +144,9 @@ void PersistentIndexBenchTest::do_bench(benchmark::State& state) {
         ASSERT_CHECK(_index->commit(&_index_meta, &stat));
         uint64_t tail = watch.elapsed_time();
         ASSERT_CHECK(_index->on_commited());
-        if (config::enable_pindex_async_compaction) {
+        if (config::enable_pindex_minor_compaction) {
             if (_index->get_write_amp_score() > 0.0) {
-                ASSERT_CHECK(_index->TEST_bg_compaction(_index_meta));
+                ASSERT_CHECK(_index->TEST_major_compaction(_index_meta));
             }
         }
         if (stat.compaction_cost > 0) {
@@ -183,9 +183,9 @@ static void process_args(benchmark::internal::Benchmark* b) {
     config::l0_snapshot_size = 16777216;
     config::max_tmp_l1_num = 10;
     config::enable_parallel_get_and_bf = false;
-    config::enable_pindex_async_compaction = true;
+    config::enable_pindex_minor_compaction = true;
     config::max_allow_pindex_l2_num = 5;
-    config::pindex_bg_compaction_num_threads = 2;
+    config::pindex_major_compaction_num_threads = 2;
     b->Args({10000000, 5000, 1})->Iterations(1);
 }
 

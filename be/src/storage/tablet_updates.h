@@ -317,7 +317,7 @@ public:
 
     double get_pk_index_write_amp_score();
 
-    Status pk_index_bg_compaction();
+    Status pk_index_major_compaction();
 
 private:
     friend class Tablet;

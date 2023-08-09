@@ -116,7 +116,7 @@ public:
 
     double get_write_amp_score();
 
-    Status bg_compaction(Tablet* tablet);
+    Status major_compaction(Tablet* tablet);
 
     Status abort();
 
