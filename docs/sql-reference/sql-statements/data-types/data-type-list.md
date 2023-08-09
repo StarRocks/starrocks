@@ -20,6 +20,7 @@ StarRocks supports the following data types: [Numeric](#numeric), [String](#stri
 - [CHAR](../data-types/CHAR.md)
 - [STRING](../data-types/STRING.md)
 - [VARCHAR](../data-types/VARCHAR.md)
+- [BINARY](../data-types/BINARY.md)
 
 ## Date
 

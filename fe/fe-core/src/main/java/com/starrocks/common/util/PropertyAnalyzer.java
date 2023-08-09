@@ -22,6 +22,7 @@
 package com.starrocks.common.util;
 
 import com.clearspring.analytics.util.Lists;
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
@@ -139,8 +140,10 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
 
-    public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty inferredDataProperty,
-                                                   boolean isDefault)
+    public static final String PROPERTIES_MV_REWRITE_STALENESS_SECOND = "mv_rewrite_staleness_second";
+
+    public static DataProperty analyzeDataProperty(Map<String, String> properties,
+                                                   DataProperty inferredDataProperty, boolean isDefault)
             throws AnalysisException {
         String mediumKey = PROPERTIES_STORAGE_MEDIUM;
         String coolDownKey = PROPERTIES_STORAGE_COOLDOWN_TIME;
@@ -303,6 +306,23 @@ public class PropertyAnalyzer {
         return tables;
     }
 
+    public static int analyzeMVRewriteStaleness(Map<String, String> properties)
+            throws AnalysisException {
+        int maxMVRewriteStaleness = INVALID;
+        if (properties != null && properties.containsKey(PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
+            try {
+                maxMVRewriteStaleness = Integer.parseInt(properties.get(PROPERTIES_MV_REWRITE_STALENESS_SECOND));
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Invalid maxMVRewriteStaleness Number: " + e.getMessage());
+            }
+            if (maxMVRewriteStaleness != INVALID && maxMVRewriteStaleness < 0) {
+                throw new AnalysisException("Illegal maxMVRewriteStaleness: " + maxMVRewriteStaleness);
+            }
+            properties.remove(PROPERTIES_MV_REWRITE_STALENESS_SECOND);
+        }
+        return maxMVRewriteStaleness;
+    }
+
     public static boolean analyzeForceExternalTableQueryRewrite(Map<String, String> properties) {
         boolean forceExternalTableQueryRewrite = false;
         if (properties != null && properties.containsKey(PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
@@ -347,9 +367,10 @@ public class PropertyAnalyzer {
         }
         List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
         if (replicationNum > backendIds.size()) {
-            throw new AnalysisException("Replication num should be less than the number of available BE nodes. " 
-            + "Replication num is " + replicationNum + " available BE nodes is " + backendIds.size() +
-                    ", You can change this default by setting the replication_num table properties.");
+            throw new AnalysisException("Table replication num should be less than " +
+                    "of equal to the number of available BE nodes. "
+                    + "You can change this default by setting the replication_num table properties. "
+                    + "Current alive backend is [" + Joiner.on(",").join(backendIds) + "].");
         }
     }
 

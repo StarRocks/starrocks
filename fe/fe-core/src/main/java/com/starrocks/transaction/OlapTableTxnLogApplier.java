@@ -128,7 +128,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                 } // end for tablets
             } // end for indices
             long versionTime = partitionCommitInfo.getVersionTime();
-            partition.updateVisibleVersion(version, versionTime);
+            partition.updateVisibleVersion(version, versionTime, txnState.getTransactionId());
             if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {
                 for (String column : partitionCommitInfo.getInvalidDictCacheColumns()) {
                     IDictManager.getInstance().removeGlobalDict(tableId, column);

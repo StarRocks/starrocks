@@ -109,6 +109,8 @@ struct HdfsScannerParams {
     // The file size. -1 means unknown.
     int64_t file_size = -1;
 
+    int64_t modification_time = 0;
+
     const TupleDescriptor* tuple_desc = nullptr;
 
     // columns read from file

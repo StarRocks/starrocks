@@ -790,4 +790,17 @@ public class DeleteHandler implements Writable {
             }
         }
     }
+
+    public long getDeleteJobCount() {
+        return this.idToDeleteJob.size();
+    }
+
+    public long getDeleteInfoCount() {
+        lock.readLock().lock();
+        try {
+            return dbToDeleteInfos.values().stream().mapToLong(List::size).sum();
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
 }

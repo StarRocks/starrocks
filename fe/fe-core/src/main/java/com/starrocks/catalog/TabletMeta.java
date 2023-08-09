@@ -38,6 +38,7 @@ public class TabletMeta {
 
     private final boolean isLakeTablet;
 
+
     /**
      * If currentTimeMs is ahead of `toBeCleanedTimeMs`, the tablet meta will be cleaned from TabletInvertedIndex.
      */
@@ -113,6 +114,10 @@ public class TabletMeta {
 
     public void setToBeCleanedTime(Long time) {
         toBeCleanedTimeMs = time;
+    }
+
+    public void resetToBeCleanedTime() {
+        toBeCleanedTimeMs = null;
     }
 
     public boolean containsSchemaHash(int schemaHash) {

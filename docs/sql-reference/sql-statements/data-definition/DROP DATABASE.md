@@ -26,7 +26,7 @@ Note:
 ## References
 
 - [CREATE DATABASE](../data-definition/CREATE%20DATABASE.md)
-- [SHOW CREATE DATABASE](SHOW%20CREATE%20DATABASE.md)
+- [SHOW CREATE DATABASE](../data-manipulation/SHOW%20CREATE%20DATABASE.md)
 - [USE](../data-definition/USE.md)
 - [DESC](../Utility/DESCRIBE.md)
 - [SHOW DATABASES](../data-manipulation/SHOW%20DATABASES.md)

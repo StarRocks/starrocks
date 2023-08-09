@@ -4,6 +4,9 @@ This load uses external Apache Spark™ resources to pre-process imported data, 
 
 Spark load is an **asynchronous** import method that requires users to create Spark-type import jobs via the MySQL protocol and view the import results using `SHOW LOAD`.
 
+> **NOTICE**
+> In versions earlier than v2.5.9, the bucketing column of a StarRocks table cannot be of DATE, DATETIME, or DECIMAL type when Spark Load is used to load data into this table.
+
 ## Terminology explanation
 
 * **Spark ETL**: Mainly responsible for ETL of data in the import process, including global dictionary construction (BITMAP type), partitioning, sorting, aggregation, etc.

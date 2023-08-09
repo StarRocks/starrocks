@@ -25,6 +25,9 @@ public abstract class ScalarOperator implements Cloneable {
     // from JoinNode.
     protected boolean isRedundant = false;
 
+    // whether the ScalarOperator is pushdown from equivalence derivation
+    protected boolean isPushdown = false;
+
     private List<String> hints = Collections.emptyList();
 
     public ScalarOperator(OperatorType opType, Type type) {
@@ -141,6 +144,7 @@ public abstract class ScalarOperator implements Cloneable {
             operator = (ScalarOperator) super.clone();
             operator.hints = Lists.newArrayList(hints);
             operator.isRedundant = this.isRedundant;
+            operator.isPushdown = this.isPushdown;
         } catch (CloneNotSupportedException ignored) {
         }
         return operator;
@@ -207,6 +211,14 @@ public abstract class ScalarOperator implements Cloneable {
 
     public void setRedundant(boolean redundant) {
         isRedundant = redundant;
+    }
+
+    public boolean isPushdown() {
+        return isPushdown;
+    }
+
+    public void setIsPushdown(boolean isPushdown) {
+        this.isPushdown = isPushdown;
     }
 
     // whether ScalarOperator are equals without id

@@ -19,11 +19,13 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
+import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
+import java.lang.reflect.InvocationTargetException;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -317,7 +319,20 @@ public class CachingHiveMetastore implements IHiveMetastore {
     public synchronized List<HivePartitionName> refreshTable(String hiveDbName, String hiveTblName,
                                                              boolean onlyCachedPartitions) {
         HiveTableName hiveTableName = HiveTableName.of(hiveDbName, hiveTblName);
-        Table updatedTable = loadTable(hiveTableName);
+        Table updatedTable;
+        try {
+            updatedTable = loadTable(hiveTableName);
+        } catch (StarRocksConnectorException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof InvocationTargetException &&
+                    ((InvocationTargetException) cause).getTargetException() instanceof NoSuchObjectException) {
+                invalidateTable(hiveDbName, hiveTblName);
+                throw new StarRocksConnectorException(e.getMessage() + ", invalidated cache.");
+            } else {
+                throw e;
+            }
+        }
+
         tableCache.put(hiveTableName, updatedTable);
 
         List<String> updatedPartitionKeys = loadPartitionKeys(hiveTableName);

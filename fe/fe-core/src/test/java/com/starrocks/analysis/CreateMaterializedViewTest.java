@@ -1280,7 +1280,7 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Refresh start must be after current time", e.getMessage());
+            Assert.fail(e.getMessage());
         }
     }
 
@@ -1400,7 +1400,7 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Create materialized view do not support the table type: MYSQL"));
+            Assert.assertTrue(e.getMessage().contains("Create/Rebuild materialized view do not support the table type: MYSQL"));
         }
     }
 
@@ -1500,7 +1500,7 @@ public class CreateMaterializedViewTest {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
             currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
-            Assert.assertEquals("Create materialized view from inactive materialized view: base_inactive_mv",
+            Assert.assertEquals("Create/Rebuild materialized view from inactive materialized view: base_inactive_mv",
                     e.getMessage());
         }
     }
@@ -1555,7 +1555,7 @@ public class CreateMaterializedViewTest {
         } catch (Exception e) {
             Assert.assertEquals(e.getMessage(),
                     "Materialized view query statement select item rand() " +
-                            "not supported nondeterministic function", e.getMessage());
+                            "not supported nondeterministic function.", e.getMessage());
         }
     }
 
@@ -1573,7 +1573,7 @@ public class CreateMaterializedViewTest {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             Assert.assertEquals("Materialized view query statement select item rand() " +
-                    "not supported nondeterministic function", e.getMessage());
+                    "not supported nondeterministic function.", e.getMessage());
         }
     }
 
@@ -1758,7 +1758,11 @@ public class CreateMaterializedViewTest {
                 ") " +
                 "as select tbl1.k1 ss, k2 from tbl1;";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            CreateMaterializedViewStatement createMaterializedViewStatement =
+                    (CreateMaterializedViewStatement) statementBase;
+            RefreshSchemeDesc refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
+            Assert.assertEquals(MaterializedView.RefreshType.ASYNC, refreshSchemeDesc.getType());
         } catch (Exception e) {
             Assert.assertEquals("The experimental mv is disabled", e.getMessage());
         } finally {
@@ -2518,5 +2522,36 @@ public class CreateMaterializedViewTest {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         }
     }
+
+    @Test
+    public void testMVWithMaxRewriteStaleness() throws Exception {
+        LocalDateTime startTime = LocalDateTime.now().plusSeconds(3);
+        String sql = "create materialized view mv_with_rewrite_staleness \n" +
+                "partition by date_trunc('month',k1)\n" +
+                "distributed by hash(s2) buckets 10\n" +
+                "refresh async START('" + startTime.format(DateUtils.DATE_TIME_FORMATTER) +
+                "') EVERY(INTERVAL 3 SECOND)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"," +
+                "\"mv_rewrite_staleness_second\" = \"60\"\n" +
+                ")\n" +
+                "as select tb1.k1, k2 s2 from tbl1 tb1;";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(4000L);
+            Table mv1 = testDb.getTable("mv_with_rewrite_staleness");
+            Assert.assertTrue(mv1 instanceof MaterializedView);
+
+            // test partition
+            MaterializedView materializedView = (MaterializedView) mv1;
+            Assert.assertEquals(materializedView.getMaxMVRewriteStaleness(), 60);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        } finally {
+            dropMv("mv_with_rewrite_staleness");
+        }
+    }
+
 }
 

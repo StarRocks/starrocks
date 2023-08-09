@@ -16,6 +16,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/BackendService.h"
 #include "runtime/current_thread.h"
+#include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
 #include "util/brpc_stub_cache.h"
 #include "util/defer_op.h"
@@ -109,6 +110,8 @@ private:
     // And we just pick the maximum accumulated_network_time among all destination
     int64_t _network_time();
 
+    void _try_to_merge_query_statistics(TransmitChunkInfo& request);
+
     FragmentContext* _fragment_ctx;
     MemTracker* const _mem_tracker;
     const int32_t _brpc_timeout_ms;
@@ -174,6 +177,7 @@ private:
     int64_t _first_send_time = -1;
     int64_t _last_receive_time = -1;
     int64_t _rpc_http_min_size = 0;
+    std::shared_ptr<QueryStatistics> _eos_query_stats = std::make_shared<QueryStatistics>();
 };
 
 } // namespace starrocks::pipeline

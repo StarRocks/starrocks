@@ -180,16 +180,17 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                             } else {
                                 Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(tabletBackend);
                                 failedReplicaInfoSB.append(
-                                        String.format("%d:{be:%d %s V:%d LFV:%d},", replica.getId(), tabletBackend,
-                                                backend == null ? "" : backend.getHost(), replica.getVersion(), lfv));
+                                        String.format("%d:{be:%d %s st:%s V:%d LFV:%d},", replica.getId(), tabletBackend,
+                                                backend == null ? "" : backend.getHost(),
+                                                replica.getState(), replica.getVersion(), lfv));
                             }
                             replica.setLastWriteFail(false);
                         } else {
                             Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(tabletBackend);
                             failedReplicaInfoSB.append(
-                                    String.format("%d:{be:%d %s V:%d LFV:%d},", replica.getId(), tabletBackend,
-                                            backend == null ? "" : backend.getHost(), replica.getVersion(),
-                                            replica.getLastFailedVersion()));
+                                    String.format("%d:{be:%d %s st:%s V:%d LFV:%d},", replica.getId(), tabletBackend,
+                                            backend == null ? "" : backend.getHost(),
+                                            replica.getState(), replica.getVersion(), replica.getLastFailedVersion()));
                             // not remove rollup task here, because the commit maybe failed
                             // remove rollup task when commit successfully
                             errorReplicaIds.add(replica.getId());

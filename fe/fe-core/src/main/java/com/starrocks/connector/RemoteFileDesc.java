@@ -9,16 +9,18 @@ public class RemoteFileDesc {
     private String fileName;
     private String compression;
     private long length;
+    private long modificationTime;
     private ImmutableList<RemoteFileBlockDesc> blockDescs;
     private boolean splittable;
     private TextFileFormatDesc textFileFormatDesc;
     private ImmutableList<String> hudiDeltaLogs;
 
-    public RemoteFileDesc(String fileName, String compression, long length,
+    public RemoteFileDesc(String fileName, String compression, long length, long modificationTime,
                           ImmutableList<RemoteFileBlockDesc> blockDescs, ImmutableList<String> hudiDeltaLogs) {
         this.fileName = fileName;
         this.compression = compression;
         this.length = length;
+        this.modificationTime = modificationTime;
         this.blockDescs = blockDescs;
         this.hudiDeltaLogs = hudiDeltaLogs;
     }
@@ -33,6 +35,10 @@ public class RemoteFileDesc {
 
     public long getLength() {
         return length;
+    }
+
+    public long getModificationTime() {
+        return modificationTime;
     }
 
     public ImmutableList<RemoteFileBlockDesc> getBlockDescs() {
@@ -67,6 +73,7 @@ public class RemoteFileDesc {
         sb.append("fileName='").append(fileName).append('\'');
         sb.append(", compression='").append(compression).append('\'');
         sb.append(", length=").append(length);
+        sb.append(", modificationTime=").append(modificationTime);
         sb.append(", blockDescs=").append(blockDescs);
         sb.append(", splittable=").append(splittable);
         sb.append(", textFileFormatDesc=").append(textFileFormatDesc);

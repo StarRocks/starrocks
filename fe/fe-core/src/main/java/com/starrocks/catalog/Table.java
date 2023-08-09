@@ -416,13 +416,17 @@ public class Table extends MetaObject implements Writable {
     }
 
     public String getMysqlType() {
-        if (this instanceof View) {
-            return "VIEW";
+        switch (type) {
+            case INLINE_VIEW:
+            case VIEW:
+            case MATERIALIZED_VIEW:
+                return "VIEW";
+            case SCHEMA:
+                return "SYSTEM VIEW";
+            default:
+                // external table also returns "BASE TABLE" for BI compatibility
+                return "BASE TABLE";
         }
-        if (this instanceof MaterializedView) {
-            return "VIEW";
-        }
-        return "BASE TABLE";
     }
 
     public String getComment() {

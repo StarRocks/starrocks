@@ -13,7 +13,8 @@ public final class ColumnDict {
     private long versionTime;
 
     public ColumnDict(ImmutableMap<ByteBuffer, Integer> dict, long versionTime) {
-        Preconditions.checkState(dict.size() > 0 && dict.size() <= 256);
+        Preconditions.checkState(dict.size() > 0 && dict.size() <= 256,
+                "dict size %s is illegal", dict.size());
         this.dict = dict;
         this.collectedVersionTime = versionTime;
         this.versionTime = versionTime;

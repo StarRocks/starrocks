@@ -51,6 +51,7 @@ public enum PartitionType {
             case UNPARTITIONED:
                 return TPartitionType.UNPARTITIONED;
             case RANGE:
+            case EXPR_RANGE:
                 return TPartitionType.RANGE_PARTITIONED;
             default:
                 return TPartitionType.UNPARTITIONED;

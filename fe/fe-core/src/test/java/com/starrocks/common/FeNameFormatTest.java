@@ -21,6 +21,7 @@
 
 package com.starrocks.common;
 
+import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.Test;
 
 import java.util.Random;
@@ -43,10 +44,10 @@ public class FeNameFormatTest {
         }
         // length 64
         ExceptionChecker.expectThrowsNoException(() -> FeNameFormat.checkColumnName(sb.toString()));
-        ExceptionChecker.expectThrows(AnalysisException.class, () -> FeNameFormat.checkColumnName("Column \0 Name"));
-        ExceptionChecker.expectThrows(AnalysisException.class, () -> FeNameFormat.checkColumnName("\0"));
+        ExceptionChecker.expectThrows(SemanticException.class, () -> FeNameFormat.checkColumnName("Column \0 Name"));
+        ExceptionChecker.expectThrows(SemanticException.class, () -> FeNameFormat.checkColumnName("\0"));
         // length 0
-        ExceptionChecker.expectThrows(AnalysisException.class, () -> FeNameFormat.checkColumnName(""));
+        ExceptionChecker.expectThrows(SemanticException.class, () -> FeNameFormat.checkColumnName(""));
 
     }
 

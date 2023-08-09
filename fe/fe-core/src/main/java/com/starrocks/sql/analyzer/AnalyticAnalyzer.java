@@ -17,6 +17,8 @@ import com.starrocks.common.AnalysisException;
 
 import java.math.BigDecimal;
 
+import static com.starrocks.catalog.FunctionSet.STATISTIC_FUNCTIONS;
+
 public class AnalyticAnalyzer {
     public static void verifyAnalyticExpression(AnalyticExpr analyticExpr) {
         for (Expr e : analyticExpr.getPartitionExprs()) {
@@ -93,10 +95,14 @@ public class AnalyticAnalyzer {
             }
         }
 
+        if (isStatisticFn(analyticFunction.getFn()) && (!analyticExpr.getOrderByElements().isEmpty())) {
+            throw new SemanticException("order by not allowed with '" + analyticFunction.toSql());
+        }
+
         if (analyticExpr.getWindow() != null) {
             if ((isRankingFn(analyticFunction.getFn()) || isOffsetFn(analyticFunction.getFn()) ||
-                    isHllAggFn(analyticFunction.getFn()))) {
-                throw new SemanticException("Windowing clause not allowed with '" + analyticFunction.toSql() + "'");
+                    isHllAggFn(analyticFunction.getFn()) || isStatisticFn(analyticFunction.getFn()))) {
+                throw new SemanticException("Windowing clause not allowed with '" + analyticFunction.toSql());
             }
 
             verifyWindowFrame(analyticExpr);
@@ -315,6 +321,10 @@ public class AnalyticAnalyzer {
         }
 
         return fn.functionName().equalsIgnoreCase(AnalyticExpr.NTILE);
+    }
+
+    private static boolean isStatisticFn(Function fn) {
+        return STATISTIC_FUNCTIONS.contains(fn.functionName().toLowerCase());
     }
 
     private static boolean isHllAggFn(Function fn) {

@@ -306,6 +306,7 @@
       + [bitmap](./sql-reference/sql-functions/aggregate-functions/bitmap.md)
       + [bitmap_agg](./sql-reference/sql-functions/bitmap-functions/bitmap_agg.md)
       + [count](./sql-reference/sql-functions/aggregate-functions/count.md)
+      + [group_concat](./sql-reference/sql-functions/string-functions/group_concat.md)
       + [grouping](./sql-reference/sql-functions/aggregate-functions/grouping.md)
       + [grouping_id](./sql-reference/sql-functions/aggregate-functions/grouping_id.md)
       + [group_concat](./sql-reference/sql-functions/string-functions/group_concat.md)
@@ -595,7 +596,7 @@
       + [percentile_hash](./sql-reference/sql-functions/percentile-functions/percentile_hash.md)
       + [percentile_union](./sql-reference/sql-functions/percentile-functions/percentile_union.md)
     + Scalar Functions
-      + [hll_cardinality](/sql-reference/sql-functions/scalar-functions/hll_cardinality.md)
+      + [hll_cardinality](./sql-reference/sql-functions/scalar-functions/hll_cardinality.md)
     + Utility Functions
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
       + [host_name](./sql-reference/sql-functions/utility-functions/host_name.md)

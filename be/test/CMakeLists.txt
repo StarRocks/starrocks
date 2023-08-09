@@ -22,7 +22,7 @@ set(EXEC_FILES
         ./common/config_test.cpp
         ./common/status_test.cpp
         ./common/tracer_test.cpp
-        ./common/s3_uri_test.cpp
+        ./common/uri_test.cpp
         ./fs/fs_broker_test.cpp
         ./fs/fs_posix_test.cpp
         ./fs/fs_memory_test.cpp
@@ -358,28 +358,6 @@ add_executable(starrocks_test ${EXEC_FILES})
 
 TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
 SET_TARGET_PROPERTIES(starrocks_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
-
-# =================================================
-# bytes_test requires tcmalloc which conflicts with sanitizer.
-# Thus we need a standalone binary without sanitizer to test it.
-add_executable(bytes_test
-        ./column/bytes_test.cpp
-        ../src/service/mem_hook.cpp
-        )
-
-set_target_properties(bytes_test PROPERTIES
-        COMPILE_OPTIONS
-        "-lpthread;-std=gnu++17;-g;-fno-sanitize=address")
-
-set_target_properties(bytes_test PROPERTIES
-        LINK_OPTIONS
-        "-static-libstdc++;-static-libgcc;-fno-sanitize=address")
-
-TARGET_LINK_LIBRARIES(bytes_test
-        pthread
-        gtest
-        tcmalloc
-        )
 
 # =================================================
 # test cases must be compiled as a standalone binary

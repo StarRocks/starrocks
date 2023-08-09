@@ -246,7 +246,7 @@ The following table describes the parameters you need to configure in `StorageCr
 
 A set of parameters about how StarRocks updates the cached metadata of Hive. This parameter set is optional.
 
-StarRocks implements the automatic asynchronous update policy by default.
+StarRocks implements the [automatic asynchronous update policy](#appendix-understand-metadata-automatic-asynchronous-update) by default.
 
 In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with an out-of-the-box performance.
 
@@ -265,8 +265,6 @@ However, if the frequency of data updates in Hive is high, you can tune these pa
 | metastore_cache_ttl_sec                | No       | The time interval at which StarRocks automatically discards the metadata of Hive tables or partitions cached in itself. Unit: seconds. Default value: `86400`, which is 24 hours. |
 | remote_file_cache_ttl_sec              | No       | The time interval at which StarRocks automatically discards the metadata of the underlying data files of Hive tables or partitions cached in itself. Unit: seconds. Default value: `129600`, which is 36 hours. |
 | enable_cache_list_names                | No       | Specifies whether StarRocks caches Hive partition names. Valid values: `true` and `false`. Default value: `false`. The value `true` enables the cache, and the value `false` disables the cache. |
-
-For more information, see the "[Understand automatic asynchronous update](../catalog/hive_catalog.md#appendix-understand-automatic-asynchronous-update)" section of this topic.
 
 ### Examples
 

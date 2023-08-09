@@ -136,6 +136,9 @@ public:
      */
     DEFINE_VECTORIZED_FN(atan);
 
+    template <PrimitiveType TYPE, bool isNorm>
+    DEFINE_VECTORIZED_FN(cosine_similarity);
+
     /**
     * @param columns: [DoubleColumn]
     * @return BigIntColumn

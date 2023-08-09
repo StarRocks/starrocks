@@ -82,7 +82,7 @@ Please take the following steps to resolve this issue:
 1. Install OpenJDK 8 or higher using your Linux distribution's package manager.
 For example:
 sudo apt install openjdk-8-jdk  (on Ubuntu/Debian)
-sudo yum install java-1.8.0-openjdk (on CentOS/RHEL)
+sudo yum install java-1.8.0-openjdk-devel (on CentOS/RHEL)
 2. Set the JAVA_HOME environment variable to point to your installed OpenJDK directory.
 For example:
 export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
@@ -113,6 +113,10 @@ if [[ "$JAVA_VERSION" -gt 8 ]]; then
         exit -1
     fi
     final_java_opt=$JAVA_OPTS_FOR_JDK_9
+fi
+
+if [[ "$JAVA_VERSION" -lt 11 ]]; then
+    echo "Tips: current JDK version is $JAVA_VERSION, JDK 11 or 17 is highly recommended for better GC performance(lower version JDK may not be supported in the future)"
 fi
 
 if [ ${ENABLE_DEBUGGER} -eq 1 ]; then

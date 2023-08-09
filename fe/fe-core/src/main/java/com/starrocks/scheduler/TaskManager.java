@@ -4,17 +4,18 @@ package com.starrocks.scheduler;
 
 import com.clearspring.analytics.util.Lists;
 import com.clearspring.analytics.util.Preconditions;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
-import com.starrocks.meta.LimitExceededException;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -121,23 +122,32 @@ public class TaskManager {
             if (taskSchedule == null) {
                 continue;
             }
-
+            long period = TimeUtils.convertTimeUnitValueToSecond(taskSchedule.getPeriod(),
+                    taskSchedule.getTimeUnit());
             LocalDateTime startTime = Utils.getDatetimeFromLong(taskSchedule.getStartTime());
-            Duration duration = Duration.between(LocalDateTime.now(), startTime);
-            long initialDelay = duration.getSeconds();
-            // if startTime < now, start scheduling now
-            if (initialDelay < 0) {
-                initialDelay = 0;
-            }
+            LocalDateTime scheduleTime = LocalDateTime.now();
+            long initialDelay = getInitialDelayTime(period, startTime, scheduleTime);
             // Tasks that run automatically have the lowest priority,
             // but are automatically merged if they are found to be merge-able.
             ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(),
                     true, task.getProperties());
             ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
                             executeTask(task.getName(), option), initialDelay,
-                    TimeUtils.convertTimeUnitValueToSecond(taskSchedule.getPeriod(),
-                            taskSchedule.getTimeUnit()), TimeUnit.SECONDS);
+                    period, TimeUnit.SECONDS);
             periodFutureMap.put(task.getId(), future);
+        }
+    }
+
+    @VisibleForTesting
+    static long getInitialDelayTime(long period, LocalDateTime startTime,
+                                    LocalDateTime scheduleTime) {
+        Duration duration = Duration.between(scheduleTime, startTime);
+        long initialDelay = duration.getSeconds();
+        // if startTime < now, start scheduling from the next period
+        if (initialDelay < 0) {
+            return ((initialDelay % period) + period) % period;
+        } else {
+            return initialDelay;
         }
     }
 
@@ -286,7 +296,10 @@ public class TaskManager {
             throw new DmlException("Failed to get task lock when execute Task sync[" + task.getName() + "]");
         }
         try {
-            taskRun = TaskRunBuilder.newBuilder(task).setConnectContext(ConnectContext.get()).build();
+            taskRun = TaskRunBuilder.newBuilder(task)
+                    .properties(option.getTaskRunProperties())
+                    .type(option)
+                    .setConnectContext(ConnectContext.get()).build();
             submitResult = taskRunManager.submitTaskRun(taskRun, option);
             if (submitResult.getStatus() != SUBMITTED) {
                 throw new DmlException("execute task:" + task.getName() + " failed");
@@ -414,8 +427,9 @@ public class TaskManager {
             initialDelay = 0;
         }
         // this operation should only run in master
+        ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), true, task.getProperties());
         ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
-                        executeTask(task.getName()), initialDelay,
+                        executeTask(task.getName(), option), initialDelay,
                 TimeUtils.convertTimeUnitValueToSecond(schedule.getPeriod(), schedule.getTimeUnit()),
                 TimeUnit.SECONDS);
         periodFutureMap.put(task.getId(), future);
@@ -530,20 +544,16 @@ public class TaskManager {
         data.tasks = new ArrayList<>(nameToTaskMap.values());
         checksum ^= data.tasks.size();
         data.runStatus = showTaskRunStatus(null);
-        String s = GsonUtils.GSON.toJson(data);
-        boolean retry = false;
-        try {
-            Text.writeString(dos, s);
-        } catch (LimitExceededException ex) {
-            retry = true;
-        }
-        if (retry) {
-            int beforeLength = s.length();
+        int beforeSize = data.runStatus.size();
+        if (beforeSize >= Config.task_runs_max_history_number) {
             taskRunManager.getTaskRunHistory().forceGC();
             data.runStatus = showTaskRunStatus(null);
-            s = GsonUtils.GSON.toJson(data);
+            String s = GsonUtils.GSON.toJson(data);
             LOG.warn("Too much task metadata triggers forced task_run GC, " +
-                    "length before GC:{}, length after GC:{}.", beforeLength, s.length());
+                    "size before GC:{}, size after GC:{}.", beforeSize, data.runStatus.size());
+            Text.writeString(dos, s);
+        } else {
+            String s = GsonUtils.GSON.toJson(data);
             Text.writeString(dos, s);
         }
         return checksum;
@@ -789,5 +799,9 @@ public class TaskManager {
         } finally {
             taskUnlock();
         }
+    }
+
+    public long getTaskCount() {
+        return this.idToTaskMap.size();
     }
 }

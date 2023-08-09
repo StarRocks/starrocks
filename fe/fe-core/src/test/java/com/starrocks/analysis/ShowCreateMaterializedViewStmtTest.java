@@ -81,7 +81,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getDb("test").getTable("mv9");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv9`\n" +
+        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv9` (`k1`, `k2`)\n" +
                 "DISTRIBUTED BY HASH(`k1`) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
                 "PROPERTIES (\n" +
@@ -108,7 +108,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getDb("test").getTable("mv10");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv10`\n" +
+        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv10` (`c1`, `c2`)\n" +
                         "DISTRIBUTED BY HASH(`c1`) BUCKETS 10 \n" +
                         "REFRESH MANUAL\n" +
                         "PROPERTIES (\n" +
@@ -149,7 +149,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getDb("test").getTable("mv1");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv1`\n" +
+        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv1` (`k1`, `k2`)\n" +
                 "DISTRIBUTED BY HASH(`k1`) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
                 "PROPERTIES (\n" +
@@ -175,7 +175,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getDb("test").getTable("mv2");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv2`\n" +
+        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv2` (`k3`, `k2`)\n" +
                 "PARTITION BY (`k3`)\n" +
                 "DISTRIBUTED BY HASH(`k3`) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
@@ -202,7 +202,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getDb("test").getTable("mv3");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv3`\n" +
+        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv3` (`k1`, `k3`)\n" +
                 "PARTITION BY (date_trunc('month', `k1`))\n" +
                 "DISTRIBUTED BY HASH(`k3`) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
@@ -230,7 +230,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getDb("test").getTable("mv4");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv4`\n" +
+        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv4` (`k3`, `k2`)\n" +
                 "PARTITION BY (date_trunc('month', `k3`))\n" +
                 "DISTRIBUTED BY HASH(`k3`) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
@@ -262,7 +262,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getDb("test").getTable("mv5");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv5`\n" +
+        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv5` (`k3`, `k2`)\n" +
                 "PARTITION BY (date_trunc('month', `k3`))\n" +
                 "DISTRIBUTED BY HASH(`k3`) BUCKETS 10 \n" +
                 "REFRESH ASYNC START(\"2122-12-31 00:00:00\") EVERY(INTERVAL 1 HOUR)\n" +
@@ -295,7 +295,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getDb("test").getTable("mv6");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv6`\n" +
+        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv6` (`k3`, `k2`)\n" +
                 "PARTITION BY (date_trunc('month', `k3`))\n" +
                 "DISTRIBUTED BY HASH(`k3`) BUCKETS 10 \n" +
                 "REFRESH ASYNC\n" +
@@ -328,7 +328,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getDb("test").getTable("mv7");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv7`\n" +
+        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv7` (`k3`, `k2`)\n" +
                 "PARTITION BY (date_trunc('month', `k3`))\n" +
                 "DISTRIBUTED BY HASH(`k3`) BUCKETS 10 \n" +
                 "REFRESH ASYNC EVERY(INTERVAL 1 HOUR)\n" +
@@ -357,7 +357,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getDb("test").getTable("mv8");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv8`\n" +
+        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv8` (`l_orderkey`, `l_partkey`, `l_shipdate`)\n" +
                 "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
                 "PROPERTIES (\n" +
@@ -368,7 +368,6 @@ public class ShowCreateMaterializedViewStmtTest {
                 "FROM `hive0`.`tpch`.`lineitem`;");
         ctx.getGlobalStateMgr().setMetadataMgr(oldMetadataMgr);
     }
-
 
     @Test(expected = SemanticException.class)
     public void testNoTbl(){
