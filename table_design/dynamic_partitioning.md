@@ -44,6 +44,9 @@ PROPERTIES(
 | dynamic_partition.prefix | 否   | 动态分区的前缀名，默认值为 `p`。                                                                                                                                                                                                                                                                                                    |
 | dynamic_partition.buckets | 否   | 动态分区的分桶数量。默认与 BUCKETS 保留字指定的分桶数量、或者 StarRocks 自动设置的分桶数量保持一致。                                                                                                                                                                                                                                                          |
 | dynamic_partition.history_partition_num | 否   | 动态分区的创建历史分区的个数，默认值为 `0`。当值>0时会提前创建历史分区。自 2.5.2 版本起，StarRocks 支持配置该参数。                                                                                                                                                                                                                                                                              |
+| dynamic_partition.start_day_of_week     | 否   |      当 `dynamic_partition.time_unit` 为 `WEEK` 时，该参数指定每周的第一天。有效值为 `1` 到 `7`。`1` 表示星期一，`7` 表示星期日。默认值为 `1`，表示每周从星期一开始。  |
+| dynamic_partition.start_day_of_month     | 否   |     当 `dynamic_partition.time_unit` 为 `MONTH` 时，该参数指定每月的第一天。有效值为 `1` 到 `28`。`1` 表示每月的第一天，`28` 表示每月的第 `28` 天。默认值为 `1`，表示每月从第一天开始。每月的第一天不支持为 29 日、30 日或 31 日。   |
+| dynamic_partition.replication_num     | 否   |  在动态创建的分区中，每个 tablet 副本的数量。默认值与建表时配置的副本数量相同。      |
 
 **动态分区相关 FE 配置项：**
 
