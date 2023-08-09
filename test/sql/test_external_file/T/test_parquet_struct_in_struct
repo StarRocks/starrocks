@@ -1,0 +1,21 @@
+-- name: testParquetStructInStruct
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_parquet_struct_in_struct/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ../be/test/formats/parquet/test_data/test_parquet_struct_in_struct.parquet oss://${oss_bucket}/test_parquet_struct_in_struct/${uuid0}/test_parquet_struct_in_struct.parquet | grep -Pv "(average|elapsed)"
+
+CREATE EXTERNAL TABLE struct_in_struct (
+c0 int,
+c1 int,
+c_struct struct<c0 string, c1 string>,
+c_struct_struct struct<c0 string, c_struct struct<c0 string, c1 string>>
+)
+ENGINE=file
+PROPERTIES
+(
+    "path" = "oss://${oss_bucket}/test_parquet_struct_in_struct/${uuid0}/test_parquet_struct_in_struct.parquet",
+    "format" = "parquet"
+);
+
+select c_struct_struct from struct_in_struct where c_struct_struct.c_struct.c0 = '55' and c0 = 155;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_parquet_struct_in_struct/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
