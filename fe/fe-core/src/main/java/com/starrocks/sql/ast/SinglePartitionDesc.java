@@ -17,14 +17,22 @@ package com.starrocks.sql.ast;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.DateLiteral;
 import com.starrocks.catalog.DataProperty;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
+import org.threeten.extra.PeriodDuration;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
 
 public abstract class SinglePartitionDesc extends PartitionDesc {
@@ -103,7 +111,8 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
         return isAnalyzed;
     }
 
-    protected void analyzeProperties(Map<String, String> tableProperties) throws AnalysisException {
+    protected void analyzeProperties(Map<String, String> tableProperties,
+                                     PartitionKeyDesc partitionKeyDesc) throws AnalysisException {
         Map<String, String> partitionAndTableProperties = Maps.newHashMap();
         // The priority of the partition attribute is higher than that of the table
         if (tableProperties != null) {
@@ -117,6 +126,22 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
         partitionDataProperty = PropertyAnalyzer.analyzeDataProperty(partitionAndTableProperties,
                 DataProperty.getInferredDefaultDataProperty(), false);
         Preconditions.checkNotNull(partitionDataProperty);
+
+        if (tableProperties != null && tableProperties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
+            String storageCoolDownTTL = tableProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
+            PeriodDuration periodDuration = TimeUtils.parseHumanReadablePeriodOrDuration(storageCoolDownTTL);
+            if (partitionKeyDesc.isMax()) {
+                partitionDataProperty = new DataProperty(TStorageMedium.SSD, DataProperty.MAX_COOLDOWN_TIME_MS);
+            } else {
+                String stringUpperValue = partitionKeyDesc.getUpperValues().get(0).getStringValue();
+                DateTimeFormatter dateTimeFormatter = DateUtils.probeFormat(stringUpperValue);
+                LocalDateTime upperTime = DateUtils.parseStringWithDefaultHSM(stringUpperValue, dateTimeFormatter);
+                LocalDateTime updatedUpperTime = upperTime.plus(periodDuration);
+                DateLiteral dateLiteral = new DateLiteral(updatedUpperTime, Type.DATETIME);
+                long coolDownTimeStamp = dateLiteral.unixTimestamp(TimeUtils.getTimeZone());
+                partitionDataProperty = new DataProperty(TStorageMedium.SSD, coolDownTimeStamp);
+            }
+        }
 
         // analyze replication num
         replicationNum = PropertyAnalyzer

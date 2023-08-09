@@ -64,7 +64,7 @@ public class SingleItemListPartitionDesc extends SinglePartitionDesc {
         }
 
         FeNameFormat.checkPartitionName(this.getPartitionName());
-        analyzeProperties(tableProperties);
+        analyzeProperties(tableProperties, null);
 
         if (columnDefList.size() != 1) {
             throw new AnalysisException("Partition column size should be one when use single list partition ");
