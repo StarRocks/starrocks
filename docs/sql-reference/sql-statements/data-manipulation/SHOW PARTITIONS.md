@@ -4,10 +4,6 @@
 
 Displays partition information, including common partitions and [temporary partitions](../../../table_design/Temporary_partition.md).
 
-> **NOTE**
->
-> For v3.0 and later, this operation requires any one TABLE-level privilege.
-
 ## Syntax
 
 ```sql
@@ -40,8 +36,8 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
 | DistributionKey          | The bucket key of hash bucketing.                            |
 | Buckets                  | The number of buckets for the partition.                     |
 | ReplicationNum           | The number of replicas per tablet in the partition.        |
-| StorageMedium            | The storage medium to store the data from the partition. The value `HHD` indicates hard disk drives, and the value `SSD` indicates solid-state drives. |
-| CooldownTime             | The storage cooldown time for a partition. When the initial storage medium is SSD, the storage medium is switched from SSD to HDD after the time specified by this parameter. Format: "yyyy-MM-dd HH:mm:ss". |
+| StorageMedium            | The storage medium to store the data in the partition. The value `HHD` indicates hard disk drives, and the value `SSD` indicates solid-state drives. |
+| CooldownTime             | The cooldown time for data in the partition. If the initial storage medium is SSD, the storage medium is switched from SSD to HDD after the time specified by this parameter. Format: "yyyy-MM-dd HH:mm:ss". |
 | LastConsistencyCheckTime | The time of the last consistency check. `NULL` indicates no consistency check was performed. |
 | DataSize                 | The size of data in the partition.                          |
 | IsInMemory               | Whether all data in the partition is stored in memory.          |
