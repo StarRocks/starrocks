@@ -299,7 +299,12 @@ public class GsonUtils {
                     .registerSubtype(FunctionPEntryObject.class, "FunctionPEntryObject")
                     .registerSubtype(CatalogPEntryObject.class, "CatalogPEntryObject")
                     .registerSubtype(ResourceGroupPEntryObject.class, "ResourceGroupPEntryObject")
-                    .registerSubtype(ForwardCompatiblePEntryObject.class, "StorageVolumePEntryObject");
+                    .registerSubtype(ForwardCompatiblePEntryObject.StorageVolumeForwardCompatiblePEntryObject.class,
+                            "StorageVolumePEntryObject")
+                    .registerSubtype(ForwardCompatiblePEntryObject.PolicyForwardCompatiblePEntryObject.class,
+                            "PolicyPEntryObject")
+                    .registerSubtype(ForwardCompatiblePEntryObject.WarehouseForwardCompatiblePEntryObject.class,
+                            "WarehousePEntryObject");
 
     private static final RuntimeTypeAdapterFactory<Warehouse> WAREHOUSE_TYPE_ADAPTER_FACTORY = RuntimeTypeAdapterFactory
             .of(Warehouse.class, "clazz")

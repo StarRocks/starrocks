@@ -65,4 +65,15 @@ public class ForwardCompatiblePEntryObject implements PEntryObject {
     public String toString() {
         throw new UnsupportedOperationException();
     }
+
+
+    public static class StorageVolumeForwardCompatiblePEntryObject extends ForwardCompatiblePEntryObject {
+    }
+
+
+    public static class WarehouseForwardCompatiblePEntryObject extends ForwardCompatiblePEntryObject {
+    }
+
+    public static class PolicyForwardCompatiblePEntryObject extends ForwardCompatiblePEntryObject {
+    }
 }
