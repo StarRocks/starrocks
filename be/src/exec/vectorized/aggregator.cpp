@@ -89,6 +89,9 @@ void AggregatorParams::init() {
                     agg_fn_types[i].is_asc_order = fn.aggregate_fn.is_asc_order;
                     agg_fn_types[i].nulls_first = fn.aggregate_fn.nulls_first;
                 }
+                if (fn.aggregate_fn.__isset.is_distinct) {
+                    agg_fn_types[i].is_distinct = fn.aggregate_fn.is_distinct;
+                }
             }
         }
     }
@@ -398,7 +401,15 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
         _agg_fn_ctxs[i] = FunctionContextImpl::create_context(
                 state, _mem_pool.get(), AnyValUtil::column_type_to_type_desc(_agg_fn_types[i].result_type),
+<<<<<<< HEAD:be/src/exec/vectorized/aggregator.cpp
                 _agg_fn_types[i].arg_typedescs, 0, false);
+=======
+                _agg_fn_types[i].arg_typedescs, _agg_fn_types[i].is_distinct, _agg_fn_types[i].is_asc_order,
+                _agg_fn_types[i].nulls_first);
+        if (state->query_options().__isset.group_concat_max_len) {
+            _agg_fn_ctxs[i]->set_group_concat_max_len(state->query_options().group_concat_max_len);
+        }
+>>>>>>> 3865788b7d (keep the same with mysql results):be/src/exec/aggregator.cpp
         state->obj_pool()->add(_agg_fn_ctxs[i]);
     }
 

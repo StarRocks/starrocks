@@ -215,7 +215,15 @@ public class FunctionCallExpr extends Expr {
         if (fnParams.isDistinct()) {
             sb.append("DISTINCT ");
         }
+<<<<<<< HEAD
         sb.append(Joiner.on(", ").join(childrenToSql())).append(")");
+=======
+        sb.append(Joiner.on(", ").join(firstNChildrenToSql(children.size() - fnParams.getOrderByElemNum())));
+        if (fnParams.getOrderByElements() != null) {
+            sb.append(fnParams.getOrderByStringToSql());
+        }
+        sb.append(')');
+>>>>>>> 3865788b7d (keep the same with mysql results)
         return sb.toString();
     }
 

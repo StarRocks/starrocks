@@ -75,6 +75,12 @@ public class AggregateFunction extends Function {
     // function. e.g. org.example.MyUdf.class.
     private String symbolName;
 
+    private boolean isDistinct = false;
+
+    public void setIsDistinct(boolean isDistinct) {
+        this.isDistinct = isDistinct;
+    }
+
     // only used for serialization
     protected AggregateFunction() {
     }
@@ -163,7 +169,11 @@ public class AggregateFunction extends Function {
 =======
         isAscOrder = other.isAscOrder;
         nullsFirst = other.nullsFirst;
+<<<<<<< HEAD
 >>>>>>> 6f25c531a3 (update tests)
+=======
+        isDistinct = other.isDistinct;
+>>>>>>> 3865788b7d (keep the same with mysql results)
     }
 
     public String getSymbolName() {
@@ -291,6 +301,18 @@ public class AggregateFunction extends Function {
         } else {
             aggFn.setIntermediate_type(getReturnType().toThrift());
         }
+<<<<<<< HEAD
+=======
+        if (isAscOrder != null && !isAscOrder.isEmpty()) {
+            aggFn.setIs_asc_order(isAscOrder);
+        }
+        if (nullsFirst != null && !nullsFirst.isEmpty()) {
+            aggFn.setNulls_first(nullsFirst);
+        }
+        if (isDistinct) {
+            aggFn.setIs_distinct(true);
+        }
+>>>>>>> 3865788b7d (keep the same with mysql results)
         aggFn.setSymbol(getSymbolName());
         fn.setAggregate_fn(aggFn);
         return fn;

@@ -100,7 +100,16 @@ struct AggFunctionTypes {
     TypeDescriptor serde_type; // for serialize
     std::vector<FunctionContext::TypeDesc> arg_typedescs;
     bool has_nullable_child;
+<<<<<<< HEAD:be/src/exec/vectorized/aggregator.h
     bool is_nullable; // agg function result whether is nullable
+=======
+    bool is_nullable; // whether result of agg function is nullable
+    // hold order-by info
+    std::vector<bool> is_asc_order;
+    std::vector<bool> nulls_first;
+
+    bool is_distinct = false;
+>>>>>>> 3865788b7d (keep the same with mysql results):be/src/exec/aggregator.h
 };
 
 struct ColumnType {

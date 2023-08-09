@@ -784,6 +784,15 @@ public class ExpressionAnalyzer {
                 if (fnName.equals(FunctionSet.ARRAY_AGG)) {
                     fn.setRetType(new ArrayType(argsTypes[0]));     // return null if scalar agg with empty input
                 } else {
+                    boolean outputConst = true;
+                    for (int i = 0; i < node.getChildren().size() - isAscOrder.size() - 1; i++) {
+                        if (!node.getChild(i).isConstant()) {
+                            outputConst = false;
+                            break;
+                        }
+                    }
+                    ((AggregateFunction) fn).setIsDistinct(node.getParams().isDistinct() &&
+                            (!isAscOrder.isEmpty() || outputConst));
                     fn.setRetType(Type.VARCHAR);
                 }
 >>>>>>> e31fbe8c1b ([Feature] group_concat() support distinct and order by)

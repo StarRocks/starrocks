@@ -64,9 +64,13 @@ void AggregateFuncResolver::register_others() {
 
     add_general_mapping<AnyValueSemiState>("any_value", false, AggregateFactory::MakeAnyValueSemiAggregateFunction());
     add_general_mapping_notnull("array_agg2", false, AggregateFactory::MakeArrayAggAggregateFunctionV2());
+<<<<<<< HEAD
     add_general_mapping_nullable_variadic<GroupConcatAggregateStateV2>(
             "group_concat2", false, AggregateFactory::MakeGroupConcatAggregateFunctionV2());
 >>>>>>> e31fbe8c1b ([Feature] group_concat() support distinct and order by)
+=======
+    add_general_mapping_notnull("group_concat2", false, AggregateFactory::MakeGroupConcatAggregateFunctionV2());
+>>>>>>> 3865788b7d (keep the same with mysql results)
 }
 
 } // namespace starrocks::vectorized

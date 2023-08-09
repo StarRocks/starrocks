@@ -1799,8 +1799,12 @@ aggregationFunction
     | MIN '(' setQuantifier? expression ')'
     | SUM '(' setQuantifier? expression ')'
     | ARRAY_AGG '(' expression (ORDER BY sortItem (',' sortItem)*)? ')'
+<<<<<<< HEAD
     | GROUP_CONCAT '(' setQuantifier? (expression (',' expression)*)? (ORDER BY sortItem (',' sortItem)*)? (SEPARATOR expression)? ')'
 >>>>>>> e31fbe8c1b ([Feature] group_concat() support distinct and order by)
+=======
+    | GROUP_CONCAT '(' setQuantifier? expression (',' expression)* (ORDER BY sortItem (',' sortItem)*)? (SEPARATOR expression)? ')'
+>>>>>>> 3865788b7d (keep the same with mysql results)
     ;
 
 userVariable
