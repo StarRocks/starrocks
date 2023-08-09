@@ -76,7 +76,7 @@ public:
 
     static FunctionContext* create_context(RuntimeState* state, MemPool* pool,
                                            const FunctionContext::TypeDesc& return_type,
-                                           const std::vector<FunctionContext::TypeDesc>& arg_types,
+                                           const std::vector<FunctionContext::TypeDesc>& arg_types, bool is_distinct,
                                            const std::vector<bool>& isAscOrder, const std::vector<bool>& nullsFirst);
 
     ~FunctionContext();
@@ -113,10 +113,12 @@ public:
 
     std::vector<bool> get_is_asc_order() { return _is_asc_order; }
     std::vector<bool> get_nulls_first() { return _nulls_first; }
+    bool get_is_distinct() { return _is_distinct; }
     // for tests
     void set_is_asc_order(const std::vector<bool>& order) { _is_asc_order = order; }
     void set_nulls_first(const std::vector<bool>& nulls) { _nulls_first = nulls; }
     void set_runtime_state(RuntimeState* const state) { _state = state; }
+    void set_is_distinct(bool is_distinct) { _is_distinct = is_distinct; }
 
     // Returns _constant_columns size
     int get_num_constant_columns() const;
@@ -156,6 +158,10 @@ public:
     const char* error_msg() const;
 
     JavaUDAFContext* udaf_ctxs() { return _jvm_udaf_ctxs.get(); }
+
+    size_t get_group_concat_max_len() { return group_concat_max_len; }
+    // min value is 4, default is 1024
+    void set_group_concat_max_len(size_t len) { group_concat_max_len = len < 4 ? 4 : len; }
 
 private:
     friend class ExprContext;
@@ -197,6 +203,8 @@ private:
 
     std::vector<bool> _is_asc_order;
     std::vector<bool> _nulls_first;
+    bool _is_distinct = false;
+    size_t group_concat_max_len = 4;
 };
 
 } // namespace starrocks

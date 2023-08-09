@@ -262,6 +262,14 @@ struct TQueryOptions {
   95: optional double connector_scan_use_query_mem_ratio = 0.3;
   // used to identify which operators allow spill, only meaningful when enable_spill=true
   96: optional i64 spillable_operator_mask;
+<<<<<<< HEAD
+=======
+  // used to judge whether the profile need to report to FE, only meaningful when enable_profile=true
+  97: optional i64 load_profile_collect_second;
+
+  100: optional i64 group_concat_max_len = 1024;
+  101: optional i64 runtime_profile_report_interval = 30;
+>>>>>>> 3865788b7d (keep the same with mysql results)
 
   102: optional bool enable_collect_table_level_scan_stats;
 }
