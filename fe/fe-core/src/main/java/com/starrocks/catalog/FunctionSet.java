@@ -194,6 +194,7 @@ public class FunctionSet {
     public static final String PARSE_URL = "parse_url";
     public static final String TRIM = "trim";
     public static final String UPPER = "upper";
+    public static final String SUBSTRING_INDEX = "substring_index";
 
     // Json functions:
     public static final String JSON_ARRAY = "json_array";
