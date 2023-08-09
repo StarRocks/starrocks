@@ -48,8 +48,12 @@ public class SingleRangePartitionDesc extends SinglePartitionDesc {
 
         FeNameFormat.checkPartitionName(getPartitionName());
         partitionKeyDesc.analyze(partColNum);
-        analyzeProperties(tableProperties);
 
+        if (partColNum == 1) {
+            analyzeProperties(tableProperties, partitionKeyDesc);
+        } else {
+            analyzeProperties(tableProperties, null);
+        }
         isAnalyzed = true;
     }
 

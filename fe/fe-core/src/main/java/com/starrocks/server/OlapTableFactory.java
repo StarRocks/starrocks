@@ -348,6 +348,17 @@ public class OlapTableFactory implements AbstractTableFactory {
                 }
             }
 
+            if (properties != null) {
+                try {
+                    PeriodDuration duration = PropertyAnalyzer.analyzeStorageCoolDownTTL(properties);
+                    if (duration != null) {
+                        table.setStorageCoolDownTTL(duration);
+                    }
+                } catch (AnalysisException e) {
+                    throw new DdlException(e.getMessage());
+                }
+            }
+
             if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
                 // if this is an unpartitioned table, we should analyze data property and replication num here.
                 // if this is a partitioned table, there properties are already analyzed in RangePartitionDesc analyze phase.
