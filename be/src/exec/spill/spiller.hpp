@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <mutex>
 #include <utility>
 
@@ -28,11 +29,12 @@
 #include "exec/spill/spiller.h"
 #include "storage/chunk_helper.h"
 #include "util/defer_op.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks::spill {
 template <class TaskExecutor, class MemGuard>
 Status Spiller::spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&& executor, MemGuard&& guard) {
-    SCOPED_TIMER(_metrics.spill_timer);
+    SCOPED_TIMER(_metrics.append_data_timer);
     RETURN_IF_ERROR(task_status());
     DCHECK(!chunk->is_empty());
     DCHECK(!is_full());
@@ -57,7 +59,7 @@ Status Spiller::spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&&
 template <class Processer, class TaskExecutor, class MemGuard>
 Status Spiller::partitioned_spill(RuntimeState* state, const ChunkPtr& chunk, SpillHashColumn* hash_column,
                                   Processer&& processer, TaskExecutor&& executor, MemGuard&& guard) {
-    SCOPED_TIMER(_metrics.spill_timer);
+    SCOPED_TIMER(_metrics.append_data_timer);
     RETURN_IF_ERROR(task_status());
     DCHECK(!chunk->is_empty());
     COUNTER_UPDATE(_metrics.spill_rows, chunk->num_rows());
@@ -70,8 +72,12 @@ Status Spiller::partitioned_spill(RuntimeState* state, const ChunkPtr& chunk, Sp
 
     std::vector<uint32_t> indexs;
     auto writer = _writer->as<PartitionedSpillerWriter*>();
-    writer->shuffle(indexs, hash_column);
-    writer->process_partition_data(chunk, indexs, std::forward<Processer>(processer));
+    {
+        SCOPED_TIMER(_metrics.shuffle_timer);
+        writer->shuffle(indexs, hash_column);
+        writer->process_partition_data(chunk, indexs, std::forward<Processer>(processer));
+    }
+    COUNTER_SET(_metrics.partition_writer_peak_memory_usage, 0);
     RETURN_IF_ERROR(writer->flush_if_full(state, executor, guard));
     return Status::OK();
 }
@@ -80,7 +86,7 @@ template <class TaskExecutor, class MemGuard>
 Status Spiller::flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
     RETURN_IF_ERROR(task_status());
     if (_opts.init_partition_nums > 0) {
-        return _writer->as<PartitionedSpillerWriter*>()->flush(state, executor, guard);
+        return _writer->as<PartitionedSpillerWriter*>()->flush(state, true, executor, guard);
     } else {
         return _writer->as<RawSpillerWriter*>()->flush(state, executor, guard);
     }
@@ -92,7 +98,6 @@ StatusOr<ChunkPtr> Spiller::restore(RuntimeState* state, TaskExecutor&& executor
 
     ASSIGN_OR_RETURN(auto chunk, _reader->restore(state, executor, guard));
     chunk->check_or_die();
-    COUNTER_UPDATE(_metrics.restore_rows, chunk->num_rows());
     _restore_read_rows += chunk->num_rows();
 
     RETURN_IF_ERROR(trigger_restore(state, std::forward<TaskExecutor>(executor), std::forward<MemGuard>(guard)));
@@ -170,10 +175,11 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
 
 template <class TaskExecutor, class MemGuard>
 StatusOr<ChunkPtr> SpillerReader::restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
-    SCOPED_TIMER(_spiller->metrics().restore_timer);
+    SCOPED_TIMER(_spiller->metrics().restore_from_buffer_timer);
     ASSIGN_OR_RETURN(auto chunk, _stream->get_next(_spill_read_ctx));
     RETURN_IF_ERROR(trigger_restore(state, std::forward<TaskExecutor>(executor), std::forward<MemGuard>(guard)));
     _read_rows += chunk->num_rows();
+    COUNTER_UPDATE(_spiller->metrics().restore_rows, chunk->num_rows());
     TRACE_SPILL_LOG << "restore rows: " << chunk->num_rows() << ", total restored: " << _read_rows << ", " << this;
     return chunk;
 }
@@ -244,272 +250,45 @@ Status PartitionedSpillerWriter::spill(RuntimeState* state, const ChunkPtr& chun
 
 template <class TaskExecutor, class MemGuard>
 Status PartitionedSpillerWriter::flush_if_full(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
-    if (_mem_tracker->consumption() > options().spill_file_size) {
-        return flush(state, executor, guard);
+    if (_mem_tracker->consumption() > options().spill_mem_table_bytes_size) {
+        return flush(state, false, executor, guard);
     }
-    return Status::OK();
-}
-
-template <class ChunkProvider>
-Status PartitionedSpillerWriter::spill_partition(SerdeContext& ctx, SpilledPartition* partition,
-                                                 ChunkProvider&& provider) {
-    auto& serde = _spiller->serde();
-
-    if (partition->spill_writer->block() == nullptr) {
-        spill::AcquireBlockOptions opts;
-        opts.query_id = _runtime_state->query_id();
-        opts.plan_node_id = options().plan_node_id;
-        opts.name = options().name;
-        ASSIGN_OR_RETURN(auto block, _spiller->block_manager()->acquire_block(opts));
-        std::lock_guard<std::mutex> l(_mutex);
-        partition->spill_writer->block_group().append(block);
-        partition->spill_writer->block() = block;
-    }
-
-    auto& block = partition->spill_writer->block();
-    DCHECK(block != nullptr);
-
-    auto consumer = [&](const auto& chunk) {
-        RETURN_IF_ERROR(serde->serialize(ctx, chunk, block));
-        partition->bytes += chunk->memory_usage();
-        return Status::OK();
-    };
-
-    RETURN_IF_ERROR(provider(consumer));
-
-    if (partition->spill_writer->block()->size() > options().spill_file_size) {
-        RETURN_IF_ERROR(block->flush());
-        RETURN_IF_ERROR(_spiller->block_manager()->release_block(block));
-        block.reset();
-    }
-    return Status::OK();
-}
-
-template <class Consumer>
-class AccumulateWriter {
-public:
-    AccumulateWriter(Consumer& consumer, size_t chunk_size) : _consumer(consumer) {
-        _accumulator.set_max_size(chunk_size);
-    }
-
-    Status write(const ChunkPtr& chunk) {
-        DCHECK(_accumulator.need_input());
-        _accumulator.push(chunk);
-        if (_accumulator.has_output()) {
-            auto normalized = std::move(_accumulator.pull());
-            RETURN_IF_ERROR(_consumer(normalized));
-        }
-        return Status::OK();
-    }
-
-    Status flush() {
-        _accumulator.finalize();
-        if (auto chunk = std::move(_accumulator.pull())) {
-            if (!chunk->is_empty()) {
-                RETURN_IF_ERROR(_consumer(chunk));
-            }
-        }
-        return Status::OK();
-    }
-
-private:
-    Consumer& _consumer;
-    ChunkPipelineAccumulator _accumulator;
-};
-
-struct DoSpillPartition {
-public:
-    DoSpillPartition(SerdeContext& spill_ctx_, SpilledPartition* partition_, PartitionedSpillerWriter* writer_)
-            : spill_ctx(spill_ctx_), partition(partition_), writer(writer_) {}
-
-    Status operator()(const ChunkPtr& chunk) {
-        return writer->spill_partition(spill_ctx, partition, [&](auto& consumer) {
-            RETURN_IF_ERROR(consumer(chunk));
-            partition->num_rows += chunk->num_rows();
-            return Status::OK();
-        });
-    }
-
-private:
-    SerdeContext& spill_ctx;
-    SpilledPartition* partition;
-    PartitionedSpillerWriter* writer;
-};
-
-template <class MemGuard>
-Status PartitionedSpillerWriter::_split_partition(SerdeContext& spill_ctx, SpillerReader* reader,
-                                                  SpilledPartition* partition, SpilledPartition* left_partition,
-                                                  SpilledPartition* right_partition, MemGuard& guard) {
-    size_t current_level = partition->level;
-    size_t restore_rows = 0;
-
-    DoSpillPartition spill_left_partition(spill_ctx, left_partition, this);
-    DoSpillPartition spill_right_partition(spill_ctx, right_partition, this);
-
-    AccumulateWriter left_accumulate_writer(spill_left_partition, _runtime_state->chunk_size());
-    AccumulateWriter right_accumulate_writer(spill_right_partition, _runtime_state->chunk_size());
-
-    auto defer = DeferOp([&]() {
-        left_accumulate_writer.flush();
-        right_accumulate_writer.flush();
-    });
-
-    while (true) {
-        RETURN_IF_ERROR(reader->trigger_restore(_runtime_state, SyncTaskExecutor{}, guard));
-        if (!reader->has_output_data()) {
-            DCHECK_EQ(restore_rows, partition->num_rows);
-            break;
-        }
-        ASSIGN_OR_RETURN(auto chunk, reader->restore(_runtime_state, SyncTaskExecutor{}, guard));
-        restore_rows += chunk->num_rows();
-        if (chunk->is_empty()) {
-            continue;
-        }
-        auto hash_column = down_cast<SpillHashColumn*>(chunk->columns().back().get());
-        const auto& hash_data = hash_column->get_data();
-        // hash data
-        std::vector<uint32_t> shuffle_result;
-        shuffle_result.resize(hash_data.size());
-        size_t left_channel_size = 0;
-        for (size_t i = 0; i < hash_data.size(); ++i) {
-            shuffle_result[i] = hash_data[i] >> current_level & 0x01;
-            left_channel_size += !shuffle_result[i];
-        }
-        size_t left_cursor = 0;
-        size_t right_cursor = left_channel_size;
-        std::vector<uint32_t> selection(hash_data.size());
-        for (size_t i = 0; i < hash_data.size(); ++i) {
-            if (shuffle_result[i] == 0) {
-                selection[left_cursor++] = i;
-            } else {
-                selection[right_cursor++] = i;
-            }
-        }
-
-#ifndef NDEBUG
-        for (size_t i = 0; i < left_cursor; i++) {
-            DCHECK_EQ(hash_data[selection[i]] & left_partition->mask(),
-                      left_partition->partition_id & left_partition->mask());
-        }
-
-        for (size_t i = left_cursor; i < right_cursor; i++) {
-            DCHECK_EQ(hash_data[selection[i]] & right_partition->mask(),
-                      right_partition->partition_id & right_partition->mask());
-        }
-#endif
-
-        if (left_channel_size > 0) {
-            ChunkPtr left_chunk = chunk->clone_empty();
-            left_chunk->append_selective(*chunk, selection.data(), 0, left_channel_size);
-            left_accumulate_writer.write(left_chunk);
-        }
-        if (hash_data.size() != left_channel_size) {
-            ChunkPtr right_chunk = chunk->clone_empty();
-            right_chunk->append_selective(*chunk, selection.data(), left_channel_size,
-                                          hash_data.size() - left_channel_size);
-            right_accumulate_writer.write(right_chunk);
-        }
-    }
-    DCHECK_EQ(restore_rows, partition->num_rows);
     return Status::OK();
 }
 
 template <class TaskExecutor, class MemGuard>
-Status PartitionedSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
-    // check need split partition
-    std::vector<SpilledPartition*> splitting_partitions;
-    if (options().splittable) {
-        for (const auto& [pid, partition] : _id_to_partitions) {
-            const auto& mem_table = partition->spill_writer->mem_table();
-            // partition not in memory
-            if (!partition->in_mem && partition->level < max_partition_level &&
-                mem_table->mem_usage() + partition->bytes > options().max_memory_size_each_partition) {
-                RETURN_IF_ERROR(mem_table->done());
-                partition->in_mem = false;
-                partition->mem_size = 0;
-                partition->bytes += mem_table->mem_usage();
-                partition->is_spliting = true;
-                splitting_partitions.emplace_back(partition);
-            }
-        }
+Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush, TaskExecutor&& executor,
+                                       MemGuard&& guard) {
+    std::vector<SpilledPartition*> splitting_partitions, spilling_partitions;
+    RETURN_IF_ERROR(_choose_partitions_to_flush(is_final_flush, splitting_partitions, spilling_partitions));
+
+    if (spilling_partitions.empty() && splitting_partitions.empty()) {
+        return Status::OK();
     }
 
-    //
-    std::vector<SpilledPartition*> spilling_partitions;
-    for (const auto& [pid, partition] : _id_to_partitions) {
-        const auto& mem_table = partition->spill_writer->mem_table();
-        if (!partition->is_spliting && (mem_table->is_full() || mem_table->mem_usage() > options().min_spilled_size)) {
-            RETURN_IF_ERROR(mem_table->done());
-            partition->in_mem = false;
-            partition->mem_size = 0;
-            spilling_partitions.emplace_back(partition);
-        }
+    if (is_final_flush && _running_flush_tasks > 0) {
+        _need_final_flush = true;
+        return Status::OK();
     }
-
+    DCHECK_EQ(_running_flush_tasks, 0);
     _running_flush_tasks++;
 
     auto task = [this, state, guard = guard, splitting_partitions = std::move(splitting_partitions),
                  spilling_partitions = std::move(spilling_partitions), trace = TraceInfo(state)]() {
         SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
         RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
-        DCHECK_EQ(_running_flush_tasks, 1);
+        RACE_DETECT(detect_flush, var1);
+        // concurrency test
         auto defer = DeferOp([&]() {
             _spiller->update_spilled_task_status(_decrease_running_flush_tasks());
             guard.scoped_end();
         });
 
-        // partition memory usage
-        // now we partitioned sorted spill
-        SerdeContext spill_ctx;
-        {
-            SCOPED_TIMER(_spiller->metrics().flush_timer);
-            for (auto partition : spilling_partitions) {
-                RETURN_IF_ERROR(spill_partition(spill_ctx, partition, [&partition](auto& consumer) {
-                    auto& mem_table = partition->spill_writer->mem_table();
-                    RETURN_IF_ERROR(mem_table->flush(consumer));
-                    return Status::OK();
-                }));
-            }
+        if (_spiller->is_cancel() || !_spiller->task_status().ok()) {
+            return Status::OK();
         }
 
-        {
-            SCOPED_TIMER(_spiller->metrics().split_partition_timer);
-            for (auto partition : splitting_partitions) {
-                auto [left, right] = partition->split();
-                left->spill_writer = std::make_unique<RawSpillerWriter>(_spiller, _runtime_state, _mem_tracker.get());
-                left->in_mem = false;
-                RETURN_IF_ERROR(left->spill_writer->prepare(state));
-                left->spill_writer->acquire_mem_table();
-                right->in_mem = false;
-
-                right->spill_writer = std::make_unique<RawSpillerWriter>(_spiller, _runtime_state, _mem_tracker.get());
-                RETURN_IF_ERROR(right->spill_writer->prepare(state));
-                right->spill_writer->acquire_mem_table();
-
-                // write
-                std::shared_ptr<SpillInputStream> stream;
-                RETURN_IF_ERROR(partition->spill_writer->acquire_stream(&stream));
-
-                auto reader = std::make_unique<SpillerReader>(_spiller);
-                reader->set_stream(std::move(stream));
-
-                // split process may be generate many small chunks. we should fix it
-                auto st = _split_partition(spill_ctx, reader.get(), partition, left.get(), right.get(), guard);
-                DCHECK(st.ok() || st.is_end_of_file());
-                DCHECK_EQ(left->num_rows + right->num_rows, partition->num_rows);
-
-                left->spill_writer->acquire_mem_table();
-                right->spill_writer->acquire_mem_table();
-
-                _add_partition(std::move(right));
-                _add_partition(std::move(left));
-            }
-
-            for (auto partition : splitting_partitions) {
-                _remove_partition(partition);
-            }
-        }
-
+        _spiller->update_spilled_task_status(_flush_task(splitting_partitions, spilling_partitions));
         return Status::OK();
     };
 

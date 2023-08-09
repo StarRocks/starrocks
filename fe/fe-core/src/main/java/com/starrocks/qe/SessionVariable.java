@@ -269,6 +269,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_CTE_REUSE_RATE = "cbo_cte_reuse_rate";
     public static final String CBO_CTE_MAX_LIMIT = "cbo_cte_max_limit";
     public static final String CBO_CTE_REUSE_RATE_V2 = "cbo_cte_reuse_rate_v2";
+    public static final String PREFER_CTE_REWRITE = "prefer_cte_rewrite";
     public static final String ENABLE_SQL_DIGEST = "enable_sql_digest";
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
@@ -450,6 +451,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SIMPLIFY_CASE_WHEN = "enable_simplify_case_when";
 
     public static final String ENABLE_COUNT_STAR_OPTIMIZATION = "enable_count_star_optimization";
+
+    public static final String HDFS_BACKEND_SELECTOR_HASH_ALGORITHM = "hdfs_backend_selector_hash_algorithm";
+
+    public static final String CONSISTENT_HASH_VIRTUAL_NUMBER = "consistent_hash_virtual_number";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -684,6 +689,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_CTE_MAX_LIMIT, flag = VariableMgr.INVISIBLE)
     private int cboCTEMaxLimit = 10;
+
+    @VarAttr(name = PREFER_CTE_REWRITE, flag = VariableMgr.INVISIBLE)
+    private boolean preferCTERewrite = false;
 
     @VarAttr(name = CBO_PRUNE_SUBFIELD, flag = VariableMgr.INVISIBLE)
     private boolean cboPruneSubfield = true;
@@ -990,6 +998,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PARTIAL_UPDATE_MODE)
     private String partialUpdateMode = "auto";
 
+    @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_HASH_ALGORITHM, flag = VariableMgr.INVISIBLE)
+    private String hdfsBackendSelectorHashAlgorithm = "consistent";
+
+    @VariableMgr.VarAttr(name = CONSISTENT_HASH_VIRTUAL_NUMBER, flag = VariableMgr.INVISIBLE)
+    private int consistentHashVirtualNodeNum = 32;
+
     public void setPartialUpdateMode(String mode) {
         this.partialUpdateMode = mode;
     }
@@ -1093,7 +1107,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private String queryExcludingMVNames = "";
 
     @VarAttr(name = QUERY_INCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
-    private String queryincludingMVNames = "";
+    private String queryIncludingMVNames = "";
 
     @VarAttr(name = ANALYZE_FOR_MV)
     private String analyzeTypeForMV = "sample";
@@ -1414,6 +1428,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getMaxParallelScanInstanceNum() {
         return maxParallelScanInstanceNum;
+    }
+
+    public String getHdfsBackendSelectorHashAlgorithm() {
+        return hdfsBackendSelectorHashAlgorithm;
+    }
+
+    public void setHdfsBackendSelectorHashAlgorithm(String hdfsBackendSelectorHashAlgorithm) {
+        this.hdfsBackendSelectorHashAlgorithm = hdfsBackendSelectorHashAlgorithm;
+    }
+
+    public int getConsistentHashVirtualNodeNum() {
+        return consistentHashVirtualNodeNum;
+    }
+
+    public void setConsistentHashVirtualNodeNum(int consistentHashVirtualNodeNum) {
+        this.consistentHashVirtualNodeNum = consistentHashVirtualNodeNum;
     }
 
     // when pipeline engine is enabled
@@ -1808,8 +1838,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return runtimeProfileReportInterval;
     }
 
+    public void setProfileLimitFold(boolean profileLimitFold) {
+        this.profileLimitFold = profileLimitFold;
+    }
+
     public boolean isProfileLimitFold() {
         return profileLimitFold;
+    }
+
+    public void setPipelineProfileLevel(int pipelineProfileLevel) {
+        this.pipelineProfileLevel = pipelineProfileLevel;
     }
 
     public int getPipelineProfileLevel() {
@@ -1889,6 +1927,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboCteReuse(boolean cboCteReuse) {
         this.cboCteReuse = cboCteReuse;
+    }
+
+    public boolean isPreferCTERewrite() {
+        return preferCTERewrite;
     }
 
     public void setSingleNodeExecPlan(boolean singleNodeExecPlan) {
@@ -2112,12 +2154,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.queryExcludingMVNames = queryExcludingMVNames;
     }
 
-    public String getQueryincludingMVNames() {
-        return queryincludingMVNames;
+    public String getQueryIncludingMVNames() {
+        return queryIncludingMVNames;
     }
 
-    public void setQueryincludingMVNames(String queryincludingMVNames) {
-        this.queryincludingMVNames = queryincludingMVNames;
+    public void setQueryIncludingMVNames(String queryIncludingMVNames) {
+        this.queryIncludingMVNames = queryIncludingMVNames;
     }
 
     public String getAnalyzeForMV() {

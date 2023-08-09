@@ -37,6 +37,7 @@ package com.starrocks.leader;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.alter.AlterJobV2.JobType;
 import com.starrocks.catalog.Column;
@@ -939,6 +940,7 @@ public class LeaderImpl {
                 partitionMeta.setVisible_version(partition.getVisibleVersion());
                 partitionMeta.setVisible_time(partition.getVisibleVersionTime());
                 partitionMeta.setNext_version(partition.getNextVersion());
+                partitionMeta.setIs_temp(olapTable.getPartition(partition.getName(), true) != null);
                 tableMeta.addToPartitions(partitionMeta);
                 Short replicaNum = partitionInfo.getReplicationNum(partition.getId());
                 boolean inMemory = partitionInfo.getIsInMemory(partition.getId());
@@ -967,7 +969,9 @@ public class LeaderImpl {
                     columnMeta.setComment(column.getComment());
                     rangePartitionDesc.addToColumns(columnMeta);
                 }
-                Map<Long, Range<PartitionKey>> ranges = rangePartitionInfo.getIdToRange(false);
+                Map<Long, Range<PartitionKey>> ranges = Maps.newHashMap(rangePartitionInfo.getIdToRange(false));
+                Map<Long, Range<PartitionKey>> tempRanges = rangePartitionInfo.getIdToRange(true);
+                ranges.putAll(tempRanges);
                 for (Map.Entry<Long, Range<PartitionKey>> range : ranges.entrySet()) {
                     TRange tRange = new TRange();
                     tRange.setPartition_id(range.getKey());
@@ -981,6 +985,7 @@ public class LeaderImpl {
                     range.getValue().upperEndpoint().write(stream);
                     tRange.setEnd_key(output.toByteArray());
                     tRange.setBase_desc(basePartitionDesc);
+                    tRange.setIs_temp(tempRanges.containsKey(range.getKey()));
                     rangePartitionDesc.putToRanges(range.getKey(), tRange);
                 }
                 tPartitionInfo.setRange_partition_desc(rangePartitionDesc);
@@ -1007,7 +1012,7 @@ public class LeaderImpl {
                 tableMeta.addToIndex_infos(indexInfo);
             }
 
-            for (Partition partition : olapTable.getPartitions()) {
+            for (Partition partition : olapTable.getAllPartitions()) {
                 List<MaterializedIndex> indexes = partition.getMaterializedIndices(IndexExtState.ALL);
                 for (MaterializedIndex index : indexes) {
                     TIndexMeta indexMeta = new TIndexMeta();

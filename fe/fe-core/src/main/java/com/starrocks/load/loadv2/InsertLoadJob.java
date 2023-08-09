@@ -34,12 +34,15 @@
 
 package com.starrocks.load.loadv2;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
@@ -47,6 +50,7 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TReportExecStatusParams;
 import org.apache.logging.log4j.LogManager;
@@ -70,15 +74,23 @@ public class InsertLoadJob extends LoadJob {
     private long estimateScanRow;
     private TLoadJobType loadType;
 
+    @SerializedName("wh")
+    private String warehouse;
+
+    @SerializedName("isj")
+    private boolean isStatisticsJob;
+
     // only for log replay
     public InsertLoadJob() {
         super();
         this.jobType = EtlJobType.INSERT;
+        this.warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        this.isStatisticsJob = false;
     }
 
     public InsertLoadJob(String label, long dbId, long tableId, long createTimestamp,
-                         long estimateScanRow, TLoadJobType type, long timeout)
-            throws MetaNotFoundException {
+                         long estimateScanRow, TLoadJobType type, long timeout, String warehouse,
+                         boolean isStatisticsJob) {
         super(dbId, label);
         this.tableId = tableId;
         this.createTimestamp = createTimestamp;
@@ -88,11 +100,13 @@ public class InsertLoadJob extends LoadJob {
         this.estimateScanRow = estimateScanRow;
         this.loadType = type;
         this.timeoutSecond = timeout;
+        this.warehouse = warehouse;
+        this.isStatisticsJob = isStatisticsJob;
     }
 
-    // only used for test
-    public InsertLoadJob(String label, long dbId, long tableId, long createTimestamp, String failMsg,
-                         String trackingUrl) throws MetaNotFoundException {
+    @VisibleForTesting
+    InsertLoadJob(String label, long dbId, long tableId, long createTimestamp, String failMsg,
+                  String trackingUrl) throws MetaNotFoundException {
         super(dbId, label);
         this.tableId = tableId;
         this.createTimestamp = createTimestamp;
@@ -111,6 +125,18 @@ public class InsertLoadJob extends LoadJob {
         this.authorizationInfo = gatherAuthInfo();
         this.loadingStatus.setTrackingUrl(trackingUrl);
         this.loadType = TLoadJobType.INSERT_QUERY;
+        this.warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        this.isStatisticsJob = false;
+    }
+
+    @Override
+    public String getCurrentWarehouse() {
+        return warehouse;
+    }
+
+    @Override
+    public boolean isInternalJob() {
+        return isStatisticsJob;
     }
 
     public void setLoadFinishOrCancel(String failMsg, String trackingUrl) throws UserException {
@@ -197,6 +223,25 @@ public class InsertLoadJob extends LoadJob {
             }
         }
         return Sets.newHashSet(table.getName());
+    }
+
+    @Override
+    public boolean hasTxn() {
+        Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (database == null) {
+            return true;
+        }
+
+        Table table = database.getTable(tableId);
+        if (table == null) {
+            return true;
+        }
+
+        if (table instanceof SystemTable || table instanceof IcebergTable) {
+            return false;
+        } else {
+            return true;
+        }
     }
 
     @Override

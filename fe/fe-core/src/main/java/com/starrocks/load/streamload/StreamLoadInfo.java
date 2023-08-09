@@ -322,7 +322,7 @@ public class StreamLoadInfo {
         }
         if (context.partialUpdateMode != null) {
             if (context.partialUpdateMode.equals("column")) {
-                partialUpdateMode = TPartialUpdateMode.COLUMN_MODE;
+                partialUpdateMode = TPartialUpdateMode.COLUMN_UPSERT_MODE;
             } else if (context.partialUpdateMode.equals("auto")) {
                 partialUpdateMode = TPartialUpdateMode.AUTO_MODE;
             } else if (context.partialUpdateMode.equals("row")) {
@@ -469,13 +469,7 @@ public class StreamLoadInfo {
         }
         stripOuterArray = routineLoadJob.isStripOuterArray();
         partialUpdate = routineLoadJob.isPartialUpdate();
-        if (routineLoadJob.getPartialUpdateMode().equals("column")) {
-            partialUpdateMode = TPartialUpdateMode.COLUMN_MODE;
-        } else if (routineLoadJob.getPartialUpdateMode().equals("auto")) {
-            partialUpdateMode = TPartialUpdateMode.AUTO_MODE;
-        } else if (routineLoadJob.getPartialUpdateMode().equals("row")) {
-            partialUpdateMode = TPartialUpdateMode.UNKNOWN_MODE;
-        }
+        partialUpdateMode = TPartialUpdateMode.ROW_MODE;
         if (routineLoadJob.getSessionVariables().containsKey(SessionVariable.EXEC_MEM_LIMIT)) {
             execMemLimit = Long.parseLong(routineLoadJob.getSessionVariables().get(SessionVariable.EXEC_MEM_LIMIT));
         } else {

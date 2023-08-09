@@ -15,10 +15,13 @@
 
 package com.starrocks.sql.optimizer.base;
 
+import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 public class HashDistributionDesc {
     public enum SourceType {
@@ -39,18 +42,31 @@ public class HashDistributionDesc {
         SHUFFLE_ENFORCE // parent node which can not satisfy the requirement will enforce child this hash property
     }
 
-    private final List<Integer> columns;
+    private List<DistributionCol> distributionCols;
+
     // Which operator produce this hash DistributionDesc
     private final SourceType sourceType;
 
+    // only used to build scan initial distribution info
     public HashDistributionDesc(List<Integer> columns, SourceType sourceType) {
-        this.columns = columns;
+        this.distributionCols = columns.stream().map(e -> new DistributionCol(e, true))
+                .collect(Collectors.toList());
         this.sourceType = sourceType;
-        Preconditions.checkState(!columns.isEmpty());
+        Preconditions.checkState(!distributionCols.isEmpty());
     }
 
-    public List<Integer> getColumns() {
-        return columns;
+    public HashDistributionDesc(Collection<DistributionCol> distributionCols, SourceType sourceType) {
+        this.distributionCols = Lists.newArrayList(distributionCols);
+        this.sourceType = sourceType;
+        Preconditions.checkState(!distributionCols.isEmpty());
+    }
+
+    public List<DistributionCol> getDistributionCols() {
+        return distributionCols;
+    }
+
+    public List<Integer> getExplainInfo() {
+        return distributionCols.stream().map(DistributionCol::getColId).collect(Collectors.toList());
     }
 
     public SourceType getSourceType() {
@@ -62,15 +78,15 @@ public class HashDistributionDesc {
             return true;
         }
 
-        if (this.columns.size() > item.columns.size()) {
+        if (this.distributionCols.size() > item.distributionCols.size()) {
             return false;
         }
 
         if (this.sourceType == SourceType.SHUFFLE_AGG && item.sourceType == SourceType.SHUFFLE_JOIN) {
-            return this.columns.size() == item.columns.size() && this.columns.equals(item.columns);
+            return distributionColsEquals(item.distributionCols);
         } else if (this.sourceType == SourceType.SHUFFLE_JOIN && (item.sourceType == SourceType.SHUFFLE_AGG ||
                 item.sourceType == SourceType.SHUFFLE_JOIN)) {
-            return item.columns.containsAll(this.columns);
+            return distributionColsContainsAll(item.distributionCols);
         } else if (!this.sourceType.equals(item.sourceType) &&
                 this.sourceType != HashDistributionDesc.SourceType.LOCAL) {
             return false;
@@ -78,15 +94,42 @@ public class HashDistributionDesc {
 
         // different columns size is allowed if this sourceType is LOCAL or SHUFFLE_AGG
         if (SourceType.LOCAL.equals(sourceType) || SourceType.SHUFFLE_AGG.equals(sourceType)) {
-            return item.columns.containsAll(this.columns);
+            return distributionColsContainsAll(item.distributionCols);
         }
+        return distributionColsEquals(item.distributionCols);
+    }
 
-        if (this.columns.size() != item.columns.size()) {
+    public boolean distributionColsEquals(List<DistributionCol> requiredCols) {
+        if (this.distributionCols.size() != requiredCols.size()) {
             return false;
         }
-
-        return this.columns.equals(item.columns);
+        for (int i = 0; i < distributionCols.size(); i++) {
+            DistributionCol col = distributionCols.get(i);
+            DistributionCol requiredCol = requiredCols.get(i);
+            if (!col.isSatisfy(requiredCol)) {
+                return false;
+            }
+        }
+        return true;
     }
+
+    public boolean distributionColsContainsAll(List<DistributionCol> requiredCols) {
+        for (DistributionCol col : distributionCols) {
+            boolean find = false;
+            for (DistributionCol requiredCol : requiredCols) {
+                if (col.isSatisfy(requiredCol)) {
+                    find = true;
+                    break;
+                }
+            }
+            if (!find) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+
 
     public boolean isLocal() {
         return this.sourceType == SourceType.LOCAL;
@@ -108,6 +151,22 @@ public class HashDistributionDesc {
         return this.sourceType == SourceType.BUCKET;
     }
 
+    public HashDistributionDesc getNullRelaxDesc() {
+        List<DistributionCol> newDistributionCols = distributionCols.stream()
+                .map(e -> new DistributionCol(e.getColId(), false)).collect(Collectors.toList());
+        return new HashDistributionDesc(newDistributionCols, sourceType);
+    }
+
+    public HashDistributionDesc getNullStrictDesc() {
+        List<DistributionCol> newDistributionCols = distributionCols.stream()
+                .map(e -> new DistributionCol(e.getColId(), true)).collect(Collectors.toList());
+        return new HashDistributionDesc(newDistributionCols, sourceType);
+    }
+
+    public boolean isAllNullStrict() {
+        return distributionCols.stream().allMatch(DistributionCol::isNullStrict);
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -123,16 +182,17 @@ public class HashDistributionDesc {
             return false;
         }
 
-        return Objects.equals(columns, other.columns);
+        return Objects.equals(distributionCols, other.distributionCols) && Objects.equals(sourceType, other.sourceType);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(columns);
+        return Objects.hash(distributionCols, sourceType);
     }
 
     @Override
     public String toString() {
-        return columns.toString();
+        return distributionCols.toString();
     }
+
 }

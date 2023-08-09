@@ -116,6 +116,10 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         this.topNType = topNType;
     }
 
+    public boolean isUseTopN() {
+        return useTopN;
+    }
+
     public long getOffset() {
         return offset;
     }

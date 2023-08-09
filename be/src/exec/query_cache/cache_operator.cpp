@@ -126,7 +126,7 @@ struct PerLaneBuffer {
 
 CacheOperator::CacheOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence, CacheManagerRawPtr cache_mgr,
                              const CacheParam& cache_param)
-        : pipeline::Operator(factory, factory->id(), factory->get_name(), factory->plan_node_id(), driver_sequence),
+        : pipeline::Operator(factory, factory->id(), factory->get_raw_name(), factory->plan_node_id(), driver_sequence),
           _cache_mgr(cache_mgr),
           _cache_param(cache_param),
           _lane_arbiter(std::make_shared<LaneArbiter>(_cache_param.num_lanes)) {
@@ -200,9 +200,9 @@ void CacheOperator::close(RuntimeState* state) {
     _cache_populate_tablets_counter->update(_populate_tablets.size());
     _cache_probe_tablets_counter->update(_probe_tablets.size());
     _cache_passthrough_tablets_counter->update(passthrough_tablets.size());
-    _runtime_profile->add_info_string("CacheProbeTablets", flatten_tablet_set(_probe_tablets));
-    _runtime_profile->add_info_string("CachePopulateTablets", flatten_tablet_set(_populate_tablets));
-    _runtime_profile->add_info_string("CachePassthroughTablets", flatten_tablet_set(passthrough_tablets));
+    _unique_metrics->add_info_string("CacheProbeTablets", flatten_tablet_set(_probe_tablets));
+    _unique_metrics->add_info_string("CachePopulateTablets", flatten_tablet_set(_populate_tablets));
+    _unique_metrics->add_info_string("CachePassthroughTablets", flatten_tablet_set(passthrough_tablets));
 
     Operator::close(state);
 }

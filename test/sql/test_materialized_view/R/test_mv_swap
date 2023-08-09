@@ -127,7 +127,7 @@ E: (1064, "Unexpected exception: Getting analyzing error. Detail message: Can no
 -- !result
 ALTER MATERIALIZED VIEW mv_on_mv_2 ACTIVE;
 -- result:
-E: (1064, 'Unexpected exception: Getting analyzing error from line 2, column 5 to line 2, column 23. Detail message: Create materialized view from inactive materialized view: mv_on_mv_1.')
+E: (1064, 'Unexpected exception: Getting analyzing error from line 2, column 5 to line 2, column 23. Detail message: Create/Rebuild materialized view from inactive materialized view: mv_on_mv_1.')
 -- !result
 SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1';
 -- result:

@@ -98,6 +98,8 @@ set(UTIL_FILES
   debug/query_trace_impl.cpp
   random.cc
   stack_trace_mutex.cpp
+  bthreads/future.h
+  bthreads/future_impl.cpp
 )
 
 add_library(Util STATIC

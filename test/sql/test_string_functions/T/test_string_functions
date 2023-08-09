@@ -72,3 +72,13 @@ select split_part(c1, "##", 3) from t1;
 select split_part(c1, "##", -1) from t1;
 select split_part(c1, "##", -2) from t1;
 select split_part(c1, "##", -3) from t1;
+
+-- name: test_url_encode
+select url_encode('https://docs.starrocks.io/en-us/latest/quick_start/Deploy');
+select url_encode('https://docs.starrocks数据库.io/en-us/latest/quick_start/Deploy?name=快速');
+select url_encode(NULL);
+
+--name: test_url_decode
+select url_decode('https%3A%2F%2Fdocs.starrocks.io%2Fen-us%2Flatest%2Fquick_start%2FDeploy');
+select url_decode('https%3A%2F%2Fdocs.starrocks%E6%95%B0%E6%8D%AE%E5%BA%93.io%2Fen-us%2Flatest%2Fquick_start%2FDeploy%3Fname%3D%E5%BF%AB%E9%80%9F');
+select url_decode(NULL);

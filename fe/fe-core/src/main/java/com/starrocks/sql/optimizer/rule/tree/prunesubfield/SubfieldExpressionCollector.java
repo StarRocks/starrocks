@@ -18,7 +18,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
@@ -49,15 +48,6 @@ public class SubfieldExpressionCollector extends ScalarOperatorVisitor<Void, Voi
             complexExpressions.add(variable);
         }
         return null;
-    }
-
-    @Override
-    public Void visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
-        if (predicate.getChild(0).getType().isComplexType()) {
-            complexExpressions.add(predicate);
-            return null;
-        }
-        return visit(predicate, context);
     }
 
     @Override

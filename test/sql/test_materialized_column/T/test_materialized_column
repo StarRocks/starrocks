@@ -224,3 +224,140 @@ UPDATE t SET v2 = 400 where v3 = 300;
 SELECT * FROM t;
 
 DROP DATABASE test_update;
+
+-- name: test_schema_change_for_add_optimization
+CREATE DATABASE test_schema_change_for_add_optimization;
+USE test_schema_change_for_add_optimization;
+
+CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+INSERT INTO t VALUES (1, 2);
+ALTER TABLE t ADD COLUMN newcol1 BIGINT AS id + name;
+function: wait_alter_table_finish()
+SELECT * FROM t;
+ALTER TABLE t ADD COLUMN newcol2 BIGINT AS id * 10 + name;
+function: wait_alter_table_finish()
+SELECT * FROM t;
+ALTER TABLE t ADD COLUMN newcol3 BIGINT AS id * 100 + name;
+function: wait_alter_table_finish()
+SELECT * FROM t;
+ALTER TABLE t DROP COLUMN newcol1;
+function: wait_alter_table_finish()
+SELECT * FROM t;
+ALTER TABLE t DROP COLUMN newcol2;
+function: wait_alter_table_finish()
+SELECT * FROM t;
+ALTER TABLE t DROP COLUMN newcol3;
+function: wait_alter_table_finish()
+SELECT * FROM t;
+DROP TABLE t;
+
+CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+INSERT INTO t VALUES (1, 2);
+ALTER TABLE t ADD COLUMN newcol1 BIGINT AS id + name;
+function: wait_alter_table_finish()
+SELECT * FROM t;
+ALTER TABLE t ADD COLUMN newcol2 BIGINT AS id * 10 + name;
+function: wait_alter_table_finish()
+SELECT * FROM t;
+ALTER TABLE t ADD COLUMN newcol3 BIGINT AS id * 100 + name;
+function: wait_alter_table_finish()
+SELECT * FROM t;
+ALTER TABLE t DROP COLUMN newcol1;
+function: wait_alter_table_finish()
+SELECT * FROM t;
+ALTER TABLE t DROP COLUMN newcol2;
+function: wait_alter_table_finish()
+SELECT * FROM t;
+ALTER TABLE t DROP COLUMN newcol3;
+function: wait_alter_table_finish()
+SELECT * FROM t;
+DROP TABLE t;
+
+CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+INSERT INTO t VALUES (1, 2);
+ALTER TABLE t ADD COLUMN newcol1 BIGINT AS id + name;
+function: wait_alter_table_finish()
+SELECT * FROM t;
+INSERT INTO t VALUES (1, 2);
+ALTER TABLE t ADD COLUMN newcol2 BIGINT AS id * 10 + name;
+function: wait_alter_table_finish()
+SELECT * FROM t;
+INSERT INTO t VALUES (1, 2);
+ALTER TABLE t ADD COLUMN newcol3 BIGINT AS id * 100 + name;
+function: wait_alter_table_finish()
+SELECT * FROM t;
+ALTER TABLE t DROP COLUMN newcol1;
+function: wait_alter_table_finish()
+SELECT * FROM t;
+ALTER TABLE t DROP COLUMN newcol2;
+function: wait_alter_table_finish()
+SELECT * FROM t;
+ALTER TABLE t DROP COLUMN newcol3;
+function: wait_alter_table_finish()
+SELECT * FROM t;
+DROP TABLE t;
+
+CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+INSERT INTO t VALUES (1, 2);
+ALTER TABLE t ADD COLUMN newcol1 BIGINT AS id + name;
+function: wait_alter_table_finish()
+SELECT * FROM t;
+INSERT INTO t VALUES (1, 2);
+ALTER TABLE t ADD COLUMN newcol2 BIGINT AS id * 10 + name;
+function: wait_alter_table_finish()
+SELECT * FROM t;
+INSERT INTO t VALUES (1, 2);
+ALTER TABLE t ADD COLUMN newcol3 BIGINT AS id * 100 + name;
+function: wait_alter_table_finish()
+SELECT * FROM t;
+ALTER TABLE t DROP COLUMN newcol1;
+function: wait_alter_table_finish()
+SELECT * FROM t;
+ALTER TABLE t DROP COLUMN newcol2;
+function: wait_alter_table_finish()
+SELECT * FROM t;
+ALTER TABLE t DROP COLUMN newcol3;
+function: wait_alter_table_finish()
+SELECT * FROM t;
+DROP TABLE t;
+
+
+DROP DATABASE test_schema_change_for_add_optimization;
+
+-- name: test_schema_change_for_constant_expression
+ CREATE DATABASE test_schema_change_for_constant_expression;
+ USE test_schema_change_for_constant_expression;
+
+ CREATE TABLE t ( id BIGINT NOT NULL) PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+ INSERT INTO t VALUES (1),(2),(3);
+ ALTER TABLE t ADD COLUMN newcol1 TINYINT AS 1;
+ function: wait_alter_table_finish()
+ SELECT * FROM t ORDER BY id;
+ ALTER TABLE t ADD COLUMN (newcol2 TINYINT AS 2, newcol3 TINYINT AS 3);
+ function: wait_alter_table_finish()
+ SELECT * FROM t ORDER BY id;
+ ALTER TABLE t ADD COLUMN (newcol4 TINYINT AS 4, newcol5 BIGINT AS id * 5, newcol6 TINYINT AS 6);
+ function: wait_alter_table_finish()
+ SELECT * FROM t ORDER BY id;
+ ALTER TABLE t ADD COLUMN (newcol7 BIGINT AS id * 7, newcol8 TINYINT AS 8, newcol9 BIGINT AS id * 9);
+ function: wait_alter_table_finish()
+ SELECT * FROM t ORDER BY id;
+ DROP TABLE t;
+
+ CREATE TABLE t ( id BIGINT NOT NULL) DUPLICATE KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+ INSERT INTO t VALUES (1),(2),(3);
+ ALTER TABLE t ADD COLUMN newcol1 TINYINT AS 1;
+ function: wait_alter_table_finish()
+ SELECT * FROM t ORDER BY id;
+ ALTER TABLE t ADD COLUMN (newcol2 TINYINT AS 2, newcol3 TINYINT AS 3);
+ function: wait_alter_table_finish()
+ SELECT * FROM t ORDER BY id;
+ ALTER TABLE t ADD COLUMN (newcol4 TINYINT AS 4, newcol5 BIGINT AS id * 5, newcol6 TINYINT AS 6);
+ function: wait_alter_table_finish()
+ SELECT * FROM t ORDER BY id;
+ ALTER TABLE t ADD COLUMN (newcol7 BIGINT AS id * 7, newcol8 TINYINT AS 8, newcol9 BIGINT AS id * 9);
+ function: wait_alter_table_finish()
+ SELECT * FROM t ORDER BY id;
+ DROP TABLE t;
+
+ DROP DATABASE test_schema_change_for_constant_expression;

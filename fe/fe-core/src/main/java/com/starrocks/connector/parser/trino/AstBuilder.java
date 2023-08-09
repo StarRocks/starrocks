@@ -106,6 +106,7 @@ import io.trino.sql.tree.DoubleLiteral;
 import io.trino.sql.tree.Except;
 import io.trino.sql.tree.ExistsPredicate;
 import io.trino.sql.tree.Explain;
+import io.trino.sql.tree.ExplainAnalyze;
 import io.trino.sql.tree.ExplainType;
 import io.trino.sql.tree.Expression;
 import io.trino.sql.tree.Extract;
@@ -267,6 +268,13 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         } else {
             queryStatement.setIsExplain(true, StatementBase.ExplainLevel.NORMAL);
         }
+        return queryStatement;
+    }
+
+    @Override
+    protected ParseNode visitExplainAnalyze(ExplainAnalyze node, ParseTreeContext context) {
+        QueryStatement queryStatement = (QueryStatement) visit(node.getStatement(), context);
+        queryStatement.setIsExplain(true, StatementBase.ExplainLevel.ANALYZE);
         return queryStatement;
     }
 

@@ -154,6 +154,13 @@ public class SystemInfoService implements GsonPostProcessable {
         idToComputeNodeRef.put(computeNode.getId(), computeNode);
     }
 
+    /**
+     * For TEST only!
+     */
+    public void dropComputeNode(ComputeNode computeNode) {
+        idToComputeNodeRef.remove(computeNode.getId());
+    }
+
     // Final entry of adding compute node
     private void addComputeNode(String host, int heartbeatPort) {
         ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
@@ -1073,7 +1080,7 @@ public class SystemInfoService implements GsonPostProcessable {
         memoryBe.setDecommissionType(be.getDecommissionType());
     }
 
-    private long getClusterAvailableCapacityB() {
+    public long getClusterAvailableCapacityB() {
         List<Backend> clusterBackends = getBackends();
         long capacity = 0L;
         for (Backend backend : clusterBackends) {

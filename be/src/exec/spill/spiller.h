@@ -49,23 +49,49 @@ struct SpillProcessMetrics {
     // For query statistics
     std::atomic_int64_t* total_spill_bytes;
 
-    RuntimeProfile::Counter* spill_timer = nullptr;
-    RuntimeProfile::Counter* spill_rows = nullptr;
-    RuntimeProfile::Counter* flush_timer = nullptr;
-    RuntimeProfile::Counter* restore_timer = nullptr;
-    RuntimeProfile::Counter* write_io_timer = nullptr;
-    RuntimeProfile::Counter* restore_rows = nullptr;
-    RuntimeProfile::Counter* shuffle_timer = nullptr;
-    RuntimeProfile::Counter* split_partition_timer = nullptr;
+    std::shared_ptr<RuntimeProfile> _spiller_metrics;
 
+    // time spent to append data into Spiller
+    RuntimeProfile::Counter* append_data_timer = nullptr;
+    // the number of rows appended to Spiller
+    RuntimeProfile::Counter* spill_rows = nullptr;
+    // time spent to flush data to disk
+    RuntimeProfile::Counter* flush_timer = nullptr;
+    // disk io time during flush
+    RuntimeProfile::Counter* write_io_timer = nullptr;
+    // time spent to restore data from Spiller, which includes the time to try to get data from buffer and drive the next prefetch
+    RuntimeProfile::Counter* restore_from_buffer_timer = nullptr;
+    // disk io time during restore
+    RuntimeProfile::Counter* read_io_timer = nullptr;
+    // the number of rows restored from Spiller
+    RuntimeProfile::Counter* restore_rows = nullptr;
+    // data bytes flushed to disk
     RuntimeProfile::Counter* flush_bytes = nullptr;
+    // data bytes restored from disk
     RuntimeProfile::Counter* restore_bytes = nullptr;
+    // time spent to serialize data before flush it to disk
     RuntimeProfile::Counter* serialize_timer = nullptr;
+    // time spent to deserialize data after read it from disk
     RuntimeProfile::Counter* deserialize_timer = nullptr;
+    // peak memory usage of mem table
+    RuntimeProfile::HighWaterMarkCounter* mem_table_peak_memory_usage = nullptr;
+    // peak memory usage of input stream
+    RuntimeProfile::HighWaterMarkCounter* input_stream_peak_memory_usage = nullptr;
+
+    // time spent to shuffle data to the corresponding partition, only used in join operator
+    RuntimeProfile::Counter* shuffle_timer = nullptr;
+    // time spent to split partitions, only used in join operator
+    RuntimeProfile::Counter* split_partition_timer = nullptr;
+    // data bytes restored from mem table in memory, only used in join operator
+    RuntimeProfile::Counter* restore_from_mem_table_bytes = nullptr;
+    // the number of rows restored from mem table in memory, only used in join operator
+    RuntimeProfile::Counter* restore_from_mem_table_rows = nullptr;
+    // peak memory usage of partition writer, only used in join operator
+    RuntimeProfile::HighWaterMarkCounter* partition_writer_peak_memory_usage = nullptr;
 };
 
 // major spill interfaces
-class Spiller {
+class Spiller : public std::enable_shared_from_this<Spiller> {
 public:
     Spiller(SpilledOptions opts, const std::shared_ptr<SpillerFactory>& factory)
             : _opts(std::move(opts)), _parent(factory) {}
@@ -78,8 +104,10 @@ public:
 
     const SpillProcessMetrics& metrics() { return _metrics; }
 
-    // set partition
+    // set partitions for spiller only works when spiller has partitioned spill writer
     Status set_partition(const std::vector<const SpillPartitionInfo*>& parititons);
+    // init partition by `num_partitions`
+    Status set_partition(RuntimeState* state, size_t num_partitions);
 
     // no thread-safe
     // TaskExecutor: Executor for runing io tasks
@@ -111,6 +139,8 @@ public:
     Status set_flush_all_call_back(const FlushAllCallBack& callback, RuntimeState* state, IOTaskExecutor& executor,
                                    const MemGuard& guard) {
         auto flush_call_back = [this, callback, state, &executor, guard]() {
+            auto defer = DeferOp([&]() { guard.scoped_end(); });
+            RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
             RETURN_IF_ERROR(callback());
             if (!_is_cancel && spilled()) {
                 RETURN_IF_ERROR(_acquire_input_stream(state));

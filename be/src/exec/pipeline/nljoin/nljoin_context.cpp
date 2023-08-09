@@ -48,7 +48,7 @@ Status NJJoinBuildInputChannel::add_chunk_to_spill_buffer(RuntimeState* state, C
     _num_rows += build_chunk->num_rows();
     _accumulator.push(std::move(build_chunk));
     if (auto chunk = _accumulator.pull()) {
-        RETURN_IF_ERROR(_spiller->spill(state, chunk, executor, RESOURCE_TLS_MEMTRACER_GUARD(state)));
+        RETURN_IF_ERROR(_spiller->spill(state, chunk, executor, TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
     }
 
     return Status::OK();
@@ -82,7 +82,7 @@ StatusOr<ChunkPtr> SpillableNLJoinChunkStream::get_next(RuntimeState* state, spi
 Status SpillableNLJoinChunkStream::reset(RuntimeState* state, spill::Spiller* dummy_spiller) {
     std::vector<spill::InputStreamPtr> spilled_input_streams;
 
-    auto stream = spill::SpillInputStream::as_stream(_build_chunks);
+    auto stream = spill::SpillInputStream::as_stream(_build_chunks, dummy_spiller);
     spilled_input_streams.emplace_back(std::move(stream));
 
     //

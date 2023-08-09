@@ -447,6 +447,8 @@ public class TabletInvertedIndex {
                     } else {
                         backendTabletNumReport.get(backendId).first++;
                     }
+
+                    tabletMeta.resetToBeCleanedTime();
                 } finally {
                     database.readUnlock();
                 }
@@ -809,6 +811,14 @@ public class TabletInvertedIndex {
         replicaNumMap.put(TStorageMedium.HDD, hddNum);
         replicaNumMap.put(TStorageMedium.SSD, ssdNum);
         return replicaNumMap;
+    }
+
+    public long getTabletCount() {
+        return this.tabletMetaMap.size();
+    }
+
+    public long getReplicaCount() {
+        return this.replicaMetaTable.size();
     }
 
     // just for test

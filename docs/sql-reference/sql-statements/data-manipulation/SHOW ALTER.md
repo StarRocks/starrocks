@@ -43,7 +43,7 @@ SHOW ALTER TABLE ROLLUP FROM example_db;
 
 ## References
 
-- [CREATE TABLE](CREATE%20TABLE.md)
-- [ALTER TABLE](ALTER%20TABLE.md)
+- [CREATE TABLE](../data-definition/CREATE%20TABLE.md)
+- [ALTER TABLE](../data-definition/ALTER%20TABLE.md)
 - [SHOW TABLES](../data-manipulation/SHOW%20TABLES.md)
 - [SHOW CREATE TABLE](../data-manipulation/SHOW%20CREATE%20TABLE.md)

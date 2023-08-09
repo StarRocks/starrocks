@@ -16,6 +16,7 @@
 #include <gtest/gtest.h>
 
 #include "fs/fs_util.h"
+#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -28,7 +29,12 @@ namespace starrocks::lake {
 
 class TestBase : public ::testing::Test {
 public:
-    virtual ~TestBase() override { (void)fs::remove_all(_test_dir); }
+    virtual ~TestBase() override {
+        // Wait for all vacuum tasks finished processing before destroying
+        // _tablet_mgr.
+        ExecEnv::GetInstance()->vacuum_thread_pool()->wait();
+        (void)fs::remove_all(_test_dir);
+    }
 
 protected:
     explicit TestBase(const std::string& test_dir, int64_t cache_limit = 1024 * 1024)

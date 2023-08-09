@@ -19,8 +19,10 @@
 #include <boost/algorithm/string.hpp>
 #include <orc/OrcFile.hh>
 #include <unordered_map>
+#include <variant>
 
 #include "common/status.h"
+#include "formats/utils.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
@@ -30,10 +32,19 @@ namespace starrocks {
 class OrcMapping;
 using OrcMappingPtr = std::shared_ptr<OrcMapping>;
 
-struct OrcMappingOrOrcColumnId {
+struct OrcMappingOptions {
+    std::string filename;
+    bool case_sensitive;
+    // Only used by hive
+    // TODO(SmithCruise) Not develop now
+    bool invalid_as_null;
+};
+
+// For a primitive type, it only contain orc_type
+// For a complex type, it contains orc_mapping and orc_type both
+struct OrcMappingOrcType {
     const OrcMappingPtr orc_mapping = nullptr;
-    // Large invalid number
-    size_t orc_column_id = SIZE_MAX;
+    const orc::Type* orc_type = nullptr;
 };
 
 // OrcMapping is used to create a global mapping for orc
@@ -87,9 +98,9 @@ class OrcMapping {
 public:
     // Only Array, Map, Struct contains child mapping, other logical types will return nullptr directly.
     // src_pos is origin column position in table definition.
-    const OrcMappingOrOrcColumnId& get_column_id_or_child_mapping(size_t original_pos_in_table_definition);
+    const OrcMappingOrcType& get_orc_type_child_mapping(size_t original_pos_in_table_definition);
 
-    void add_mapping(size_t pos_in_src, size_t orc_column_id, const OrcMappingPtr& child_mapping);
+    void add_mapping(size_t pos_in_src, const OrcMappingPtr& child_mapping, const orc::Type* orc_type);
 
     void clear();
 
@@ -98,10 +109,11 @@ public:
                                  std::list<uint64_t>* column_id_list);
 
     // Include in slot_descriptor level, complex type's lazy load is not support now.
-    Status set_lazyload_column_id(const uint64_t slot_pos, std::list<uint64_t>* column_id_list);
+    Status set_lazy_load_column_id(const uint64_t slot_pos, std::list<uint64_t>* column_id_list);
 
 private:
-    std::unordered_map<size_t, OrcMappingOrOrcColumnId> _mapping;
+    std::unordered_map<size_t, const OrcMappingOrcType> _mapping;
+    std::unordered_map<std::string, orc::Type*> _new_mapping;
 
     Status set_include_column_id_by_type(const OrcMappingPtr& mapping, const TypeDescriptor& desc,
                                          std::list<uint64_t>* column_id_list);
@@ -113,25 +125,28 @@ public:
     // column name rather than position in table definition.
     static StatusOr<std::unique_ptr<OrcMapping>> build_mapping(const std::vector<SlotDescriptor*>& slot_descs,
                                                                const orc::Type& root_orc_type,
-                                                               const bool case_sensitive,
                                                                const bool orc_use_column_names,
-                                                               const std::vector<std::string>* hive_column_names);
+                                                               const std::vector<std::string>* hive_column_names,
+                                                               const OrcMappingOptions& options);
 
 private:
-    static Status _check_orc_type_can_converte_2_logical_type(const orc::Type& orc_source_type,
-                                                              const TypeDescriptor& slot_target_type);
+    static Status _check_orc_type_can_convert_2_logical_type(const orc::Type* orc_source_type,
+                                                             const TypeDescriptor& slot_target_type,
+                                                             const OrcMappingOptions& options);
 
     static Status _init_orc_mapping_with_orc_column_names(std::unique_ptr<OrcMapping>& mapping,
                                                           const std::vector<SlotDescriptor*>& slot_descs,
-                                                          const orc::Type& orc_root_type, const bool case_sensitive);
+                                                          const orc::Type* orc_root_type,
+                                                          const OrcMappingOptions& options);
 
     static Status _init_orc_mapping_with_hive_column_names(std::unique_ptr<OrcMapping>& mapping,
                                                            const std::vector<SlotDescriptor*>& slot_descs,
-                                                           const orc::Type& orc_root_type, const bool case_sensitive,
-                                                           const std::vector<std::string>* hive_column_names);
+                                                           const orc::Type* orc_root_type,
+                                                           const std::vector<std::string>* hive_column_names,
+                                                           const OrcMappingOptions& options);
 
     static Status _set_child_mapping(const OrcMappingPtr& mapping, const TypeDescriptor& origin_type,
-                                     const orc::Type& orc_type, const bool case_sensitive);
+                                     const orc::Type* orc_type, const OrcMappingOptions& options);
 };
 
 } // namespace starrocks

@@ -50,9 +50,9 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.clone.TabletSchedCtx.Priority;
-import com.starrocks.clone.TabletScheduler.AddResult;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.server.GlobalStateMgr;
@@ -690,6 +690,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
                                  TabletScheduler tabletScheduler) {
         long checkStartTime = System.currentTimeMillis();
         long lockTotalTime = 0;
+        long waitTotalTimeMs = 0;
         List<Long> tableIds = colocateIndex.getAllTableIds(groupId);
         Database db = globalStateMgr.getDbIncludeRecycleBin(groupId.dbId);
         if (db == null) {
@@ -801,16 +802,12 @@ public class ColocateTableBalancer extends FrontendDaemon {
                                                 && st == TabletStatus.COLOCATE_MISMATCH);
 
                                         // For bad replica, we ignore the size limit of scheduler queue
-                                        AddResult res = tabletScheduler.addTablet(tabletCtx,
-                                                needToForceRepair(st, tablet,
+                                        Pair<Boolean, Long> result =
+                                                tabletScheduler.blockingAddTabletCtxToScheduler(db, tabletCtx,
+                                                        needToForceRepair(st, tablet,
                                                         bucketsSeq) || isPartitionUrgent /* forcefully add or not */);
-                                        if (res == AddResult.LIMIT_EXCEED) {
-                                            // tablet in scheduler exceed limit, skip this group and check next one.
-                                            LOG.info("number of scheduling tablets in tablet scheduler"
-                                                    + " exceed to limit. stop colocate table check");
-                                            break TABLE;
-                                        }
-                                        if (res == AddResult.ADDED && tabletCtx.getRelocationForRepair()) {
+                                        waitTotalTimeMs += result.second;
+                                        if (result.first && tabletCtx.getRelocationForRepair()) {
                                             LOG.info("add tablet relocation task to scheduler, tablet id: {}, " +
                                                             "bucket sequence before: {}, bucket sequence now: {}",
                                                     tableId,
@@ -853,7 +850,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
             db.readUnlock();
         }
 
-        return lockTotalTime;
+        return lockTotalTime - waitTotalTimeMs * 1000000;
     }
 
     private long matchOneGroupUrgent(GroupId groupId,

@@ -112,10 +112,6 @@ public:
 
     [[nodiscard]] Status delete_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time);
 
-    // put tablet_metadata and delvec to meta file. Only in PK table
-    [[nodiscard]] Status put_tablet_metadata_delvec(const TabletMetadata& metadata,
-                                                    const std::vector<std::pair<std::string, DelVectorPtr>>& del_vecs);
-
     void prune_metacache();
 
     // TODO: remove this method
@@ -144,9 +140,6 @@ public:
     std::string tablet_metadata_lock_location(int64_t tablet_id, int64_t version, int64_t expire_time) const;
 
     const LocationProvider* location_provider() const { return _location_provider; }
-
-    // Return a set of tablet that owned by this TabletManager.
-    std::set<int64_t> owned_tablets();
 
     UpdateManager* update_mgr();
 

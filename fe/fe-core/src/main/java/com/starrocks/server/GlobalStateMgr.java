@@ -157,8 +157,8 @@ import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
-import com.starrocks.lake.ShardDeleter;
 import com.starrocks.lake.ShardManager;
+import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
@@ -217,8 +217,8 @@ import com.starrocks.persist.metablock.SRMetaBlockLoader;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
@@ -230,6 +230,7 @@ import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
@@ -301,6 +302,7 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.WarehouseInfo;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -320,6 +322,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -499,7 +502,7 @@ public class GlobalStateMgr {
 
     private StarOSAgent starOSAgent;
 
-    private ShardDeleter shardDeleter;
+    private StarMgrMetaSyncer starMgrMetaSyncer;
 
     private MetadataMgr metadataMgr;
     private CatalogMgr catalogMgr;
@@ -743,7 +746,7 @@ public class GlobalStateMgr {
         this.shardManager = new ShardManager();
         this.compactionMgr = new CompactionMgr();
         this.configRefreshDaemon = new ConfigRefreshDaemon();
-        this.shardDeleter = new ShardDeleter();
+        this.starMgrMetaSyncer = new StarMgrMetaSyncer();
 
         this.binlogManager = new BinlogManager();
 
@@ -983,6 +986,10 @@ public class GlobalStateMgr {
 
     public WarehouseManager getWarehouseMgr() {
         return warehouseMgr;
+    }
+
+    public List<WarehouseInfo> getWarehouseInfosFromOtherFEs() {
+        return nodeMgr.getWarehouseInfosFromOtherFEs();
     }
 
     public StorageVolumeMgr getStorageVolumeMgr() {
@@ -1354,7 +1361,7 @@ public class GlobalStateMgr {
         taskRunStateSynchronizer.start();
 
         if (RunMode.allowCreateLakeTable()) {
-            shardDeleter.start();
+            starMgrMetaSyncer.start();
             autovacuumDaemon.start();
         }
 
@@ -1590,6 +1597,8 @@ public class GlobalStateMgr {
                 checksum = warehouseMgr.loadWarehouses(dis, checksum);
                 remoteChecksum = dis.readLong();
                 checksum = localMetastore.loadAutoIncrementId(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = loadStorageVolumes(dis, checksum);
                 remoteChecksum = dis.readLong();
                 // ** NOTICE **: always add new code at the end
 
@@ -1830,6 +1839,11 @@ public class GlobalStateMgr {
         return checksum;
     }
 
+    public long loadStorageVolumes(DataInputStream in, long checksum) throws IOException {
+        storageVolumeMgr.load(in);
+        return checksum;
+    }
+
     // Only called by checkpoint thread
     public void saveImage() throws IOException {
         // Write image.ckpt
@@ -1955,6 +1969,8 @@ public class GlobalStateMgr {
                 dos.writeLong(checksum);
                 checksum = localMetastore.saveAutoIncrementId(dos, checksum);
                 dos.writeLong(checksum);
+                checksum = storageVolumeMgr.saveStorageVolumes(dos, checksum);
+                dos.writeLong(checksum);
                 // ** NOTICE **: always add new code at the end
 
                 long saveImageEndTime = System.currentTimeMillis();
@@ -2076,6 +2092,12 @@ public class GlobalStateMgr {
             @Override
             protected void runAfterCatalogReady() {
                 globalTransactionMgr.abortTimeoutTxns();
+
+                try {
+                    loadMgr.cancelResidualJob();
+                } catch (Throwable t) {
+                    LOG.warn("load manager cancel residual job failed", t);
+                }
             }
         };
     }
@@ -2614,6 +2636,18 @@ public class GlobalStateMgr {
                         .append(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)
                         .append("\" = \"");
                 sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)).append("\"");
+
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
+                        .append("\" = \"");
+                sb.append(olapTable.enablePersistentIndex()).append("\"");
+
+                if (olapTable.enablePersistentIndex() && !Strings.isNullOrEmpty(olapTable.getPersistentIndexTypeString())) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)
+                            .append("\" = \"");
+                    sb.append(olapTable.getPersistentIndexTypeString()).append("\"");
+                }
             } else {
                 // in memory
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_INMEMORY)
@@ -2671,6 +2705,15 @@ public class GlobalStateMgr {
                     sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
                             .append("\" = \"");
                     sb.append(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)).append("\"");
+                }
+
+                String storageCoolDownTTL =
+                        olapTable.getTableProperty().getProperties().get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
+                if (storageCoolDownTTL != null) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)
+                            .append("\" = \"")
+                            .append(storageCoolDownTTL).append("\"");
                 }
 
                 // partition live number
@@ -2975,8 +3018,20 @@ public class GlobalStateMgr {
         return nodeMgr.getToken();
     }
 
+    public Optional<Database> mayGetDb(String name) {
+        return Optional.ofNullable(localMetastore.getDb(name));
+    }
+
     public Database getDb(String name) {
         return localMetastore.getDb(name);
+    }
+
+    public Optional<Table> mayGetTable(long dbId, long tableId) {
+        return mayGetDb(dbId).flatMap(db -> db.tryGetTable(tableId));
+    }
+
+    public Optional<Database> mayGetDb(long dbId) {
+        return Optional.ofNullable(localMetastore.getDb(dbId));
     }
 
     public Database getDb(long dbId) {
@@ -3479,9 +3534,13 @@ public class GlobalStateMgr {
         if (!catalogMgr.catalogExists(newCatalogName)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
         }
-        if (!CatalogMgr.isInternalCatalog(newCatalogName) &&
-                !PrivilegeActions.checkAnyActionOnOrInCatalog(ctx, newCatalogName)) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+        if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
+            try {
+                Authorizer.checkAnyActionOnOrInCatalog(ctx.getCurrentUserIdentity(),
+                        ctx.getCurrentRoleIds(), newCatalogName);
+            } catch (AccessDeniedException e) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+            }
         }
         ctx.setCurrentCatalog(newCatalogName);
         ctx.setDatabase("");
@@ -3506,9 +3565,13 @@ public class GlobalStateMgr {
             if (!catalogMgr.catalogExists(newCatalogName)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
             }
-            if (!CatalogMgr.isInternalCatalog(newCatalogName) &&
-                    !PrivilegeActions.checkAnyActionOnOrInCatalog(ctx, newCatalogName)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+            if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
+                try {
+                    Authorizer.checkAnyActionOnOrInCatalog(ctx.getCurrentUserIdentity(),
+                            ctx.getCurrentRoleIds(), newCatalogName);
+                } catch (AccessDeniedException e) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+                }
             }
             ctx.setCurrentCatalog(newCatalogName);
             dbName = parts[1];
@@ -3521,7 +3584,10 @@ public class GlobalStateMgr {
 
         // Here we check the request permission that sent by the mysql client or jdbc.
         // So we didn't check UseDbStmt permission in PrivilegeCheckerV2.
-        if (!PrivilegeActions.checkAnyActionOnOrInDb(ctx, ctx.getCurrentCatalog(), dbName)) {
+        try {
+            Authorizer.checkAnyActionOnOrInDb(ctx.getCurrentUserIdentity(),
+                    ctx.getCurrentRoleIds(), ctx.getCurrentCatalog(), dbName);
+        } catch (AccessDeniedException e) {
             ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
                     ctx.getQualifiedUser(), dbName);
         }
@@ -3943,12 +4009,6 @@ public class GlobalStateMgr {
             loadMgr.removeOldLoadJob();
         } catch (Throwable t) {
             LOG.warn("load manager remove old load jobs failed", t);
-        }
-
-        try {
-            loadMgr.cleanResidualJob();
-        } catch (Throwable t) {
-            LOG.warn("load manager clean residual job failed", t);
         }
 
         try {

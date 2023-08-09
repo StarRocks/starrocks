@@ -2,7 +2,7 @@
 # Please run this command from the git repo root directory to build:
 #
 #   - Use artifact image to package runtime container:
-#     > DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=image --build-arg ARTIFACTIMAGE=ghcr.io/starrocks/starrocks/artifact-ubuntu:latest -f docker/dockerfiles/be/be-ubuntu.Dockerfile -t be-ubuntu:latest .
+#     > DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=image --build-arg ARTIFACTIMAGE=starrocks/artifacts-ubuntu:latest -f docker/dockerfiles/be/be-ubuntu.Dockerfile -t be-ubuntu:latest .
 #   - Use locally build artifacts to package runtime container:
 #     > DOCKER_BUILDKIT=1 docker build --build-arg ARTIFACT_SOURCE=local --build-arg LOCAL_REPO_PATH=. -f docker/dockerfiles/be/be-ubuntu.Dockerfile -t be-ubuntu:latest .
 #
@@ -11,7 +11,7 @@
 #   local: copy the artifacts from a local repo. Mainly used for local development and test.
 ARG ARTIFACT_SOURCE=image
 
-ARG ARTIFACTIMAGE=artifact:latest
+ARG ARTIFACTIMAGE=starrocks/artifacts-ubuntu:latest
 FROM ${ARTIFACTIMAGE} as artifacts-from-image
 
 # create a docker build stage that copy locally build artifacts
@@ -34,22 +34,26 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends \
 RUN echo "export PATH=/usr/lib/linux-tools/5.15.0-60-generic:$PATH" >> /etc/bash.bashrc
 ENV JAVA_HOME=/lib/jvm/default-java
 
+RUN touch /.dockerenv
+
 WORKDIR $STARROCKS_ROOT
-
-# Copy all artifacts to the runtime container image
-COPY --from=artifacts /release/be_artifacts/ $STARROCKS_ROOT/
-
-# Copy be k8s scripts to the runtime container image
-COPY docker/dockerfiles/be/*.sh $STARROCKS_ROOT/
-
-# Create directory for BE storage, create cn symbolic link to be
-RUN touch /.dockerenv && mkdir -p $STARROCKS_ROOT/be/storage && ln -sfT be $STARROCKS_ROOT/cn
 
 # Run as starrocks user
 ARG USER=starrocks
 ARG GROUP=starrocks
 RUN groupadd --gid 1000 $GROUP && useradd --no-create-home --uid 1000 --gid 1000 \
-             --shell /usr/sbin/nologin $USER  \
-    && chown -R $USER:$GROUP /opt/starrocks
+             --shell /usr/sbin/nologin $USER  && \
+    chown -R $USER:$GROUP $STARROCKS_ROOT
 USER $USER
-ENV USER=$USER
+
+# Copy all artifacts to the runtime container image
+COPY --from=artifacts --chown=starrocks:starrocks /release/be_artifacts/ $STARROCKS_ROOT/
+
+# Copy be k8s scripts to the runtime container image
+COPY --chown=starrocks:starrocks docker/dockerfiles/be/*.sh $STARROCKS_ROOT/
+
+# Create directory for BE storage, create cn symbolic link to be
+RUN mkdir -p $STARROCKS_ROOT/be/storage && ln -sfT be $STARROCKS_ROOT/cn
+
+# run as root by default
+USER root

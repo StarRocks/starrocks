@@ -689,6 +689,10 @@ StatusOr<ColumnPtr> BinaryColumnBase<T>::upgrade_if_overflow() {
                 base += Column::MAX_CAPACITY_LIMIT;
                 start = mid;
             }
+
+            // NOTE(yanz): in BinaryColumnBase, we have an invariant that `_offsets.back == _bytes.size()`;  
+            // and since _bytes has been moved to new_column, we have to clear _offset to keep the invariant.
+            _offsets.clear();
             return new_column;
         } else {
             return nullptr;

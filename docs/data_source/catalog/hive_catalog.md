@@ -1,12 +1,12 @@
 # Hive catalog
 
-A Hive catalog is a kind of external catalog that enables you to query data from Apache Hive™ without ingestion.
+A Hive catalog is a kind of external catalog that enables you to query data from Apache Hive™ without ingestion. Also, you can directly transform and load data from Hive by using [INSERT INTO](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md) based on Hive catalogs.
 
-Also, you can directly transform and load data from Hive by using [INSERT INTO](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md) based on Hive catalogs. StarRocks supports Hive catalogs from v2.4 onwards.
+StarRocks supports Hive catalogs from v2.4 onwards, and from v3.1 onwards StarRocks supports accessing views that are created on tables within Hive catalogs.
 
 To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster needs to integrate with two important components:
 
-- Object storage or distributed file system like AWS S3, other S3-compatible storage system, Microsoft Azure Storage, Google GCS, or HDFS
+- Distributed file system (HDFS) or object storage like AWS S3, Microsoft Azure Storage, Google GCS, or other S3-compatible storage system (for example, MinIO)
 
 - Metastore like Hive metastore or AWS Glue
 
@@ -439,7 +439,7 @@ If you choose Google GCS as storage for your Hive cluster, take one of the follo
 
 A set of parameters about how StarRocks updates the cached metadata of Hive. This parameter set is optional.
 
-StarRocks implements the automatic asynchronous update policy by default.
+StarRocks implements the [automatic asynchronous update policy](#appendix-understand-metadata-automatic-asynchronous-update) by default.
 
 In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with an out-of-the-box performance.
 
@@ -458,8 +458,6 @@ However, if the frequency of data updates in Hive is high, you can tune these pa
 | metastore_cache_ttl_sec                | No       | The time interval at which StarRocks automatically discards the metadata of Hive tables or partitions cached in itself. Unit: seconds. Default value: `86400`, which is 24 hours. |
 | remote_file_cache_ttl_sec              | No       | The time interval at which StarRocks automatically discards the metadata of the underlying data files of Hive tables or partitions cached in itself. Unit: seconds. Default value: `129600`, which is 36 hours. |
 | enable_cache_list_names                | No       | Specifies whether StarRocks caches Hive partition names. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the cache, and the value `false` disables the cache. |
-
-For more information, see the "[Understand automatic asynchronous update](../catalog/hive_catalog.md#appendix-understand-automatic-asynchronous-update)" section of this topic.
 
 ### Examples
 
@@ -837,6 +835,38 @@ Suppose you have an OLAP table named `olap_tbl`, you can transform and load data
 
 ```SQL
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM hive_table
+```
+
+## Grant privileges on Hive tales and views
+
+You can use the [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) statement to grant the privileges on all tables or views within a Hive catalog to a specific role.
+
+- Grant a role the privilege to query all tables within a Hive catalog:
+
+  ```SQL
+  GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE <role_name>
+  ```
+
+- Grant a role the privilege to query all views within a Hive catalog:
+
+  ```SQL
+  GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE <role_name>
+  ```
+
+For example, use the following commands to create a role named `hive_role_table`, switch to the Hive catalog `hive_catalog`, and then grant the role `hive_role_table` the privilege to query all tables and views within the Hive catalog `hive_catalog`:
+
+```SQL
+-- Create a role named hive_role_table.
+CREATE ROLE hive_role_table;
+
+-- Switch to the Hive catalog hive_catalog.
+SET CATALOG hive_catalog;
+
+-- Grant the role hive_role_table the privilege to query all tables within the Hive catalog hive_catalog.
+GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE hive_role_table;
+
+-- Grant the role hive_role_table the privilege to query all views within the Hive catalog hive_catalog.
+GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE hive_role_table;
 ```
 
 ## Manually or automatically update metadata cache

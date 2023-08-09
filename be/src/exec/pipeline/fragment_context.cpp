@@ -114,8 +114,10 @@ bool FragmentContext::need_report_exec_state() {
     if (!query_ctx->enable_profile()) {
         return false;
     }
-
-    return (MonotonicNanos() - _last_report_exec_state_ns) >= query_ctx->get_runtime_profile_report_interval_ns();
+    const auto now = MonotonicNanos();
+    const auto interval_ns = query_ctx->get_runtime_profile_report_interval_ns();
+    auto last_report_ns = _last_report_exec_state_ns.load();
+    return now - last_report_ns >= interval_ns;
 }
 
 void FragmentContext::report_exec_state_if_necessary() {
@@ -131,12 +133,6 @@ void FragmentContext::report_exec_state_if_necessary() {
         return;
     }
 
-    for (auto& pipeline : _pipelines) {
-        for (auto& driver : pipeline->drivers()) {
-            driver->runtime_report_action();
-        }
-    }
-
     int64_t normalized_report_ns;
     if (now - last_report_ns > 2 * interval_ns) {
         // Maybe the first time, then initialized it.
@@ -146,6 +142,12 @@ void FragmentContext::report_exec_state_if_necessary() {
         normalized_report_ns = last_report_ns + interval_ns;
     }
     if (_last_report_exec_state_ns.compare_exchange_strong(last_report_ns, normalized_report_ns)) {
+        for (auto& pipeline : _pipelines) {
+            for (auto& driver : pipeline->drivers()) {
+                driver->runtime_report_action();
+            }
+        }
+
         state->exec_env()->wg_driver_executor()->report_exec_state(query_ctx, this, Status::OK(), false, true);
     }
 }

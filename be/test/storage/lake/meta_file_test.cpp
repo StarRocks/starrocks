@@ -47,8 +47,6 @@ public:
         }
     }
 
-    Status list_root_locations(std::set<std::string>* roots) const override { return _lp->list_root_locations(roots); }
-
     std::set<int64_t> _owned_shards;
     LocationProvider* _lp;
 };

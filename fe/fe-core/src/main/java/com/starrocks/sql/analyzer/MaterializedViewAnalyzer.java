@@ -122,31 +122,36 @@ public class MaterializedViewAnalyzer {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
     }
 
-    public static List<BaseTableInfo> getAndCheckBaseTables(QueryStatement queryStatement) {
+    public static List<BaseTableInfo> getBaseTableInfos(QueryStatement queryStatement, boolean withCheck) {
         List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
-        processBaseTables(queryStatement, baseTableInfos);
+        processBaseTables(queryStatement, baseTableInfos, withCheck);
         Set<BaseTableInfo> baseTableInfoSet = Sets.newHashSet(baseTableInfos);
         baseTableInfos.clear();
         baseTableInfos.addAll(baseTableInfoSet);
         return baseTableInfos;
     }
 
-    private static void processBaseTables(QueryStatement queryStatement, List<BaseTableInfo> baseTableInfos) {
+    private static void processBaseTables(QueryStatement queryStatement, List<BaseTableInfo> baseTableInfos,
+                                          boolean withCheck) {
         Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllConnectorTableAndView(queryStatement);
-        tableNameTableMap.forEach((tableNameInfo, table) -> {
-            Preconditions.checkState(table != null, "Materialized view base table is null");
-            if (!isSupportBasedOnTable(table)) {
-                throw new SemanticException("Create materialized view do not support the table type: " +
-                        table.getType(), tableNameInfo.getPos());
-            }
-            if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
-                throw new SemanticException(
-                        "Create materialized view from inactive materialized view: " + table.getName(),
-                        tableNameInfo.getPos());
+        for (Map.Entry<TableName, Table> entry : tableNameTableMap.entrySet()) {
+            TableName tableNameInfo = entry.getKey();
+            Table table = entry.getValue();
+            if (withCheck) {
+                Preconditions.checkState(table != null, "Materialized view base table is null");
+                if (!isSupportBasedOnTable(table)) {
+                    throw new SemanticException("Create/Rebuild materialized view do not support the table type: " +
+                            table.getType(), tableNameInfo.getPos());
+                }
+                if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
+                    throw new SemanticException(
+                            "Create/Rebuild materialized view from inactive materialized view: " + table.getName(),
+                            tableNameInfo.getPos());
+                }
             }
 
             if (table.isView()) {
-                return;
+                continue;
             }
 
             if (!FeConstants.isReplayFromQueryDump && isExternalTableFromResource(table)) {
@@ -155,8 +160,8 @@ public class MaterializedViewAnalyzer {
                                 "which created by catalog", tableNameInfo.getPos());
             }
             baseTableInfos.add(BaseTableInfo.fromTableName(tableNameInfo, table));
-        });
-        processViews(queryStatement, baseTableInfos);
+        }
+        processViews(queryStatement, baseTableInfos, withCheck);
     }
 
     private static boolean isSupportBasedOnTable(Table table) {
@@ -181,7 +186,8 @@ public class MaterializedViewAnalyzer {
         }
     }
 
-    private static void processViews(QueryStatement queryStatement, List<BaseTableInfo> baseTableInfos) {
+    private static void processViews(QueryStatement queryStatement, List<BaseTableInfo> baseTableInfos,
+                                     boolean withCheck) {
         List<ViewRelation> viewRelations = AnalyzerUtils.collectViewRelations(queryStatement);
         if (viewRelations.isEmpty()) {
             return;
@@ -189,7 +195,7 @@ public class MaterializedViewAnalyzer {
         Set<ViewRelation> viewRelationSet = Sets.newHashSet(viewRelations);
         for (ViewRelation viewRelation : viewRelationSet) {
             // base tables of view
-            processBaseTables(viewRelation.getQueryStatement(), baseTableInfos);
+            processBaseTables(viewRelation.getQueryStatement(), baseTableInfos, withCheck);
 
             // view itself is considered as base-table
             baseTableInfos.add(BaseTableInfo.fromTableName(viewRelation.getName(), viewRelation.getView()));
@@ -234,7 +240,7 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("Can not find database:" + statement.getTableName().getDb(),
                         statement.getTableName().getPos());
             }
-            List<BaseTableInfo> baseTableInfos = getAndCheckBaseTables(queryStatement);
+            List<BaseTableInfo> baseTableInfos = getBaseTableInfos(queryStatement, true);
             // now do not support empty base tables
             // will be relaxed after test
             if (baseTableInfos.isEmpty()) {

@@ -18,16 +18,21 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
@@ -224,5 +229,26 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
                     Lists.newArrayList(index));
         }
         return collectionElement;
+    }
+
+    /*
+     * rewrite map/array is null -> map_size(map)/array_size(array) is null
+     */
+    @Override
+    public ScalarOperator visitIsNullPredicate(IsNullPredicateOperator predicate,
+                                               ScalarOperatorRewriteContext context) {
+        if (predicate.getChild(0).getType().isMapType()) {
+            Function fn = Expr.getBuiltinFunction(FunctionSet.MAP_SIZE,
+                    new Type[] {predicate.getChild(0).getType()}, Function.CompareMode.IS_SUPERTYPE_OF);
+            CallOperator call = new CallOperator(fn.functionName(), fn.getReturnType(), predicate.getChildren(), fn);
+            return new IsNullPredicateOperator(predicate.isNotNull(), call);
+        } else if (predicate.getChild(0).getType().isArrayType()) {
+            Function fn = Expr.getBuiltinFunction(FunctionSet.ARRAY_LENGTH,
+                    new Type[] {predicate.getChild(0).getType()}, Function.CompareMode.IS_SUPERTYPE_OF);
+            CallOperator call = new CallOperator(fn.functionName(), fn.getReturnType(), predicate.getChildren(), fn);
+            return new IsNullPredicateOperator(predicate.isNotNull(), call);
+        }
+
+        return visit(predicate, context);
     }
 }

@@ -51,6 +51,7 @@ public abstract class StatementBase implements ParseNode {
     public enum ExplainLevel {
         NORMAL,
         LOGICAL,
+        ANALYZE,
         // True if the describe_stmt print verbose information, if `isVerbose` is true, `isExplain` must be set to true.
         VERBOSE,
         // True if the describe_stmt print costs information, if `isCosts` is true, `isExplain` must be set to true.

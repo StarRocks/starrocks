@@ -14,7 +14,8 @@
 
 #include "common/s3_uri.h"
 
-#include <brpc/uri.h>
+#include <aws/core/utils/StringUtils.h>
+#include <aws/crt/io/Uri.h>
 #include <fmt/format.h>
 #include <gutil/strings/util.h>
 
@@ -22,21 +23,22 @@
 
 namespace starrocks {
 
-bool S3URI::parse(const char* uri_str) {
-    brpc::URI uri;
-    if (uri.SetHttpURL(uri_str) != 0) {
+bool S3URI::parse(const char* uri_str, const size_t size) {
+    Aws::Crt::Io::Uri uri(Aws::Crt::ByteCursor{size, (uint8_t*)uri_str});
+    if (!uri) {
         return false;
     }
 
-    _scheme = uri.scheme();
+    _scheme = Aws::Utils::StringUtils::FromByteCursor(uri.GetScheme());
     std::transform(_scheme.begin(), _scheme.end(), _scheme.begin(), ::tolower);
-    const std::string& host = uri.host();
+    const std::string& host = Aws::Utils::StringUtils::FromByteCursor(uri.GetHostName());
+    const std::string& aws_path = Aws::Utils::StringUtils::FromByteCursor(uri.GetPath());
     std::string_view path;
 
-    if (!uri.path().empty() && uri.path()[0] == '/') {
-        path = std::string_view(uri.path().data() + 1, uri.path().size() - 1);
+    if (!aws_path.empty() && aws_path[0] == '/') {
+        path = std::string_view(aws_path.data() + 1, aws_path.size() - 1);
     } else {
-        path = uri.path();
+        path = aws_path;
     }
 
     if (_scheme == "s3" || _scheme == "s3a" || _scheme == "s3n") {

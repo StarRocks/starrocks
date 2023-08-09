@@ -57,11 +57,12 @@ public class BaseTableInfo {
         this(dbId, null, tableId);
     }
 
-    public BaseTableInfo(String catalogName, String dbName, String tableIdentifier) {
+    // used for external table
+    public BaseTableInfo(String catalogName, String dbName, String tableName, String tableIdentifier) {
         this.catalogName = catalogName;
         this.dbName = dbName;
+        this.tableName = tableName;
         this.tableIdentifier = tableIdentifier;
-        this.tableName = tableIdentifier.split(":")[0];
     }
 
     public static BaseTableInfo fromTableName(TableName name, Table table) {
@@ -69,7 +70,7 @@ public class BaseTableInfo {
         if (isInternalCatalog(name.getCatalog())) {
             return new BaseTableInfo(database.getId(), database.getFullName(), table.getId());
         } else {
-            return new BaseTableInfo(name.getCatalog(), name.getDb(), table.getTableIdentifier());
+            return new BaseTableInfo(name.getCatalog(), name.getDb(), table.getName(), table.getTableIdentifier());
         }
     }
 
@@ -136,7 +137,13 @@ public class BaseTableInfo {
                 LOG.warn("table {}.{}.{} not exist", catalogName, dbName, tableName);
                 return null;
             }
-            if (table.getTableIdentifier().equals(tableIdentifier)) {
+
+            if (tableIdentifier == null) {
+                this.tableIdentifier = table.getTableIdentifier();
+                return table;
+            }
+
+            if (tableIdentifier != null && table.getTableIdentifier().equals(tableIdentifier)) {
                 return table;
             }
             return null;

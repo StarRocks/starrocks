@@ -287,6 +287,17 @@ public class WindowTest extends PlanTestBase {
     }
 
     @Test
+    public void testStatisticWindowFunction() throws Exception {
+        String sql = "select CORR(t1e,t1f) over (partition by t1a order by t1b) from test_all_type";
+        starRocksAssert.query(sql)
+                .analysisError("order by not allowed with");
+        sql = "select CORR(t1e,t1f) over (partition by t1a " +
+                "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) from test_all_type";
+        starRocksAssert.query(sql)
+                .analysisError("Windowing clause not allowed with");
+    }
+
+    @Test
     public void testRankingWindowWithoutPartitionPredicatePushDown() throws Exception {
         FeConstants.runningUnitTest = true;
         {
@@ -1086,7 +1097,6 @@ public class WindowTest extends PlanTestBase {
                     "  6:EXCHANGE");
         }
     }
-
 
     @Test
     public void testWindowWithHaving() throws Exception {

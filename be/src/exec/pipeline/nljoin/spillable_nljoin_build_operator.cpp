@@ -61,7 +61,7 @@ Status SpillableNLJoinBuildOperator::set_finishing(RuntimeState* state) {
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(spiller->flush(state, executor, RESOURCE_TLS_MEMTRACER_GUARD(state)));
+    RETURN_IF_ERROR(spiller->flush(state, executor, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
     spiller->set_flush_all_call_back(
             [&, state]() {
                 RETURN_IF_ERROR(_cross_join_context->finish_one_right_sinker(_driver_sequence, state));
@@ -69,7 +69,7 @@ Status SpillableNLJoinBuildOperator::set_finishing(RuntimeState* state) {
                 _spill_channel->set_finishing();
                 return Status::OK();
             },
-            state, executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
+            state, executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
 
     return Status::OK();
 }
@@ -89,11 +89,10 @@ Status SpillableNLJoinBuildOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
     _spill_options = std::make_shared<spill::SpilledOptions>();
-    _spill_options->spill_file_size = state->spill_mem_table_size();
+    _spill_options->spill_mem_table_bytes_size = state->spill_mem_table_size();
     _spill_options->mem_table_pool_size = state->spill_mem_table_num();
     _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
     _spill_options->min_spilled_size = state->spill_operator_min_bytes();
-    _spill_options->max_memory_size_each_partition = state->spill_operator_max_bytes();
     _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();
     _spill_options->name = "spillable-nestloop-join-build";
     _spill_options->plan_node_id = _plan_node_id;

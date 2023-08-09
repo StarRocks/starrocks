@@ -503,6 +503,10 @@ CONF_mBool(sync_tablet_meta, "false");
 // Default thrift rpc timeout ms.
 CONF_mInt32(thrift_rpc_timeout_ms, "5000");
 
+CONF_Bool(thrift_rpc_strict_mode, "true");
+// rpc max string body size. 0 means unlimited
+CONF_Int32(thrift_rpc_max_body_size, "0");
+
 // txn commit rpc timeout
 CONF_mInt32(txn_commit_rpc_timeout_ms, "20000");
 
@@ -859,6 +863,16 @@ CONF_Int32(starlet_star_cache_mem_size_percent, "0");
 CONF_Int32(starlet_star_cache_disk_size_percent, "60");
 CONF_Int64(starlet_star_cache_disk_size_bytes, "0");
 CONF_Int32(starlet_star_cache_block_size_bytes, "1048576");
+// domain list separated by comma, e.g. '.example.com,.helloworld.com'
+CONF_String(starlet_s3_virtual_address_domainlist, "");
+// number of caches allowed from s3client factory
+CONF_Int32(starlet_s3_client_max_cache_capacity, "8");
+// number of instances per cache item
+CONF_Int32(starlet_s3_client_num_instances_per_cache, "1");
+// whether turn on read prefetch feature
+CONF_Bool(starlet_fs_read_prefetch_enable, "false");
+// prefetch threadpool size
+CONF_Int32(starlet_fs_read_prefetch_threadpool_size, "128");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
@@ -900,7 +914,7 @@ CONF_String(spill_local_storage_dir, "${STARROCKS_HOME}/spill");
 // when spill occurs, whether enable skip synchronous flush
 CONF_mBool(experimental_spill_skip_sync, "true");
 // spill Initial number of partitions
-CONF_mInt32(spill_init_partition, "4");
+CONF_mInt32(spill_init_partition, "16");
 // The maximum size of a single log block container file, this is not a hard limit.
 // If the file size exceeds this limit, a new file will be created to store the block.
 CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
@@ -949,6 +963,7 @@ CONF_Int64(block_cache_lru_insertion_point, "1");
 // Set the default value empty to indicate whether it is manully configured by users.
 // If not, we need to adjust the default engine based on build switches like "WITH_CACHELIB" and "WITH_STARCACHE".
 CONF_String(block_cache_engine, "");
+CONF_Bool(block_cache_direct_io_enable, "false");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB

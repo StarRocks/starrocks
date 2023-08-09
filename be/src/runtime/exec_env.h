@@ -235,6 +235,8 @@ public:
 
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
 
+    ThreadPool* vacuum_thread_pool();
+
 private:
     Status _init(const std::vector<StorePath>& store_paths, bool as_cn);
     void _stop();

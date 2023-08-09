@@ -46,6 +46,18 @@ DECLARE_double(cachemgr_evict_high_water);
 DECLARE_int32(cachemgr_dir_allocate_policy);
 // buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
 DECLARE_int32(fs_stream_buffer_size_bytes);
+// domain allow list to force starlet using s3 virtual address style
+DECLARE_string(fslib_s3_virtual_address_domainlist);
+// s3client factory cache capacity
+DECLARE_int32(fslib_s3client_max_items);
+// s3client max connections
+DECLARE_int32(fslib_s3client_max_connections);
+// s3client max instances per cache item, allow using multiple client instances per cache
+DECLARE_int32(fslib_s3client_max_instance_per_item);
+// threadpool size for buffer prefetch task
+DECLARE_int32(fs_buffer_prefetch_threadpool_size);
+// switch to turn on/off buffer prefetch when read
+DECLARE_bool(fs_enable_buffer_prefetch);
 
 namespace starrocks {
 
@@ -399,6 +411,13 @@ void init_staros_worker() {
     FLAGS_cachemgr_evict_high_water = config::starlet_cache_evict_high_water;
     FLAGS_cachemgr_dir_allocate_policy = config::starlet_cache_dir_allocate_policy;
     FLAGS_fs_stream_buffer_size_bytes = config::starlet_fs_stream_buffer_size_bytes;
+    FLAGS_fslib_s3_virtual_address_domainlist = config::starlet_s3_virtual_address_domainlist;
+    // use the same configuration as the external query
+    FLAGS_fslib_s3client_max_connections = config::object_storage_max_connection;
+    FLAGS_fslib_s3client_max_items = config::starlet_s3_client_max_cache_capacity;
+    FLAGS_fslib_s3client_max_instance_per_item = config::starlet_s3_client_num_instances_per_cache;
+    FLAGS_fs_enable_buffer_prefetch = config::starlet_fs_read_prefetch_enable;
+    FLAGS_fs_buffer_prefetch_threadpool_size = config::starlet_fs_read_prefetch_threadpool_size;
 
     fslib::FLAGS_use_star_cache = config::starlet_use_star_cache;
     fslib::FLAGS_star_cache_mem_size_percent = config::starlet_star_cache_mem_size_percent;

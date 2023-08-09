@@ -212,7 +212,7 @@ public class ShowExecutorTest {
         };
 
         BaseTableInfo baseTableInfo = new BaseTableInfo(
-                "default_catalog", "testDb", "testTbl");
+                "default_catalog", "testDb", "testTbl", null);
 
         // mock materialized view
         MaterializedView mv = new MaterializedView();
@@ -1229,6 +1229,7 @@ public class ShowExecutorTest {
                 properties.put("type", "hive");
                 properties.put("aws.s3.access_key", "iam_user_access_key");
                 properties.put("aws.s3.secret_key", "iam_user_secret_key");
+                properties.put("password", "password");
                 return new Catalog(1, "test_hive", properties, "hive_test");
             }
         };

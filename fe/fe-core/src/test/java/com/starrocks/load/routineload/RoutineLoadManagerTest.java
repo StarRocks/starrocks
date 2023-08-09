@@ -56,6 +56,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
@@ -670,6 +671,9 @@ public class RoutineLoadManagerTest {
                 routineLoadJob.getName();
                 minTimes = 0;
                 result = "";
+                routineLoadJob.getCurrentWarehouse();
+                minTimes = 0;
+                result = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
@@ -704,6 +708,9 @@ public class RoutineLoadManagerTest {
                 routineLoadJob.getDbId();
                 minTimes = 0;
                 result = 1L;
+                routineLoadJob.getCurrentWarehouse();
+                minTimes = 0;
+                result = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
                 operation.getId();
                 minTimes = 0;
                 result = 1L;

@@ -26,6 +26,7 @@ import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.FastByteArrayOutputStream;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
@@ -383,5 +384,19 @@ public class StorageVolumeTest {
         Assert.assertEquals(sv.getName(), sv1.getName());
         Assert.assertEquals(sv.getEnabled(), sv1.getEnabled());
         Assert.assertEquals(CloudType.AWS, sv1.getCloudConfiguration().getCloudType());
+    }
+
+    @Test
+    public void testAddMaskForCredential() {
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_ACCESS_KEY, "accessKey");
+        storageParams.put(AWS_S3_SECRET_KEY, "secretKey");
+        storageParams.put(AZURE_BLOB_SAS_TOKEN, "sasToken");
+        storageParams.put(AZURE_BLOB_SHARED_KEY, "sharedKey");
+        Deencapsulation.invoke(StorageVolume.class, "addMaskForCredential", storageParams);
+        Assert.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AWS_S3_ACCESS_KEY));
+        Assert.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AWS_S3_SECRET_KEY));
+        Assert.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AZURE_BLOB_SAS_TOKEN));
+        Assert.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AZURE_BLOB_SHARED_KEY));
     }
 }

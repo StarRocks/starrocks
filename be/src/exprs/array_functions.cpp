@@ -1342,7 +1342,7 @@ inline static void nestloop_intersect(uint8_t* hits, const Column* base, size_t 
 }
 
 StatusOr<ColumnPtr> ArrayFunctions::array_intersect_any_type(FunctionContext* ctx, const Columns& columns) {
-    DCHECK_LE(2, columns.size());
+    DCHECK_LE(1, columns.size());
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     size_t rows = columns[0]->size();

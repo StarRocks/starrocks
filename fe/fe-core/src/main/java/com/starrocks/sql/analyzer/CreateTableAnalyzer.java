@@ -162,6 +162,8 @@ public class CreateTableAnalyzer {
                     keysPos = keysDesc.getPos();
                 }
                 throw new SemanticException("only primary key support sort key", keysPos);
+            } else if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                throw new SemanticException("not support sort key in cloud native table yet!");
             } else {
                 List<String> columnNames =
                         statement.getColumnDefs().stream().map(ColumnDef::getName).collect(Collectors.toList());
@@ -370,6 +372,7 @@ public class CreateTableAnalyzer {
                     try {
                         // Iceberg table must use ListPartitionDesc
                         ((ListPartitionDesc) partitionDesc).analyzePartitionColumns(columnDefs);
+                        ((ListPartitionDesc) partitionDesc).checkPartitionColPos(columnDefs);
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
                     }

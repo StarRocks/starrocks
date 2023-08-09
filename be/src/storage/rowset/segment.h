@@ -114,7 +114,7 @@ public:
     // may return EndOfFile
     StatusOr<ChunkIteratorPtr> new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
 
-    StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg);
+    StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx);
 
     uint64_t id() const { return _segment_id; }
 
@@ -158,6 +158,8 @@ public:
 
     bool keep_in_memory() const { return _tablet_schema->is_in_memory(); }
 
+    const TabletSchema& tablet_schema() const { return *_tablet_schema; }
+
     const std::string& file_name() const { return _fname; }
 
     uint32_t num_rows() const { return _num_rows; }
@@ -170,6 +172,14 @@ public:
     const ShortKeyIndexDecoder* decoder() const { return _sk_index_decoder.get(); }
 
     int64_t mem_usage() { return _basic_info_mem_usage() + _short_key_index_mem_usage(); }
+
+    int64_t get_data_size() {
+        auto res = _fs->get_file_size(_fname);
+        if (res.ok()) {
+            return res.value();
+        }
+        return 0;
+    }
 
     // read short_key_index, for data check, just used in unit test now
     [[nodiscard]] Status get_short_key_index(std::vector<std::string>* sk_index_values);

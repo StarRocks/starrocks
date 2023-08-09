@@ -48,14 +48,30 @@ message EditVersionPB {
 }
 
 // used in partial update for primary key tablet
-message DeltaColumnGroupPB {
+message DeltaColumnGroupColumnIdsPB {
+    repeated uint32 column_ids = 1;
+}
+
+message OldDeltaColumnGroupPB {
     repeated uint32 column_ids = 1;
     optional string column_file = 2;
+}
+
+message DeltaColumnGroupPB {
+    repeated DeltaColumnGroupColumnIdsPB column_ids = 1;
+    repeated string column_files = 2;
 }
 
 message DeltaColumnGroupListPB {
     repeated DeltaColumnGroupPB dcgs = 1;
     repeated int64 versions = 2;
+}
+
+message DeltaColumnGroupSnapshotPB {
+    repeated int64 tablet_id = 1;
+    repeated string rowset_id = 2;
+    repeated uint32 segment_id = 3;
+    repeated DeltaColumnGroupListPB dcg_lists = 4;
 }
 
 // page position info for segment file and persistent index file

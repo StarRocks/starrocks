@@ -42,7 +42,7 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseAction;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
-import com.starrocks.http.UnauthorizedException;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
@@ -66,20 +66,27 @@ public class RestBaseAction extends BaseAction {
     }
 
     @Override
-    public void handleRequest(BaseRequest request) throws Exception {
+    public void handleRequest(BaseRequest request) {
         LOG.info("receive http request. url={}", request.getRequest().uri());
         BaseResponse response = new BaseResponse();
         try {
             execute(request, response);
+        } catch (AccessDeniedException accessDeniedException) {
+            LOG.warn("fail to process url: {}", request.getRequest().uri(), accessDeniedException);
+            response.updateHeader(HttpHeaderNames.WWW_AUTHENTICATE.toString(), "Basic realm=\"\"");
+            response.appendContent(new RestBaseResult(accessDeniedException.getMessage()).toJson());
+            writeResponse(request, response, HttpResponseStatus.UNAUTHORIZED);
         } catch (DdlException e) {
             LOG.warn("fail to process url: {}", request.getRequest().uri(), e);
-            if (e instanceof UnauthorizedException) {
-                response.updateHeader(HttpHeaderNames.WWW_AUTHENTICATE.toString(), "Basic realm=\"\"");
-                response.appendContent(new RestBaseResult(e.getMessage()).toJson());
-                writeResponse(request, response, HttpResponseStatus.UNAUTHORIZED);
-            } else {
-                sendResult(request, response, new RestBaseResult(e.getMessage()));
+            sendResult(request, response, new RestBaseResult(e.getMessage()));
+        } catch (Exception e) {
+            LOG.warn("fail to process url: {}", request.getRequest().uri(), e);
+            String msg = e.getMessage();
+            if (msg == null) {
+                msg = e.toString();
             }
+            response.appendContent(new RestBaseResult(msg).toJson());
+            writeResponse(request, response, HttpResponseStatus.INTERNAL_SERVER_ERROR);
         }
     }
 

@@ -120,7 +120,6 @@ public class WindowTransformer {
                     firstType = callExpr.getFn().getArgs()[0];
                 }
 
-
                 if (callExpr.getChildren().size() == 1) {
                     callExpr.addChild(new IntLiteral("1", Type.BIGINT));
                     callExpr.addChild(NullLiteral.create(firstType));

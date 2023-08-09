@@ -179,7 +179,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     rollup: test_base_part");
 
         sql("select c1, c3, c2 from test_base_part where c2 < 3000 and c3 < 3000")
-                .contains("PREDICATES: 2: c2 < 3000\n" +
+                .contains("PREDICATES: 9: c2 < 3000, 9: c2 > 1999\n" +
                         "     partitions=5/5\n" +
                         "     rollup: test_base_part");
 

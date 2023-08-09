@@ -24,6 +24,7 @@ import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.Identifier;
+import org.apache.paimon.options.Options;
 import org.apache.paimon.table.AbstractFileStoreTable;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.IntType;
@@ -108,5 +109,26 @@ public class PaimonConnectorTest {
         Assert.assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
         Assert.assertEquals(ScalarType.INT, paimonTable.getBaseSchema().get(0).getType());
         Assert.assertEquals("paimon_catalog", paimonTable.getCatalogName());
+    }
+
+    @Test
+    public void testCreatePaimonConnectorWithS3() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("paimon.catalog.warehouse", "s3://bucket/warehouse");
+        properties.put("paimon.catalog.type", "filesystem");
+        String accessKeyValue = "s3_access_key";
+        String secretKeyValue = "s3_secret_key";
+        String endpointValue = "s3_endpoint";
+        properties.put("aws.s3.access_key", accessKeyValue);
+        properties.put("aws.s3.secret_key", secretKeyValue);
+        properties.put("aws.s3.endpoint", endpointValue);
+        PaimonConnector connector = new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+        Options paimonOptions = connector.getPaimonOptions();
+        String accessKeyOption = paimonOptions.get("s3.access-key");
+        String secretKeyOption = paimonOptions.get("s3.secret-key");
+        String endpointOption = paimonOptions.get("s3.endpoint");
+        Assert.assertEquals(accessKeyOption, accessKeyValue);
+        Assert.assertEquals(secretKeyOption, secretKeyValue);
+        Assert.assertEquals(endpointOption, endpointValue);
     }
 }

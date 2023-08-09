@@ -852,7 +852,7 @@ public class TrinoQueryTest extends TrinoTestBase {
     @Test
     public void testExplain() throws Exception {
         String sql = "explain (TYPE logical) select v1, v2 from t0,t1";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getExplain(sql),
+        Assert.assertTrue(getExplain(sql), StringUtils.containsIgnoreCase(getExplain(sql),
                 "SCAN [t1] => [8:auto_fill_col]\n" +
                 "                    Estimates: {row: 1, cpu: 2.00, memory: 0.00, network: 0.00, cost: 1.00}\n" +
                 "                    partitionRatio: 0/1, tabletRatio: 0/0\n" +

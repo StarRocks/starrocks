@@ -27,7 +27,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.statistic.StatsConstants;
+import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -44,8 +44,6 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static com.starrocks.utframe.UtFrameUtils.CREATE_STATISTICS_TABLE_STMT;
-
 public class MaterializedViewTestBase extends PlanTestBase {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewTestBase.class);
 
@@ -60,7 +58,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setEnableQueryCache(false);
-        connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
+        // connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         // connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
@@ -72,7 +70,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
         new MockUp<MaterializedView>() {
             @Mock
-            Set<String> getPartitionNamesToRefreshForMv() {
+            Set<String> getPartitionNamesToRefreshForMv(boolean isQueryRewrite) {
                 return Sets.newHashSet();
             }
         };
@@ -92,9 +90,8 @@ public class MaterializedViewTestBase extends PlanTestBase {
         };
 
         if (!starRocksAssert.databaseExist("_statistics_")) {
-            starRocksAssert.withDatabaseWithoutAnalyze(StatsConstants.STATISTICS_DB_NAME)
-                    .useDatabase(StatsConstants.STATISTICS_DB_NAME);
-            starRocksAssert.withTable(CREATE_STATISTICS_TABLE_STMT);
+            StatisticsMetaManager m = new StatisticsMetaManager();
+            m.createStatisticsTablesForTest();
         }
 
         starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
@@ -315,6 +312,17 @@ public class MaterializedViewTestBase extends PlanTestBase {
             for (String expect: expects) {
                 Assert.assertTrue(this.rewritePlan.contains(expect));
             }
+            return this;
+        }
+
+        public MVRewriteChecker notContain(String expect) {
+            Assert.assertTrue(this.rewritePlan != null);
+            boolean contained = this.rewritePlan.contains(expect);
+            if (contained) {
+                LOG.warn("rewritePlan: \n{}", rewritePlan);
+                LOG.warn("expect: \n{}", expect);
+            }
+            Assert.assertFalse(contained);
             return this;
         }
     }

@@ -25,6 +25,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -133,6 +134,15 @@ public class ListPartitionDesc extends PartitionDesc {
         return partitionColumns;
     }
 
+    public void checkPartitionColPos(List<ColumnDef> columnDefs) {
+        for (int i = 0; i < columnDefs.size() - partitionColNames.size(); i++) {
+            String colName = columnDefs.get(i).getName();
+            if (partitionColNames.contains(colName)) {
+                throw new SemanticException("Partition columns must be at the end of column defs");
+            }
+        }
+    }
+
     private void analyzeMultiListPartition(Map<String, String> tableProperties,
                                            List<ColumnDef> columnDefList) throws AnalysisException {
         Set<String> multiListPartitionName = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
@@ -225,6 +235,7 @@ public class ListPartitionDesc extends PartitionDesc {
                 listPartitionInfo.setValues(partitionId, desc.getValues());
                 listPartitionInfo.setLiteralExprValues(partitionId, desc.getValues());
                 listPartitionInfo.setIdToIsTempPartition(partitionId, isTemp);
+                listPartitionInfo.setStorageCacheInfo(partitionId, desc.getDataCacheInfo());
             }
             for (MultiItemListPartitionDesc desc : this.multiListPartitionDescs) {
                 long partitionId = partitionNameToId.get(desc.getPartitionName());
@@ -235,6 +246,7 @@ public class ListPartitionDesc extends PartitionDesc {
                 listPartitionInfo.setMultiValues(partitionId, desc.getMultiValues());
                 listPartitionInfo.setMultiLiteralExprValues(partitionId, desc.getMultiValues());
                 listPartitionInfo.setIdToIsTempPartition(partitionId, isTemp);
+                listPartitionInfo.setStorageCacheInfo(partitionId, desc.getDataCacheInfo());
             }
             listPartitionInfo.setAutomaticPartition(isAutoPartitionTable);
             return listPartitionInfo;

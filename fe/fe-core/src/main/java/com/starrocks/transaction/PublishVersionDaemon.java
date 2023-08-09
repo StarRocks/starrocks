@@ -142,7 +142,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
     private @NotNull Executor getLakeTaskExecutor() {
         if (lakeTaskExecutor == null) {
-            lakeTaskExecutor = Executors.newFixedThreadPool(Config.experimental_lake_publish_version_threads);
+            lakeTaskExecutor = Executors.newCachedThreadPool();
         }
         return lakeTaskExecutor;
     }

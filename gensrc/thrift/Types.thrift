@@ -460,15 +460,17 @@ enum TOpType {
     DELETE,
 }
 
+struct TUserRoles {
+    1: optional list<i64> role_id_list
+}
+
 // represent a user identity
 struct TUserIdentity {
     1: optional string username
     2: optional string host
     3: optional bool is_domain
-}
-
-struct TUserRoles {
-    1: optional list<i64> role_id_list
+    4: optional bool is_ephemeral
+    5: optional TUserRoles current_role_ids
 }
 
 const i32 TSNAPSHOT_REQ_VERSION1 = 3; // corresponding to alpha rowset
@@ -512,8 +514,9 @@ struct TBinlogOffset {
 enum TPartialUpdateMode {
     UNKNOWN_MODE = 0;
     ROW_MODE = 1;
-    COLUMN_MODE = 2;
+    COLUMN_UPSERT_MODE = 2;
     AUTO_MODE = 3;
+    COLUMN_UPDATE_MODE = 4;
 }
 
 enum TRunMode {

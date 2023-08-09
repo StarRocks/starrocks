@@ -61,11 +61,6 @@ public:
         return Status::NotSupported("get_dict_values is not supported");
     }
 
-    virtual Status get_dict_codes(const std::vector<Slice>& dict_values, const NullableColumn& nulls,
-                                  std::vector<int32_t>* dict_codes) {
-        return Status::NotSupported("get_dict_codes is not supported");
-    }
-
     // used to set fixed length
     virtual void set_type_length(int32_t type_length) {}
 

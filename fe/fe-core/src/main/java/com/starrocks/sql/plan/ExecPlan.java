@@ -52,6 +52,7 @@ public class ExecPlan {
 
     private final IdGenerator<PlanNodeId> nodeIdGenerator = PlanNodeId.createGenerator();
     private final IdGenerator<PlanFragmentId> fragmentIdGenerator = PlanFragmentId.createGenerator();
+    private final Map<Integer, OptExpression> optExpressions = Maps.newHashMap();
 
     @VisibleForTesting
     public ExecPlan() {
@@ -128,6 +129,14 @@ public class ExecPlan {
 
     public List<ColumnRefOperator> getOutputColumns() {
         return outputColumns;
+    }
+
+    public void recordPlanNodeId2OptExpression(int id, OptExpression optExpression) {
+        optExpressions.put(id, optExpression);
+    }
+
+    public OptExpression getOptExpression(int planNodeId) {
+        return optExpressions.get(planNodeId);
     }
 
     public String getExplainString(TExplainLevel level) {

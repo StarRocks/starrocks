@@ -430,87 +430,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
     }
 
     @Test
-    public void testHiveJoinMvRewrite() throws Exception {
-        createAndRefreshMv("test", "hive_join_mv_1", "create materialized view hive_join_mv_1" +
-                " distributed by hash(s_suppkey)" +
-                "PROPERTIES (\n" +
-                "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                ") " +
-                " as " +
-                " SELECT s_suppkey , s_name, n_name" +
-                " from hive0.tpch.supplier join hive0.tpch.nation" +
-                " on s_nationkey = n_nationkey" +
-                " where s_suppkey < 100");
-
-        String query1 = "SELECT (s_suppkey + 1) * 2, n_name" +
-                " from hive0.tpch.supplier join hive0.tpch.nation on s_nationkey = n_nationkey where s_suppkey < 100";
-        String plan1 = getFragmentPlan(query1);
-        PlanTestBase.assertContains(plan1, "hive_join_mv_1");
-
-        String query2 = "SELECT (s_suppkey + 1) * 2, n_name, n_comment" +
-                " from hive0.tpch.supplier join hive0.tpch.nation on s_nationkey = n_nationkey where s_suppkey < 100";
-        String plan2 = getFragmentPlan(query2);
-        PlanTestBase.assertNotContains(plan2, "hive_join_mv_1");
-
-        String query3 = "SELECT (s_suppkey + 1) * 2, n_name" +
-                " from hive0.tpch.supplier join hive0.tpch.nation on s_nationkey = n_nationkey where s_suppkey = 99";
-        String plan3 = getFragmentPlan(query3);
-        PlanTestBase.assertContains(plan3, "hive_join_mv_1");
-
-        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
-        String query4 = "SELECT (s_suppkey + 1) * 2, n_name" +
-                " from hive0.tpch.supplier join hive0.tpch.nation on s_nationkey = n_nationkey where s_suppkey < 101";
-        String plan4 = getFragmentPlan(query4);
-        PlanTestBase.assertNotContains(plan4, "hive_join_mv_1");
-
-        String query5 = "SELECT (s_suppkey + 1) * 2, n_name from hive0.tpch.supplier join hive0.tpch.nation on " +
-                "s_nationkey = n_nationkey where s_suppkey < 100 and s_suppkey > 10";
-        String plan5 = getFragmentPlan(query5);
-        PlanTestBase.assertContains(plan5, "hive_join_mv_1");
-
-        String query6 = "SELECT (s_suppkey + 1) * 2, n_name" +
-                " from hive0.tpch.supplier join hive0.tpch.nation on s_nationkey = n_nationkey";
-        String plan6 = getFragmentPlan(query6);
-        PlanTestBase.assertNotContains(plan6, "hive_join_mv_1");
-
-        dropMv("test", "hive_join_mv_1");
-
-        createAndRefreshMv("test", "hive_join_mv_2", "create materialized view hive_join_mv_2" +
-                " distributed by hash(s_nationkey)" +
-                "PROPERTIES (\n" +
-                "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                ") " +
-                " as " +
-                " SELECT s_nationkey , s_name, n_name" +
-                " from hive0.tpch.supplier join hive0.tpch.nation" +
-                " on s_nationkey = n_nationkey" +
-                " where s_nationkey <= 100");
-
-        // test on equivalence classes for output and predicates
-        String query7 = "SELECT (n_nationkey + 1) * 2, n_name" +
-                " from hive0.tpch.supplier join hive0.tpch.nation on s_nationkey = n_nationkey where n_nationkey < 100";
-        String plan7 = getFragmentPlan(query7);
-        PlanTestBase.assertContains(plan7, "hive_join_mv_2");
-
-        String query8 = "SELECT (n_nationkey + 1) * 2, n_name" +
-                " from hive0.tpch.supplier join hive0.tpch.nation on s_nationkey = n_nationkey where n_nationkey < 10";
-        String plan8 = getFragmentPlan(query8);
-        PlanTestBase.assertContains(plan8, "hive_join_mv_2");
-
-        String query9 = "SELECT (n_nationkey + 1) * 2, n_name" +
-                " from hive0.tpch.supplier join hive0.tpch.nation on s_nationkey = n_nationkey where n_nationkey = 100";
-        String plan9 = getFragmentPlan(query9);
-        PlanTestBase.assertContains(plan9, "hive_join_mv_2");
-
-        String query10 = "SELECT (n_nationkey + 1) * 2, n_name from hive0.tpch.supplier join hive0.tpch.nation on " +
-                "s_nationkey = n_nationkey where n_nationkey between 10 and 20";
-        String plan10 = getFragmentPlan(query10);
-        PlanTestBase.assertContains(plan10, "hive_join_mv_2");
-
-        dropMv("test", "hive_join_mv_2");
-    }
-
-    @Test
     public void testAggregateMvRewrite() throws Exception {
         createAndRefreshMv("test", "agg_join_mv_1", "create materialized view agg_join_mv_1" +
                 " distributed by hash(v1) as SELECT t0.v1 as v1," +
@@ -944,37 +863,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "     NON-PARTITION PREDICATES: 13: s_suppkey < 10, 13: s_suppkey > 4");
 
         dropMv("test", "hive_union_mv_1");
-    }
-
-    @Test
-    public void testHiveQueryWithMvs() throws Exception {
-        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-        // enforce choose the hive scan operator, not mv plan
-        connectContext.getSessionVariable().setUseNthExecPlan(1);
-        createAndRefreshMv("test", "hive_union_mv_1",
-                "create materialized view hive_union_mv_1 distributed by hash(s_suppkey) " +
-                        "PROPERTIES (\n" +
-                        "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                        ") " +
-                        " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
-        createAndRefreshMv("test", "hive_join_mv_1", "create materialized view hive_join_mv_1" +
-                " distributed by hash(s_suppkey)" +
-                "PROPERTIES (\n" +
-                "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                ") " +
-                " as " +
-                " SELECT s_suppkey , s_name, n_name" +
-                " from hive0.tpch.supplier join hive0.tpch.nation" +
-                " on s_nationkey = n_nationkey" +
-                " where s_suppkey < 100");
-
-        String query1 = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 10";
-        String plan = getFragmentPlan(query1);
-        PlanTestBase.assertContains(plan, "TABLE: supplier", "NON-PARTITION PREDICATES: 19: s_suppkey < 10");
-
-        connectContext.getSessionVariable().setUseNthExecPlan(0);
-        dropMv("test", "hive_union_mv_1");
-        dropMv("test", "hive_join_mv_1");
     }
 
     @Test
@@ -1855,5 +1743,131 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
         String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "_pushdown_predicate_join_mv2");
+    }
+
+    @Test
+    public void testNonpartitionedMvWithPartitionPredicate() throws Exception {
+        createAndRefreshMv("test", "mv_with_partition_predicate_1",
+                "create materialized view mv_with_partition_predicate_1 distributed by hash(`k1`)" +
+                        " as select k1, v1 from t1 where k1 = 3;");
+        String query = "select k1, v1 from t1 where k1 = 3;";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "mv_with_partition_predicate_1");
+        starRocksAssert.dropMaterializedView("mv_with_partition_predicate_1");
+    }
+
+    @Test
+    public void testJoinWithTypeCast() throws Exception {
+        String sql1 = "create table test.dim_tbl1 (\n" +
+                "    col1 string,\n" +
+                "    col1_name string\n" +
+                ")DISTRIBUTED BY HASH(col1)" +
+                ";\n";
+        String sql2 = "CREATE TABLE test.fact_tbl1( \n" +
+                "          fdate  int,\n" +
+                "          fqqid STRING ,\n" +
+                "          col1 BIGINT  ,\n" +
+                "          flcnt BIGINT\n" +
+                " )PARTITION BY range(fdate) (\n" +
+                "    PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                "    PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                "    PARTITION p3 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                " )\n" +
+                " DISTRIBUTED BY HASH(fqqid);";
+        String mv = "create MATERIALIZED VIEW test.test_mv1\n" +
+                "DISTRIBUTED BY HASH(fdate,col1_name)\n" +
+                "REFRESH MANUAL\n" +
+                "AS \n" +
+                "    select t1.fdate, t2.col1_name,  count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                "    FROM test.fact_tbl1 t1 \n" +
+                "    LEFT JOIN test.dim_tbl1 t2\n" +
+                "    ON t1.`col1` = t2.`col1`\n" +
+                "    WHERE t1.`fdate` >= 20230701 and t1.fdate <= 20230705\n" +
+                "    GROUP BY  fdate, `col1_name`;";
+        starRocksAssert.withTable(sql1);
+        starRocksAssert.withTable(sql2);
+        starRocksAssert.withMaterializedView(mv);
+        String sql = "select t1.fdate, t2.col1_name,  count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                "    FROM test.fact_tbl1 t1 \n" +
+                "    LEFT JOIN test.dim_tbl1 t2\n" +
+                "    ON t1.`col1` = t2.`col1`\n" +
+                "    WHERE t1.`fdate` >= 20230702 and t1.fdate <= 20230705\n" +
+                "    GROUP BY  fdate, `col1_name`;";
+        String plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, "test_mv1");
+
+        sql = "select t2.col1_name,  count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                "    FROM test.fact_tbl1 t1 \n" +
+                "    LEFT JOIN test.dim_tbl1 t2\n" +
+                "    ON t1.`col1` = t2.`col1`\n" +
+                "    WHERE t1.`fdate` = 20230705\n" +
+                "    GROUP BY   `col1_name`;";
+        plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, "test_mv1");
+
+        sql = "select t2.col1_name,  sum(t1.flcnt)as index_xxx\n" +
+                "    FROM test.fact_tbl1 t1 \n" +
+                "    LEFT JOIN test.dim_tbl1 t2\n" +
+                "    ON t1.`col1` = t2.`col1`\n" +
+                "    WHERE t1.`fdate` = 20230705\n" +
+                "    GROUP BY   `col1_name`;";
+        plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, "test_mv1");
+
+        sql = "select t2.col1_name,  sum(t1.flcnt)as index_xxx\n" +
+                "    FROM test.fact_tbl1 t1 \n" +
+                "    LEFT JOIN test.dim_tbl1 t2\n" +
+                "    ON t1.`col1` = t2.`col1`\n" +
+                "    WHERE t1.`fdate` >= 20230702 and t1.fdate <= 20230705\n" +
+                "    GROUP BY   `col1_name`;";
+        plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, "test_mv1");
+    }
+
+    @Test
+    public void testPartitionPrune1() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE test_partition_tbl1 (\n" +
+                "                            k1 date,\n" +
+                "                            v1 INT,\n" +
+                "                            v2 INT)\n" +
+                "                        DUPLICATE KEY(k1)\n" +
+                "                        PARTITION BY RANGE(k1)\n" +
+                "                        (\n" +
+                "                        PARTITION p1 VALUES LESS THAN ('2020-01-01'),\n" +
+                "                        PARTITION p2 VALUES LESS THAN ('2020-02-01'),\n" +
+                "                        PARTITION p3 VALUES LESS THAN ('2020-03-01'),\n" +
+                "                        PARTITION p4 VALUES LESS THAN ('2020-04-01'),\n" +
+                "                        PARTITION p5 VALUES LESS THAN ('2020-05-01'),\n" +
+                "                        PARTITION p6 VALUES LESS THAN ('2020-06-01')\n" +
+                "                        )\n" +
+                "                        DISTRIBUTED BY HASH(k1);");
+        cluster.runSql("test", "insert into test_partition_tbl1 values (\"2019-01-01\",1,1),(\"2019-01-01\",1,2)," +
+                "(\"2019-01-01\",2,1),(\"2019-01-01\",2,2),\n" +
+                "(\"2020-01-11\",1,1),(\"2020-01-11\",1,2),(\"2020-01-11\",2,1),(\"2020-01-11\",2,2),\n" +
+                "(\"2020-02-11\",1,1),(\"2020-02-11\",1,2),(\"2020-02-11\",2,1),(\"2020-02-11\",2,2);");
+        createAndRefreshMv("test", "test_partition_tbl_mv1",
+                "CREATE MATERIALIZED VIEW test_partition_tbl_mv1\n" +
+                        "               PARTITION BY k1\n" +
+                        "               DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                        "               REFRESH ASYNC\n" +
+                        "               PROPERTIES(\n" +
+                        "               \"partition_ttl_number\"=\"4\",\n" +
+                        "               \"auto_refresh_partitions_limit\"=\"4\"\n" +
+                        "               )\n" +
+                        "               AS SELECT k1, sum(v1) as sum_v1 FROM test_partition_tbl1 group by k1;");
+        {
+            String query = "select k1, sum(v1) FROM test_partition_tbl1 where k1>='2020-02-11' group by k1;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_partition_tbl_mv1");
+            PlanTestBase.assertContains(plan, "PREDICATES: 5: k1 >= '2020-02-11'\n" +
+                    "     partitions=4/6");
+        }
+        {
+            String query = "select k1, sum(v1) FROM test_partition_tbl1 where k1>='2020-02-01' group by k1;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_partition_tbl_mv1");
+            PlanTestBase.assertContains(plan, "partitions=4/6\n" +
+                    "     rollup: test_partition_tbl_mv1");
+        }
     }
 }

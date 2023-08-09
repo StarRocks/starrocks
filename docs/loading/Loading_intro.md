@@ -46,7 +46,7 @@ In asynchronous loading mode, after you submit a load job, StarRocks immediately
 
 - If the result indicates a job creation failure, you can determine whether you need to retry the job based on the failure information.
 
-StarRocks provides three loading methods that support asynchronous loading: [Broker Load](../loading/BrokerLoad.md), [Routine Load](../loading/RoutineLoad.md), and [Spark Load](../loading/SparkLoad.md).
+StarRocks provides three loading methods that support asynchronous loading: [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md), and [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md).
 
 The process of asynchronous loading is as follows:
 
@@ -101,7 +101,7 @@ The workflow of a Routine job is described as follows:
 
 ## Loading methods
 
-StarRocks provides five loading methods to help you load data in various business scenarios: [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), [Routine Load](../loading/RoutineLoad.md), [Spark Load](../loading/SparkLoad.md), and [INSERT](../loading/InsertInto.md).
+StarRocks provides five loading methods to help you load data in various business scenarios: [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md), [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md), and [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md).
 
 | Loading method     | Data source                                        | Business scenario                                            | Data volume per load job                                     | Data file format                                | Loading mode | Protocol |
 | ------------------ | -------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ | ----------------------------------------------- | ------------ | -------- |
@@ -136,7 +136,7 @@ The following figure provides an overview of various data sources supported by S
 
 StarRocks provides parameters for you to limit the memory usage for each load job, thereby reducing memory consumption, especially in high concurrency scenarios. However, do not specify an excessively low memory usage limit. If the memory usage limit is excessively low, data may be frequently flushed from memory to disk because the memory usage for load jobs reaches the specified limit. We recommend that you specify a proper memory usage limit based on your business scenario.
 
-The parameters that are used to limit memory usage vary for each loading method. For more information, see [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), [Routine Load](../loading/RoutineLoad.md), [Spark Load](../loading/SparkLoad.md), and [INSERT](../loading/InsertInto.md). Note that a load job usually runs on multiple BEs. Therefore, the parameters limit the memory usage of each load job on each involved BE rather than the total memory usage of the load job on all involved BEs.
+The parameters that are used to limit memory usage vary for each loading method. For more information, see [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md), [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md), and [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md). Note that a load job usually runs on multiple BEs. Therefore, the parameters limit the memory usage of each load job on each involved BE rather than the total memory usage of the load job on all involved BEs.
 
 StarRocks also provides parameters for you to limit the total memory usage of all load jobs that run on each individual BE. For more information, see the "[System configurations](../loading/Loading_intro.md#system-configurations)" section of this topic.
 
@@ -148,7 +148,7 @@ When you load data, you can choose not to load the data from a specific field of
 
 - If you have specified the `DEFAULT` keyword for the destination StarRocks table column mapping the source field when you create the StarRocks table, StarRocks automatically fills the specified default value into the destination column.
 
-  [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), [Routine Load](../loading/RoutineLoad.md), and [INSERT](../loading/InsertInto.md) supports `DEFAULT current_timestamp`, `DEFAULT <default_value>`, and `DEFAULT (<expression>)`. [Spark Load](../loading/SparkLoad.md) supports only `DEFAULT current_timestamp` and `DEFAULT <default_value>`.
+  [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md), and [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md) supports `DEFAULT current_timestamp`, `DEFAULT <default_value>`, and `DEFAULT (<expression>)`. [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md) supports only `DEFAULT current_timestamp` and `DEFAULT <default_value>`.
 
   > **NOTE**
   >
@@ -160,7 +160,7 @@ When you load data, you can choose not to load the data from a specific field of
   >
   > If the destination column is defined as `NOT NULL`, the load fails.
 
-  For [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), [Routine Load](../loading/RoutineLoad.md), and [Spark Load](../loading/SparkLoad.md), you can also specify the value you want to fill in the destination column by using the parameter that is used to specify column mapping.
+  For [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md), and [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md), you can also specify the value you want to fill in the destination column by using the parameter that is used to specify column mapping.
 
 For information about the usage of `NOT NULL` and `DEFAULT`, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
 

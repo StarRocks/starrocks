@@ -348,10 +348,11 @@ int main(int argc, char** argv) {
         }
         cache_options.meta_path = starrocks::config::block_cache_meta_path;
         cache_options.block_size = starrocks::config::block_cache_block_size;
-        cache_options.checksum = starrocks::config::block_cache_checksum_enable;
         cache_options.max_parcel_memory_mb = starrocks::config::block_cache_max_parcel_memory_mb;
         cache_options.max_concurrent_inserts = starrocks::config::block_cache_max_concurrent_inserts;
         cache_options.lru_insertion_point = starrocks::config::block_cache_lru_insertion_point;
+        cache_options.enable_checksum = starrocks::config::block_cache_checksum_enable;
+        cache_options.enable_direct_io = starrocks::config::block_cache_direct_io_enable;
         cache_options.engine = starrocks::config::block_cache_engine;
         EXIT_IF_ERROR(cache->init(cache_options));
     }

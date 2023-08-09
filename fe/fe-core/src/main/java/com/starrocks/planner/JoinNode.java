@@ -327,6 +327,10 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         return joinOp;
     }
 
+    public List<BinaryPredicate> getEqJoinConjuncts() {
+        return eqJoinConjuncts;
+    }
+
     public DistributionMode getDistrMode() {
         return distrMode;
     }

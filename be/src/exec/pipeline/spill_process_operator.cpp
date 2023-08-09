@@ -47,9 +47,9 @@ StatusOr<ChunkPtr> SpillProcessOperator::pull_chunk(RuntimeState* state) {
     if (chunk_st.status().ok() && !state->is_cancelled()) {
         auto chunk = chunk_st.value();
         if (chunk != nullptr && !chunk->is_empty()) {
-            RETURN_IF_ERROR(_channel->spiller()->spill(
-                    state, std::move(chunk_st.value()), *_channel->io_executor(),
-                    spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this())));
+            auto& spiller = _channel->spiller();
+            RETURN_IF_ERROR(spiller->spill(state, std::move(chunk_st.value()), *_channel->io_executor(),
+                                           TRACKER_WITH_SPILLER_GUARD(state, spiller)));
         }
     } else if (chunk_st.status().is_end_of_file()) {
         _channel->current_task().reset();

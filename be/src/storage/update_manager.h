@@ -51,6 +51,9 @@ class LocalDeltaColumnGroupLoader : public DeltaColumnGroupLoader {
 public:
     LocalDeltaColumnGroupLoader(KVStore* meta) : _meta(meta) {}
     Status load(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList* pdcgs);
+    Status load(int64_t tablet_id, RowsetId rowsetid, uint32_t segment_id, int64_t version,
+                DeltaColumnGroupList* pdcgs);
+    KVStore* meta() const { return _meta; }
 
 private:
     KVStore* _meta = nullptr;

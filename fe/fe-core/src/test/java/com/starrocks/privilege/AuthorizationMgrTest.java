@@ -15,6 +15,7 @@
 
 package com.starrocks.privilege;
 
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -32,6 +33,7 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
@@ -156,15 +158,19 @@ public class AuthorizationMgrTest {
         ctx.setQualifiedUser(testUser.getQualifiedUser());
 
         AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
-        Assert.assertFalse(PrivilegeActions.checkTableAction(
-                ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
-        Assert.assertFalse(PrivilegeActions.checkAnyActionOnOrInDb(ctx, DB_NAME));
-        Assert.assertFalse(PrivilegeActions.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnOrInDb(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, DB_NAME));
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnTable(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), new TableName(DB_NAME, TABLE_NAME_1)));
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
-        Assert.assertTrue(PrivilegeActions.checkTableAction(
-                ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
-        Assert.assertTrue(PrivilegeActions.checkAnyActionOnOrInDb(ctx, DB_NAME));
-        Assert.assertTrue(PrivilegeActions.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
+        Authorizer.checkTableAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT);
+        Authorizer.checkAnyActionOnOrInDb(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, DB_NAME);
+        Authorizer.checkAnyActionOnTable(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                new TableName(DB_NAME, TABLE_NAME_1));
 
         String sql = "grant select on table db.tbl1 to test_user";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
@@ -174,14 +180,16 @@ public class AuthorizationMgrTest {
         manager.grant(grantStmt);
 
         setCurrentUserAndRoles(ctx, testUser);
-        ;
-        Assert.assertTrue(PrivilegeActions.checkTableAction(
-                ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
-        Assert.assertTrue(PrivilegeActions.checkAnyActionOnOrInDb(ctx, DB_NAME));
-        Assert.assertTrue(PrivilegeActions.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
-        Assert.assertTrue(PrivilegeActions.checkActionInDb(ctx, DB_NAME, PrivilegeType.SELECT));
-        Assert.assertFalse(PrivilegeActions.checkActionInDb(ctx, DB_NAME, PrivilegeType.DROP));
-        Assert.assertTrue(PrivilegeActions.checkActionInDb(ctx, "db3", PrivilegeType.ALTER));
+        Authorizer.checkTableAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT);
+        Authorizer.checkAnyActionOnOrInDb(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, DB_NAME);
+        Authorizer.checkAnyActionOnTable(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                new TableName(DB_NAME, TABLE_NAME_1));
+        Authorizer.checkActionInDb(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, PrivilegeType.SELECT);
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkActionInDb(ctx.getCurrentUserIdentity(),
+                ctx.getCurrentRoleIds(), DB_NAME, PrivilegeType.DROP));
+        Authorizer.checkActionInDb(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), "db3", PrivilegeType.ALTER);
 
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         sql = "revoke select on db.tbl1 from test_user";
@@ -192,11 +200,12 @@ public class AuthorizationMgrTest {
         manager.revoke(revokeStmt);
 
         setCurrentUserAndRoles(ctx, testUser);
-        ;
-        Assert.assertFalse(PrivilegeActions.checkTableAction(
-                ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
-        Assert.assertFalse(PrivilegeActions.checkAnyActionOnOrInDb(ctx, DB_NAME));
-        Assert.assertFalse(PrivilegeActions.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnOrInDb(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, DB_NAME));
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnTable(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), new TableName(DB_NAME, TABLE_NAME_1)));
 
         // grant many priveleges
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
@@ -206,15 +215,16 @@ public class AuthorizationMgrTest {
         manager.grant(grantStmt);
 
         setCurrentUserAndRoles(ctx, testUser);
-        ;
-        Assert.assertTrue(PrivilegeActions.checkTableAction(
-                ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
-        Assert.assertTrue(PrivilegeActions.checkTableAction(
-                ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.INSERT));
-        Assert.assertTrue(PrivilegeActions.checkTableAction(
-                ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.DELETE));
-        Assert.assertTrue(PrivilegeActions.checkAnyActionOnOrInDb(ctx, DB_NAME));
-        Assert.assertTrue(PrivilegeActions.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
+        Authorizer.checkTableAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT);
+        Authorizer.checkTableAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.INSERT);
+        Authorizer.checkTableAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.DELETE);
+        Authorizer.checkAnyActionOnOrInDb(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, DB_NAME);
+        Authorizer.checkAnyActionOnTable(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                new TableName(DB_NAME, TABLE_NAME_1));
 
         // revoke only select
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
@@ -223,15 +233,16 @@ public class AuthorizationMgrTest {
         manager.revoke(revokeStmt);
 
         setCurrentUserAndRoles(ctx, testUser);
-        ;
-        Assert.assertFalse(PrivilegeActions.checkTableAction(
-                ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
-        Assert.assertTrue(PrivilegeActions.checkTableAction(
-                ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.INSERT));
-        Assert.assertTrue(PrivilegeActions.checkTableAction(
-                ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.DELETE));
-        Assert.assertTrue(PrivilegeActions.checkAnyActionOnOrInDb(ctx, DB_NAME));
-        Assert.assertTrue(PrivilegeActions.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+        Authorizer.checkTableAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.INSERT);
+        Authorizer.checkTableAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.DELETE);
+        Authorizer.checkAnyActionOnOrInDb(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, DB_NAME);
+        Authorizer.checkAnyActionOnTable(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                new TableName(DB_NAME, TABLE_NAME_1));
 
         // revoke all
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
@@ -241,14 +252,16 @@ public class AuthorizationMgrTest {
 
         setCurrentUserAndRoles(ctx, testUser);
         ;
-        Assert.assertFalse(PrivilegeActions.checkTableAction(
-                ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
-        Assert.assertFalse(PrivilegeActions.checkTableAction(
-                ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.INSERT));
-        Assert.assertFalse(PrivilegeActions.checkTableAction(
-                ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.DELETE));
-        Assert.assertFalse(PrivilegeActions.checkAnyActionOnOrInDb(ctx, DB_NAME));
-        Assert.assertFalse(PrivilegeActions.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.INSERT));
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.DELETE));
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnOrInDb(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, DB_NAME));
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnTable(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), new TableName(DB_NAME, TABLE_NAME_1)));
 
         // grant view
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
@@ -257,10 +270,11 @@ public class AuthorizationMgrTest {
         manager.grant(grantStmt);
 
         setCurrentUserAndRoles(ctx, testUser);
-        ;
-        Assert.assertTrue(PrivilegeActions.checkAnyActionOnOrInDb(ctx, DB_NAME));
-        Assert.assertTrue(PrivilegeActions.checkActionInDb(ctx, DB_NAME, PrivilegeType.ALTER));
-        Assert.assertFalse(PrivilegeActions.checkActionInDb(ctx, DB_NAME, PrivilegeType.SELECT));
+        Authorizer.checkAnyActionOnOrInDb(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, DB_NAME);
+        Authorizer.checkActionInDb(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, PrivilegeType.ALTER);
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkActionInDb(ctx.getCurrentUserIdentity(),
+                ctx.getCurrentRoleIds(), DB_NAME, PrivilegeType.SELECT));
 
         // revoke view
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
@@ -269,8 +283,8 @@ public class AuthorizationMgrTest {
         manager.revoke(revokeStmt);
 
         setCurrentUserAndRoles(ctx, testUser);
-        ;
-        Assert.assertFalse(PrivilegeActions.checkAnyActionOnOrInDb(ctx, DB_NAME));
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnOrInDb(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, DB_NAME));
     }
 
     @Test
@@ -289,8 +303,8 @@ public class AuthorizationMgrTest {
 
         setCurrentUserAndRoles(ctx, testUser);
         ;
-        Assert.assertTrue(PrivilegeActions.checkTableAction(
-                ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1,
+                PrivilegeType.SELECT);
 
         UtFrameUtils.PseudoImage grantImage = new UtFrameUtils.PseudoImage();
         masterGlobalStateMgr.saveRBACPrivilege(grantImage.getDataOutputStream());
@@ -301,8 +315,8 @@ public class AuthorizationMgrTest {
         masterManager.revoke(revokeStmt);
         setCurrentUserAndRoles(ctx, testUser);
         ;
-        Assert.assertFalse(PrivilegeActions.checkTableAction(
-                ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
         UtFrameUtils.PseudoImage revokeImage = new UtFrameUtils.PseudoImage();
         masterGlobalStateMgr.saveRBACPrivilege(revokeImage.getDataOutputStream());
 
@@ -314,20 +328,24 @@ public class AuthorizationMgrTest {
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_USER_PRIVILEGE_V2);
         followerManager.replayUpdateUserPrivilegeCollection(
                 info.getUserIdentity(), info.getPrivilegeCollection(), info.getPluginId(), info.getPluginVersion());
-        Assert.assertTrue(PrivilegeActions.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1,
+                PrivilegeType.SELECT);
 
         info = (UserPrivilegeCollectionInfo)
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_USER_PRIVILEGE_V2);
         followerManager.replayUpdateUserPrivilegeCollection(
                 info.getUserIdentity(), info.getPrivilegeCollection(), info.getPluginId(), info.getPluginVersion());
-        Assert.assertFalse(PrivilegeActions.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(ctx.getCurrentUserIdentity(),
+                ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
 
         // check image
         masterGlobalStateMgr.loadRBACPrivilege(grantImage.getDataInputStream());
-        Assert.assertTrue(PrivilegeActions.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1,
+                PrivilegeType.SELECT);
 
         masterGlobalStateMgr.loadRBACPrivilege(revokeImage.getDataInputStream());
-        Assert.assertFalse(PrivilegeActions.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(ctx.getCurrentUserIdentity(),
+                ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
     }
 
     @Test
@@ -382,19 +400,19 @@ public class AuthorizationMgrTest {
         setCurrentUserAndRoles(ctx, testUser);
         ;
         if (canSelectTbl0) {
-            Assert.assertTrue(PrivilegeActions.checkTableAction(
-                    ctx, DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT));
+            Authorizer.checkTableAction(
+                    ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT);
         } else {
-            Assert.assertFalse(PrivilegeActions.checkTableAction(
-                    ctx, DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT));
+            Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+                    ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT));
         }
 
         if (canSelectTbl1) {
-            Assert.assertTrue(PrivilegeActions.checkTableAction(
-                    ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+            Authorizer.checkTableAction(
+                    ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT);
         } else {
-            Assert.assertFalse(PrivilegeActions.checkTableAction(
-                    ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+            Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+                    ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
         }
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
     }
@@ -612,7 +630,8 @@ public class AuthorizationMgrTest {
         manager.grant(grantResourceStmt);
         // 10. add invalidate entry: bad resource name
         objects = Arrays.asList(new ResourcePEntryObject("bad_resource"));
-        manager.grantToUser(grantResourceStmt.getObjectType(), grantResourceStmt.getPrivilegeTypes(), objects, false, testUser);
+        manager.grantToUser(grantResourceStmt.getObjectType(), grantResourceStmt.getPrivilegeTypes(), objects, false,
+                testUser);
 
         // check before clean up:
         System.out.println(GsonUtils.GSON.toJson(manager.userToPrivilegeCollection));
@@ -645,8 +664,8 @@ public class AuthorizationMgrTest {
         setCurrentUserAndRoles(ctx, testUser);
         ;
         AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
-        Assert.assertFalse(PrivilegeActions.checkTableAction(
-                ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
 
         List<List<String>> sqls = Arrays.asList(
                 Arrays.asList(
@@ -662,21 +681,21 @@ public class AuthorizationMgrTest {
             manager.grant(grantStmt);
             setCurrentUserAndRoles(ctx, testUser);
             ;
-            Assert.assertTrue(PrivilegeActions.checkTableAction(
-                    ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+            Authorizer.checkTableAction(
+                    ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT);
 
             setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
             RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sqlPair.get(1), ctx);
             manager.revoke(revokeStmt);
             setCurrentUserAndRoles(ctx, testUser);
             ;
-            Assert.assertFalse(PrivilegeActions.checkTableAction(
-                    ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+            Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+                    ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
         }
 
         // on all databases
-        Assert.assertFalse(PrivilegeActions.checkDbAction(
-                ctx, DB_NAME, PrivilegeType.CREATE_TABLE));
+        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl().checkDbAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), null, DB_NAME, PrivilegeType.CREATE_TABLE));
 
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
@@ -685,8 +704,8 @@ public class AuthorizationMgrTest {
 
         setCurrentUserAndRoles(ctx, testUser);
         ;
-        Assert.assertTrue(PrivilegeActions.checkDbAction(
-                ctx, DB_NAME, PrivilegeType.CREATE_TABLE));
+        new NativeAccessControl().checkDbAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), null, DB_NAME, PrivilegeType.CREATE_TABLE);
 
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
@@ -695,8 +714,8 @@ public class AuthorizationMgrTest {
 
         setCurrentUserAndRoles(ctx, testUser);
         ;
-        Assert.assertFalse(PrivilegeActions.checkDbAction(
-                ctx, DB_NAME, PrivilegeType.CREATE_TABLE));
+        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl().checkDbAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), null, DB_NAME, PrivilegeType.CREATE_TABLE));
 
         // on all users
         AuthorizationMgr authorizationManager = ctx.getGlobalStateMgr().getAuthorizationMgr();
@@ -827,15 +846,19 @@ public class AuthorizationMgrTest {
         setCurrentUserAndRoles(ctx, testUser);
         ;
         if (canCreateTable) {
-            Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, "db", PrivilegeType.CREATE_TABLE));
+            new NativeAccessControl().checkDbAction(
+                    ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), null, "db", PrivilegeType.CREATE_TABLE);
         } else {
-            Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, "db", PrivilegeType.CREATE_TABLE));
+            Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl().checkDbAction(
+                    ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), null, "db", PrivilegeType.CREATE_TABLE));
         }
 
         if (canDrop) {
-            Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, "db", PrivilegeType.DROP));
+            new NativeAccessControl().checkDbAction(
+                    ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), null, "db", PrivilegeType.DROP);
         } else {
-            Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, "db", PrivilegeType.DROP));
+            Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl().checkDbAction(
+                    ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), null, "db", PrivilegeType.DROP));
         }
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
     }
@@ -1107,11 +1130,13 @@ public class AuthorizationMgrTest {
         setCurrentUserAndRoles(ctx, userIdentity);
         for (int i = 0; i != 4; ++i) {
             if (args[i]) {
-                Assert.assertTrue("cannot select tbl" + i,
-                        PrivilegeActions.checkTableAction(ctx, DB_NAME, "tbl" + i, PrivilegeType.SELECT));
+                Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME,
+                        "tbl" + i, PrivilegeType.SELECT);
             } else {
-                Assert.assertFalse("can select tbl" + i,
-                        PrivilegeActions.checkTableAction(ctx, DB_NAME, "tbl" + i, PrivilegeType.SELECT));
+                int finalI = i;
+                Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl()
+                        .checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), new TableName(DB_NAME,
+                                "tbl" + finalI), PrivilegeType.SELECT));
             }
         }
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
@@ -1123,11 +1148,13 @@ public class AuthorizationMgrTest {
         ctx.setCurrentUserIdentity(userIdentity);
         for (int i = 0; i != 4; ++i) {
             if (args[i]) {
-                Assert.assertTrue("cannot select tbl" + i,
-                        PrivilegeActions.checkTableAction(ctx, DB_NAME, "tbl" + i, PrivilegeType.SELECT));
+                new NativeAccessControl().checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                        new TableName(DB_NAME, "tbl" + i), PrivilegeType.SELECT);
             } else {
-                Assert.assertFalse("can select tbl" + i,
-                        PrivilegeActions.checkTableAction(ctx, DB_NAME, "tbl" + i, PrivilegeType.SELECT));
+                int finalI = i;
+                Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl()
+                        .checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), new TableName(DB_NAME,
+                                "tbl" + finalI), PrivilegeType.SELECT));
             }
         }
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
@@ -1319,18 +1346,23 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("GRANT select on db.tbl0 TO ROLE public"), ctx), ctx);
         setCurrentUserAndRoles(ctx, user);
-        Assert.assertTrue(PrivilegeActions.checkTableAction(ctx, DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT));
+        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_0,
+                PrivilegeType.SELECT);
 
         // root role
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("GRANT root TO user_test_builtin_role"), ctx), ctx);
         setCurrentUserAndRoles(ctx, user);
-        Assert.assertTrue(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.GRANT));
-        Assert.assertTrue(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.NODE));
-        Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, DB_NAME, PrivilegeType.DROP));
-        Assert.assertTrue(PrivilegeActions.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.DROP));
-        Assert.assertTrue(PrivilegeActions.checkViewAction(ctx, DB_NAME, "view1", PrivilegeType.DROP));
+        new NativeAccessControl().checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.GRANT);
+        new NativeAccessControl().checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.NODE);
+        new NativeAccessControl().checkDbAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), null, DB_NAME,
+                PrivilegeType.DROP);
+        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1,
+                PrivilegeType.DROP);
+        new NativeAccessControl().checkViewAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                new TableName(DB_NAME, "view1"), PrivilegeType.DROP);
+
         Assert.assertTrue(manager.canExecuteAs(ctx, UserIdentity.ROOT));
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
@@ -1340,11 +1372,16 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("GRANT db_admin TO user_test_builtin_role"), ctx), ctx);
         setCurrentUserAndRoles(ctx, user);
-        Assert.assertFalse(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.GRANT));
-        Assert.assertFalse(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.NODE));
-        Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, DB_NAME, PrivilegeType.DROP));
-        Assert.assertTrue(PrivilegeActions.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.DROP));
-        Assert.assertTrue(PrivilegeActions.checkViewAction(ctx, DB_NAME, "view1", PrivilegeType.DROP));
+        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl().checkSystemAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.GRANT));
+        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl().checkSystemAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.NODE));
+        new NativeAccessControl().checkDbAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                null, DB_NAME, PrivilegeType.DROP);
+        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                DB_NAME, TABLE_NAME_1, PrivilegeType.DROP);
+        new NativeAccessControl().checkViewAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                new TableName(DB_NAME, "view1"), PrivilegeType.DROP);
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("REVOKE db_admin FROM user_test_builtin_role"), ctx), ctx);
@@ -1353,11 +1390,15 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("GRANT cluster_admin TO user_test_builtin_role"), ctx), ctx);
         setCurrentUserAndRoles(ctx, user);
-        Assert.assertFalse(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.GRANT));
-        Assert.assertTrue(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.NODE));
-        Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, DB_NAME, PrivilegeType.DROP));
-        Assert.assertFalse(PrivilegeActions.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.DROP));
-        Assert.assertFalse(PrivilegeActions.checkViewAction(ctx, DB_NAME, "view1", PrivilegeType.DROP));
+        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl().checkSystemAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.GRANT));
+        new NativeAccessControl().checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.NODE);
+        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl().checkDbAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), null, DB_NAME, PrivilegeType.DROP));
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.DROP));
+        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl().checkViewAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), new TableName(DB_NAME, "view1"), PrivilegeType.DROP));
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("REVOKE cluster_admin FROM user_test_builtin_role"), ctx), ctx);
@@ -1366,23 +1407,31 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("GRANT user_admin TO user_test_builtin_role"), ctx), ctx);
         setCurrentUserAndRoles(ctx, user);
-        Assert.assertTrue(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.GRANT));
-        Assert.assertFalse(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.NODE));
-        Assert.assertFalse(PrivilegeActions.checkDbAction(ctx, DB_NAME, PrivilegeType.DROP));
-        Assert.assertFalse(PrivilegeActions.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.DROP));
-        Assert.assertFalse(PrivilegeActions.checkViewAction(ctx, DB_NAME, "view1", PrivilegeType.DROP));
+        new NativeAccessControl().checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.GRANT);
+        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl().checkSystemAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.NODE));
+        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl().checkDbAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), null, DB_NAME, PrivilegeType.DROP));
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.DROP));
+        Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl().checkViewAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), new TableName(DB_NAME, "view1"), PrivilegeType.DROP));
         Assert.assertTrue(manager.canExecuteAs(ctx, UserIdentity.ROOT));
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("REVOKE user_admin FROM user_test_builtin_role"), ctx), ctx);
 
         // user root
-        Assert.assertTrue(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.GRANT));
-        Assert.assertTrue(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.NODE));
-        Assert.assertTrue(PrivilegeActions.checkDbAction(ctx, DB_NAME, PrivilegeType.DROP));
-        Assert.assertTrue(PrivilegeActions.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.DROP));
-        Assert.assertTrue(PrivilegeActions.checkViewAction(ctx, DB_NAME, "view1", PrivilegeType.DROP));
-        Assert.assertTrue(PrivilegeActions.checkAnyActionOnOrInDb(ctx, DB_NAME));
+        new NativeAccessControl().checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.GRANT);
+        new NativeAccessControl().checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.NODE);
+        new NativeAccessControl().checkDbAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                null, DB_NAME, PrivilegeType.DROP);
+        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                DB_NAME, TABLE_NAME_1, PrivilegeType.DROP);
+        new NativeAccessControl().checkViewAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                new TableName(DB_NAME, "view1"), PrivilegeType.DROP);
+        Authorizer.checkAnyActionOnOrInDb(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, DB_NAME);
 
         // grant to imutable role
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
@@ -1443,7 +1492,8 @@ public class AuthorizationMgrTest {
 
         setCurrentUserAndRoles(ctx, user);
         Assert.assertTrue(manager.canExecuteAs(ctx, UserIdentity.ROOT));
-        Assert.assertTrue(PrivilegeActions.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT);
     }
 
     @Test
@@ -1458,9 +1508,12 @@ public class AuthorizationMgrTest {
                 "grant alter on all resources to resource_user with grant option", ctx), ctx);
         UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("resource_user", "%");
         setCurrentUserAndRoles(ctx, user);
-        Assert.assertTrue(PrivilegeActions.checkResourceAction(ctx, "hive0", PrivilegeType.DROP));
-        Assert.assertTrue(PrivilegeActions.checkResourceAction(ctx, "hive0", PrivilegeType.USAGE));
-        Assert.assertTrue(PrivilegeActions.checkResourceAction(ctx, "hive0", PrivilegeType.ALTER));
+        new NativeAccessControl().checkResourceAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), "hive0",
+                PrivilegeType.DROP);
+        new NativeAccessControl().checkResourceAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), "hive0",
+                PrivilegeType.USAGE);
+        new NativeAccessControl().checkResourceAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), "hive0",
+                PrivilegeType.ALTER);
     }
 
     @Test
@@ -1479,14 +1532,15 @@ public class AuthorizationMgrTest {
                 "grant alter on all catalogs to test_catalog_user with grant option", ctx), ctx);
         UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("test_catalog_user", "%");
         setCurrentUserAndRoles(ctx, user);
-        Assert.assertTrue(PrivilegeActions.checkCatalogAction(ctx, "test_catalog",
-                PrivilegeType.DROP));
-        Assert.assertTrue(PrivilegeActions.checkCatalogAction(ctx, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                PrivilegeType.CREATE_DATABASE));
-        Assert.assertTrue(PrivilegeActions.checkCatalogAction(ctx, "test_catalog",
-                PrivilegeType.USAGE));
-        Assert.assertTrue(PrivilegeActions.checkCatalogAction(ctx, "test_catalog",
-                PrivilegeType.ALTER));
+        new NativeAccessControl().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), "test_catalog",
+                PrivilegeType.DROP);
+        new NativeAccessControl().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                PrivilegeType.CREATE_DATABASE);
+        new NativeAccessControl().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), "test_catalog",
+                PrivilegeType.USAGE);
+        new NativeAccessControl().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), "test_catalog",
+                PrivilegeType.ALTER);
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "create user test_catalog_user2", ctx), ctx);
@@ -1494,8 +1548,9 @@ public class AuthorizationMgrTest {
                 "grant create database on catalog " + InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME +
                         " to test_catalog_user2 with grant option", ctx), ctx);
         setCurrentUserAndRoles(ctx, UserIdentity.createAnalyzedUserIdentWithIp("test_catalog_user2", "%"));
-        Assert.assertTrue(PrivilegeActions.checkCatalogAction(ctx, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                PrivilegeType.CREATE_DATABASE));
+        new NativeAccessControl().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                PrivilegeType.CREATE_DATABASE);
     }
 
     @Test
@@ -1510,9 +1565,28 @@ public class AuthorizationMgrTest {
                 "grant alter on all views in database db to view_user with grant option", ctx), ctx);
         UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("view_user", "%");
         setCurrentUserAndRoles(ctx, user);
-        Assert.assertTrue(PrivilegeActions.checkViewAction(ctx, "db", "view1", PrivilegeType.DROP));
-        Assert.assertTrue(PrivilegeActions.checkViewAction(ctx, "db", "view1", PrivilegeType.SELECT));
-        Assert.assertTrue(PrivilegeActions.checkViewAction(ctx, "db", "view1", PrivilegeType.ALTER));
+        new NativeAccessControl().checkViewAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                new TableName("db", "view1"), PrivilegeType.DROP);
+        new NativeAccessControl().checkViewAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                new TableName("db", "view1"), PrivilegeType.SELECT);
+        new NativeAccessControl().checkViewAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                new TableName("db", "view1"), PrivilegeType.ALTER);
+    }
+
+    @Test
+    public void testGrantMaterializedView() throws Exception {
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create user mv_user", ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant select on materialized view db3.mv1 to mv_user", ctx), ctx);
+        UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("mv_user", "%");
+        setCurrentUserAndRoles(ctx, user);
+        new NativeAccessControl().checkMaterializedViewAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                new TableName("db3", "mv1"), PrivilegeType.SELECT);
+        new NativeAccessControl().checkAnyActionOnMaterializedView(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                new TableName("db3", "mv1"));
+        new NativeAccessControl().checkAnyActionOnAnyMaterializedView(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                "db3");
     }
 
     @Test
@@ -1523,7 +1597,8 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant drop on tbl0 to brief_user", ctx), ctx);
         ctx.setCurrentUserIdentity(new UserIdentity("brief_user", "%"));
-        Assert.assertTrue(PrivilegeActions.checkTableAction(ctx, "db", "tbl0", PrivilegeType.DROP));
+        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), "db", "tbl0",
+                PrivilegeType.DROP);
 
         try {
             StatementBase statementBase =
@@ -1570,12 +1645,12 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
 
         setCurrentUserAndRoles(ctx, new UserIdentity("u1", "%"));
-        Assert.assertTrue(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.OPERATE));
+        new NativeAccessControl().checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.OPERATE);
 
         sql = "grant OPERATE ON SYSTEM TO USER u2";
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
         setCurrentUserAndRoles(ctx, new UserIdentity("u2", "%"));
-        Assert.assertTrue(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.OPERATE));
+        new NativeAccessControl().checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.OPERATE);
     }
 
     @Test
@@ -1592,7 +1667,8 @@ public class AuthorizationMgrTest {
                 .createStorageVolume("test", "S3", locations, storageParams, Optional.empty(), "");
         manager.grantStorageVolumeUsageToPublicRole(storageVolumeId);
         setCurrentUserAndRoles(ctx, new UserIdentity("u1", "%"));
-        Assert.assertTrue(PrivilegeActions.checkStorageVolumeAction(ctx, "test", PrivilegeType.USAGE));
+        new NativeAccessControl().checkStorageVolumeAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                "test", PrivilegeType.USAGE);
     }
 
     @Test

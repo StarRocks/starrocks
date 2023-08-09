@@ -14,16 +14,27 @@
 
 package com.starrocks.sql.optimizer.operator;
 
+import com.google.common.collect.Maps;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 
+import java.lang.reflect.Constructor;
+import java.util.Map;
+
 public class OperatorBuilderFactory {
+    private static final Map<String, Constructor> CONSTRUCTOR_MAP = Maps.newHashMap();
+
     public static <T extends Operator.Builder> T build(Operator operator) {
         String clazzName = operator.getClass().getName();
         String builderName = clazzName + "$Builder";
 
         try {
-            return (T) Class.forName(builderName).getConstructor().newInstance();
+            if (CONSTRUCTOR_MAP.containsKey(builderName)) {
+                return (T) CONSTRUCTOR_MAP.get(builderName).newInstance();
+            }
+            Constructor c = Class.forName(builderName).getConstructor();
+            CONSTRUCTOR_MAP.put(builderName, c);
+            return (T) c.newInstance();
         } catch (Exception e) {
             throw new StarRocksPlannerException("not implement builder: " + operator.getOpType(),
                     ErrorType.INTERNAL_ERROR);

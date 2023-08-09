@@ -56,6 +56,7 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
 import org.apache.commons.lang3.StringUtils;
@@ -246,15 +247,20 @@ public class OlapTableFactory implements AbstractTableFactory {
 
             // analyze replication_num
             short replicationNum = RunMode.defaultReplicationNum();
+            String logReplicationNum = "";
             try {
                 boolean isReplicationNumSet =
                         properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM);
+                if (properties != null) {
+                    logReplicationNum = properties.get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM);
+                }
                 replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
                 if (isReplicationNumSet) {
                     table.setReplicationNum(replicationNum);
                 }
-            } catch (AnalysisException e) {
-                throw new DdlException(e.getMessage());
+            } catch (AnalysisException ex) {
+                throw new DdlException(String.format("%s table=%s, properties.replication_num=%s",
+                        ex.getMessage(), table.getName(), logReplicationNum));
             }
 
             // set in memory
@@ -266,9 +272,19 @@ public class OlapTableFactory implements AbstractTableFactory {
                     PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
                             false);
             if (enablePersistentIndex && table.isCloudNativeTable()) {
-                throw new DdlException("Cannot create cloud native table with persistent index yet");
-            }
+                // Judge there are whether compute nodes without storagePath or not.
+                // Cannot create cloud native table with persistent_index = true when ComputeNode without storagePath
+                Set<Long> cnUnSetStoragePath = GlobalStateMgr.getCurrentSystemInfo().getAvailableComputeNodeIds().
+                        stream().filter(id -> !GlobalStateMgr.getCurrentSystemInfo().getComputeNode(id).
+                                isSetStoragePath()).collect(Collectors.toSet());
+                if (cnUnSetStoragePath.size() != 0) {
+                    throw new DdlException("Cannot create cloud native table with persistent_index = true " +
+                            "when ComputeNode without storage_path, nodeId:" + cnUnSetStoragePath);
+                } else {
+                    table.setPersistentIndexType(TPersistentIndexType.LOCAL);
+                }
 
+            }
             table.setEnablePersistentIndex(enablePersistentIndex);
 
             if (properties != null && (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
@@ -330,8 +346,16 @@ public class OlapTableFactory implements AbstractTableFactory {
                         throw new DdlException(e.getMessage());
                     }
                 }
-                if (partitionInfo.getType() == PartitionType.LIST) {
-                    throw new DdlException("Do not support create list partition Cloud Native table");
+            }
+
+            if (properties != null) {
+                try {
+                    PeriodDuration duration = PropertyAnalyzer.analyzeStorageCoolDownTTL(properties);
+                    if (duration != null) {
+                        table.setStorageCoolDownTTL(duration);
+                    }
+                } catch (AnalysisException e) {
+                    throw new DdlException(e.getMessage());
                 }
             }
 
@@ -374,11 +398,6 @@ public class OlapTableFactory implements AbstractTableFactory {
 
                 boolean addedToColocateGroup = colocateTableIndex.addTableToGroup(db, table,
                         colocateGroup, false /* expectLakeTable */);
-                if (!(table instanceof ExternalOlapTable) && addedToColocateGroup) {
-                    // Colocate table should keep the same bucket number across the partitions
-                    DistributionInfo defaultDistributionInfo = table.getDefaultDistributionInfo();
-                    table.inferDistribution(defaultDistributionInfo);
-                }
             }
 
             // get base index storage type. default is COLUMN

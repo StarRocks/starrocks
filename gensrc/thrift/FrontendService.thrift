@@ -77,6 +77,7 @@ struct TColumnDesc {
   22: optional string aggregationType
   23: optional string dbName
   24: optional string tableName
+  25: optional string columnDefault
 }
 
 // A column definition; used by CREATE TABLE and DESCRIBE <table> statements. A column
@@ -425,6 +426,7 @@ struct TTaskRunInfo {
     11: optional string progress
 
     12: optional string extra_message
+    13: optional string properties
 }
 
 struct TGetTaskRunInfoResult {
@@ -992,6 +994,7 @@ struct TRange {
     2: optional TBasePartitionDesc base_desc
     3: optional binary start_key
     4: optional binary end_key
+    5: optional bool is_temp
 }
 
 struct TRangePartitionDesc {
@@ -1017,6 +1020,7 @@ struct TPartitionMeta {
     7: optional i64 visible_time
     8: optional i64 next_version
     9: optional i64 next_version_hash // Deprecated
+    10: optional bool is_temp
 }
 
 struct THashDistributionInfo {
@@ -1052,7 +1056,7 @@ struct TTableMeta {
     15: optional list<TIndexInfo> index_infos
     16: optional string colocate_group
     17: optional list<string> bloomfilter_columns
-    18: optional string table_type;
+    18: optional string table_type
 }
 
 struct TGetTableMetaResponse {
@@ -1204,6 +1208,24 @@ struct TUpdateResourceUsageResponse {
     1: optional Status.TStatus status
 }
 
+struct TGetWarehousesRequest {
+}
+
+struct TWarehouseInfo {
+    1: optional string warehouse
+    2: optional i64 id
+    3: optional i64 num_unfinished_query_jobs
+    4: optional i64 num_unfinished_load_jobs
+    5: optional i64 num_unfinished_backup_jobs
+    6: optional i64 num_unfinished_restore_jobs
+    7: optional i64 last_finished_job_timestamp_ms
+}
+
+struct TGetWarehousesResponse {
+    1: optional Status.TStatus status
+    2: optional list<TWarehouseInfo> warehouse_infos;
+}
+
 struct TTableInfo {
     1: optional string table_catalog
     2: optional string table_schema
@@ -1345,6 +1367,8 @@ service FrontendService {
     TCreatePartitionResult createPartition(1: TCreatePartitionRequest request)
 
     TUpdateResourceUsageResponse updateResourceUsage(1: TUpdateResourceUsageRequest request)
+
+    TGetWarehousesResponse getWarehouses(1: TGetWarehousesRequest request)
     
     // For Materialized View
     MVMaintenance.TMVReportEpochResponse mvReport(1: MVMaintenance.TMVMaintenanceTasks request)

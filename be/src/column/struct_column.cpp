@@ -54,6 +54,15 @@ size_t StructColumn::byte_size() const {
     return total_size;
 }
 
+size_t StructColumn::byte_size(size_t from, size_t size) const {
+    DCHECK_LE(from + size, this->size()) << "Range error";
+    size_t total_size = 0;
+    for (const auto& column : _fields) {
+        total_size += column->byte_size(from, size);
+    }
+    return total_size;
+}
+
 size_t StructColumn::byte_size(size_t idx) const {
     size_t total_size = 0;
     for (const auto& column : _fields) {

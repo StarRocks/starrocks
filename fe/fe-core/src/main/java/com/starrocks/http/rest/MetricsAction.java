@@ -40,12 +40,12 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.http.UnauthorizedException;
 import com.starrocks.metric.JsonMetricVisitor;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.MetricVisitor;
 import com.starrocks.metric.PrometheusMetricVisitor;
 import com.starrocks.metric.SimpleCoreMetricVisitor;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
@@ -98,7 +98,7 @@ public class MetricsAction extends RestBaseAction {
                 if (WITH_TABLE_METRICS_ALL.equalsIgnoreCase(withTableMetrics)) {
                     minifyTableMetrics = false;
                 }
-            } catch (UnauthorizedException e) {
+            } catch (AccessDeniedException e) {
                 LOG.warn("Auth failure when getting table level metrics, current user: {}, error msg: {}",
                         currentUser, e.getMessage(), e);
             }

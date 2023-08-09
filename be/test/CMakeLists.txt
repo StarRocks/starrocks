@@ -21,7 +21,7 @@ set(EXEC_FILES
         ./common/config_test.cpp
         ./common/status_test.cpp
         ./common/tracer_test.cpp
-        ./common/s3_uri_test.cpp
+        ./common/uri_test.cpp
         ./fs/fs_broker_test.cpp
         ./fs/fs_posix_test.cpp
         ./fs/fs_memory_test.cpp
@@ -122,6 +122,7 @@ set(EXEC_FILES
         ./exprs/string_fn_test.cpp
         ./exprs/string_fn_trim_test.cpp
         ./exprs/string_fn_money_format_decimal_test.cpp
+        ./exprs/string_fn_url_extract_parameter_test.cpp
         ./exprs/struct_functions_test.cpp
         ./exprs/time_functions_test.cpp
         ./exprs/es_functions_test.cpp
@@ -315,6 +316,7 @@ set(EXEC_FILES
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
         ./types/bitmap_value_test.cpp
+        ./simd/batch_run_counter_test.cpp
         ./simd/simd_test.cpp
         ./simd/simd_selector_test.cpp
         ./simd/simd_mulselector_test.cpp
@@ -327,7 +329,10 @@ set(EXEC_FILES
         ./util/block_compression_test.cpp
         ./util/blocking_queue_test.cpp
         ./util/brpc_stub_cache_test.cpp
+        ./util/bthreads/future_test.cpp
+        ./util/bthreads/promise_test.cpp
         ./util/bthreads/shared_mutex_test.cpp
+        ./util/bthreads/shared_future_test.cpp
         ./util/c_string_test.cpp
         ./util/cidr_test.cpp
         ./util/coding_test.cpp

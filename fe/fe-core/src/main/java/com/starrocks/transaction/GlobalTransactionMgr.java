@@ -329,7 +329,7 @@ public class GlobalTransactionMgr implements Writable {
         }
     }
 
-    public TransactionStatus getLabelState(long dbId, String label) {
+    public TransactionStatus getLabelStatus(long dbId, String label) {
         try {
             DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
             return dbTransactionMgr.getLabelState(label);
@@ -337,7 +337,6 @@ public class GlobalTransactionMgr implements Writable {
             LOG.warn("Get transaction status by label " + label + " failed", e);
             return TransactionStatus.UNKNOWN;
         }
-
     }
 
     public Long getLabelTxnID(long dbId, String label) {
@@ -347,6 +346,16 @@ public class GlobalTransactionMgr implements Writable {
         } catch (AnalysisException e) {
             LOG.warn("Get transaction status by label " + label + " failed", e);
             return (long) -1;
+        }
+    }
+
+    public TransactionState getLabelTransactionState(long dbId, String label) {
+        try {
+            DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
+            return dbTransactionMgr.getLabelTransactionState(label);
+        } catch (AnalysisException e) {
+            LOG.warn("Get transaction state by label " + label + " failed", e);
+            return null;
         }
     }
 
@@ -725,9 +734,6 @@ public class GlobalTransactionMgr implements Writable {
         return dbTransactionMgr.getPartitionTransInfo(tid, tableId);
     }
 
-    /**
-     * It is a non thread safe method, only invoked by checkpoint thread without any lock or image dump thread with db lock
-     */
     public int getTransactionNum() {
         int txnNum = 0;
         for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
