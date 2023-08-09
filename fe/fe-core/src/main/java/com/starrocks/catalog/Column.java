@@ -521,10 +521,14 @@ public class Column implements Writable {
             return defaultValue;
         } else if (defaultExpr != null) {
             if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
-                extras.add("DEFAULT_GENERATED");
+                if (extras != null) {
+                    extras.add("DEFAULT_GENERATED");
+                }
                 return "CURRENT_TIMESTAMP";
             } else {
-                extras.add("DEFAULT_GENERATED");
+                if (extras != null) {
+                    extras.add("DEFAULT_GENERATED");
+                }
                 return defaultExpr.getExpr();
             }
         }
