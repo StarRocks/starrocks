@@ -118,7 +118,7 @@ public class PartitionUtils {
                             partition, partitionInfo.getDataProperty(partition.getId()),
                             partitionInfo.getReplicationNum(partition.getId()),
                             partitionInfo.getIsInMemory(partition.getId()), true,
-                            values, multiValues);
+                            values, multiValues, partitionInfo.getDataCacheInfo(partition.getId()));
                 } else {
                     throw new DdlException("Unsupported partition persist info.");
                 }
