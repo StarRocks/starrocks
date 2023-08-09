@@ -130,6 +130,29 @@ public class PartitionUtilTest {
     }
 
     @Test
+    public void testHiveIntPartitionNames() throws Exception {
+        List<String> partitionValues = Lists.newArrayList("2007-01-01", "01");
+        List<Column> columns = new ArrayList<>();
+        columns.add(new Column("a", Type.fromPrimitiveType(PrimitiveType.DATE)));
+        columns.add(new Column("b", Type.fromPrimitiveType(PrimitiveType.INT)));
+
+        PartitionKey partitionKey = PartitionUtil.createPartitionKey(partitionValues, columns, Table.TableType.HIVE);
+        List<String> res = PartitionUtil.fromPartitionKey(partitionKey);
+        Assert.assertEquals("2007-01-01", res.get(0));
+        Assert.assertEquals("01", res.get(1));
+
+        partitionValues = Lists.newArrayList("125", "0125");
+        columns = new ArrayList<>();
+        columns.add(new Column("a", Type.fromPrimitiveType(PrimitiveType.INT)));
+        columns.add(new Column("b", Type.fromPrimitiveType(PrimitiveType.INT)));
+
+        partitionKey = PartitionUtil.createPartitionKey(partitionValues, columns, Table.TableType.HIVE);
+        res = PartitionUtil.fromPartitionKey(partitionKey);
+        Assert.assertEquals("125", res.get(0));
+        Assert.assertEquals("0125", res.get(1));
+    }
+
+    @Test
     public void testHivePartitionNames() {
         List<String> partitionValues = Lists.newArrayList("1", "2", "3");
         String partitionNames = "a=1/b=2/c=3";
