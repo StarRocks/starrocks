@@ -538,7 +538,6 @@ Status NodeChannel::_filter_indexes_with_where_expr(Chunk* input, const std::vec
                                                     std::vector<uint32_t>& filtered_indexes) {
     DCHECK(_where_clause != nullptr);
     // Filter data
-    LOG(INFO) << "In node channel filter data, chunk has " << input->num_rows() << " rows data";
     ASSIGN_OR_RETURN(ColumnPtr filter_col, _where_clause->evaluate(input))
 
     size_t size = filter_col->size();

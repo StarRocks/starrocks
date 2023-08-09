@@ -42,6 +42,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotRef;
@@ -345,6 +346,25 @@ public class OlapTableSink extends DataSink {
                     descMap.put(slot.getColumn().getName(), slot);
                 }
 
+
+                Expr whereClause = indexMeta.getWhereClause().clone();
+                List<SlotRef> slots = Lists.newArrayList();
+                whereClause.collect(SlotRef.class, slots);
+
+                ExprSubstitutionMap smap = new ExprSubstitutionMap();
+                for (SlotRef slot : slots) {
+                    SlotDescriptor slotDesc = descMap.get(slot.getColumnName());
+                    Preconditions.checkNotNull(slotDesc);
+                    smap.getLhs().add(slot);
+                    SlotRef slotRef = new SlotRef(slotDesc);
+                    slotRef.setColumnName(slot.getColumnName());
+                    smap.getRhs().add(slotRef);
+                }
+                whereClause = whereClause.clone(smap);
+
+                // sourceScope must be set null tableName for its Field in RelationFields
+                // because we hope slotRef can not be resolved in sourceScope but can be
+                // resolved in outputScope to force to replace the node using outputExprs.
                 List<Expr> outputExprs = Lists.newArrayList();
                 for (Column col : table.getBaseSchema()) {
                     SlotDescriptor slotDesc = descMap.get(col.getName());
@@ -353,10 +373,7 @@ public class OlapTableSink extends DataSink {
                     slotRef.setColumnName(col.getName());
                     outputExprs.add(slotRef);
                 }
-
-                // sourceScope must be set null tableName for its Field in RelationFields
-                // because we hope slotRef can not be resolved in sourceScope but can be
-                // resolved in outputScope to force to replace the node using outputExprs.
+                ConnectContext connectContext = new ConnectContext();
                 Scope sourceScope = new Scope(RelationId.anonymous(),
                         new RelationFields(table.getBaseSchema().stream().map(col ->
                                         new Field(col.getName(), col.getType(), null, null))
@@ -367,15 +384,7 @@ public class OlapTableSink extends DataSink {
                                 .collect(Collectors.toList())));
                 SelectAnalyzer.RewriteAliasVisitor visitor =
                         new SelectAnalyzer.RewriteAliasVisitor(sourceScope, outputScope,
-                                outputExprs, new ConnectContext());
-                Expr whereClause = indexMeta.getWhereClause().clone();
-                List<SlotRef> slots = new ArrayList<>();
-                whereClause.collect(SlotRef.class, slots);
-                for (SlotRef slot : slots) {
-                    SlotDescriptor slotDesc = descMap.get(slot.getColumnName());
-                    slot.setDesc(slotDesc);
-                    slot.setType(slotDesc.getType());
-                }
+                                outputExprs, connectContext);
 
                 whereClause = whereClause.accept(visitor, null);
                 whereClause = Expr.analyzeAndCastFold(whereClause);
