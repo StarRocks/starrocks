@@ -750,6 +750,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 OlapTable olapTable = (OlapTable) table;
                 tableKeysType = olapTable.getKeysType().name().substring(0, 3).toUpperCase();
             }
+<<<<<<< HEAD
             for (Column column : table.getBaseSchema()) {
                 final TColumnDesc desc =
                         new TColumnDesc(column.getName(), column.getPrimitiveType().toThrift());
@@ -787,6 +788,38 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 if (limit > 0 && columns.size() >= limit) {
                     return true;
                 }
+=======
+            desc.setColumnDefault(column.getMetaDefaultValue(null));
+            final Integer columnLength = column.getType().getColumnSize();
+            if (columnLength != null) {
+                desc.setColumnLength(columnLength);
+            }
+            final Integer decimalDigits = column.getType().getDecimalDigits();
+            if (decimalDigits != null) {
+                desc.setColumnScale(decimalDigits);
+            }
+            desc.setAllowNull(column.isAllowNull());
+            if (column.isKey()) {
+                // COLUMN_KEY (UNI, AGG, DUP, PRI)
+                desc.setColumnKey(tableKeysType);
+            } else {
+                desc.setColumnKey("");
+            }
+            final TColumnDef colDef = new TColumnDef(desc);
+            final String comment = column.getComment();
+            if (comment != null) {
+                colDef.setComment(comment);
+            }
+            columns.add(colDef);
+            // add db_name and table_name values to TColumnDesc if needed
+            if (needSetDbAndTable) {
+                columns.get(columns.size() - 1).columnDesc.setDbName(db);
+                columns.get(columns.size() - 1).columnDesc.setTableName(tbl);
+            }
+            // if user set limit, then only return limit size result
+            if (limit > 0 && columns.size() >= limit) {
+                return true;
+>>>>>>> 20b92c925d ([Enhancement] Support column default for default value (#28857))
             }
         }
         return false;
