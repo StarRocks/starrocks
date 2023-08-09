@@ -588,10 +588,11 @@ void LocalTabletsChannel::abort() {
 }
 
 void LocalTabletsChannel::abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) {
+    bool abort_with_exception = !reason.empty();
     for (auto tablet_id : tablet_ids) {
         auto it = _delta_writers.find(tablet_id);
         if (it != _delta_writers.end()) {
-            it->second->abort(true);
+            it->second->abort(abort_with_exception);
         }
     }
     string tablet_id_list_str;
@@ -599,7 +600,7 @@ void LocalTabletsChannel::abort(const std::vector<int64_t>& tablet_ids, const st
     LOG(INFO) << "cancel LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << _key.id
               << " index_id: " << _key.index_id << " tablet_ids:" << tablet_id_list_str;
 
-    if (!reason.empty()) {
+    if (abort_with_exception) {
         std::lock_guard l(_status_lock);
         _status = Status::Aborted(reason);
     }
