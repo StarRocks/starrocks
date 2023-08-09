@@ -44,6 +44,7 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.warehouse.Warehouse;
@@ -105,10 +106,18 @@ public class LoadAction extends RestBaseAction {
 
         checkTableAction(ConnectContext.get(), dbName, tableName, PrivilegeType.INSERT);
 
+        String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        if (request.getRequest().headers().contains(WAREHOUSE_KEY)) {
+            warehouseName = request.getRequest().headers().get(WAREHOUSE_KEY);
+        }
+
         // Choose a backend sequentially, or choose a cn in shared_data mode
         List<Long> nodeIds = new ArrayList<>();
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
+            if (warehouse == null) {
+                throw new DdlException("Warehouse " + warehouseName + " not exists.");
+            }
             for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
                 ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
                 if (node != null && node.isAvailable()) {
@@ -132,8 +141,8 @@ public class LoadAction extends RestBaseAction {
 
         TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), node.getHttpPort());
 
-        LOG.info("redirect load action to destination={}, db: {}, tbl: {}, label: {}",
-                redirectAddr.toString(), dbName, tableName, label);
+        LOG.info("redirect load action to destination={}, db: {}, tbl: {}, label: {}, warehouse: {}",
+                redirectAddr.toString(), dbName, tableName, label, warehouseName);
         redirectTo(request, response, redirectAddr);
     }
 }

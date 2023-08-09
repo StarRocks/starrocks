@@ -45,14 +45,19 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionStatus;
+import com.starrocks.warehouse.Warehouse;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -72,7 +77,12 @@ public class TransactionLoadAction extends RestBaseAction {
 
     private Map<String, Long> txnBackendMap = new LinkedHashMap<String, Long>(512, 0.75f, true) {
         protected boolean removeEldestEntry(Map.Entry<String, Long> eldest) {
-            return size() > GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber() * 512;
+            // TODO: whether it needs to adapt to multi-warehouse
+            int totalNodeNum = GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber();
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                totalNodeNum += GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
+            }
+            return size() > totalNodeNum * 512;
         }
     };
 
@@ -141,7 +151,7 @@ public class TransactionLoadAction extends RestBaseAction {
             throw new DdlException("Must provide channel_num when stream load begin.");
         }
 
-        Long backendID = null;
+        Long nodeID = null;
 
         if (Strings.isNullOrEmpty(dbName)) {
             throw new UserException("No database selected.");
@@ -201,20 +211,45 @@ public class TransactionLoadAction extends RestBaseAction {
             }
         }
 
+        String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        if (request.getRequest().headers().contains(WAREHOUSE_KEY)) {
+            warehouseName = request.getRequest().headers().get(WAREHOUSE_KEY);
+        }
+
+        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
+        if (warehouse == null) {
+            throw new UserException("Warehouse " + warehouseName + " not exist");
+        }
+
         if (channelIdStr == null) {
             // 2. redirect transaction op to BE
             synchronized (this) {
                 // 2.1 save label->be map when begin transaction, so that subsequent operator can send to same BE
+                List<Long> nodeIds = new ArrayList<>();
                 if (op.equalsIgnoreCase(TXN_BEGIN)) {
-                    List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
-                    if (CollectionUtils.isEmpty(backendIds)) {
-                        throw new UserException("No backend alive.");
+                    if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                        for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+                            ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+                            if (node != null && node.isAvailable()) {
+                                nodeIds.add(nodeId);
+                            }
+                        }
+                        if (CollectionUtils.isEmpty(nodeIds)) {
+                            throw new UserException("No backend or compute node alive.");
+                        }
+                        Collections.shuffle(nodeIds);
+                    } else {
+                        nodeIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
+                        if (CollectionUtils.isEmpty(nodeIds)) {
+                            throw new UserException("No backend alive.");
+                        }
                     }
-                    backendID = backendIds.get(0);
+
+                    nodeID = nodeIds.get(0);
                     // txnBackendMap is LRU cache, it automic remove unused entry
-                    txnBackendMap.put(label, backendID);
+                    txnBackendMap.put(label, nodeID);
                 } else if (channelIdStr == null) {
-                    backendID = txnBackendMap.get(label);
+                    nodeID = txnBackendMap.get(label);
                 }
             }
         }
@@ -232,8 +267,9 @@ public class TransactionLoadAction extends RestBaseAction {
             }
 
             // context.parseHttpHeader(request.getRequest().headers());
+            long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
             GlobalStateMgr.getCurrentState().getStreamLoadMgr().beginLoadTask(
-                    dbName, tableName, label, timeoutMillis, channelNum, channelId, resp);
+                    dbName, tableName, label, timeoutMillis, channelNum, channelId, resp, workerGroupId);
             sendResult(request, response, resp);
             return;
         }
@@ -284,19 +320,20 @@ public class TransactionLoadAction extends RestBaseAction {
         }
 
 
-        if (backendID == null) {
+        if (nodeID == null) {
             throw new UserException("transaction with op " + op + " label " + label + " has no backend");
         }
 
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendID);
-        if (backend == null) {
-            throw new UserException("Backend " + backendID + " is not alive");
+        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeID);
+        if (node == null) {
+            throw new UserException("Backend or compute node " + nodeID + " is not alive");
         }
 
-        TNetworkAddress redirectAddr = new TNetworkAddress(backend.getHost(), backend.getHttpPort());
+        TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), node.getHttpPort());
 
-        LOG.info("redirect transaction action to destination={}, db: {}, table: {}, op: {}, label: {}",
-                redirectAddr, dbName, tableName, op, label);
+        LOG.info("redirect transaction action to destination={}, " +
+                        "db: {}, table: {}, op: {}, label: {}, warehouse: {}",
+                redirectAddr, dbName, tableName, op, label, warehouseName);
         redirectTo(request, response, redirectAddr);
     }
 }

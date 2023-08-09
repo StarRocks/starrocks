@@ -135,6 +135,7 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -273,6 +274,7 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TxnCommitAttachment;
+import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.WarehouseInfo;
 import com.starrocks.warehouse.WarehouseInfosBuilder;
 import org.apache.commons.lang3.StringUtils;
@@ -1209,8 +1211,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TLoadTxnBeginResult loadTxnBegin(TLoadTxnBeginRequest request) throws TException {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive txn begin request, db: {}, tbl: {}, label: {}, backend: {}",
-                request.getDb(), request.getTbl(), request.getLabel(), clientAddr);
+        LOG.info("receive txn begin request, db: {}, tbl: {}, label: {}, backend: {}, warehouse: {}",
+                request.getDb(), request.getTbl(), request.getLabel(), clientAddr, request.getWarehouse());
         LOG.debug("txn begin request: {}", request);
 
         TLoadTxnBeginResult result = new TLoadTxnBeginResult();
@@ -1271,13 +1273,24 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         long timeoutSecond = request.isSetTimeout() ? request.getTimeout() : Config.stream_load_default_timeout_second;
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
 
+        String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        if (request.getWarehouse() != null && !request.getWarehouse().isEmpty()) {
+            warehouseName = request.getWarehouse();
+        }
+        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
+        if (warehouse == null) {
+            throw new UserException("Warehouse " + warehouseName + " not exist");
+        }
+        long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
+
         // just use default value of session variable
         // as there is no connectContext for sync stream load
         ConnectContext connectContext = new ConnectContext();
         if (connectContext.getSessionVariable().isEnableLoadProfile()) {
             TransactionResult resp = new TransactionResult();
             StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
-            streamLoadManager.beginLoadTask(dbName, table.getName(), request.getLabel(), timeoutSecond, resp, false);
+            streamLoadManager.beginLoadTask(dbName, table.getName(), request.getLabel(),
+                    timeoutSecond, resp, false, workerGroupId);
             if (!resp.stateOK()) {
                 LOG.warn(resp.msg);
                 throw new UserException(resp.msg);
@@ -1294,7 +1307,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
                 db.getId(), Lists.newArrayList(table.getId()), request.getLabel(), request.getRequest_id(),
                 new TxnCoordinator(TxnSourceType.BE, clientIp),
-                TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, timeoutSecond);
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, timeoutSecond,
+                workerGroupId);
     }
 
     @Override
@@ -1585,9 +1599,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TStreamLoadPutResult streamLoadPut(TStreamLoadPutRequest request) {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive stream load put request. db:{}, tbl: {}, txn_id: {}, load id: {}, backend: {}",
-                request.getDb(), request.getTbl(), request.getTxnId(), DebugUtil.printId(request.getLoadId()),
-                clientAddr);
+        LOG.info("receive stream load put request. db:{}, tbl: {}, txn_id: {}, load id: {}, backend: {}, warehouse: {}",
+                request.getDb(), request.getTbl(),
+                request.getTxnId(), DebugUtil.printId(request.getLoadId()),
+                clientAddr, request.getWarehouse());
         LOG.debug("stream load put request: {}", request);
 
         TStreamLoadPutResult result = new TStreamLoadPutResult();

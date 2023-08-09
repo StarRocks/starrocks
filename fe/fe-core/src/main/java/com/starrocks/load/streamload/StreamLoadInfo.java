@@ -346,6 +346,9 @@ public class StreamLoadInfo {
         StreamLoadInfo streamLoadInfo = new StreamLoadInfo(request.getLoadId(), request.getTxnId(),
                 request.getFileType(), request.getFormatType());
         streamLoadInfo.setOptionalFromTSLPutRequest(request, db);
+        if (request.getWarehouse() != null && !request.getWarehouse().isEmpty()) {
+            streamLoadInfo.setWarehouse(request.getWarehouse());
+        }
         return streamLoadInfo;
     }
 

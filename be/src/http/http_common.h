@@ -76,4 +76,6 @@ static const std::string HTTP_PARTIAL_UPDATE_MODE = "partial_update_mode";
 static const std::string HTTP_100_CONTINUE = "100-continue";
 static const std::string HTTP_CHANNEL_ID = "channel_id";
 
+static const std::string HTTP_WAREHOUSE = "warehouse";
+
 } // namespace starrocks

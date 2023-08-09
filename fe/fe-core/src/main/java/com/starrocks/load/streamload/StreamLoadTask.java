@@ -147,6 +147,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     private long numRowsUnselected;
     @SerializedName(value = "numLoadBytesTotal")
     private long numLoadBytesTotal;
+    @SerializedName(value = "workerGroupId")
+    private long workerGroupId;
 
     // used for sync stream load and routine load
     private boolean isSyncStreamLoad = false;
@@ -179,6 +181,10 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
     private void readUnlock() {
         lock.readLock().unlock();
+    }
+
+    public void setWorkerGroupId(long workerGroupId) {
+        this.workerGroupId = workerGroupId;
     }
 
     public StreamLoadTask(long id, Database db, OlapTable table, String label,
@@ -900,8 +906,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 dbId, Lists.newArrayList(tableId), label, null,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                 TransactionState.LoadJobSourceType.FRONTEND_STREAMING, id,
-                timeoutMs / 1000);
-    }
+                timeoutMs / 1000, workerGroupId);
+    } 
 
     public void unprotectedPrepareTxn() throws UserException {
         List<TabletCommitInfo> commitInfos = TabletCommitInfo.fromThrift(coord.getCommitInfos());

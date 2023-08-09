@@ -162,6 +162,9 @@ Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
     }
     request.__set_request_id(ctx->id.to_thrift());
 
+    // set warehouse
+    request.__set_warehouse(ctx->warehouse);
+
     TNetworkAddress master_addr = get_master_address();
     TLoadTxnBeginResult result;
 #ifndef BE_TEST

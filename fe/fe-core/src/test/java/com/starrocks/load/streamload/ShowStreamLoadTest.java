@@ -16,6 +16,7 @@ package com.starrocks.load.streamload;
 
 import com.starrocks.common.Config;
 import com.starrocks.http.rest.TransactionResult;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
@@ -74,9 +75,11 @@ public class ShowStreamLoadTest {
 
         String labelName = "label_stream_load";
         TransactionResult resp = new TransactionResult();
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, resp, false);
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, resp, false,
+                StarOSAgent.DEFAULT_WORKER_GROUP_ID);
         labelName = "label_routine_load";
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, resp, true);
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, resp, true,
+                StarOSAgent.DEFAULT_WORKER_GROUP_ID);
 
         String sql = "show all stream load";
         ShowStreamLoadStmt showStreamLoadStmt = (ShowStreamLoadStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);

@@ -221,6 +221,10 @@ int StreamLoadAction::on_header(HttpRequest* req) {
         ctx->label = generate_uuid_string();
     }
 
+    if (!req->header(HTTP_WAREHOUSE).empty()) {
+        ctx->warehouse = req->header(HTTP_WAREHOUSE);
+    }
+
     if (config::enable_http_stream_load_limit && !ctx->check_and_set_http_limiter(_http_concurrent_limiter)) {
         LOG(WARNING) << "income streaming load request hit limit." << ctx->brief() << ", db=" << ctx->db
                      << ", tbl=" << ctx->table;
@@ -232,7 +236,7 @@ int StreamLoadAction::on_header(HttpRequest* req) {
         return -1;
     } else {
         LOG(INFO) << "new income streaming load request." << ctx->brief() << ", db=" << ctx->db
-                  << ", tbl=" << ctx->table;
+                  << ", tbl=" << ctx->table << ", warehouse=" << ctx->warehouse;
     }
 
     VLOG(1) << "streaming load request: " << req->debug_string();
@@ -276,7 +280,8 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
 
         if (ctx->format == TFileFormatType::FORMAT_JSON) {
             // Allocate buffer in advance, since the json payload cannot be parsed in stream mode.
-            // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
+            // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the
+            // end.
             ctx->buffer = ByteBuffer::allocate(ctx->body_bytes + simdjson::SIMDJSON_PADDING);
         }
     } else {
@@ -412,6 +417,10 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     request.txnId = ctx->txn_id;
     request.formatType = ctx->format;
     request.__set_loadId(ctx->id.to_thrift());
+
+    // set warehouse
+    request.__set_warehouse(ctx->warehouse);
+
     if (ctx->use_streaming) {
         auto pipe =
                 std::make_shared<StreamLoadPipe>(1024 * 1024 /* max_buffered_bytes */, 64 * 1024 /* min_chunk_size */);
