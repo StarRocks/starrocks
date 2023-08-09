@@ -115,6 +115,18 @@ public class PartitionUtilTest {
         List<String> res = PartitionUtil.fromPartitionKey(partitionKey);
         Assert.assertEquals("2007-01-01 10:35:00.0", res.get(0));
         Assert.assertEquals("2007-01-01 10:35:00.123", res.get(1));
+
+        partitionValues = Lists.newArrayList("2007-01-01 10:35:00", "2007-01-01 10:35:00.00",
+                "2007-01-01 10:35:00.000");
+        columns = new ArrayList<>();
+        columns.add(new Column("a", Type.fromPrimitiveType(PrimitiveType.DATETIME)));
+        columns.add(new Column("b", Type.fromPrimitiveType(PrimitiveType.DATETIME)));
+        columns.add(new Column("c", Type.fromPrimitiveType(PrimitiveType.DATETIME)));
+        partitionKey = PartitionUtil.createPartitionKey(partitionValues, columns, Table.TableType.HIVE);
+        res = PartitionUtil.fromPartitionKey(partitionKey);
+        Assert.assertEquals("2007-01-01 10:35:00", res.get(0));
+        Assert.assertEquals("2007-01-01 10:35:00.00", res.get(1));
+        Assert.assertEquals("2007-01-01 10:35:00.000", res.get(2));
     }
 
     @Test
