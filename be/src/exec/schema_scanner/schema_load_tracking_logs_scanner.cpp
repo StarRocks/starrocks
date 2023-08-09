@@ -109,7 +109,17 @@ Status SchemaLoadTrackingLogsScanner::fill_chunk(ChunkPtr* chunk) {
                     if (!st.ok()) {
                         tracking_msg = "Failed to access " + info.url + " err: " + st.to_string();
                     }
+<<<<<<< HEAD
                     Slice msg = Slice(tracking_msg);
+=======
+                    std::stringstream ss;
+                    std::for_each(_tracking_msg_vec.begin(), _tracking_msg_vec.end(),
+                                  [&ss, last = _tracking_msg_vec.end() - 1](const auto& s) {
+                                      ss << s << (s == *last ? "" : "\n");
+                                  });
+                    std::string tmp_str = ss.str();
+                    Slice msg = Slice(tmp_str);
+>>>>>>> ffe721a661 ([BugFix] Fix use-after-free of SchemaLoadTrackingLogsScanner (#28929))
                     fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&msg);
                 } else {
                     down_cast<NullableColumn*>(column.get())->append_nulls(1);
