@@ -327,6 +327,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
             PARTITION p3 VALUES LESS THAN MAXVALUE
         )
         ```
+
   * 指定各个分区的上界和下界
 
     语法：
@@ -383,23 +384,23 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
 * **批量创建分区**
 
-    语法：
+  语法：
 
-    * 如果分区列为时间类型
+  * 如果分区列为时间类型
 
-        ```sql
-        PARTITION BY RANGE (<partitioning_column>) (
-            START ("<start_date>") END ("<end_date>") EVERY (INTERVAL <N> <time_unit>)
-        )
-        ```
+    ```sql
+    PARTITION BY RANGE (<partitioning_column>) (
+        START ("<start_date>") END ("<end_date>") EVERY (INTERVAL <N> <time_unit>)
+    )
+    ```
 
     * 如果分区列为整数类型
 
-        ```sql
-        PARTITION BY RANGE (<partitioning_column>) (
-            START ("<start_integer>") END ("<end_integer>") EVERY (<partitioning_granularity>)
-        )
-        ```
+    ```sql
+    PARTITION BY RANGE (<partitioning_column>) (
+        START ("<start_integer>") END ("<end_integer>") EVERY (<partitioning_granularity>)
+    )
+    ```
 
     说明：
     用户可以通过给出一个 START 值、一个 END 值以及一个定义分区增量值的 EVERY 子句批量产生分区。
