@@ -21,7 +21,7 @@ import com.starrocks.credential.CloudConfiguration;
 import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.Objects.requireNonNull;
 
-public class CatalogConnector {
+public class CatalogConnector implements Connector {
     private final Connector normalConnector;
     private final Connector informationSchemaConnector;
 

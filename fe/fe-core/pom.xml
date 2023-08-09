@@ -815,6 +815,10 @@ under the License.
             <version>2.4.0</version>
         </dependency>
 
+        <dependency>
+            <groupId>io.airlift</groupId>
+            <artifactId>concurrent</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

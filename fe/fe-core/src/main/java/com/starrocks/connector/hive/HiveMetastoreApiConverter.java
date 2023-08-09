@@ -17,6 +17,7 @@ package com.starrocks.connector.hive;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
@@ -59,8 +60,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.google.common.base.Strings.emptyToNull;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.starrocks.catalog.HudiTable.HUDI_BASE_PATH;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_COLUMN_NAMES;
@@ -70,15 +73,18 @@ import static com.starrocks.catalog.HudiTable.HUDI_TABLE_SERDE_LIB;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_TYPE;
 import static com.starrocks.connector.ColumnTypeConverter.fromHudiType;
 import static com.starrocks.connector.ColumnTypeConverter.fromHudiTypeToHiveTypeString;
-import static com.starrocks.connector.hive.HiveMetastoreOperations.FILE_FORMAT;
+import static com.starrocks.connector.hive.HiveMetadata.STARROCKS_QUERY_ID;
+import static com.starrocks.connector.hive.RemoteFileInputFormat.fromHdfsInputFormatClass;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
 import static java.util.Objects.requireNonNull;
+import static org.apache.hadoop.hive.common.StatsSetupConst.NUM_FILES;
 import static org.apache.hadoop.hive.common.StatsSetupConst.ROW_COUNT;
 import static org.apache.hadoop.hive.common.StatsSetupConst.TOTAL_SIZE;
 
 public class HiveMetastoreApiConverter {
     private static final Logger LOG = LogManager.getLogger(HiveMetastoreApiConverter.class);
     private static final String SPARK_SQL_SOURCE_PROVIDER = "spark.sql.sources.provider";
+    private static final Set<String> STATS_PROPERTIES = ImmutableSet.of(ROW_COUNT, TOTAL_SIZE, NUM_FILES);
 
     private static boolean isDeltaLakeTable(Map<String, String> tableParams) {
         return tableParams.containsKey(SPARK_SQL_SOURCE_PROVIDER) &&
@@ -133,6 +139,7 @@ public class HiveMetastoreApiConverter {
                         .collect(Collectors.toList()))
                 .setFullSchema(toFullSchemasForHiveTable(table))
                 .setTableLocation(toTableLocation(table.getSd(), table.getParameters()))
+                .setStorageFormat(HiveStorageFormat.get(fromHdfsInputFormatClass(table.getSd().getInputFormat()).name()))
                 .setCreateTime(table.getCreateTime());
         return tableBuilder.build();
     }
@@ -142,18 +149,19 @@ public class HiveMetastoreApiConverter {
         apiTable.setDbName(table.getDbName());
         apiTable.setTableName(table.getTableName());
         apiTable.setTableType("MANAGED_TABLE");
+        apiTable.setOwner(System.getenv("HADOOP_USER_NAME"));
         apiTable.setParameters(toApiTableProperties(table));
         apiTable.setPartitionKeys(table.getPartitionColumns().stream()
                 .map(HiveMetastoreApiConverter::toMetastoreApiFieldSchema)
                 .collect(Collectors.toList()));
-        apiTable.setSd(makeStorageDescriptor(table));
+        apiTable.setSd(makeStorageDescriptorFromHiveTable(table));
         return apiTable;
     }
 
-    private static StorageDescriptor makeStorageDescriptor(HiveTable table) {
+    private static StorageDescriptor makeStorageDescriptorFromHiveTable(HiveTable table) {
         SerDeInfo serdeInfo = new SerDeInfo();
         serdeInfo.setName(table.getTableName());
-        HiveStorageFormat storageFormat = HiveStorageFormat.get(table.getHiveProperties().getOrDefault(FILE_FORMAT, "parquet"));
+        HiveStorageFormat storageFormat = table.getStorageFormat();
         serdeInfo.setSerializationLib(storageFormat.getSerde());
 
         StorageDescriptor sd = new StorageDescriptor();
@@ -170,6 +178,25 @@ public class HiveMetastoreApiConverter {
         return sd;
     }
 
+    private static StorageDescriptor makeStorageDescriptorFromHivePartition(HivePartition partition) {
+        SerDeInfo serdeInfo = new SerDeInfo();
+        HiveStorageFormat hiveSd = partition.getStorage();
+        serdeInfo.setName(partition.getTableName());
+        serdeInfo.setSerializationLib(hiveSd.getSerde());
+
+        StorageDescriptor sd = new StorageDescriptor();
+        sd.setLocation(emptyToNull(partition.getLocation()));
+        sd.setCols(partition.getColumns().stream()
+                .map(HiveMetastoreApiConverter::toMetastoreApiFieldSchema)
+                .collect(toImmutableList()));
+        sd.setSerdeInfo(serdeInfo);
+        sd.setInputFormat(hiveSd.getInputFormat());
+        sd.setOutputFormat(hiveSd.getOutputFormat());
+        sd.setParameters(ImmutableMap.of());
+
+        return sd;
+    }
+
     public static FieldSchema toMetastoreApiFieldSchema(Column column) {
         return new FieldSchema(column.getName(), ColumnTypeConverter.toHiveType(column.getType()), column.getComment());
     }
@@ -177,12 +204,12 @@ public class HiveMetastoreApiConverter {
     public static Map<String, String> toApiTableProperties(HiveTable table) {
         ImmutableMap.Builder<String, String> tableProperties = ImmutableMap.builder();
 
-        tableProperties.put("numFiles", "-1");
-        tableProperties.put("totalSize", "-1");
+        tableProperties.put(ROW_COUNT, "0");
+        tableProperties.put(TOTAL_SIZE, "0");
         tableProperties.put("comment", table.getComment());
         tableProperties.put("starrocks_version", Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH);
         if (ConnectContext.get() != null && ConnectContext.get().getQueryId() != null) {
-            tableProperties.put("starrocks_query_id", ConnectContext.get().getQueryId().toString());
+            tableProperties.put(STARROCKS_QUERY_ID, ConnectContext.get().getQueryId().toString());
         }
 
         return tableProperties.build();
@@ -265,6 +292,25 @@ public class HiveMetastoreApiConverter {
                 .setSplittable(RemoteFileInputFormat.isSplittable(sd.getInputFormat()));
 
         return partitionBuilder.build();
+    }
+
+    public static org.apache.hadoop.hive.metastore.api.Partition toMetastoreApiPartition(
+            HivePartitionWithStats partitionWithStatistics) {
+        org.apache.hadoop.hive.metastore.api.Partition partition =
+                toMetastoreApiPartition(partitionWithStatistics.getHivePartition());
+        partition.setParameters(updateStatisticsParameters(
+                partition.getParameters(), partitionWithStatistics.getHivePartitionStats().getCommonStats()));
+        return partition;
+    }
+
+    public static org.apache.hadoop.hive.metastore.api.Partition toMetastoreApiPartition(HivePartition hivePartition) {
+        org.apache.hadoop.hive.metastore.api.Partition result = new org.apache.hadoop.hive.metastore.api.Partition();
+        result.setDbName(hivePartition.getDatabaseName());
+        result.setTableName(hivePartition.getTableName());
+        result.setValues(hivePartition.getValues());
+        result.setSd(makeStorageDescriptorFromHivePartition(hivePartition));
+        result.setParameters(hivePartition.getParameters());
+        return result;
     }
 
     public static List<Column> toFullSchemasForHiveTable(Table table) {
@@ -478,6 +524,26 @@ public class HiveMetastoreApiConverter {
         HiveColumnStats hiveColumnStatistics = new HiveColumnStats();
         hiveColumnStatistics.initialize(columnStatisticsObj.getStatsData(), rowNums);
         return hiveColumnStatistics;
+    }
+
+    public static Map<String, String> updateStatisticsParameters(Map<String, String> parameters, HiveCommonStats statistics) {
+        ImmutableMap.Builder<String, String> result = ImmutableMap.builder();
+
+        parameters.forEach((key, value) -> {
+            if (!(STATS_PROPERTIES.contains(key))) {
+                result.put(key, value);
+            }
+        });
+
+        result.put(ROW_COUNT, String.valueOf(statistics.getRowNums()));
+        result.put(TOTAL_SIZE, String.valueOf(statistics.getTotalFileBytes()));
+
+        if (!parameters.containsKey("STATS_GENERATED_VIA_STATS_TASK")) {
+            result.put("STATS_GENERATED_VIA_STATS_TASK", "workaround for potential lack of HIVE-12730");
+        }
+
+
+        return result.buildOrThrow();
     }
 
     public static void validateHiveTableType(String hiveTableType) {
