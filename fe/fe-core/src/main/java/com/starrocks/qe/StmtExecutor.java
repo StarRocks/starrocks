@@ -1044,7 +1044,6 @@ public class StmtExecutor {
     }
 
     private void handleAnalyzeProfileStmt() throws IOException {
-        Preconditions.checkState(false, "Not support profile analysis statement in this version");
         AnalyzeProfileStmt analyzeProfileStmt = (AnalyzeProfileStmt) parsedStmt;
         String queryId = analyzeProfileStmt.getQueryId();
         List<Integer> planNodeIds = analyzeProfileStmt.getPlanNodeIds();
