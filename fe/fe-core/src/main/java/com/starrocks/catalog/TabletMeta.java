@@ -51,6 +51,10 @@ public class TabletMeta {
 
     private final boolean isLakeTablet;
 
+
+    /**
+     * If currentTimeMs is ahead of `toBeCleanedTimeMs`, the tablet meta will be cleaned from TabletInvertedIndex.
+     */
     private Long toBeCleanedTimeMs = null;
 
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
