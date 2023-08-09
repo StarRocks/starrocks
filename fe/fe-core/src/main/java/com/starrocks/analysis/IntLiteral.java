@@ -63,6 +63,8 @@ public class IntLiteral extends LiteralExpr {
     public static final long BIG_INT_MAX = Long.MAX_VALUE;
     private long value;
 
+    private String stringValue = null;
+
     /**
      * C'tor forcing type, e.g., due to implicit cast
      */
@@ -152,6 +154,7 @@ public class IntLiteral extends LiteralExpr {
 
         this.value = longValue;
         this.type = type;
+        this.stringValue = value;
         analysisDone();
     }
 
@@ -309,7 +312,7 @@ public class IntLiteral extends LiteralExpr {
 
     @Override
     public String getStringValue() {
-        return Long.toString(value);
+        return stringValue != null ? stringValue : Long.toString(value);
     }
 
     @Override
