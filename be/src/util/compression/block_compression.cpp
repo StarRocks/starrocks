@@ -984,14 +984,15 @@ public:
             return Status::OK();
         }
 
-        thread_local libdeflate_decompressor* decompressor = libdeflate_alloc_decompressor();
+        thread_local std::unique_ptr<libdeflate_decompressor, void (*)(libdeflate_decompressor*)> decompressor{
+                libdeflate_alloc_decompressor(), libdeflate_free_decompressor};
         if (!decompressor) {
             return Status::InternalError("libdeflate_alloc_decompressor failed");
         }
 
         std::size_t out_len;
-        auto result =
-                libdeflate_gzip_decompress(decompressor, input.data, input.size, output->data, output->size, &out_len);
+        auto result = libdeflate_gzip_decompress(decompressor.get(), input.data, input.size, output->data, output->size,
+                                                 &out_len);
         if (result != LIBDEFLATE_SUCCESS) {
             return Status::InvalidArgument("libdeflate_gzip_decompress failed");
         }
