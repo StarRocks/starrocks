@@ -4,7 +4,8 @@ ffund_union string,
  famt bigint, 
   fuser_id string,
   fdate bigint
-)PARTITION BY range(fdate) (
+)
+PARTITION BY range(fdate) (
     PARTITION p1 VALUES LESS THAN ("20230703"),
     PARTITION p2 VALUES LESS THAN ("20230706"),
     PARTITION p3 VALUES LESS THAN ("20230716")
@@ -24,7 +25,8 @@ create table dal_bbb(
     famt bigint, 
     fuser_id string,
     fdate bigint
-)PARTITION BY range(fdate) (
+)
+PARTITION BY range(fdate) (
     PARTITION p1 VALUES LESS THAN ("20230703"),
     PARTITION p2 VALUES LESS THAN ("20230706"),
     PARTITION p3 VALUES LESS THAN ("20230716")
@@ -108,7 +110,7 @@ SELECT `fdate` AS a_ds, a.`ffund_union_5061_lvl1` AS `dim_1_ffund_union_5061_lvl
                     ) t14
                     ON t12.`ffund_union` = t14.`ffund_union`
             ) a
-            GROUP BY a_ds, `dim_1_ffund_union_5061_lvl1`
+            GROUP BY a_ds, `dim_1_ffund_union_5061_lvl1`;
 
 create MATERIALIZED VIEW join_mv3
 DISTRIBUTED BY HASH(a_ds, dim_1_ffund_union_5061_lvl1)

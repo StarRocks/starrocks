@@ -3906,4 +3906,29 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK("select * from t5 full outer join t4 on k1=a",
                 "select * from t5 left outer join t4 on k1=a where k1=3;");
     }
+
+    @Test
+    public void testComplexExpressionRewrite() {
+        // left outer join
+        {
+            // Equivalence class should not be used. because c_custkey is nullable in mv, but lo_custkey is
+            // not nullable
+            String mv = "select" +
+                    " case when lo_orderkey is null then 0 else 1 end as f1," +
+                    " lo_linenumber is null as f2," +
+                    " lo_shipmode like 'mode' as f3," +
+                    " not lo_revenue > 0 as f4," +
+                    " lo_revenue between 100 and 200 as f5, lo_orderdate in (20230101, 20230102) as f6" +
+                    " from lineorder_null";
+            String query = "select" +
+                    " case when lo_orderkey is null then 0 else 1 end as f1," +
+                    " lo_linenumber is null as f2," +
+                    " lo_shipmode like 'mode' as f3," +
+                    " not lo_revenue > 0 as f4," +
+                    " lo_revenue between 100 and 200 as f5," +
+                    " lo_orderdate in (20230101, 20230102) as f6" +
+                    " from lineorder_null";
+            testRewriteOK(mv, query);
+        }
+    }
 }
