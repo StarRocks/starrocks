@@ -38,6 +38,7 @@ Before starting FEs, add the following configuration items in the FE configurati
 | aws_s3_secret_key                   | The Secret Access Key used to access your S3 bucket.         |
 | aws_s3_iam_role_arn                 | The ARN of the IAM role that has privileges on your S3 bucket in which your data files are stored. |
 | aws_s3_external_id                  | The external ID of the AWS account that is used for cross-account access to your S3 bucket. |
+
 <!--| azure_blob_path                     | The Azure Blob Storage path used to store data. It consists of the name of the container within your storage account and the sub-path (if any) under the container, for example, `testcontainer/subpath`. |
 | azure_blob_endpoint                 | The endpoint of your Azure Blob Storage Account, for example, `https://test.blob.core.windows.net`. |
 | azure_blob_shared_key               | The Shared Key used to authorize requests for your Azure Blob Storage.                     |
