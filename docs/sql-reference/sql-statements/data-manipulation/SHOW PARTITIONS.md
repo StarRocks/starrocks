@@ -48,7 +48,7 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
 1. Display information of all regular partitions from the specified table `site_access` under the specified database `test`.
 
     ```SQL
-    MySQL [test]> show partitions from test.site_access\G
+    MySQL > show partitions from test.site_access\G
     *************************** 1. row ***************************
                 PartitionId: 20990
             PartitionName: p2019 
