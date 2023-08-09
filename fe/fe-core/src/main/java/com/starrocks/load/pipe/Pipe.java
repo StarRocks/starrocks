@@ -28,6 +28,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.VariableMgr;
@@ -133,7 +134,7 @@ public class Pipe implements GsonPostProcessable {
             pipeSource.setAutoIngest(value);
         }
         if (properties.containsKey(PipeAnalyzer.PROPERTY_BATCH_SIZE)) {
-            long batchSize = Long.parseLong(properties.get(PipeAnalyzer.PROPERTY_BATCH_SIZE));
+            long batchSize = ParseUtil.parseDataVolumeStr(properties.get(PipeAnalyzer.PROPERTY_BATCH_SIZE));
             pipeSource.setBatchSize(batchSize);
         }
     }

@@ -583,4 +583,14 @@ public class PipeManagerTest {
         Assert.assertFalse(result.pipe_files.isEmpty());
     }
 
+    @Test
+    public void testProperty() throws Exception {
+        createPipe("create pipe p_batch_size properties('batch_size'='10GB') " +
+                " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
+        createPipe("create pipe p_poll_interval properties('poll_interval'='100') " +
+                " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
+        createPipe("create pipe p_auto_ingest properties('auto_ingest'='false') " +
+                " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
+    }
+
 }

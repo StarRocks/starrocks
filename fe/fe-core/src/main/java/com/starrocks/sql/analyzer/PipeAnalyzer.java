@@ -25,6 +25,7 @@ import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.OrderByPair;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.load.pipe.FilePipeSource;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.VariableMgr;
@@ -95,14 +96,13 @@ public class PipeAnalyzer {
                     break;
                 }
                 case PROPERTY_BATCH_SIZE: {
-                    int value = -1;
+                    long value = -1;
                     try {
-                        value = Integer.parseInt(valueStr);
-                    } catch (NumberFormatException ignored) {
+                        value = ParseUtil.parseDataVolumeStr(valueStr);
+                    } catch (Exception ignored) {
                     }
                     if (value < 0) {
-                        ErrorReport.reportSemanticException(
-                                ErrorCode.ERR_INVALID_PARAMETER,
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
                                 PROPERTY_BATCH_SIZE + " should in [0, +oo)");
                     }
                     break;
