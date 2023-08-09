@@ -194,7 +194,7 @@ public class ExecuteSqlAction extends RestBaseAction {
         }
 
         if (requestBody.onlyOutputResultRaw) {
-            context.setonlyOutputResultRaw(true);
+            context.setOnlyOutputResultRaw(true);
         }
 
         return requestBody;

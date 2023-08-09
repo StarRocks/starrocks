@@ -140,11 +140,11 @@ public class HttpConnectContext extends ConnectContext {
         isKeepAlive = keepAlive;
     }
 
-    public boolean isonlyOutputResultRaw() {
+    public boolean isOnlyOutputResultRaw() {
         return onlyOutputResultRaw;
     }
 
-    public void setonlyOutputResultRaw(boolean onlyOutputResultRaw) {
+    public void setOnlyOutputResultRaw(boolean onlyOutputResultRaw) {
         this.onlyOutputResultRaw = onlyOutputResultRaw;
     }
 

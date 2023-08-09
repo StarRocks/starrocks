@@ -74,7 +74,7 @@ public class HttpResultSender {
         context.setSendDate(true);
         sendHeader(nettyChannel);
         // write connectId
-        if (!context.isonlyOutputResultRaw()) {
+        if (!context.isOnlyOutputResultRaw()) {
             nettyChannel.write(JsonSerializer.getConnectId(context.getConnectionId()));
         }
         // write column meta data
@@ -88,7 +88,7 @@ public class HttpResultSender {
                 context.updateReturnRows(batch.getBatch().getRows().size());
             }
             if (batch.isEos()) {
-                if (!context.isonlyOutputResultRaw()) {
+                if (!context.isOnlyOutputResultRaw()) {
                     ByteBuf statisticData = JsonSerializer.getStatistic(batch.getQueryStatistics());
                     nettyChannel.writeAndFlush(statisticData);
                 }
@@ -129,9 +129,11 @@ public class HttpResultSender {
                 }
                 Thread.yield();
             }
-            // only flush once
             if (row != resultBatch.getRows().get(rowsSize - 1)) {
                 channel.write(Unpooled.wrappedBuffer(row));
+                if (!channel.channel().isWritable()) {
+                    channel.flush();
+                }
             } else {
                 channel.writeAndFlush(Unpooled.wrappedBuffer(row));
             }
