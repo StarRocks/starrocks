@@ -500,10 +500,12 @@ public class PipeManagerTest {
         ShowExecutor showExecutor = new ShowExecutor(ctx, showPipeStmt);
         ShowResultSet result = showExecutor.execute();
         Assert.assertEquals(
-                Arrays.asList("show_1", "pipe_test_db.tbl1", "RUNNING", "{\"loadFiles\":0,\"loadBytes\":0}", null),
+                Arrays.asList("show_1", "pipe_test_db.tbl1", "RUNNING",
+                        "{\"loadedFiles\":0,\"loadedBytes\":0,\"loadingFiles\":0}", null),
                 result.getResultRows().get(0).subList(2, result.numColumns() - 1));
         Assert.assertEquals(
-                Arrays.asList("show_2", "pipe_test_db.tbl1", "RUNNING", "{\"loadFiles\":0,\"loadBytes\":0}", null),
+                Arrays.asList("show_2", "pipe_test_db.tbl1", "RUNNING",
+                        "{\"loadedFiles\":0,\"loadedBytes\":0,\"loadingFiles\":0}", null),
                 result.getResultRows().get(1).subList(2, result.numColumns() - 1));
 
         // desc
@@ -513,7 +515,7 @@ public class PipeManagerTest {
         result = showExecutor.execute();
         Assert.assertEquals(
                 Arrays.asList("show_1", "FILE", "pipe_test_db.tbl1", "FILE_SOURCE(path=fake://pipe)",
-                        "insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')"),
+                        "insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')", ""),
                 result.getResultRows().get(0).subList(2, result.numColumns())
         );
     }

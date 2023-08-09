@@ -512,6 +512,9 @@ public class Pipe implements GsonPostProcessable {
     }
 
     public String getPropertiesJson() {
+        if (MapUtils.isEmpty(properties)) {
+            return "";
+        }
         Gson gsonObj = new Gson();
         return gsonObj.toJson(properties);
     }
