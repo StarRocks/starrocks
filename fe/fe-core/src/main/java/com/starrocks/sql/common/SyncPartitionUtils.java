@@ -465,7 +465,7 @@ public class SyncPartitionUtils {
         if (expr instanceof SlotRef) {
             Column partitionColumn = baseTable.getColumn(((SlotRef) expr).getColumnName());
             BaseTableInfo baseTableInfo = new BaseTableInfo(tableName.getCatalog(), tableName.getDb(),
-                    baseTable.getTableIdentifier());
+                    baseTable.getName(), baseTable.getTableIdentifier());
             Map<String, MaterializedView.BasePartitionInfo> baseTableVersionMap = versionMap.get(baseTableInfo);
             if (baseTableVersionMap != null) {
                 baseTableVersionMap.keySet().removeIf(partitionName -> {
@@ -483,7 +483,7 @@ public class SyncPartitionUtils {
         } else {
             // This is a bad case for refreshing, and this problem will be optimized later.
             versionMap.remove(new BaseTableInfo(tableName.getCatalog(), tableName.getDb(),
-                    baseTable.getTableIdentifier()));
+                    baseTable.getName(), baseTable.getTableIdentifier()));
         }
     }
 
