@@ -381,7 +381,7 @@ public class MaterializedViewAnalyzer {
 
             // set duplicate key, when sort key is set, it is dup key col.
             List<String> keyCols = statement.getSortKeys();
-            if (keyCols == null) {
+            if (CollectionUtils.isEmpty(keyCols)) {
                 keyCols = Lists.newArrayList();
                 int theBeginIndexOfValue = 0;
                 int keySizeByte = 0;
@@ -419,13 +419,17 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("The number of sort key should be less than the number of columns.");
             }
 
+            // Without specified sortkeys, set keys from columns
+            Map<String, Column> columnMap = mvColumns.stream().collect(Collectors.toMap(Column::getName, col -> col));
             if (CollectionUtils.isEmpty(statement.getSortKeys())) {
+                for (String col : keyCols) {
+                    columnMap.get(col).setIsKey(true);
+                }
                 return mvColumns;
             }
 
             // Reorder the MV columns according to sort-key
             List<Column> reorderedColumns = new ArrayList<>();
-            Map<String, Column> columnMap = mvColumns.stream().collect(Collectors.toMap(Column::getName, col -> col));
             Set<String> usedColumns = new HashSet<>();
             for (String columnName : keyCols) {
                 Column keyColumn = columnMap.get(columnName);
