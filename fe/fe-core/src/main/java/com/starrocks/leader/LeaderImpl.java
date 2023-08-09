@@ -178,7 +178,9 @@ public class LeaderImpl {
         // check task status
         // retry task by report process
         TStatus taskStatus = request.getTask_status();
-        LOG.debug("get task report: {}", request.toString());
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("get task report: {}", request.toString());
+        }
         if (taskStatus.getStatus_code() != TStatusCode.OK) {
             LOG.warn("finish task reports bad. request: {}", request.toString());
         }
