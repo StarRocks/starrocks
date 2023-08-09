@@ -213,5 +213,5 @@ explain logical
         ) t_join1
         ON coalesce(CAST(t_join0.a_ds AS string), '无值') = coalesce(CAST(t_join1.a_ds AS string), '无值')
             AND coalesce(CAST(t_join0.`dim_1_ffund_union_5061_lvl1` AS string), '无值') = coalesce(CAST(t_join1.`dim_1_ffund_union_5061_lvl1` AS string), '无值');
- -- result:
+-- result:
 [REGEX]join_mv3
