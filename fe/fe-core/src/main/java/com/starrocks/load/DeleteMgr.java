@@ -820,6 +820,19 @@ public class DeleteMgr implements Writable {
         }
     }
 
+    public long getDeleteJobCount() {
+        return this.idToDeleteJob.size();
+    }
+
+    public long getDeleteInfoCount() {
+        lock.readLock().lock();
+        try {
+            return dbToDeleteInfos.values().stream().mapToLong(List::size).sum();
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
         int numJson = 1 + dbToDeleteInfos.size() * 2;
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.DELETE_MGR, numJson);

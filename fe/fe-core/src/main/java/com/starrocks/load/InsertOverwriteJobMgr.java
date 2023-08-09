@@ -210,7 +210,12 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable {
     }
 
     public long getJobNum() {
-        return overwriteJobMap.size();
+        lock.readLock().lock();
+        try {
+            return overwriteJobMap.size();
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     public long getRunningJobSize() {

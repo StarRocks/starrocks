@@ -913,4 +913,8 @@ public class TaskManager {
             taskUnlock();
         }
     }
+
+    public long getTaskCount() {
+        return this.idToTaskMap.size();
+    }
 }
