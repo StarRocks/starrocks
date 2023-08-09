@@ -44,8 +44,9 @@ Status StarCacheWrapper::init(const CacheOptions& options) {
     }
     _load_starcache_conf();
     starcache::config::FLAGS_block_size = options.block_size;
-    starcache::config::FLAGS_enable_disk_checksum = options.checksum;
+    starcache::config::FLAGS_enable_disk_checksum = options.enable_checksum;
     starcache::config::FLAGS_max_concurrent_writes = options.max_concurrent_inserts;
+    starcache::config::FLAGS_enable_os_page_cache = !options.enable_direct_io;
 
     _cache = std::make_unique<starcache::StarCache>();
     return to_status(_cache->init(opt));

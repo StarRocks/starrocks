@@ -379,11 +379,7 @@ public class AlterTableStatementAnalyzer {
                 throw new SemanticException("New column name is not set");
             }
 
-            try {
-                FeNameFormat.checkColumnName(clause.getNewColName());
-            } catch (AnalysisException e) {
-                throw new SemanticException("Analyze FeNameFormat error: %s", e.getMessage());
-            }
+            FeNameFormat.checkColumnName(clause.getNewColName());
             return null;
         }
 

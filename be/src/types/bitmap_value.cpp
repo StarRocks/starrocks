@@ -923,27 +923,58 @@ void BitmapValue::_convert_to_smaller_type() {
 }
 
 int64_t BitmapValue::sub_bitmap_internal(const int64_t& offset, const int64_t& len, BitmapValue* ret_bitmap) {
-    if (offset > 0 && offset >= _bitmap->cardinality()) {
+    switch (_type) {
+    case EMPTY:
         return 0;
+    case SINGLE: {
+        if (offset >= 1 || offset < -1 || len <= 0) {
+            return 0;
+        } else {
+            ret_bitmap->add(_sv);
+            return 1;
+        }
     }
-    if (offset < 0 && std::abs(offset) > _bitmap->cardinality()) {
-        return 0;
-    }
-    int64_t abs_offset = offset;
-    if (offset < 0) {
-        abs_offset = _bitmap->cardinality() + offset;
-    }
+    case SET: {
+        size_t cardinality = _set->size();
+        if ((offset > 0 && offset >= cardinality) || (offset < 0 && std::abs(offset) > cardinality)) {
+            return 0;
+        }
+        int64_t abs_offset = offset;
+        if (offset < 0) {
+            abs_offset = cardinality + offset;
+        }
 
-    int64_t count = 0;
-    int64_t offset_count = 0;
-    auto it = _bitmap->begin();
-    for (; it != _bitmap->end() && offset_count < abs_offset; ++it) {
-        ++offset_count;
+        std::vector values(_set->begin(), _set->end());
+        std::sort(values.begin(), values.end());
+
+        int64_t count = 0;
+        for (auto idx = abs_offset; idx < values.size() && count < len; ++idx, ++count) {
+            ret_bitmap->add(values[idx]);
+        }
+        return count;
     }
-    for (; it != _bitmap->end() && count < len; ++it, ++count) {
-        ret_bitmap->add(*it);
+    default:
+        DCHECK_EQ(_type, BITMAP);
+        size_t cardinality = _bitmap->cardinality();
+        if ((offset > 0 && offset >= cardinality) || (offset < 0 && std::abs(offset) > cardinality)) {
+            return 0;
+        }
+        int64_t abs_offset = offset;
+        if (offset < 0) {
+            abs_offset = cardinality + offset;
+        }
+
+        int64_t count = 0;
+        int64_t offset_count = 0;
+        auto it = _bitmap->begin();
+        for (; it != _bitmap->end() && offset_count < abs_offset; ++it) {
+            ++offset_count;
+        }
+        for (; it != _bitmap->end() && count < len; ++it, ++count) {
+            ret_bitmap->add(*it);
+        }
+        return count;
     }
-    return count;
 }
 
 void BitmapValue::add_many(size_t n_args, const uint32_t* vals) {

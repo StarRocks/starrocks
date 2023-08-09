@@ -16,8 +16,7 @@ create materialized view tvd distributed by hash(k) buckets 10 REFRESH ASYNC as 
 -- !result
 show create materialized view tvd;
 -- result:
-tvd	CREATE MATERIALIZED VIEW `tvd`
-COMMENT "MATERIALIZED_VIEW"
+tvd	CREATE MATERIALIZED VIEW `tvd` (`k`, `sum(v)`)
 DISTRIBUTED BY HASH(`k`) BUCKETS 10 
 REFRESH ASYNC
 PROPERTIES (
@@ -37,7 +36,7 @@ create materialized view tvb distributed by hash(k) buckets 10 REFRESH ASYNC as 
 -- !result
 show create materialized view tvb;
 -- result:
-tvb	CREATE MATERIALIZED VIEW `tvb`
+tvb	CREATE MATERIALIZED VIEW `tvb` (`k`, `sum(v)`)
 COMMENT "MATERIALIZED_VIEW"
 DISTRIBUTED BY HASH(`k`) BUCKETS 10 
 REFRESH ASYNC

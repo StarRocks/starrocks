@@ -41,9 +41,6 @@ order by
 [result]
 TOP-N (order by [[71: count DESC NULLS LAST, 2: s_name ASC NULLS FIRST]])
     TOP-N (order by [[71: count DESC NULLS LAST, 2: s_name ASC NULLS FIRST]])
-        AGGREGATE ([GLOBAL] aggregate [{185: count=sum(185: count)}] group by [[123: s_name]] having [null]
-            EXCHANGE SHUFFLE[123]
-                AGGREGATE ([LOCAL] aggregate [{185: count=sum(126: cnt_star)}] group by [[123: s_name]] having [null]
-                    SCAN (mv[query21_mv] columns[123: s_name, 124: o_orderstatus, 125: n_name, 126: cnt_star] predicate[124: o_orderstatus = F AND 125: n_name = CANADA])
+        SCAN (mv[query21_mv] columns[157: s_name, 158: o_orderstatus, 159: n_name, 160: cnt_star] predicate[158: o_orderstatus = F AND 159: n_name = CANADA])
 [end]
 

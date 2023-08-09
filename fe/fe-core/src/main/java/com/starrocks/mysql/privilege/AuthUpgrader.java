@@ -28,6 +28,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.privilege.AuthorizationMgr;
+import com.starrocks.privilege.CatalogPEntryObject;
+import com.starrocks.privilege.DbPEntryObject;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivObjNotFoundException;
@@ -37,7 +39,9 @@ import com.starrocks.privilege.PrivilegeEntry;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.privilege.RolePrivilegeCollectionV2;
+import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.privilege.UserPrivilegeCollectionV2;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
@@ -52,6 +56,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class AuthUpgrader {
 
@@ -425,6 +430,27 @@ public class AuthUpgrader {
                                 "unsupported table " + privilege + " for user " + user);
                 }
             } // for privilege
+        }
+
+        List<String> catalogs = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().keySet()
+                .stream().filter(catalogName ->
+                        !CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)
+                ).collect(Collectors.toList());
+        for (String catalog : catalogs) {
+            CatalogPEntryObject catalogPEntryObject =
+                    CatalogPEntryObject.generate(GlobalStateMgr.getCurrentState(), Lists.newArrayList(catalog));
+            collection.grant(ObjectType.CATALOG, authorizationManager.getAvailablePrivType(ObjectType.CATALOG),
+                    Lists.newArrayList(catalogPEntryObject), false);
+
+            DbPEntryObject dbPEntryObject = DbPEntryObject.generate(GlobalStateMgr.getCurrentState(),
+                    Lists.newArrayList(catalog, "*"));
+            collection.grant(ObjectType.DATABASE, authorizationManager.getAvailablePrivType(ObjectType.DATABASE),
+                    Lists.newArrayList(dbPEntryObject), false);
+
+            TablePEntryObject tablePEntryObject = TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
+                    Lists.newArrayList(catalog, "*", "*"));
+            collection.grant(ObjectType.TABLE, authorizationManager.getAvailablePrivType(ObjectType.TABLE),
+                    Lists.newArrayList(tablePEntryObject), false);
         }
     }
 

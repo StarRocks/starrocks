@@ -25,11 +25,12 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 
 public class MaterializedViewOptimizer {
     public MVRewriteContextCache optimize(MaterializedView mv,
-                                          ConnectContext connectContext) {
+                                          ConnectContext connectContext,
+                                          OptimizerConfig optimizerConfig) {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         String mvSql = mv.getViewDefineSql();
         Pair<OptExpression, LogicalPlan> plans =
-                MvUtils.getRuleOptimizedLogicalPlan(mvSql, columnRefFactory, connectContext);
+                MvUtils.getRuleOptimizedLogicalPlan(mv, mvSql, columnRefFactory, connectContext, optimizerConfig);
         if (plans == null) {
             return null;
         }

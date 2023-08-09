@@ -331,7 +331,7 @@ OutPut Exchange Id: 10
 |  * s_phone-->[-Infinity, Infinity, 0.0, 15.0, 200000.0] ESTIMATE
 |  * s_acctbal-->[-998.22, 9999.72, 0.0, 8.0, 200000.0] ESTIMATE
 |  * s_comment-->[-Infinity, Infinity, 0.0, 101.0, 200000.0] ESTIMATE
-|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
 8:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -344,12 +344,12 @@ OutPut Exchange Id: 10
 |  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 200000.0] ESTIMATE
 |  * s_name-->[-Infinity, Infinity, 0.0, 25.0, 200000.0] ESTIMATE
 |  * s_address-->[-Infinity, Infinity, 0.0, 40.0, 200000.0] ESTIMATE
-|  * s_nationkey-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
 |  * s_phone-->[-Infinity, Infinity, 0.0, 15.0, 200000.0] ESTIMATE
 |  * s_acctbal-->[-998.22, 9999.72, 0.0, 8.0, 200000.0] ESTIMATE
 |  * s_comment-->[-Infinity, Infinity, 0.0, 101.0, 200000.0] ESTIMATE
-|  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
-|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * n_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * r_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 |----7:EXCHANGE
 |       distribution type: BROADCAST

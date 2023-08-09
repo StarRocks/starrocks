@@ -39,7 +39,9 @@ import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
@@ -197,6 +199,25 @@ public class InsertLoadJob extends LoadJob {
             }
         }
         return Sets.newHashSet(table.getName());
+    }
+
+    @Override
+    public boolean hasTxn() {
+        Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (database == null) {
+            return true;
+        }
+
+        Table table = database.getTable(tableId);
+        if (table == null) {
+            return true;
+        }
+
+        if (table instanceof SystemTable || table instanceof IcebergTable) {
+            return false;
+        } else {
+            return true;
+        }
     }
 
     @Override

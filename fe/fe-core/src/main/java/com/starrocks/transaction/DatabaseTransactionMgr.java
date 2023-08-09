@@ -736,6 +736,21 @@ public class DatabaseTransactionMgr {
         }
     }
 
+    public TransactionState getLabelTransactionState(String label) {
+        readLock();
+        try {
+            Set<Long> existingTxnIds = unprotectedGetTxnIdsByLabel(label);
+            if (existingTxnIds == null || existingTxnIds.isEmpty()) {
+                return null;
+            }
+            // find the latest txn (which id is largest)
+            long maxTxnId = existingTxnIds.stream().max(Comparator.comparingLong(Long::valueOf)).orElse(Long.MIN_VALUE);
+            return unprotectedGetTransactionState(maxTxnId);
+        } finally {
+            readUnlock();
+        }
+    }
+
     public Long getLabelTxnID(String label) {
         readLock();
         try {
@@ -822,10 +837,6 @@ public class DatabaseTransactionMgr {
                             // which means publish version task finished in replica
                             for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 if (!errReplicas.contains(replica.getId())) {
-                                    // if replica not in can load state, skip it.
-                                    if (!replica.getState().canLoad()) {
-                                        continue;
-                                    }
                                     // success healthy replica condition:
                                     // 1. version is equal to partition's visible version
                                     // 2. publish version task in this replica has finished
@@ -864,7 +875,7 @@ public class DatabaseTransactionMgr {
 
                                 // if all unfinished backends already down through heartbeat detect, we don't need to wait anymore
                                 for (Long backendID : unfinishedBackends) {
-                                    if (globalStateMgr.getCurrentSystemInfo().checkBackendAlive(backendID)) {
+                                    if (GlobalStateMgr.getCurrentSystemInfo().checkBackendAlive(backendID)) {
                                         return false;
                                     }
                                 }
@@ -967,10 +978,6 @@ public class DatabaseTransactionMgr {
                             for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 if (!errorReplicaIds.contains(replica.getId())
                                         && replica.getLastFailedVersion() < 0) {
-                                    // if replica not in can load state, skip it.
-                                    if (!replica.getState().canLoad()) {
-                                        continue;
-                                    }
                                     // if replica not commit yet, skip it. This may happen when it's just create by clone.
                                     if (!transactionState.tabletCommitInfosContainsReplica(tablet.getId(), 
                                             replica.getBackendId())) {
@@ -1004,7 +1011,7 @@ public class DatabaseTransactionMgr {
                                                 partitionCommitInfo.getVersion());
                                         LOG.warn("transaction state {} has error, the replica [{}] not appeared " +
                                                         "in error replica list and its version not equal to partition " +
-                                                        "commit version or commit version - 1 if its not a upgrate " +
+                                                        "commit version or commit version - 1 if it's not a upgrade " +
                                                         "stage, its a fatal error. ",
                                                 transactionState, replica);
                                     }
@@ -1436,7 +1443,12 @@ public class DatabaseTransactionMgr {
     }
 
     public int getTransactionNum() {
-        return idToRunningTransactionState.size() + finalStatusTransactionStateDeque.size();
+        try {
+            readLock();
+            return idToRunningTransactionState.size() + finalStatusTransactionStateDeque.size();
+        } finally {
+            readUnlock();
+        }
     }
 
     public List<Pair<Long, Long>> getTransactionIdByCoordinateBe(String coordinateHost, int limit) {

@@ -82,6 +82,8 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.BackendCoreStat;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.util.ThreadUtil;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 
 import java.io.IOException;
@@ -90,6 +92,7 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 public class StarRocksAssert {
+    private static final Logger LOG = LogManager.getLogger(StarRocksAssert.class);
 
     private ConnectContext ctx;
 
@@ -216,9 +219,13 @@ public class StarRocksAssert {
         return this;
     }
 
+    public Table getTable(String dbName, String tableName) {
+        return ctx.getGlobalStateMgr().mayGetDb(dbName).map(db -> db.getTable(tableName)).orElse(null);
+    }
+
     public StarRocksAssert withSingleReplicaTable(String sql) throws Exception {
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        if (statementBase instanceof  CreateTableStmt) {
+        if (statementBase instanceof CreateTableStmt) {
             CreateTableStmt createTableStmt = (CreateTableStmt) statementBase;
             createTableStmt.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
             return this.withTable(sql);

@@ -116,10 +116,10 @@ OutPut Exchange Id: 23
 |
 20:HASH JOIN
 |  join op: INNER JOIN (PARTITIONED)
-|  equal join conjunct: [25: o_custkey, INT, true] = [33: c_custkey, INT, true]
 |  equal join conjunct: [45: n_nationkey, INT, true] = [36: c_nationkey, INT, true]
+|  equal join conjunct: [25: o_custkey, INT, true] = [33: c_custkey, INT, true]
 |  build runtime filters:
-|  - filter_id = 3, build_expr = (33: c_custkey), remote = true
+|  - filter_id = 4, build_expr = (33: c_custkey), remote = true
 |  output columns: 13, 14, 18, 42, 46
 |  cardinality: 554680
 |  column statistics:
@@ -193,11 +193,11 @@ OutPut Exchange Id: 17
 |  output columns: 13, 14, 18, 25, 42, 45, 46
 |  cardinality: 6939052
 |  column statistics:
-|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 6939052.173623761] ESTIMATE
+|  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
+|  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 |  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 3736520.0] ESTIMATE
 |  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |  * l_shipdate-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] ESTIMATE
-|  * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 6939052.173623761] ESTIMATE
 |  * o_custkey-->[1.0, 1.5E8, 0.0, 8.0, 6939052.173623761] ESTIMATE
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 |  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
@@ -393,7 +393,7 @@ numNodes=0
 cardinality: 150000000
 probe runtime filters:
 - filter_id = 2, probe_expr = (24: o_orderkey)
-- filter_id = 3, probe_expr = (25: o_custkey)
+- filter_id = 4, probe_expr = (25: o_custkey)
 column statistics:
 * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 * o_custkey-->[1.0, 1.5E8, 0.0, 8.0, 1.0031873E7] ESTIMATE

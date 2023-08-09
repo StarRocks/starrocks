@@ -177,7 +177,9 @@ public class InsertAnalyzer {
         insertStmt.setTargetTable(table);
         insertStmt.setTargetPartitionIds(targetPartitionIds);
         insertStmt.setTargetColumns(targetColumns);
-        session.getDumpInfo().addTable(database.getFullName(), table);
+        if (session.getDumpInfo() != null) {
+            session.getDumpInfo().addTable(database.getFullName(), table);
+        }
     }
 
     private static void checkStaticKeyPartitionInsert(InsertStmt insertStmt, Table table, PartitionNames targetPartitionNames) {
@@ -208,7 +210,7 @@ public class InsertAnalyzer {
 
         for (int i = 0; i < partitionColNames.size(); i++) {
             String actualName = partitionColNames.get(i);
-            if (!tablePartitionColumnNames.contains(actualName)) {
+            if (!AnalyzerUtils.containsIgnoreCase(tablePartitionColumnNames, actualName)) {
                 throw new SemanticException("Can't find partition column %s", actualName);
             }
 

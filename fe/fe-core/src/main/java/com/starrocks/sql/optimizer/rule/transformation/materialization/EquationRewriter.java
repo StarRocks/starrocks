@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
@@ -37,6 +38,8 @@ public class EquationRewriter {
 
     private Multimap<ScalarOperator, Pair<ColumnRefOperator, ScalarOperator>> equationMap;
     private Map<ColumnRefOperator, ColumnRefOperator> columnMapping;
+    private AggregateFunctionRewriter aggregateFunctionRewriter;
+    boolean underAggFunctionRewriteContext;
 
     public EquationRewriter() {
         this.equationMap = ArrayListMultimap.create();
@@ -44,6 +47,18 @@ public class EquationRewriter {
 
     public void setOutputMapping(Map<ColumnRefOperator, ColumnRefOperator> columnMapping) {
         this.columnMapping = columnMapping;
+    }
+
+    public void setAggregateFunctionRewriter(AggregateFunctionRewriter aggregateFunctionRewriter) {
+        this.aggregateFunctionRewriter = aggregateFunctionRewriter;
+    }
+
+    public boolean isUnderAggFunctionRewriteContext() {
+        return underAggFunctionRewriteContext;
+    }
+
+    public void setUnderAggFunctionRewriteContext(boolean underAggFunctionRewriteContext) {
+        this.underAggFunctionRewriteContext = underAggFunctionRewriteContext;
     }
 
     protected ScalarOperator replaceExprWithTarget(ScalarOperator expr) {
@@ -62,8 +77,35 @@ public class EquationRewriter {
 
             @Override
             public ScalarOperator visitCall(CallOperator predicate, Void context) {
+                // 1. rewrite query's predicate
                 ScalarOperator tmp = replace(predicate);
-                return tmp != null ? tmp : super.visitCall(predicate, context);
+                if (tmp != null) {
+                    return tmp;
+                }
+
+                // 2. normalize predicate to better match mv
+                // TODO: merge into aggregateFunctionRewriter later.
+                predicate = normalizeCallOperator(predicate);
+                tmp = replace(predicate);
+                if (tmp != null) {
+                    return tmp;
+                }
+
+                // 3. retry again by using aggregateFunctionRewriter when predicate cannot be rewritten.
+                if (aggregateFunctionRewriter != null && aggregateFunctionRewriter.canRewriteAggFunction(predicate) &&
+                        !isUnderAggFunctionRewriteContext()) {
+                    ScalarOperator newChooseScalarOp = aggregateFunctionRewriter.rewriteAggFunction(predicate);
+                    if (newChooseScalarOp != null) {
+                        setUnderAggFunctionRewriteContext(true);
+                        // NOTE: To avoid repeating `rewriteAggFunction` by `aggregateFunctionRewriter`, use
+                        // `underAggFunctionRewriteContext` to mark it's under agg function rewriter and no need rewrite again.
+                        ScalarOperator rewritten = newChooseScalarOp.accept(this, null);
+                        setUnderAggFunctionRewriteContext(false);
+                        return rewritten;
+                    }
+                }
+
+                return super.visitCall(predicate, context);
             }
 
             @Override
@@ -79,9 +121,7 @@ public class EquationRewriter {
             }
 
             ScalarOperator replace(ScalarOperator scalarOperator) {
-
                 if (equationMap.containsKey(scalarOperator)) {
-
                     Optional<Pair<ColumnRefOperator, ScalarOperator>> mappedColumnAndExprRef =
                             equationMap.get(scalarOperator).stream().findFirst();
 
@@ -103,7 +143,6 @@ public class EquationRewriter {
                     ScalarOperator newExpr = extendedExpr.clone();
                     return replaceColInExpr(newExpr, basedColumn,
                             replaced.clone()) ? newExpr : null;
-
                 }
 
                 return null;
@@ -125,15 +164,41 @@ public class EquationRewriter {
         return expr.accept(shuttle, null);
     }
 
+    private static CallOperator normalizeCallOperator(CallOperator aggFunc) {
+        String aggFuncName = aggFunc.getFnName();
+        if (!aggFuncName.equals(FunctionSet.COUNT) || aggFunc.isDistinct()) {
+            return aggFunc;
+        }
+
+        // unify count(*) or count(non-nullable column) to count(1) to be better for rewrite.
+        if (aggFunc.getChildren().size() == 0 || !aggFunc.getChild(0).isNullable()) {
+            return new CallOperator(FunctionSet.COUNT, aggFunc.getType(),
+                    Lists.newArrayList(ConstantOperator.createTinyInt((byte) 1)));
+        }
+        return aggFunc;
+    }
+
     public boolean containsKey(ScalarOperator scalarOperator) {
         return equationMap.containsKey(scalarOperator);
     }
 
     public void addMapping(ScalarOperator expr, ColumnRefOperator col) {
         equationMap.put(expr, Pair.create(col, null));
+
+        // Convert a + 1 -> col_f => a => col_f - 1
         Pair<ScalarOperator, ScalarOperator> extendedEntry = new EquationTransformer(expr, col).getMapping();
         if (extendedEntry.second != col) {
             equationMap.put(extendedEntry.first, Pair.create(col, extendedEntry.second));
+        }
+
+        if (expr instanceof CallOperator) {
+            CallOperator aggFunc = (CallOperator) expr;
+            if (aggFunc.getFnName().equals(FunctionSet.COUNT) && !aggFunc.isDistinct()) {
+                CallOperator newAggFunc = normalizeCallOperator(aggFunc);
+                if (newAggFunc != null && newAggFunc != aggFunc) {
+                    equationMap.put(newAggFunc,  Pair.create(col, null));
+                }
+            }
         }
     }
 

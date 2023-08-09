@@ -330,7 +330,7 @@ public class TrinoTestBase {
     }
 
     public String getExplain(String sql) throws Exception {
-        connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
 
         List<StatementBase> statements =
                 com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable());
@@ -344,7 +344,7 @@ public class TrinoTestBase {
 
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
             throws Exception {
-        connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
 
         List<StatementBase> statements =
                 com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable());

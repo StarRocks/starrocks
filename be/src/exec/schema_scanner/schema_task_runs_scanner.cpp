@@ -36,7 +36,8 @@ SchemaScanner::ColumnDesc SchemaTaskRunsScanner::_s_tbls_columns[] = {
         {"ERROR_CODE", TYPE_BIGINT, sizeof(StringValue), true},
         {"ERROR_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), true},
         {"PROGRESS", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"EXTRA_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), true}};
+        {"EXTRA_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"PROPERTIES", TYPE_VARCHAR, sizeof(StringValue), true}};
 
 SchemaTaskRunsScanner::SchemaTaskRunsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -230,6 +231,15 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                 }
             }
             break;
+        }
+        case 13: {
+            // properties
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(13);
+                const std::string* str = &task_run_info.properties;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
         }
         default:
             break;

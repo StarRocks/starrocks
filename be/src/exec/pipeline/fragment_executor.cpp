@@ -636,7 +636,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                                              "prepare-pipeline-driver", "FragmentInstancePrepareTime", 10_ms);
             COUNTER_SET(prepare_pipeline_driver_timer, profiler.prepare_runtime_state_time);
         } else {
-            _fail_cleanup();
+            _fail_cleanup(prepare_success);
         }
     });
 
@@ -673,7 +673,7 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     bool prepare_success = false;
     DeferOp defer([this, &prepare_success]() {
         if (!prepare_success) {
-            _fail_cleanup();
+            _fail_cleanup(true);
         }
     });
 
@@ -692,10 +692,12 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     return Status::OK();
 }
 
-void FragmentExecutor::_fail_cleanup() {
+void FragmentExecutor::_fail_cleanup(bool fragment_has_registed) {
     if (_query_ctx) {
         if (_fragment_ctx) {
-            _query_ctx->fragment_mgr()->unregister(_fragment_ctx->fragment_instance_id());
+            if (fragment_has_registed) {
+                _query_ctx->fragment_mgr()->unregister(_fragment_ctx->fragment_instance_id());
+            }
             _fragment_ctx->destroy_pass_through_chunk_buffer();
             _fragment_ctx.reset();
         }
@@ -726,7 +728,8 @@ std::shared_ptr<ExchangeSinkOperatorFactory> _create_exchange_sink_operator(Pipe
     auto exchange_sink = std::make_shared<ExchangeSinkOperatorFactory>(
             context->next_operator_id(), stream_sink.dest_node_id, sink_buffer, sender->get_partition_type(),
             sender->destinations(), is_pipeline_level_shuffle, dest_dop, sender->sender_id(),
-            sender->get_dest_node_id(), sender->get_partition_exprs(), sender->get_enable_exchange_pass_through(),
+            sender->get_dest_node_id(), sender->get_partition_exprs(),
+            !is_dest_merge && sender->get_enable_exchange_pass_through(),
             sender->get_enable_exchange_perf() && !context->has_aggregation, fragment_ctx, sender->output_columns());
     return exchange_sink;
 }

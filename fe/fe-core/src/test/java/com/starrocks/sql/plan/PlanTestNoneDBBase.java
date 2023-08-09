@@ -32,6 +32,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TExplainLevel;
@@ -81,7 +82,7 @@ public class PlanTestNoneDBBase {
         FeConstants.default_scheduler_interval_millisecond = 1;
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
-        connectContext = UtFrameUtils.createDefaultCtx();
+        connectContext = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
         starRocksAssert = new StarRocksAssert(connectContext);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
     }

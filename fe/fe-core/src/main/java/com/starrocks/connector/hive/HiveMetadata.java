@@ -174,13 +174,15 @@ public class HiveMetadata implements ConnectorMetadata {
         }
 
         Preconditions.checkState(columnRefOperators.size() == statistics.getColumnStatistics().size());
-        for (ColumnRefOperator column : columnRefOperators) {
-            session.getDumpInfo().addTableStatistics(table, column.getName(), statistics.getColumnStatistic(column));
-        }
+        if (session.getDumpInfo() != null) {
+            for (ColumnRefOperator column : columnRefOperators) {
+                session.getDumpInfo().addTableStatistics(table, column.getName(), statistics.getColumnStatistic(column));
+            }
 
-        HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
-        session.getDumpInfo().getHMSTable(hmsTable.getResourceName(), hmsTable.getDbName(), table.getName())
-                .setScanRowCount(statistics.getOutputRowCount());
+            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
+            session.getDumpInfo().getHMSTable(hmsTable.getResourceName(), hmsTable.getDbName(), table.getName())
+                    .setScanRowCount(statistics.getOutputRowCount());
+        }
 
         return statistics;
     }

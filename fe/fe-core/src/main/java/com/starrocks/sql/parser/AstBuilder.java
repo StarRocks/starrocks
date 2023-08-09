@@ -1183,8 +1183,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.columnNameWithComment().size() > 0) {
             colWithComments = visit(context.columnNameWithComment(), ColWithComment.class);
         }
+        if (context.IF() != null && context.REPLACE() != null) {
+            throw new ParsingException("conflicted option OR REPLACE and IF NOT EXISTS");
+        }
         return new CreateViewStmt(
                 context.IF() != null,
+                context.REPLACE() != null,
                 targetTableName,
                 colWithComments,
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment())).getStringValue(),
@@ -1420,6 +1424,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QualifiedName qualifiedName = getQualifiedName(context.mvName);
         TableName tableName = qualifiedNameToTableName(qualifiedName);
 
+        List<ColWithComment> colWithComments = null;
+        if (!context.columnNameWithComment().isEmpty()) {
+            colWithComments = visit(context.columnNameWithComment(), ColWithComment.class);
+        }
+
         String comment =
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue();
         QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
@@ -1520,7 +1529,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     "you can set FE config enable_experimental_mv=true to enable it.");
         }
 
-        return new CreateMaterializedViewStatement(tableName, ifNotExist, comment,
+        return new CreateMaterializedViewStatement(tableName, ifNotExist, colWithComments, comment,
                 refreshSchemeDesc, expressionPartitionDesc, distributionDesc, sortKeys, properties, queryStatement);
     }
 
@@ -3572,7 +3581,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         if (context.optimizerTrace() != null) {
-            queryStatement.setIsExplain(true, StatementBase.ExplainLevel.OPTIMIZER);
+            queryStatement.setIsExplain(true, getTraceType(context.optimizerTrace()));
         }
 
         return queryStatement;
@@ -4232,7 +4241,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitDropFunctionStatement(StarRocksParser.DropFunctionStatementContext context) {
-        String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
+        String functionName = getQualifiedName(context.qualifiedName()).toString();
         boolean isGlobal = context.GLOBAL() != null;
         FunctionName fnName = FunctionName.createFnName(functionName);
         if (isGlobal) {
@@ -4253,7 +4262,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.functionType != null) {
             functionType = context.functionType.getText();
         }
-        String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
+        String functionName = getQualifiedName(context.qualifiedName()).toString();
 
         TypeDef returnTypeDef = new TypeDef(getType(context.returnType));
         TypeDef intermediateType = null;
@@ -5031,9 +5040,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitSimpleFunctionCall(StarRocksParser.SimpleFunctionCallContext context) {
 
-        String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
-
-        FunctionName fnName = FunctionName.createFnName(functionName);
+        String fullFunctionName = getQualifiedName(context.qualifiedName()).toString();
+        FunctionName fnName = FunctionName.createFnName(fullFunctionName);
+        String functionName = fnName.getFunction();
         if (functionName.equals(FunctionSet.TIME_SLICE) || functionName.equals(FunctionSet.DATE_SLICE)) {
             if (context.expression().size() == 2) {
                 Expr e1 = (Expr) visit(context.expression(0));
@@ -5702,6 +5711,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             explainLevel = StatementBase.ExplainLevel.COST;
         }
         return explainLevel;
+    }
+
+    private static StatementBase.ExplainLevel getTraceType(StarRocksParser.OptimizerTraceContext context) {
+        if (context.REWRITE() != null) {
+            return StatementBase.ExplainLevel.REWRITE;
+        } else {
+            return StatementBase.ExplainLevel.OPTIMIZER;
+        }
     }
 
     public static SetType getVariableType(StarRocksParser.VarTypeContext context) {

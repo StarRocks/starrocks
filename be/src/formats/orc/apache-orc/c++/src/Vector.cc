@@ -35,7 +35,6 @@
 
 #include "orc/Vector.hh"
 
-#include <cstdlib>
 #include <iostream>
 #include <sstream>
 
@@ -300,8 +299,13 @@ void StructVectorBatch::filter(uint8_t* f_data, uint32_t f_size, uint32_t true_s
 void StructVectorBatch::filterOnFields(uint8_t* f_data, uint32_t f_size, uint32_t true_size,
                                        const std::vector<int>& positions, bool onLazyLoad) {
     if (!onLazyLoad) {
+        alreadyFiltered = true;
         ColumnVectorBatch::filter(f_data, f_size, true_size);
     } else {
+        if (!alreadyFiltered) {
+            alreadyFiltered = true;
+            ColumnVectorBatch::filter(f_data, f_size, true_size);
+        }
         numElements = true_size;
     }
     for (int p : positions) {

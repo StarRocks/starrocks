@@ -190,4 +190,8 @@ public class CompactionMgr {
         CompactionMgr compactionManager = reader.readJson(CompactionMgr.class);
         partitionStatisticsHashMap = compactionManager.partitionStatisticsHashMap;
     }
+
+    public long getPartitionStatsCount() {
+        return partitionStatisticsHashMap.size();
+    }
 }

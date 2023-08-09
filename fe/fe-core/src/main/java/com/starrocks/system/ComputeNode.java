@@ -182,6 +182,10 @@ public class ComputeNode implements IComputable, Writable {
         return brpcPort;
     }
 
+    public TNetworkAddress getAddress() {
+        return new TNetworkAddress(host, bePort);
+    }
+
     public TNetworkAddress getBrpcAddress() {
         return new TNetworkAddress(host, brpcPort);
     }
@@ -394,10 +398,6 @@ public class ComputeNode implements IComputable, Writable {
 
     public void setIsAlive(AtomicBoolean isAlive) {
         this.isAlive = isAlive;
-    }
-
-    public AtomicBoolean getIsDecommissioned() {
-        return isDecommissioned;
     }
 
     public void setDecommissionType(int decommissionType) {

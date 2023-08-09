@@ -1681,6 +1681,8 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
     ColumnPtr& data_col = std::dynamic_pointer_cast<NullableColumn>(col)->data_column();
     std::vector<uint8_t> filter(std::dynamic_pointer_cast<NullableColumn>(col)->immutable_null_column_data());
 
+    std::vector<uint8_t> init_filter(chunk->num_rows(), 0);
+
     if (_keys_type == TKeysType::PRIMARY_KEYS && _output_tuple_desc->slots().back()->col_name() == "__op") {
         size_t op_column_id = chunk->num_columns() - 1;
         ColumnPtr& op_col = chunk->get_column_by_index(op_column_id);
@@ -1689,9 +1691,24 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
 
         for (size_t i = 0; i < row; ++i) {
             if (ops[i] == TOpType::DELETE) {
-                filter[i] = 0;
+                // Just init when user do not specify the column value
+                if (filter[i] != 0) {
+                    init_filter[i] = 1;
+                    filter[i] = 0;
+                }
             }
         }
+    }
+
+    // In many cases, it is safe if the auto increment column value is un-inited for the deleted row
+    // Because, this row will be deleteed any way. We don't care about the value any more.
+    // But if auto increment column is the key, the value of increment column will decide which row
+    // will be deleteed and it is matter in this case.
+    // Here we just set 0 value in this case.
+    uint32 del_rows = SIMD::count_nonzero(init_filter);
+    if (del_rows != 0) {
+        RETURN_IF_ERROR((std::dynamic_pointer_cast<Int64Column>(data_col))
+                                ->fill_range(std::vector<int64_t>(del_rows, 0), init_filter));
     }
 
     uint32_t null_rows = SIMD::count_nonzero(filter);

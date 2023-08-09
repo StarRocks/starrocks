@@ -19,7 +19,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
@@ -38,6 +37,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import static com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil.findArithmeticFunction;
 
 public class MvNormalizePredicateRule extends NormalizePredicateRule {
     // Normalize Binary Predicate
@@ -91,10 +92,6 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
             }
         }
         return tmp;
-    }
-
-    private Function findArithmeticFunction(Type[] argsType, String fnName) {
-        return Expr.getBuiltinFunction(fnName, argsType, Function.CompareMode.IS_IDENTICAL);
     }
 
     // should maintain sequence for case:

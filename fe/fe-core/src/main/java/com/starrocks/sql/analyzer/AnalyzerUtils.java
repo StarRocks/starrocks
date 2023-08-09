@@ -32,6 +32,7 @@ import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
@@ -1007,4 +1008,27 @@ public class AnalyzerUtils {
         };
         return queryStatement.getQueryRelation().accept(slotRefResolver, null);
     }
+
+    public static void checkNondeterministicFunction(ParseNode node) {
+        new AstTraverser<Void, Void>() {
+            @Override
+            public Void visitFunctionCall(FunctionCallExpr expr, Void context) {
+                if (expr.isNondeterministicBuiltinFnName()) {
+                    throw new SemanticException("Materialized view query statement select item " +
+                            expr.toSql() + " not supported nondeterministic function");
+                }
+                return null;
+            }
+        }.visit(node);
+    }
+
+    public static boolean containsIgnoreCase(List<String> list, String soughtFor) {
+        for (String current : list) {
+            if (current.equalsIgnoreCase(soughtFor)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 }

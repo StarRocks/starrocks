@@ -660,6 +660,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setExpire_time(status.getExpireTime() / 1000);
             info.setProgress(status.getProgress() + "%");
             info.setExtra_message(status.getExtraMessage());
+            info.setProperties(status.getPropertiesJson());
             tasksResult.add(info);
         }
         return result;
@@ -949,6 +950,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (precision != null) {
                 desc.setColumnPrecision(precision);
             }
+            desc.setColumnDefault(column.getMetaDefaultValue(null));
             final Integer columnLength = column.getType().getColumnSize();
             if (columnLength != null) {
                 desc.setColumnLength(columnLength);

@@ -179,3 +179,8 @@ insert into ss values('0001-02-01', 2);
 select * from ss;
 alter table ss drop partition p200201;
 select * from ss;
+
+-- name: test_without_property
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1;
+insert into ss values('2021-01-01', 1);
+select * from ss;

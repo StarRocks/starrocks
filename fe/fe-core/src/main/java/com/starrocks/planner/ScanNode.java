@@ -61,6 +61,10 @@ public abstract class ScanNode extends PlanNode {
         this.columnFilters = columnFilters;
     }
 
+    public String getTableName() {
+        return desc.getTable().getName();
+    }
+
     /**
      * cast expr to SlotDescriptor type
      */

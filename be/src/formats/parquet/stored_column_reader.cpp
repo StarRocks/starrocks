@@ -170,8 +170,6 @@ public:
     }
 
 private:
-    // TODO(zc): No need copy
-    const tparquet::ColumnChunk _chunk_metadata;
     const ParquetField* _field = nullptr;
 };
 

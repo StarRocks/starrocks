@@ -311,6 +311,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -1976,6 +1977,12 @@ public class GlobalStateMgr {
             @Override
             protected void runAfterCatalogReady() {
                 globalTransactionMgr.abortTimeoutTxns();
+
+                try {
+                    loadMgr.cancelResidualJob();
+                } catch (Throwable t) {
+                    LOG.warn("load manager cancel residual job failed", t);
+                }
             }
         };
     }
@@ -2344,7 +2351,7 @@ public class GlobalStateMgr {
             List<String> colDef = Lists.newArrayList();
             for (Column column : table.getBaseSchema()) {
                 StringBuilder colSb = new StringBuilder();
-                colSb.append(column.getName());
+                colSb.append("`" + column.getName() + "`");
                 if (!Strings.isNullOrEmpty(column.getComment())) {
                     colSb.append(" COMMENT ").append("\"").append(column.getDisplayComment()).append("\"");
                 }
@@ -2866,8 +2873,20 @@ public class GlobalStateMgr {
         return nodeMgr.getToken();
     }
 
+    public Optional<Database> mayGetDb(String name) {
+        return Optional.ofNullable(localMetastore.getDb(name));
+    }
+
     public Database getDb(String name) {
         return localMetastore.getDb(name);
+    }
+
+    public Optional<Table> mayGetTable(long dbId, long tableId) {
+        return mayGetDb(dbId).flatMap(db -> db.tryGetTable(tableId));
+    }
+
+    public Optional<Database> mayGetDb(long dbId) {
+        return Optional.ofNullable(localMetastore.getDb(dbId));
     }
 
     public Database getDb(long dbId) {
@@ -3828,12 +3847,6 @@ public class GlobalStateMgr {
             loadMgr.removeOldLoadJob();
         } catch (Throwable t) {
             LOG.warn("load manager remove old load jobs failed", t);
-        }
-
-        try {
-            loadMgr.cleanResidualJob();
-        } catch (Throwable t) {
-            LOG.warn("load manager clean residual job failed", t);
         }
 
         try {

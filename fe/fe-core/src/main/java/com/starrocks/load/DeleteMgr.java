@@ -823,6 +823,19 @@ public class DeleteMgr implements Writable {
         }
     }
 
+    public long getDeleteJobCount() {
+        return this.idToDeleteJob.size();
+    }
+
+    public long getDeleteInfoCount() {
+        lock.readLock().lock();
+        try {
+            return dbToDeleteInfos.values().stream().mapToLong(List::size).sum();
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         int analyzeJobSize = reader.readInt();
         for (int i = 0; i < analyzeJobSize; ++i) {

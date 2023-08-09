@@ -387,10 +387,10 @@ public class RuleSet {
 
     public void addOuterJoinTransformationRules() {
         transformRules.add(JoinAssociativityRule.OUTER_JOIN_ASSOCIATIVITY_RULE);
-        transformRules.add(JoinLeftAsscomRule.getInstance());
+        transformRules.add(JoinLeftAsscomRule.OUTER_JOIN_LEFT_ASSCOM_RULE);
     }
 
-    public void addJoinCommutativityWithOutInnerRule() {
+    public void addJoinCommutativityWithoutInnerRule() {
         transformRules.add(JoinCommutativityWithoutInnerRule.getInstance());
     }
 

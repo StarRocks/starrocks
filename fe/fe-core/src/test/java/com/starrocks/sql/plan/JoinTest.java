@@ -666,7 +666,7 @@ public class JoinTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "9:Project\n" +
                 "  |  <slot 3> : 3: t1c\n" +
-                "  |  <slot 21> : 37\n" +
+                "  |  <slot 21> : 21: expr\n" +
                 "  |  <slot 22> : 22: P_PARTKEY\n" +
                 "  |  <slot 23> : 23: P_NAME\n" +
                 "  |  <slot 24> : 24: P_MFGR\n" +
@@ -677,7 +677,7 @@ public class JoinTest extends PlanTestBase {
                 "  |  <slot 29> : 29: P_RETAILPRICE\n" +
                 "  |  <slot 30> : 30: P_COMMENT\n" +
                 "  |  <slot 31> : 31: PAD\n" +
-                "  |  <slot 40> : CAST(37 AS INT)");
+                "  |  <slot 40> : CAST(21: expr AS INT)");
     }
 
     @Test

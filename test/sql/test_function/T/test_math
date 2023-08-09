@@ -1,0 +1,11 @@
+-- name: test_math_cosine_similarity
+
+create table t1 (id int, data array<float>) engine = olap distributed by hash(id) properties ("replication_num" = "1");
+
+insert into t1 values(1, array<float>[0.1, 0.2, 0.3]), (2, array<float>[0.2, 0.1, 0.3]), (3, array<float>[0.3, 0.2, 0.1]);
+
+select cosine_similarity(array<float>[0.1, 0.2, 0.3], data) as dist, id from t1 order by dist desc;
+
+select cosine_similarity(array<float>[0.1, 0.2, 0.3], array<float>[0.1, 0.2, 0.3]) as dist;
+
+select cosine_similarity_norm(array<float>[0.1, 0.2, 0.3], array<float>[0.1, 0.2, 0.3]) as dist;

@@ -209,18 +209,24 @@ You can add a table comment when you create a table, optional. Note that COMMENT
 
 ### partition_desc
 
-Partition description can be used in the following three ways:
+Partition description can be used in the following ways:
 
-#### LESS THAN
+#### Create partitions dynamically
+
+[Dynamic partitioning](../../../table_design/dynamic_partitioning.md) provides a time-to-live (TTL) management for partitions. StarRocks automatically creates new partitions in advance and removes expired partitions to ensure data freshness. To enable this feature, you can configure Dynamic partitioning related properties at table creation.
+
+#### Create partitions one by one
+
+**Specify only the upper bound for a partition**
 
 Syntax:
 
-```Plain%20Text
-PARTITION BY RANGE (k1, k2, ...)
-(
-    PARTITION partition_name1 VALUES LESS THAN MAXVALUE|("value1", "value2", ...),
-    PARTITION partition_name2 VALUES LESS THAN MAXVALUE|("value1", "value2", ...)
-    ...
+```sql
+PARTITION BY RANGE ( <partitioning_column1> [, <partitioning_column2>, ... ] )
+  PARTITION <partition1_name> VALUES LESS THAN ("<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] )
+  [ ,
+  PARTITION <partition2_name> VALUES LESS THAN ("<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] )
+  , ... ] 
 )
 ```
 
@@ -229,26 +235,36 @@ Note:
 Please use specified key columns and specified value ranges for partitioning.
 
 - Partition name only supports [A-z0-9_]
-- Columns in Range partition only support the following types: TINYINT, SAMLLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME.
+- Columns in Range partition only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME.
 - Partitions are left closed and right open. The left boundary of the first partition is of minimum value.
 - NULL value is stored only in partitions that contain minimum values. When the partition containing the minimum value is deleted, NULL values can no longer be imported.
 - Partition columns can either be single columns or multiple columns. The partition values are the default minimum values.
+- When only one column is specified as the partitioning column, you can set `MAXVALUE` as the upper bound for the partitioning column of the most recent partition.
+
+  ```SQL
+  PARTITION BY RANGE (pay_dt) (
+    PARTITION p1 VALUES LESS THAN ("20210102"),
+    PARTITION p2 VALUES LESS THAN ("20210103"),
+    PARTITION p3 VALUES LESS THAN MAXVALUE
+  )
+  ```
 
 Please note:
 
 - Partitions are often used for managing data related to time.
 - When data backtracking is needed, you may want to consider emptying the first partition for adding partitions later when necessary.
 
-#### Fixed Range
+**Specify both the lower and upper bounds for a partition**
 
 Syntax:
 
 ```SQL
-PARTITION BY RANGE (k1, k2, k3, ...)
+PARTITION BY RANGE ( <partitioning_column1> [, <partitioning_column2>, ... ] )
 (
-    PARTITION partition_name1 VALUES [("k1-lower1", "k2-lower1", "k3-lower1",...), ("k1-upper1", "k2-upper1", "k3-upper1", ...)),
-    PARTITION partition_name2 VALUES [("k1-lower1-2", "k2-lower1-2", ...), ("k1-upper1-2", MAXVALUE, )),
-    "k3-upper1-2", ...
+    PARTITION <partition_name1> VALUES [( "<lower_bound_for_partitioning_column1>" [ , "<lower_bound_for_partitioning_column2>", ... ] ), ( "<upper_bound_for_partitioning_column1?" [ , "<upper_bound_for_partitioning_column2>", ... ] ) ) 
+    [,
+    PARTITION <partition_name2> VALUES [( "<lower_bound_for_partitioning_column1>" [ , "<lower_bound_for_partitioning_column2>", ... ] ), ( "<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] ) ) 
+    , ...]
 )
 ```
 
@@ -256,25 +272,44 @@ Note:
 
 - Fixed Range is more flexible than LESS THAN. You can customize the left and right partitions.
 - Fixed Range is the same as LESS THAN in the other aspects.
+- When only one column is specified as the partitioning column, you can set `MAXVALUE` as the upper bound for the partitioning column of the most recent partition.
 
-#### Create partitions in bulk
+  ```SQL
+  PARTITION BY RANGE (pay_dt) (
+    PARTITION p202101 VALUES [("20210101"), ("20210201")),
+    PARTITION p202102 VALUES [("20210201"), ("20210301")),
+    PARTITION p202103 VALUES [("20210301"), (MAXVALUE))
+  )
+  ```
+
+#### Create multiple partitions in a batch
 
 Syntax
 
-```Plain%20Text
-PARTITION BY RANGE (datekey) (
-    START ("2021-01-01") END ("2021-01-04") EVERY (INTERVAL 1 day)
-)
-```
+- If the partitioning column is of a date type.
+
+    ```sql
+    PARTITION BY RANGE (<partitioning_column>) (
+        START ("<start_date>") END ("<end_date>") EVERY (INTERVAL <N> <time_unit>)
+    )
+    ```
+
+- If the partitioning column is of an integer type.
+
+    ```sql
+    PARTITION BY RANGE (<partitioning_column>) (
+        START ("<start_integer>") END ("<end_integer>") EVERY (<partitioning_granularity>)
+    )
+    ```
 
 Description
 
-You can specify the value for `START` and `END` and the expression in `EVERY` to create partitions in bulk .
+You can specify the start and end values in `START()` and `END()` and the time unit or partitioning granularity in `EVERY()` to create multiple partitions in a batch.
 
-- If `datekey` supports DATE and INTEGER data type, the data type of `START`, `END`, and `EVERY` must be the same as the data type of `datekey`.
-- If `datekey` only supports DATE data type, you need to use the `INTERVAL` keyword to specify the date interval. You can specify the date interval by day, week, month, or year. The naming conventions of partitions are the same as those for dynamic partitions.
+- The partitioning column can be of a date or integer type.
+- If the partitioning column is of a date type, you need to use the `INTERVAL` keyword to specify the time interval. You can specify the time unit as hour (since v3.0), day, week, month, or year. The naming conventions of partitions are the same as those for dynamic partitions.
 
-For more information, see [Data distribution](../../../table_design/Data_distribution.md#create-and-modify-partitions-in-bulk).
+For more information, see [Data distribution](../../../table_design/Data_distribution.md).
 
 ### distribution_desc
 
@@ -781,6 +816,29 @@ PROPERTIES(
     "dynamic_partition.buckets" = "10"
 );
 ```
+
+### Create a table where multiple partitions are created in a batch, and an integer type column is specified as partitioning column
+
+  In the following example, the partitioning column `datekey` is of the INT type. All the partitions are created by only one simple partition clause  `START ("1") END ("5") EVERY (1)`. The range of all the partitions starts from `1` and ends at `5`, with a partition granularity of `1`:
+  > **NOTE**
+  >
+  > The partitioning column values in **START()** and **END()** need to be wrapped in quotation marks, while the partition granularity in the **EVERY()** does not need to be wrapped in quotation marks.
+
+  ```SQL
+  CREATE TABLE site_access (
+      datekey INT,
+      site_id INT,
+      city_code SMALLINT,
+      user_name VARCHAR(32),
+      pv BIGINT DEFAULT '0'
+  )
+  ENGINE=olap
+  DUPLICATE KEY(datekey, site_id, city_code, user_name)
+  PARTITION BY RANGE (datekey) (START ("1") END ("5") EVERY (1)
+  )
+  DISTRIBUTED BY HASH(site_id)
+  PROPERTIES ("replication_num" = "3");
+  ```
 
 ### Create a Hive external table
 

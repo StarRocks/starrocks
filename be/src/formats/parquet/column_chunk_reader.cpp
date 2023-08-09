@@ -86,7 +86,7 @@ Status ColumnChunkReader::skip_page() {
     uint32_t uncompressed_size = header.uncompressed_page_size;
     size_t size = _compress_codec != nullptr ? compressed_size : uncompressed_size;
     RETURN_IF_ERROR(_page_reader->skip_bytes(size));
-    _opts.stats->skip_read_rows += _num_values;
+    _opts.stats->page_skip += 1;
 
     _page_parse_state = PAGE_DATA_PARSED;
     return Status::OK();
@@ -104,6 +104,9 @@ Status ColumnChunkReader::_parse_page_header() {
     if (_page_reader->current_header()->type == tparquet::PageType::DATA_PAGE) {
         const auto& header = *_page_reader->current_header();
         _num_values = header.data_page_header.num_values;
+        _opts.stats->has_page_statistics |=
+                (header.data_page_header.__isset.statistics && (header.data_page_header.statistics.__isset.min_value ||
+                                                                header.data_page_header.statistics.__isset.min));
     }
 
     _page_parse_state = PAGE_HEADER_PARSED;

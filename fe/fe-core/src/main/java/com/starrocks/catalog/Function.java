@@ -252,6 +252,8 @@ public class Function implements Writable {
         this.userVisible = userVisible;
     }
 
+    // TODO: It's dangerous to change this directly because it may change the global function state.
+    // Make sure you use a copy of the global function.
     public void setArgsType(Type[] newTypes) {
         argTypes = newTypes;
     }

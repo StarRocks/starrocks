@@ -200,6 +200,13 @@ public class ColocateTableIndex implements Writable {
                     groupAlreadyExist = false;
                 }
                 HashDistributionInfo distributionInfo = (HashDistributionInfo) tbl.getDefaultDistributionInfo();
+                if (!(tbl instanceof ExternalOlapTable)) {
+                    // Colocate table should keep the same bucket number across the partitions
+                    if (distributionInfo.getBucketNum() == 0) {
+                        int bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+                        distributionInfo.setBucketNum(bucketNum);
+                    }
+                }
                 ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId,
                         distributionInfo.getDistributionColumns(), distributionInfo.getBucketNum(),
                         tbl.getDefaultReplicationNum());

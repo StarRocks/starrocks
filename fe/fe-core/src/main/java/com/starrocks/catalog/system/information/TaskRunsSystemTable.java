@@ -41,6 +41,7 @@ public class TaskRunsSystemTable {
                         .column("ERROR_MESSAGE", ScalarType.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
                         .column("PROGRESS", ScalarType.createVarchar(64))
                         .column("EXTRA_MESSAGE", ScalarType.createVarchar(8192))
+                        .column("PROPERTIES", ScalarType.createVarcharType(512))
                         .build(), TSchemaTableType.SCH_TASK_RUNS);
     }
 }

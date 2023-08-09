@@ -497,6 +497,10 @@ CONF_mBool(sync_tablet_meta, "false");
 // Default thrift rpc timeout ms.
 CONF_mInt32(thrift_rpc_timeout_ms, "5000");
 
+CONF_Bool(thrift_rpc_strict_mode, "true");
+// rpc max string body size. 0 means unlimited
+CONF_Int32(thrift_rpc_max_body_size, "0");
+
 // txn commit rpc timeout
 CONF_mInt32(txn_commit_rpc_timeout_ms, "20000");
 
@@ -930,6 +934,7 @@ CONF_Bool(block_cache_report_stats, "false");
 CONF_Int64(block_cache_lru_insertion_point, "1");
 // cachelib, starcache
 CONF_String(block_cache_engine, "starcache");
+CONF_Bool(block_cache_direct_io_enable, "false");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB

@@ -237,7 +237,7 @@ private:
         // In the unplug state, has_output will return true directly if there is a chunk in the queue.
         // Otherwise, it will try to batch enough chunks to reduce the scheduling overhead.
         bool unpluging = false;
-        bool is_short_circuited = false;
+        std::atomic<bool> is_short_circuited = false;
     };
     std::vector<ChunkQueueState> _chunk_queue_states;
 

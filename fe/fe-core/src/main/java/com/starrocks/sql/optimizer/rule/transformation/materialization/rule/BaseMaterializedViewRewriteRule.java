@@ -23,7 +23,6 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -39,6 +38,8 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.Predicate
 
 import java.util.List;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 
 public abstract class BaseMaterializedViewRewriteRule extends TransformationRule {
 
@@ -89,6 +90,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         final ScalarOperator queryPartitionPredicate =
                 MvUtils.compensatePartitionPredicate(queryExpression, queryColumnRefFactory);
         if (queryPartitionPredicate == null) {
+            logMVRewrite(context, this, "Query partition compensate from partition prune failed.");
             return Lists.newArrayList();
         }
         ScalarOperator queryPredicate = MvUtils.rewriteOptExprCompoundPredicate(queryExpression, queryColumnRefRewriter);
@@ -96,12 +98,12 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             queryPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(queryPredicate, queryPartitionPredicate));
         }
         final PredicateSplit queryPredicateSplit = PredicateSplit.splitPredicate(queryPredicate);
-        List<ScalarOperator> onPredicates = collectOnPredicate(queryExpression);
+        List<ScalarOperator> onPredicates = MvUtils.collectOnPredicate(queryExpression);
         onPredicates = onPredicates.stream().map(MvUtils::canonizePredicate).collect(Collectors.toList());
         List<Table> queryTables = MvUtils.getAllTables(queryExpression);
         for (MaterializationContext mvContext : mvCandidateContexts) {
-            MvRewriteContext mvRewriteContext = new MvRewriteContext(
-                    mvContext, queryTables, queryExpression, queryColumnRefRewriter, queryPredicateSplit, onPredicates);
+            MvRewriteContext mvRewriteContext = new MvRewriteContext(mvContext, queryTables, queryExpression,
+                    queryColumnRefRewriter, queryPredicateSplit, onPredicates, this);
             MaterializedViewRewriter mvRewriter = getMaterializedViewRewrite(mvRewriteContext);
             OptExpression candidate = mvRewriter.rewrite();
             if (candidate == null) {
@@ -118,23 +120,6 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         }
 
         return results;
-    }
-
-    private List<ScalarOperator> collectOnPredicate(OptExpression optExpression) {
-        List<ScalarOperator> onPredicates = Lists.newArrayList();
-        collectOnPredicate(optExpression, onPredicates);
-        return onPredicates;
-    }
-
-    private void collectOnPredicate(OptExpression optExpression, List<ScalarOperator> onPredicates) {
-        if (optExpression.getOp() instanceof LogicalJoinOperator) {
-            LogicalJoinOperator joinOperator = optExpression.getOp().cast();
-            onPredicates.addAll(Utils.extractConjuncts(joinOperator.getOnPredicate()));
-        } else {
-            for (OptExpression child : optExpression.getInputs()) {
-                collectOnPredicate(child, onPredicates);
-            }
-        }
     }
 
     /**

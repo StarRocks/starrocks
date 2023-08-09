@@ -95,6 +95,8 @@ Status HashJoinProbeOperator::set_finished(RuntimeState* state) {
 }
 
 Status HashJoinProbeOperator::_reference_builder_hash_table_once() {
+    // non-broadcast join directly return as _join_prober == _join_builder,
+    // but broadcast should refer to the shared join builder
     if (_join_prober == _join_builder) {
         return Status::OK();
     }
