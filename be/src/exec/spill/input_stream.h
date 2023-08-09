@@ -68,6 +68,8 @@ public:
     StatusOr<InputStreamPtr> as_ordered_stream(RuntimeState* state, const SerdePtr& serde, Spiller* spiller,
                                                const SortExecExprs* sort_exprs, const SortDescs* sort_descs);
 
+    void clear() { _blocks.clear(); }
+
 private:
     std::vector<BlockPtr> _blocks;
 };

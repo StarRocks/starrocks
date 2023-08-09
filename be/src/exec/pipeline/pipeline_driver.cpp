@@ -21,12 +21,14 @@
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
+#include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/lane_arbiter.h"
 #include "exec/query_cache/multilane_operator.h"
 #include "exec/query_cache/ticket_checker.h"
 #include "exec/workgroup/work_group.h"
+#include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -78,19 +80,19 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     DCHECK(_state == DriverState::NOT_READY);
 
     auto* source_op = source_operator();
+    const auto use_cache = _fragment_ctx->enable_cache();
+
     // attach ticket_checker to both ScanOperator and SplitMorselQueue
     auto should_attach_ticket_checker = (dynamic_cast<ScanOperator*>(source_op) != nullptr) &&
-                                        (dynamic_cast<SplitMorselQueue*>(_morsel_queue) != nullptr) &&
-                                        _fragment_ctx->enable_cache();
+                                        _morsel_queue != nullptr && _morsel_queue->could_attch_ticket_checker() &&
+                                        (use_cache || down_cast<ScanOperator*>(source_op)->output_chunk_by_bucket());
     if (should_attach_ticket_checker) {
         auto* scan_op = dynamic_cast<ScanOperator*>(source_op);
-        auto* split_morsel_queue = dynamic_cast<SplitMorselQueue*>(_morsel_queue);
         auto ticket_checker = std::make_shared<query_cache::TicketChecker>();
         scan_op->set_ticket_checker(ticket_checker);
-        split_morsel_queue->set_ticket_checker(ticket_checker);
+        _morsel_queue->set_ticket_checker(ticket_checker);
     }
 
-    const auto use_cache = _fragment_ctx->enable_cache();
     source_op->add_morsel_queue(_morsel_queue);
     // fill OperatorWithDependency instances into _dependencies from _operators.
     DCHECK(_dependencies.empty());
@@ -303,7 +305,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 if (return_status.ok()) {
                     if (maybe_chunk.value() &&
                         (maybe_chunk.value()->num_rows() > 0 ||
-                         (maybe_chunk.value()->owner_info().is_last_chunk() && is_multilane(next_op)))) {
+                         (maybe_chunk.value()->owner_info().is_last_chunk() && !next_op->ignore_empty_eos()))) {
                         size_t row_num = maybe_chunk.value()->num_rows();
                         if (UNLIKELY(row_num > runtime_state->chunk_size())) {
                             return Status::InternalError(

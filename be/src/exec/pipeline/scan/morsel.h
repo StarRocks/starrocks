@@ -106,12 +106,15 @@ public:
     ScanMorsel(int32_t plan_node_id, const TScanRange& scan_range)
             : Morsel(plan_node_id), _scan_range(std::make_unique<TScanRange>(scan_range)) {
         if (_scan_range->__isset.internal_scan_range) {
-            _tablet_id = _scan_range->internal_scan_range.tablet_id;
+            _owner_id = _scan_range->internal_scan_range.tablet_id;
             auto str_version = _scan_range->internal_scan_range.version;
             _version = strtol(str_version.c_str(), nullptr, 10);
+            _owner_id = _scan_range->internal_scan_range.__isset.bucket_sequence
+                                ? _scan_range->internal_scan_range.bucket_sequence
+                                : _owner_id;
         }
         if (_scan_range->__isset.binlog_scan_range) {
-            _tablet_id = _scan_range->binlog_scan_range.tablet_id;
+            _owner_id = _scan_range->binlog_scan_range.tablet_id;
         }
     }
 
@@ -125,12 +128,14 @@ public:
     TInternalScanRange* get_olap_scan_range() { return &(_scan_range->internal_scan_range); }
 
     std::tuple<int64_t, int64_t> get_lane_owner_and_version() const override {
-        return std::tuple<int64_t, int64_t>{_tablet_id, _version};
+        return std::tuple<int64_t, int64_t>{_owner_id, _version};
     }
+
+    int32_t owner_id() const { return _owner_id; }
 
 private:
     std::unique_ptr<TScanRange> _scan_range;
-    int64_t _tablet_id = 0;
+    int64_t _owner_id = 0;
     int64_t _version = 0;
 };
 
@@ -213,6 +218,30 @@ private:
     const bool _could_local_shuffle;
 };
 
+class HashPartitionSequenceMorselQueueFactory final : public MorselQueueFactory {
+public:
+    HashPartitionSequenceMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq,
+                                            bool could_local_shuffle);
+    ~HashPartitionSequenceMorselQueueFactory() override = default;
+
+    MorselQueue* create(int driver_sequence) override {
+        DCHECK_LT(driver_sequence, _queue_per_driver_seq.size());
+        return _queue_per_driver_seq[driver_sequence].get();
+    }
+
+    size_t size() const override { return _queue_per_driver_seq.size(); }
+
+    size_t num_original_morsels() const override;
+
+    bool is_shared() const override { return false; }
+
+    bool could_local_shuffle() const override { return _could_local_shuffle; }
+
+private:
+    std::vector<MorselQueuePtr> _queue_per_driver_seq;
+    const bool _could_local_shuffle;
+};
+
 /// MorselQueue.
 class MorselQueue {
 public:
@@ -224,6 +253,8 @@ public:
     virtual void set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) {}
     virtual void set_tablets(const std::vector<TabletSharedPtr>& tablets) {}
     virtual void set_tablet_rowsets(const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets) {}
+    virtual void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) {}
+    virtual bool could_attch_ticket_checker() { return false; }
 
     virtual size_t num_original_morsels() const = 0;
     virtual size_t max_degree_of_parallelism() const = 0;
@@ -231,6 +262,7 @@ public:
     virtual StatusOr<MorselPtr> try_get() = 0;
     void unget(MorselPtr&& morsel);
     virtual std::string name() const = 0;
+    virtual StatusOr<bool> ready_for_next() const { return true; }
 
 protected:
     MorselPtr _unget_morsel = nullptr;
@@ -263,6 +295,35 @@ private:
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 };
 
+class PartitionSequenceMorselQueue : public MorselQueue {
+public:
+    PartitionSequenceMorselQueue(MorselQueuePtr&& morsel_queue);
+    std::vector<TInternalScanRange*> olap_scan_ranges() const override;
+
+    void set_tablet_rowsets(const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets) override {
+        _morsel_queue->set_tablet_rowsets(tablet_rowsets);
+    }
+
+    void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) override {
+        _ticket_checker = ticket_checker;
+    }
+    bool could_attch_ticket_checker() override { return true; }
+
+    size_t num_original_morsels() const override { return _morsel_queue->num_original_morsels(); }
+    size_t max_degree_of_parallelism() const override { return _morsel_queue->max_degree_of_parallelism(); }
+    bool empty() const override;
+    StatusOr<MorselPtr> try_get() override;
+    std::string name() const override;
+    StatusOr<bool> ready_for_next() const override;
+
+private:
+    StatusOr<int64_t> _peek_sequence_id() const;
+
+    int64_t _current_sequence = -1;
+    MorselQueuePtr _morsel_queue;
+    query_cache::TicketCheckerPtr _ticket_checker;
+};
+
 class SplitMorselQueue : public MorselQueue {
 public:
     SplitMorselQueue(Morsels&& morsels, int64_t degree_of_parallelism, int64_t splitted_scan_rows)
@@ -272,7 +333,10 @@ public:
               _splitted_scan_rows(splitted_scan_rows) {}
     void set_tablets(const std::vector<TabletSharedPtr>& tablets) override { _tablets = tablets; }
 
-    void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) { _ticket_checker = ticket_checker; }
+    void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) override {
+        _ticket_checker = ticket_checker;
+    }
+    bool could_attch_ticket_checker() override { return true; }
 
 protected:
     void _inc_num_splits(bool is_last) {

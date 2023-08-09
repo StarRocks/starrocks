@@ -62,6 +62,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -720,5 +721,16 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public void reset() {
         // Do nothing.
+    }
+
+    public void disablePhysicalDistributionOptimize() {
+        forEachNode(planRoot, PlanNode::disablePhysicalDistributionOptimize);
+    }
+
+    private void forEachNode(PlanNode root, Consumer<PlanNode> consumer) {
+        consumer.accept(root);
+        for (PlanNode child : root.getChildren()) {
+            forEachNode(child, consumer);
+        }
     }
 }

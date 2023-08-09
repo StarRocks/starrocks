@@ -113,6 +113,9 @@ void Pipeline::setup_drivers_profile(const DriverPtr& driver) {
     for (int32_t i = operators.size() - 1; i >= 0; --i) {
         auto& curr_op = operators[i];
         driver->runtime_profile()->add_child(curr_op->runtime_profile(), true, nullptr);
+        if (curr_op->is_combinatorial_operator()) {
+            curr_op->setup_child_profile(driver->runtime_profile());
+        }
     }
 }
 

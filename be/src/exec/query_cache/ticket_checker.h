@@ -64,6 +64,8 @@ public:
     // test if all_ready_bit is on, returning true means that morsel splitting is done.
     bool are_all_ready(TicketIdType id);
 
+    bool are_all_left(TicketIdType id);
+
 private:
     DISALLOW_COPY_AND_MOVE(TicketChecker);
     SpinLock _lock;

@@ -91,6 +91,8 @@ public:
     // Whether we could pull chunk from this operator
     virtual bool has_output() const = 0;
 
+    virtual bool ignore_empty_eos() const { return true; }
+
     // Whether we could push chunk to this operator
     virtual bool need_input() const = 0;
 
@@ -261,6 +263,10 @@ public:
 
     // memory to be reserved before executing set_finishing
     virtual size_t estimated_memory_reserved() { return 0; }
+
+    // if return true it means the operator has child operators
+    virtual bool is_combinatorial_operator() const { return false; }
+    virtual void setup_child_profile(RuntimeProfile* parent) {}
 
 protected:
     OperatorFactory* _factory;

@@ -89,7 +89,8 @@ public class AggregationNode extends PlanNode {
     private String streamingPreaggregationMode = "auto";
 
     private boolean useSortAgg = false;
-
+    private boolean usePerBucketOptimize = false;
+    
     private boolean withLocalShuffle = false;
 
     // identicallyDistributed meanings the PlanNode above OlapScanNode are cases as follows:
@@ -163,6 +164,15 @@ public class AggregationNode extends PlanNode {
         this.useSortAgg = useSortAgg;
     }
 
+    public void setUsePerBucketOptimize(boolean usePerBucketOptimize) {
+        this.usePerBucketOptimize = usePerBucketOptimize;
+    }
+
+    public void disablePhysicalDistributionOptimize() {
+        setUseSortAgg(false);
+        setUsePerBucketOptimize(false);
+    }
+
     @Override
     public void computeStats(Analyzer analyzer) {
     }
@@ -224,6 +234,7 @@ public class AggregationNode extends PlanNode {
             msg.agg_node.setSql_aggregate_functions(sqlAggFuncBuilder.toString());
         }
         msg.agg_node.setUse_sort_agg(useSortAgg);
+        msg.agg_node.setUse_per_bucket_optimize(usePerBucketOptimize);
 
         List<Expr> groupingExprs = aggInfo.getGroupingExprs();
         if (groupingExprs != null) {
