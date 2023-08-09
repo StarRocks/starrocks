@@ -83,7 +83,7 @@ public class StorageCoolDownTest {
                 ));
 
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
-                "Can not assign cooldown ttl to HDD storage medium",
+                "e: Can not assign cooldown ttl to table with HDD storage medium",
                 () -> createTable(
                         "CREATE TABLE site_access_date_with_1_day_ttl_less_than(\n" +
                                 "event_day DATE,\n" +
