@@ -60,6 +60,8 @@ public class DateLiteral extends LiteralExpr {
     private static final DateLiteral MAX_DATE = new DateLiteral(9999, 12, 31);
     private static final DateLiteral MIN_DATETIME = new DateLiteral(0, 1, 1, 0, 0, 0, 0);
     private static final DateLiteral MAX_DATETIME = new DateLiteral(9999, 12, 31, 23, 59, 59, 999999);
+    // The default precision of datetime is 0
+    private int precision = 0;
 
     // Date Literal persist type in meta
     private enum DateLiteralType {
@@ -171,6 +173,9 @@ public class DateLiteral extends LiteralExpr {
             second = dateTime.getSecond();
             microsecond = dateTime.getNano() / 1000;
             this.type = type;
+            if (type.isDatetime() && s.contains(".") && microsecond == 0) {
+                precision = s.length() - s.indexOf(".") - 1;
+            }
         } catch (Exception ex) {
             throw new AnalysisException("date literal [" + s + "] is invalid");
         }
@@ -413,6 +418,10 @@ public class DateLiteral extends LiteralExpr {
 
     public long getMicrosecond() {
         return microsecond;
+    }
+
+    public int getPrecision() {
+        return precision;
     }
 
     private long year;
