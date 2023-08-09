@@ -47,42 +47,60 @@ PROPERTIES (
 create view v (a with masking policy mp, b)  as select v1, v2 from t0;
 -- result:
 -- !result
-select * from sys.policy_references where POLICY_DATABASE="test_create_table_with_policy";
+select * from sys.policy_references where POLICY_DATABASE="test_create_table_with_policy" and REF_OBJECT_NAME="v";
 -- result:
 test_create_table_with_policy	mp	Column Masking	default_catalog	test_create_table_with_policy	v	a
-test_create_table_with_policy	mp	Column Masking	default_catalog	test_create_table_with_policy	test_policy	v1
-test_create_table_with_policy	rp	Row Access	default_catalog	test_create_table_with_policy	t0	None
 -- !result
 create view v2 with row access policy rp as select * from t0;
 -- result:
 -- !result
-select * from sys.policy_references where POLICY_DATABASE="test_create_table_with_policy";
+select * from sys.policy_references where POLICY_DATABASE="test_create_table_with_policy" and REF_OBJECT_NAME="v2";
 -- result:
 test_create_table_with_policy	rp	Row Access	default_catalog	test_create_table_with_policy	v2	None
-test_create_table_with_policy	mp	Column Masking	default_catalog	test_create_table_with_policy	v	a
-test_create_table_with_policy	mp	Column Masking	default_catalog	test_create_table_with_policy	test_policy	v1
-test_create_table_with_policy	rp	Row Access	default_catalog	test_create_table_with_policy	t0	None
 -- !result
-create materialized view mv (a with masking policy mp, b) distributed by hash(a) buckets 10 REFRESH ASYNC as select v1, v2 from t0;
+CREATE TABLE `t1` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`, `v2`, `v3`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
 -- result:
 -- !result
-select * from sys.policy_references where POLICY_DATABASE="test_create_table_with_policy";
+create materialized view mv (a with masking policy mp, b) distributed by hash(a) buckets 10 REFRESH ASYNC as select v1, v2 from t1;
 -- result:
-test_create_table_with_policy	rp	Row Access	default_catalog	test_create_table_with_policy	v2	None
+-- !result
+select * from sys.policy_references where POLICY_DATABASE="test_create_table_with_policy" and REF_OBJECT_NAME="mv";
+-- result:
 test_create_table_with_policy	mp	Column Masking	default_catalog	test_create_table_with_policy	mv	a
-test_create_table_with_policy	mp	Column Masking	default_catalog	test_create_table_with_policy	v	a
-test_create_table_with_policy	mp	Column Masking	default_catalog	test_create_table_with_policy	test_policy	v1
-test_create_table_with_policy	rp	Row Access	default_catalog	test_create_table_with_policy	t0	None
 -- !result
-create materialized view mv2 with row access policy rp distributed by hash(v1) buckets 10 REFRESH ASYNC as select * from t0;
+CREATE TABLE `t2` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`, `v2`, `v3`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
 -- result:
 -- !result
-select * from sys.policy_references where POLICY_DATABASE="test_create_table_with_policy";
+create materialized view mv2 with row access policy rp distributed by hash(v1) buckets 10 REFRESH ASYNC as select * from t2;
+-- result:
+-- !result
+select * from sys.policy_references where POLICY_DATABASE="test_create_table_with_policy" and REF_OBJECT_NAME="mv2";
 -- result:
 test_create_table_with_policy	rp	Row Access	default_catalog	test_create_table_with_policy	mv2	None
-test_create_table_with_policy	rp	Row Access	default_catalog	test_create_table_with_policy	v2	None
-test_create_table_with_policy	mp	Column Masking	default_catalog	test_create_table_with_policy	mv	a
-test_create_table_with_policy	mp	Column Masking	default_catalog	test_create_table_with_policy	v	a
-test_create_table_with_policy	mp	Column Masking	default_catalog	test_create_table_with_policy	test_policy	v1
-test_create_table_with_policy	rp	Row Access	default_catalog	test_create_table_with_policy	t0	None
 -- !result

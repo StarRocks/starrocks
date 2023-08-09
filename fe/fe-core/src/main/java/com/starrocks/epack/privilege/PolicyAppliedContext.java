@@ -118,4 +118,8 @@ public class PolicyAppliedContext {
             contextLock.readLock().unlock();
         }
     }
+
+    public boolean isEmpty() {
+        return maskingPolicyApply.isEmpty() && rowAccessPolicyApply.isEmpty();
+    }
 }

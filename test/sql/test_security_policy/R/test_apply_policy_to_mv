@@ -40,19 +40,47 @@ test_apply_policy_to_mv	mp	Column Masking	default_catalog	test_apply_policy_to_m
 alter materialized view mv modify column v1 unset masking policy;
 -- result:
 -- !result
-select * from sys.policy_references where POLICY_DATABASE="test_apply_policy_to_mv";;
+select * from sys.policy_references where POLICY_DATABASE="test_apply_policy_to_mv";
 -- result:
 -- !result
 alter materialized view mv add row access policy rp;
 -- result:
 -- !result
-select * from sys.policy_references where POLICY_DATABASE="test_apply_policy_to_mv";;
+select * from sys.policy_references where POLICY_DATABASE="test_apply_policy_to_mv";
 -- result:
 test_apply_policy_to_mv	rp	Row Access	default_catalog	test_apply_policy_to_mv	mv	None
 -- !result
 alter materialized view mv drop row access policy rp;
 -- result:
 -- !result
-select * from sys.policy_references where POLICY_DATABASE="test_apply_policy_to_mv";;
+select * from sys.policy_references where POLICY_DATABASE="test_apply_policy_to_mv";
 -- result:
+-- !result
+alter table t0 modify column v1 set masking policy mp;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Can not apply policy to table which has related materialized view.')
+-- !result
+alter table t0 add row access policy rp;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Can not apply policy to table which has related materialized view.')
+-- !result
+CREATE TABLE `test_policy` (
+  `v1` bigint(20) NULL WITH MASKING POLICY mp COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`, `v2`, `v3`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+create materialized view mv2 distributed by hash(v1) buckets 10 REFRESH ASYNC as select * from test_policy;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Can't create materialized view with table which has security policy.")
 -- !result
