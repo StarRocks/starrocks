@@ -240,14 +240,11 @@ public class FunctionCallExpr extends Expr {
         if (fnParams.isDistinct()) {
             sb.append("DISTINCT ");
         }
-        if (fnParams.getOrderByElements() == null) {
-            sb.append(Joiner.on(", ").join(childrenToSql())).append(")");
-        } else {
-            sb.append(Joiner.on(", ").join(firstNChildrenToSql(
-                    children.size() - fnParams.getOrderByElements().size())));
+        sb.append(Joiner.on(", ").join(firstNChildrenToSql(children.size() - fnParams.getOrderByElemNum())));
+        if (fnParams.getOrderByElements() != null) {
             sb.append(fnParams.getOrderByStringToSql());
-            sb.append(')');
         }
+        sb.append(')');
         return sb.toString();
     }
 
