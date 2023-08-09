@@ -108,7 +108,8 @@ Status SchemaLoadTrackingLogsScanner::fill_chunk(ChunkPtr* chunk) {
                                   [&ss, last = _tracking_msg_vec.end() - 1](const auto& s) {
                                       ss << s << (s == *last ? "" : "\n");
                                   });
-                    Slice msg = Slice(ss.str());
+                    std::string tmp_str = ss.str();
+                    Slice msg = Slice(tmp_str);
                     fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&msg);
                 } else {
                     down_cast<NullableColumn*>(column.get())->append_nulls(1);
