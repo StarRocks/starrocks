@@ -18,40 +18,24 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.AggregateInfo;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SortInfo;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.Counter;
+import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.AnalyticEvalNode;
-import com.starrocks.planner.DataPartition;
-import com.starrocks.planner.DataSink;
-import com.starrocks.planner.DataStreamSink;
 import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.JoinNode;
 import com.starrocks.planner.MultiCastDataSink;
-import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
-import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
-import com.starrocks.planner.ProjectNode;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.ScanNode;
-import com.starrocks.planner.SelectNode;
 import com.starrocks.planner.SortNode;
 import com.starrocks.planner.UnionNode;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.SessionVariable;
-import com.starrocks.sql.optimizer.ExpressionContext;
-import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
-import com.starrocks.sql.optimizer.cost.CostModel;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
-import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TUnit;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
@@ -59,9 +43,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -83,9 +65,8 @@ public class ExplainAnalyzer {
 
     private static final int RESULT_SINK_PSEUDO_PLAN_NODE_ID = Integer.MAX_VALUE;
     private static final Pattern PLAN_NODE_ID = Pattern.compile("^.*?\\(.*?plan_node_id=([-0-9]+)\\)$");
-    private static final int MAX_EXPR_LENGTH = 64;
 
-    // Colors
+    // ANSI Characters
     private static final String ANSI_RESET = "\u001B[0m";
     private static final String ANSI_BOLD = "\u001B[1m";
     private static final String ANSI_RED = "\u001B[31m";
@@ -114,8 +95,8 @@ public class ExplainAnalyzer {
         return Integer.parseInt(matcher.group(1));
     }
 
-    public static String analyze(ExecPlan execPlan, RuntimeProfile profile, List<Integer> planNodeIds) {
-        ExplainAnalyzer analyzer = new ExplainAnalyzer(execPlan, profile, planNodeIds);
+    public static String analyze(ProfilingExecPlan plan, RuntimeProfile profile, List<Integer> planNodeIds) {
+        ExplainAnalyzer analyzer = new ExplainAnalyzer(plan, profile, planNodeIds);
         return analyzer.analyze();
     }
 
@@ -136,7 +117,7 @@ public class ExplainAnalyzer {
         private final String content;
     }
 
-    private final ExecPlan execPlan;
+    private final ProfilingExecPlan plan;
     private final RuntimeProfile summaryProfile;
     private final RuntimeProfile plannerProfile;
     private final RuntimeProfile executionProfile;
@@ -176,18 +157,24 @@ public class ExplainAnalyzer {
         return transformedName.toString();
     }
 
-    public ExplainAnalyzer(ExecPlan execPlan, RuntimeProfile queryProfile, List<Integer> planNodeIds) {
-        this.execPlan = execPlan;
-        this.summaryProfile = queryProfile.getChild("Summary");
-        this.plannerProfile = queryProfile.getChild("Planner");
-        this.executionProfile = queryProfile.getChild("Execution");
+    public ExplainAnalyzer(ProfilingExecPlan plan, RuntimeProfile queryProfile, List<Integer> planNodeIds) {
+        this.plan = plan;
+        if (this.plan == null) {
+            this.summaryProfile = null;
+            this.plannerProfile = null;
+            this.executionProfile = null;
+        } else {
+            this.summaryProfile = queryProfile.getChild("Summary");
+            this.plannerProfile = queryProfile.getChild("Planner");
+            this.executionProfile = queryProfile.getChild("Execution");
+        }
         if (CollectionUtils.isNotEmpty(planNodeIds)) {
             detailPlanNodeIds.addAll(planNodeIds);
         }
     }
 
     public String analyze() {
-        if (summaryProfile == null || plannerProfile == null || executionProfile == null) {
+        if (plan == null || summaryProfile == null || plannerProfile == null || executionProfile == null) {
             return null;
         }
 
@@ -208,14 +195,8 @@ public class ExplainAnalyzer {
     }
 
     private void parseProfile() {
-        ConnectContext connectContext = execPlan.getConnectContext();
-        if (connectContext != null) {
-            SessionVariable sessionVariable = connectContext.getSessionVariable();
-            if (sessionVariable != null) {
-                Preconditions.checkState(sessionVariable.getPipelineProfileLevel() == 1,
-                        "please set `pipeline_profile_level` to 1");
-            }
-        }
+        Preconditions.checkState(plan.getProfileLevel() == 1,
+                "please set `pipeline_profile_level` to 1");
 
         String queryState = summaryProfile.getInfoString("Query State");
         if (Objects.equals(queryState, "Running")) {
@@ -248,45 +229,45 @@ public class ExplainAnalyzer {
         }
 
         // Bind plan element
-        for (PlanFragment fragment : execPlan.getFragments()) {
-            DataSink sink = fragment.getSink();
-            if (sink instanceof ResultSink || sink instanceof OlapTableSink) {
+        plan.getFragments().forEach((fragment) -> {
+            ProfilingExecPlan.ProfilingElement sink = fragment.getSink();
+            if (sink.instanceOf(ResultSink.class) || sink.instanceOf(OlapTableSink.class)) {
                 NodeInfo resultNodeInfo = allNodeInfos.get(RESULT_SINK_PSEUDO_PLAN_NODE_ID);
                 if (resultNodeInfo == null) {
                     resultNodeInfo = new NodeInfo(isRuntimeProfile, RESULT_SINK_PSEUDO_PLAN_NODE_ID, true, null, null);
                     allNodeInfos.put(resultNodeInfo.planNodeId, resultNodeInfo);
                 }
-                resultNodeInfo.planElement = sink;
+                resultNodeInfo.element = sink;
             }
 
-            PlanNode planNode = fragment.getPlanRoot();
-            Queue<PlanNode> queue = Lists.newLinkedList();
+            ProfilingExecPlan.ProfilingElement planNode = fragment.getRoot();
+            Queue<ProfilingExecPlan.ProfilingElement> queue = Lists.newLinkedList();
             queue.offer(planNode);
             while (!queue.isEmpty()) {
                 int num = queue.size();
                 for (int i = 0; i < num; i++) {
-                    PlanNode peek = queue.poll();
+                    ProfilingExecPlan.ProfilingElement peek = queue.poll();
                     Preconditions.checkNotNull(peek);
-                    NodeInfo nodeInfo = allNodeInfos.get(peek.getId().asInt());
+                    NodeInfo nodeInfo = allNodeInfos.get(peek.getId());
                     if (nodeInfo == null) {
-                        nodeInfo = new NodeInfo(isRuntimeProfile, peek.getId().asInt(), true, null, null);
+                        nodeInfo = new NodeInfo(isRuntimeProfile, peek.getId(), true, null, null);
                         allNodeInfos.put(nodeInfo.planNodeId, nodeInfo);
                     }
-                    nodeInfo.planElement = peek;
+                    nodeInfo.element = peek;
 
-                    for (PlanNode child : peek.getChildren()) {
+                    for (ProfilingExecPlan.ProfilingElement child : peek.getChildren()) {
                         queue.offer(child);
                     }
                 }
             }
-        }
+        });
 
         allNodeInfos.values().forEach(NodeInfo::initState);
 
         allNodeInfos.values().forEach(nodeInfo -> {
             if (nodeInfo.planNodeId == RESULT_SINK_PSEUDO_PLAN_NODE_ID) {
                 nodeInfo.outputRowNums = searchMetricFromUpperLevel(nodeInfo, "CommonMetrics", "PushRowNum");
-            } else if (nodeInfo.planElement instanceof UnionNode) {
+            } else if (nodeInfo.element.instanceOf(UnionNode.class)) {
                 nodeInfo.outputRowNums = sumUpMetric(nodeInfo, false, false, "CommonMetrics", "PullRowNum");
             } else {
                 nodeInfo.outputRowNums = searchMetricFromUpperLevel(nodeInfo, "CommonMetrics", "PullRowNum");
@@ -294,9 +275,9 @@ public class ExplainAnalyzer {
         });
 
         for (NodeInfo nodeInfo : allNodeInfos.values()) {
-            if (nodeInfo.planElement instanceof ScanNode) {
+            if (nodeInfo.element.instanceOf(ScanNode.class)) {
                 allScanNodeInfos.add(nodeInfo);
-            } else if (nodeInfo.planElement instanceof ExchangeNode) {
+            } else if (nodeInfo.element.instanceOf(ExchangeNode.class)) {
                 allExchangeNodeInfos.add(nodeInfo);
             }
         }
@@ -323,8 +304,8 @@ public class ExplainAnalyzer {
 
         // 1. Brief information
         pushIndent(GraphElement.LEAF_METRIC_INDENT);
-        if (execPlan.getFragments().stream()
-                .anyMatch(fragment -> fragment.getSink() instanceof OlapTableSink)) {
+        if (plan.getFragments().stream()
+                .anyMatch(fragment -> fragment.getSink().instanceOf(OlapTableSink.class))) {
             appendSummaryLine("Attention: ", ANSI_BOLD + ANSI_BLACK_ON_RED,
                     "The transaction of the statement will be aborted, and no data will be actually inserted!!!",
                     ANSI_RESET);
@@ -440,14 +421,14 @@ public class ExplainAnalyzer {
     }
 
     private void appendExecutionInfo() {
-        for (int i = 0; i < execPlan.getFragments().size(); i++) {
-            PlanFragment fragment = execPlan.getFragments().get(i);
+        for (int i = 0; i < plan.getFragments().size(); i++) {
+            ProfilingExecPlan.ProfilingFragment fragment = plan.getFragments().get(i);
             RuntimeProfile fragmentProfile = executionProfile.getChildList().get(i).first;
             appendFragment(fragment, fragmentProfile);
         }
     }
 
-    private void appendFragment(PlanFragment fragment, RuntimeProfile fragmentProfile) {
+    private void appendFragment(ProfilingExecPlan.ProfilingFragment fragment, RuntimeProfile fragmentProfile) {
         appendDetailLine(fragmentProfile.getName());
         pushIndent(GraphElement.NON_LEAF_METRIC_INDENT);
         appendDetailLine("BackendNum: ", fragmentProfile.getCounter("BackendNum"));
@@ -461,21 +442,18 @@ public class ExplainAnalyzer {
         }
         popIndent(); // metric indent
 
-        DataSink sink = fragment.getSink();
+        ProfilingExecPlan.ProfilingElement sink = fragment.getSink();
         NodeInfo sinkInfo = null;
         boolean isFinalSink = false;
-        DataPartition outputPartition = null;
-        if (sink instanceof MultiCastDataSink) {
-            List<DataStreamSink> sinks = ((MultiCastDataSink) sink).getDataStreamSinks();
+        if (sink.instanceOf(MultiCastDataSink.class)) {
             List<String> ids = Lists.newArrayList();
-            if (CollectionUtils.isNotEmpty(sinks)) {
-                sinks.forEach(s -> ids.add(Integer.toString(s.getExchNodeId().asInt())));
-                outputPartition = sinks.get(0).getOutputPartition();
+            if (CollectionUtils.isNotEmpty(sink.getMultiSinkIds())) {
+                sink.getMultiSinkIds().forEach(id -> ids.add(Integer.toString(id)));
             }
-            appendDetailLine(GraphElement.LST_OPERATOR_INDENT, transformNodeName(sink.getClass()),
+            appendDetailLine(GraphElement.LST_OPERATOR_INDENT, transformNodeName(sink.getClazz()),
                     String.format(" (ids=[%s])", String.join(", ", ids)));
         } else {
-            if (sink instanceof ResultSink || sink instanceof OlapTableSink) {
+            if (sink.instanceOf(ResultSink.class) || sink.instanceOf(OlapTableSink.class)) {
                 isFinalSink = true;
                 // Calculate result sink's time info, other sink's type will be properly processed
                 // at the receiver side fragment through exchange node
@@ -487,11 +465,10 @@ public class ExplainAnalyzer {
                     setCoralColor();
                 }
             } else {
-                sinkInfo = allNodeInfos.get(sink.getExchNodeId().asInt());
+                sinkInfo = allNodeInfos.get(sink.getId());
             }
-            outputPartition = sink.getOutputPartition();
-            appendDetailLine(GraphElement.LST_OPERATOR_INDENT, transformNodeName(sink.getClass()),
-                    isFinalSink ? "" : String.format(" (id=%d)", sink.getExchNodeId().asInt()));
+            appendDetailLine(GraphElement.LST_OPERATOR_INDENT, transformNodeName(sink.getClazz()),
+                    isFinalSink ? "" : String.format(" (id=%d)", sink.getId()));
         }
         pushIndent(GraphElement.LAST_CHILD_OPERATOR_INDENT);
         pushIndent(GraphElement.NON_LEAF_METRIC_INDENT);
@@ -508,33 +485,24 @@ public class ExplainAnalyzer {
             // Output Rows
             appendDetailLine("OutputRows: ", resultNodeInfo.outputRowNums);
         }
-        if (outputPartition != null) {
-            appendDetailLine("PartitionType: ", outputPartition.getType());
-            if (CollectionUtils.isNotEmpty(outputPartition.getPartitionExprs())) {
-                appendExprs("PartitionExprs", outputPartition.getPartitionExprs());
-            }
-        }
-        if (sink instanceof ResultSink) {
-            ResultSink resultSink = (ResultSink) sink;
-            appendDetailLine("SinkType: ", resultSink.getSinkType());
-        } else if (sink instanceof OlapTableSink) {
-            OlapTableSink olapTableSink = (OlapTableSink) sink;
-            appendDetailLine("Table: ", olapTableSink.getDstTable().getName());
-        }
+        sink.getUniqueInfos().forEach((key, value) -> appendDetailLine(key, ": ", value));
+
         if (isFinalSink) {
             resetColor();
         }
         popIndent(); // metric indent
 
-        leftOrderTraverse(fragment.getPlanRoot(), null, -1, null);
+        leftOrderTraverse(fragment.getRoot(), null, -1, null);
 
         popIndent(); // child operator indent
 
         appendDetailLine();
     }
 
-    private void leftOrderTraverse(PlanNode cur, PlanNode parent, int index, String preTitleAttribute) {
-        int planNodeId = cur.getId().asInt();
+    private void leftOrderTraverse(ProfilingExecPlan.ProfilingElement cur, ProfilingExecPlan.ProfilingElement parent,
+                                   int index,
+                                   String preTitleAttribute) {
+        int planNodeId = cur.getId();
         NodeInfo nodeInfo = allNodeInfos.get(planNodeId);
         Preconditions.checkNotNull(nodeInfo);
 
@@ -558,7 +526,7 @@ public class ExplainAnalyzer {
 
         boolean shouldTraverseChildren = cur.getChildren() != null
                 && cur.getChildren().size() > 0
-                && !(cur instanceof ExchangeNode);
+                && !(cur.instanceOf(ExchangeNode.class));
         if (!shouldTraverseChildren) {
             pushIndent(GraphElement.LEAF_METRIC_INDENT);
         } else {
@@ -572,10 +540,10 @@ public class ExplainAnalyzer {
         if (shouldTraverseChildren) {
             for (int i = 0; i < cur.getChildren().size(); i++) {
                 String childTitleAttribute = null;
-                if (nodeInfo.planElement instanceof JoinNode) {
+                if (nodeInfo.element.instanceOf(JoinNode.class)) {
                     childTitleAttribute = (i == 0 ? "PROBE" : "BUILD");
                 }
-                leftOrderTraverse(cur.getChild(i), cur, i, childTitleAttribute);
+                leftOrderTraverse(cur.getChildren().get(i), cur, i, childTitleAttribute);
             }
         }
 
@@ -588,22 +556,22 @@ public class ExplainAnalyzer {
         }
 
         // 1. Cost Estimation
-        OptExpression optExpression = execPlan.getOptExpression(nodeInfo.planNodeId);
-        if (optExpression != null) {
-            CostEstimate cost = CostModel.calculateCostEstimate(new ExpressionContext(optExpression));
-            if (optExpression.getStatistics().getColumnStatistics().values().stream()
-                    .allMatch(ColumnStatistic::isUnknown)) {
+        if (nodeInfo.element.getStatistics() != null && nodeInfo.element.getCostEstimate() != null) {
+            Statistics statistics = nodeInfo.element.getStatistics();
+            CostEstimate cost = nodeInfo.element.getCostEstimate();
+            double totalCost = nodeInfo.element.getTotalCost();
+            if (statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
                 appendDetailLine("Estimates: [",
-                        "row: ", (long) optExpression.getStatistics().getOutputRowCount(),
-                        ", cpu: ?, memory: ?, network: ?, cost: ", optExpression.getCost(),
+                        "row: ", (long) statistics.getOutputRowCount(),
+                        ", cpu: ?, memory: ?, network: ?, cost: ", totalCost,
                         "]");
             } else {
                 appendDetailLine("Estimates: [",
-                        "row: ", (long) optExpression.getStatistics().getOutputRowCount(),
+                        "row: ", (long) statistics.getOutputRowCount(),
                         ", cpu: ", String.format("%.2f", cost.getCpuCost()),
                         ", memory: ", String.format("%.2f", cost.getMemoryCost()),
                         ", network: ", String.format("%.2f", cost.getNetworkCost()),
-                        ", cost: ", String.format("%.2f", optExpression.getCost()),
+                        ", cost: ", String.format("%.2f", totalCost),
                         "]");
             }
         } else {
@@ -615,11 +583,11 @@ public class ExplainAnalyzer {
         items.addAll(Arrays.asList("TotalTime: ", nodeInfo.totalTime,
                 String.format(" (%.2f%%)", nodeInfo.totalTimePercentage)));
         items.addAll(Arrays.asList(" [CPUTime: ", nodeInfo.cpuTime));
-        if (nodeInfo.planElement instanceof ExchangeNode) {
+        if (nodeInfo.element.instanceOf(ExchangeNode.class)) {
             if (nodeInfo.networkTime != null) {
                 items.addAll(Arrays.asList(", NetworkTime: ", nodeInfo.networkTime));
             }
-        } else if (nodeInfo.planElement instanceof ScanNode) {
+        } else if (nodeInfo.element.instanceOf(ScanNode.class)) {
             if (nodeInfo.scanTime != null) {
                 items.addAll(Arrays.asList(", ScanTime: ", nodeInfo.scanTime));
             }
@@ -665,17 +633,17 @@ public class ExplainAnalyzer {
     // operator will process. And sometimes, child operator may already finish its execution, so we can get the output
     // row number from its lowest child along the hierarchy path.
     private Counter getTotalRowNum(NodeInfo rootInfo) {
-        if (!(rootInfo.planElement instanceof PlanNode)) {
+        if (!(rootInfo.element.instanceOf(PlanNode.class))) {
             return null;
         }
-        PlanNode cur = (PlanNode) rootInfo.planElement;
+        ProfilingExecPlan.ProfilingElement cur = rootInfo.element;
         while (true) {
-            NodeInfo curNodeInfo = allNodeInfos.get(cur.getId().asInt());
+            NodeInfo curNodeInfo = allNodeInfos.get(cur.getId());
             if (curNodeInfo.state.isInit()) {
                 return null;
             } else if (curNodeInfo.state.isFinished()) {
                 return curNodeInfo.outputRowNums;
-            } else if (cur instanceof AggregationNode) {
+            } else if (cur.instanceOf(AggregationNode.class)) {
                 return null;
             } else if (CollectionUtils.isEmpty(cur.getChildren()) || cur.getChildren().size() > 1) {
                 return null;
@@ -686,25 +654,21 @@ public class ExplainAnalyzer {
     }
 
     private void appendOperatorUniqueInfo(NodeInfo nodeInfo) {
-        if (nodeInfo.planElement instanceof AggregationNode) {
-            AggregationNode aggregationNode = (AggregationNode) nodeInfo.planElement;
-            AggregateInfo aggInfo = aggregationNode.getAggInfo();
-            if (aggInfo == null) {
-                return;
-            }
-            if (CollectionUtils.isNotEmpty(aggInfo.getAggregateExprs())) {
-                appendExprs("AggExprs", aggInfo.getAggregateExprs());
-            }
-            if (CollectionUtils.isNotEmpty(aggInfo.getGroupingExprs())) {
-                appendExprs("GroupingExprs", aggInfo.getGroupingExprs());
-            }
+        if (nodeInfo.element.instanceOf(JoinNode.class)) {
+            Counter buildTime = searchMetric(nodeInfo, false, "_JOIN_BUILD (", true,
+                    "CommonMetrics", "OperatorTotalTime");
+            Counter probeTime = searchMetric(nodeInfo, false, "_JOIN_PROBE (", true,
+                    "CommonMetrics", "OperatorTotalTime");
+            appendDetailLine("BuildTime: ", buildTime);
+            appendDetailLine("ProbeTime: ", probeTime);
+        } else if (nodeInfo.element.instanceOf(AggregationNode.class)) {
             Optional<RuntimeProfile> cacheOptional = nodeInfo.pseudoOperatorProfiles.stream()
                     .filter(profile -> profile.getName().contains("CACHE ("))
                     .findAny();
-            if (cacheOptional.isPresent() && aggregationNode.hasChild(0) &&
-                    aggregationNode.getChild(0) instanceof ScanNode) {
-                PlanNode scanNode = aggregationNode.getChild(0);
-                NodeInfo scanNodeInfo = allNodeInfos.get(scanNode.getId().asInt());
+            if (cacheOptional.isPresent() && nodeInfo.element.hasChild(0) &&
+                    nodeInfo.element.getChild(0).instanceOf(ScanNode.class)) {
+                ProfilingExecPlan.ProfilingElement scanNode = nodeInfo.element.getChild(0);
+                NodeInfo scanNodeInfo = allNodeInfos.get(scanNode.getId());
                 Counter tabletNum = searchMetric(scanNodeInfo, false, null, false,
                         "UniqueMetrics", "TabletCount");
                 Counter cachePassthroughTabletNum = searchMetric(nodeInfo, true, "CACHE (", false,
@@ -728,71 +692,9 @@ public class ExplainAnalyzer {
                             "]");
                 }
             }
-        } else if (nodeInfo.planElement instanceof AnalyticEvalNode) {
-            AnalyticEvalNode window = (AnalyticEvalNode) nodeInfo.planElement;
-            if (CollectionUtils.isNotEmpty(window.getAnalyticFnCalls())) {
-                appendExprs("Functions", window.getAnalyticFnCalls());
-            }
-            if (CollectionUtils.isNotEmpty(window.getPartitionExprs())) {
-                appendExprs("PartitionExprs", window.getPartitionExprs());
-            }
-            if (CollectionUtils.isNotEmpty(window.getOrderByElements())) {
-                appendExprs("OrderByExprs", window.getOrderByElements().stream()
-                        .map(OrderByElement::getExpr).collect(Collectors.toList()));
-            }
-        } else if (nodeInfo.planElement instanceof ProjectNode) {
-            ProjectNode projectNode = (ProjectNode) nodeInfo.planElement;
-            if (MapUtils.isNotEmpty(projectNode.getSlotMap())) {
-                List<Pair<SlotId, Expr>> orderedExprs = new ArrayList<>();
-                for (Map.Entry<SlotId, Expr> kv : projectNode.getSlotMap().entrySet()) {
-                    orderedExprs.add(new Pair<>(kv.getKey(), kv.getValue()));
-                }
-                orderedExprs.sort(Comparator.comparingInt(o -> o.first.asInt()));
-                appendExprs("Expression",
-                        orderedExprs.stream().map(kv -> kv.second).collect(Collectors.toList()));
-            }
-
-            if (MapUtils.isNotEmpty(projectNode.getCommonSlotMap())) {
-                List<Pair<SlotId, Expr>> orderedExprs = new ArrayList<>();
-                for (Map.Entry<SlotId, Expr> kv : projectNode.getCommonSlotMap().entrySet()) {
-                    orderedExprs.add(new Pair<>(kv.getKey(), kv.getValue()));
-                }
-                orderedExprs.sort(Comparator.comparingInt(o -> o.first.asInt()));
-                appendExprs("CommonExpression",
-                        orderedExprs.stream().map(kv -> kv.second).collect(Collectors.toList()));
-            }
-        } else if (nodeInfo.planElement instanceof JoinNode) {
-            JoinNode joinNode = (JoinNode) nodeInfo.planElement;
-            Counter buildTime = searchMetric(nodeInfo, false, "_JOIN_BUILD (", true,
-                    "CommonMetrics", "OperatorTotalTime");
-            Counter probeTime = searchMetric(nodeInfo, false, "_JOIN_PROBE (", true,
-                    "CommonMetrics", "OperatorTotalTime");
-            appendDetailLine("BuildTime: ", buildTime);
-            appendDetailLine("ProbeTime: ", probeTime);
-            if (CollectionUtils.isNotEmpty(joinNode.getEqJoinConjuncts())) {
-                appendExprs("EqJoinConjuncts", joinNode.getEqJoinConjuncts());
-            }
-        } else if (nodeInfo.planElement instanceof SelectNode) {
-            SelectNode selectNode = (SelectNode) nodeInfo.planElement;
-            if (CollectionUtils.isNotEmpty(selectNode.getConjuncts())) {
-                appendExprs("Predicates", selectNode.getConjuncts());
-            }
-        } else if (nodeInfo.planElement instanceof SortNode) {
-            SortNode sortNode = (SortNode) nodeInfo.planElement;
-            SortInfo sortInfo = sortNode.getSortInfo();
-            if (CollectionUtils.isNotEmpty(sortInfo.getPartitionExprs())) {
-                appendExprs("PartitionExprs", sortInfo.getPartitionExprs());
-            }
-            if (CollectionUtils.isNotEmpty(sortInfo.getOrderingExprs())) {
-                appendExprs("OrderByExprs", sortInfo.getOrderingExprs());
-            }
-        } else if (nodeInfo.planElement instanceof ScanNode) {
-            ScanNode scanNode = (ScanNode) nodeInfo.planElement;
-            if (scanNode instanceof OlapScanNode) {
-                OlapScanNode olapScanNode = (OlapScanNode) scanNode;
-                appendDetailLine("Table: ", olapScanNode.getOlapTable().getName());
-            }
         }
+
+        nodeInfo.element.getUniqueInfos().forEach((key, value) -> appendDetailLine(key, ": ", value));
     }
 
     private void appendOperatorDetailInfo(NodeInfo nodeInfo) {
@@ -924,29 +826,6 @@ public class ExplainAnalyzer {
             items.add(ANSI_RESET);
         }
         appendDetailLine(items.toArray());
-    }
-
-    private void appendExprs(String metricName, List<? extends Expr> exprs) {
-        List<String> exprContents = exprs.stream()
-                .map(Expr::toSql)
-                .collect(Collectors.toList());
-        int lastIndex = -1;
-        int length = 0;
-        int originalSize = exprs.size();
-        for (int i = 0; i < originalSize; i++) {
-            if (length + exprContents.get(i).length() > MAX_EXPR_LENGTH) {
-                break;
-            }
-            lastIndex = i;
-            length += exprContents.get(i).length();
-        }
-        if (lastIndex >= 0) {
-            exprContents = exprContents.subList(0, lastIndex + 1);
-        }
-        if (lastIndex < originalSize - 1) {
-            exprContents.add("...");
-        }
-        appendDetailLine(metricName, ": [", String.join(", ", exprContents), "]");
     }
 
     private static Counter searchMetric(NodeInfo nodeInfo, boolean searchPseudoOperator, String pattern,
@@ -1136,7 +1015,7 @@ public class ExplainAnalyzer {
         private final List<RuntimeProfile> operatorProfiles;
         private final List<RuntimeProfile> pseudoOperatorProfiles;
 
-        private Object planElement;
+        private ProfilingExecPlan.ProfilingElement element;
         private Counter totalTime;
         private Counter cpuTime;
         private Counter networkTime;
@@ -1179,7 +1058,7 @@ public class ExplainAnalyzer {
         }
 
         public String getDetailAttributes() {
-            if (planElement instanceof ScanNode) {
+            if (element.instanceOf(ScanNode.class)) {
                 return "[ScanTime = IOTaskExecTime + IOTaskWaitTime]";
             }
             return "";
@@ -1203,8 +1082,8 @@ public class ExplainAnalyzer {
         }
 
         public boolean isMemoryConsumingOperator() {
-            return planElement instanceof AggregationNode || planElement instanceof JoinNode
-                    || planElement instanceof SortNode || planElement instanceof AnalyticEvalNode;
+            return element.instanceOf(AggregationNode.class) || element.instanceOf(JoinNode.class)
+                    || element.instanceOf(SortNode.class) || element.instanceOf(AnalyticEvalNode.class);
         }
 
         public void merge(NodeInfo other) {
@@ -1218,12 +1097,12 @@ public class ExplainAnalyzer {
             if (cpuTime != null) {
                 totalTime.update(cpuTime.getValue());
             }
-            if (planElement instanceof ExchangeNode) {
+            if (element.instanceOf(ExchangeNode.class)) {
                 networkTime = searchMetric(this, false, null, true, "UniqueMetrics", "NetworkTime");
                 if (networkTime != null) {
                     totalTime.update(networkTime.getValue());
                 }
-            } else if (planElement instanceof ScanNode) {
+            } else if (element.instanceOf(ScanNode.class)) {
                 scanTime = searchMetric(this, false, null, true, "UniqueMetrics", "ScanTime");
                 if (scanTime != null) {
                     totalTime.update(scanTime.getValue());
@@ -1244,34 +1123,14 @@ public class ExplainAnalyzer {
 
         public String getTitle() {
             StringBuilder titleBuilder = new StringBuilder();
-            titleBuilder.append(transformNodeName(planElement.getClass()));
-            if (!(planElement instanceof ResultSink) && !(planElement instanceof OlapTableSink)) {
+            titleBuilder.append(transformNodeName(element.getClazz()));
+            if (!(element.instanceOf(ResultSink.class) && !(element.instanceOf(OlapTableSink.class)))) {
                 titleBuilder.append(String.format(" (id=%d) ", planNodeId));
             }
             // Attributes
-            List<String> attributes = Lists.newArrayList();
-            if (planElement instanceof AggregationNode) {
-                AggregationNode aggNode = (AggregationNode) planElement;
-                attributes.add(aggNode.getAggInfo().isMerge() ? "merge" : "update");
-                attributes.add(aggNode.isNeedsFinalize() ? "finalize" : "serialize");
-            } else if (planElement instanceof JoinNode) {
-                JoinNode joinNode = (JoinNode) planElement;
-                attributes.add(joinNode.getJoinOp().toString());
-                attributes.add(joinNode.getDistrMode().toString());
-            } else if (planElement instanceof SortNode) {
-                SortNode sortNode = (SortNode) planElement;
-                attributes.add(sortNode.isUseTopN() ? "TOP-N" :
-                        (sortNode.getSortInfo().getPartitionExprs().isEmpty() ? "SORT" : "PARTITION-TOP-N"));
-                attributes.add(sortNode.getTopNType().toString());
-            } else if (planElement instanceof ExchangeNode) {
-                ExchangeNode exchangeNode = (ExchangeNode) planElement;
-                if (exchangeNode.getDistributionType() != null) {
-                    attributes.add(exchangeNode.getDistributionType().toString());
-                }
-            }
-            if (CollectionUtils.isNotEmpty(attributes)) {
+            if (CollectionUtils.isNotEmpty(element.getTitleAttributes())) {
                 titleBuilder.append('[')
-                        .append(String.join(", ", attributes))
+                        .append(String.join(", ", element.getTitleAttributes()))
                         .append(']');
             }
             if (isRuntimeProfile) {
