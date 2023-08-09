@@ -26,6 +26,7 @@
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
+#include "util/utf8.h"
 
 namespace starrocks {
 template <LogicalType LT, typename = guard::Guard>
@@ -306,13 +307,19 @@ struct GroupConcatAggregateStateV2 {
         (*data_columns)[index]->append(column, offset, count);
     }
 
-    // release the trailing N-1 order-by columns
-    void release_order_by_columns(int output_col_num) const {
+    // order-by items may be null
+    void update_nulls(FunctionContext* ctx, size_t index, size_t count) {
+        DCHECK((*data_columns)[index]->is_nullable());
+        (*data_columns)[index]->append_nulls(count);
+    }
+
+    // release the trailing order-by columns
+    void release_order_by_columns() const {
         DCHECK(data_columns != nullptr);
-        for (auto i = output_col_num; i < data_columns->size(); ++i) {
+        for (auto i = output_col_num + 1; i < data_columns->size(); ++i) { // after the separator column
             data_columns->at(i).reset();
         }
-        data_columns->resize(output_col_num);
+        data_columns->resize(output_col_num + 1);
     }
 
     ~GroupConcatAggregateStateV2() {
@@ -326,10 +333,20 @@ struct GroupConcatAggregateStateV2 {
         }
     }
     // using pointer rather than vector to avoid variadic size
-    // group_concat(a, b order by c, d), the a,b,',',c,d are put into data_columns in order.
-    Columns* data_columns = nullptr; // without null element
+    // group_concat(a, b order by c, d), the a,b,',',c,d are put into data_columns in order, and reject null for
+    // output columns a and b.
+    Columns* data_columns = nullptr;
+    int output_col_num = 0;
 };
 
+// group_concat concatenates non-null values from a group, and output null if the group is empty.
+// TODO(fzh) we can further optimize group_concat in following 3 ways:
+// 1. reuse columns for order-by clause, group_concat(a order by 1) can avoid replacing '1' with a in plan, just keep a;
+// 2. convert output columns to string in finalized phase, instead of add cast functions in plan, which leads to
+// redundancy columns in intermediate results. For example, group_concat(a,b order by 1,2) is rewritten to
+// group_concat(cast(a to string), cast(b to string) order by a, b), resulting to keeping 4 columns, but it only needs
+// keep 2 columns in intermediate results.
+// 3. refactor order-by and distinct function to a combinator to clean the code.
 class GroupConcatAggregateFunctionV2
         : public AggregateFunctionBatchHelper<GroupConcatAggregateStateV2, GroupConcatAggregateFunctionV2> {
 public:
@@ -338,8 +355,9 @@ public:
         auto num = ctx->get_num_args();
         state.data_columns = new Columns;
         auto order_by_num = ctx->get_nulls_first().size();
-        DCHECK(num - order_by_num > 1);
-        for (auto i = 0; i < num - order_by_num - 1; ++i) {
+        state.output_col_num = num - order_by_num - 1; // excluding separator column
+        DCHECK(state.output_col_num > 0);
+        for (auto i = 0; i < state.output_col_num; ++i) {
             if (UNLIKELY(!is_string_type(ctx->get_arg_type(i)->type))) {
                 ctx->set_error(fmt::format("{}-th input of group_concat should be string type.", i + 1).c_str(), false);
             }
@@ -359,6 +377,7 @@ public:
         }
     }
 
+    // reject null for output columns, but non-output columns may be null
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         auto num = ctx->get_num_args();
@@ -366,7 +385,18 @@ public:
         if (state_impl.data_columns == nullptr) {
             create_impl(ctx, state_impl);
         }
+        for (auto i = 0; i < state_impl.output_col_num; ++i) {
+            if (columns[i]->is_nullable() && columns[i]->is_null(row_num)) {
+                return;
+            }
+        }
+
         for (auto i = 0; i < num; ++i) {
+            // non-output columns is null
+            if (i >= state_impl.output_col_num && (columns[i]->is_nullable() && columns[i]->is_null(row_num))) {
+                this->data(state).update_nulls(ctx, i, 1);
+                continue;
+            }
             auto* data_col = columns[i];
             auto tmp_row_num = row_num;
             if (columns[i]->is_constant()) {
@@ -380,6 +410,15 @@ public:
 
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
+        GroupConcatAggregateStateV2& state_impl = this->data(state);
+        if (state_impl.data_columns == nullptr) {
+            create_impl(ctx, state_impl);
+        }
+        for (auto i = 0; i < state_impl.output_col_num; ++i) {
+            if (columns[i]->only_null()) {
+                return;
+            }
+        }
         for (size_t i = 0; i < chunk_size; ++i) {
             update(ctx, columns, state, i);
         }
@@ -388,11 +427,21 @@ public:
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
+        GroupConcatAggregateStateV2& state_impl = this->data(state);
+        if (state_impl.data_columns == nullptr) {
+            create_impl(ctx, state_impl);
+        }
+        for (auto i = 0; i < state_impl.output_col_num; ++i) {
+            if (columns[i]->only_null()) {
+                return;
+            }
+        }
         for (size_t i = frame_start; i < frame_end; ++i) {
             update(ctx, columns, state, i);
         }
     }
 
+    // input struct column, array may be null, but array->elements of output columns should not null
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         if (UNLIKELY(row_num >= column->size())) {
             ctx->set_error(fmt::format("group_concat' merge() required row num {} >= input colum size {}", row_num,
@@ -401,10 +450,20 @@ public:
                            false);
             return;
         }
+        // input struct is null
+        if (column->is_nullable() && column->is_null(row_num)) {
+            return;
+        }
         auto& input_columns = down_cast<const StructColumn*>(ColumnHelper::get_data_column(column))->fields();
         auto& state_impl = this->data(state);
         if (state_impl.data_columns == nullptr) {
             create_impl(ctx, state_impl);
+        }
+        // output columns is null
+        for (auto i = 0; i < state_impl.output_col_num; i++) {
+            if (input_columns[i]->is_null(row_num)) {
+                return;
+            }
         }
         for (auto i = 0; i < input_columns.size(); ++i) {
             auto array_column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(input_columns[i].get()));
@@ -414,10 +473,16 @@ public:
         }
     }
 
-    // serialize each state->column to a [nullable] array in a [nullable] struct
+    // TODO: if any output column is nullable, the result and intermediate result should be nullable
+    // serialize each state->column to a (nullable but no null) array in a nullable struct
+    // if the data_columns is empty, output null into nullable struct
+    // otherwise, each state->column construct an array.
+    // nullable struct {nullable array[nullable elements]...}, the struct may be null, array and array elements from
+    // output columns wouldn't be null.
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto& state_impl = this->data(state);
-        if (state_impl.data_columns == nullptr) {
+        if (state_impl.data_columns == nullptr || (*state_impl.data_columns)[0]->size() == 0) {
+            to->append_default();
             return;
         }
         auto& columns = down_cast<StructColumn*>(ColumnHelper::get_data_column(to))->fields_column();
@@ -438,44 +503,97 @@ public:
         }
     }
 
-    // convert each cell of a row to a [nullable] array in a struct
+    // convert each cell of a row to a [nullable] array in a nullable struct, keep the same of chunk_size
+    // if i-th output row is null, set i-th output column in the struct is null whether the i-th struct is null.
+    // nullable struct {nullable array[nullable elements]...}, the struct and array may be null, array elements from
+    // output columns wouldn't be null.
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override {
         auto columns = down_cast<StructColumn*>(ColumnHelper::get_data_column(dst->get()))->fields_column();
+        DCHECK(src.size() == columns.size());
+        // get null info from output columns
+        auto output_col_num = ctx->get_num_args() - ctx->get_nulls_first().size() - 1;
+        NullColumnPtr nulls = NullColumn::create(chunk_size, false);
+        auto null_data = nulls->get_data();
+        for (int j = 0; j < output_col_num; ++j) {
+            if (src[j]->only_null()) {
+                for (int i = 0; i < chunk_size; ++i) {
+                    null_data[i] = true;
+                }
+                break;
+            }
+            if (src[j]->is_constant()) {
+                DCHECK(!src[j]->is_nullable());
+                continue;
+            }
+            if (src[j]->is_nullable()) {
+                auto null_col = down_cast<NullableColumn*>(src[j].get())->null_column_data();
+                for (int i = 0; i < chunk_size; ++i) {
+                    null_data[i] |= null_col[i];
+                }
+            }
+        }
         if (dst->get()->is_nullable()) {
+            auto nullable_col = down_cast<NullableColumn*>(dst->get());
             for (size_t i = 0; i < chunk_size; i++) {
-                down_cast<NullableColumn*>(dst->get())->null_column_data().emplace_back(0);
+                nullable_col->null_column_data().emplace_back(null_data[i]);
+            }
+            nullable_col->update_has_null();
+        }
+        // if i-th row is null, set nullable_array[x][i] = null, otherwise, set array[x][i]=src[x][i]
+        std::vector<ArrayColumn*> arrays(columns.size());
+        std::vector<NullData*> array_nulls(columns.size());
+        std::vector<std::vector<uint32_t>*> array_offsets(columns.size());
+        std::vector<NullableColumn*> nullable_arrays(columns.size());
+        auto old_size = columns[0]->size();
+        for (auto j = 0; j < columns.size(); ++j) {
+            nullable_arrays[j] = down_cast<NullableColumn*>(columns[j].get());
+            arrays[j] = down_cast<ArrayColumn*>(nullable_arrays[j]->data_column().get());
+            arrays[j]->reserve(old_size + chunk_size);
+            array_nulls[j] = &(nullable_arrays[j]->null_column_data());
+            array_nulls[j]->resize(old_size + chunk_size);
+            array_offsets[j] = &(arrays[j]->offsets_column()->get_data());
+        }
+        for (auto i = 0; i < chunk_size; i++) {
+            if (null_data[i]) {
+                for (auto j = 0; j < columns.size(); ++j) {
+                    (*array_nulls[j])[i + old_size] = 1;
+                    array_offsets[j]->push_back(array_offsets[j]->back());
+                }
+            } else {
+                for (auto j = 0; j < columns.size(); ++j) {
+                    (*array_nulls[j])[i + old_size] = 0;
+                    arrays[j]->elements_column()->append_datum(src[j]->get(i));
+                    array_offsets[j]->push_back(array_offsets[j]->back() + 1);
+                }
             }
         }
         for (auto j = 0; j < columns.size(); ++j) {
-            auto array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(columns[j].get()));
-            if (columns[j].get()->is_nullable()) {
-                for (size_t i = 0; i < chunk_size; i++) {
-                    down_cast<NullableColumn*>(columns[j].get())->null_column_data().emplace_back(0);
-                }
-            }
-            auto& element_column = array_col->elements_column();
-            auto& offsets = array_col->offsets_column()->get_data();
-            for (size_t i = 0; i < chunk_size; i++) {
-                element_column->append_datum(src[j]->get(i));
-                offsets.emplace_back(offsets.back() + 1);
-            }
+            nullable_arrays[j]->update_has_null();
         }
     }
 
     // group_concat(a, b order by c, d), output a,b,',' by c and d, but ignore the last separator ','
+    // empty state return null, other output row by row.
+    // note as output columns and order-by columns are put in group-by clause if specify DISTINCT, so here need to do
+    // distinct further after order by data columns.
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        DCHECK(to->is_binary());
         auto& state_impl = this->data(state);
         if (state_impl.data_columns == nullptr) {
+            to->append_default();
             return;
         }
         auto elem_size = (*state_impl.data_columns)[0]->size();
-        auto output_col_num = state_impl.data_columns->size() - ctx->get_is_asc_order().size();
+        if (elem_size == 0) {
+            to->append_default();
+            return;
+        }
+        auto output_col_num = state_impl.output_col_num + 1; // include sep
         Columns outputs(output_col_num);
         for (auto i = 0; i < output_col_num; ++i) {
             outputs[i] = (*state_impl.data_columns)[i];
         }
+        // order by
         if (!ctx->get_is_asc_order().empty()) {
             for (auto i = 0; i < output_col_num; ++i) {
                 outputs[i] = (*state_impl.data_columns)[i]->clone_empty();
@@ -487,13 +605,36 @@ public:
             Status st = sort_and_tie_columns(ctx->state()->cancelled_ref(), order_by_columns, sort_desc, &perm);
             // release order-by columns early
             order_by_columns.clear();
-            state_impl.release_order_by_columns(output_col_num);
+            state_impl.release_order_by_columns();
             DCHECK(ctx->state()->cancelled_ref() || st.ok());
             for (auto i = 0; i < output_col_num; ++i) {
                 materialize_column_by_permutation(outputs[i].get(), {(*state_impl.data_columns)[i]}, perm);
             }
         }
+        // further remove duplicated values, pick the last unique one to identify the last sep and don't output it.
+        // TODO(fzh) optimize it later
+        std::vector<bool> duplicated(outputs[0]->size(), false);
+        if (ctx->get_is_distinct()) {
+            for (auto row_id = 0; row_id < elem_size; row_id++) {
+                bool is_duplicated = false;
+                for (auto next_id = row_id + 1; next_id < elem_size; next_id++) {
+                    bool tmp_duplicated = true;
+                    for (auto col_id = 0; col_id < output_col_num - 1; col_id++) { // exclude sep
+                        if (!outputs[col_id]->equals(next_id, *outputs[col_id], row_id)) {
+                            tmp_duplicated = false;
+                            break;
+                        }
+                    }
+                    if (tmp_duplicated) {
+                        is_duplicated = true;
+                        break;
+                    }
+                }
+                duplicated[row_id] = is_duplicated;
+            }
+        }
         // copy col_0, col_1 ... col_n row by row
+        DCHECK(ColumnHelper::get_data_column(to)->is_binary());
         auto* string = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(to));
         if (to->is_nullable()) {
             down_cast<NullableColumn*>(to)->null_column_data().emplace_back(0);
@@ -510,21 +651,49 @@ public:
         }
 
         bytes.resize(offset + length);
-        for (auto j = 0; j < elem_size; ++j) {
-            for (auto i = 0; i < output_col_num; ++i) {
+        bool overflow = false;
+        size_t str_len = 0;
+        for (auto j = 0; j < elem_size && !overflow; ++j) {
+            if (duplicated[j]) {
+                continue;
+            }
+            for (auto i = 0; i < output_col_num && !overflow; ++i) {
                 if (j + 1 == elem_size && i + 1 == output_col_num) { // ignore the last separator
                     continue;
                 }
+                if (UNLIKELY(i + 1 < output_col_num && binary_cols[i]->is_null(j))) {
+                    ctx->set_error("group_concat mustn't output null", false);
+                    return;
+                }
                 auto str = binary_cols[i]->get_slice(j);
-                memcpy(bytes.data() + offset, str.get_data(), str.get_size());
-                offset += str.get_size();
+                if (str_len + str.get_size() < ctx->get_group_concat_max_len()) {
+                    memcpy(bytes.data() + offset, str.get_data(), str.get_size());
+                    offset += str.get_size();
+                    str_len += str.get_size();
+                } else { // make the last utf8 character valid
+                    std::vector<size_t> index;
+                    get_utf8_index(str, &index);
+                    size_t end = 0;
+                    for (auto id : index) {
+                        if (str_len + id >= ctx->get_group_concat_max_len()) {
+                            end = id;
+                            break;
+                        }
+                    }
+                    if (end > 0) {
+                        memcpy(bytes.data() + offset, str.get_data(), end);
+                        offset += end;
+                        str_len += end;
+                    }
+                    overflow = true;
+                }
             }
         }
         bytes.resize(offset);
         string->get_offset().emplace_back(offset);
     }
 
-    std::string get_name() const override { return "group concat2"; }
+    std::string get_name() const override { return "group_concat2"; }
 };
 
 } // namespace starrocks
