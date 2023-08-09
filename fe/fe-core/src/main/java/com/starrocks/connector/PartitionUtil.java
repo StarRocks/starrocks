@@ -63,6 +63,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -204,9 +205,16 @@ public class PartitionUtil {
             return String.format("%04d-%02d-%02d", dateLiteral.getYear(), dateLiteral.getMonth(), dateLiteral.getDay());
         } else {
             if (dateLiteral.getMicrosecond() == 0) {
-                // 2007-01-01 10:35:00 => 2007-01-01 10:35:00.0
-                return String.format("%04d-%02d-%02d %02d:%02d:%02d.0", dateLiteral.getYear(), dateLiteral.getMonth(),
-                        dateLiteral.getDay(), dateLiteral.getHour(), dateLiteral.getMinute(), dateLiteral.getSecond());
+                String datetime = String.format("%04d-%02d-%02d %02d:%02d:%02d", dateLiteral.getYear(),
+                        dateLiteral.getMonth(),
+                        dateLiteral.getDay(), dateLiteral.getHour(), dateLiteral.getMinute(),
+                        dateLiteral.getSecond());
+                if (dateLiteral.getPrecision() > 0) {
+                    // 2007-01-01 10:35:00 => 2007-01-01 10:35:00.000000(precision=6)
+                    datetime = datetime + "." +
+                            String.join("", Collections.nCopies(dateLiteral.getPrecision(), "0"));
+                }
+                return datetime;
             } else {
                 // 2007-01-01 10:35:00.123000 => 2007-01-01 10:35:00.123
                 return String.format("%04d-%02d-%02d %02d:%02d:%02d.%6d", dateLiteral.getYear(), dateLiteral.getMonth(),
