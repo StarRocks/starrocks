@@ -12,11 +12,9 @@ COVAR_SAMP(expr1, expr2)
 
 ## Parameters
 
-`expr1`: expression 1.
+`expr1` and `expr2` must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
 
-`expr2`: expression 2.
-
-If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
+If `expr1` and `expr2` are table columns, this function calculates the sample covariance of these two columns.
 
 ## Return value
 
