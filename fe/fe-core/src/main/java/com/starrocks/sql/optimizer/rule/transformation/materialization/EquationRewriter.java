@@ -175,33 +175,9 @@ public class EquationRewriter {
             }
 
             @Override
-            public ScalarOperator visitArray(ArrayOperator array, Void context) {
-                ScalarOperator tmp = replace(array);
-                return tmp != null ? tmp : super.visitArray(array, context);
-            }
-
-            @Override
-            public ScalarOperator visitCollectionElement(CollectionElementOperator collectionElementOp, Void context) {
-                ScalarOperator tmp = replace(collectionElementOp);
-                return tmp != null ? tmp : super.visitCollectionElement(collectionElementOp, context);
-            }
-
-            @Override
-            public ScalarOperator visitArraySlice(ArraySliceOperator array, Void context) {
-                ScalarOperator tmp = replace(array);
-                return tmp != null ? tmp : super.visitArraySlice(array, context);
-            }
-
-            @Override
             public ScalarOperator visitBetweenPredicate(BetweenPredicateOperator predicate, Void context) {
                 ScalarOperator tmp = replace(predicate);
                 return tmp != null ? tmp : super.visitBetweenPredicate(predicate, context);
-            }
-
-            @Override
-            public ScalarOperator visitExistsPredicate(ExistsPredicateOperator predicate, Void context) {
-                ScalarOperator tmp = replace(predicate);
-                return tmp != null ? tmp : super.visitExistsPredicate(predicate, context);
             }
 
             @Override
@@ -214,18 +190,6 @@ public class EquationRewriter {
             public ScalarOperator visitLikePredicateOperator(LikePredicateOperator predicate, Void context) {
                 ScalarOperator tmp = replace(predicate);
                 return tmp != null ? tmp : super.visitLikePredicateOperator(predicate, context);
-            }
-
-            @Override
-            public ScalarOperator visitMultiInPredicate(MultiInPredicateOperator predicate, Void context) {
-                ScalarOperator tmp = replace(predicate);
-                return tmp != null ? tmp : super.visitMultiInPredicate(predicate, context);
-            }
-
-            @Override
-            public ScalarOperator visitLambdaFunctionOperator(LambdaFunctionOperator operator, Void context) {
-                ScalarOperator tmp = replace(operator);
-                return tmp != null ? tmp : super.visitLambdaFunctionOperator(operator, context);
             }
 
             ScalarOperator replace(ScalarOperator scalarOperator) {
