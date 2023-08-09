@@ -133,6 +133,8 @@ struct AggFunctionTypes {
     // hold order-by info
     std::vector<bool> is_asc_order;
     std::vector<bool> nulls_first;
+
+    bool is_distinct = false;
 };
 
 struct ColumnType {

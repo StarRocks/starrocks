@@ -5514,13 +5514,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
         }
         List<Expr> exprs = visit(context.aggregationFunction().expression(), Expr.class);
-        if (isGroupConcat && context.aggregationFunction().SEPARATOR() == null) {
+        if (isGroupConcat && !exprs.isEmpty() && context.aggregationFunction().SEPARATOR() == null) {
             Expr sepExpr;
             String sep = ",";
             sepExpr = new StringLiteral(sep, pos);
             exprs.add(sepExpr);
         }
-        if (orderByElements != null) {
+        if (!orderByElements.isEmpty()) {
             int exprSize = exprs.size();
             if (isGroupConcat) { // the last expr of group_concat is the separator
                 exprSize--;
@@ -5537,6 +5537,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     orderByElement.setExpr(by);
                 }
             }
+            // remove const order-by items
+            orderByElements = orderByElements.stream().filter(x -> !x.getExpr().isConstant()).collect(toList());
         }
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(functionName,
                 context.aggregationFunction().ASTERISK_SYMBOL() == null ?

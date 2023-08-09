@@ -2118,7 +2118,7 @@ aggregationFunction
     | MIN '(' setQuantifier? expression ')'
     | SUM '(' setQuantifier? expression ')'
     | ARRAY_AGG '(' expression (ORDER BY sortItem (',' sortItem)*)? ')'
-    | GROUP_CONCAT '(' setQuantifier? (expression (',' expression)*)? (ORDER BY sortItem (',' sortItem)*)? (SEPARATOR expression)? ')'
+    | GROUP_CONCAT '(' setQuantifier? expression (',' expression)* (ORDER BY sortItem (',' sortItem)*)? (SEPARATOR expression)? ')'
     ;
 
 userVariable
