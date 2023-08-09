@@ -683,7 +683,7 @@ public class SystemInfoService implements GsonPostProcessable {
 
         final List<Backend> candidateBackends = needAvailable ? getAvailableBackends() : getBackends();
         if (CollectionUtils.isEmpty(candidateBackends)) {
-            LOG.info("failed to find any backend, needAvailable={}", needAvailable);
+            LOG.warn("failed to find any backend, needAvailable={}", needAvailable);
             return Collections.emptyList();
         }
 
@@ -696,7 +696,7 @@ public class SystemInfoService implements GsonPostProcessable {
                     .map(backend -> "[host=" + backend.getHost() + ", bePort=" + backend.getBePort() + "]")
                     .collect(Collectors.joining("; "));
 
-            LOG.info(
+            LOG.warn(
                     "failed to find any backend with qualified disk usage from {} candidate backends, needAvailable={}, [{}]",
                     candidateBackends.size(), needAvailable, backendInfo);
             return Collections.emptyList();
