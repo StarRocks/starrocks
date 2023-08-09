@@ -14,9 +14,12 @@
 
 #include "exec/pipeline/exchange/local_exchange.h"
 
+#include <memory>
+
 #include "column/chunk.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exprs/expr_context.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 
@@ -73,7 +76,7 @@ Status PartitionExchanger::Partitioner::partition_chunk(const ChunkPtr& chunk,
     return Status::OK();
 }
 
-PartitionExchanger::PartitionExchanger(const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager,
+PartitionExchanger::PartitionExchanger(const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager,
                                        LocalExchangeSourceOperatorFactory* source, const TPartitionType::type part_type,
                                        const std::vector<ExprContext*>& partition_expr_ctxs)
         : LocalExchanger(strings::Substitute("Partition($0)", to_string(part_type)), memory_manager, source),
