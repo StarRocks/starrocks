@@ -14,12 +14,8 @@
 
 package com.starrocks.sql.optimizer.rule.tree;
 
-import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ComplexTypeAccessGroup;
-import com.starrocks.catalog.ComplexTypeAccessPath;
-import com.starrocks.catalog.ComplexTypeAccessPathType;
-import com.starrocks.catalog.ComplexTypeAccessPaths;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -129,11 +125,7 @@ public class PruneSubfieldsForComplexType implements TreeRewriteRule {
             if (projection == null) {
                 for (ColumnRefOperator columnRefOperator : physicalScanOperator.getOutputColumns()) {
                     if (columnRefOperator.getType().isMapType() || columnRefOperator.getType().isStructType()) {
-                        ComplexTypeAccessPath complexTypeAccessPath =
-                                new ComplexTypeAccessPath(ComplexTypeAccessPathType.ALL_SUBFIELDS);
-                        ImmutableList.Builder<ComplexTypeAccessPath> builder = new ImmutableList.Builder<>();
-                        builder.add(complexTypeAccessPath);
-                        context.addAccessPaths(columnRefOperator, new ComplexTypeAccessPaths(builder.build()));
+                        context.add(columnRefOperator, columnRefOperator);
                     }
                 }
             }
