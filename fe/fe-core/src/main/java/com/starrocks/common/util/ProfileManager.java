@@ -83,18 +83,15 @@ public class ProfileManager {
     public static class ProfileElement {
         public Map<String, String> infoStrings = Maps.newHashMap();
         public byte[] profileContent;
-
-        public ExecPlan plan;
-        public RuntimeProfile profile;
+        public ProfilingExecPlan plan;
 
         public List<String> toRow() {
             List<String> res = Lists.newArrayList();
-            RuntimeProfile summary = profile.getChildList().get(0).first;
-            res.add(summary.getInfoString(QUERY_ID));
-            res.add(summary.getInfoString(START_TIME));
-            res.add(summary.getInfoString(TOTAL_TIME));
-            res.add(summary.getInfoString(QUERY_STATE));
-            String statement = summary.getInfoString(SQL_STATEMENT);
+            res.add(infoStrings.get(QUERY_ID));
+            res.add(infoStrings.get(START_TIME));
+            res.add(infoStrings.get(TOTAL_TIME));
+            res.add(infoStrings.get(QUERY_STATE));
+            String statement = infoStrings.get(SQL_STATEMENT);
             if (statement.length() > 128) {
                 statement = statement.substring(0, 124) + " ...";
             }
@@ -149,8 +146,8 @@ public class ProfileManager {
                 profileString = profile.toString();
                 break;
             case "json":
-                RuntimeProfile.ProfileFormater formater = new RuntimeProfile.JsonProfileFormater();
-                profileString = formater.format(profile, "");
+                RuntimeProfile.ProfileFormatter formatter = new RuntimeProfile.JsonProfileFormater();
+                profileString = formatter.format(profile, "");
                 break;
             default:
                 profileString = profile.toString();
@@ -162,9 +159,13 @@ public class ProfileManager {
     public String pushProfile(ExecPlan plan, RuntimeProfile profile) {
         String profileString = generateProfileString(profile);
         ProfileElement element = createElement(profile.getChildList().get(0).first, profileString);
+<<<<<<< HEAD
         // TODO(hcf) Fix this in 3.1.1
         //        element.plan = plan;
         //        element.profile = profile;
+=======
+        element.plan = ProfilingExecPlan.buildFrom(plan);
+>>>>>>> b0cfdcff7c ([Enhancement] Support text-based profile analysis(3) (#28813))
         String queryId = element.infoStrings.get(ProfileManager.QUERY_ID);
         // check when push in, which can ensure every element in the list has QUERY_ID column,
         // so there is no need to check when remove element from list.

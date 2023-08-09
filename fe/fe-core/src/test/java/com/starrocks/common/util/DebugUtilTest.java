@@ -62,7 +62,7 @@ public class DebugUtilTest {
         Pair<Double, String> result;
         result = DebugUtil.getByteUint(0);
         Assert.assertEquals(result.first, Double.valueOf(0.0));
-        Assert.assertEquals(result.second, "");
+        Assert.assertEquals(result.second, "B");
 
         result = DebugUtil.getByteUint(123);     // B
         Assert.assertEquals(result.first, Double.valueOf(123.0));
