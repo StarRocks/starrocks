@@ -2216,7 +2216,6 @@ public class OlapTable extends Table {
         tableProperty.buildDataCachePartitionDuration();
     }
 
-
     public void setStorageCoolDownTTL(PeriodDuration duration) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());

@@ -225,7 +225,7 @@ public class PropertyAnalyzer {
 
         if (hasCooldownTime && hasCoolDownTTL) {
             throw new AnalysisException("Invalid data property. "
-                    + coolDownTimeKey + " and " + coolDownTTLKey + "conflict. you can only use one of them. ");
+                    + coolDownTimeKey + " and " + coolDownTTLKey + " conflict. you can only use one of them. ");
         }
 
         properties.remove(mediumKey);
@@ -240,10 +240,8 @@ public class PropertyAnalyzer {
                 throw new AnalysisException("Can not assign cooldown timestamp to HDD storage medium");
             }
             long currentTimeMs = System.currentTimeMillis();
-            if (storageMedium == TStorageMedium.SSD) {
-                if (coolDownTimeStamp <= currentTimeMs) {
-                    throw new AnalysisException("Cooldown time should later than now");
-                }
+            if (coolDownTimeStamp <= currentTimeMs) {
+                throw new AnalysisException("Cooldown time should be later than now");
             }
 
         } else if (hasCoolDownTTL) {
@@ -251,7 +249,7 @@ public class PropertyAnalyzer {
                 throw new AnalysisException("Invalid data property. storage medium property is not found");
             }
             if (storageMedium == TStorageMedium.HDD) {
-                throw new AnalysisException("Can not assign cooldown ttl to HDD storage medium");
+                throw new AnalysisException("Can not assign cooldown ttl to table with HDD storage medium");
             }
         }
 
