@@ -138,7 +138,7 @@ void LevelBuilder::_write_boolean_column_chunk(const LevelBuilderContext& ctx, c
     // Use the rep_levels in the context from caller since node is primitive.
     auto& rep_levels = ctx._rep_levels;
     auto def_levels = _make_def_levels(ctx, node, null_col, col->size());
-    auto null_bitset = _make_null_bitset(col->size(), null_col, ctx);
+    auto null_bitset = _make_null_bitset(ctx, null_col, col->size());
 
     // sizeof(bool) depends on implementation, thus we cast values to ensure correctness
     auto values = new bool[col->size()];
@@ -167,7 +167,7 @@ void LevelBuilder::_write_int_column_chunk(const LevelBuilderContext& ctx, const
     // Use the rep_levels in the context from caller since node is primitive.
     auto& rep_levels = ctx._rep_levels;
     auto def_levels = _make_def_levels(ctx, node, null_col, col->size());
-    auto null_bitset = _make_null_bitset(col->size(), null_col, ctx); // could be influenced by upper laye, ctxrs
+    auto null_bitset = _make_null_bitset(ctx, null_col, col->size());
 
     using source_type = RunTimeCppType<lt>;
     using target_type = typename ::parquet::type_traits<pt>::value_type;
@@ -210,7 +210,7 @@ void LevelBuilder::_write_decimal128_column_chunk(const LevelBuilderContext& ctx
     // Use the rep_levels in the context from caller since node is primitive.
     auto& rep_levels = ctx._rep_levels;
     auto def_levels = _make_def_levels(ctx, node, null_col, col->size());
-    auto null_bitset = _make_null_bitset(col->size(), null_col, ctx);
+    auto null_bitset = _make_null_bitset(ctx, null_col, col->size());
 
     auto values = new unsigned __int128[col->size()];
     DeferOp defer([&] { delete[] values; });
@@ -246,7 +246,7 @@ void LevelBuilder::_write_date_column_chunk(const LevelBuilderContext& ctx, cons
     // Use the rep_levels in the context from caller since node is primitive.
     auto& rep_levels = ctx._rep_levels;
     auto def_levels = _make_def_levels(ctx, node, null_col, col->size());
-    auto null_bitset = _make_null_bitset(col->size(), null_col, ctx);
+    auto null_bitset = _make_null_bitset(ctx, null_col, col->size());
 
     auto unix_epoch_date = DateValue::create(1970, 1, 1); // base date to subtract
 
@@ -275,7 +275,7 @@ void LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx, 
     // Use the rep_levels in the context from caller since node is primitive.
     auto rep_levels = ctx._rep_levels;
     auto def_levels = _make_def_levels(ctx, node, null_col, col->size());
-    auto null_bitset = _make_null_bitset(col->size(), null_col, ctx);
+    auto null_bitset = _make_null_bitset(ctx, null_col, col->size());
 
     auto values = new int64_t[col->size()];
     DeferOp defer([&] { delete[] values; });
@@ -304,7 +304,7 @@ void LevelBuilder::_write_varchar_column_chunk(const LevelBuilderContext& ctx, c
     // Use the rep_levels in the context from caller since node is primitive.
     auto& rep_levels = ctx._rep_levels;
     auto def_levels = _make_def_levels(ctx, node, null_col, col->size());
-    auto null_bitset = _make_null_bitset(col->size(), null_col, ctx);
+    auto null_bitset = _make_null_bitset(ctx, null_col, col->size());
 
     auto values = new ::parquet::ByteArray[col->size()];
     DeferOp defer([&] { delete[] values; });
@@ -502,8 +502,9 @@ void LevelBuilder::_write_struct_column_chunk(const LevelBuilderContext& ctx, co
 }
 
 // Convert byte-addressable mask into a bit-addressable mask. Note the 0/1 values are flipped.
-std::shared_ptr<std::vector<uint8_t>> LevelBuilder::_make_null_bitset(const size_t col_size, const uint8_t* nulls,
-                                                                      const LevelBuilderContext& ctx) const {
+std::shared_ptr<std::vector<uint8_t>> LevelBuilder::_make_null_bitset(const LevelBuilderContext& ctx,
+                                                                      const uint8_t* nulls,
+                                                                      const size_t col_size) const {
     if (ctx._repeated_ancestor_def_level == ctx._max_def_level) {
         if (nulls == nullptr) {
             return nullptr;
