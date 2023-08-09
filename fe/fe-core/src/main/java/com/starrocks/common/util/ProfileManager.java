@@ -159,13 +159,7 @@ public class ProfileManager {
     public String pushProfile(ExecPlan plan, RuntimeProfile profile) {
         String profileString = generateProfileString(profile);
         ProfileElement element = createElement(profile.getChildList().get(0).first, profileString);
-<<<<<<< HEAD
-        // TODO(hcf) Fix this in 3.1.1
-        //        element.plan = plan;
-        //        element.profile = profile;
-=======
         element.plan = ProfilingExecPlan.buildFrom(plan);
->>>>>>> b0cfdcff7c ([Enhancement] Support text-based profile analysis(3) (#28813))
         String queryId = element.infoStrings.get(ProfileManager.QUERY_ID);
         // check when push in, which can ensure every element in the list has QUERY_ID column,
         // so there is no need to check when remove element from list.
