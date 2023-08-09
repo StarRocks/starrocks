@@ -559,8 +559,6 @@ public class OlapTableFactory implements AbstractTableFactory {
             throw e;
         }
 
-        // NOTE: The table has been added to the database, and the following procedure cannot throw exception.
-        LOG.info("Successfully create table[{};{}]", tableName, tableId);
         return table;
     }
 
