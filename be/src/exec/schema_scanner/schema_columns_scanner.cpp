@@ -277,7 +277,13 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
             // COLUMN_DEFAULT
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
-                fill_data_column_with_null(column.get());
+                if (_desc_result.columns[_column_index].columnDesc.__isset.columnDefault) {
+                    std::string* str = &_desc_result.columns[_column_index].columnDesc.columnDefault;
+                    Slice value(str->c_str(), str->length());
+                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                } else {
+                    fill_data_column_with_null(column.get());
+                }
             }
             break;
         }

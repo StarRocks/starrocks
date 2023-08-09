@@ -31,8 +31,11 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TColumnDef;
 import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
+import com.starrocks.thrift.TDescribeTableParams;
+import com.starrocks.thrift.TDescribeTableResult;
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTablesParams;
@@ -652,6 +655,46 @@ public class FrontendServiceImplTest {
         List<TTableInfo> tablesInfos = response.getTables_infos();
         Assert.assertEquals(1, tablesInfos.size());
         Assert.assertEquals("t1", tablesInfos.get(0).getTable_name());
+    }
+
+    @Test
+    public void testDefaultValueMeta() throws Exception {
+        starRocksAssert.withDatabase("test_table").useDatabase("test_table")
+                .withTable("CREATE TABLE `test_default_value` (\n" +
+                        "  `id` datetime NULL DEFAULT CURRENT_TIMESTAMP COMMENT \"\",\n" +
+                        "  `value` int(11) NULL DEFAULT \"2\" COMMENT \"\"\n" +
+                        ") ENGINE=OLAP \n" +
+                        "DUPLICATE KEY(`id`, `value`)\n" +
+                        "DISTRIBUTED BY RANDOM\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"enable_persistent_index\" = \"false\",\n" +
+                        "\"replicated_storage\" = \"true\",\n" +
+                        "\"compression\" = \"LZ4\"\n" +
+                        ");");
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createUserSql = "create user test2";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx), ctx);
+        String grantSql = "GRANT SELECT ON TABLE test_table.test_default_value TO USER `test2`@`%`;";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TDescribeTableParams request = new TDescribeTableParams();
+        TUserIdentity userIdentity = new TUserIdentity();
+        userIdentity.setUsername("test2");
+        userIdentity.setHost("%");
+        userIdentity.setIs_domain(false);
+        request.setCurrent_user_ident(userIdentity);
+        TDescribeTableResult response = impl.describeTable(request);
+        List<TColumnDef> columnDefList = response.getColumns();
+        List<TColumnDef> testDefaultValue = columnDefList.stream()
+                .filter(u -> u.getColumnDesc().getTableName().equalsIgnoreCase("test_default_value"))
+                .collect(Collectors.toList());
+        Assert.assertEquals(2, testDefaultValue.size());
+        Assert.assertEquals("CURRENT_TIMESTAMP", testDefaultValue.get(0).getColumnDesc().getColumnDefault());
+        Assert.assertEquals("2", testDefaultValue.get(1).getColumnDesc().getColumnDefault());
     }
 
 }
