@@ -1962,6 +1962,7 @@ relationPrimary
         (AS? alias=identifier columnAliases?)?                                          #normalizedTableFunction
     | FILES propertyList
         (AS? alias=identifier columnAliases?)?                                          #fileTableFunction
+    | LIST_FILES propertyList                                                           #listFilesTableFunction
     | '(' relations ')'                                                                 #parenthesizedRelation
     ;
 

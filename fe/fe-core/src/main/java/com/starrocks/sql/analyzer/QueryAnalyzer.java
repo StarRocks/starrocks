@@ -34,6 +34,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HiveView;
+import com.starrocks.catalog.ListFilesTableFunctionTable;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Resource;
@@ -58,6 +59,7 @@ import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.ListFilesTableFunctionRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -236,6 +238,11 @@ public class QueryAnalyzer {
             } else if (relation instanceof FileTableFunctionRelation) {
                 FileTableFunctionRelation tableFunctionRelation = (FileTableFunctionRelation) relation;
                 Table table = resolveTableFunctionTable(tableFunctionRelation.getProperties());
+                tableFunctionRelation.setTable(table);
+                return relation;
+            } else if (relation instanceof ListFilesTableFunctionRelation) {
+                ListFilesTableFunctionRelation tableFunctionRelation = (ListFilesTableFunctionRelation) relation;
+                Table table = resolveListFilesTableFunctionTable(tableFunctionRelation.getProperties());
                 tableFunctionRelation.setTable(table);
                 return relation;
             } else if (relation instanceof TableRelation) {
@@ -426,6 +433,18 @@ public class QueryAnalyzer {
                 columns.put(field, column);
                 fields.add(field);
             }
+
+            node.setColumns(columns.build());
+            Scope scope = new Scope(RelationId.of(node), new RelationFields(fields.build()));
+            node.setScope(scope);
+            return scope;
+        }
+
+        @Override
+        public Scope visitListFilesTableFunction(ListFilesTableFunctionRelation node, Scope outerScope) {
+            TableName tableName = node.getResolveTableName();
+            ImmutableList.Builder<Field> fields = ImmutableList.builder();
+            ImmutableMap.Builder<Field, Column> columns = ImmutableMap.builder();
 
             node.setColumns(columns.build());
             Scope scope = new Scope(RelationId.of(node), new RelationFields(fields.build()));
@@ -946,6 +965,14 @@ public class QueryAnalyzer {
     private Table resolveTableFunctionTable(Map<String, String> properties) {
         try {
             return new TableFunctionTable(properties);
+        } catch (DdlException e) {
+            throw new StorageAccessException(e);
+        }
+    }
+    private Table resolveListFilesTableFunctionTable(Map<String, String> properties) {
+        try {
+            // TODO:
+            return new ListFilesTableFunctionTable(properties);
         } catch (DdlException e) {
             throw new StorageAccessException(e);
         }

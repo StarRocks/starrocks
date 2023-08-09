@@ -376,6 +376,16 @@ std::string JDBCTableDescriptor::debug_string() const {
     return out.str();
 }
 
+TableFunctionTableDescriptor::TableFunctionTableDescriptor(const TTableDescriptor& tdesc) : TableDescriptor(tdesc) {}
+
+TableFunctionTableDescriptor::~TableFunctionTableDescriptor() = default;
+
+std::string TableFunctionTableDescriptor::debug_string() const {
+    std::stringstream out;
+    out << "TableFunctionTable(" << TableDescriptor::debug_string() << ")";
+    return out.str();
+}
+
 TupleDescriptor::TupleDescriptor(const TTupleDescriptor& tdesc)
         : _id(tdesc.id), _table_desc(nullptr), _byte_size(tdesc.byteSize) {}
 
@@ -593,6 +603,10 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
         }
         case TTableType::JDBC_TABLE: {
             desc = pool->add(new JDBCTableDescriptor(tdesc));
+            break;
+        }
+        case TTableType::TABLE_FUNCTION_TABLE: {
+            desc = pool->add(new TableFunctionTableDescriptor(tdesc));
             break;
         }
         default:

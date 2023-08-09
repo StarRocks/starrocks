@@ -41,6 +41,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.ListFilesTableFunctionTable;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
@@ -61,6 +62,7 @@ import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.planner.AssertNumRowsNode;
+import com.starrocks.planner.BackendScanNode;
 import com.starrocks.planner.BinlogScanNode;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
@@ -3130,11 +3132,9 @@ public class PlanFragmentBuilder {
             }
         }
 
-        @Override
-        public PlanFragment visitPhysicalTableFunctionTableScan(OptExpression optExpression, ExecPlan context) {
+        private PlanFragment buildFilesTableFunctionFragment(OptExpression optExpression, ExecPlan context) {
             PhysicalTableFunctionTableScanOperator node =
                     (PhysicalTableFunctionTableScanOperator) optExpression.getOp();
-
             TableFunctionTable table = (TableFunctionTable) node.getTable();
 
             TupleDescriptor tupleDesc = context.getDescTbl().createTupleDescriptor();
@@ -3188,6 +3188,45 @@ public class PlanFragmentBuilder {
                     new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.RANDOM);
             context.getFragments().add(fragment);
             return fragment;
+        }
+
+        private PlanFragment buildListFilesTableFunctionFragment(OptExpression optExpression, ExecPlan context) {
+            PhysicalTableFunctionTableScanOperator scan = (PhysicalTableFunctionTableScanOperator) optExpression.getOp();
+
+            context.getDescTbl().addReferencedTable(scan.getTable());
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(scan.getTable());
+
+            BackendScanNode scanNode = new BackendScanNode(context.getNextNodeId(), context.getDescTbl().createTupleDescriptor());
+
+            for (Map.Entry<ColumnRefOperator, Column> entry : scan.getColRefToColumnMetaMap().entrySet()) {
+                SlotDescriptor slotDescriptor =
+                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
+                slotDescriptor.setColumn(entry.getValue());
+                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
+                slotDescriptor.setIsMaterialized(true);
+                context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().getName(), slotDescriptor));
+            }
+            tupleDescriptor.computeMemLayout();
+
+            context.getScanNodes().add(scanNode);
+            PlanFragment fragment =
+                    new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.RANDOM);
+            context.getFragments().add(fragment);
+            return fragment;
+        }
+
+        @Override
+        public PlanFragment visitPhysicalTableFunctionTableScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalTableFunctionTableScanOperator node =
+                    (PhysicalTableFunctionTableScanOperator) optExpression.getOp();
+
+            if (node.getTable() instanceof TableFunctionTable) {
+                return buildFilesTableFunctionFragment(optExpression, context);
+            } else if (node.getTable() instanceof ListFilesTableFunctionTable) {
+                return buildListFilesTableFunctionFragment(optExpression, context);
+            }
+            return buildFilesTableFunctionFragment(optExpression, context);
         }
     }
 }

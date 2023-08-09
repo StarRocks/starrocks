@@ -83,6 +83,7 @@ enum TPlanNodeType {
   STREAM_JOIN_NODE,
   STREAM_AGG_NODE,
   LAKE_META_SCAN_NODE,
+  BACKEND_SCAN_NODE,
 }
 
 // phases of an execution node
@@ -1105,6 +1106,9 @@ struct TStreamAggregationNode {
   24: optional i32 agg_func_set_version = 1
 }
 
+struct TBackendScanNode {
+}
+
 
 // This is essentially a union of all messages corresponding to subclasses
 // of PlanNode.
@@ -1180,6 +1184,8 @@ struct TPlanNode {
   70: optional TStreamScanNode stream_scan_node;
   71: optional TStreamJoinNode stream_join_node;
   72: optional TStreamAggregationNode stream_agg_node;
+
+  81: optional TBackendScanNode backend_scan_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

@@ -357,6 +357,13 @@ private:
     std::string _jdbc_passwd;
 };
 
+class TableFunctionTableDescriptor : public TableDescriptor {
+public:
+    TableFunctionTableDescriptor(const TTableDescriptor& tdesc);
+    ~TableFunctionTableDescriptor() override;
+    std::string debug_string() const override;
+};
+
 class TupleDescriptor {
 public:
     int byte_size() const { return _byte_size; }

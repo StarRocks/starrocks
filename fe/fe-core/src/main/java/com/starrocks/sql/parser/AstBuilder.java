@@ -237,6 +237,7 @@ import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
+import com.starrocks.sql.ast.ListFilesTableFunctionRelation;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
@@ -4477,6 +4478,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitFileTableFunction(StarRocksParser.FileTableFunctionContext context) {
         Map<String, String> properties = getPropertyList(context.propertyList());
         return new FileTableFunctionRelation(properties, NodePosition.ZERO);
+    }
+
+    @Override
+    public ParseNode visitListFilesTableFunction(StarRocksParser.ListFilesTableFunctionContext context) {
+        Map<String, String> properties = getPropertyList(context.propertyList());
+        return new ListFilesTableFunctionRelation(properties, NodePosition.ZERO);
     }
 
     @Override

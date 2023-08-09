@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ListFilesTableFunctionTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -41,7 +42,7 @@ public class LogicalTableFunctionTableScanOperator extends LogicalScanOperator {
                 limit,
                 predicate, null);
 
-        Preconditions.checkState(table instanceof TableFunctionTable);
+        Preconditions.checkState(table instanceof TableFunctionTable || table instanceof ListFilesTableFunctionTable);
     }
 
     private LogicalTableFunctionTableScanOperator() {
