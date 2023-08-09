@@ -221,6 +221,20 @@ public class ScalarOperatorFunctions {
         }
     }
 
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "to_iso8601", argTypes = {DATETIME}, returnType = VARCHAR),
+            @ConstantFunction(name = "to_iso8601", argTypes = {DATE}, returnType = VARCHAR)
+    })
+    public static ConstantOperator toISO8601(ConstantOperator date) {
+        if (date.getType().isDatetime()) {
+            DateTimeFormatter fmt = DateUtils.unixDatetimeFormatter("%Y-%m-%dT%H:%i:%s.%f", true);
+            String result = date.getDatetime().format(fmt);
+            return ConstantOperator.createVarchar(result);
+        }
+        String result = date.getDate().format(DateUtils.DATE_FORMATTER_UNIX);
+        return ConstantOperator.createVarchar(result);
+    }
+
     @ConstantFunction(name = "str_to_date", argTypes = {VARCHAR, VARCHAR}, returnType = DATETIME)
     public static ConstantOperator dateParse(ConstantOperator date, ConstantOperator fmtLiteral) {
         DateTimeFormatter builder = DateUtils.unixDatetimeFormatter(fmtLiteral.getVarchar(), false);
