@@ -457,7 +457,7 @@ public class PlanFragmentBuilder {
                 }
             }
 
-            Set<Integer> unUsedOutputColumnIds = new HashSet<Integer>();
+            Set<Integer> unUsedOutputColumnIds = new HashSet<>();
             Map<Integer, Integer> dictStringIdToIntIds = node.getDictStringIdToIntIds();
             for (Integer cid : singlePredColumnIds) {
                 Integer newCid = cid;
@@ -706,6 +706,7 @@ public class PlanFragmentBuilder {
             try {
                 scanNode.updateScanInfo(node.getSelectedPartitionId(),
                         node.getSelectedTabletId(),
+                        node.getHintsReplicaId(),
                         node.getSelectedIndexId());
                 long selectedIndexId = node.getSelectedIndexId();
                 long totalTabletsNum = 0;

@@ -2000,7 +2000,7 @@ relation
     ;
 
 relationPrimary
-    : qualifiedName temporalClause? partitionNames? tabletList? (
+    : qualifiedName temporalClause? partitionNames? tabletList? replicaList? (
         AS? alias=identifier)? bracketHint?                                             #tableAtom
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable
@@ -2068,6 +2068,10 @@ keyPartitions
 
 tabletList
     : TABLET '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
+    ;
+
+replicaList
+    : REPLICA '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
     ;
 
 // ------------------------------------------- Expression --------------------------------------------------------------
