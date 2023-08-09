@@ -243,7 +243,6 @@ static bool check_tablet(const TabletSharedPtr& tablet, int64_t version, int64_t
 }
 
 static void commit_rowsets(const TabletSharedPtr& tablet, std::vector<RowsetSharedPtr>& rowsets, int64_t& version) {
-    auto pool = StorageEngine::instance()->update_manager()->apply_thread_pool();
     for (int i = 0; i < rowsets.size(); i++) {
         auto st = tablet->rowset_commit(++version, rowsets[i], 10000);
         CHECK(st.ok()) << st.to_string();
