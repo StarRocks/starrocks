@@ -120,6 +120,13 @@ public class PipeManagerTest {
         pm.createPipe(createStmt);
     }
 
+    private void dropPipe(String name) throws Exception {
+        String sql = "drop pipe " + name;
+        DropPipeStmt dropStmt = (DropPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        PipeManager pm = ctx.getGlobalStateMgr().getPipeManager();
+        pm.dropPipe(dropStmt);
+    }
+
     private Pipe getPipe(String name) {
         PipeManager pm = ctx.getGlobalStateMgr().getPipeManager();
         return pm.mayGetPipe(new PipeName(PIPE_TEST_DB, name)).get();
@@ -593,4 +600,37 @@ public class PipeManagerTest {
                 " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
     }
 
+    @Test
+    public void testInsertSql() throws Exception {
+        mockRepoExecutor();
+        String pipeName = "p_insert_sql";
+
+        // select *
+        {
+            createPipe("create pipe p_insert_sql properties('batch_size'='10GB') " +
+                    " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
+            Pipe pipe = getPipe(pipeName);
+            FilePipePiece piece = new FilePipePiece();
+            piece.addFile(new PipeFileRecord(pipe.getId(), "a.parquet", "v1", 1));
+            piece.addFile(new PipeFileRecord(pipe.getId(), "b.parquet", "v1", 1));
+            String sql = FilePipeSource.buildInsertSql(pipe, piece);
+            Assert.assertEquals("INSERT INTO `tbl1` SELECT *\n" +
+                    "FROM FILES('path'='a.parquet,b.parquet','batch_size'='10GB')", sql);
+            dropPipe(pipeName);
+        }
+
+        // select col
+        {
+            createPipe("create pipe p_insert_sql properties('batch_size'='10GB') " +
+                    " as insert into tbl1 select col_int, col_string from files('path'='fake://pipe', 'format'='parquet')");
+            Pipe pipe = getPipe(pipeName);
+            FilePipePiece piece = new FilePipePiece();
+            piece.addFile(new PipeFileRecord(pipe.getId(), "a.parquet", "v1", 1));
+            piece.addFile(new PipeFileRecord(pipe.getId(), "b.parquet", "v1", 1));
+            String sql = FilePipeSource.buildInsertSql(pipe, piece);
+            Assert.assertEquals("INSERT INTO `tbl1` SELECT `col_int`, `col_string`\n" +
+                    "FROM FILES('path'='a.parquet,b.parquet','batch_size'='10GB')", sql);
+            dropPipe(pipeName);
+        }
+    }
 }

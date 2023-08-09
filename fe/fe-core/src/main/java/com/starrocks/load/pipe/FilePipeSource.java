@@ -18,10 +18,20 @@ package com.starrocks.load.pipe;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BrokerDesc;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.UserException;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.qe.OriginStatement;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.FileTableFunctionRelation;
+import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.SqlParser;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.hadoop.fs.FileStatus;
@@ -29,6 +39,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -36,8 +47,6 @@ import java.util.stream.Collectors;
 public class FilePipeSource implements GsonPostProcessable {
 
     private static final Logger LOG = LogManager.getLogger(FilePipeSource.class);
-    public static final String FILE_FUNCTION = "FILES";
-    public static final String FILE_FUNCTION_REGEX = "(?i)FILES\\(.*\\)";
 
     @SerializedName(value = "pipe_id")
     private PipeId pipeId;
@@ -170,6 +179,29 @@ public class FilePipeSource implements GsonPostProcessable {
 
     public FileListRepo getFileListRepo() {
         return fileListRepo;
+    }
+
+    /**
+     * Build insert sql from original pipe statement
+     * Example: original sql: insert into tbl select * from files('path'='xxx')
+     */
+    public static String buildInsertSql(Pipe pipe, FilePipePiece piece) {
+        String originalSql = pipe.getOriginSql();
+        Map<String, String> originalProperties = pipe.getProperties();
+        StatementBase sqlStmt = SqlParser.parse(originalSql, new SessionVariable()).get(0);
+        sqlStmt.setOrigStmt(new OriginStatement(originalSql, 0));
+        Preconditions.checkState(sqlStmt instanceof InsertStmt);
+        InsertStmt insertStmt = (InsertStmt) sqlStmt;
+        SelectRelation select = (SelectRelation) insertStmt.getQueryStatement().getQueryRelation();
+
+        // build a new Files table function
+        Map<String, String> properties = new HashMap<>(originalProperties);
+        String files =
+                piece.getFiles().stream().map(PipeFileRecord::getFileName).collect(Collectors.joining(","));
+        properties.put(TableFunctionTable.PROPERTY_PATH, files);
+        FileTableFunctionRelation fileRelation = new FileTableFunctionRelation(properties, NodePosition.ZERO);
+        select.setRelation(fileRelation);
+        return AstToSQLBuilder.toSQL(sqlStmt);
     }
 
     @Override

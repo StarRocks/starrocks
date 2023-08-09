@@ -21,7 +21,6 @@ import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -58,7 +57,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.stream.Collectors;
 
 /**
  * Pipe: continuously load and unload data
@@ -207,8 +205,7 @@ public class Pipe implements GsonPostProcessable {
         try {
             lock.writeLock().lock();
 
-            // TODO: structural replace ?
-            String sqlTask = originSql.replaceAll(FilePipeSource.FILE_FUNCTION_REGEX, buildFileSelectSource(piece));
+            String sqlTask = FilePipeSource.buildInsertSql(this, piece);
             long taskId = GlobalStateMgr.getCurrentState().getNextId();
             PipeId pipeId = getPipeId();
             String uniqueName = PipeTaskDesc.genUniqueTaskName(getName(), taskId, 0);
@@ -304,30 +301,6 @@ public class Pipe implements GsonPostProcessable {
         } finally {
             lock.writeLock().unlock();
         }
-    }
-
-    private String buildFileSelectSource(FilePipePiece piece) {
-        FilePipeSource fileSource = (FilePipeSource) pipeSource;
-        StringBuilder sb = new StringBuilder();
-        sb.append(FilePipeSource.FILE_FUNCTION).append("(");
-        boolean isFirst = true;
-        for (Map.Entry<String, String> entry : fileSource.getTableProperties().entrySet()) {
-            if (!isFirst) {
-                sb.append(", ");
-            }
-            isFirst = false;
-            if (entry.getKey().equalsIgnoreCase(TableFunctionTable.PROPERTY_PATH)) {
-                // TODO: it's not supported right now
-                String files =
-                        piece.getFiles().stream().map(PipeFileRecord::getFileName).collect(Collectors.joining(","));
-                sb.append("'").append(TableFunctionTable.PROPERTY_PATH).append("'='").append(files).append("'");
-            } else {
-                sb.append("'").append(entry.getKey()).append("'='");
-                sb.append(entry.getValue()).append("'");
-            }
-        }
-        sb.append(")");
-        return sb.toString();
     }
 
     private void executeTask(PipeTaskDesc taskDesc) {

@@ -22,14 +22,17 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FieldReference;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.SelectList;
+import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -135,27 +138,42 @@ public class AstToSQLBuilder {
             }
 
             List<String> selectListString = new ArrayList<>();
-            for (int i = 0; i < stmt.getOutputExpression().size(); ++i) {
-                Expr expr = stmt.getOutputExpression().get(i);
-                String columnName = stmt.getColumnOutputNames().get(i);
+            if (CollectionUtils.isNotEmpty(stmt.getOutputExpression())) {
+                for (int i = 0; i < stmt.getOutputExpression().size(); ++i) {
+                    Expr expr = stmt.getOutputExpression().get(i);
+                    String columnName = stmt.getColumnOutputNames().get(i);
 
-                if (expr instanceof FieldReference) {
-                    Field field = stmt.getScope().getRelationFields().getFieldByIndex(i);
-                    selectListString.add(buildColumnName(field.getRelationAlias(), field.getName(), columnName));
-                } else if (expr instanceof SlotRef) {
-                    SlotRef slot = (SlotRef) expr;
-                    if (slot.getOriginType().isStructType()) {
-                        selectListString.add(buildStructColumnName(slot.getTblNameWithoutAnalyzed(),
-                                slot.getColumnName(), columnName));
+                    if (expr instanceof FieldReference) {
+                        Field field = stmt.getScope().getRelationFields().getFieldByIndex(i);
+                        selectListString.add(buildColumnName(field.getRelationAlias(), field.getName(), columnName));
+                    } else if (expr instanceof SlotRef) {
+                        SlotRef slot = (SlotRef) expr;
+                        if (slot.getOriginType().isStructType()) {
+                            selectListString.add(buildStructColumnName(slot.getTblNameWithoutAnalyzed(),
+                                    slot.getColumnName(), columnName));
+                        } else {
+                            selectListString.add(buildColumnName(slot.getTblNameWithoutAnalyzed(), slot.getColumnName(),
+                                    columnName));
+                        }
                     } else {
-                        selectListString.add(buildColumnName(slot.getTblNameWithoutAnalyzed(), slot.getColumnName(),
-                                columnName));
+                        selectListString.add(
+                                expr.getFn() == null || expr.getFn().getFunctionName().getDb() == null ?
+                                        visit(expr) + " AS `" + columnName + "`" :
+                                        visit(expr) + " AS `" + expr.getFn().getFunctionName().getFunction() + "`");
                     }
-                } else {
-                    selectListString.add(
-                            expr.getFn() == null || expr.getFn().getFunctionName().getDb() == null ?
-                                    visit(expr) + " AS `" + columnName + "`" :
-                                    visit(expr) + " AS `" + expr.getFn().getFunctionName().getFunction() + "`");
+                }
+            } else {
+                for (SelectListItem item : stmt.getSelectList().getItems()) {
+                    if (item.isStar()) {
+                        selectListString.add("*");
+                    } else if (item.getExpr() != null) {
+                        Expr expr = item.getExpr();
+                        String str = visit(expr);
+                        if (StringUtils.isNotEmpty(item.getAlias())) {
+                            str += " AS " + item.getAlias();
+                        }
+                        selectListString.add(str);
+                    }
                 }
             }
 
@@ -315,6 +333,30 @@ public class AstToSQLBuilder {
                 return buildColumnName(expr.getTblNameWithoutAnalyzed(),
                         expr.getColumnName(), expr.getColumnName());
             }
+        }
+
+        @Override
+        public String visitInsertStatement(InsertStmt insert, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("INSERT ");
+            if (insert.isOverwrite()) {
+                sb.append("OVERWRITE ");
+            } else {
+                sb.append("INTO ");
+            }
+
+            // target
+            sb.append(insert.getTableName().toSql());
+            // TODO: not support specify partition and columns
+
+            sb.append(" ");
+
+            // source
+            if (insert.getQueryStatement() != null) {
+                sb.append(visit(insert.getQueryStatement()));
+            }
+
+            return sb.toString();
         }
     }
 }
