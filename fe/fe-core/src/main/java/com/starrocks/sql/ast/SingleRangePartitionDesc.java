@@ -107,6 +107,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
             return;
         }
 
+<<<<<<< HEAD
         FeNameFormat.checkPartitionName(partName);
 
         partitionKeyDesc.analyze(partColNum);
@@ -181,6 +182,17 @@ public class SingleRangePartitionDesc extends PartitionDesc {
 
     public boolean isAnalyzed() {
         return this.isAnalyzed;
+=======
+        FeNameFormat.checkPartitionName(getPartitionName());
+        partitionKeyDesc.analyze(partColNum);
+
+        if (partColNum == 1) {
+            analyzeProperties(tableProperties, partitionKeyDesc);
+        } else {
+            analyzeProperties(tableProperties, null);
+        }
+        isAnalyzed = true;
+>>>>>>> 8d4d9462e0 ([Feature] Support storage_cooldown_ttl for table (#28737))
     }
 
     @Override

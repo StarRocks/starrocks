@@ -121,6 +121,11 @@ public class SingleItemListPartitionDesc extends PartitionDesc {
 
     public void analyze(List<ColumnDef> columnDefList, Map<String, String> tableProperties) throws AnalysisException {
         FeNameFormat.checkPartitionName(this.getPartitionName());
+<<<<<<< HEAD
+=======
+        analyzeProperties(tableProperties, null);
+
+>>>>>>> 8d4d9462e0 ([Feature] Support storage_cooldown_ttl for table (#28737))
         if (columnDefList.size() != 1) {
             throw new AnalysisException("Partition column size should be one when use single list partition ");
         }

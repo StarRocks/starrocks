@@ -163,6 +163,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
      */
     private String storageVolume;
 
+<<<<<<< HEAD
+=======
+    private PeriodDuration storageCoolDownTTL;
+
+    // This property only applies to materialized views
+    private String resourceGroup = null;
+
+>>>>>>> 8d4d9462e0 ([Feature] Support storage_cooldown_ttl for table (#28737))
     // the default compression type of this table.
     private TCompressionType compressionType = TCompressionType.LZ4_FRAME;
 
@@ -459,6 +467,25 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+<<<<<<< HEAD
+=======
+    public TableProperty buildDataCachePartitionDuration() {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
+            dataCachePartitionDuration = TimeUtils.parseHumanReadablePeriodOrDuration(
+                    properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION));
+        }
+        return this;
+    }
+
+    public TableProperty buildStorageCoolDownTTL() {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
+            storageCoolDownTTL = TimeUtils.parseHumanReadablePeriodOrDuration(
+                    properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL));
+        }
+        return this;
+    }
+
+>>>>>>> 8d4d9462e0 ([Feature] Support storage_cooldown_ttl for table (#28737))
     public void modifyTableProperties(Map<String, String> modifyProperties) {
         properties.putAll(modifyProperties);
     }
@@ -603,6 +630,17 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return binlogAvailabeVersions;
     }
 
+<<<<<<< HEAD
+=======
+    public PeriodDuration getDataCachePartitionDuration() {
+        return dataCachePartitionDuration;
+    }
+
+    public PeriodDuration getStorageCoolDownTTL() {
+        return storageCoolDownTTL;
+    }
+
+>>>>>>> 8d4d9462e0 ([Feature] Support storage_cooldown_ttl for table (#28737))
     public void clearBinlogAvailableVersion() {
         binlogAvailabeVersions.clear();
         for (Iterator<Map.Entry<String, String>> it = properties.entrySet().iterator(); it.hasNext(); ) {
@@ -629,6 +667,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildInMemory();
         buildStorageFormat();
         buildStorageVolume();
+        buildStorageCoolDownTTL();
         buildEnablePersistentIndex();
         buildCompressionType();
         buildWriteQuorum();

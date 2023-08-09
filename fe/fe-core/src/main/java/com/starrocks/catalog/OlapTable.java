@@ -2075,6 +2075,27 @@ public class OlapTable extends Table {
         tableProperty.setHasDelete(true);
     }
 
+<<<<<<< HEAD
+=======
+    public void setDataCachePartitionDuration(PeriodDuration duration) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION,
+                TimeUtils.toHumanReadableString(duration));
+        tableProperty.buildDataCachePartitionDuration();
+    }
+
+    public void setStorageCoolDownTTL(PeriodDuration duration) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL,
+                TimeUtils.toHumanReadableString(duration));
+        tableProperty.buildStorageCoolDownTTL();
+    }
+
+>>>>>>> 8d4d9462e0 ([Feature] Support storage_cooldown_ttl for table (#28737))
     public boolean hasForbitGlobalDict() {
         if (tableProperty == null) {
             return false;

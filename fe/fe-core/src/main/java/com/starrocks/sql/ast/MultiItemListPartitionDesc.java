@@ -124,9 +124,19 @@ public class MultiItemListPartitionDesc extends PartitionDesc {
     }
 
     public void analyze(List<ColumnDef> columnDefList, Map<String, String> tableProperties) throws AnalysisException {
+<<<<<<< HEAD
         FeNameFormat.checkPartitionName(this.getPartitionName());
         this.analyzeValues(columnDefList.size());
         this.analyzeProperties(tableProperties);
+=======
+        if (isAnalyzed) {
+            return;
+        }
+
+        FeNameFormat.checkPartitionName(getPartitionName());
+        analyzeValues(columnDefList.size());
+        analyzeProperties(tableProperties, null);
+>>>>>>> 8d4d9462e0 ([Feature] Support storage_cooldown_ttl for table (#28737))
         this.columnDefList = columnDefList;
     }
 
