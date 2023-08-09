@@ -991,8 +991,8 @@ public:
         }
 
         std::size_t out_len;
-        auto result =
-                libdeflate_gzip_decompress(decompressor.get(), input.data, input.size, output->data, output->size, &out_len);
+        auto result = libdeflate_gzip_decompress(decompressor.get(), input.data, input.size, output->data, output->size,
+                                                 &out_len);
         if (result != LIBDEFLATE_SUCCESS) {
             return Status::InvalidArgument("libdeflate_gzip_decompress failed");
         }
