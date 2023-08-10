@@ -7,6 +7,10 @@ StarRocks provides two options for loading data from S3:
 
 Small datasets are often loaded synchronously using the `FILES()` table function, and large datasets are often loaded asynchronously using Broker Load. The two methods have different advantages and are described below.
 
+> Note
+>
+> You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
+
 ## Using Broker Load
 
 An asynchronous Broker Load process handles making the connection to S3, pulling the data, and storing the data in StarRocks.
@@ -30,6 +34,10 @@ An asynchronous Broker Load process handles making the connection to S3, pulling
 
 Create a table, start a load process that pulls a Parquet file from S3, and verify the progress and success of the data loading.
 
+> Note
+>
+> The examples use a sample dataset in Parquet format, if you want to load a CSV or ORC file, that information is linked at the bottom of this page.
+
 #### Create a table
 
 Create a database for your table:
@@ -52,7 +60,7 @@ CREATE TABLE `user_behavior` (
     `Timestamp` datetime
 ) ENGINE=OLAP 
 DUPLICATE KEY(`UserID`)
-DISTRIBUTED BY HASH(`UserID`) BUCKETS 1 
+DISTRIBUTED BY HASH(`UserID`)
 PROPERTIES (
     "replication_num" = "1"
 );
@@ -60,9 +68,14 @@ PROPERTIES (
 
 #### Gather connection details
 
+> Note
+>
+> The examples use IAM-based authentication. Other authentication methods are available and linked at the bottom of this page.
+
 Loading data from S3 requires having the:
 
-- S3 endpoint
+- S3 bucket
+- S3 object keys (object names) if accessing a specific object in the bucket
 - S3 region
 - Access key and secret
 
@@ -70,7 +83,7 @@ Loading data from S3 requires having the:
 
 This `LOAD` job has four main sections:
 
-- `LABEL`: A string used to query the state of a `LOAD` job.
+- `LABEL`: A string used when querying the state of a `LOAD` job.
 - `LOAD` declaration: The source URI, destination table, and the source data format.
 - `BROKER`: The connection details for the source.
 - `PROPERTIES`: Timeout value and any other properties to apply to this job.
@@ -82,7 +95,7 @@ This `LOAD` job has four main sections:
 ```SQL
 LOAD LABEL user_behavior
 (
-    DATA INFILE("s3a://starrocks-datasets/user_behavior_sample_data.parquet")
+    DATA INFILE("s3://starrocks-datasets/user_behavior_sample_data.parquet")
     INTO TABLE user_behavior
     FORMAT AS "parquet"
  )
@@ -102,26 +115,28 @@ PROPERTIES
 
 #### Check progress
 
-Use the `SHOW LOAD` query to track progress. If you have multiple `LOAD` jobs running you can specify the `LABEL` associated with the job. In the output below there are two entries for the load job `user_behavior`. The first record shows a failure; scroll to the end of the table, and you see that access was forbidden. The second record succeeded with a valid AWS IAM access key and secret.
+Query the `information_schema.loads` table to track progress. If you have multiple `LOAD` jobs running you can filter on the `LABEL` associated with the job. In the output below there are two entries for the load job `user_behavior`. The first record shows a state of `CANCELLED`; scroll to the end of the output, and you see that `listPath failed`. The second record shows success with a valid AWS IAM access key and secret.
 
 ```SQL
-SHOW LOAD;
+SELECT * FROM information_schema.loads;
 ```
 
 ```SQL
-SHOW LOAD WHERE label = 'user_behavior';
+SELECT * FROM information_schema.loads WHERE LABEL = 'user_behavior';
 ```
 
-|JobId|Label|State|Progress|Type|Priority|ScanRows|FilteredRows|UnselectedRows|SinkRows|EtlInfo|TaskInfo|ErrorMsg|CreateTime|EtlStartTime|EtlFinishTime|LoadStartTime|LoadFinishTime|TrackingSQL|JobDetails|
-|----|------|-----|--------|----|--------|--------|------------|--------------|--------|-------|--------|--------|----------|------------|-------------|-------------|--------------|-----------|----------|
-|10104|user\_behavior|CANCELLED|ETL:N/A; LOAD:N/A|BROKER|NORMAL  |0       |0           |0             |0     |      |resource:N/A; timeout(s):72000; max\_filter\_ratio:0.0|type:ETL\_RUN\_FAIL; msg:unknown error when get file status: s3a://starrocks-datasets/user\_behavior\_sample\_data.parquet: getFileStatus on s3a://starrocks-datasets/user\_behavior\_sample\_data.parquet: com.amazonaws.services.s3.model.AmazonS3Exception: Forbidde|2023-08-04 15:58:51|                   |                   |                   |2023-08-04 15:58:57|           |{"All backends":{},"FileNumber":0,"FileSize":0,"InternalTableLoadBytes":0,"InternalTableLoadRows":0,"ScanBytes":0,"ScanRows":0,"TaskNumber":0,"Unfinished backends":{}} |
-|10110|user\_behavior|LOADING  |ETL:100%; LOAD:0%|BROKER|NORMAL  |0|0|0|0||resource:N/A; timeout(s):72000; max\_filter\_ratio:0.0||2023-08-04 16:22:27|2023-08-04 16:22:30|2023-08-04 16:22:30|2023-08-04 16:22:30|||{"All backends":{"563ec0b9-1bd6-4a39-aa30-1332fc0fee04":\[10004]},"FileNumber":1,"FileSize":1225637388,"InternalTableLoadBytes":0,"InternalTableLoadRows":0,"ScanBytes":0,"ScanRows":0,"TaskNumber":1,"Unfinished backends":{"563ec0b9-1bd6-4a39-aa30-1332fc0fee|
+```plaintext
+JOB_ID|LABEL                                      |DATABASE_NAME|STATE    |PROGRESS           |TYPE  |PRIORITY|SCAN_ROWS|FILTERED_ROWS|UNSELECTED_ROWS|SINK_ROWS|ETL_INFO|TASK_INFO                                           |CREATE_TIME        |ETL_START_TIME     |ETL_FINISH_TIME    |LOAD_START_TIME    |LOAD_FINISH_TIME   |JOB_DETAILS                                                                                                                                                                                                                                                    |ERROR_MSG                             |TRACKING_URL|TRACKING_SQL|REJECTED_RECORD_PATH|
+------+-------------------------------------------+-------------+---------+-------------------+------+--------+---------+-------------+---------------+---------+--------+----------------------------------------------------+-------------------+-------------------+-------------------+-------------------+-------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+--------------------------------------+------------+------------+--------------------+
+ 10121|user_behavior                              |project      |CANCELLED|ETL:N/A; LOAD:N/A  |BROKER|NORMAL  |        0|            0|              0|        0|        |resource:N/A; timeout(s):72000; max_filter_ratio:0.0|2023-08-10 14:59:30|                   |                   |                   |2023-08-10 14:59:34|{"All backends":{},"FileNumber":0,"FileSize":0,"InternalTableLoadBytes":0,"InternalTableLoadRows":0,"ScanBytes":0,"ScanRows":0,"TaskNumber":0,"Unfinished backends":{}}                                                                                        |type:ETL_RUN_FAIL; msg:listPath failed|            |            |                    |
+ 10106|user_behavior                              |project      |FINISHED |ETL:100%; LOAD:100%|BROKER|NORMAL  | 86953525|            0|              0| 86953525|        |resource:N/A; timeout(s):72000; max_filter_ratio:0.0|2023-08-10 14:50:15|2023-08-10 14:50:19|2023-08-10 14:50:19|2023-08-10 14:50:19|2023-08-10 14:55:10|{"All backends":{"a5fe5e1d-d7d0-4826-ba99-c7348f9a5f2f":[10004]},"FileNumber":1,"FileSize":1225637388,"InternalTableLoadBytes":2710603082,"InternalTableLoadRows":86953525,"ScanBytes":1225637388,"ScanRows":86953525,"TaskNumber":1,"Unfinished backends":{"a5|                                      |            |            |                    |
+ ```
 
 ## Using the `FILES()` table function
 
 ### `FILES()` advantages
 
-- `FILES()` can infer the data types of the columns of the Parquet data and generate the schema for a StarRocks table. This provides the ability to query the file directly from S3 with a `SELECT` or to create the table structure in StarRocks as part of the data loading process.
+`FILES()` can infer the data types of the columns of the Parquet data and generate the schema for a StarRocks table. This provides the ability to query the file directly from S3 with a `SELECT` or to create the table structure in StarRocks as part of the data loading process.
 
 ### Typical examples
 
@@ -246,7 +261,7 @@ CREATE TABLE `user_behavior_declared` (
     `Timestamp` datetime
 ) ENGINE=OLAP 
 DUPLICATE KEY(`UserID`)
-DISTRIBUTED BY HASH(`UserID`) BUCKETS 1 
+DISTRIBUTED BY HASH(`UserID`)
 PROPERTIES (
     "replication_num" = "1"
 );
@@ -269,4 +284,4 @@ INSERT INTO user_behavior_declared
 
 - For more details on synchronous and asynchronous data loading please see the [overview of data loading](../loading/Loading_intro.md) documentation.
 - Learn about how the broker supports data transformation during loading at [Transform data at loading](../loading/Etl_in_loading.md) and [Change data through loading](../loading/Load_to_Primary_Key_tables.md).
-- You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [`GRANT`](../sql-reference/sql-statements/account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
+- This document only covered authentication with AWS IAM roles using key and secret authentication. For other options please see [authenticate to AWS resources](../integrations/authenticate_to_aws_resources.md).
