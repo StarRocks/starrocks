@@ -22,6 +22,8 @@ import com.starrocks.journal.JournalTask;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Frontend;
+import mockit.Expectations;
+import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
@@ -38,7 +40,19 @@ public class EditLogTest {
     public static final Logger LOG = LogManager.getLogger(EditLogTest.class);
 
     @Test
-    public void testtNormal() throws Exception {
+    public void testtNormal(@Mocked GlobalStateMgr globalStateMgr) throws Exception {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+
+                globalStateMgr.isLeader();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
         BlockingQueue<JournalTask> logQueue = new ArrayBlockingQueue<>(100);
         short threadNum = 20;
         List<Thread> allThreads = new ArrayList<>();
@@ -79,7 +93,18 @@ public class EditLogTest {
     }
 
     @Test
-    public void testInterrupt() throws Exception {
+    public void testInterrupt(@Mocked GlobalStateMgr globalStateMgr) throws Exception {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+
+                globalStateMgr.isLeader();
+                result = true;
+                minTimes = 0;
+            }
+        };
         // block if more than one task is put
         BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<>(1);
         Thread t1 = new Thread(new Runnable() {
