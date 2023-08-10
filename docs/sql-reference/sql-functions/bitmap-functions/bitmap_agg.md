@@ -12,7 +12,7 @@ BITMAP_AGG(col)
 
 ## Parameters
 
-`col`: the column whose values you want to aggregate. Supported data types are BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, and LARGEINT.
+`col`: the column whose values you want to aggregate. It must evaluate to BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, and LARGEINT.
 
 ## Return value
 
