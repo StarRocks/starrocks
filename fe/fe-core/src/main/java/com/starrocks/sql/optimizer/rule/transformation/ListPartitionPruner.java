@@ -450,16 +450,22 @@ public class ListPartitionPruner implements PartitionPruner {
         Set<Long> rights = evalPartitionPruneFilter(compoundPredicate.getChild(1));
         if (lefts == null && rights == null) {
             return null;
-        } else if (lefts == null) {
-            return rights;
-        } else if (rights == null) {
-            return lefts;
         }
 
         if (compoundPredicate.getCompoundType() == CompoundPredicateOperator.CompoundType.AND) {
-            lefts.retainAll(rights);
+            if (lefts == null) {
+                return rights;
+            } else if (rights == null) {
+                return lefts;
+            } else {
+                lefts.retainAll(rights);
+            }
         } else if (compoundPredicate.getCompoundType() == CompoundPredicateOperator.CompoundType.OR) {
-            lefts.addAll(rights);
+            if (lefts == null || rights == null) {
+                return null;
+            } else {
+                lefts.addAll(rights);
+            }
         }
         return lefts;
     }

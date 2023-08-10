@@ -339,12 +339,12 @@ public class RuntimeProfile {
     //  3. Counters
     //  4. Children
     public void prettyPrint(StringBuilder builder, String prefix) {
-        ProfileFormater formater = new DefaultProfileFormater(builder);
-        formater.format(this, prefix);
+        ProfileFormatter formatter = new DefaultProfileFormatter(builder);
+        formatter.format(this, prefix);
     }
 
     public String toString() {
-        ProfileFormater formater = new DefaultProfileFormater();
+        ProfileFormatter formater = new DefaultProfileFormatter();
         return formater.format(this);
     }
 
@@ -357,66 +357,55 @@ public class RuntimeProfile {
 
     private static String printCounter(long value, TUnit type) {
         StringBuilder builder = new StringBuilder();
-        long tmpValue = value;
-        switch (type) {
-            case UNIT: {
-                Pair<Double, String> pair = DebugUtil.getUint(tmpValue);
+        try (Formatter fmt = new Formatter()) {
+            if (type == TUnit.UNIT || type == TUnit.UNIT_PER_SECOND) {
+                Pair<Double, String> pair = DebugUtil.getUint(value);
                 if (pair.second.isEmpty()) {
-                    builder.append(tmpValue);
+                    builder.append(value);
                 } else {
-                    builder.append(pair.first).append(pair.second)
-                            .append(" (").append(tmpValue).append(")");
+                    builder.append(fmt.format("%.3f", pair.first)).append(pair.second)
+                            .append(" (").append(value).append(")");
                 }
-                break;
-            }
-            case TIME_NS: {
-                if (tmpValue >= DebugUtil.BILLION) {
+                if (type == TUnit.UNIT_PER_SECOND) {
+                    builder.append(" /sec");
+                }
+            } else if (type == TUnit.BYTES || type == TUnit.BYTES_PER_SECOND) {
+                Pair<Double, String> pair = DebugUtil.getByteUint(value);
+                builder.append(fmt.format("%.3f", pair.first)).append(" ").append(pair.second);
+                if (type == TUnit.BYTES_PER_SECOND) {
+                    builder.append("/sec");
+                }
+            } else if (type == TUnit.TIME_NS) {
+                if (value >= DebugUtil.BILLION) {
                     // If the time is over a second, print it up to ms.
-                    tmpValue /= DebugUtil.MILLION;
-                    DebugUtil.printTimeMs(tmpValue, builder);
-                } else if (tmpValue >= DebugUtil.MILLION) {
+                    value /= DebugUtil.MILLION;
+                    DebugUtil.printTimeMs(value, builder);
+                } else if (value >= DebugUtil.MILLION) {
                     // if the time is over a ms, print it up to microsecond in the unit of ms.
-                    tmpValue /= 1000;
-                    builder.append(tmpValue / 1000).append(".").append(tmpValue % 1000).append("ms");
-                } else if (tmpValue > 1000) {
+                    value /= DebugUtil.THOUSAND;
+                    long remain = value % DebugUtil.THOUSAND;
+                    if (remain == 0) {
+                        builder.append(value / DebugUtil.THOUSAND).append("ms");
+                    } else {
+                        builder.append(value / DebugUtil.THOUSAND).append(".")
+                                .append(String.format("%03d", remain)).append("ms");
+                    }
+                } else if (value >= DebugUtil.THOUSAND) {
                     // if the time is over a microsecond, print it using unit microsecond
-                    builder.append(tmpValue / 1000).append(".").append(tmpValue % 1000).append("us");
+                    long remain = value % DebugUtil.THOUSAND;
+                    if (remain == 0) {
+                        builder.append(value / DebugUtil.THOUSAND).append("us");
+                    } else {
+                        builder.append(value / DebugUtil.THOUSAND).append(".")
+                                .append(String.format("%03d", remain)).append("us");
+                    }
                 } else {
-                    builder.append(tmpValue).append("ns");
+                    builder.append(value).append("ns");
                 }
-                break;
-            }
-            case BYTES: {
-                Pair<Double, String> pair = DebugUtil.getByteUint(tmpValue);
-                Formatter fmt = new Formatter();
-                builder.append(fmt.format("%.2f", pair.first)).append(" ").append(pair.second);
-                fmt.close();
-                break;
-            }
-            case BYTES_PER_SECOND: {
-                Pair<Double, String> pair = DebugUtil.getByteUint(tmpValue);
-                builder.append(pair.first).append(" ").append(pair.second).append("/sec");
-                break;
-            }
-            case DOUBLE_VALUE: {
-                Formatter fmt = new Formatter();
-                builder.append(fmt.format("%.2f", (double) tmpValue));
-                fmt.close();
-                break;
-            }
-            case UNIT_PER_SECOND: {
-                Pair<Double, String> pair = DebugUtil.getUint(tmpValue);
-                if (pair.second.isEmpty()) {
-                    builder.append(tmpValue);
-                } else {
-                    builder.append(pair.first).append(pair.second)
-                            .append(" ").append("/sec");
-                }
-                break;
-            }
-            default: {
+            } else if (type == TUnit.DOUBLE_VALUE) {
+                builder.append(fmt.format("%.3f", (double) value));
+            } else {
                 Preconditions.checkState(false, "type=" + type);
-                break;
             }
         }
         return builder.toString();
@@ -755,7 +744,7 @@ public class RuntimeProfile {
         profile.getChildList().forEach(pair -> removeRedundantMinMaxMetrics(pair.first));
     }
 
-    interface ProfileFormater {
+    interface ProfileFormatter {
 
         // Print the profile:
         //  1. Profile Name
@@ -767,15 +756,15 @@ public class RuntimeProfile {
         String format(RuntimeProfile profile);
     }
 
-    static class DefaultProfileFormater implements ProfileFormater {
+    static class DefaultProfileFormatter implements ProfileFormatter {
 
         private final StringBuilder builder;
 
-        DefaultProfileFormater(StringBuilder builder) {
+        DefaultProfileFormatter(StringBuilder builder) {
             this.builder = builder;
         }
 
-        DefaultProfileFormater() {
+        DefaultProfileFormatter() {
             this.builder = new StringBuilder();
         }
 
@@ -857,7 +846,7 @@ public class RuntimeProfile {
         }
     }
 
-    static class JsonProfileFormater implements ProfileFormater {
+    static class JsonProfileFormater implements ProfileFormatter {
         private final JsonObject builder;
 
         JsonProfileFormater() {

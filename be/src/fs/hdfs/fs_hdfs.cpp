@@ -130,13 +130,15 @@ StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_st
         stats->append("TotalZeroCopyBytesRead", hdfs_statistics->totalZeroCopyBytesRead);
         hdfsFileFreeReadStatistics(hdfs_statistics);
 
-        struct hdfsHedgedReadMetrics* hdfs_hedged_read_statistics = nullptr;
-        r = hdfsGetHedgedReadMetrics(_fs, &hdfs_hedged_read_statistics);
-        if (r == 0) {
-            stats->append("TotalHedgedReadOps", hdfs_hedged_read_statistics->hedgedReadOps);
-            stats->append("TotalHedgedReadOpsInCurThread", hdfs_hedged_read_statistics->hedgedReadOpsInCurThread);
-            stats->append("TotalHedgedReadOpsWin", hdfs_hedged_read_statistics->hedgedReadOpsWin);
-            hdfsFreeHedgedReadMetrics(hdfs_hedged_read_statistics);
+        if (config::hdfs_client_enable_hedged_read) {
+            struct hdfsHedgedReadMetrics* hdfs_hedged_read_statistics = nullptr;
+            r = hdfsGetHedgedReadMetrics(_fs, &hdfs_hedged_read_statistics);
+            if (r == 0) {
+                stats->append("TotalHedgedReadOps", hdfs_hedged_read_statistics->hedgedReadOps);
+                stats->append("TotalHedgedReadOpsInCurThread", hdfs_hedged_read_statistics->hedgedReadOpsInCurThread);
+                stats->append("TotalHedgedReadOpsWin", hdfs_hedged_read_statistics->hedgedReadOpsWin);
+                hdfsFreeHedgedReadMetrics(hdfs_hedged_read_statistics);
+            }
         }
         return Status::OK();
     });

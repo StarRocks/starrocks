@@ -86,7 +86,11 @@ struct AgentTaskRequestWithoutReqBody {
     int64_t recv_time;
 };
 
+#ifndef BE_TEST
 const int MIN_TRANSACTION_PUBLISH_WORKER_COUNT = 8;
+#else
+const int MIN_TRANSACTION_PUBLISH_WORKER_COUNT = 1;
+#endif
 
 using CreateTabletAgentTaskRequest = AgentTaskRequestWithReqBody<TCreateTabletReq>;
 using DropTabletAgentTaskRequest = AgentTaskRequestWithReqBody<TDropTabletReq>;
