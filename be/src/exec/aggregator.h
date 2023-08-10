@@ -31,6 +31,7 @@
 #include "common/statusor.h"
 #include "exec/aggregate/agg_hash_variant.h"
 #include "exec/aggregate/agg_profile.h"
+#include "exec/chunk_buffer_memory_manager.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "exprs/agg/aggregate_factory.h"
@@ -246,7 +247,6 @@ AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode);
 // it contains common data struct and algorithm of aggregation
 class Aggregator : public pipeline::ContextWithDependency {
 public:
-    static constexpr auto MAX_CHUNK_BUFFER_SIZE = 1024;
 #ifdef NDEBUG
     static constexpr size_t two_level_memory_threshold = 33554432; // 32M, L3 Cache
 #else
@@ -317,8 +317,8 @@ public:
 
     bool is_chunk_buffer_empty();
     ChunkPtr poll_chunk_buffer();
-    size_t chunk_buffer_size() { return _buffer_size.load(std::memory_order_acquire); }
     void offer_chunk_to_buffer(const ChunkPtr& chunk);
+    bool is_chunk_buffer_full();
 
     bool should_expand_preagg_hash_tables(size_t prev_row_returned, size_t input_chunk_size, int64_t ht_mem,
                                           int64_t ht_rows) const;
@@ -414,8 +414,8 @@ protected:
     // only used in pipeline engine
     std::atomic<bool> _is_sink_complete = false;
     // only used in pipeline engine
-    std::atomic_int _buffer_size{};
     std::queue<ChunkPtr> _buffer;
+    std::unique_ptr<pipeline::ChunkBufferMemoryManager> _buffer_mem_manager;
     std::mutex _buffer_mutex;
 
     // Certain aggregates require a finalize step, which is the final step of the
