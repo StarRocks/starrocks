@@ -16,7 +16,7 @@ COVAR_SAMP(expr1, expr2)
 
 `expr2`: 选取的表达式 2。
 
-当表达式为表中一列时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL。
+当表达式为表中一列时，用于计算两列值之间的样本协方差。支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL。
 
 ## 返回值说明
 

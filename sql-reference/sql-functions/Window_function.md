@@ -18,11 +18,11 @@
 
 语法：
 
-~~~SQL
+```SQL
 FUNCTION(args) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 partition_by_clause ::= PARTITION BY expr [, expr ...]
 order_by_clause ::= ORDER BY expr [ASC | DESC] [, expr [ASC | DESC] ...]
-~~~
+```
 
 > 注意：窗口函数只能出现在 SELECT 列表和最外层的 Order By 子句中。在查询过程中，窗口函数会在最后生效，也就是在执行完 Join，Where 和 Group By 等操作之后生效。
 
@@ -33,19 +33,19 @@ order_by_clause ::= ORDER BY expr [ASC | DESC] [, expr [ASC | DESC] ...]
 
     以下示例展示了在 SELECT 列表中增加一个 `id` 列，它的值是 `1`，`2`，`3` 等，顺序按照 `events` 表中的 `date_and_time` 列排序。
 
-    ~~~SQL
+    ```SQL
     SELECT row_number() OVER (ORDER BY date_and_time) AS id,
         c1, c2, c3, c4
     FROM events;
-    ~~~
+    ```
 
 * **window_clause**：Window 子句，可以用来为窗口函数指定一个运算范围，以当前行为准，前后若干行作为窗口函数运算的对象。Window 子句支持的函数有：`AVG()`、`COUNT()`、`FIRST_VALUE()`、`LAST_VALUE()` 和 `SUM()`。对于 `MAX()` 和 `MIN()`，Window 子句可以通过 UNBOUNDED、PRECEDING 关键词指定开始范围。
 
     Window 子句语法：
 
-    ~~~SQL
+    ```SQL
     ROWS BETWEEN [ { m | UNBOUNDED } PRECEDING | CURRENT ROW] [ AND [CURRENT ROW | { UNBOUNDED | n } FOLLOWING] ]
-    ~~~
+    ```
 
     > 注意：Window 子句必须在 Order By 子句之内。
 
@@ -55,13 +55,13 @@ order_by_clause ::= ORDER BY expr [ASC | DESC] [, expr [ASC | DESC] ...]
 
 语法：
 
-~~~SQL
-AVG( expression ) [OVER (*analytic_clause*)]
-~~~
+```SQL
+AVG( expr ) [OVER (*analytic_clause*)]
+```
 
 以下示例模拟如下的股票数据，股票代码是 `JDR`，`closing price` 代表其每天的收盘价。
 
-~~~SQL
+```SQL
 CREATE TABLE stock_ticker (
     stock_symbol  STRING,
     closing_price DECIMAL(8,2),
@@ -80,11 +80,11 @@ INSERT INTO stock_ticker VALUES
     ("JDR", 14.75, "2014-10-07 00:00:00"), 
     ("JDR", 13.98, "2014-10-08 00:00:00")
 ;
-~~~
+```
 
 以下示例使用 `AVG()` 函数计算了该股票每日与其前后一日的收盘价均值。
 
-~~~SQL
+```SQL
 select stock_symbol, closing_date, closing_price,
     avg(closing_price)
         over (partition by stock_symbol
@@ -92,11 +92,11 @@ select stock_symbol, closing_date, closing_price,
               rows between 1 preceding and 1 following
         ) as moving_average
 from stock_ticker;
-~~~
+```
 
 返回：
 
-~~~Plain Text
+```Plain Text
 +--------------+---------------------+---------------+----------------+
 | stock_symbol | closing_date        | closing_price | moving_average |
 +--------------+---------------------+---------------+----------------+
@@ -108,7 +108,7 @@ from stock_ticker;
 | JDR          | 2014-10-07 00:00:00 |         14.75 |    14.25333333 |
 | JDR          | 2014-10-08 00:00:00 |         13.98 |    14.36500000 |
 +--------------+---------------------+---------------+----------------+
-~~~
+```
 
 <br/>
 
@@ -118,13 +118,13 @@ from stock_ticker;
 
 语法：
 
-~~~SQL
-COUNT( expression ) [OVER (analytic_clause)]
-~~~
+```SQL
+COUNT(expr) [OVER (analytic_clause)]
+```
 
 以下示例使用 `COUNT()` 计算了从**当前行到第一行**数据 `property` 列数据出现的次数。
 
-~~~SQL
+```SQL
 select x, property,
     count(x)
         over (
@@ -133,11 +133,11 @@ select x, property,
             rows between unbounded preceding and current row
         ) as 'cumulative total'
 from int_t where property in ('odd','even');
-~~~
+```
 
 返回：
 
-~~~Plain Text
+```Plain Text
 +----+----------+------------------+
 | x  | property | cumulative count |
 +----+----------+------------------+
@@ -152,7 +152,7 @@ from int_t where property in ('odd','even');
 | 7  | odd      | 4                |
 | 9  | odd      | 5                |
 +----+----------+------------------+
-~~~
+```
 
 <br/>
 
@@ -162,13 +162,13 @@ from int_t where property in ('odd','even');
 
 语法：
 
-~~~SQL
+```SQL
 DENSE_RANK() OVER(partition_by_clause order_by_clause)
-~~~
+```
 
 以下示例使用 `DENSE_RANK()` 对 `x` 列排名。
 
-~~~SQL
+```SQL
 select x, y,
     dense_rank()
         over (
@@ -176,11 +176,11 @@ select x, y,
             order by y
         ) as `rank`
 from int_t;
-~~~
+```
 
 返回：
 
-~~~Plain Text
+```Plain Text
 +---+---+------+
 | x | y | rank |
 +---+---+------+
@@ -194,7 +194,7 @@ from int_t;
 | 3 | 1 | 1    |
 | 3 | 2 | 2    |
 +---+---+------+
-~~~
+```
 
 <br/>
 
@@ -204,20 +204,20 @@ from int_t;
 
 语法：
 
-~~~SQL
+```SQL
 FIRST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [window_clause])
-~~~
+```
 
 从 2.5 版本开始支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认会包含 NULL 值。比如，如果第一个值为 NULL，则返回 NULL。如果指定了 `IGNORE NULLS`，会返回第一个非 NULL 值。如果所有值都为 NULL，那么即使指定了 `IGNORE NULLS`，也会返回 NULL。
 
 以下示例使用的数据如下：
 
-~~~SQL
+```SQL
 select name, country, greeting
 from mail_merge;
-~~~
+```
 
-~~~Plain Text
+```Plain Text
 +---------+---------+--------------+
 | name    | country | greeting     |
 +---------+---------+--------------+
@@ -228,11 +228,11 @@ from mail_merge;
 | Bjorn   | Sweden  | Hej          |
 | Mats    | Sweden  | Tja          |
 +---------+---------+--------------+
-~~~
+```
 
 以下示例使用 `FIRST_VALUE()` 函数，根据 `country` 列分组，返回每个分组中第一个 `greeting` 的值。
 
-~~~SQL
+```SQL
 select country, name,
     first_value(greeting)
         over (
@@ -240,11 +240,11 @@ select country, name,
             order by name, greeting
         ) as greeting
 from mail_merge;
-~~~
+```
 
 返回：
 
-~~~Plain Text
+```Plain Text
 +---------+---------+-----------+
 | country | name    | greeting  |
 +---------+---------+-----------+
@@ -255,7 +255,7 @@ from mail_merge;
 | USA     | John    | Hi        |
 | USA     | Pete    | Hi        |
 +---------+---------+-----------+
-~~~
+```
 
 <br/>
 
@@ -273,10 +273,10 @@ from mail_merge;
 
 **语法：**
 
-~~~SQL
+```SQL
 LAG(expr [IGNORE NULLS] [, offset[, default]])
 OVER([<partition_by_clause>] [<order_by_clause>])
-~~~
+```
 
 **参数说明：**
 
@@ -284,34 +284,78 @@ OVER([<partition_by_clause>] [<order_by_clause>])
 * `offset`: 偏移量，表示向前查找的行数，必须为**正整数**。如果未指定，默认按照 1 处理。
 * `default`: 没有找到符合条件的行时，返回的默认值。如果未指定 `default`，默认返回 NULL。`default` 的数据类型必须和 `expr` 兼容。
 
-以下示例计算 `stock_ticker` 表中股票 JDR **前一天**的收盘价 `closing_price`。`default` 设置为 0，表示如果没有符合条件的行，则返回 0，比如下面示例中返回结果的第一行。
+**示例：**
 
-~~~SQL
-select stock_symbol, closing_date, closing_price,
-    lag(closing_price, 1, 0)
-    over(
-    partition by stock_symbol
-    order by closing_date
-    ) as "yesterday closing"
-from stock_ticker
-order by closing_date;
-~~~
+建表并插入数据：
 
-返回：
+```SQL
+CREATE TABLE test_tbl (col_1 INT, col_2 INT)
+DISTRIBUTED BY HASH(col_1);
 
-~~~Plain
-+--------------+---------------------+---------------+-------------------+
-| stock_symbol | closing_date        | closing_price | yesterday closing |
-+--------------+---------------------+---------------+-------------------+
-| JDR          | 2014-09-13 00:00:00 | 12.86         | 0                 |
-| JDR          | 2014-09-14 00:00:00 | 12.89         | 12.86             |
-| JDR          | 2014-09-15 00:00:00 | 12.94         | 12.89             |
-| JDR          | 2014-09-16 00:00:00 | 12.55         | 12.94             |
-| JDR          | 2014-09-17 00:00:00 | 14.03         | 12.55             |
-| JDR          | 2014-09-18 00:00:00 | 14.75         | 14.03             |
-| JDR          | 2014-09-19 00:00:00 | 13.98         | 14.75             |
-+--------------+---------------------+---------------+-------------------+
-~~~
+INSERT INTO test_tbl VALUES 
+    (1, NULL),
+    (2, 4),
+    (3, NULL),
+    (4, 2),
+    (5, NULL),
+    (6, 7),
+    (7, 6),
+    (8, 5),
+    (9, NULL),
+    (10, NULL);
+```
+
+示例一：lag 中未指定 IGNORE NULLS。
+
+```SQL
+SELECT col_1, col_2, LAG(col_2,2,0) OVER (ORDER BY col_1) 
+FROM test_tbl ORDER BY col_1;
++-------+-------+---------------------------------------------+
+| col_1 | col_2 | lag(col_2, 2, 0) OVER (ORDER BY col_1 ASC ) |
++-------+-------+---------------------------------------------+
+|     1 |  NULL |                                           0 |
+|     2 |     4 |                                           0 |
+|     3 |  NULL |                                        NULL |
+|     4 |     2 |                                           4 |
+|     5 |  NULL |                                        NULL |
+|     6 |     7 |                                           2 |
+|     7 |     6 |                                        NULL |
+|     8 |     5 |                                           7 |
+|     9 |  NULL |                                           6 |
+|    10 |  NULL |                                           5 |
++-------+-------+---------------------------------------------+
+```
+
+可以看到对于前两行，往前遍历时不存在 2 个 非 NULL 值，因此返回默认值 0。
+
+对于第 3 行数据 NULL，往前遍历两行对应的值是 NULL，因为未指定 IGNORE NULLS，允许返回结果包含 NULL，所以返回 NULL。
+
+示例二：lag 中指定了 IGNORE NULLS。
+
+依然使用上面的数据表。
+
+```SQL
+SELECT col_1, col_2, LAG(col_2 IGNORE NULLS,2,0) OVER (ORDER BY col_1) 
+FROM test_tbl ORDER BY col_1;
++-------+-------+---------------------------------------------+
+| col_1 | col_2 | lag(col_2, 2, 0) OVER (ORDER BY col_1 ASC ) |
++-------+-------+---------------------------------------------+
+|     1 |  NULL |                                           0 |
+|     2 |     4 |                                           0 |
+|     3 |  NULL |                                           0 |
+|     4 |     2 |                                           0 |
+|     5 |  NULL |                                           4 |
+|     6 |     7 |                                           4 |
+|     7 |     6 |                                           2 |
+|     8 |     5 |                                           7 |
+|     9 |  NULL |                                           6 |
+|    10 |  NULL |                                           6 |
++-------+-------+---------------------------------------------+
+```
+
+可以看到对于第 1-4 行，因为在当前行之前不存在 2 个 非 NULL 值，因此返回默认值 0。
+
+对于第 7 行数据 6，往前遍历两行对应的值是 NULL，因为指定了 IGNORE NULLS，会忽略这一行，继续往前遍历，因此返回第 4 行的 2。
 
 <br/>
 
@@ -321,15 +365,15 @@ order by closing_date;
 
 语法：
 
-~~~SQL
+```SQL
 LAST_VALUE(expr [IGNORE NULLS])) OVER(partition_by_clause order_by_clause [window_clause])
-~~~
+```
 
 从 2.5 版本开始支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认会包含 NULL 值。比如，如果最后一个值为 NULL，则返回 NULL。如果指定了 `IGNORE NULLS`，会返回最后一个非 NULL 值。如果所有值都为 NULL，那么即使指定了 `IGNORE NULLS`，也会返回 NULL。
 
 以下示例使用 `LAST_VALUE()` 函数，根据 `country` 列分组，返回每个分组中最后一个 `greeting` 的值。
 
-~~~SQL
+```SQL
 select country, name,
     last_value(greeting)
         over (
@@ -337,11 +381,11 @@ select country, name,
             order by name, greeting
         ) as greeting
 from mail_merge;
-~~~
+```
 
 返回：
 
-~~~Plain Text
+```Plain Text
 +---------+---------+--------------+
 | country | name    | greeting     |
 +---------+---------+--------------+
@@ -352,7 +396,7 @@ from mail_merge;
 | USA     | John    | Hello        |
 | USA     | Pete    | Hello        |
 +---------+---------+--------------+
-~~~
+```
 
 <br/>
 
@@ -366,10 +410,10 @@ from mail_merge;
 
 语法：
 
-~~~Haskell
+```Haskell
 LEAD(expr [IGNORE NULLS] [, offset[, default]])
 OVER([<partition_by_clause>] [<order_by_clause>])
-~~~
+```
 
 参数说明：
 
@@ -377,39 +421,82 @@ OVER([<partition_by_clause>] [<order_by_clause>])
 * `offset`: 偏移量，表示向后查找的行数，必须为**正整数**。如果未指定，默认按照 1 处理。
 * `default`: 没有找到符合条件的行时，返回的默认值。如果未指定 `default`，默认返回 NULL。`default` 的数据类型必须和 `expr` 兼容。
 
-以下示例计算第二天的收盘价对比当天收盘价的走势，即第二天收盘价比当天高还是低。
+`default` 设置为 0，表示如果没有符合条件的行，则返回 0。
 
-`default` 设置为 0，表示如果没有符合条件的行，则返回 0，
+**示例：**
 
-~~~SQL
-select stock_symbol, closing_date, closing_price,
-    case(lead(closing_price, 1, 0) 
-         over (partition by stock_symbol
-         order by closing_date) - closing_price) > 0 
-        when true then "higher"
-        when false then "flat or lower" end
-    as "trending"
-from stock_ticker
-order by closing_date;
-~~~
+建表并插入数据：
 
-返回：
+```SQL
+CREATE TABLE test_tbl (col_1 INT, col_2 INT)
+DISTRIBUTED BY HASH(col_1);
 
-~~~Plain
-+--------------+---------------------+---------------+---------------+
-| stock_symbol | closing_date        | closing_price | trending      |
-+--------------+---------------------+---------------+---------------+
-| JDR          | 2014-09-13 00:00:00 | 12.86         | higher        |
-| JDR          | 2014-09-14 00:00:00 | 12.89         | higher        |
-| JDR          | 2014-09-15 00:00:00 | 12.94         | flat or lower |
-| JDR          | 2014-09-16 00:00:00 | 12.55         | higher        |
-| JDR          | 2014-09-17 00:00:00 | 14.03         | higher        |
-| JDR          | 2014-09-18 00:00:00 | 14.75         | flat or lower |
-| JDR          | 2014-09-19 00:00:00 | 13.98         | flat or lower |
-+--------------+---------------------+---------------+---------------+
-~~~
+INSERT INTO test_tbl VALUES 
+    (1, NULL),
+    (2, 4),
+    (3, NULL),
+    (4, 2),
+    (5, NULL),
+    (6, 7),
+    (7, 6),
+    (8, 5),
+    (9, NULL),
+    (10, NULL);
+```
 
-<br/>
+示例一：lag 中未指定 IGNORE NULLS。
+
+```SQL
+SELECT col_1, col_2, LEAD(col_2,2,0) OVER (ORDER BY col_1) 
+FROM test_tbl ORDER BY col_1;
++-------+-------+----------------------------------------------+
+| col_1 | col_2 | lead(col_2, 2, 0) OVER (ORDER BY col_1 ASC ) |
++-------+-------+----------------------------------------------+
+|     1 |  NULL |                                         NULL |
+|     2 |     4 |                                            2 |
+|     3 |  NULL |                                         NULL |
+|     4 |     2 |                                            7 |
+|     5 |  NULL |                                            6 |
+|     6 |     7 |                                            5 |
+|     7 |     6 |                                         NULL |
+|     8 |     5 |                                         NULL |
+|     9 |  NULL |                                            0 |
+|    10 |  NULL |                                            0 |
++-------+-------+----------------------------------------------+
+```
+
+可以看到对于第 1 行数据 NULL，往后遍历两行对应的数据是 NULL，因为未指定 IGNORE NULLS，允许返回结果包含 NULL，所以返回 NULL。
+
+对于最后两行，因为往后遍历时不存在 2 个 非 NULL 值，因此返回默认值 0。
+
+示例二：lead 中指定了 IGNORE NULLS。
+
+依然使用上面的数据表。
+
+```SQL
+SELECT col_1, col_2, LEAD(col_2 IGNORE NULLS,2,0) OVER (ORDER BY col_1) 
+FROM test_tbl ORDER BY col_1;
++-------+-------+----------------------------------------------+
+| col_1 | col_2 | lead(col_2, 2, 0) OVER (ORDER BY col_1 ASC ) |
++-------+-------+----------------------------------------------+
+|     1 |  NULL |                                            2 |
+|     2 |     4 |                                            7 |
+|     3 |  NULL |                                            7 |
+|     4 |     2 |                                            6 |
+|     5 |  NULL |                                            6 |
+|     6 |     7 |                                            5 |
+|     7 |     6 |                                            0 |
+|     8 |     5 |                                            0 |
+|     9 |  NULL |                                            0 |
+|    10 |  NULL |                                            0 |
++-------+-------+----------------------------------------------+
+```
+
+可以看到对于第 7-10 行，往后遍历时不存在 2 个 非 NULL 值，因此返回默认值 0。
+
+对于第 1 行数据 NULL，往后遍历两行对应的值是 NULL，因为指定了 IGNORE NULLS，会忽略这一行，继续往前遍历，因此返回第 4 行的 2。
+
+<br>
 
 ## 使用 MAX() 窗口函数
 
@@ -417,13 +504,13 @@ order by closing_date;
 
 语法：
 
-~~~SQL
-MAX(expression) [OVER (analytic_clause)]
-~~~
+```SQL
+MAX(expr) [OVER (analytic_clause)]
+```
 
 以下示例计算**从第一行到当前行之后一行中**的最大值。
 
-~~~SQL
+```SQL
 select x, property,
     max(x)
         over (
@@ -432,11 +519,11 @@ select x, property,
         ) as 'local maximum'
 from int_t
 where property in ('prime','square');
-~~~
+```
 
 返回结果：
 
-~~~Plain Text
+```Plain Text
 +---+----------+---------------+
 | x | property | local maximum |
 +---+----------+---------------+
@@ -448,11 +535,11 @@ where property in ('prime','square');
 | 4 | square   | 9             |
 | 9 | square   | 9             |
 +---+----------+---------------+
-~~~
+```
 
 从 2.4 版本开始，该函数支持设置 `rows between n preceding and n following`，即支持计算当前行前n行及后 `n` 行中的最大值。比如要计算当前行前 3 行和后 2 行中的最大值，语句可写为：
 
-~~~SQL
+```SQL
 select x, property,
     max(x)
         over (
@@ -460,7 +547,7 @@ select x, property,
             rows between 3 preceding and 2 following) as 'local maximum'
 from int_t
 where property in ('prime','square');
-~~~
+```
 
 ## 使用 MIN() 窗口函数
 
@@ -468,13 +555,13 @@ where property in ('prime','square');
 
 语法：
 
-~~~SQL
-MIN(expression) [OVER (analytic_clause)]
-~~~
+```SQL
+MIN(expr) [OVER (analytic_clause)]
+```
 
 以下示例计算**从第一行到当前行之后一行中**的最小值。
 
-~~~SQL
+```SQL
 select x, property,
     min(x)
         over (
@@ -483,11 +570,11 @@ select x, property,
         ) as 'local minimum'
 from int_t
 where property in ('prime','square');
-~~~
+```
 
 返回结果：
 
-~~~Plain Text
+```Plain Text
 +---+----------+---------------+
 | x | property | local minimum |
 +---+----------+---------------+
@@ -499,11 +586,11 @@ where property in ('prime','square');
 | 4 | square   | 1             |
 | 1 | square   | 1             |
 +---+----------+---------------+
-~~~
+```
 
 从 2.4 版本开始，该函数支持设置 `rows between n preceding and n following`，即支持计算当前行前n行以及后 `n` 行中的最小值。比如要计算当前行前 3 行和后 2 行中的最小值，语句可写为：
 
-~~~SQL
+```SQL
 select x, property,
     min(x)
     over (
@@ -511,7 +598,7 @@ select x, property,
           rows between 3 preceding and 2 following) as 'local minimum'
 from int_t
 where property in ('prime','square');
-~~~
+```
 
 ## 使用 NTILE() 窗口函数
 
@@ -524,9 +611,9 @@ where property in ('prime','square');
 
 语法：
 
-~~~~SQL
+```~SQL
 NTILE (num_buckets) OVER (partition_by_clause order_by_clause)
-~~~~
+```~
 
 其中，`num_buckets` 是要划分桶的数量，必须是一个常量正整数，最大值为 BIGINT 的最大值，即 `2^63 - 1`。
 
@@ -535,7 +622,7 @@ NTILE (num_buckets) OVER (partition_by_clause order_by_clause)
 
 以下示例使用 `NTILE()` 函数当前窗口中的数据划分至 `2` 个桶中，划分结果见 `bucket_id` 列。
 
-~~~~sql
+```~sql
 select id, x, y,
     ntile(2)
         over (
@@ -543,11 +630,11 @@ select id, x, y,
             order by y
         ) as bucket_id
 from t1;
-~~~~
+```~
 
 返回：
 
-~~~~Plain Text
+```~Plain Text
 +------+------+------+-----------+
 | id   | x    | y    | bucket_id |
 +------+------+------+-----------+
@@ -562,7 +649,7 @@ from t1;
 |    9 |    2 |   88 |         2 |
 |   10 |    3 |   99 |         1 |
 +------+------+------+-----------+
-~~~~
+```~
 
 如上述例子所示，`num_buckets` 为 `2`，此时：
 
@@ -578,24 +665,24 @@ from t1;
 
 语法：
 
-~~~SQL
+```SQL
 RANK() OVER(partition_by_clause order_by_clause)
-~~~
+```
 
 以下示例为 `x` 列排名。
 
-~~~SQL
+```SQL
 select x, y, 
     rank() over(
         partition by x 
         order by y
     ) as `rank`
 from int_t;
-~~~
+```
 
 返回：
 
-~~~Plain Text
+```Plain Text
 +---+---+------+
 | x | y | rank |
 +---+---+------+
@@ -609,7 +696,7 @@ from int_t;
 | 3 | 1 | 1    |
 | 3 | 2 | 3    |
 +---+---+------+
-~~~
+```
 
 <br/>
 
@@ -619,24 +706,24 @@ from int_t;
 
 语法：
 
-~~~SQL
+```SQL
 ROW_NUMBER() OVER(partition_by_clause order_by_clause)
-~~~
+```
 
 以下示例使用 `ROW_NUMBER()` 为以 `x` 列为分区划分的数据指定 `rank`。
 
-~~~SQL
+```SQL
 select x, y, 
     row_number() over(
         partition by x 
         order by y
     ) as `rank`
 from int_t;
-~~~
+```
 
 返回：
 
-~~~Plain Text
+```Plain Text
 +---+---+------+
 | x | y | rank |
 +---+---+------+
@@ -650,7 +737,7 @@ from int_t;
 | 3 | 1 | 2    |
 | 3 | 2 | 3    |
 +---+---+------+
-~~~
+```
 
 ## 使用 QUALIFY 窗口函数
 
@@ -658,7 +745,7 @@ QUALIFY 子句用于过滤窗口函数的结果。在 SELECT 语句中，可以�
 
 QUALIFY 提供了一种更为简洁的数据筛选方式。比如，如果不使用 QUALIFY，过滤语句比较复杂：
 
-~~~SQL
+```SQL
 SELECT *
 FROM (SELECT DATE,
              PROVINCE_CODE,
@@ -666,28 +753,28 @@ FROM (SELECT DATE,
              ROW_NUMBER() OVER(PARTITION BY PROVINCE_CODE ORDER BY TOTAL_SCORE) AS SCORE_ROWNUMBER
       FROM example_table) T1
 WHERE T1.SCORE_ROWNUMBER = 1;
-~~~
+```
 
 使用 QUALIFY 之后，语句可以简化成这样：
 
-~~~SQL
+```SQL
 SELECT DATE, PROVINCE_CODE, TOTAL_SCORE
 FROM example_table 
 QUALIFY ROW_NUMBER() OVER(PARTITION BY PROVINCE_CODE ORDER BY TOTAL_SCORE) = 1;
-~~~
+```
 
 **当前 QUALIFY 仅支持如下窗口函数：ROW_NUMBER()，RANK()，DENSE_RANK()。**
 
 **语法：**
 
-~~~SQL
+```SQL
 SELECT <column_list>
 FROM <data_source>
 [GROUP BY ...]
 [HAVING ...]
 QUALIFY <window_function>
 [ ... ]
-~~~
+```
 
 **参数：**
 
@@ -697,7 +784,7 @@ QUALIFY <window_function>
 
 **示例：**
 
-~~~SQL
+```SQL
 -- 创建一张表。
 CREATE TABLE sales_record (
    city_id INT,
@@ -722,11 +809,11 @@ select * from sales_record order by city_id;
 |       3 | fruit  |    87 |
 |       4 | drinks |    98 |
 +---------+--------+-------+
-~~~
+```
 
 示例一：获取表中行号大于 1 的记录，无分区。
 
-~~~SQL
+```SQL
 SELECT city_id, item, sales
 FROM sales_record
 QUALIFY row_number() OVER (ORDER BY city_id) > 1;
@@ -737,11 +824,11 @@ QUALIFY row_number() OVER (ORDER BY city_id) > 1;
 |       3 | fruit  |    87 |
 |       4 | drinks |    98 |
 +---------+--------+-------+
-~~~
+```
 
 示例二：按照 `item` 将表分为 2 个分区，获取每个分区中 row number 为`1`的记录。
 
-~~~SQL
+```SQL
 SELECT city_id, item, sales
 FROM sales_record 
 QUALIFY ROW_NUMBER() OVER (PARTITION BY item ORDER BY city_id) = 1
@@ -752,11 +839,11 @@ ORDER BY city_id;
 |       1 | fruit  |    95 |
 |       2 | drinks |    70 |
 +---------+--------+-------+
-~~~
+```
 
 示例三：按照 `item` 将表分为 2 个分区，使用 rank() 获取每个分区里销量 `sales` 排名第一的记录。
 
-~~~SQL
+```SQL
 SELECT city_id, item, sales
 FROM sales_record
 QUALIFY RANK() OVER (PARTITION BY item ORDER BY sales DESC) = 1
@@ -767,7 +854,7 @@ ORDER BY city_id;
 |       1 | fruit  |    95 |
 |       4 | drinks |    98 |
 +---------+--------+-------+
-~~~
+```
 
 **注意事项：**
 
@@ -791,13 +878,13 @@ ORDER BY city_id;
 
 语法：
 
-~~~SQL
-SUM(expression) [OVER (analytic_clause)]
-~~~
+```SQL
+SUM(expr) [OVER (analytic_clause)]
+```
 
 以下示例将数据按照 `property` 列进行分组，并在组内计算**当前行以及前后各一行**的 `x` 列数据的和。
 
-~~~SQL
+```SQL
 select x, property,
     sum(x)
         over (
@@ -806,11 +893,11 @@ select x, property,
             rows between 1 preceding and 1 following
         ) as 'moving total'
 from int_t where property in ('odd','even');
-~~~
+```
 
 返回：
 
-~~~Plain Text
+```Plain Text
 +----+----------+--------------+
 | x  | property | moving total |
 +----+----------+--------------+
@@ -824,7 +911,11 @@ from int_t where property in ('odd','even');
 | 5  | odd      | 15           |
 | 7  | odd      | 21           |
 +----+----------+--------------+
+<<<<<<< HEAD
 ~~~
+=======
+```
+>>>>>>> 760ddf69 (Update Window_function.md (backport #6276) (#6321))
 
 ## 使用 VARIANCE, VAR_POP, VARIANCE_POP 窗口函数
 
@@ -832,9 +923,9 @@ VARIANCE() 窗口函数用于统计表达式的总体方差。VAR_POP 和 VARIAN
 
 **语法：**
 
-~~~SQL
-VARIANCE(expression) [OVER (partition_by_clause)]
-~~~
+```SQL
+VARIANCE(expr) [OVER (partition_by_clause)]
+```
 
 > 注意
 >
@@ -842,7 +933,7 @@ VARIANCE(expression) [OVER (partition_by_clause)]
 
 **参数说明：**
 
-当表达式expression为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL
+当表达式 `expr` 为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL。
 
 **示例：**
 
@@ -883,7 +974,7 @@ VAR_SAMP() 窗口函数用于统计表达式的样本方差。
 **语法：**
 
 ```sql
-VAR_SAMP(expression) [OVER (partition_by_clause)]
+VAR_SAMP(expr) [OVER (partition_by_clause)]
 ```
 
 > 注意
@@ -892,7 +983,7 @@ VAR_SAMP(expression) [OVER (partition_by_clause)]
 
 **参数说明：**
 
-当表达式expression为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL
+当表达式 `expr` 为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL。
 
 **示例：**
 
@@ -933,7 +1024,7 @@ STD() 窗口函数用于统计表达式的总体标准差。
 **语法：**
 
 ```sql
-STD(expression) [OVER (partition_by_clause)]
+STD(expr) [OVER (partition_by_clause)]
 ```
 
 > 注意
@@ -942,7 +1033,7 @@ STD(expression) [OVER (partition_by_clause)]
 
 **参数说明：**
 
-当表达式expression为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL
+当表达式 `expr` 为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL。
 
 **示例：**
 
@@ -983,7 +1074,7 @@ STDDEV_SAMP() 窗口函数用于统计表达式的样本标准差。
 **语法：**
 
 ```sql
-STDDEV_SAMP(expression) [OVER (partition_by_clause)]
+STDDEV_SAMP(expr) [OVER (partition_by_clause)]
 ```
 
 > 注意
@@ -992,7 +1083,7 @@ STDDEV_SAMP(expression) [OVER (partition_by_clause)]
 
 **参数说明：**
 
-当表达式expression为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL
+当表达式 `expr` 为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL。
 
 **示例：**
 
@@ -1033,7 +1124,7 @@ COVAR_SAMP() 窗口函数用于统计表达式的样本协方差。
 **语法：**
 
 ```sql
-COVAR_SAMP(expression) [OVER (partition_by_clause)]
+COVAR_SAMP(expr1, expr2) [OVER (partition_by_clause)]
 ```
 
 > 注意
@@ -1042,7 +1133,7 @@ COVAR_SAMP(expression) [OVER (partition_by_clause)]
 
 **参数说明：**
 
-当表达式expression为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL
+当表达式 `expr` 为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL。
 
 **示例：**
 
@@ -1083,7 +1174,7 @@ COVAR_POP() 窗口函数用于统计表达式的总体协方差。
 **语法：**
 
 ```sql
-COVAR_POP(expression, expression) [OVER (partition_by_clause)]
+COVAR_POP(expr1, expr2) [OVER (partition_by_clause)]
 ```
 
 > 注意
@@ -1092,7 +1183,7 @@ COVAR_POP(expression, expression) [OVER (partition_by_clause)]
 
 **参数说明：**
 
-当表达式expression为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL
+当表达式 `expr` 为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL。
 
 **示例：**
 
@@ -1133,7 +1224,7 @@ CORR() 窗口函数用于统计表达式的相关系数。
 **语法：**
 
 ```sql
-CORR(expression, expression) [OVER (partition_by_clause)]
+CORR(expr1, expr2) [OVER (partition_by_clause)]
 ```
 
 > 注意
@@ -1142,7 +1233,7 @@ CORR(expression, expression) [OVER (partition_by_clause)]
 
 **参数说明：**
 
-当表达式expression为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL
+当表达式 `expr` 为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL。
 
 **示例：**
 
