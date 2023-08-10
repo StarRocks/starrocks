@@ -74,6 +74,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.persist.ColocatePersistInfo;
@@ -103,6 +104,7 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.threeten.extra.PeriodDuration;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -2073,6 +2075,15 @@ public class OlapTable extends Table {
             return;
         }
         tableProperty.setHasDelete(true);
+    }
+
+    public void setStorageCoolDownTTL(PeriodDuration duration) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL,
+                TimeUtils.toHumanReadableString(duration));
+        tableProperty.buildStorageCoolDownTTL();
     }
 
     public boolean hasForbitGlobalDict() {

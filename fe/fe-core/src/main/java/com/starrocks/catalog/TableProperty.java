@@ -47,6 +47,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.OperationType;
@@ -60,6 +61,7 @@ import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.commons.lang3.EnumUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.threeten.extra.PeriodDuration;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -120,6 +122,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // This property only applies to materialized views
     // It represents the maximum number of partitions that will be refreshed by a TaskRun refresh
     private int partitionRefreshNumber = INVALID;
+
+    private PeriodDuration storageCoolDownTTL;
 
     // This property only applies to materialized views
     // When using the system to automatically refresh, the maximum range of the most recent partitions will be refreshed.
@@ -459,6 +463,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildStorageCoolDownTTL() {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
+            storageCoolDownTTL = TimeUtils.parseHumanReadablePeriodOrDuration(
+                    properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL));
+        }
+        return this;
+    }
+
     public void modifyTableProperties(Map<String, String> modifyProperties) {
         properties.putAll(modifyProperties);
     }
@@ -603,6 +615,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return binlogAvailabeVersions;
     }
 
+    public PeriodDuration getStorageCoolDownTTL() {
+        return storageCoolDownTTL;
+    }
+
+
     public void clearBinlogAvailableVersion() {
         binlogAvailabeVersions.clear();
         for (Iterator<Map.Entry<String, String>> it = properties.entrySet().iterator(); it.hasNext(); ) {
@@ -629,6 +646,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildInMemory();
         buildStorageFormat();
         buildStorageVolume();
+        buildStorageCoolDownTTL();
         buildEnablePersistentIndex();
         buildCompressionType();
         buildWriteQuorum();
