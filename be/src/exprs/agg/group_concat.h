@@ -652,7 +652,7 @@ public:
 
         bytes.resize(offset + length);
         bool overflow = false;
-        size_t str_len = 0;
+        size_t limit = ctx->get_group_concat_max_len() + offset;
         for (auto j = 0; j < elem_size && !overflow; ++j) {
             if (duplicated[j]) {
                 continue;
@@ -666,26 +666,22 @@ public:
                     return;
                 }
                 auto str = binary_cols[i]->get_slice(j);
-                if (str_len + str.get_size() <= ctx->get_group_concat_max_len()) {
+                if (offset + str.get_size() <= limit) {
                     memcpy(bytes.data() + offset, str.get_data(), str.get_size());
                     offset += str.get_size();
-                    str_len += str.get_size();
-                    overflow = str_len == ctx->get_group_concat_max_len();
+                    overflow = offset == limit;
                 } else { // make the last utf8 character valid
                     std::vector<size_t> index;
                     get_utf8_index(str, &index);
                     size_t end = 0;
                     for (auto id : index) {
-                        if (str_len + id >= ctx->get_group_concat_max_len()) {
-                            end = id;
+                        if (offset + id > limit) {
                             break;
                         }
+                        end = id;
                     }
-                    if (end > 0) {
-                        memcpy(bytes.data() + offset, str.get_data(), end);
-                        offset += end;
-                        str_len += end;
-                    }
+                    memcpy(bytes.data() + offset, str.get_data(), end);
+                    offset += end;
                     overflow = true;
                 }
             }
