@@ -718,6 +718,8 @@ public class MaterializedViewAnalyzer {
                 checkPartitionColumnWithBaseHMSTable(slotRef, (HiveMetaStoreTable) table);
             } else if (table.isIcebergTable()) {
                 checkPartitionColumnWithBaseIcebergTable(slotRef, (IcebergTable) table);
+            } else if (table.isJDBCTable()) {
+                checkPartitionColumnWithBaseJDBCTable(slotRef, (JDBCTable) table);
             } else {
                 throw new SemanticException("Materialized view with partition does not support base table type : %s",
                         table.getType());
@@ -782,6 +784,27 @@ public class MaterializedViewAnalyzer {
                     String partitionColumnName = partitionField.name();
                     if (partitionColumnName.equalsIgnoreCase(slotRef.getColumnName())) {
                         checkPartitionColumnType(table.getColumn(partitionColumnName));
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    throw new SemanticException("Materialized view partition column in partition exp " +
+                            "must be base table partition column");
+                }
+            }
+        }
+
+        private void checkPartitionColumnWithBaseJDBCTable(SlotRef slotRef, JDBCTable table) {
+            List<Column> partitionColumns = table.getPartitionColumns();
+            if (table.isUnPartitioned()) {
+                throw new SemanticException("Materialized view partition column in partition exp " +
+                        "must be base table partition column");
+            } else {
+                boolean found = false;
+                for (Column partitionColumn : partitionColumns) {
+                    if (partitionColumn.getName().equalsIgnoreCase(slotRef.getColumnName())) {
+                        checkPartitionColumnType(partitionColumn);
                         found = true;
                         break;
                     }

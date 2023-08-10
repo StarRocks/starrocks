@@ -39,6 +39,8 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiPartitionKey;
 import com.starrocks.catalog.IcebergPartitionKey;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.JDBCPartitionKey;
+import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
@@ -102,6 +104,9 @@ public class PartitionUtil {
                 break;
             case DELTALAKE:
                 partitionKey = new DeltaLakePartitionKey();
+                break;
+            case JDBC:
+                partitionKey = new JDBCPartitionKey();
                 break;
             default:
                 Preconditions.checkState(false, "Do not support create partition key for " +
@@ -243,8 +248,12 @@ public class PartitionUtil {
             partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                     icebergTable.getCatalogName(), icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
         } else if (table.isJDBCTable()) {
-            // return null list if table is JDBC table
-            return Lists.newArrayList();
+            JDBCTable jdbcTable = (JDBCTable) table;
+            partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                    jdbcTable.getCatalogName(), jdbcTable.getDbName(), jdbcTable.getJdbcTable());
+            if (partitionNames.size() == 0) {
+                return Lists.newArrayList(jdbcTable.getJdbcTable());
+            }
         } else {
             Preconditions.checkState(false, "Do not support get partition names and columns for" +
                     "table type %s", table.getType());
@@ -283,6 +292,9 @@ public class PartitionUtil {
         } else if (table.isIcebergTable()) {
             IcebergTable icebergTable = (IcebergTable) table;
             partitionColumns = icebergTable.getPartitionColumns();
+        } else if (table.isJDBCTable()) {
+            JDBCTable jdbcTable = (JDBCTable) table;
+            partitionColumns = jdbcTable.getPartitionColumns();
         } else {
             Preconditions.checkState(false, "Do not support get partition names and columns for" +
                     "table type %s", table.getType());
@@ -301,7 +313,7 @@ public class PartitionUtil {
             throws UserException {
         if (table.isNativeTableOrMaterializedView()) {
             return ((OlapTable) table).getRangePartitionMap();
-        } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable()) {
+        } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable() || table.isJDBCTable()) {
             return PartitionUtil.getRangePartitionMapOfExternalTable(table, partitionColumn, getPartitionNames(table));
         } else {
             throw new DmlException("Can not get partition range from table with type : %s", table.getType());
@@ -397,15 +409,27 @@ public class PartitionUtil {
         // Get the index of partitionColumn when table has multi partition columns.
         int partitionColumnIndex = checkAndGetPartitionColumnIndex(partitionColumns, partitionColumn);
         Map<String, Set<String>> mvPartitionKeySetMap = Maps.newHashMap();
-        for (String partitionName : partitionNames) {
-            List<String> partitionNameValues = toPartitionValues(partitionName);
-            PartitionKey partitionKey = createPartitionKey(
-                    ImmutableList.of(partitionNameValues.get(partitionColumnIndex)),
-                    ImmutableList.of(partitionColumns.get(partitionColumnIndex)),
-                    table.getType());
-            String mvPartitionName = generateMVPartitionName(partitionKey);
-            mvPartitionKeySetMap.computeIfAbsent(mvPartitionName, x -> Sets.newHashSet())
-                    .add(partitionName);
+        if (table.isJDBCTable()) {
+            for (String partitionName : partitionNames) {
+                PartitionKey partitionKey = createPartitionKey(
+                        ImmutableList.of(partitionName),
+                        ImmutableList.of(partitionColumn),
+                        table.getType());
+                String mvPartitionName = generateMVPartitionName(partitionKey);
+                mvPartitionKeySetMap.computeIfAbsent(mvPartitionName, x -> Sets.newHashSet())
+                        .add(partitionName);
+            }
+        } else {
+            for (String partitionName : partitionNames) {
+                List<String> partitionNameValues = toPartitionValues(partitionName);
+                PartitionKey partitionKey = createPartitionKey(
+                        ImmutableList.of(partitionNameValues.get(partitionColumnIndex)),
+                        ImmutableList.of(partitionColumns.get(partitionColumnIndex)),
+                        table.getType());
+                String mvPartitionName = generateMVPartitionName(partitionKey);
+                mvPartitionKeySetMap.computeIfAbsent(mvPartitionName, x -> Sets.newHashSet())
+                        .add(partitionName);
+            }
         }
         return mvPartitionKeySetMap;
     }
@@ -433,17 +457,31 @@ public class PartitionUtil {
         int partitionColumnIndex = checkAndGetPartitionColumnIndex(partitionColumns, partitionColumn);
         List<PartitionKey> partitionKeys = new ArrayList<>();
         Map<String, PartitionKey> mvPartitionKeyMap = Maps.newHashMap();
-        for (String partitionName : partitionNames) {
-            List<String> partitionNameValues = toPartitionValues(partitionName);
-            PartitionKey partitionKey = createPartitionKey(
-                    ImmutableList.of(partitionNameValues.get(partitionColumnIndex)),
-                    ImmutableList.of(partitionColumns.get(partitionColumnIndex)),
-                    table.getType());
-            partitionKeys.add(partitionKey);
-            String mvPartitionName = generateMVPartitionName(partitionKey);
-            // TODO: check `mvPartitionName` existed.
-            mvPartitionKeyMap.put(mvPartitionName, partitionKey);
+        if (table.isJDBCTable()) {
+            for (String partitionName : partitionNames) {
+                PartitionKey partitionKey = createPartitionKey(
+                        ImmutableList.of(partitionName),
+                        ImmutableList.of(partitionColumn),
+                        table.getType());
+                partitionKeys.add(partitionKey);
+                String mvPartitionName = generateMVPartitionName(partitionKey);
+                // TODO: check `mvPartitionName` existed.
+                mvPartitionKeyMap.put(mvPartitionName, partitionKey);
+            }
+        } else {
+            for (String partitionName : partitionNames) {
+                List<String> partitionNameValues = toPartitionValues(partitionName);
+                PartitionKey partitionKey = createPartitionKey(
+                        ImmutableList.of(partitionNameValues.get(partitionColumnIndex)),
+                        ImmutableList.of(partitionColumns.get(partitionColumnIndex)),
+                        table.getType());
+                partitionKeys.add(partitionKey);
+                String mvPartitionName = generateMVPartitionName(partitionKey);
+                // TODO: check `mvPartitionName` existed.
+                mvPartitionKeyMap.put(mvPartitionName, partitionKey);
+            }
         }
+
 
         LinkedHashMap<String, PartitionKey> sortedPartitionLinkMap = mvPartitionKeyMap.entrySet().stream()
                 .sorted(Map.Entry.comparingByValue(PartitionKey::compareTo))

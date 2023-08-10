@@ -39,6 +39,7 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -751,7 +752,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      * @param table : Whether this table can be supported for incremental refresh by partition or not.
      */
     private boolean unSupportRefreshByPartition(Table table) {
-        return !table.isOlapTableOrMaterializedView() && !table.isHiveTable() && !table.isCloudNativeTable();
+        return !table.isOlapTableOrMaterializedView() && !table.isHiveTable() && !table.isJDBCTable() && !table.isCloudNativeTable();
     }
 
     /**
@@ -1532,7 +1533,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             if (entry.getKey().isHiveTable()) {
                 HiveTable hiveTable = (HiveTable) entry.getKey();
                 Optional<BaseTableInfo> baseTableInfoOptional = materializedView.getBaseTableInfos().stream().filter(
-                                baseTableInfo -> baseTableInfo.getTableIdentifier().equals(hiveTable.getTableIdentifier())).
+                        baseTableInfo -> baseTableInfo.getTableIdentifier().equals(hiveTable.getTableIdentifier())).
                         findAny();
                 if (!baseTableInfoOptional.isPresent()) {
                     continue;
@@ -1540,6 +1541,19 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 BaseTableInfo baseTableInfo = baseTableInfoOptional.get();
                 Map<String, MaterializedView.BasePartitionInfo> partitionInfos =
                         getSelectedPartitionInfos(hiveTable, Lists.newArrayList(entry.getValue()),
+                                baseTableInfo);
+                changedOlapTablePartitionInfos.put(baseTableInfo, partitionInfos);
+            } else if (entry.getKey().isJDBCTable()) {
+                JDBCTable jdbcTable = (JDBCTable) entry.getKey();
+                Optional<BaseTableInfo> baseTableInfoOptional = materializedView.getBaseTableInfos().stream().filter(
+                        baseTableInfo -> baseTableInfo.getTableIdentifier().equals(jdbcTable.getTableIdentifier())).
+                        findAny();
+                if (!baseTableInfoOptional.isPresent()) {
+                    continue;
+                }
+                BaseTableInfo baseTableInfo = baseTableInfoOptional.get();
+                Map<String, MaterializedView.BasePartitionInfo> partitionInfos =
+                        getSelectedPartitionInfos(jdbcTable, Lists.newArrayList(entry.getValue()),
                                 baseTableInfo);
                 changedOlapTablePartitionInfos.put(baseTableInfo, partitionInfos);
             }
@@ -1563,6 +1577,27 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         selectedPartitionNames);
         for (int index = 0; index < selectedPartitionNames.size(); ++index) {
             long modifiedTime = hivePartitions.get(index).getModifiedTime();
+            partitionInfos.put(selectedPartitionNames.get(index),
+                    new MaterializedView.BasePartitionInfo(-1, modifiedTime, modifiedTime));
+        }
+        return partitionInfos;
+    }
+
+    /**
+     * @param jdbcTable                 : input jdbc table to collect refresh partition infos
+     * @param selectedPartitionNames    : input jdbc table refreshed partition names
+     * @param baseTableInfo             : input jdbc table's base table info
+     * @return                          : return the given hive table's refresh partition infos
+     */
+    private Map<String, MaterializedView.BasePartitionInfo> getSelectedPartitionInfos(JDBCTable jdbcTable,
+                                                                                      List<String> selectedPartitionNames,
+                                                                                      BaseTableInfo baseTableInfo) {
+        Map<String, MaterializedView.BasePartitionInfo> partitionInfos = Maps.newHashMap();
+        List<com.starrocks.connector.PartitionInfo> jdbcPartitions = GlobalStateMgr.
+                getCurrentState().getMetadataMgr().getPartitions(baseTableInfo.getCatalogName(), jdbcTable,
+                selectedPartitionNames);
+        for (int index = 0; index < selectedPartitionNames.size(); ++index) {
+            long modifiedTime = jdbcPartitions.get(index).getModifiedTime();
             partitionInfos.put(selectedPartitionNames.get(index),
                     new MaterializedView.BasePartitionInfo(-1, modifiedTime, modifiedTime));
         }
