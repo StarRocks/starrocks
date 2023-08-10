@@ -747,7 +747,8 @@ public class StmtExecutor {
                         DebugUtil.getPrettyStringMs(profileEndTime - profileBeginTime));
         StringBuilder builder = new StringBuilder();
         profile.prettyPrint(builder, "");
-        String profileContent = ProfileManager.getInstance().pushProfile(plan, profile);
+        ProfilingExecPlan profilingPlan = plan == null ? null : plan.getProfilingPlan();
+        String profileContent = ProfileManager.getInstance().pushProfile(profilingPlan, profile);
         if (context.getQueryDetail() != null) {
             context.getQueryDetail().setProfile(profileContent);
         }
