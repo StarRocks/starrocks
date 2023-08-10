@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from dbt.adapters.base.relation import BaseRelation, Policy
 from dbt.exceptions import DbtRuntimeError
 
-
+@dataclass
 class StarRocksQuotePolicy(Policy):
     database: bool = False
     schema: bool = True
