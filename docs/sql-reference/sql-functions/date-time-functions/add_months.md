@@ -2,24 +2,26 @@
 
 ## Description
 
-Adds an integer months to a given date (DATE, DATETIME). The integer can be positive or negative.
+Adds a specified number of months to a given date (DATE or DATETIME). The [months_add](./months_add.md) function provides similar functionalities.
 
-The resulting day component remains the same as that specified in `date`, unless the resulting month
+The day component in the resulting month remains the same as that specified in `date`, unless `date` is the last day of the month and the resulting month
 has fewer days than the day component of the given date, in which case the day will be the last day of
-the resulting month.
+the resulting month. For example, `select add_months('2022-01-31', 1);` returns `2022-02-28 00:00:00`.
+
+Difference with Oracle: In Oracle, if `date` is the last day of the month, then the result is the last day of the resulting month.
 
 Returns NULL if an invalid date or a NULL argument is passed in.
 
 ## Syntax
 
-```SQL	
+```Haskell
 ADD_MONTH(date, months)
 ```
 
 ## Parameters
 
 - `date`: It must be a valid date or datetime expression.
-- `months`: the months you want to add. It must be of the INT type.
+- `months`: the months you want to add. It must be an integer. A  positive integer adds months to `date`. A negative integer subtracts months from `date`.
 
 ## Return value
 
