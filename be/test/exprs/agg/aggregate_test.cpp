@@ -2030,8 +2030,8 @@ TEST_F(AggregateTest, test_group_concatV2) {
         res_struct_col->resize(0);
         gc_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
         ASSERT_EQ(res_struct_col->debug_string(),
-                  "[{vchar:NULL,sep:NULL,int:NULL}, {vchar:['bcd'],sep:[','],int:[9]}, {vchar:['cdrdfe'],"
-                  "sep:[','],int:[NULL]}, {vchar:NULL,sep:NULL,int:NULL}, {vchar:['esfg'],sep:[','],int:[6]}]");
+                  "[NULL, {vchar:['bcd'],sep:[','],int:[9]}, {vchar:['cdrdfe'],sep:[','],int:[NULL]}, "
+                  "NULL, {vchar:['esfg'],sep:[','],int:[6]}]");
 
         auto res_col = ColumnHelper::create_column(char_type, false);
         gc_func->finalize_to_column(local_ctx.get(), state->state(), res_col.get());
@@ -2155,7 +2155,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
 
         res_struct_col->resize(0);
         gc_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
-        ASSERT_EQ(res_struct_col->debug_string(), "[{vchar:NULL,sep:NULL,int:NULL}, {vchar:NULL,sep:NULL,int:NULL}]");
+        ASSERT_EQ(res_struct_col->debug_string(), "[NULL, NULL]");
 
         auto res_col = ColumnHelper::create_column(TypeDescriptor(LogicalType::TYPE_VARCHAR), true);
         gc_func->finalize_to_column(local_ctx.get(), state->state(), res_col.get());

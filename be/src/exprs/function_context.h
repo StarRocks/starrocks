@@ -159,9 +159,9 @@ public:
 
     JavaUDAFContext* udaf_ctxs() { return _jvm_udaf_ctxs.get(); }
 
-    size_t get_group_concat_max_len() { return group_concat_max_len; }
+    ssize_t get_group_concat_max_len() { return group_concat_max_len; }
     // min value is 4, default is 1024
-    void set_group_concat_max_len(size_t len) { group_concat_max_len = len < 4 ? 4 : len; }
+    void set_group_concat_max_len(ssize_t len) { group_concat_max_len = len < 4 ? 4 : len; }
 
 private:
     friend class ExprContext;
@@ -204,7 +204,7 @@ private:
     std::vector<bool> _is_asc_order;
     std::vector<bool> _nulls_first;
     bool _is_distinct = false;
-    size_t group_concat_max_len = 4;
+    ssize_t group_concat_max_len = 1024;
 };
 
 } // namespace starrocks

@@ -274,7 +274,7 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
                                                                  Map<ColumnRefOperator, ScalarOperator> projectionMap) {
         LinkedList<OptExpression> allCteConsumes = Lists.newLinkedList();
         Map<CallOperator, ColumnRefOperator> consumeAggCallMap = Maps.newHashMap();
-        for (ColumnRefOperator distinctAggRef : distinctAggList) { // error for new agg
+        for (ColumnRefOperator distinctAggRef : distinctAggList) {
             CallOperator aggCallOperator = aggregate.getAggregations().get(distinctAggRef);
             if (aggCallOperator.getFnName().equalsIgnoreCase(FunctionSet.COUNT) ||
                     aggCallOperator.getFnName().equalsIgnoreCase(FunctionSet.SUM) ||
@@ -283,6 +283,8 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
                         aggregate, cteProduce, factory));
                 consumeAggCallMap.put(aggCallOperator, distinctAggRef);
                 projectionMap.put(distinctAggRef, distinctAggRef);
+            } else if (!aggCallOperator.getFnName().equals(FunctionSet.AVG)) {
+                throw new UnsupportedOperationException(aggCallOperator.getFnName() + " does not distinct.");
             }
         }
 

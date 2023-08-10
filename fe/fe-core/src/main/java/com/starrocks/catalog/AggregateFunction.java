@@ -349,9 +349,8 @@ public class AggregateFunction extends Function {
         if (nullsFirst != null && !nullsFirst.isEmpty()) {
             aggFn.setNulls_first(nullsFirst);
         }
-        if (isDistinct) {
-            aggFn.setIs_distinct(true);
-        }
+        aggFn.setIs_distinct(isDistinct);
+
         aggFn.setSymbol(getSymbolName());
         fn.setAggregate_fn(aggFn);
         return fn;
