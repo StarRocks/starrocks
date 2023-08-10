@@ -37,6 +37,7 @@ class KVStore;
 class RowsetUpdateState;
 class RowsetColumnUpdateState;
 class Tablet;
+class PersistentIndexCompactionManager;
 
 class LocalDelvecLoader : public DelvecLoader {
 public:
@@ -90,6 +91,7 @@ public:
 
     ThreadPool* apply_thread_pool() { return _apply_thread_pool.get(); }
     ThreadPool* get_pindex_thread_pool() { return _get_pindex_thread_pool.get(); }
+    PersistentIndexCompactionManager* get_pindex_compaction_mgr() { return _persistent_index_compaction_mgr.get(); }
 
     DynamicCache<uint64_t, PrimaryIndex>& index_cache() { return _index_cache; }
 
@@ -165,6 +167,7 @@ private:
 
     std::unique_ptr<ThreadPool> _apply_thread_pool;
     std::unique_ptr<ThreadPool> _get_pindex_thread_pool;
+    std::unique_ptr<PersistentIndexCompactionManager> _persistent_index_compaction_mgr;
 
     UpdateManager(const UpdateManager&) = delete;
     const UpdateManager& operator=(const UpdateManager&) = delete;
