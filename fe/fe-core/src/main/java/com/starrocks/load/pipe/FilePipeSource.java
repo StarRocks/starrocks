@@ -192,9 +192,10 @@ public class FilePipeSource implements GsonPostProcessable {
         Preconditions.checkState(sqlStmt instanceof InsertStmt);
         InsertStmt insertStmt = (InsertStmt) sqlStmt;
         SelectRelation select = (SelectRelation) insertStmt.getQueryStatement().getQueryRelation();
+        FileTableFunctionRelation tableFunctionRelation = (FileTableFunctionRelation) select.getRelation();
 
         // replace with a new Files table function
-        Map<String, String> properties = new HashMap<>(originalProperties);
+        Map<String, String> properties = new HashMap<>(tableFunctionRelation.getProperties());
         String files =
                 piece.getFiles().stream().map(PipeFileRecord::getFileName).collect(Collectors.joining(","));
         properties.put(TableFunctionTable.PROPERTY_PATH, files);

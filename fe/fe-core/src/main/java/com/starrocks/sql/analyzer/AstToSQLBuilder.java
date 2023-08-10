@@ -351,7 +351,7 @@ public class AstToSQLBuilder {
 
             // label
             if (StringUtils.isNotEmpty(insert.getLabel())) {
-                sb.append("WITH LABEL ").append(insert.getLabel()).append(" ");
+                sb.append("WITH LABEL `").append(insert.getLabel()).append("` ");
             }
 
             // source

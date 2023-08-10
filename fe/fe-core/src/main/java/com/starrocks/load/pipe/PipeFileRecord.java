@@ -45,7 +45,7 @@ import java.util.Objects;
 public class PipeFileRecord {
 
     private static final String FILE_LOCATOR = "(pipe_id = %s AND file_name = %s AND file_version = %s)";
-    private static final String FILE_RECORD_VALUES = "(%d, %s, %s, %d, %s, %s, %s, %s, %s, %s)";
+    private static final String FILE_RECORD_VALUES = "(%d, %s, %s, %d, %s, %s, %s, %s, %s, %s, %s)";
 
     // Fields of error_info
     // {
@@ -147,9 +147,12 @@ public class PipeFileRecord {
                 }
             }
             if (dataArray.size() > 10) {
-                String insertLabel = dataArray.get(10).getAsString();
-                if (StringUtils.isNotEmpty(insertLabel)) {
-                    file.insertLabel = insertLabel;
+                JsonElement field = dataArray.get(10);
+                if (field.isJsonPrimitive()) {
+                    String insertLabel = field.getAsString();
+                    if (StringUtils.isNotEmpty(insertLabel)) {
+                        file.insertLabel = insertLabel;
+                    }
                 }
             }
 
@@ -213,7 +216,8 @@ public class PipeFileRecord {
                 toSQLString(stagedTime),
                 toSQLString(startLoadTime),
                 toSQLString(finishLoadTime),
-                toSQLString(toErrorInfo())
+                toSQLString(toErrorInfo()),
+                toSQLStringNonnull(insertLabel)
         );
     }
 

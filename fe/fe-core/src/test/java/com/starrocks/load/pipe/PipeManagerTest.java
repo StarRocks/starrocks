@@ -619,8 +619,8 @@ public class PipeManagerTest {
             piece.addFile(new PipeFileRecord(pipe.getId(), "a.parquet", "v1", 1));
             piece.addFile(new PipeFileRecord(pipe.getId(), "b.parquet", "v1", 1));
             String sql = FilePipeSource.buildInsertSql(pipe, piece, "insert_label");
-            Assert.assertEquals("INSERT INTO `tbl1` WITH LABEL insert_label SELECT *\n" +
-                    "FROM FILES('path'='a.parquet,b.parquet','batch_size'='10GB')", sql);
+            Assert.assertEquals("INSERT INTO `tbl1` WITH LABEL `insert_label` SELECT *\n" +
+                    "FROM FILES('format'='parquet','path'='a.parquet,b.parquet')", sql);
             dropPipe(pipeName);
         }
 
@@ -633,8 +633,8 @@ public class PipeManagerTest {
             piece.addFile(new PipeFileRecord(pipe.getId(), "a.parquet", "v1", 1));
             piece.addFile(new PipeFileRecord(pipe.getId(), "b.parquet", "v1", 1));
             String sql = FilePipeSource.buildInsertSql(pipe, piece, "insert_label");
-            Assert.assertEquals("INSERT INTO `tbl1` WITH LABEL insert_label SELECT `col_int`, `col_string`\n" +
-                    "FROM FILES('path'='a.parquet,b.parquet','batch_size'='10GB')", sql);
+            Assert.assertEquals("INSERT INTO `tbl1` WITH LABEL `insert_label` SELECT `col_int`, `col_string`\n" +
+                    "FROM FILES('format'='parquet','path'='a.parquet,b.parquet')", sql);
             dropPipe(pipeName);
         }
     }

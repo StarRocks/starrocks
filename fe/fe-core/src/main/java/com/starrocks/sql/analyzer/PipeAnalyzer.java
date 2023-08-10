@@ -52,7 +52,7 @@ public class PipeAnalyzer {
     public static final String PROPERTY_POLL_INTERVAL = "poll_interval";
     public static final String PROPERTY_BATCH_SIZE = "batch_size";
 
-    private static final ImmutableSet<String> SUPPORTED_PROPERTIES =
+    public static final ImmutableSet<String> SUPPORTED_PROPERTIES =
             new ImmutableSortedSet.Builder<String>(String.CASE_INSENSITIVE_ORDER)
                     .add(PROPERTY_AUTO_INGEST)
                     .add(PROPERTY_POLL_INTERVAL)
