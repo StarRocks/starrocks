@@ -26,6 +26,7 @@ import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddRollupClause;
+import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
@@ -275,7 +276,7 @@ public class AlterJobExecutor extends AstVisitor<Void, ConnectContext> {
         this.catalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         this.db = db;
         this.table = table;
-        AlterViewClause alterViewClause = (AlterViewClause) statement.getAlterClause();
+        AlterClause alterViewClause = statement.getAlterClause();
         visit(alterViewClause, context);
         return null;
     }
