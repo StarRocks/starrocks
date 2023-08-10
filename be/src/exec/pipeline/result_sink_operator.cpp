@@ -31,6 +31,7 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
 
     // Create profile
     _profile = std::make_unique<RuntimeProfile>("result sink");
+    _unique_metrics->add_child(_profile.get(), true, nullptr);
 
     // Create writer based on sink type
     switch (_sink_type) {
