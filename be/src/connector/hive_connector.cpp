@@ -455,6 +455,8 @@ HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(FSOptions& options) {
 }
 
 Status HiveDataSource::_init_scanner(RuntimeState* state) {
+    SCOPED_TIMER(_profile.open_file_timer);
+
     const auto& scan_range = _scan_range;
     std::string native_file_path = scan_range.full_path;
     if (_hive_table != nullptr && _hive_table->has_partition()) {
@@ -464,9 +466,6 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
                     "Plan inconsistency. scan_range.partition_id = {} not found in partition description map",
                     scan_range.partition_id));
         }
-
-        SCOPED_TIMER(_profile.open_file_timer);
-
         std::filesystem::path file_path(partition_desc->location());
         file_path /= scan_range.relative_path;
         native_file_path = file_path.native();
