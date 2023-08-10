@@ -95,7 +95,7 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                     }
 
                     if (status.ok()) {
-                        StarRocksMetrics::instance()->stream_receive_bytes_total.increment(ctx->receive_bytes);
+                        StarRocksMetrics::instance()->stream_receive_bytes_total.increment(ctx->total_receive_bytes);
                         StarRocksMetrics::instance()->stream_load_rows_total.increment(ctx->number_loaded_rows);
                     }
                 } else {

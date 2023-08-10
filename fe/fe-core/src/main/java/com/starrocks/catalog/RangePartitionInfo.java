@@ -70,7 +70,7 @@ public class RangePartitionInfo extends PartitionInfo {
     private static final Logger LOG = LogManager.getLogger(RangePartitionInfo.class);
 
     @SerializedName(value = "partitionColumns")
-    private List<Column> partitionColumns = Lists.newArrayList();
+    protected List<Column> partitionColumns = Lists.newArrayList();
     // formal partition id -> partition range
     protected Map<Long, Range<PartitionKey>> idToRange = Maps.newHashMap();
     // temp partition id -> partition range

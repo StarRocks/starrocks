@@ -244,7 +244,7 @@ public:
     }
 
     template <LogicalType Type>
-    static inline RunTimeColumnType<Type>* cast_to_raw(const Column* value) {
+    static inline RunTimeColumnType<Type>* cast_to_raw(Column* value) {
         return down_cast<RunTimeColumnType<Type>*>(value);
     }
 

@@ -117,6 +117,20 @@ public class PruneSubfieldsForComplexType implements TreeRewriteRule {
             }
             return visit(optExpression, context);
         }
+
+        @Override
+        public Void visitPhysicalScan(OptExpression optExpression, PruneComplexTypeUtil.Context context) {
+            PhysicalScanOperator physicalScanOperator = (PhysicalScanOperator) optExpression.getOp();
+            Projection projection = optExpression.getOp().getProjection();
+            if (projection == null) {
+                for (ColumnRefOperator columnRefOperator : physicalScanOperator.getOutputColumns()) {
+                    if (columnRefOperator.getType().isMapType() || columnRefOperator.getType().isStructType()) {
+                        context.add(columnRefOperator, columnRefOperator);
+                    }
+                }
+            }
+            return visit(optExpression, context);
+        }
     }
 
     private static class PruneSubfieldsOptVisitor extends OptExpressionVisitor<Void, PruneComplexTypeUtil.Context> {

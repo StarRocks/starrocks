@@ -37,6 +37,7 @@ Fixed the following issues:
 - If users specify `"hadoop.security.authentication" = "simple"` in their Broker Load jobs created to load data from HDFS, the job fails. [#27774](https://github.com/StarRocks/starrocks/pull/27774)
 - Modifying the refresh mode of materialized views causes inconsistent metadata between the leader FE and follower FE. [#28082](https://github.com/StarRocks/starrocks/pull/28082) [#28097](https://github.com/StarRocks/starrocks/pull/28097)
 - Passwords are not hidden when SHOW CREATE CATALOG and SHOW RESOURCES are used to query specific information. [#28059](https://github.com/StarRocks/starrocks/pull/28059)
+- FE memory leak caused by blocked LabelCleaner threads. [#28311](https://github.com/StarRocks/starrocks/pull/28311)
 
 ## 2.5.9
 

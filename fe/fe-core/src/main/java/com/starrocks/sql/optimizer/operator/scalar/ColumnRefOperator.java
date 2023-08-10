@@ -110,7 +110,7 @@ public final class ColumnRefOperator extends ScalarOperator {
     }
 
     public static String toString(Collection<ColumnRefOperator> columns) {
-        StringJoiner joiner = new StringJoiner("{", ", ", "}");
+        StringJoiner joiner = new StringJoiner(", ", "{", "}");
         for (ColumnRefOperator column : columns) {
             joiner.add(column.toString());
         }
