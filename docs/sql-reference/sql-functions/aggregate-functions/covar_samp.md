@@ -49,7 +49,7 @@ mysql> select * from agg;
 +------+-------+-------+
 ```
 
-计算列 `k` 和列 `v` 的样本协方差:
+Calculate the sample covariance of the `k` and `v`` columns:
 
 ```plaintext
 mysql> select no,COVAR_SAMP(k,v) from agg group by no;
