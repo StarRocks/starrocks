@@ -259,7 +259,7 @@ StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_st
 
         if (config::hdfs_client_enable_hedged_read) {
             struct hdfsHedgedReadMetrics* hdfs_hedged_read_statistics = nullptr;
-            r = hdfsGetHedgedReadMetrics(_fs, &hdfs_hedged_read_statistics);
+            r = hdfsGetHedgedReadMetrics(_handle->getFS(), &hdfs_hedged_read_statistics);
             if (r == 0) {
                 stats->append("TotalHedgedReadOps", hdfs_hedged_read_statistics->hedgedReadOps);
                 stats->append("TotalHedgedReadOpsInCurThread", hdfs_hedged_read_statistics->hedgedReadOpsInCurThread);
