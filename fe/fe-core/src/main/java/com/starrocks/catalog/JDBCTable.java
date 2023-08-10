@@ -41,6 +41,7 @@ public class JDBCTable extends Table {
 
     private static final String TABLE = "table";
     private static final String RESOURCE = "resource";
+    public static final String PARTITION_NULL_VALUE = "null";
 
     @SerializedName(value = "tn")
     private String jdbcTable;
@@ -48,8 +49,10 @@ public class JDBCTable extends Table {
     private String resourceName;
 
     private Map<String, String> properties;
-    private String dbName;
     private String catalogName;
+    private String dbName;
+    private List<Column> partitionColumns;
+
 
     public JDBCTable() {
         super(TableType.JDBC);
@@ -60,11 +63,20 @@ public class JDBCTable extends Table {
         validate(properties);
     }
 
-    public JDBCTable(long id, String name, List<Column> schema, String dbName, String catalogName,
-                     Map<String, String> properties) throws DdlException {
+    public JDBCTable(long id, String name, List<Column> schema, String dbName,
+                     String catalogName, Map<String, String> properties) throws DdlException {
         super(id, name, TableType.JDBC, schema);
-        this.dbName = dbName;
         this.catalogName = catalogName;
+        this.dbName = dbName;
+        validate(properties);
+    }
+
+    public JDBCTable(long id, String name, List<Column> schema, List<Column> partitionColumns, String dbName,
+                     String catalogName, Map<String, String> properties) throws DdlException {
+        super(id, name, TableType.JDBC, schema);
+        this.catalogName = catalogName;
+        this.dbName = dbName;
+        this.partitionColumns = partitionColumns;
         validate(properties);
     }
 
@@ -72,8 +84,29 @@ public class JDBCTable extends Table {
         return resourceName;
     }
 
+    public String getCatalogName() {
+        return catalogName;
+    }
+
+    public String getDbName() {
+        return dbName;
+    }
+
     public String getJdbcTable() {
         return jdbcTable;
+    }
+
+    public List<Column> getPartitionColumns() {
+        return partitionColumns;
+    }
+
+    @Override
+    public boolean isUnPartitioned() {
+        if (partitionColumns.size() > 0) {
+            return false;
+        } else {
+            return true;
+        }
     }
 
     public String getProperty(String propertyKey) {
