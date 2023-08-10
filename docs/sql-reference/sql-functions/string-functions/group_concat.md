@@ -2,7 +2,7 @@
 
 ## Description
 
-group_concat concatenates non-null values into one string from a group, with the second argument `sep` being the separator, which is ',' by default if omitted.
+group_concat concatenates non-null values into one string from a group, with a separator argument, which is ',' by default if not specified.
 
 ## Syntax
 
@@ -15,13 +15,15 @@ VARCHAR GROUP_CONCAT([DISTINCT] expr [,expr ...]
 
 ## Parameters
 
-- `expr`: the values to concatenate. It should be cast to VARCHAR. They can be optionally specified `DISTINCT` to eliminate duplicate values. More `expr` are concatenated directly, use `concat()` or `concat_ws` to specify formats.
+- `expr`: the values to concatenate, ignoring null. It should be cast to VARCHAR. They can be optionally specified `DISTINCT` to eliminate duplicate values. More `expr` are concatenated directly, use `concat()` or `concat_ws` to specify formats.
 - order-by items can be unsigned integers (identify `expr`, starting from 1), column names or normal expressions. To sort in reverse order, add the DESC (descending) keyword to the name of the column you are sorting by in the ORDER BY clause. The default is ascending order; this may be specified explicitly using the ASC keyword
 - `str_val`: the optional separator is used to concat non-null values from different rows. If it is not specified, `,` (a comma) is used by default.
 
 ## Return value
 
-Returns a VARCHAR value. It returns NULL if there are no non-NULL values.
+Returns a string value for each group, but returns NULL if there are no non-NULL values.
+
+set `group_concat_max_len` to limit the length of output string from a group, its default value is 1024, minimal value is 4.
 
 ## Examples
 
