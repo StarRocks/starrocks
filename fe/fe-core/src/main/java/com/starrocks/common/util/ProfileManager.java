@@ -38,7 +38,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
-import com.starrocks.sql.plan.ExecPlan;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -156,10 +155,10 @@ public class ProfileManager {
         return profileString;
     }
 
-    public String pushProfile(ExecPlan plan, RuntimeProfile profile) {
+    public String pushProfile(ProfilingExecPlan plan, RuntimeProfile profile) {
         String profileString = generateProfileString(profile);
         ProfileElement element = createElement(profile.getChildList().get(0).first, profileString);
-        element.plan = ProfilingExecPlan.buildFrom(plan);
+        element.plan = plan;
         String queryId = element.infoStrings.get(ProfileManager.QUERY_ID);
         // check when push in, which can ensure every element in the list has QUERY_ID column,
         // so there is no need to check when remove element from list.
