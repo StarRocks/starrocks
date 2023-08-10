@@ -32,7 +32,7 @@ $$
 
 - NULL is returned in any input is NULL.
 
-## 示例
+## Examples
 
 Suppose table `agg` has the following data:
 
@@ -49,7 +49,7 @@ mysql> select * from agg;
 +------+-------+-------+
 ```
 
-计算列 `k` 和 列 `v` 的相关系数:
+Calculate the correlation coefficient of the `k` and `v` columns:
 
 ```plaintext
 mysql> select no,CORR(k,v) from agg group by no;
