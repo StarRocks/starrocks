@@ -39,6 +39,7 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
 | aws_s3_secret_key                   | 访问 S3 存储空间的 Secret Key。                              |
 | aws_s3_iam_role_arn                 | 有访问 S3 存储空间权限 IAM Role 的 ARN。                      |
 | aws_s3_external_id                  | 用于跨 AWS 账户访问 S3 存储空间的外部 ID。                     |
+
 <!--| azure_blob_path                     | 用于存储数据的 Azure Blob Storage 路径，由存 Storage Account 中的容器名称和容器下的子路径（如有）组成，如 `testcontainer/subpath`。 |
 | azure_blob_endpoint                 | Azure Blob Storage 的链接地址，如 `https://test.blob.core.windows.net`。 |
 | azure_blob_shared_key               | 访问 Azure Blob Storage 的 Shared Key。                     |
