@@ -169,12 +169,6 @@ public class EquationRewriter {
             }
 
             @Override
-            public ScalarOperator visitBetweenPredicate(BetweenPredicateOperator predicate, Void context) {
-                ScalarOperator tmp = replace(predicate);
-                return tmp != null ? tmp : super.visitBetweenPredicate(predicate, context);
-            }
-
-            @Override
             public ScalarOperator visitInPredicate(InPredicateOperator predicate, Void context) {
                 ScalarOperator tmp = replace(predicate);
                 return tmp != null ? tmp : super.visitInPredicate(predicate, context);
