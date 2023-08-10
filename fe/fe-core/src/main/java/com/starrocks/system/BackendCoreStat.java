@@ -29,14 +29,14 @@ public class BackendCoreStat {
 
     private static int DEFAULT_CORES_OF_BE = 1;
 
-    private static final ConcurrentHashMap<Long, Integer> numOfHardwareCoresPerBe = new ConcurrentHashMap<>();
+    private static ConcurrentHashMap<Long, Integer> numOfHardwareCoresPerBe = new ConcurrentHashMap<>();
     private static AtomicInteger cachedAvgNumOfHardwareCores = new AtomicInteger(-1);
-    private static final ReentrantLock lock = new ReentrantLock();
+    private static ReentrantLock lock = new ReentrantLock();
 
     public static void setNumOfHardwareCoresOfBe(long be, int numOfCores) {
         Integer previous = numOfHardwareCoresPerBe.put(be, numOfCores);
-        LOG.info("set numOfHardwareCoresOfBe of be({}) to {}", be, numOfCores);
-        LOG.info("current cpuCores stats: {}", numOfHardwareCoresPerBe);
+        LOG.info("set numOfHardwareCoresOfBe of be({}) to {}, current cpuCores stats: {}", be, numOfCores,
+                numOfHardwareCoresPerBe);
         if (previous == null || previous != numOfCores) {
             cachedAvgNumOfHardwareCores.set(-1);
         }
@@ -85,8 +85,8 @@ public class BackendCoreStat {
                     / numOfHardwareCoresPerBe.size();
             avg = Math.max(DEFAULT_CORES_OF_BE, avg);
             cachedAvgNumOfHardwareCores.set(avg);
-            LOG.info("update avgNumOfHardwareCoresOfBe to {}", avg);
-            LOG.info("current cpuCores stats: {}", numOfHardwareCoresPerBe);
+            LOG.info("update avgNumOfHardwareCoresOfBe to {}, current cpuCores stats: {}", avg,
+                    numOfHardwareCoresPerBe);
             return avg;
         } finally {
             lock.unlock();
