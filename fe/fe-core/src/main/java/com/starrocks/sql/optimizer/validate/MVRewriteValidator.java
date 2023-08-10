@@ -53,12 +53,19 @@ public class MVRewriteValidator {
                     tracerNames.add(e.getKey().replace("REWRITE ", ""));
                 }
             }
-            if (tracerNames.isEmpty()) {
-                if (connectContext.getSessionVariable().isEnableMaterializedViewRewriteOrError()) {
+
+            if (connectContext.getSessionVariable().isEnableMaterializedViewRewriteOrError()) {
+                if (tracerNames.isEmpty()) {
                     throw new IllegalArgumentException("no executable plan with materialized view for this sql in " +
                             connectContext.getSessionVariable().getMaterializedViewRewriteMode() + " mode.");
+                } else {
+                    throw new IllegalArgumentException("no executable plan with materialized view for this sql in " +
+                            connectContext.getSessionVariable().getMaterializedViewRewriteMode() + " mode because of" +
+                            "cost.");
                 }
+            }
 
+            if (tracerNames.isEmpty()) {
                 tracer.log("Query cannot be rewritten, please check the trace logs or " +
                         "`set enable_mv_optimizer_trace_log=on` to find more infos.");
             } else {
@@ -66,6 +73,16 @@ public class MVRewriteValidator {
                         + ", but are not chosen as the best plan by cost.");
             }
         } else {
+            // If final result contains materialized views, ho
+            if (connectContext.getSessionVariable().isEnableMaterializedViewRewriteOrError()) {
+                Map<String, PlannerProfile.LogTracer> tracers = connectContext.getPlannerProfile().getTracers();
+                if (tracers.entrySet().stream().noneMatch(e -> e.getValue().getLogs().stream()
+                        .anyMatch(x -> x.contains(MaterializedViewRewriter.REWRITE_SUCCESS)))) {
+                    throw new IllegalArgumentException("no executable plan with materialized view for this sql in " +
+                            connectContext.getSessionVariable().getMaterializedViewRewriteMode() + " mode.");
+                }
+            }
+
             tracer.log("Query has already been successfully rewritten by: " + Joiner.on(",").join(mvNames) + ".");
         }
     }

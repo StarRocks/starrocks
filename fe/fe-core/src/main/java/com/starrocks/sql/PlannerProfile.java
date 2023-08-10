@@ -319,9 +319,12 @@ public class PlannerProfile {
      */
     public static LogTracer getLogTracer(String name) {
         ConnectContext ctx = ConnectContext.get();
-        if (ctx == null || ctx.getPlannerProfile() == null ||
-                ctx.getExplainLevel() != StatementBase.ExplainLevel.REWRITE ||
-                ctx.getSessionVariable().isEnableMaterializedViewRewriteOrError()) {
+        if (ctx == null || ctx.getPlannerProfile() == null) {
+            return null;
+        }
+
+        if (ctx.getExplainLevel() != StatementBase.ExplainLevel.REWRITE &&
+                !ctx.getSessionVariable().isEnableMaterializedViewRewriteOrError()) {
             return null;
         }
 
