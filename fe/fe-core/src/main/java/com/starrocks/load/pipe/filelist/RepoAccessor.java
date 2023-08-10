@@ -62,6 +62,19 @@ public class RepoAccessor {
         return res;
     }
 
+    public List<PipeFileRecord> listLoadingFiles(long pipeId) {
+        List<PipeFileRecord> res = null;
+        try {
+            String sql = buildListLoadingFile(pipeId);
+            List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
+            res = PipeFileRecord.fromResultBatch(batch);
+        } catch (Exception e) {
+            LOG.error("listLoadingFiles failed", e);
+            throw e;
+        }
+        return res;
+    }
+
     public List<PipeFileRecord> selectStagedFiles(List<PipeFileRecord> records) {
         try {
             String sql = buildSelectStagedFiles(records);
@@ -87,7 +100,7 @@ public class RepoAccessor {
     /**
      * pipe_id, file_name, file_version are required to locate unique file
      */
-    public void updateFilesState(List<PipeFileRecord> records, FileListRepo.PipeFileState state) {
+    public void updateFilesState(List<PipeFileRecord> records, FileListRepo.PipeFileState state, String insertLabel) {
         try {
             String sql = null;
             switch (state) {
@@ -97,7 +110,7 @@ public class RepoAccessor {
                     sql = buildSqlUpdateState(records, state);
                     break;
                 case LOADING:
-                    sql = buildSqlStartLoad(records, state);
+                    sql = buildSqlStartLoad(records, state, insertLabel);
                     break;
                 case LOADED:
                     sql = buildSqlFinishLoad(records, state);
@@ -136,6 +149,12 @@ public class RepoAccessor {
         return sql;
     }
 
+    protected String buildListLoadingFile(long pipeId) {
+        String sql = String.format(FileListTableRepo.SELECT_FILES_BY_STATE,
+                pipeId, Strings.quote(FileListRepo.PipeFileState.LOADING.toString()));
+        return sql;
+    }
+
     protected String buildDeleteByPipe(long pipeId) {
         return String.format(FileListTableRepo.DELETE_BY_PIPE, pipeId);
     }
@@ -160,9 +179,10 @@ public class RepoAccessor {
         return sb.toString();
     }
 
-    public String buildSqlStartLoad(List<PipeFileRecord> records, FileListRepo.PipeFileState state) {
+    public String buildSqlStartLoad(List<PipeFileRecord> records, FileListRepo.PipeFileState state, String label) {
         StringBuilder sb = new StringBuilder();
-        sb.append(String.format(FileListTableRepo.UPDATE_FILE_STATE_START_LOAD, Strings.quote(state.toString())));
+        sb.append(String.format(FileListTableRepo.UPDATE_FILE_STATE_START_LOAD,
+                Strings.quote(state.toString()), Strings.quote(label)));
         sb.append(records.stream().map(PipeFileRecord::toUniqueLocator).collect(Collectors.joining(" OR ")));
         return sb.toString();
     }

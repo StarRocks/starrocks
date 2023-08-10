@@ -31,6 +31,7 @@ import com.starrocks.sql.ast.pipe.PipeName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -183,6 +184,15 @@ public class PipeManager {
         try {
             lock.readLock().lock();
             return pipeMap.values().stream().filter(Pipe::isRunnable).collect(Collectors.toList());
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    public List<Pipe> getAllPipes() {
+        try {
+            lock.readLock().lock();
+            return new ArrayList<>(pipeMap.values());
         } finally {
             lock.readLock().unlock();
         }

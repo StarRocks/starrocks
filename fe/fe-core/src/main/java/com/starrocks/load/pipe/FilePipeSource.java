@@ -129,7 +129,6 @@ public class FilePipeSource implements GsonPostProcessable {
                 break;
             }
         }
-        fileListRepo.updateFileState(piece.getFiles(), FileListRepo.PipeFileState.LOADING);
 
         return piece;
     }
@@ -142,7 +141,7 @@ public class FilePipeSource implements GsonPostProcessable {
         // TODO: distinguish file granular error message
         String errorMsg = taskDesc.getErrorMsg();
         piece.getFiles().forEach(file -> file.errorMessage = errorMsg);
-        fileListRepo.updateFileState(piece.getFiles(), state);
+        fileListRepo.updateFileState(piece.getFiles(), state, null);
     }
 
     public void setAutoIngest(boolean autoIngest) {
@@ -185,7 +184,7 @@ public class FilePipeSource implements GsonPostProcessable {
      * Build insert sql from original pipe statement
      * Example: original sql: insert into tbl select * from files('path'='xxx')
      */
-    public static String buildInsertSql(Pipe pipe, FilePipePiece piece) {
+    public static String buildInsertSql(Pipe pipe, FilePipePiece piece, String label) {
         String originalSql = pipe.getOriginSql();
         Map<String, String> originalProperties = pipe.getProperties();
         StatementBase sqlStmt = SqlParser.parse(originalSql, new SessionVariable()).get(0);
@@ -194,11 +193,14 @@ public class FilePipeSource implements GsonPostProcessable {
         InsertStmt insertStmt = (InsertStmt) sqlStmt;
         SelectRelation select = (SelectRelation) insertStmt.getQueryStatement().getQueryRelation();
 
-        // build a new Files table function
+        // replace with a new Files table function
         Map<String, String> properties = new HashMap<>(originalProperties);
         String files =
                 piece.getFiles().stream().map(PipeFileRecord::getFileName).collect(Collectors.joining(","));
         properties.put(TableFunctionTable.PROPERTY_PATH, files);
+        // replace with an insert label
+        insertStmt.setLabel(label);
+
         FileTableFunctionRelation fileRelation = new FileTableFunctionRelation(properties, NodePosition.ZERO);
         select.setRelation(fileRelation);
         return AstToSQLBuilder.toSQL(sqlStmt);

@@ -28,6 +28,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ParseUtil;
+import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.VariableMgr;
@@ -42,6 +43,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.PipeAnalyzer;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionStatus;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -57,6 +60,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 /**
  * Pipe: continuously load and unload data
@@ -96,6 +100,7 @@ public class Pipe implements GsonPostProcessable {
     private int failedTaskExecutionCount = 0;
     private int pollIntervalSecond = DEFAULT_POLL_INTERVAL;
     private long lastPolledTime = 0;
+    private boolean recovered = false;
 
     protected Pipe(PipeId id, String name, TableName targetTable, FilePipeSource sourceTable, String originSql) {
         this.name = Preconditions.checkNotNull(name);
@@ -116,6 +121,7 @@ public class Pipe implements GsonPostProcessable {
                 stmt.getInsertSql());
         stmt.getDataSource().initPipeId(pipeId);
         res.properties = stmt.getProperties();
+        res.recovered = true;
         res.processProperties();
         return res;
     }
@@ -183,6 +189,61 @@ public class Pipe implements GsonPostProcessable {
     }
 
     /**
+     * Recovery after restart, to guarantee exactly-once ingestion
+     * 1. Persist the insert label along with file before loading state
+     * 2. Check the insert success or not by insert-label after restart recovery
+     * 3. As a result, we could clearly distinguish insert success or not,
+     * so that each file would not be ingested repeatedly
+     */
+    public void recovery() {
+        if (recovered) {
+            return;
+        }
+        LOG.info("pipe {} start to recover", name);
+
+        GlobalTransactionMgr txnMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        long dbId = getPipeId().getDbId();
+        List<PipeFileRecord> loadingFiles = pipeSource.getFileListRepo().listLoadingFiles();
+
+        if (CollectionUtils.isEmpty(loadingFiles)) {
+            recovered = true;
+            return;
+        }
+
+        for (PipeFileRecord file : loadingFiles) {
+            if (StringUtils.isEmpty(file.insertLabel)) {
+                file.loadState = FileListRepo.PipeFileState.ERROR;
+            } else {
+                TransactionStatus txnStatus = txnMgr.getLabelStatus(dbId, file.insertLabel);
+                if (txnStatus == null || txnStatus.isFailed()) {
+                    file.loadState = FileListRepo.PipeFileState.ERROR;
+                } else {
+                    file.loadState = FileListRepo.PipeFileState.LOADED;
+                }
+            }
+        }
+
+        List<PipeFileRecord> failedFiles = loadingFiles.stream()
+                .filter(x -> x.loadState == FileListRepo.PipeFileState.ERROR)
+                .collect(Collectors.toList());
+        List<PipeFileRecord> loadedFiles = loadingFiles.stream()
+                .filter(x -> x.loadState == FileListRepo.PipeFileState.LOADED)
+                .collect(Collectors.toList());
+
+        if (CollectionUtils.isNotEmpty(failedFiles)) {
+            pipeSource.getFileListRepo().updateFileState(failedFiles, FileListRepo.PipeFileState.ERROR, null);
+        }
+        if (CollectionUtils.isNotEmpty(loadedFiles)) {
+            pipeSource.getFileListRepo().updateFileState(loadedFiles, FileListRepo.PipeFileState.LOADED, null);
+        }
+
+        LOG.info("{} pipe recovered to state {}, failed-files: {}, loaded-files: {}",
+                name, state, failedFiles, loadedFiles);
+        recovered = true;
+        persistPipe();
+    }
+
+    /**
      * Pull PipePiece from source, and build new tasks
      */
     private void buildNewTasks() {
@@ -205,15 +266,19 @@ public class Pipe implements GsonPostProcessable {
         try {
             lock.writeLock().lock();
 
-            String sqlTask = FilePipeSource.buildInsertSql(this, piece);
             long taskId = GlobalStateMgr.getCurrentState().getNextId();
             PipeId pipeId = getPipeId();
             String uniqueName = PipeTaskDesc.genUniqueTaskName(getName(), taskId, 0);
             String dbName = GlobalStateMgr.getCurrentState().mayGetDb(pipeId.getDbId())
                     .map(Database::getOriginName)
                     .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR));
+            String sqlTask = FilePipeSource.buildInsertSql(this, piece, uniqueName);
             PipeTaskDesc taskDesc = new PipeTaskDesc(taskId, uniqueName, dbName, sqlTask, piece);
             taskDesc.setErrorLimit(FAILED_TASK_THRESHOLD);
+
+            // Persist the loading state
+            fileSource.getFileListRepo()
+                    .updateFileState(piece.getFiles(), FileListRepo.PipeFileState.LOADING, uniqueName);
 
             runningTasks.put(taskId, taskDesc);
             loadStatus.loadingFiles += piece.getNumFiles();
@@ -403,9 +468,12 @@ public class Pipe implements GsonPostProcessable {
         getPipeSource().getFileListRepo().destroy();
     }
 
+    public boolean isRecovered() {
+        return recovered;
+    }
+
     public boolean isRunnable() {
-        return this.state != null &&
-                this.state.equals(State.RUNNING);
+        return recovered && this.state != null && this.state.equals(State.RUNNING);
     }
 
     public List<PipeTaskDesc> getRunningTasks() {
@@ -498,6 +566,10 @@ public class Pipe implements GsonPostProcessable {
         this.lastPolledTime = value;
     }
 
+    public void setState(State state) {
+        this.state = state;
+    }
+
     @Override
     public void gsonPostProcess() throws IOException {
         this.runningTasks = new HashMap<>();
@@ -584,6 +656,7 @@ public class Pipe implements GsonPostProcessable {
     }
 
     public enum State {
+        RECOVERING,
         SUSPEND,
         RUNNING,
         FINISHED,

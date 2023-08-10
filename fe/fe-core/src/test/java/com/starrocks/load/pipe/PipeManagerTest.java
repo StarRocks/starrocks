@@ -248,7 +248,7 @@ public class PipeManagerTest {
             private List<PipeFileRecord> records = new ArrayList<>();
 
             @Mock
-            public void updateFileState(List<PipeFileRecord> files, FileListRepo.PipeFileState state) {
+            public void updateFileState(List<PipeFileRecord> files, FileListRepo.PipeFileState state, String label) {
                 for (PipeFileRecord file : files) {
                     records.stream().filter(x -> x.equals(file)).findFirst().get().loadState = state;
                 }
@@ -613,8 +613,8 @@ public class PipeManagerTest {
             FilePipePiece piece = new FilePipePiece();
             piece.addFile(new PipeFileRecord(pipe.getId(), "a.parquet", "v1", 1));
             piece.addFile(new PipeFileRecord(pipe.getId(), "b.parquet", "v1", 1));
-            String sql = FilePipeSource.buildInsertSql(pipe, piece);
-            Assert.assertEquals("INSERT INTO `tbl1` SELECT *\n" +
+            String sql = FilePipeSource.buildInsertSql(pipe, piece, "insert_label");
+            Assert.assertEquals("INSERT INTO `tbl1` WITH LABEL insert_label SELECT *\n" +
                     "FROM FILES('path'='a.parquet,b.parquet','batch_size'='10GB')", sql);
             dropPipe(pipeName);
         }
@@ -627,8 +627,8 @@ public class PipeManagerTest {
             FilePipePiece piece = new FilePipePiece();
             piece.addFile(new PipeFileRecord(pipe.getId(), "a.parquet", "v1", 1));
             piece.addFile(new PipeFileRecord(pipe.getId(), "b.parquet", "v1", 1));
-            String sql = FilePipeSource.buildInsertSql(pipe, piece);
-            Assert.assertEquals("INSERT INTO `tbl1` SELECT `col_int`, `col_string`\n" +
+            String sql = FilePipeSource.buildInsertSql(pipe, piece, "insert_label");
+            Assert.assertEquals("INSERT INTO `tbl1` WITH LABEL insert_label SELECT `col_int`, `col_string`\n" +
                     "FROM FILES('path'='a.parquet,b.parquet','batch_size'='10GB')", sql);
             dropPipe(pipeName);
         }

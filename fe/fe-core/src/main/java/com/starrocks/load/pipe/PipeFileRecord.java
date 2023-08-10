@@ -69,6 +69,7 @@ public class PipeFileRecord {
     public LocalDateTime startLoadTime;
     public LocalDateTime finishLoadTime;
     public String errorMessage;
+    public String insertLabel;
 
     public PipeFileRecord() {
     }
@@ -143,6 +144,12 @@ public class PipeFileRecord {
                     if (errorMessageElement != null && !errorMessageElement.isJsonNull()) {
                         file.errorMessage = errorMessageElement.getAsString();
                     }
+                }
+            }
+            if (dataArray.size() > 10) {
+                String insertLabel = dataArray.get(10).getAsString();
+                if (StringUtils.isNotEmpty(insertLabel)) {
+                    file.insertLabel = insertLabel;
                 }
             }
 
@@ -261,6 +268,10 @@ public class PipeFileRecord {
 
     public long getErrorLine() {
         return 0L;
+    }
+
+    public String getInsertLabel() {
+        return insertLabel;
     }
 
     @Override

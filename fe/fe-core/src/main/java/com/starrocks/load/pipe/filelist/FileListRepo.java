@@ -40,6 +40,8 @@ public abstract class FileListRepo {
      */
     public abstract List<PipeFileRecord> listUnloadedFiles();
 
+    public abstract List<PipeFileRecord> listLoadingFiles();
+
     /**
      * Add files into the list, as unloaded state
      * If some files have already been loaded, they will not been added
@@ -53,7 +55,7 @@ public abstract class FileListRepo {
      * 2. ERROR: load failed
      * 3. SKIPPED: manually skip the file
      */
-    public abstract void updateFileState(List<PipeFileRecord> files, PipeFileState state);
+    public abstract void updateFileState(List<PipeFileRecord> files, PipeFileState state, String insertLabel);
 
     /**
      * Cleanup expired file records

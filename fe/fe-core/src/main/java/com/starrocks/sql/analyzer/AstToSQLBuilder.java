@@ -346,10 +346,13 @@ public class AstToSQLBuilder {
             }
 
             // target
-            sb.append(insert.getTableName().toSql());
+            sb.append(insert.getTableName().toSql()).append(" ");
             // TODO: not support specify partition and columns
 
-            sb.append(" ");
+            // label
+            if (StringUtils.isNotEmpty(insert.getLabel())) {
+                sb.append("WITH LABEL ").append(insert.getLabel()).append(" ");
+            }
 
             // source
             if (insert.getQueryStatement() != null) {
