@@ -522,10 +522,6 @@ public class MaterializedViewRewriter {
         return true;
     }
 
-    private boolean isSupportViewDeltaJoin(Table table) {
-        return table.isNativeTableOrMaterializedView() || table.isHiveTable();
-    }
-
     public OptExpression rewrite() {
         final OptExpression queryExpression = mvRewriteContext.getQueryExpression();
         final OptExpression mvExpression = materializationContext.getMvExpression();
@@ -578,17 +574,6 @@ public class MaterializedViewRewriter {
                                            OptExpression mvExpression) {
         List<TableScanDesc> queryTableScanDescs = MvUtils.getTableScanDescs(queryExpression);
         List<TableScanDesc> mvTableScanDescs = MvUtils.getTableScanDescs(mvExpression);
-        // do not support external table now
-        if (queryTableScanDescs.stream().anyMatch(
-                tableScanDesc -> !isSupportViewDeltaJoin(tableScanDesc.getTable()))) {
-            logMVRewrite(mvRewriteContext, "Rewrite view delta failed: query tables are not supported for rewrite");
-            return null;
-        }
-        if (mvTableScanDescs.stream().anyMatch(
-                tableScanDesc -> !isSupportViewDeltaJoin(tableScanDesc.getTable()))) {
-            logMVRewrite(mvRewriteContext, "Rewrite view delta failed: mv tables are not supported for rewrite");
-            return null;
-        }
 
         // NOTE: When queries/mvs have multi same tables in snowflake-schema mode, eg:
         // MV   : B <-> A <-> D <-> C <-> E <-> A <-> B

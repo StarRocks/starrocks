@@ -37,8 +37,9 @@ import java.util.stream.Collectors;
 // a table may have multi foreign key constraints.
 public class ForeignKeyConstraint {
     private static final Logger LOG = LogManager.getLogger(ForeignKeyConstraint.class);
-    private static final String FOREIGN_KEY_REGEX = "((\\.?\\w+:?)*)\\s*\\(((,?\\s*\\w+\\s*)+)\\)\\s+((?i)REFERENCES)\\s+" +
-            "((\\.?\\w+:?)+)\\s*\\(((,?\\s*\\w+\\s*)+)\\)";
+
+    private static final String FOREIGN_KEY_REGEX = "((\\.?\\w+:?-?)*)\\s*\\(((,?\\s*\\w+\\s*)+)\\)\\s+((?i)REFERENCES)\\s+" +
+            "((\\.?\\w+:?-?)+)\\s*\\(((,?\\s*\\w+\\s*)+)\\)";
 
     public static final Pattern FOREIGN_KEY_PATTERN = Pattern.compile(FOREIGN_KEY_REGEX);
 
@@ -114,7 +115,7 @@ public class ForeignKeyConstraint {
             }
             Matcher foreignKeyMatcher = FOREIGN_KEY_PATTERN.matcher(constraintDesc);
             if (!foreignKeyMatcher.find()) {
-                LOG.warn("invalid constraint:{}", foreignKeyConstraintDescs);
+                LOG.warn("invalid constraint:{}", constraintDesc);
                 continue;
             }
 
