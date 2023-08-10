@@ -618,7 +618,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // The number of seconds the server waits for activity on a noninteractive connection before closing it.
     @VariableMgr.VarAttr(name = WAIT_TIMEOUT)
-    private int waitTimeout = 28800;
+    private int waitTimeout = 60;
 
     // The number of seconds to wait for a block to be written to a connection before aborting the write
     @VariableMgr.VarAttr(name = NET_WRITE_TIMEOUT)
