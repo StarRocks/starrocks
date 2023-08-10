@@ -21,6 +21,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class BackendCoreStat {
 
@@ -28,8 +29,9 @@ public class BackendCoreStat {
 
     private static int DEFAULT_CORES_OF_BE = 1;
 
-    private static ConcurrentHashMap<Long, Integer> numOfHardwareCoresPerBe = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<Long, Integer> numOfHardwareCoresPerBe = new ConcurrentHashMap<>();
     private static AtomicInteger cachedAvgNumOfHardwareCores = new AtomicInteger(-1);
+    private static final ReentrantLock lock = new ReentrantLock();
 
     public static void setNumOfHardwareCoresOfBe(long be, int numOfCores) {
         Integer previous = numOfHardwareCoresPerBe.put(be, numOfCores);
@@ -67,28 +69,28 @@ public class BackendCoreStat {
     }
 
     public static int getAvgNumOfHardwareCoresOfBe() {
+        // optimistic path
         int snapshotAvg = cachedAvgNumOfHardwareCores.get();
         if (snapshotAvg > 0) {
             return snapshotAvg;
         }
 
-        cachedAvgNumOfHardwareCores.compareAndSet(snapshotAvg, 0);
-        Integer[] numCoresArray = new Integer[0];
-        numCoresArray = numOfHardwareCoresPerBe.values().toArray(numCoresArray);
-        if (numCoresArray.length == 0) {
-            return DEFAULT_CORES_OF_BE;
+        // pessimistic path
+        try {
+            lock.lock();
+            if (numOfHardwareCoresPerBe.isEmpty()) {
+                return DEFAULT_CORES_OF_BE;
+            }
+            int avg = numOfHardwareCoresPerBe.values().stream().reduce(Integer::sum).orElse(0)
+                    / numOfHardwareCoresPerBe.size();
+            avg = Math.max(DEFAULT_CORES_OF_BE, avg);
+            cachedAvgNumOfHardwareCores.set(avg);
+            LOG.info("update avgNumOfHardwareCoresOfBe to {}", avg);
+            LOG.info("current cpuCores stats: {}", numOfHardwareCoresPerBe);
+            return avg;
+        } finally {
+            lock.unlock();
         }
-        int sum = 0;
-        for (Integer v : numCoresArray) {
-            sum += v;
-        }
-        int newAvg = sum / numCoresArray.length;
-        snapshotAvg = 0;
-        // Update the cached value if numOfHardwareCoresPerBe is changed(cachedAvgNumOfHardwareCores = -1)
-        cachedAvgNumOfHardwareCores.compareAndSet(snapshotAvg, newAvg);
-        LOG.info("update avgNumOfHardwareCoresOfBe to {}", newAvg);
-        LOG.info("current cpuCores stats: {}", numOfHardwareCoresPerBe);
-        return newAvg;
     }
 
     public static int getDefaultDOP() {
