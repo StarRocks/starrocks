@@ -753,8 +753,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             Long v = partitionKeyToId.get(key);
             if (v == null) {
                 partitionKeyToId.put(key, size);
-                size += 1;
                 v = size;
+                size += 1;
             }
             ret.add(v);
         }
