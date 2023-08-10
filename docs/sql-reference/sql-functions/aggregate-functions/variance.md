@@ -20,26 +20,6 @@ Returns a DOUBLE value.
 
 ## Examples
 
-<<<<<<< HEAD
-```plain text
-MySQL > select variance(scan_rows)
-from log_statis
-group by datetime;
-+-----------------------+
-| variance(`scan_rows`) |
-+-----------------------+
-|    5.6183332881176211 |
-+-----------------------+
-
-MySQL > select var_pop(scan_rows)
-from log_statis
-group by datetime;
-+----------------------+
-| var_pop(`scan_rows`) |
-+----------------------+
-|   5.6230744719006163 |
-+----------------------+
-=======
 ```plaintext
 MySQL > select var_pop(i_current_price), i_rec_start_date from item group by i_rec_start_date;
 +--------------------------+------------------+
@@ -62,7 +42,6 @@ MySQL > select variance(i_current_price), i_rec_start_date from item group by i_
 |         337.9318386924912 | 2000-10-27       |
 |        333.80931439318346 | 2001-10-27       |
 +---------------------------+------------------+
->>>>>>> 41ea837d3 ([Doc] add corr related functions and update window functions (#28776))
 ```
 
 ## keyword
