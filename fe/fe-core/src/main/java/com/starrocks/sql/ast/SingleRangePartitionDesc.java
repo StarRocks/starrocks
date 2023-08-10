@@ -135,21 +135,20 @@ public class SingleRangePartitionDesc extends PartitionDesc {
             }
         }
 
-        if (partColNum == 1) {
-            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
-                String storageCoolDownTTL = properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
-                PeriodDuration periodDuration = TimeUtils.parseHumanReadablePeriodOrDuration(storageCoolDownTTL);
-                if (partitionKeyDesc.isMax()) {
-                    partitionDataProperty = new DataProperty(TStorageMedium.SSD, DataProperty.MAX_COOLDOWN_TIME_MS);
-                } else {
-                    String stringUpperValue = partitionKeyDesc.getUpperValues().get(0).getStringValue();
-                    DateTimeFormatter dateTimeFormatter = DateUtils.probeFormat(stringUpperValue);
-                    LocalDateTime upperTime = DateUtils.parseStringWithDefaultHSM(stringUpperValue, dateTimeFormatter);
-                    LocalDateTime updatedUpperTime = upperTime.plus(periodDuration);
-                    DateLiteral dateLiteral = new DateLiteral(updatedUpperTime, Type.DATETIME);
-                    long coolDownTimeStamp = dateLiteral.unixTimestamp(TimeUtils.getTimeZone());
-                    partitionDataProperty = new DataProperty(TStorageMedium.SSD, coolDownTimeStamp);
-                }
+        if (partColNum == 1 && properties != null
+                && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
+            String storageCoolDownTTL = properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
+            PeriodDuration periodDuration = TimeUtils.parseHumanReadablePeriodOrDuration(storageCoolDownTTL);
+            if (partitionKeyDesc.isMax()) {
+                partitionDataProperty = new DataProperty(TStorageMedium.SSD, DataProperty.MAX_COOLDOWN_TIME_MS);
+            } else {
+                String stringUpperValue = partitionKeyDesc.getUpperValues().get(0).getStringValue();
+                DateTimeFormatter dateTimeFormatter = DateUtils.probeFormat(stringUpperValue);
+                LocalDateTime upperTime = DateUtils.parseStringWithDefaultHSM(stringUpperValue, dateTimeFormatter);
+                LocalDateTime updatedUpperTime = upperTime.plus(periodDuration);
+                DateLiteral dateLiteral = new DateLiteral(updatedUpperTime, Type.DATETIME);
+                long coolDownTimeStamp = dateLiteral.unixTimestamp(TimeUtils.getTimeZone());
+                partitionDataProperty = new DataProperty(TStorageMedium.SSD, coolDownTimeStamp);
             }
         } else {
             // analyze data property
