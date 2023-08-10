@@ -381,6 +381,7 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
         }
         ctx->buffer->pos += remove_bytes;
         ctx->receive_bytes += remove_bytes;
+        ctx->total_receive_bytes += remove_bytes;
     }
     ctx->total_received_data_cost_nanos += (MonotonicNanos() - start_read_data_time);
 }
