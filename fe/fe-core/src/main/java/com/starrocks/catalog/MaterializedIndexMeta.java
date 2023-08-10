@@ -90,8 +90,6 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
 
     private Expr whereClause = null;
 
-    private boolean whereClauseAnalyzed = false;
-
     public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
                                  short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
                                  OriginStatement defineStmt, List<Integer> sortKeyIdxes) {
@@ -226,9 +224,6 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         if (indexMeta.whereClause != this.whereClause) {
             return false;
         }
-        if (indexMeta.whereClauseAnalyzed != this.whereClauseAnalyzed) {
-            return false;
-        }
         return true;
     }
 
@@ -240,21 +235,12 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         this.targetTableId = targetTableId;
     }
 
-    public void setWhereClause(Expr whereClause, boolean whereClauseAnalyzed) {
+    public void setWhereClause(Expr whereClause) {
         this.whereClause = whereClause;
-        this.whereClauseAnalyzed = whereClauseAnalyzed;
-    }
-
-    public void setWhereClauseAnalyzed(boolean whereClauseAnalyzed) {
-        this.whereClauseAnalyzed = whereClauseAnalyzed;
     }
 
     public Expr getWhereClause() {
         return whereClause;
-    }
-
-    public boolean isWhereClauseAnalyzed() {
-        return whereClauseAnalyzed;
     }
 
     public MetaIndexType getMetaIndexType() {
@@ -292,7 +278,6 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         Map<String, Expr> columnNameToDefineExpr = MetaUtils.parseColumnNameToDefineExpr(defineStmt);
         if (columnNameToDefineExpr.containsKey(CreateMaterializedViewStmt.where_col_name)) {
             whereClause = columnNameToDefineExpr.get(CreateMaterializedViewStmt.where_col_name);
-            setWhereClause(whereClause, false);
         }
         setColumnsDefineExpr(columnNameToDefineExpr);
     }
