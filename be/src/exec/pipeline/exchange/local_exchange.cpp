@@ -14,12 +14,14 @@
 
 #include "exec/pipeline/exchange/local_exchange.h"
 
+#include <memory>
+
 #include "column/chunk.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exprs/expr_context.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
-
 Status Partitioner::partition_chunk(const ChunkPtr& chunk, int32_t num_partitions,
                                     std::vector<uint32_t>& partition_row_indexes) {
     size_t num_rows = chunk->num_rows();
@@ -116,14 +118,14 @@ Status RandomPartitioner::shuffle_channel_ids(const ChunkPtr& chunk, int32_t num
     return Status::OK();
 }
 
-PartitionExchanger::PartitionExchanger(const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager,
+PartitionExchanger::PartitionExchanger(const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager,
                                        LocalExchangeSourceOperatorFactory* source, const TPartitionType::type part_type,
                                        const std::vector<ExprContext*>& partition_expr_ctxs)
         : LocalExchanger(strings::Substitute("Partition($0)", to_string(part_type)), memory_manager, source),
           _part_type(part_type),
           _partition_exprs(partition_expr_ctxs) {}
 
-KeyPartitionExchanger::KeyPartitionExchanger(const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager,
+KeyPartitionExchanger::KeyPartitionExchanger(const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager,
                                              LocalExchangeSourceOperatorFactory* source,
                                              const std::vector<ExprContext*>& partition_expr_ctxs,
                                              const size_t num_sinks)
