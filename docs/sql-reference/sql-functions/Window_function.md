@@ -368,13 +368,8 @@ Returns the value of the row that lags the current row by `offset` rows. This fu
 
 Syntax:
 
-<<<<<<< HEAD
 ~~~Haskell
 LAG(expr[, offset[, default]])
-=======
-```SQL
-LAG(expr [IGNORE NULLS] [, offset[, default]])
->>>>>>> 41ea837d3 ([Doc] add corr related functions and update window functions (#28776))
 OVER([<partition_by_clause>] [<order_by_clause>])
 ```
 
@@ -388,7 +383,6 @@ Example:
 
 Calculate the `closing_price` of the previous day. In this example, `default` is set to 0, which means 0 is returned if no matching row is found.
 
-<<<<<<< HEAD
 ~~~SQL
 select stock_symbol, closing_date, closing_price,
     lag(closing_price, 1, 0)
@@ -399,28 +393,9 @@ select stock_symbol, closing_date, closing_price,
 from stock_ticker
 order by closing_date;
 ~~~
-=======
-```SQL
-CREATE TABLE test_tbl (col_1 INT, col_2 INT)
-DISTRIBUTED BY HASH(col_1);
-
-INSERT INTO test_tbl VALUES 
-    (1, NULL),
-    (2, 4),
-    (3, NULL),
-    (4, 2),
-    (5, NULL),
-    (6, 7),
-    (7, 6),
-    (8, 5),
-    (9, NULL),
-    (10, NULL);
-```
->>>>>>> 41ea837d3 ([Doc] add corr related functions and update window functions (#28776))
 
 Output:
 
-<<<<<<< HEAD
 ~~~Plain
 +--------------+---------------------+---------------+-------------------+
 | stock_symbol | closing_date        | closing_price | yesterday closing |
@@ -436,57 +411,6 @@ Output:
 ~~~
 
 The first row shows what happens when there is no previous row. The function returns the ***`default`*** value 0.
-=======
-```Plain
-SELECT col_1, col_2, LAG(col_2,2,0) OVER (ORDER BY col_1) 
-FROM test_tbl ORDER BY col_1;
-+-------+-------+---------------------------------------------+
-| col_1 | col_2 | lag(col_2, 2, 0) OVER (ORDER BY col_1 ASC ) |
-+-------+-------+---------------------------------------------+
-|     1 |  NULL |                                           0 |
-|     2 |     4 |                                           0 |
-|     3 |  NULL |                                        NULL |
-|     4 |     2 |                                           4 |
-|     5 |  NULL |                                        NULL |
-|     6 |     7 |                                           2 |
-|     7 |     6 |                                        NULL |
-|     8 |     5 |                                           7 |
-|     9 |  NULL |                                           6 |
-|    10 |  NULL |                                           5 |
-+-------+-------+---------------------------------------------+
-```
-
-For the first two rows, no previous two rows exist and the default value 0 is returned.
-
-For NULL in row 3, the value two rows backward is NULL and NULL is returned because NULL values are allowed.
-
-Example 2: IGNORE NULLS is specified
-
-Use the preceding table and parameter settings.
-
-```SQL
-SELECT col_1, col_2, LAG(col_2 IGNORE NULLS,2,0) OVER (ORDER BY col_1) 
-FROM test_tbl ORDER BY col_1;
-+-------+-------+---------------------------------------------+
-| col_1 | col_2 | lag(col_2, 2, 0) OVER (ORDER BY col_1 ASC ) |
-+-------+-------+---------------------------------------------+
-|     1 |  NULL |                                           0 |
-|     2 |     4 |                                           0 |
-|     3 |  NULL |                                           0 |
-|     4 |     2 |                                           0 |
-|     5 |  NULL |                                           4 |
-|     6 |     7 |                                           4 |
-|     7 |     6 |                                           2 |
-|     8 |     5 |                                           7 |
-|     9 |  NULL |                                           6 |
-|    10 |  NULL |                                           6 |
-+-------+-------+---------------------------------------------+
-```
-
-For rows 1 to 4, the system cannot find two non-NULL values for each of them in the previous rows and the default value 0 is returned.
-
-For value 6 in row 7, the value two rows backward is NULL and NULL is ignored because IGNORE NULLS is specified. The system continues to search for non-null values and 2 in row 4 is returned.
->>>>>>> 41ea837d3 ([Doc] add corr related functions and update window functions (#28776))
 
 ### LAST_VALUE()
 
@@ -533,13 +457,8 @@ Data types that can be queried by `lead()` are the same as those supported by [l
 
 Syntax
 
-<<<<<<< HEAD
 ~~~Haskell
 LEAD(expr[, offset[, default]])
-=======
-```sql
-LEAD(expr [IGNORE NULLS] [, offset[, default]])
->>>>>>> 41ea837d3 ([Doc] add corr related functions and update window functions (#28776))
 OVER([<partition_by_clause>] [<order_by_clause>])
 ```
 
@@ -553,7 +472,6 @@ Example:
 
 Calculate the trending of closing prices between two days, that is, whether the price of the next day is higher or lower. `default` is set to 0, which means 0 is returned if no matching row is found.
 
-<<<<<<< HEAD
 ~~~SQL
 select stock_symbol, closing_date, closing_price,
     case(lead(closing_price, 1, 0) 
@@ -565,28 +483,9 @@ select stock_symbol, closing_date, closing_price,
 from stock_ticker
 order by closing_date;
 ~~~
-=======
-```SQL
-CREATE TABLE test_tbl (col_1 INT, col_2 INT)
-DISTRIBUTED BY HASH(col_1);
-
-INSERT INTO test_tbl VALUES 
-    (1, NULL),
-    (2, 4),
-    (3, NULL),
-    (4, 2),
-    (5, NULL),
-    (6, 7),
-    (7, 6),
-    (8, 5),
-    (9, NULL),
-    (10, NULL);
-```
->>>>>>> 41ea837d3 ([Doc] add corr related functions and update window functions (#28776))
 
 Output
 
-<<<<<<< HEAD
 ~~~Plain
 +--------------+---------------------+---------------+---------------+
 | stock_symbol | closing_date        | closing_price | trending      |
@@ -601,58 +500,6 @@ Output
 +--------------+---------------------+---------------+---------------+
 ~~~
 
-=======
-```Plain
-SELECT col_1, col_2, LEAD(col_2,2,0) OVER (ORDER BY col_1) 
-FROM test_tbl ORDER BY col_1;
-+-------+-------+----------------------------------------------+
-| col_1 | col_2 | lead(col_2, 2, 0) OVER (ORDER BY col_1 ASC ) |
-+-------+-------+----------------------------------------------+
-|     1 |  NULL |                                         NULL |
-|     2 |     4 |                                            2 |
-|     3 |  NULL |                                         NULL |
-|     4 |     2 |                                            7 |
-|     5 |  NULL |                                            6 |
-|     6 |     7 |                                            5 |
-|     7 |     6 |                                         NULL |
-|     8 |     5 |                                         NULL |
-|     9 |  NULL |                                            0 |
-|    10 |  NULL |                                            0 |
-+-------+-------+----------------------------------------------+
-```
-
-For the first row, the value two rows forward is NULL and NULL is returned because NULL values are allowed.
-
-For the last two rows, no subsequent two rows exist and the default value 0 is returned.
-
-Example 2: IGNORE NULLS is specified
-
-Use the preceding table and parameter settings.
-
-```SQL
-SELECT col_1, col_2, LEAD(col_2 IGNORE NULLS,2,0) OVER (ORDER BY col_1) 
-FROM test_tbl ORDER BY col_1;
-+-------+-------+----------------------------------------------+
-| col_1 | col_2 | lead(col_2, 2, 0) OVER (ORDER BY col_1 ASC ) |
-+-------+-------+----------------------------------------------+
-|     1 |  NULL |                                            2 |
-|     2 |     4 |                                            7 |
-|     3 |  NULL |                                            7 |
-|     4 |     2 |                                            6 |
-|     5 |  NULL |                                            6 |
-|     6 |     7 |                                            5 |
-|     7 |     6 |                                            0 |
-|     8 |     5 |                                            0 |
-|     9 |  NULL |                                            0 |
-|    10 |  NULL |                                            0 |
-+-------+-------+----------------------------------------------+
-```
-
-For rows 7 to 10, the system cannot find two non-null values in the subsequent rows and the default value 0 is returned.
-
-For the first row, the value two rows forward is NULL and NULL is ignored because IGNORE NULLS is specified. The system continues to search for the second non-null value and 2 in row 4 is returned.
-
->>>>>>> 41ea837d3 ([Doc] add corr related functions and update window functions (#28776))
 ### MAX()
 
 Returns the maximum value of the specified rows in the current window.
