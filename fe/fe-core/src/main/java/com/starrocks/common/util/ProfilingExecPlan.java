@@ -186,7 +186,7 @@ public class ProfilingExecPlan {
             PlanNode planRoot = fragment.getPlanRoot();
 
             ProfilingFragment lightFragment = new ProfilingFragment(visitSink(sink),
-                    visitNode(profilingPlan, execPlan, planRoot, visitedElements));
+                    visitNode(execPlan, planRoot, visitedElements));
             profilingPlan.addFragment(lightFragment);
         }
 
@@ -232,7 +232,7 @@ public class ProfilingExecPlan {
         return element;
     }
 
-    private static ProfilingElement visitNode(ProfilingExecPlan profilingPlan, ExecPlan execPlan, PlanNode node,
+    private static ProfilingElement visitNode(ExecPlan execPlan, PlanNode node,
                                               Map<Integer, ProfilingElement> visitedElements) {
         if (visitedElements.containsKey(node.getId().asInt())) {
             return visitedElements.get(node.getId().asInt());
@@ -244,7 +244,7 @@ public class ProfilingExecPlan {
         buildUniqueInfos(node, element);
 
         for (PlanNode child : node.getChildren()) {
-            element.addChild(visitNode(profilingPlan, execPlan, child, visitedElements));
+            element.addChild(visitNode(execPlan, child, visitedElements));
         }
 
         visitedElements.put(element.getId(), element);
@@ -252,6 +252,9 @@ public class ProfilingExecPlan {
     }
 
     private static void buildCostEstimation(ExecPlan execPlan, ProfilingElement element) {
+        if (ConnectContext.get() == null) {
+            return;
+        }
         OptExpression optExpression = execPlan.getOptExpression(element.getId());
         if (optExpression != null) {
             CostEstimate cost = CostModel.calculateCostEstimate(new ExpressionContext(optExpression));
