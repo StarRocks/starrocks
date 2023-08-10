@@ -267,7 +267,7 @@ PROPERTIES (
 );
 ```
 
-After creating the table, you can load it with `INSERT INTO` ... `SELECT FROM FILES()`:
+After creating the table, you can load it with `INSERT INTO` ‥. `SELECT FROM FILES()`:
 
 ```SQL
 INSERT INTO user_behavior_declared
