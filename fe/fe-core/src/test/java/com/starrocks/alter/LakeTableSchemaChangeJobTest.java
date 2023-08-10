@@ -40,6 +40,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MarkedCountDownLatch;
+import com.starrocks.epack.server.WarehouseManagerEpack;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -50,14 +51,18 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.warehouse.LocalWarehouse;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
+import mockit.Mocked;
 import org.apache.commons.lang3.concurrent.ConcurrentUtils;
 import org.junit.After;
 import org.junit.Assert;
@@ -85,14 +90,28 @@ public class LakeTableSchemaChangeJobTest {
     private LakeTable table;
     private List<Long> shadowTabletIds = new ArrayList<>();
 
+    @Mocked
+    private WarehouseManagerEpack warehouseMgr;
+
     public LakeTableSchemaChangeJobTest() {
         connectContext = new ConnectContext(null);
         connectContext.setStartTime();
         connectContext.setThreadLocalInfo();
+        warehouseMgr = new WarehouseManagerEpack();
     }
 
     @Before
     public void before() throws Exception {
+        new Expectations() {
+            {
+                warehouseMgr.getWarehouse(anyString);
+                result = new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID,
+                        "An internal warehouse contains all compute nodes in this system");
+                minTimes = 0;
+            }
+        };
+
         new MockUp<StarOSAgent>() {
             @Mock
             public List<Long> createShards(int shardCount, FilePathInfo path, FileCacheInfo cache, long groupId,
@@ -109,6 +128,13 @@ public class LakeTableSchemaChangeJobTest {
             @Mock
             public void logSaveNextId(long nextId) {
 
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return warehouseMgr;
             }
         };
 
@@ -227,7 +253,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testPendingJobNoAliveBackend() {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet, long workerGroupId) {
                 return null;
             }
         };
@@ -289,7 +315,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testCreateTabletFailed() {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet, long workerGroupId) {
                 return 1L;
             }
         };
@@ -322,7 +348,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testCreateTabletSuccess() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet, long workerGroupId) {
                 return 1L;
             }
         };
@@ -362,7 +388,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testPreviousTxnNotFinished() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet, long workerGroupId) {
                 return 1L;
             }
         };
@@ -410,7 +436,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testThrowAnalysisExceptiondWhileWaitingTxn() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet, long workerGroupId) {
                 return 1L;
             }
         };
@@ -461,7 +487,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testTableNotExistWhileWaitingTxn() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet, long workerGroupId) {
                 return 1L;
             }
         };
@@ -523,7 +549,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testTableDroppedBeforeRewriting() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet, long workerGroupId) {
                 return 1L;
             }
         };
@@ -592,7 +618,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testAlterTabletFailed() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet, long workerGroupId) {
                 return 1L;
             }
         };
@@ -652,7 +678,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testAlterTabletSuccess() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet, long workerGroupId) {
                 return 1L;
             }
         };
@@ -721,12 +747,13 @@ public class LakeTableSchemaChangeJobTest {
     public void testPublishVersion() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet, long workerGroupId) {
                 return 1L;
             }
 
             @Mock
-            public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion) throws
+            public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion,
+                                       long newVersion, long workerGroupId) throws
                     RpcException {
                 throw new RpcException("publish version failed", "127.0.0.1");
             }
@@ -817,12 +844,13 @@ public class LakeTableSchemaChangeJobTest {
         // Make publish version success
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet, long workerGroupId) {
                 return 1L;
             }
 
             @Mock
-            public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion) {
+            public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion,
+                                       long newVersion, long workerGroupId) {
                 // nothing to do
             }
         };

@@ -979,7 +979,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withAlterIndexInfo(hasIndexChange, indexes)
                 .withStartTime(ConnectContext.get().getStartTime())
                 .withBloomFilterColumns(bfColumns, bfFpp)
-                .withBloomFilterColumnsChanged(hasBfChange);
+                .withBloomFilterColumnsChanged(hasBfChange)
+                .withWarehouse(ConnectContext.get().getCurrentWarehouse());
 
         // begin checking each table
         // ATTN: DO NOT change any meta in this loop

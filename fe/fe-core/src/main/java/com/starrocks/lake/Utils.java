@@ -30,7 +30,6 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.collections.CollectionUtils;
@@ -102,9 +101,9 @@ public class Utils {
         return groupMap;
     }
 
-    public static void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion)
-            throws NoAliveBackendException, RpcException {
-        publishVersion(tablets, txnId, baseVersion, newVersion, null, WarehouseManager.DEFAULT_CLUSTER_ID);
+    public static void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
+                                      long workerGroupId) throws NoAliveBackendException, RpcException {
+        publishVersion(tablets, txnId, baseVersion, newVersion, null, workerGroupId);
     }
 
     public static void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion, Map<Long,

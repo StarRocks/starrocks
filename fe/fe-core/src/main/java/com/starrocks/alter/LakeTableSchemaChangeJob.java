@@ -52,6 +52,7 @@ import com.starrocks.lake.Utils;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -64,6 +65,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.warehouse.Warehouse;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -129,6 +131,9 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     // Mapping from partition id to commit version
     private Map<Long, Long> commitVersionMap;
 
+    @SerializedName(value = "warehouse")
+    private String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+
     @SerializedName(value = "sortKeyIdxes")
     private List<Integer> sortKeyIdxes;
 
@@ -152,6 +157,10 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
     void setStartTime(long startTime) {
         this.startTime = startTime;
+    }
+
+    void setWarehouse(String warehouse) {
+        this.warehouse = warehouse;
     }
 
     void setSortKeyIdxes(List<Integer> sortKeyIdxes) {
@@ -335,12 +344,18 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
                         LakeTablet lakeTablet = ((LakeTablet) shadowTablet);
-                        Long backendId = Utils.chooseBackend(lakeTablet);
-                        if (backendId == null) {
-                            throw new AlterCancelException("No alive backend");
+
+                        Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouse);
+                        if (currentWh == null) {
+                            throw new AlterCancelException("warehouse " + warehouse + " not exist.");
                         }
-                        countDownLatch.addMark(backendId, shadowTabletId);
-                        CreateReplicaTask createReplicaTask = new CreateReplicaTask(backendId, dbId, tableId, partitionId,
+                        Long nodeId = Utils.chooseBackend(lakeTablet, currentWh.getAnyAvailableCluster().getWorkerGroupId());
+                        if (nodeId == null) {
+                            throw new AlterCancelException("No alive backend or compute node in warehouse " + warehouse);
+                        }
+
+                        countDownLatch.addMark(nodeId, shadowTabletId);
+                        CreateReplicaTask createReplicaTask = new CreateReplicaTask(nodeId, dbId, tableId, partitionId,
                                 shadowIdxId, shadowTabletId, shadowShortKeyColumnCount, 0, Partition.PARTITION_INIT_VERSION,
                                 originKeysType, TStorageType.COLUMN, storageMedium, copiedShadowSchema, bfColumns, bfFpp,
                                 countDownLatch, indexes, table.isInMemory(), table.enablePersistentIndex(),
@@ -403,18 +418,26 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 // the schema change task will transform the data before visible version(included).
                 long visibleVersion = partition.getVisibleVersion();
 
+                Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouse);
+                if (currentWh == null) {
+                    throw new AlterCancelException("warehouse " + warehouse + " not exist.");
+                }
+
                 Map<Long, MaterializedIndex> shadowIndexMap = partitionIndexMap.row(partitionId);
                 for (Map.Entry<Long, MaterializedIndex> entry : shadowIndexMap.entrySet()) {
                     long shadowIdxId = entry.getKey();
                     MaterializedIndex shadowIdx = entry.getValue();
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
-                        Long backendId = Utils.chooseBackend((LakeTablet) shadowTablet);
-                        if (backendId == null) {
-                            throw new AlterCancelException("No alive backend");
+                        Long nodeId = Utils.chooseBackend((LakeTablet) shadowTablet,
+                                currentWh.getAnyAvailableCluster().getWorkerGroupId());
+
+                        if (nodeId == null) {
+                            throw new AlterCancelException("No alive backend or compute node");
                         }
+
                         long shadowTabletId = shadowTablet.getId();
                         long originTabletId = partitionIndexTabletMap.row(partitionId).get(shadowIdxId).get(shadowTabletId);
-                        AlterReplicaTask alterTask = AlterReplicaTask.alterLakeTablet(backendId, dbId, tableId, partitionId,
+                        AlterReplicaTask alterTask = AlterReplicaTask.alterLakeTablet(nodeId, dbId, tableId, partitionId,
                                 shadowIdxId, shadowTabletId, originTabletId, visibleVersion, jobId, watershedTxnId);
                         getOrCreateSchemaChangeBatchTask().addTask(alterTask);
                     }
@@ -573,8 +596,13 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             for (long partitionId : partitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> shadowIndexMap = partitionIndexMap.row(partitionId);
+                Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouse);
+                if (currentWh == null) {
+                    throw new Exception("warehouse " + warehouse + " not exist");
+                }
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
-                    Utils.publishVersion(shadowIndex.getTablets(), watershedTxnId, 1, commitVersion);
+                    Utils.publishVersion(shadowIndex.getTablets(), watershedTxnId, 1, commitVersion,
+                            currentWh.getAnyAvailableCluster().getWorkerGroupId());
                 }
             }
             return true;
