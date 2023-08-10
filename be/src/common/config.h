@@ -752,6 +752,7 @@ CONF_Int64(object_storage_request_timeout_ms, "-1");
 
 // orc reader
 CONF_Bool(enable_orc_late_materialization, "true");
+CONF_Bool(enable_orc_libdeflate_decompression, "true");
 // orc reader, if RowGroup/Stripe/File size is less than this value, read all data.
 CONF_Int32(orc_file_cache_max_size, "8388608");
 CONF_Int32(orc_natural_read_size, "8388608");

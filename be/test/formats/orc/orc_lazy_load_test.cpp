@@ -16,8 +16,8 @@
 
 #include <orc/Writer.hh>
 
-#include "orc_test_util/MemoryInputStream.hh"
-#include "orc_test_util/MemoryOutputStream.hh"
+#include "formats/orc/memory_stream/MemoryInputStream.hh"
+#include "formats/orc/memory_stream/MemoryOutputStream.hh"
 
 namespace starrocks {
 
