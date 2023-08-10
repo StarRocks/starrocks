@@ -150,8 +150,6 @@ set(EXEC_FILES
         ./formats/avro/nullable_column_test.cpp
         ./formats/orc/orc_chunk_reader_test.cpp
         ./formats/orc/orc_lazy_load_test.cpp
-        ./formats/orc/orc_test_util/MemoryOutputStream.cc
-        ./formats/orc/orc_test_util/MemoryInputStream.cc
         ./formats/parquet/parquet_schema_test.cpp
         ./formats/parquet/encoding_test.cpp
         ./formats/parquet/page_reader_test.cpp
