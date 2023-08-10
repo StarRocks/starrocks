@@ -108,18 +108,11 @@ Status LakeMetaReader::_init_seg_meta_collecters(const LakeMetaReaderParams& par
 
 Status LakeMetaReader::_get_segments(lake::Tablet tablet, const Version& version,
                                      std::vector<SegmentSharedPtr>* segments) {
-    size_t footer_size_hint = 16 * 1024;
-    uint32_t seg_id = 0;
     ASSIGN_OR_RETURN(auto rowsets, tablet.get_rowsets(version.second));
     for (const auto& rowset : rowsets) {
-        auto rowset_metadata = rowset->metadata();
-        segments->reserve(rowset_metadata.segments().size());
-        for (const auto& seg_name : rowset_metadata.segments()) {
-            ASSIGN_OR_RETURN(auto segment, _tablet->load_segment(seg_name, seg_id++, &footer_size_hint, false));
-            segments->emplace_back(std::move(segment));
-        }
+        ASSIGN_OR_RETURN(auto rowset_segs, rowset->segments(false));
+        segments->insert(segments->end(), rowset_segs.begin(), rowset_segs.end());
     }
-
     return Status::OK();
 }
 
