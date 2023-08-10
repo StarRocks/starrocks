@@ -731,7 +731,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     private Set<String> getUpdatedPartitionNamesOfExternalTable(Table baseTable, boolean isQueryRewrite) {
-        if (!baseTable.isHiveTable()) {
+        if (!baseTable.isHiveTable() && !baseTable.isJDBCTable()) {
             // Only support hive table now
             return null;
         }
