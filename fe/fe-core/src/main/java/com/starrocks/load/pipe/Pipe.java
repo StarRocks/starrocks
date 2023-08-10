@@ -258,8 +258,15 @@ public class Pipe implements GsonPostProcessable {
         if (piece == null) {
             // EOS
             if (fileSource.eos()) {
-                changeState(State.FINISHED, true);
-                LOG.info("pipe {} finish all tasks, change state to {}", this, state);
+                boolean allLoaded = fileSource.allLoaded();
+                if (allLoaded) {
+                    changeState(State.FINISHED, true);
+                    LOG.info("pipe {} finish all tasks, change state to {}", this, state);
+                } else {
+                    // Some error happen
+                    changeState(State.ERROR, true);
+                    LOG.info("pipe {} finish all tasks but with error files, change state to {}, ", this, state);
+                }
             }
             return;
         }

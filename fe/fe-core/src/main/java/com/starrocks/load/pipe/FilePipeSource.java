@@ -113,6 +113,15 @@ public class FilePipeSource implements GsonPostProcessable {
         return eos;
     }
 
+    public boolean allLoaded() {
+        List<PipeFileRecord> errorFiles = fileListRepo.listFilesByState(FileListRepo.PipeFileState.ERROR);
+        if (CollectionUtils.isNotEmpty(errorFiles)) {
+            return false;
+        }
+        List<PipeFileRecord> unloadedFiles = fileListRepo.listFilesByState(FileListRepo.PipeFileState.UNLOADED);
+        return CollectionUtils.isEmpty(unloadedFiles);
+    }
+
     public FilePipePiece pullPiece() {
         Preconditions.checkArgument(batchSize > 0, "not support batch_size=0");
 
