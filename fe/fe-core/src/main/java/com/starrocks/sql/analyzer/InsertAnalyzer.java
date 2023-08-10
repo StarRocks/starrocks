@@ -117,7 +117,7 @@ public class InsertAnalyzer {
                     "You need to use iceberg catalog.");
         }
 
-        Set<Long> targetPartitionIds = Sets.newHashSet();
+        List<Long> targetPartitionIds = Lists.newArrayList();
         PartitionNames targetPartitionNames = insertStmt.getTargetPartitionNames();
         if (table instanceof OlapTable) {
             OlapTable olapTable = (OlapTable) table;
@@ -129,7 +129,14 @@ public class InsertAnalyzer {
                             targetPartitionNames.getPos());
                 }
 
-                for (String partitionName : targetPartitionNames.getPartitionNames()) {
+                List<String> deduplicatePartitionNames =
+                        targetPartitionNames.getPartitionNames().stream().distinct().collect(Collectors.toList());
+                if (deduplicatePartitionNames.size() != targetPartitionNames.getPartitionNames().size()) {
+                    insertStmt.setTargetPartitionNames(new PartitionNames(targetPartitionNames.isTemp(),
+                            deduplicatePartitionNames, targetPartitionNames.getPartitionColNames(),
+                            targetPartitionNames.getPartitionColValues(), targetPartitionNames.getPos()));
+                }
+                for (String partitionName : deduplicatePartitionNames) {
                     if (Strings.isNullOrEmpty(partitionName)) {
                         throw new SemanticException("there are empty partition name", targetPartitionNames.getPos());
                     }
@@ -250,7 +257,7 @@ public class InsertAnalyzer {
         }
 
         insertStmt.setTargetTable(table);
-        insertStmt.setTargetPartitionIds(Lists.newArrayList(targetPartitionIds));
+        insertStmt.setTargetPartitionIds(targetPartitionIds);
         insertStmt.setTargetColumns(targetColumns);
         if (session.getDumpInfo() != null) {
             session.getDumpInfo().addTable(database.getFullName(), table);
