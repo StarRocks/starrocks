@@ -52,6 +52,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.load.loadv2.LoadJob;
@@ -965,9 +966,10 @@ public class DefaultCoordinator extends Coordinator {
                 now - lastTime > (connectContext.getSessionVariable().getRuntimeProfileReportInterval() * 950L) &&
                 lastRuntimeProfileUpdateTime.compareAndSet(lastTime, now)) {
             RuntimeProfile profile = topProfileSupplier.get();
-            ExecPlan execPlan = execPlanSupplier.get();
+            ExecPlan plan = execPlanSupplier.get();
             profile.addChild(buildMergedQueryProfile(null));
-            ProfileManager.getInstance().pushProfile(execPlan, profile);
+            ProfilingExecPlan profilingPlan = plan == null ? null : plan.getProfilingPlan();
+            ProfileManager.getInstance().pushProfile(profilingPlan, profile);
         }
 
         lock();
