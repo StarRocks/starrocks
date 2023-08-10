@@ -97,6 +97,16 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
                     Status st = FileSystem::Default()->delete_file(l1_file_name);
                     LOG(WARNING) << "delete error l1 index file: " << l1_file_name << ", status: " << st;
                 }
+                if (index_meta.l2_versions_size() > 0) {
+                    for (int i = 0; i < index_meta.l2_versions_size(); i++) {
+                        EditVersion l2_version = index_meta.l2_versions(i);
+                        std::string l2_file_name =
+                                strings::Substitute("index.l2.$0.$1$2", l2_version.major(), l2_version.minor(),
+                                                    index_meta.l2_version_merged(i) ? MergeSuffix : "");
+                        Status st = FileSystem::Default()->delete_file(l2_file_name);
+                        LOG(WARNING) << "delete error l2 index file: " << l2_file_name << ", status: " << st;
+                    }
+                }
             }
         }
     }
@@ -161,6 +171,8 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
     //   4. write all data into new tmp _l0 index file (tmp file will be delete in _build_commit())
     index_meta.clear_l0_meta();
     index_meta.clear_l1_version();
+    index_meta.clear_l2_versions();
+    index_meta.clear_l2_version_merged();
     index_meta.set_key_size(_key_size);
     index_meta.set_format_version(PERSISTENT_INDEX_VERSION_2);
     _version.to_pb(index_meta.mutable_version());
@@ -277,7 +289,8 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
         return status;
     }
 
-    RETURN_IF_ERROR(_delete_expired_index_file(_version, _l1_version));
+    RETURN_IF_ERROR(_delete_expired_index_file(_version, _l1_version,
+                                               _l2_versions.size() > 0 ? _l2_versions[0] : EditVersion()));
     _dump_snapshot = false;
     _flushed = false;
 
