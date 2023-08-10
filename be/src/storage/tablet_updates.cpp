@@ -36,6 +36,7 @@
 #include "storage/del_vector.h"
 #include "storage/empty_iterator.h"
 #include "storage/merge_iterator.h"
+#include "storage/persistent_index.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_meta_manager.h"
@@ -252,6 +253,7 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
 
     RETURN_IF_ERROR(_load_meta_and_log(tablet_updates_pb));
 
+    _rowset_stats.clear();
     std::set<uint32_t> unapplied_rowsets;
     auto st = _load_rowsets_and_check_consistency(unapplied_rowsets);
     if (st.is_corruption()) {
@@ -1254,7 +1256,9 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
     full_rowset_size = rowset->total_segment_data_size();
 
     PersistentIndexMetaPB index_meta;
+    PersistentIndexMetaLockGuard index_meta_lock_guard;
     if (enable_persistent_index) {
+        index.get_persistent_index_meta_lock_guard(&index_meta_lock_guard);
         st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
         if (!st.ok() && !st.is_not_found()) {
             std::string msg = strings::Substitute("get persistent index meta failed: $0 $1", st.to_string(),
@@ -1914,7 +1918,9 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     int64_t t_index_delvec = MonotonicMillis();
 
     PersistentIndexMetaPB index_meta;
+    PersistentIndexMetaLockGuard index_meta_lock_guard;
     if (enable_persistent_index) {
+        index.get_persistent_index_meta_lock_guard(&index_meta_lock_guard);
         st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
         if (!st.ok() && !st.is_not_found()) {
             std::string msg = strings::Substitute("get persistent index meta failed: $0", st.to_string());
@@ -3769,6 +3775,33 @@ void TabletUpdates::get_basic_info_extra(TabletBasicInfo& info) {
     }
 }
 
+double TabletUpdates::get_pk_index_write_amp_score() {
+    double score = 0.0;
+    auto& index_cache = StorageEngine::instance()->update_manager()->index_cache();
+    auto index_entry = index_cache.get(_tablet.tablet_id());
+    if (index_entry != nullptr) {
+        auto& index = index_entry->value();
+        score = index.get_write_amp_score();
+        index_cache.release(index_entry);
+    }
+    return score;
+}
+
+Status TabletUpdates::pk_index_major_compaction() {
+    Status st = Status::OK();
+    auto& index_cache = StorageEngine::instance()->update_manager()->index_cache();
+    auto index_entry = index_cache.get(_tablet.tablet_id());
+    if (index_entry != nullptr) {
+        auto& index = index_entry->value();
+        st = index.major_compaction(&_tablet);
+        index_cache.release(index_entry);
+    }
+    if (!st.ok()) {
+        LOG(WARNING) << "PerstentIndex major compaction failed, tablet_id: " << _tablet.tablet_id() << " st: " << st;
+    }
+    return st;
+}
+
 void TabletUpdates::_to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const {
     updates_pb->Clear();
     for (const auto& version : _edit_version_infos) {
@@ -3972,15 +4005,18 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
             CHECK_FAIL(TabletMetaManager::put_del_vector(data_store, &wb, tablet_id, id, delvec));
         }
         // clear dcg before recover from snapshot meta. Otherwise it will fail in some case.
-        RETURN_IF_ERROR(TabletMetaManager::clear_delta_column_group(data_store, &wb, tablet_id));
+        CHECK_FAIL(TabletMetaManager::clear_delta_column_group(data_store, &wb, tablet_id));
         for (const auto& [rssid, dcglist] : snapshot_meta.delta_column_groups()) {
             for (const auto& dcg : dcglist) {
                 const std::vector<std::string> dcg_files = dcg->column_files(_tablet.schema_hash_path());
                 for (const auto& dcg_file : dcg_files) {
                     auto st = FileSystem::Default()->path_exists(dcg_file);
                     if (!st.ok()) {
-                        return Status::InternalError("delta column file: " + dcg_file +
-                                                     " does not exist: " + st.get_error_msg());
+                        auto msg = strings::Substitute("delta column file: $0 does not exist: $1", dcg_file,
+                                                       st.get_error_msg());
+                        LOG(ERROR) << msg;
+                        _set_error(msg);
+                        return Status::InternalError(msg);
                     }
                 }
             }

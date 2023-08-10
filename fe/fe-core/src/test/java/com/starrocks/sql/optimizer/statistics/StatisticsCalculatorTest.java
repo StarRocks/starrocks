@@ -254,6 +254,7 @@ public class StatisticsCalculatorTest {
                     false,
                     Lists.newArrayList(),
                     Lists.newArrayList(),
+                    Lists.newArrayList(),
                     false);
 
             GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
@@ -318,6 +319,7 @@ public class StatisticsCalculatorTest {
                         false,
                         Lists.newArrayList(),
                         Lists.newArrayList(),
+                        Lists.newArrayList(),
                         false);
 
         GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
@@ -375,6 +377,7 @@ public class StatisticsCalculatorTest {
                         false,
                         Lists.newArrayList(),
                         Lists.newArrayList(),
+                        Lists.newArrayList(),
                         false);
 
         GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
@@ -402,6 +405,7 @@ public class StatisticsCalculatorTest {
                         partitionIds,
                         null,
                         false,
+                        Lists.newArrayList(),
                         Lists.newArrayList(),
                         Lists.newArrayList(),
                         false);
@@ -464,6 +468,7 @@ public class StatisticsCalculatorTest {
                         false,
                         Lists.newArrayList(),
                         Lists.newArrayList(),
+                        Lists.newArrayList(),
                         false);
 
         GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
@@ -493,6 +498,7 @@ public class StatisticsCalculatorTest {
                         partitionIds,
                         null,
                         false,
+                        Lists.newArrayList(),
                         Lists.newArrayList(),
                         Lists.newArrayList(),
                         false);

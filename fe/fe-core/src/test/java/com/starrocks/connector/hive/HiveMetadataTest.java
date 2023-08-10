@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
@@ -30,6 +29,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
@@ -91,7 +91,7 @@ public class HiveMetadataTest {
         metastore = new HiveMetastore(client, "hive_catalog");
         cachingHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
                 metastore, executorForHmsRefresh, 100, 10, 1000, false);
-        hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration());
+        hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration(), MetastoreType.HMS, "hive_catalog");
 
         hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
         FileSystem fs = new MockedRemoteFileSystem(TEST_FILES);
@@ -298,6 +298,13 @@ public class HiveMetadataTest {
         ExceptionChecker.expectThrowsWithMsg(MetaNotFoundException.class,
                 "Failed to access database empty_db",
                 () -> hiveMetadata.dropDb("empty_db", true));
+    }
+
+    @Test
+    public void testMetastoreType() {
+        Assert.assertEquals(MetastoreType.HMS, MetastoreType.get("hive"));
+        Assert.assertEquals(MetastoreType.GLUE, MetastoreType.get("glue"));
+        Assert.assertEquals(MetastoreType.DLF, MetastoreType.get("dlf"));
     }
 
     @Test

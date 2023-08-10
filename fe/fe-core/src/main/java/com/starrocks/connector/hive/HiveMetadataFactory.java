@@ -17,6 +17,7 @@ package com.starrocks.connector.hive;
 
 import com.starrocks.connector.CachingRemoteFileConf;
 import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.RemoteFileOperations;
 import org.apache.hadoop.conf.Configuration;
@@ -36,6 +37,7 @@ public class HiveMetadataFactory {
     private final boolean isRecursive;
     private final boolean enableHmsEventsIncrementalSync;
     private final Configuration configuration;
+    private final MetastoreType metastoreType;
 
     public HiveMetadataFactory(String catalogName,
                                IHiveMetastore metastore,
@@ -45,7 +47,8 @@ public class HiveMetadataFactory {
                                ExecutorService pullRemoteFileExecutor,
                                boolean isRecursive,
                                boolean enableHmsEventsIncrementalSync,
-                               Configuration configuration) {
+                               Configuration configuration,
+                               MetastoreType metastoreType) {
         this.catalogName = catalogName;
         this.metastore = metastore;
         this.remoteFileIO = remoteFileIO;
@@ -55,13 +58,14 @@ public class HiveMetadataFactory {
         this.isRecursive = isRecursive;
         this.enableHmsEventsIncrementalSync = enableHmsEventsIncrementalSync;
         this.configuration = configuration;
+        this.metastoreType = metastoreType;
     }
 
     public HiveMetadata create() {
         HiveMetastoreOperations hiveMetastoreOperations = new HiveMetastoreOperations(
                 createQueryLevelInstance(metastore, perQueryMetastoreMaxNum),
                 metastore instanceof CachingHiveMetastore,
-                configuration);
+                configuration, metastoreType, catalogName);
         RemoteFileOperations remoteFileOperations = new RemoteFileOperations(
                 CachingRemoteFileIO.createQueryLevelInstance(remoteFileIO, perQueryCacheRemotePathMaxNum),
                 pullRemoteFileExecutor,

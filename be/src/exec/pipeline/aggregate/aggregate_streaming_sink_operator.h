@@ -35,8 +35,7 @@ public:
 
     bool has_output() const override { return false; }
     bool need_input() const override {
-        return !is_finished() && !_aggregator->is_streaming_all_states() &&
-               _aggregator->chunk_buffer_size() < Aggregator::MAX_CHUNK_BUFFER_SIZE;
+        return !is_finished() && !_aggregator->is_streaming_all_states() && !_aggregator->is_chunk_buffer_full();
     }
     bool is_finished() const override { return _is_finished || _aggregator->is_finished(); }
     Status set_finishing(RuntimeState* state) override;

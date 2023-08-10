@@ -80,10 +80,11 @@ void init_block_cache() {
         }
         cache_options.meta_path = config::block_cache_meta_path;
         cache_options.block_size = config::block_cache_block_size;
-        cache_options.checksum = config::block_cache_checksum_enable;
         cache_options.max_parcel_memory_mb = config::block_cache_max_parcel_memory_mb;
         cache_options.max_concurrent_inserts = config::block_cache_max_concurrent_inserts;
         cache_options.lru_insertion_point = config::block_cache_lru_insertion_point;
+        cache_options.enable_checksum = config::block_cache_checksum_enable;
+        cache_options.enable_direct_io = config::block_cache_direct_io_enable;
         cache_options.engine = config::block_cache_engine;
         EXIT_IF_ERROR(cache->init(cache_options));
     }

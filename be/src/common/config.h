@@ -754,6 +754,7 @@ CONF_Int64(object_storage_request_timeout_ms, "-1");
 CONF_Bool(enable_orc_late_materialization, "true");
 CONF_Int32(orc_row_index_cache_max_size, "1048576");
 CONF_Int32(orc_stripe_cache_max_size, "8388608");
+CONF_Bool(enable_orc_libdeflate_decompression, "true");
 CONF_Int32(orc_file_cache_max_size, "8388608");
 CONF_Int32(orc_natural_read_size, "8388608");
 CONF_mBool(orc_coalesce_read_enable, "true");
@@ -777,7 +778,7 @@ CONF_mDouble(scan_use_query_mem_ratio, "0.25");
 CONF_Double(connector_scan_use_query_mem_ratio, "0.3");
 
 // hdfs hedged read
-CONF_mBool(hdfs_client_enable_hedged_read, "false");
+CONF_Bool(hdfs_client_enable_hedged_read, "false");
 // dfs.client.hedged.read.threadpool.size
 CONF_Int32(hdfs_client_hedged_read_threadpool_size, "128");
 // dfs.client.hedged.read.threshold.millis
@@ -949,6 +950,7 @@ CONF_Int64(block_cache_lru_insertion_point, "1");
 // Set the default value empty to indicate whether it is manully configured by users.
 // If not, we need to adjust the default engine based on build switches like "WITH_CACHELIB" and "WITH_STARCACHE".
 CONF_String(block_cache_engine, "");
+CONF_Bool(block_cache_direct_io_enable, "false");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
@@ -957,6 +959,15 @@ CONF_mInt64(l0_max_mem_usage, "67108864");  // 64MB
 CONF_mInt64(l0_snapshot_size, "16777216"); // 16MB
 CONF_mInt64(max_tmp_l1_num, "10");
 CONF_mBool(enable_parallel_get_and_bf, "true");
+// Control if using the minor compaction strategy
+CONF_mBool(enable_pindex_minor_compaction, "true");
+// if l2 num is larger than this, stop doing async compaction,
+// add this config to prevent l2 grow too large.
+CONF_mInt64(max_allow_pindex_l2_num, "5");
+// control the background compaction threads
+CONF_mInt64(pindex_major_compaction_num_threads, "0");
+// control the persistent index schedule compaction interval
+CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
@@ -984,6 +995,8 @@ CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache={
 CONF_Int64(local_exchange_buffer_mem_limit_per_driver, "134217728"); // 128MB
 // only used for test. default: 128M
 CONF_mInt64(streaming_agg_limited_memory_size, "134217728");
+// pipeline streaming aggregate chunk buffer size
+CONF_mInt32(streaming_agg_chunk_buffer_size, "1024");
 CONF_mInt64(wait_apply_time, "6000"); // 6s
 
 // Max size of a binlog file. The default is 512MB.

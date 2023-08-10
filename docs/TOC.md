@@ -82,6 +82,7 @@
   + [External table](./data_source/External_table.md)
   + [File external table](./data_source/file_external_table.md)
   + [Data Cache](./data_source/data_cache.md)
+  + [Data lake-related FAQ](./data_source/datalake_faq.md)
 + Query Acceleration
   + [Gather CBO statistics](./using_starrocks/Cost_based_optimizer.md)
   + [Synchronous materialized view](./using_starrocks/Materialized_view-single_table.md)
@@ -341,6 +342,9 @@
       + [bitmap](./sql-reference/sql-functions/aggregate-functions/bitmap.md)
       + [bitmap_agg](./sql-reference/sql-functions/bitmap-functions/bitmap_agg.md)
       + [count](./sql-reference/sql-functions/aggregate-functions/count.md)
+      + [corr](./sql-reference/sql-functions/aggregate-functions/corr.md)
+      + [covar_pop](./sql-reference/sql-functions/aggregate-functions/covar_pop.md)
+      + [covar_samp](./sql-reference/sql-functions/aggregate-functions/covar_samp.md)
       + [group_concat](./sql-reference/sql-functions/string-functions/group_concat.md)
       + [grouping](./sql-reference/sql-functions/aggregate-functions/grouping.md)
       + [grouping_id](./sql-reference/sql-functions/aggregate-functions/grouping_id.md)

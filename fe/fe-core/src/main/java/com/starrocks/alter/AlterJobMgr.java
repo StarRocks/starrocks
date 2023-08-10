@@ -105,8 +105,6 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.sql.ast.AlterViewClause;
-import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CompactionClause;
@@ -335,7 +333,7 @@ public class AlterJobMgr {
     }
 
     private void processChangeMaterializedViewStatus(String status, String dbName,
-                                                        MaterializedView materializedView, Database db)
+                                                     MaterializedView materializedView, Database db)
             throws DdlException, MetaNotFoundException {
         if (!db.writeLockAndCheckExist()) {
             throw new DmlException("update meta failed. database:" + db.getFullName() + " not exist");
@@ -452,6 +450,20 @@ public class AlterJobMgr {
             foreignKeyConstraints = PropertyAnalyzer.analyzeForeignKeyConstraint(properties, db, materializedView);
             properties.remove(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT);
         }
+        TableProperty.QueryRewriteConsistencyMode oldExternalQueryRewriteConsistencyMode =
+                materializedView.getTableProperty().getForceExternalTableQueryRewrite();
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
+            String propertyValue = properties.get(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
+            oldExternalQueryRewriteConsistencyMode = TableProperty.analyzeExternalTableQueryRewrite(propertyValue);
+            properties.remove(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
+        }
+        TableProperty.QueryRewriteConsistencyMode oldQueryRewriteConsistencyMode =
+                materializedView.getTableProperty().getQueryRewriteConsistencyMode();
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY)) {
+            String propertyValue = properties.get(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY);
+            oldQueryRewriteConsistencyMode = TableProperty.analyzeQueryRewriteMode(propertyValue);
+            properties.remove(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY);
+        }
 
         if (!properties.isEmpty()) {
             if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
@@ -519,6 +531,20 @@ public class AlterJobMgr {
             curProp.put(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND,
                     propClone.get(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND));
             materializedView.setMaxMVRewriteStaleness(maxMVRewriteStaleness);
+            isChanged = true;
+        }
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
+            materializedView.getTableProperty().getProperties().
+                    put(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE,
+                            String.valueOf(oldExternalQueryRewriteConsistencyMode));
+            materializedView.getTableProperty().setForceExternalTableQueryRewrite(oldExternalQueryRewriteConsistencyMode);
+            isChanged = true;
+        }
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY)) {
+            materializedView.getTableProperty().getProperties().
+                    put(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY,
+                            String.valueOf(oldQueryRewriteConsistencyMode));
+            materializedView.getTableProperty().setQueryRewriteConsistencyMode(oldQueryRewriteConsistencyMode);
             isChanged = true;
         }
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(materializedView.getDbId(), materializedView);
@@ -1003,57 +1029,7 @@ public class AlterJobMgr {
         }
     }
 
-    public void processAlterView(AlterViewStmt stmt, ConnectContext ctx) throws DdlException {
-        TableName dbTableName = stmt.getTableName();
-        String dbName = dbTableName.getDb();
-
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-        if (db == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-        }
-
-        String tableName = dbTableName.getTbl();
-        db.writeLock();
-        try {
-            Table table = db.getTable(tableName);
-            if (table == null) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
-            }
-
-            if (table.getType() != TableType.VIEW) {
-                throw new DdlException("The specified table [" + tableName + "] is not a view");
-            }
-
-
-            AlterViewClause alterViewClause = (AlterViewClause) stmt.getAlterClause();
-            String inlineViewDef = alterViewClause.getInlineViewDef();
-            List<Column> newFullSchema = alterViewClause.getColumns();
-            long sqlMode = ctx.getSessionVariable().getSqlMode();
-
-            View view = (View) table;
-            String viewName = view.getName();
-
-            view.setInlineViewDefWithSqlMode(inlineViewDef, ctx.getSessionVariable().getSqlMode());
-            try {
-                view.init();
-            } catch (UserException e) {
-                throw new DdlException("failed to init view stmt", e);
-            }
-            view.setNewFullSchema(newFullSchema);
-
-            LocalMetastore.inactiveRelatedMaterializedView(db, view, String.format("base view %s changed", viewName));
-            db.dropTable(viewName);
-            db.registerTableUnlocked(view);
-
-            AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), view.getId(), inlineViewDef, newFullSchema, sqlMode);
-            GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo);
-            LOG.info("modify view[{}] definition to {}", viewName, inlineViewDef);
-        } finally {
-            db.writeUnlock();
-        }
-    }
-
-    public void replayModifyViewDef(AlterViewInfo alterViewInfo) throws DdlException {
+    public void alterView(AlterViewInfo alterViewInfo) {
         long dbId = alterViewInfo.getDbId();
         long tableId = alterViewInfo.getTableId();
         String inlineViewDef = alterViewInfo.getInlineViewDef();
@@ -1068,7 +1044,7 @@ public class AlterJobMgr {
             try {
                 view.init();
             } catch (UserException e) {
-                throw new DdlException("failed to init view stmt", e);
+                throw new AlterJobException("failed to init view stmt", e);
             }
             view.setNewFullSchema(newFullSchema);
 

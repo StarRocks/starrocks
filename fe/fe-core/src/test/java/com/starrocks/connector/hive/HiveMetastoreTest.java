@@ -192,6 +192,10 @@ public class HiveMetastoreTest {
         public void dropDatabase(String dbName, boolean deleteData) {
         }
 
+        public void createTable(Table table) {
+
+        }
+
         public void dropTable(String dbName, String tableName) {
 
         }

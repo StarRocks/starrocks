@@ -434,22 +434,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 baseTableAndPartitionNames.putAll(nonRefTableAndPartitionNames);
             }
 
-            for (Map.Entry<Table, Set<String>> e : baseTableAndPartitionNames.entrySet()) {
-                Table baseTable = e.getKey();
-                if (!(baseTable.isNativeTableOrMaterializedView() || baseTable.isHiveTable()) || baseTable.isView()) {
-                    throw new DmlException(
-                            "update meta failed. only OlapTable or HiveTable is supported");
-                }
-            }
             MaterializedView.AsyncRefreshContext refreshContext =
                     materializedView.getRefreshScheme().getAsyncRefreshContext();
-
             Map<Long, Map<String, MaterializedView.BasePartitionInfo>> changedOlapTablePartitionInfos =
                     getSelectedPartitionInfosOfOlapTable(baseTableAndPartitionNames);
             Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> changedExternalTablePartitionInfos
                     = getSelectedPartitionInfosOfExternalTable(baseTableAndPartitionNames);
             Preconditions.checkState(changedOlapTablePartitionInfos.size() + changedExternalTablePartitionInfos.size()
-                    == baseTableAndPartitionNames.size());
+                    <= baseTableAndPartitionNames.size());
             updateMetaForOlapTable(refreshContext, changedOlapTablePartitionInfos);
             updateMetaForExternalTable(refreshContext, changedExternalTablePartitionInfos);
 
@@ -749,14 +741,23 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return CollectionUtils.isNotEmpty(materializedView.getUpdatedPartitionNamesOfTable(table, false));
     }
 
-    private boolean needToRefreshNonPartitionTable(Table partitionTable) {
+    /**
+     * @param table : Whether this table can be supported for incremental refresh by partition or not.
+     */
+    private boolean unSupportRefreshByPartition(Table table) {
+        return !table.isOlapTableOrMaterializedView() && !table.isHiveTable() && !table.isCloudNativeTable();
+    }
+
+    /**
+     * Whether non-partitioned materialized view needs to be refreshed or not, it needs refresh when:
+     * - its base table is not supported refresh by partition.
+     * - its base table has updated.
+     */
+    private boolean isNonPartitionedMVNeedToRefresh() {
         for (Pair<BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
             Table snapshotTable = tablePair.second;
-            if (snapshotTable.getId() == partitionTable.getId()) {
-                continue;
-            }
             if (unSupportRefreshByPartition(snapshotTable)) {
-                continue;
+                return true;
             }
             if (needToRefreshTable(snapshotTable)) {
                 return true;
@@ -765,15 +766,18 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return false;
     }
 
-    private boolean unSupportRefreshByPartition(Table table) {
-        return !table.isOlapTableOrMaterializedView() && !table.isHiveTable() && !table.isCloudNativeTable();
-    }
-
-    private boolean unPartitionedMVNeedToRefresh() {
+    /**
+     * Whether partitioned materialized view needs to be refreshed or not base on the non-ref base tables, it needs refresh when:
+     * - its non-ref base table except un-supported base table has updated.
+     */
+    private boolean isPartitionedMVNeedToRefreshBaseOnNonRefTables(Table partitionTable) {
         for (Pair<BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
             Table snapshotTable = tablePair.second;
+            if (snapshotTable.getId() == partitionTable.getId()) {
+                continue;
+            }
             if (unSupportRefreshByPartition(snapshotTable)) {
-                return true;
+                continue;
             }
             if (needToRefreshTable(snapshotTable)) {
                 return true;
@@ -801,16 +805,26 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return needRefreshMvPartitionNames;
     }
 
-    private Set<String> getPartitionsToRefreshForMaterializedView(PartitionInfo partitionInfo,
+    /**
+     * @param mvPartitionInfo   : materialized view's partition info
+     * @param start             : materialized view's refresh start in this task run
+     * @param end               : materialized view's refresh end in this task run
+     * @param force             : whether this task run is force or not
+     * @return
+     * @throws AnalysisException
+     */
+    private Set<String> getPartitionsToRefreshForMaterializedView(PartitionInfo mvPartitionInfo,
                                                                   String start,
                                                                   String end,
                                                                   boolean force) throws AnalysisException {
         int partitionTTLNumber = mvContext.getPartitionTTLNumber();
+
+        // Force refresh
         if (force && start == null && end == null) {
-            if (partitionInfo instanceof SinglePartitionInfo) {
+            if (mvPartitionInfo instanceof SinglePartitionInfo) {
                 return materializedView.getPartitionNames();
             } else {
-                if (partitionInfo instanceof ListPartitionInfo) {
+                if (mvPartitionInfo instanceof ListPartitionInfo) {
                     return materializedView.getValidListPartitionMap(partitionTTLNumber).keySet();
                 } else {
                     return materializedView.getValidRangePartitionMap(partitionTTLNumber).keySet();
@@ -819,12 +833,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
 
         Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
-        if (partitionInfo instanceof SinglePartitionInfo) {
-            // for non-partitioned materialized view
-            if (force || unPartitionedMVNeedToRefresh()) {
+        if (mvPartitionInfo instanceof SinglePartitionInfo) {
+            // non-partitioned materialized view
+            if (force || isNonPartitionedMVNeedToRefresh()) {
                 return materializedView.getPartitionNames();
             }
-        } else if (partitionInfo instanceof ExpressionRangePartitionInfo) {
+        } else if (mvPartitionInfo instanceof ExpressionRangePartitionInfo) {
+            // range partitioned materialized views
             Expr partitionExpr = materializedView.getFirstPartitionRefTableExpr();
             Table refBaseTable = mvContext.getRefBaseTable();
 
@@ -833,7 +848,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             Set<String> mvRangePartitionNames = SyncPartitionUtils.getPartitionNamesByRangeWithPartitionLimit(
                     materializedView, start, end, partitionTTLNumber, isAutoRefresh);
 
-            if (needToRefreshNonPartitionTable(refBaseTable)) {
+            // check non-ref base tables
+            if (isPartitionedMVNeedToRefreshBaseOnNonRefTables(refBaseTable)) {
                 if (start == null && end == null) {
                     // if non partition table changed, should refresh all partitions of materialized view
                     return mvRangePartitionNames;
@@ -844,7 +860,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             mvRangePartitionNames, true);
                 }
             }
-            // check partition table
+
+            // check the ref base table
             if (partitionExpr instanceof SlotRef) {
                 return getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(refBaseTable, mvRangePartitionNames, force);
             } else if (partitionExpr instanceof FunctionCallExpr) {
@@ -860,13 +877,16 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 LOG.debug("Finish calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
                         " baseChangedPartitionNames: {}", needRefreshMvPartitionNames, baseChangedPartitionNames);
             }
-        } else if (partitionInfo instanceof ListPartitionInfo) {
+        } else if (mvPartitionInfo instanceof ListPartitionInfo) {
+            // list partitioned materialized view
             Table partitionTable = mvContext.getRefBaseTable();
             boolean isAutoRefresh = (mvContext.type == Constants.TaskType.PERIODICAL ||
                     mvContext.type == Constants.TaskType.EVENT_TRIGGERED);
             Set<String> mvListPartitionNames = SyncPartitionUtils.getPartitionNamesByListWithPartitionLimit(
                     materializedView, start, end, partitionTTLNumber, isAutoRefresh);
-            if (needToRefreshNonPartitionTable(partitionTable)) {
+
+            // check non-ref base tables
+            if (isPartitionedMVNeedToRefreshBaseOnNonRefTables(partitionTable)) {
                 if (start == null && end == null) {
                     // if non partition table changed, should refresh all partitions of materialized view
                     return mvListPartitionNames;
@@ -877,9 +897,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             mvListPartitionNames, true);
                 }
             }
+
+            // check the ref base table
             return getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(partitionTable, mvListPartitionNames, force);
         } else {
-            throw new DmlException("unsupported partition info type:" + partitionInfo.getClass().getName());
+            throw new DmlException("unsupported partition info type:" + mvPartitionInfo.getClass().getName());
         }
         return needRefreshMvPartitionNames;
     }
@@ -1378,8 +1400,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 } else if (table.isView()) {
                     continue;
                 } else {
-                    Preconditions.checkState(false, "Do not support get partition names and columns for" +
-                            "table type %s", table.getType());
+                    LOG.warn("Do not support get partition names and columns for" +
+                            " table type {}", table.getType());
                 }
             }
         }
@@ -1435,6 +1457,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                                 baseTableInfo);
                 changedOlapTablePartitionInfos.put(baseTableInfo, partitionInfos);
             }
+            // TODO: support iceberg
         }
         return changedOlapTablePartitionInfos;
     }
