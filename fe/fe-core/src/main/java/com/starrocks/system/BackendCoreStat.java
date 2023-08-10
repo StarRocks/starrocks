@@ -16,11 +16,16 @@
 package com.starrocks.system;
 
 import com.google.common.collect.ImmutableMap;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class BackendCoreStat {
+
+    private static final Logger LOG = LogManager.getLogger(BackendCoreStat.class);
+
     private static int DEFAULT_CORES_OF_BE = 1;
 
     private static ConcurrentHashMap<Long, Integer> numOfHardwareCoresPerBe = new ConcurrentHashMap<>();
@@ -28,6 +33,8 @@ public class BackendCoreStat {
 
     public static void setNumOfHardwareCoresOfBe(long be, int numOfCores) {
         Integer previous = numOfHardwareCoresPerBe.put(be, numOfCores);
+        LOG.info("set numOfHardwareCoresOfBe of be({}) to {}", be, numOfCores);
+        LOG.info("current cpuCores stats: {}", numOfHardwareCoresPerBe);
         if (previous == null || previous != numOfCores) {
             cachedAvgNumOfHardwareCores.set(-1);
         }
@@ -79,6 +86,8 @@ public class BackendCoreStat {
         snapshotAvg = 0;
         // Update the cached value if numOfHardwareCoresPerBe is changed(cachedAvgNumOfHardwareCores = -1)
         cachedAvgNumOfHardwareCores.compareAndSet(snapshotAvg, newAvg);
+        LOG.info("update avgNumOfHardwareCoresOfBe to {}", newAvg);
+        LOG.info("current cpuCores stats: {}", numOfHardwareCoresPerBe);
         return newAvg;
     }
 
