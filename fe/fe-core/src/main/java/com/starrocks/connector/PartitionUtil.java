@@ -42,6 +42,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -62,6 +63,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -188,11 +190,38 @@ public class PartitionUtil {
             } else if (value instanceof BoolLiteral) {
                 BoolLiteral boolValue = ((BoolLiteral) value);
                 values.add(String.valueOf(boolValue.getValue()));
+            } else if (key instanceof HivePartitionKey && value instanceof DateLiteral) {
+                // Special handle Hive timestamp partition key
+                values.add(getHiveFormatStringValue((DateLiteral) value));
             } else {
                 values.add(value.getStringValue());
             }
         }
         return values;
+    }
+
+    private static String getHiveFormatStringValue(DateLiteral dateLiteral) {
+        if (dateLiteral.getType().getPrimitiveType() == PrimitiveType.DATE) {
+            return String.format("%04d-%02d-%02d", dateLiteral.getYear(), dateLiteral.getMonth(), dateLiteral.getDay());
+        } else {
+            if (dateLiteral.getMicrosecond() == 0) {
+                String datetime = String.format("%04d-%02d-%02d %02d:%02d:%02d", dateLiteral.getYear(),
+                        dateLiteral.getMonth(),
+                        dateLiteral.getDay(), dateLiteral.getHour(), dateLiteral.getMinute(),
+                        dateLiteral.getSecond());
+                if (dateLiteral.getPrecision() > 0) {
+                    // 2007-01-01 10:35:00 => 2007-01-01 10:35:00.000000(precision=6)
+                    datetime = datetime + "." +
+                            String.join("", Collections.nCopies(dateLiteral.getPrecision(), "0"));
+                }
+                return datetime;
+            } else {
+                // 2007-01-01 10:35:00.123000 => 2007-01-01 10:35:00.123
+                return String.format("%04d-%02d-%02d %02d:%02d:%02d.%6d", dateLiteral.getYear(), dateLiteral.getMonth(),
+                        dateLiteral.getDay(), dateLiteral.getHour(), dateLiteral.getMinute(), dateLiteral.getSecond(),
+                        dateLiteral.getMicrosecond()).replaceFirst("0+$", "");
+            }
+        }
     }
 
     public static List<String> getPartitionNames(Table table) {
