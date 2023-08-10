@@ -31,7 +31,7 @@ The Partition By clause is similar to Group By. It groups the input rows by one 
 
 ### ORDER BY clause
 
-The `Order By` clause is basically the same as the outer `Order By`. It defines the order of the input rows. If`Partition By` is specified, `Order By` defines the order within each Partition grouping. The only difference is that `Order By n` (n is a positive integer) in the `OVER` clause is equivalent to no operation, whereas the n in the outer `Order By` indicates sorting by the nth column.
+The `Order By` clause is basically the same as the outer `Order By`. It defines the order of the input rows. If `Partition By` is specified, `Order By` defines the order within each Partition grouping. The only difference is that `Order By n` (n is a positive integer) in the `OVER` clause is equivalent to no operation, whereas `n` in the outer `Order By` indicates sorting by the nth column.
 
 Example:
 
@@ -1025,7 +1025,7 @@ from int_t where property in ('odd','even');
 +----+----------+--------------+
 ```
 
-## VARIANCE, VAR_POP, VARIANCE_POP
+### VARIANCE, VAR_POP, VARIANCE_POP
 
 Returns the population variance of an expression. VAR_POP and VARIANCE_POP are aliases of VARIANCE. These functions can be used as window functions since v2.5.10.
 
@@ -1075,7 +1075,7 @@ mysql> select variance(k) over (partition by no) FROM agg;
 +-------------------------------------+
 ```
 
-## VAR_SAMP, VARIANCE_SAMP
+### VAR_SAMP, VARIANCE_SAMP
 
 Returns the sample variance of an expression. These functions can be used as window functions since v2.5.10.
 
@@ -1125,7 +1125,7 @@ mysql> select VAR_SAMP(k) over (partition by no) FROM agg;
 +-------------------------------------+
 ```
 
-## STD, STDDEV, STDDEV_POP
+### STD, STDDEV, STDDEV_POP
 
 Returns the standard deviation of an expression. These functions can be used as window functions since v2.5.10.
 
@@ -1175,7 +1175,7 @@ mysql> select STD(k) over (partition by no) FROM agg;
 +--------------------------------+
 ```
 
-## STDDEV_SAMP
+### STDDEV_SAMP
 
 Returns the sample standard deviation of an expression. This function can be used as a window function since v2.5.10.
 
@@ -1225,7 +1225,7 @@ mysql> select STDDEV_SAMP(k) over (partition by no) FROM agg;
 +----------------------------------------+
 ```
 
-## COVAR_SAMP
+### COVAR_SAMP
 
 Returns the sample covariance of two expressions. This function is supported from v2.5.10. It is also an aggregate function.
 
@@ -1275,7 +1275,7 @@ mysql> select COVAR_SAMP(k, v) over (partition by no) FROM agg;
 +------------------------------------------+
 ```
 
-## COVAR_POP
+### COVAR_POP
 
 Returns the population covariance of two expressions. This function is supported from v2.5.10. It is also an aggregate function.
 
@@ -1325,7 +1325,7 @@ mysql> select COVAR_POP(k, v) over (partition by no) FROM agg;
 +-----------------------------------------+
 ```
 
-## CORR
+### CORR
 
 Returns the Pearson correlation coefficient between two expressions. This function is supported from v2.5.10. It is also an aggregate function.
 
