@@ -19,7 +19,7 @@ CloudCanal help users build a modern data stack in a simple way.
   - For Incremental DataTask, the `increBatchSize` and `increRingBufferSize` parameters can be adjusted accordingly.
 - Supported Source endpoints and features：
 
-  | Source Endpoints \ Feature | Schema Migration | Full Data | Incremental | Verification | 
+  | Source Endpoints \ Feature | Schema Migration | Full Data | Incremental | Verification |
     | --- | --- | --- | --- | --- |
   | Oracle                     | Yes | Yes | Yes | Yes |
   | PostgreSQL                 | Yes | Yes | Yes | Yes |
@@ -85,4 +85,3 @@ Once the DataSource has been added successfully, you can follow these steps to c
 - Check the status of DataJob. The DataJob will automatically go through the stages of Schema Migration, Full Data, and Incremental after it has been created
 
 ![image.png](../assets/3.11-8.png)
-
