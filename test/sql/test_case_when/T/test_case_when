@@ -517,3 +517,8 @@ select * from t0 where
 if (region = 'China', 1, 2) = NULL;
 select * from t0 where
 if (region = 'China', 1, 2) not in (NULL, 1);
+select * from t0 where (case when region = 'USA' then true when region like 'COM%' then false end) is null;
+select * from t0 where (case when ship_code is null then true when not 3 then false end) is null;
+select * from t0 where (case when ship_code is null then true when not null then false end) is null;
+select * from t0 where (case when ship_code is null then true when null then false end) is null;
+select * from t0 where (case when ship_code is null then true when 0 then false end) is null;

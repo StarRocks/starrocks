@@ -18,12 +18,13 @@ import com.starrocks.analysis.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator.CompoundType;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 
-public class NegateFilterShuttle extends BaseScalarOperatorShuttle {
+public class NegateFilterShuttle extends ScalarOperatorVisitor<ScalarOperator, Void> {
 
     private static NegateFilterShuttle INSTANCE = new NegateFilterShuttle();
 
@@ -102,6 +103,17 @@ public class NegateFilterShuttle extends BaseScalarOperatorShuttle {
     @Override
     public ScalarOperator visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
         return new IsNullPredicateOperator(!predicate.isNotNull(), predicate.getChild(0));
+    }
+
+    @Override
+    public ScalarOperator visitConstant(ConstantOperator literal, Void context) {
+        if (literal.isTrue()) {
+            return ConstantOperator.FALSE;
+        } else if (literal.isFalse()) {
+            return ConstantOperator.TRUE;
+        } else {
+            return new CompoundPredicateOperator(CompoundType.NOT, literal);
+        }
     }
 
 }
