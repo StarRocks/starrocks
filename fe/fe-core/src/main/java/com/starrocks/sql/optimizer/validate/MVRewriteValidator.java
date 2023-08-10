@@ -34,6 +34,11 @@ public class MVRewriteValidator {
     }
 
     public void validateMV(OptExpression physicalPlan) {
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext == null) {
+            return;
+        }
+
         PlannerProfile.LogTracer tracer = PlannerProfile.getLogTracer("Summary");
         if (tracer == null) {
             return;
@@ -41,7 +46,7 @@ public class MVRewriteValidator {
         List<String> mvNames = collectMaterializedViewNames(physicalPlan);
         if (mvNames.isEmpty()) {
             // Check whether plan has been rewritten success by rule.
-            Map<String, PlannerProfile.LogTracer> tracers = ConnectContext.get().getPlannerProfile().getTracers();
+            Map<String, PlannerProfile.LogTracer> tracers = connectContext.getPlannerProfile().getTracers();
             List<String> tracerNames = Lists.newArrayList();
             for (Map.Entry<String, PlannerProfile.LogTracer> e : tracers.entrySet()) {
                 if (e.getValue().getLogs().stream().anyMatch(x -> x.contains(MaterializedViewRewriter.REWRITE_SUCCESS))) {
@@ -49,6 +54,11 @@ public class MVRewriteValidator {
                 }
             }
             if (tracerNames.isEmpty()) {
+                if (connectContext.getSessionVariable().isEnableMaterializedViewRewriteOrError()) {
+                    throw new IllegalArgumentException("no executable plan with materialized view for this sql in " +
+                            connectContext.getSessionVariable().getMaterializedViewRewriteMode() + " mode.");
+                }
+
                 tracer.log("Query cannot be rewritten, please check the trace logs or " +
                         "`set enable_mv_optimizer_trace_log=on` to find more infos.");
             } else {
