@@ -3980,15 +3980,18 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
             CHECK_FAIL(TabletMetaManager::put_del_vector(data_store, &wb, tablet_id, id, delvec));
         }
         // clear dcg before recover from snapshot meta. Otherwise it will fail in some case.
-        RETURN_IF_ERROR(TabletMetaManager::clear_delta_column_group(data_store, &wb, tablet_id));
+        CHECK_FAIL(TabletMetaManager::clear_delta_column_group(data_store, &wb, tablet_id));
         for (const auto& [rssid, dcglist] : snapshot_meta.delta_column_groups()) {
             for (const auto& dcg : dcglist) {
                 const std::vector<std::string> dcg_files = dcg->column_files(_tablet.schema_hash_path());
                 for (const auto& dcg_file : dcg_files) {
                     auto st = FileSystem::Default()->path_exists(dcg_file);
                     if (!st.ok()) {
-                        return Status::InternalError("delta column file: " + dcg_file +
-                                                     " does not exist: " + st.get_error_msg());
+                        auto msg = strings::Substitute("delta column file: $0 does not exist: $1", dcg_file,
+                                                       st.get_error_msg());
+                        LOG(ERROR) << msg;
+                        _set_error(msg);
+                        return Status::InternalError(msg);
                     }
                 }
             }
