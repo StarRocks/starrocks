@@ -369,8 +369,12 @@ public class PartitionUtil {
             HiveTable hiveTable = (HiveTable) table;
             partitions = GlobalStateMgr.getCurrentState().getMetadataMgr().
                     getPartitions(hiveTable.getCatalogName(), table, partitionNames);
+        } else if (table.isJDBCTable()) {
+            JDBCTable hiveTable = (JDBCTable) table;
+            partitions = GlobalStateMgr.getCurrentState().getMetadataMgr().
+                    getPartitions(hiveTable.getCatalogName(), table, partitionNames);
         } else {
-            LOG.warn("Only support get partition for hive table type");
+            LOG.warn("Only support get partition for hive table and jdbc table type");
             return null;
         }
         for (int index = 0; index < partitionNames.size(); ++index) {

@@ -752,7 +752,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      * @param table : Whether this table can be supported for incremental refresh by partition or not.
      */
     private boolean unSupportRefreshByPartition(Table table) {
-        return !table.isOlapTableOrMaterializedView() && !table.isHiveTable() && !table.isJDBCTable() && !table.isCloudNativeTable();
+        return !table.isOlapTableOrMaterializedView() && !table.isHiveTable()
+                && !table.isJDBCTable() && !table.isCloudNativeTable();
     }
 
     /**
