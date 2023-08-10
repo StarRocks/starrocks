@@ -193,4 +193,4 @@ add_library(Storage STATIC
     binlog_reader.cpp
     lake/update_compaction_state.cpp
     lake/txn_log_applier.cpp
-)
+    persistent_index_compaction_manager.cpp)
