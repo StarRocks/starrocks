@@ -19,14 +19,12 @@ from dbt.adapters.base.relation import BaseRelation, Policy
 from dbt.exceptions import DbtRuntimeError
 
 
-@dataclass
 class StarRocksQuotePolicy(Policy):
     database: bool = False
     schema: bool = True
     identifier: bool = True
 
-
-@dataclass
+@dataclass()
 class StarRocksIncludePolicy(Policy):
     database: bool = False
     schema: bool = True
@@ -35,8 +33,8 @@ class StarRocksIncludePolicy(Policy):
 
 @dataclass(frozen=True, eq=False, repr=False)
 class StarRocksRelation(BaseRelation):
+    include_policy: StarRocksIncludePolicy = field(default_factory=lambda: StarRocksIncludePolicy())
     quote_policy: StarRocksQuotePolicy = field(default_factory=lambda: StarRocksQuotePolicy())
-    include_policy: StarRocksIncludePolicy = StarRocksIncludePolicy()
     quote_character: str = "`"
 
     def __post_init__(self):
