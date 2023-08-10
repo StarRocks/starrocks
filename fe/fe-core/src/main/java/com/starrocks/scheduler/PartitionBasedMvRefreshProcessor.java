@@ -708,19 +708,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private boolean isNonPartitionedMVNeedToRefresh() {
         for (Pair<BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
             Table snapshotTable = tablePair.second;
-            if (!supportRefreshByPartition(snapshotTable)) {
-                continue;
+            if (unSupportRefreshByPartition(snapshotTable)) {
+                return true;
             }
             if (needToRefreshTable(snapshotTable)) {
                 return true;
             }
-        }
-        return false;
-    }
-
-    private boolean supportRefreshByPartition(Table table) {
-        if (table.isOlapTableOrMaterializedView() || table.isHiveTable() || table.isCloudNativeTable()) {
-            return true;
         }
         return false;
     }
@@ -840,7 +833,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     private Set<String> getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(Table partitionTable,
             Set<String> mvRangePartitionNames, boolean force) {
-        if (force || !supportRefreshByPartition(partitionTable)) {
+        if (force || unSupportRefreshByPartition(partitionTable)) {
             return Sets.newHashSet(mvRangePartitionNames);
         }
         // check if there is a load in the base table and add it to the refresh candidate
