@@ -542,7 +542,7 @@ void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
     // we expect to get average stripe size instead of sum.
     stripe_sizes_counter =
             root->add_child_counter("StripeSizes", TUnit::BYTES,
-                                    RuntimeProfile::Counter::create_strategy(TUnit::TIME_MS), kORCProfileSectionPrefix);
+                                    RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG), kORCProfileSectionPrefix);
     stripe_number_counter = ADD_CHILD_COUNTER(root, "StripeNumber", TUnit::UNIT, kORCProfileSectionPrefix);
     for (auto v : _stats.stripe_sizes) {
         COUNTER_UPDATE(stripe_sizes_counter, v);
