@@ -12,7 +12,7 @@ BITMAP_AGG(col)
 
 ## 参数
 
-`col`: 待合并数值的列。支持的数据类型为 BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT。
+`col`: 待合并数值的列。支持的数据类型为 BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT。也支持可以转化为以上类型的 VARCHAR。
 
 ## 返回值说明
 
@@ -36,8 +36,7 @@ mysql> CREATE TABLE t1_test (
     c6 largeint
     )
 DUPLICATE KEY(c1)
-DISTRIBUTED BY HASH(c1)
-PROPERTIES ("replication_num" = "3");
+DISTRIBUTED BY HASH(c1);
 
 INSERT INTO t1_test VALUES
     (1, true, 11, 111, 1111, 11111),
