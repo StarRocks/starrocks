@@ -781,6 +781,7 @@ CONF_mBool(hdfs_client_enable_hedged_read, "false");
 CONF_Int32(hdfs_client_hedged_read_threadpool_size, "128");
 // dfs.client.hedged.read.threshold.millis
 CONF_Int32(hdfs_client_hedged_read_threshold_millis, "2500");
+CONF_Int32(hdfs_client_max_cache_size, "8");
 
 // Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
 // Once logging is enabled in your application, the SDK will generate log files in your current working directory
