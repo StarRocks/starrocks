@@ -90,7 +90,7 @@ This `LOAD` job has four main sections:
 
 > Tip
 >
-> The dataset used in these examples is available in a StarRocks S3 bucket any valid `aws.s3.access_key` and `aws.s3.secret_key`. Substitute your credentials for `AAA` and `BBB` in the commands below.
+> The dataset used in these examples is available in a StarRocks S3 bucket. Any valid `aws.s3.access_key` and `aws.s3.secret_key` can be used, as the object is readable by any AWS authenticated user. Substitute your credentials for `AAA` and `BBB` in the commands below.
 
 ```SQL
 LOAD LABEL user_behavior
@@ -148,7 +148,7 @@ There are three examples using the `FILES()` table function:
 
 > Tip
 >
-> The dataset used in these examples is available in a StarRocks S3 bucket any valid `aws.s3.access_key` and `aws.s3.secret_key`. Substitute your credentials for `AAA` and `BBB` in the commands below.
+> The dataset used in these examples is available in a StarRocks S3 bucket. Any valid `aws.s3.access_key` and `aws.s3.secret_key` can be used, as the object is readable by any AWS authenticated user. Substitute your credentials for `AAA` and `BBB` in the commands below.
 
 #### Querying directly from S3
 
