@@ -83,7 +83,7 @@ public class FileListRepoTest {
         String valueList = record.toValueList();
         Assert.assertEquals("(1, 'a.parquet', '123asdf', 1024, 'UNLOADED', " +
                         "'2023-07-01 01:01:01', '2023-07-01 01:01:01', " +
-                        "'2023-07-01 01:01:01', '2023-07-01 01:01:01')",
+                        "'2023-07-01 01:01:01', '2023-07-01 01:01:01', '{\"errorMessage\":null}')",
                 valueList);
 
         // contains empty value
@@ -95,7 +95,7 @@ public class FileListRepoTest {
         valueList = record.toValueList();
         Assert.assertEquals("(1, 'a.parquet', '', 1024, 'UNLOADED', " +
                         "NULL, '2023-07-01 01:01:01', " +
-                        "'2023-07-01 01:01:01', '2023-07-01 01:01:01')",
+                        "'2023-07-01 01:01:01', '2023-07-01 01:01:01', '{\"errorMessage\":null}')",
                 valueList);
 
         // contains null value
@@ -107,7 +107,7 @@ public class FileListRepoTest {
         valueList = record.toValueList();
         Assert.assertEquals("(1, 'a.parquet', '', 1024, 'UNLOADED', " +
                         "NULL, '2023-07-01 01:01:01', " +
-                        "'2023-07-01 01:01:01', '2023-07-01 01:01:01')",
+                        "'2023-07-01 01:01:01', '2023-07-01 01:01:01', '{\"errorMessage\":null}')",
                 valueList);
     }
 
@@ -139,9 +139,9 @@ public class FileListRepoTest {
         sql = RepoAccessor.getInstance().buildSqlAddFiles(records);
         Assert.assertEquals("INSERT INTO _statistics_.pipe_file_list VALUES " +
                 "(1, 'a.parquet', '123asdf', 1024, 'UNLOADED', '2023-07-01 01:01:01', " +
-                "'2023-07-01 01:01:01', '2023-07-01 01:01:01', '2023-07-01 01:01:01')," +
+                "'2023-07-01 01:01:01', '2023-07-01 01:01:01', '2023-07-01 01:01:01', '{\"errorMessage\":null}')," +
                 "(1, 'a.parquet', '123asdf', 1024, 'UNLOADED', '2023-07-01 01:01:01', " +
-                "'2023-07-01 01:01:01', '2023-07-01 01:01:01', '2023-07-01 01:01:01')", sql);
+                "'2023-07-01 01:01:01', '2023-07-01 01:01:01', '2023-07-01 01:01:01', '{\"errorMessage\":null}')", sql);
 
         // delete pipe
         sql = RepoAccessor.getInstance().buildDeleteByPipe(1);
@@ -150,13 +150,13 @@ public class FileListRepoTest {
         // list unloaded files
         sql = RepoAccessor.getInstance().buildListUnloadedFile(1);
         Assert.assertEquals("SELECT `pipe_id`, `file_name`, `file_version`, `file_size`, `state`, " +
-                "`last_modified`, `staged_time`, `start_load`, `finish_load` " +
+                "`last_modified`, `staged_time`, `start_load`, `finish_load`, `error_info_json` " +
                 "FROM _statistics_.pipe_file_list WHERE `pipe_id` = 1 AND `state` = 'UNLOADED'", sql);
 
         // select staged
         sql = RepoAccessor.getInstance().buildSelectStagedFiles(records);
         Assert.assertEquals("SELECT `pipe_id`, `file_name`, `file_version`, `file_size`, `state`, " +
-                "`last_modified`, `staged_time`, `start_load`, `finish_load` " +
+                "`last_modified`, `staged_time`, `start_load`, `finish_load`, `error_info_json` " +
                 "FROM _statistics_.pipe_file_list WHERE (pipe_id = 1 AND file_name = 'a.parquet' " +
                 "AND file_version = '123asdf') OR (pipe_id = 1 AND file_name = 'a.parquet' " +
                 "AND file_version = '123asdf')", sql);
@@ -257,7 +257,8 @@ public class FileListRepoTest {
             {
                 executor.executeDML(
                         "INSERT INTO _statistics_.pipe_file_list VALUES " +
-                                "(1, 'a.parquet', '1', 0, 'UNLOADED', NULL, NULL, NULL, NULL)");
+                                "(1, 'a.parquet', '1', 0, 'UNLOADED', NULL, NULL, " +
+                                "NULL, NULL, '{\"errorMessage\":null}')");
                 result = Lists.newArrayList();
             }
         };
@@ -288,7 +289,7 @@ public class FileListRepoTest {
             {
                 executor.executeDML(
                         "UPDATE _statistics_.pipe_file_list " +
-                                "SET `state` = 'ERROR' " +
+                                "SET `state` = 'ERROR', `error_info_json` = '' " +
                                 "WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '1')");
                 result = Lists.newArrayList();
             }

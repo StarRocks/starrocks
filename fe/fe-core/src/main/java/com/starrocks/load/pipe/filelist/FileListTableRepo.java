@@ -58,7 +58,7 @@ public class FileListTableRepo extends FileListRepo {
 
     protected static final String ALL_COLUMNS =
             "`pipe_id`, `file_name`, `file_version`, `file_size`, `state`, `last_modified`, `staged_time`," +
-                    " `start_load`, `finish_load`, error_info_json";
+                    " `start_load`, `finish_load`, `error_info_json`";
 
     protected static final String SELECT_FILES =
             "SELECT " + ALL_COLUMNS + " FROM " + FILE_LIST_FULL_NAME;
