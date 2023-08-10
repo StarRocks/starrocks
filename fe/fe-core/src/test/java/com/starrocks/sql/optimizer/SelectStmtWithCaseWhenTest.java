@@ -757,7 +757,12 @@ class SelectStmtWithCaseWhenTest {
                 {"select * from test.t0 where (case when region = 'USA' then true " +
                         "when region like 'COM%' then false end) is null",
                         "Predicates: [1: region, VARCHAR, false] != 'USA', NOT (1: region LIKE 'COM%')"
+                },
+                {"select * from test.t0 where (case when case when null then 'A' when false then 'B' " +
+                        "when region like 'COM%' then 'C' end = 'C' then true else false end) is null",
+                        "0:EMPTYSET"
                 }
+
 
         };
         List<Arguments> argumentsList = Lists.newArrayList();
