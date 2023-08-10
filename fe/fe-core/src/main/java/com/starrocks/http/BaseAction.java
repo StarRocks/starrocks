@@ -268,9 +268,7 @@ public abstract class BaseAction implements IAction {
         }
     }
 
-    protected void handleChannelInactive(ChannelHandlerContext ctx) {
-        LOG.error("connection closed unexpectedly");
-    }
+    protected void handleChannelInactive(ChannelHandlerContext ctx) {};
 
     public static class ActionAuthorizationInfo {
         public String fullUserName;

@@ -70,11 +70,11 @@ public class HttpResultSender {
     public RowBatch sendQueryResult(Coordinator coord, ExecPlan execPlan) throws Exception {
         RowBatch batch;
         ChannelHandlerContext nettyChannel = context.getNettyChannel();
-        sendHeader(nettyChannel);
         // if some data already sent to client, when exception occurs,we just close the channel
         context.setSendDate(true);
+        sendHeader(nettyChannel);
         // write connectId
-        if (!context.get_disable_print_connection_id()) {
+        if (!context.isOnlyOutputResultRaw()) {
             nettyChannel.write(JsonSerializer.getConnectId(context.getConnectionId()));
         }
         // write column meta data
@@ -84,12 +84,14 @@ public class HttpResultSender {
         while (true) {
             batch = coord.getNext();
             if (batch.getBatch() != null) {
-                writeResultBatch(batch.getBatch(), nettyChannel);
+                writeResultBatch(batch.getBatch(), nettyChannel, coord);
                 context.updateReturnRows(batch.getBatch().getRows().size());
             }
             if (batch.isEos()) {
-                ByteBuf statisticData = JsonSerializer.getStatistic(batch.getQueryStatistics());
-                nettyChannel.writeAndFlush(statisticData);
+                if (!context.isOnlyOutputResultRaw()) {
+                    ByteBuf statisticData = JsonSerializer.getStatistic(batch.getQueryStatistics());
+                    nettyChannel.writeAndFlush(statisticData);
+                }
                 sendEmptyLastContent();
                 break;
             }
@@ -115,14 +117,25 @@ public class HttpResultSender {
     }
 
     // BE already transferred results into json format, FE just need to Forward json objects to the client
-    private void writeResultBatch(TResultBatch resultBatch, ChannelHandlerContext channel) throws IOException {
+    private void writeResultBatch(TResultBatch resultBatch, ChannelHandlerContext channel, Coordinator coord) {
         int rowsSize = resultBatch.getRowsSize();
         for (ByteBuffer row : resultBatch.getRows()) {
-            // only flush once
+            // when channel is not writeable, sleep a while to balance read/write speed to avoid oom
+            while (!channel.channel().isWritable()) {
+                // if channel is closed, cancel query
+                if (!channel.channel().isActive()) {
+                    coord.cancel();
+                    return;
+                }
+                Thread.yield();
+            }
             if (row != resultBatch.getRows().get(rowsSize - 1)) {
-                channel.write(Unpooled.copiedBuffer(row));
+                channel.write(Unpooled.wrappedBuffer(row));
+                if (!channel.channel().isWritable()) {
+                    channel.flush();
+                }
             } else {
-                channel.writeAndFlush(Unpooled.copiedBuffer(row));
+                channel.writeAndFlush(Unpooled.wrappedBuffer(row));
             }
         }
     }
