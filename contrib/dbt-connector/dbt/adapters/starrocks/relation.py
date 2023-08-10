@@ -24,7 +24,7 @@ class StarRocksQuotePolicy(Policy):
     schema: bool = True
     identifier: bool = True
 
-@dataclass()
+@dataclass
 class StarRocksIncludePolicy(Policy):
     database: bool = False
     schema: bool = True
