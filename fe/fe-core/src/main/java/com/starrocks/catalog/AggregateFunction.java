@@ -309,10 +309,15 @@ public class AggregateFunction extends Function {
         if (nullsFirst != null && !nullsFirst.isEmpty()) {
             aggFn.setNulls_first(nullsFirst);
         }
+<<<<<<< HEAD
         if (isDistinct) {
             aggFn.setIs_distinct(true);
         }
 >>>>>>> 3865788b7d (keep the same with mysql results)
+=======
+        aggFn.setIs_distinct(isDistinct);
+
+>>>>>>> 0464ade3a3 (refine)
         aggFn.setSymbol(getSymbolName());
         fn.setAggregate_fn(aggFn);
         return fn;

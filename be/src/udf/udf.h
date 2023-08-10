@@ -191,9 +191,9 @@ public:
 
     ~FunctionContext();
 
-    size_t get_group_concat_max_len() { return group_concat_max_len; }
+    ssize_t get_group_concat_max_len() { return group_concat_max_len; }
     // min value is 4, default is 1024
-    void set_group_concat_max_len(size_t len) { group_concat_max_len = len < 4 ? 4 : len; }
+    void set_group_concat_max_len(ssize_t len) { group_concat_max_len = len < 4 ? 4 : len; }
 
 private:
     friend class starrocks::FunctionContextImpl;
@@ -218,8 +218,12 @@ private:
     std::vector<bool> _is_asc_order;
     std::vector<bool> _nulls_first;
     bool _is_distinct = false;
+<<<<<<< HEAD:be/src/udf/udf.h
     size_t group_concat_max_len = 4;
 >>>>>>> 3865788b7d (keep the same with mysql results):be/src/exprs/function_context.h
+=======
+    ssize_t group_concat_max_len = 1024;
+>>>>>>> 0464ade3a3 (refine):be/src/exprs/function_context.h
 };
 } // namespace starrocks_udf
 
