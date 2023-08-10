@@ -47,7 +47,7 @@ mysql> select * from agg;
 +------+-------+-------+
 ```
 
-计算列 `k` 和列 `v` 的总体协方差:
+Calculate the population covariance of the `k` and `v` columns:
 
 ```plaintext
 mysql> select no,COVAR_POP(k,v) from agg group by no;
