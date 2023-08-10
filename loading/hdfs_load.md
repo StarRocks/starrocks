@@ -365,7 +365,7 @@ REJECTED_RECORD_PATH: 172.26.95.92:/home/disk1/sr/be/storage/rejected_record/tes
 
 有关返回字段的说明，参见 [Information Schema > loads](../administration/information_schema.md#loads)。
 
-### 取消导入作业
+## 取消导入作业
 
 当导入作业状态不为 **CANCELLED** 或 **FINISHED** 时，可以通过 [CANCEL LOAD](/sql-reference/sql-statements/data-manipulation/CANCEL%20LOAD.md) 语句来取消该导入作业。
 
