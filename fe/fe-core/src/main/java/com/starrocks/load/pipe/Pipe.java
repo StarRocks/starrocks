@@ -203,7 +203,8 @@ public class Pipe implements GsonPostProcessable {
 
         GlobalTransactionMgr txnMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
         long dbId = getPipeId().getDbId();
-        List<PipeFileRecord> loadingFiles = pipeSource.getFileListRepo().listLoadingFiles();
+        List<PipeFileRecord> loadingFiles =
+                pipeSource.getFileListRepo().listFilesByState(FileListRepo.PipeFileState.LOADING);
 
         if (CollectionUtils.isEmpty(loadingFiles)) {
             recovered = true;
@@ -410,7 +411,6 @@ public class Pipe implements GsonPostProcessable {
                 taskDesc.onError("create failed: " + e.getMessage());
                 return;
             }
-            // TODO: persist the submitted task list in pipe
             SubmitResult result = taskManager.executeTaskAsync(task, new ExecuteOption());
             taskDesc.onRunning();
             taskDesc.setFuture(result.getFuture());

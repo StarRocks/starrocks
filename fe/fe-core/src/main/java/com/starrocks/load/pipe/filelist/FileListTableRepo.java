@@ -84,13 +84,8 @@ public class FileListTableRepo extends FileListRepo {
     protected static final String DELETE_BY_PIPE = "DELETE FROM " + FILE_LIST_FULL_NAME + " WHERE `pipe_id` = %d";
 
     @Override
-    public List<PipeFileRecord> listUnloadedFiles() {
-        return RepoAccessor.getInstance().listUnloadedFiles(pipeId.getId());
-    }
-
-    @Override
-    public List<PipeFileRecord> listLoadingFiles() {
-        return RepoAccessor.getInstance().listLoadingFiles(pipeId.getId());
+    public List<PipeFileRecord> listFilesByState(PipeFileState state) {
+        return RepoAccessor.getInstance().listFilesByState(pipeId.getId(), state);
     }
 
     @Override

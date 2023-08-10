@@ -49,11 +49,14 @@ import com.starrocks.thrift.TListPipeFilesResult;
 import com.starrocks.thrift.TListPipesParams;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TUserIdentity;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.thrift.TException;
@@ -250,13 +253,15 @@ public class PipeManagerTest {
             @Mock
             public void updateFileState(List<PipeFileRecord> files, FileListRepo.PipeFileState state, String label) {
                 for (PipeFileRecord file : files) {
-                    records.stream().filter(x -> x.equals(file)).findFirst().get().loadState = state;
+                    PipeFileRecord record = records.stream().filter(x -> x.equals(file)).findFirst().get();
+                    record.loadState = state;
+                    record.insertLabel = label;
                 }
             }
 
             @Mock
-            public List<PipeFileRecord> listUnloadedFiles() {
-                return records.stream().filter(x -> x.getLoadState().equals(FileListRepo.PipeFileState.UNLOADED))
+            public List<PipeFileRecord> listFilesByState(FileListRepo.PipeFileState state) {
+                return records.stream().filter(x -> x.getLoadState().equals(state))
                         .collect(Collectors.toList());
             }
 
@@ -631,6 +636,74 @@ public class PipeManagerTest {
             Assert.assertEquals("INSERT INTO `tbl1` WITH LABEL insert_label SELECT `col_int`, `col_string`\n" +
                     "FROM FILES('path'='a.parquet,b.parquet','batch_size'='10GB')", sql);
             dropPipe(pipeName);
+        }
+    }
+
+    @Test
+    public void testRecovery() throws Exception {
+        mockRepoExecutor();
+        PipeManager pm = ctx.getGlobalStateMgr().getPipeManager();
+        pm.clear();
+
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+        long dbId = ctx.getGlobalStateMgr().getDb(PIPE_TEST_DB).getId();
+        pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
+
+        // create pipe 1
+        String sql =
+                "create pipe p_crash as insert into tbl select * from files('path'='fake://pipe', 'format'='parquet')";
+        createPipe(sql);
+        UtFrameUtils.PseudoImage image1 = new UtFrameUtils.PseudoImage();
+        pm.getRepo().saveImage(image1.getDataOutputStream(), 123);
+
+        // loading file and crash
+        String name = "p_crash";
+        Pipe pipe = getPipe(name);
+        pipe.poll();
+        pipe.schedule();
+        Assert.assertEquals(1, pipe.getRunningTasks().size());
+        Assert.assertTrue(StringUtils.isNotEmpty(pipe.getRunningTasks().get(0).getUniqueTaskName()));
+
+        // recover when transaction failed
+        {
+            PipeManager pm1 = new PipeManager();
+            FileListRepo repo = pipe.getPipeSource().getFileListRepo();
+            pm1.getRepo().loadImage(image1.getDataInputStream(), 123);
+            Assert.assertEquals(pm.getPipesUnlock(), pm1.getPipesUnlock());
+            pipe = pm1.mayGetPipe(new PipeName(PIPE_TEST_DB, name)).get();
+            Assert.assertFalse(pipe.isRecovered());
+            Assert.assertFalse(pipe.isRunnable());
+
+            pipe.recovery();
+            Assert.assertEquals(1, repo.listFilesByState(FileListRepo.PipeFileState.ERROR).size());
+            Assert.assertTrue(pipe.isRecovered());
+            Assert.assertTrue(pipe.isRunnable());
+        }
+
+        // recover when transaction committed
+        {
+            FileListRepo repo = pipe.getPipeSource().getFileListRepo();
+            repo.updateFileState(repo.listFilesByState(FileListRepo.PipeFileState.ERROR),
+                    FileListRepo.PipeFileState.LOADING, "insert-label");
+            new MockUp<GlobalTransactionMgr>() {
+                @Mock
+                public TransactionStatus getLabelStatus(long dbId, String label) {
+                    return TransactionStatus.COMMITTED;
+                }
+            };
+
+            PipeManager pm1 = new PipeManager();
+            pm1.getRepo().loadImage(image1.getDataInputStream(), 123);
+            Assert.assertEquals(pm.getPipesUnlock(), pm1.getPipesUnlock());
+            pipe = pm1.mayGetPipe(new PipeName(PIPE_TEST_DB, name)).get();
+            Assert.assertFalse(pipe.isRecovered());
+            Assert.assertFalse(pipe.isRunnable());
+
+            pipe.recovery();
+            Assert.assertEquals(1, repo.listFilesByState(FileListRepo.PipeFileState.LOADED).size());
+            Assert.assertTrue(pipe.isRecovered());
+            Assert.assertTrue(pipe.isRunnable());
         }
     }
 }

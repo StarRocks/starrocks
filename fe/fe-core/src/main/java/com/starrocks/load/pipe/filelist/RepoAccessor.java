@@ -49,27 +49,14 @@ public class RepoAccessor {
         }
     }
 
-    public List<PipeFileRecord> listUnloadedFiles(long pipeId) {
+    public List<PipeFileRecord> listFilesByState(long pipeId, FileListRepo.PipeFileState state) {
         List<PipeFileRecord> res = null;
         try {
-            String sql = buildListUnloadedFile(pipeId);
+            String sql = buildListFileByState(pipeId, state);
             List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
             res = PipeFileRecord.fromResultBatch(batch);
         } catch (Exception e) {
             LOG.error("listUnloadedFiles failed", e);
-            throw e;
-        }
-        return res;
-    }
-
-    public List<PipeFileRecord> listLoadingFiles(long pipeId) {
-        List<PipeFileRecord> res = null;
-        try {
-            String sql = buildListLoadingFile(pipeId);
-            List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
-            res = PipeFileRecord.fromResultBatch(batch);
-        } catch (Exception e) {
-            LOG.error("listLoadingFiles failed", e);
             throw e;
         }
         return res;
@@ -143,15 +130,9 @@ public class RepoAccessor {
         return FileListTableRepo.SELECTED_STAGED_FILES + where;
     }
 
-    protected String buildListUnloadedFile(long pipeId) {
+    protected String buildListFileByState(long pipeId, FileListRepo.PipeFileState state) {
         String sql = String.format(FileListTableRepo.SELECT_FILES_BY_STATE,
-                pipeId, Strings.quote(FileListRepo.PipeFileState.UNLOADED.toString()));
-        return sql;
-    }
-
-    protected String buildListLoadingFile(long pipeId) {
-        String sql = String.format(FileListTableRepo.SELECT_FILES_BY_STATE,
-                pipeId, Strings.quote(FileListRepo.PipeFileState.LOADING.toString()));
+                pipeId, Strings.quote(state.toString()));
         return sql;
     }
 

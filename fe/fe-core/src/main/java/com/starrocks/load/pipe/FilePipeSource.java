@@ -81,7 +81,7 @@ public class FilePipeSource implements GsonPostProcessable {
         if (eos) {
             return;
         }
-        if (CollectionUtils.isEmpty(fileListRepo.listUnloadedFiles())) {
+        if (CollectionUtils.isEmpty(fileListRepo.listFilesByState(FileListRepo.PipeFileState.UNLOADED))) {
             BrokerDesc brokerDesc = new BrokerDesc(tableProperties);
             try {
                 List<FileStatus> files = HdfsUtil.listFileMeta(path, brokerDesc);
@@ -116,7 +116,7 @@ public class FilePipeSource implements GsonPostProcessable {
     public FilePipePiece pullPiece() {
         Preconditions.checkArgument(batchSize > 0, "not support batch_size=0");
 
-        List<PipeFileRecord> unloadFiles = fileListRepo.listUnloadedFiles();
+        List<PipeFileRecord> unloadFiles = fileListRepo.listFilesByState(FileListRepo.PipeFileState.UNLOADED);
         if (CollectionUtils.isEmpty(unloadFiles)) {
             return null;
         }
