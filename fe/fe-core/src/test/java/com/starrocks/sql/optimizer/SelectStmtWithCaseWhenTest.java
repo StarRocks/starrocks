@@ -63,7 +63,6 @@ class SelectStmtWithCaseWhenTest {
         starRocksAssert.withTable(createTblStmtStr);
     }
 
-
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("caseWhenWithCaseClauses")
     void testCaseWhenWithCaseClause(String sql, List<String> patterns) throws Exception {
@@ -740,6 +739,31 @@ class SelectStmtWithCaseWhenTest {
                         "if (region = 'China', 1, 2) not in (NULL, 1)",
                         "[1: region, VARCHAR, false] != 'China'",
                 },
+                {"select * from test.t0 where (case when ship_code is null then true when 1 then false end) is null",
+                        "0:EMPTYSET"
+                },
+                {"select * from test.t0 where (case when ship_code is null then true when 0 then false end) is null",
+                        "Predicates: 5: ship_code IS NOT NULL"
+                },
+                {"select * from test.t0 where (case when ship_code is null then true when null then false end) is null",
+                        "Predicates: 5: ship_code IS NOT NULL"
+                },
+                {"select * from test.t0 where (case when ship_code is null then true when not null then false end) is null",
+                        "Predicates: 5: ship_code IS NOT NULL"
+                },
+                {"select * from test.t0 where (case when ship_code is null then true when not 3 then false end) is null",
+                        "Predicates: 5: ship_code IS NOT NULL, (CAST(3 AS BOOLEAN)) OR (CAST(3 AS BOOLEAN) IS NULL)"
+                },
+                {"select * from test.t0 where (case when region = 'USA' then true " +
+                        "when region like 'COM%' then false end) is null",
+                        "Predicates: [1: region, VARCHAR, false] != 'USA', NOT (1: region LIKE 'COM%')"
+                },
+                {"select * from test.t0 where (case when case when null then 'A' when false then 'B' " +
+                        "when region like 'COM%' then 'C' end = 'C' then true else false end) is null",
+                        "0:EMPTYSET"
+                }
+
+
         };
         List<Arguments> argumentsList = Lists.newArrayList();
         for (String[] tc : testCases) {
@@ -753,7 +777,6 @@ class SelectStmtWithCaseWhenTest {
         starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(3000000);
         String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
         StringJoiner joiner = new StringJoiner("\n");
-        System.out.println(sql + ";");
         joiner.add(sql);
         joiner.add(patterns.toString());
         joiner.add(plan);
