@@ -146,14 +146,14 @@ public class ExecPlan {
         if (profilingPlan == null) {
             synchronized (this) {
                 if (profilingPlan == null) {
-                    boolean isUnset = ConnectContext.get() == null;
+                    boolean needSetCtx = ConnectContext.get() == null && this.connectContext != null;
                     try {
-                        if (isUnset) {
+                        if (needSetCtx) {
                             this.connectContext.setThreadLocalInfo();
                         }
                         profilingPlan = ProfilingExecPlan.buildFrom(this);
                     } finally {
-                        if (isUnset) {
+                        if (needSetCtx) {
                             ConnectContext.remove();
                         }
                     }
