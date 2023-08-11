@@ -1,0 +1,37 @@
+-- name: test_insert_property
+
+CREATE table tab1 (
+      k1 INTEGER,
+      v1 TINYINT,
+      v2 INTEGER,
+      v3 INTEGER,
+      v4 varchar(10),
+      v5 varchar(10)
+)
+PRIMARY KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 10
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+insert into tab1 values (100, 100, 100, 100, "v4_100", "v5_100");
+insert into tab1 values (200, 200, 200, 200, "v4_200", "v5_200");
+select * from tab1 order by k1;
+
+-- partial update
+insert into tab1 (k1, v1) properties('partial_update'='true') values (100, 200);
+select * from tab1 where k1 = 100 order by k1;
+
+-- row update
+insert into tab1 (k1, v1) values (100, 200);
+select * from tab1 where k1 = 100 order by k1;
+
+-- partial update mode
+insert into tab1 (k1, v1) properties('partial_update'='true', 'partial_update_mode'='column') values (100, 200);
+select * from tab1 where k1 = 100 order by k1;
+
+-- max filter ratio
+insert into tab1 (k1, v4) properties('max_filter_ratio'='0.1', 'partial_update'='true') values (400, 'xxxxxxxxxxxxxx'), (500, 'xxxxxxxxxxxxxxx');
+select * from tab1 where k1 = 400 order by k1;
+insert into tab1 (k1, v4) properties('max_filter_ratio'='0.8', 'partial_update'='true') values (400, 'xxxxxxxxxxxxxx'), (500, 'xxxxxxxxxxxxxxx');
+select * from tab1 where k1 = 400 order by k1;
