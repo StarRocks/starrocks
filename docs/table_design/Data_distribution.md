@@ -179,7 +179,7 @@ The number of buckets: By default, StarRocks automatically sets the number of bu
 
 ### Create partitions
 
-#### Expression partitioning
+#### Expression partitioning (recommended)
 
 > **NOTICE**
 >
@@ -549,7 +549,7 @@ Buckets reflect how data files are actually organized in StarRocks.
 
     > **NOTICE**
     >
-    > If the raw data size for each partition exceeds 100GB, we recommend that you manually configure the number of buckets using the following method.
+    > If the raw data size of a partition exceeds 100GB, we recommend that you manually configure the number of buckets using the following method.
 
   - Method 2: manually set the number of buckets
 
