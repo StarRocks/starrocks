@@ -176,6 +176,9 @@ public interface ParserErrorMsg {
     @BaseMessage("''{0}'' must be an aggregate expression or appear in GROUP BY clause")
     String shouldBeAggFunc(String a0);
 
+    @BaseMessage("subquery correlated column ''{0}'' in ''{1}'' must be an aggregate expression or appear in GROUP BY clause")
+    String unsupportedNoGroupBySubquery(String a0, String a1);
+
     @BaseMessage("Exist must have exact one subquery")
     String canOnlyOneExistSub();
 

@@ -50,9 +50,9 @@ import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.QueryStatement;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import static com.google.common.collect.ImmutableSet.toImmutableSet;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
@@ -297,11 +297,28 @@ public class AggregationAnalyzer {
         @Override
         public Boolean visitSubquery(Subquery node, Void context) {
             QueryStatement queryStatement = node.getQueryStatement();
-            List<FieldId> fieldIds = queryStatement.getQueryRelation().getColumnReferences().values().stream()
-                    .filter(fieldId -> fieldId.getRelationId().equals(sourceScope.getRelationId()))
-                    .collect(Collectors.toList());
+            for (Map.Entry<Expr, FieldId> entry : queryStatement.getQueryRelation().getColumnReferences().entrySet()) {
+                Expr expr = entry.getKey();
+                FieldId id = entry.getValue();
 
-            return groupingFields.containsAll(fieldIds);
+                if (!id.getRelationId().equals(sourceScope.getRelationId())) {
+                    continue;
+                }
+
+                if (!groupingFields.contains(id)) {
+                    if (!SqlModeHelper.check(session.getSessionVariable().getSqlMode(),
+                            SqlModeHelper.MODE_ONLY_FULL_GROUP_BY)) {
+                        if (!analyzeState.getColumnNotInGroupBy().contains(expr)) {
+                            throw new SemanticException(
+                                    PARSER_ERROR_MSG.unsupportedNoGroupBySubquery(expr.toSql(), node.toSql()),
+                                    expr.getPos());
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+            }
+            return true;
         }
 
         @Override
