@@ -218,7 +218,7 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
                 break;
             }
         }
-        if (!single_slot) {
+        if (!single_slot || slot_ids.empty()) {
             _scanner_conjunct_ctxs.emplace_back(ctx);
             continue;
         }
