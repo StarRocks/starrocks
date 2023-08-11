@@ -2553,6 +2553,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         try {
+<<<<<<< HEAD
             if (getDb(db.getFullName()) == null) {
                 throw new DdlException("database has been dropped when creating table");
             }
@@ -2578,6 +2579,9 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         try {
             if (getDb(db.getFullName()) == null) {
+=======
+            if (getDb(db.getId()) == null) {
+>>>>>>> 00b4ae9333 ([BugFix] Fix table is lost bug where create/drop db and table concurrently (#28985))
                 throw new DdlException("Database has been dropped when creating table");
             }
             if (!db.createTableWithLock(table, false)) {
@@ -2586,6 +2590,19 @@ public class LocalMetastore implements ConnectorMetadata {
                 } else {
                     LOG.info("Create table[{}] which already exists", table.getName());
                 }
+<<<<<<< HEAD
+=======
+
+                // NOTE: The table has been added to the database, and the following procedure cannot throw exception.
+                LOG.info("Successfully create table: {}-{}, in database: {}-{}",
+                        table.getName(), table.getId(), db.getFullName(), db.getId());
+
+                CreateTableInfo createTableInfo = new CreateTableInfo(db.getFullName(), table, storageVolumeId);
+                GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(createTableInfo);
+                table.onCreate(db);
+            } finally {
+                db.writeUnlock();
+>>>>>>> 00b4ae9333 ([BugFix] Fix table is lost bug where create/drop db and table concurrently (#28985))
             }
         } finally {
             unlock();
