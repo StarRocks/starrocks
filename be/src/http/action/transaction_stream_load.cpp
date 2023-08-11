@@ -13,7 +13,6 @@
 #include <rapidjson/prettywriter.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
-#include "agent/master_info.h"
 #include "common/logging.h"
 #include "common/utils.h"
 #include "gen_cpp/FrontendService.h"
@@ -370,7 +369,7 @@ Status TransactionStreamLoadAction::_exec_plan_fragment(HttpRequest* http_req, S
     }
     request.__set_thrift_rpc_timeout_ms(config::thrift_rpc_timeout_ms);
     // plan this load
-    auto master_addr = get_master_address();
+    TNetworkAddress master_addr = _exec_env->master_info()->network_address;
 #ifndef BE_TEST
     if (!http_req->header(HTTP_MAX_FILTER_RATIO).empty()) {
         ctx->max_filter_ratio = strtod(http_req->header(HTTP_MAX_FILTER_RATIO).c_str(), nullptr);

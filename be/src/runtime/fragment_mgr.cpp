@@ -28,7 +28,6 @@
 #include <memory>
 #include <sstream>
 
-#include "agent/master_info.h"
 #include "common/object_pool.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/FrontendService.h"
@@ -282,9 +281,8 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
         params.__isset.error_log = (params.error_log.size() > 0);
     }
 
-    auto backend_id = get_backend_id();
-    if (backend_id.has_value()) {
-        params.__set_backend_id(backend_id.value());
+    if (_exec_env->master_info()->__isset.backend_id) {
+        params.__set_backend_id(_exec_env->master_info()->backend_id);
     }
 
     TReportExecStatusResult res;
