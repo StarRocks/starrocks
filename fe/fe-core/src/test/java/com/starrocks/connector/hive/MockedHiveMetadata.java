@@ -1128,9 +1128,11 @@ public class MockedHiveMetadata implements ConnectorMetadata {
             columnStatisticMap.put("par_date", partitionColStats);
 
             List<RemoteFileInfo> remoteFileInfos = Lists.newArrayList();
-            partitionNames.forEach(k -> remoteFileInfos.add(new RemoteFileInfo(RemoteFileInputFormat.ORC, ImmutableList.of(), null)));
+            partitionNames.forEach(k -> remoteFileInfos.add(new RemoteFileInfo(RemoteFileInputFormat.ORC,
+                    ImmutableList.of(), null)));
 
-            mockTables.put(partTbl1.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(partTbl1, MOCKED_HIVE_CATALOG_NAME),
+            mockTables.put(partTbl1.getTableName(),
+                    new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(partTbl1, MOCKED_HIVE_CATALOG_NAME),
                     partitionNames, (long) rowCount, columnStatisticMap, remoteFileInfos));
         }
 
@@ -1139,7 +1141,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
             cols.add(new FieldSchema("c1", "int", null));
             cols.add(new FieldSchema("c2", "string", null));
             cols.add(new FieldSchema("c3", "string", null));
-            StorageDescriptor sd = new StorageDescriptor(cols, "", "",  "", false, -1, null, Lists.newArrayList(),
+            StorageDescriptor sd = new StorageDescriptor(cols, "", "",  "", false,
+                    -1, null, Lists.newArrayList(),
                     Lists.newArrayList(), Maps.newHashMap());
             Table partTbl2 = new Table("part_tbl2", "partitioned_db", null, 0, 0, 0,  sd,
                     ImmutableList.of(new FieldSchema("par_date", "date", null)), Maps.newHashMap(),
@@ -1179,9 +1182,11 @@ public class MockedHiveMetadata implements ConnectorMetadata {
             columnStatisticMap.put("par_date", partitionColStats);
 
             List<RemoteFileInfo> remoteFileInfos = Lists.newArrayList();
-            partitionNames.forEach(k -> remoteFileInfos.add(new RemoteFileInfo(RemoteFileInputFormat.ORC, ImmutableList.of(), null)));
+            partitionNames.forEach(k -> remoteFileInfos.add(new RemoteFileInfo(RemoteFileInputFormat.ORC,
+                    ImmutableList.of(), null)));
 
-            mockTables.put(partTbl2.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(partTbl2, MOCKED_HIVE_CATALOG_NAME),
+            mockTables.put(partTbl2.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(partTbl2,
+                    MOCKED_HIVE_CATALOG_NAME),
                     partitionNames, (long) rowCount, columnStatisticMap, remoteFileInfos));
         }
     }
