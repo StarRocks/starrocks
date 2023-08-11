@@ -143,10 +143,10 @@ public class JDBCMetadata implements ConnectorMetadata {
 
     public List<Column> listPartitionColumns(String databaseName, String tableName, List<Column> fullSchema) {
         try (Connection connection = getConnection()) {
-            List<String> partitionColumnNams = schemaResolver.listPartitionColumns(connection, databaseName, tableName);
+            List<String> partitionColumnNames = schemaResolver.listPartitionColumns(connection, databaseName, tableName);
             ImmutableList.Builder<Column> list = ImmutableList.builder();
-            if (partitionColumnNams.size() > 0) {
-                for (String colName : partitionColumnNams) {
+            if (partitionColumnNames.size() > 0) {
+                for (String colName : partitionColumnNames) {
                     for (Column col : fullSchema) {
                         if (colName.equals(col.getName())) {
                             list.add(col);
