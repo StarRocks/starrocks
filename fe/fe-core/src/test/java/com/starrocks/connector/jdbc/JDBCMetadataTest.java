@@ -23,6 +23,7 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.jmockit.Deencapsulation;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -37,6 +38,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static com.starrocks.catalog.JDBCResource.DRIVER_CLASS;
 
@@ -48,10 +50,14 @@ public class JDBCMetadataTest {
     @Mocked
     Connection connection;
 
+    @Mocked
+    JDBCTableIdCache jdbcTableIdCache;
+
     private Map<String, String> properties;
     private MockResultSet dbResult;
     private MockResultSet tableResult;
     private MockResultSet columnResult;
+    private Map<JDBCTableName, Integer> tableIdCache;
 
     @Before
     public void setUp() throws SQLException {
@@ -81,6 +87,8 @@ public class JDBCMetadataTest {
         properties.put(JDBCResource.PASSWORD, "123456");
         properties.put(JDBCResource.CHECK_SUM, "xxxx");
         properties.put(JDBCResource.DRIVER_URL, "xxxx");
+        tableIdCache = new ConcurrentHashMap<>();
+        tableIdCache.put(JDBCTableName.of("catalog", "test", "tbl1"), 100000);
 
         new Expectations() {
             {
@@ -100,6 +108,11 @@ public class JDBCMetadataTest {
                 connection.getMetaData().getColumns("test", null, "tbl1", "%");
                 result = columnResult;
                 minTimes = 0;
+
+                Deencapsulation.invoke(jdbcTableIdCache, "getTableIdCache");
+                result = tableIdCache;
+                minTimes = 0;
+
             }
         };
     }
@@ -180,4 +193,17 @@ public class JDBCMetadataTest {
         Table table = jdbcMetadata.getTable("test", "tbl1");
         Assert.assertNotNull(table);
     }
+
+    @Test
+    public void testCacheTableId() {
+        try {
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            Table table1 = jdbcMetadata.getTable("test", "tbl1");
+            Assert.assertTrue(table1.getId() == 100000);
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            Assert.fail();
+        }
+    }
+
 }
