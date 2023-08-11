@@ -2,7 +2,7 @@
 
 StarRocks provides two options for loading data from S3:
 
-1. Asynchronous loading using Broker Load (`WITH BROKER`)
+1. Asynchronous loading using Broker Load
 2. Synchronous loading using the `FILES()` table function
 
 Small datasets are often loaded synchronously using the `FILES()` table function, and large datasets are often loaded asynchronously using Broker Load. The two methods have different advantages and are described below.
