@@ -33,7 +33,6 @@
 #include <sstream>
 #include <string>
 
-#include "agent/agent_server.h"
 #include "common/status.h"
 #include "exec/workgroup/work_group.h"
 #include "fs/fs.h"
@@ -63,19 +62,24 @@
 
 namespace starrocks {
 
+const uint32_t TASK_FINISH_MAX_RETRY = 3;
+const uint32_t ALTER_FINISH_TASK_MAX_RETRY = 10;
 const uint32_t PUBLISH_VERSION_SUBMIT_MAX_RETRY = 10;
 const size_t PUBLISH_VERSION_BATCH_SIZE = 10;
 
 std::atomic<int64_t> TaskWorkerPool::_s_report_version(time(nullptr) * 10000);
 std::mutex TaskWorkerPool::_s_task_signatures_locks[TTaskType::type::NUM_TASK_TYPE];
 std::set<int64_t> TaskWorkerPool::_s_task_signatures[TTaskType::type::NUM_TASK_TYPE];
+FrontendServiceClientCache TaskWorkerPool::_master_service_client_cache;
 
 bvar::LatencyRecorder g_publish_latency("be", "publish");
 using std::swap;
 
-TaskWorkerPool::TaskWorkerPool(AgentServer* agent_server, TaskWorkerType task_worker_type, ExecEnv* env,
+TaskWorkerPool::TaskWorkerPool(TaskWorkerType task_worker_type, ExecEnv* env, const TMasterInfo& master_info,
                                int worker_count)
-        : _agent_server(agent_server),
+        : _master_info(master_info),
+          _agent_utils(new AgentUtils()),
+          _master_client(new MasterServerClient(_master_info, &_master_service_client_cache)),
           _env(env),
           _worker_thread_condition_variable(new std::condition_variable()),
           _worker_count(worker_count),
@@ -310,6 +314,37 @@ void TaskWorkerPool::_spawn_callback_worker_thread(CALLBACK_FUNCTION callback_fu
     Thread::set_thread_name(_worker_threads.back(), "task_worker");
 }
 
+void TaskWorkerPool::_finish_task(const TFinishTaskRequest& finish_task_request) {
+    // Return result to FE
+    TMasterResult result;
+    uint32_t try_time = 0;
+    int32_t sleep_time_second = config::sleep_one_second;
+    int32_t max_retry_times = TASK_FINISH_MAX_RETRY;
+
+    while (try_time < max_retry_times) {
+        StarRocksMetrics::instance()->finish_task_requests_total.increment(1);
+        AgentStatus client_status = _master_client->finish_task(finish_task_request, &result);
+
+        if (client_status == STARROCKS_SUCCESS) {
+            // This means FE alter thread pool is full, all alter finish request to FE is meaningless
+            // so that we will sleep && retry 10 times
+            if (result.status.status_code == TStatusCode::TOO_MANY_TASKS &&
+                finish_task_request.task_type == TTaskType::ALTER) {
+                max_retry_times = ALTER_FINISH_TASK_MAX_RETRY;
+                sleep_time_second = sleep_time_second * 2;
+            } else {
+                break;
+            }
+        }
+        try_time += 1;
+        StarRocksMetrics::instance()->finish_task_requests_failed.increment(1);
+        LOG(WARNING) << "finish task failed retry: " << try_time << "/" << TASK_FINISH_MAX_RETRY
+                     << "client_status: " << client_status << " status_code: " << result.status.status_code;
+
+        sleep(sleep_time_second);
+    }
+}
+
 void* TaskWorkerPool::_create_tablet_worker_thread_callback(void* arg_this) {
     auto* worker_pool_this = (TaskWorkerPool*)arg_this;
 
@@ -353,7 +388,7 @@ void* TaskWorkerPool::_create_tablet_worker_thread_callback(void* arg_this) {
         finish_task_request.__set_signature(agent_task_req->signature);
         finish_task_request.__set_task_status(task_status);
 
-        worker_pool_this->_agent_server->finish_task(finish_task_request);
+        worker_pool_this->_finish_task(finish_task_request);
         worker_pool_this->_remove_task_info(agent_task_req->task_type, agent_task_req->signature);
     }
     return (void*)nullptr;
@@ -397,7 +432,7 @@ void* TaskWorkerPool::_drop_tablet_worker_thread_callback(void* arg_this) {
         finish_task_request.__set_signature(agent_task_req->signature);
         finish_task_request.__set_task_status(task_status);
 
-        worker_pool_this->_agent_server->finish_task(finish_task_request);
+        worker_pool_this->_finish_task(finish_task_request);
         worker_pool_this->_remove_task_info(agent_task_req->task_type, agent_task_req->signature);
     }
     return (void*)nullptr;
@@ -433,7 +468,7 @@ void* TaskWorkerPool::_alter_tablet_worker_thread_callback(void* arg_this) {
                 // pass
                 break;
             }
-            worker_pool_this->_agent_server->finish_task(finish_task_request);
+            worker_pool_this->_finish_task(finish_task_request);
         }
         worker_pool_this->_remove_task_info(agent_task_req->task_type, agent_task_req->signature);
     }
@@ -516,7 +551,7 @@ void TaskWorkerPool::_alter_tablet(TaskWorkerPool* worker_pool_this, const TAgen
     } else {
         LOG(WARNING) << process_name << " failed. signature: " << signature;
         error_msgs.push_back(process_name + " failed");
-        error_msgs.push_back("status: " + AgentUtils::print_agent_status(status));
+        error_msgs.push_back("status: " + _agent_utils->print_agent_status(status));
         task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);
     }
 
@@ -606,7 +641,7 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
         finish_task_request.__set_task_status(task_status);
         finish_task_request.__set_report_version(_s_report_version.load(std::memory_order_relaxed));
 
-        worker_pool_this->_agent_server->finish_task(finish_task_request);
+        worker_pool_this->_finish_task(finish_task_request);
         worker_pool_this->_remove_task_info(agent_task_req->task_type, agent_task_req->signature);
     }
 
@@ -726,7 +761,7 @@ void* TaskWorkerPool::_delete_worker_thread_callback(void* arg_this) {
         finish_task_request.__set_task_status(task_status);
         finish_task_request.__set_report_version(_s_report_version.load(std::memory_order_relaxed));
 
-        worker_pool_this->_agent_server->finish_task(finish_task_request);
+        worker_pool_this->_finish_task(finish_task_request);
         worker_pool_this->_remove_task_info(agent_task_req->task_type, agent_task_req->signature);
     }
 
@@ -941,7 +976,7 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
 
             // notify FE when all tasks of group have been finished.
             for (auto& finish_task_request : finish_task_requests) {
-                worker_pool_this->_agent_server->finish_task(finish_task_request);
+                worker_pool_this->_finish_task(finish_task_request);
                 worker_pool_this->_remove_task_info(finish_task_request.task_type, finish_task_request.signature);
             }
             finish_task_requests.clear();
@@ -995,7 +1030,7 @@ void* TaskWorkerPool::_clear_transaction_task_worker_thread_callback(void* arg_t
         finish_task_request.__set_task_type(agent_task_req->task_type);
         finish_task_request.__set_signature(agent_task_req->signature);
 
-        worker_pool_this->_agent_server->finish_task(finish_task_request);
+        worker_pool_this->_finish_task(finish_task_request);
         worker_pool_this->_remove_task_info(agent_task_req->task_type, agent_task_req->signature);
     }
     return (void*)nullptr;
@@ -1063,7 +1098,7 @@ void* TaskWorkerPool::_update_tablet_meta_worker_thread_callback(void* arg_this)
         finish_task_request.__set_task_type(agent_task_req->task_type);
         finish_task_request.__set_signature(agent_task_req->signature);
 
-        worker_pool_this->_agent_server->finish_task(finish_task_request);
+        worker_pool_this->_finish_task(finish_task_request);
         worker_pool_this->_remove_task_info(agent_task_req->task_type, agent_task_req->signature);
     }
     return (void*)nullptr;
@@ -1123,7 +1158,7 @@ void* TaskWorkerPool::_clone_worker_thread_callback(void* arg_this) {
             }
         } else {
             EngineCloneTask engine_task(ExecEnv::GetInstance()->clone_mem_tracker(), clone_req,
-                                        worker_pool_this->master_info(), agent_task_req->signature, &error_msgs,
+                                        worker_pool_this->_master_info, agent_task_req->signature, &error_msgs,
                                         &tablet_infos, &status);
             Status res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
             if (!res.ok()) {
@@ -1148,7 +1183,7 @@ void* TaskWorkerPool::_clone_worker_thread_callback(void* arg_this) {
         task_status.__set_error_msgs(error_msgs);
         finish_task_request.__set_task_status(task_status);
 
-        worker_pool_this->_agent_server->finish_task(finish_task_request);
+        worker_pool_this->_finish_task(finish_task_request);
         worker_pool_this->_remove_task_info(agent_task_req->task_type, agent_task_req->signature);
     }
 
@@ -1237,7 +1272,7 @@ void* TaskWorkerPool::_storage_medium_migrate_worker_thread_callback(void* arg_t
         task_status.__set_error_msgs(error_msgs);
         finish_task_request.__set_task_status(task_status);
 
-        worker_pool_this->_agent_server->finish_task(finish_task_request);
+        worker_pool_this->_finish_task(finish_task_request);
         worker_pool_this->_remove_task_info(agent_task_req->task_type, agent_task_req->signature);
     }
     return (void*)nullptr;
@@ -1287,7 +1322,7 @@ void* TaskWorkerPool::_check_consistency_worker_thread_callback(void* arg_this) 
         finish_task_request.__set_tablet_checksum(static_cast<int64_t>(checksum));
         finish_task_request.__set_request_version(check_consistency_req.version);
 
-        worker_pool_this->_agent_server->finish_task(finish_task_request);
+        worker_pool_this->_finish_task(finish_task_request);
         worker_pool_this->_remove_task_info(agent_task_req->task_type, agent_task_req->signature);
     }
     return nullptr;
@@ -1300,7 +1335,7 @@ void* TaskWorkerPool::_report_task_worker_thread_callback(void* arg_this) {
     request.__set_backend(worker_pool_this->_backend);
 
     while ((!worker_pool_this->_stopped)) {
-        if (worker_pool_this->master_info().network_address.port == 0) {
+        if (worker_pool_this->_master_info.network_address.port == 0) {
             // port == 0 means not received heartbeat yet
             // sleep a short time and try again
             LOG(INFO) << "Waiting to receive first heartbeat from frontend";
@@ -1318,12 +1353,12 @@ void* TaskWorkerPool::_report_task_worker_thread_callback(void* arg_this) {
 
         StarRocksMetrics::instance()->report_task_requests_total.increment(1);
         TMasterResult result;
-        AgentStatus status = worker_pool_this->_agent_server->report_task(request, &result);
+        AgentStatus status = worker_pool_this->_master_client->report(request, &result);
 
         if (status != STARROCKS_SUCCESS) {
             StarRocksMetrics::instance()->report_task_requests_failed.increment(1);
-            LOG(WARNING) << "Fail to report task to " << worker_pool_this->master_info().network_address.hostname << ":"
-                         << worker_pool_this->master_info().network_address.port << ", err=" << status;
+            LOG(WARNING) << "Fail to report task to " << worker_pool_this->_master_info.network_address.hostname << ":"
+                         << worker_pool_this->_master_info.network_address.port << ", err=" << status;
         }
 
         sleep(config::report_task_interval_seconds);
@@ -1339,7 +1374,7 @@ void* TaskWorkerPool::_report_disk_state_worker_thread_callback(void* arg_this) 
     request.__set_backend(worker_pool_this->_backend);
 
     while ((!worker_pool_this->_stopped)) {
-        if (worker_pool_this->master_info().network_address.port == 0) {
+        if (worker_pool_this->_master_info.network_address.port == 0) {
             // port == 0 means not received heartbeat yet
             // sleep a short time and try again
             LOG(INFO) << "Waiting to receive first heartbeat from frontend";
@@ -1373,12 +1408,12 @@ void* TaskWorkerPool::_report_disk_state_worker_thread_callback(void* arg_this) 
 
         StarRocksMetrics::instance()->report_disk_requests_total.increment(1);
         TMasterResult result;
-        AgentStatus status = worker_pool_this->_agent_server->report_task(request, &result);
+        AgentStatus status = worker_pool_this->_master_client->report(request, &result);
 
         if (status != STARROCKS_SUCCESS) {
             StarRocksMetrics::instance()->report_disk_requests_failed.increment(1);
-            LOG(WARNING) << "Fail to report disk state to " << worker_pool_this->master_info().network_address.hostname
-                         << ":" << worker_pool_this->master_info().network_address.port << ", err=" << status;
+            LOG(WARNING) << "Fail to report disk state to " << worker_pool_this->_master_info.network_address.hostname
+                         << ":" << worker_pool_this->_master_info.network_address.port << ", err=" << status;
         }
 
         // wait for notifying until timeout
@@ -1397,7 +1432,7 @@ void* TaskWorkerPool::_report_tablet_worker_thread_callback(void* arg_this) {
     AgentStatus status = STARROCKS_SUCCESS;
 
     while ((!worker_pool_this->_stopped)) {
-        if (worker_pool_this->master_info().network_address.port == 0) {
+        if (worker_pool_this->_master_info.network_address.port == 0) {
             // port == 0 means not received heartbeat yet
             // sleep a short time and try again
             LOG(INFO) << "Waiting to receive first heartbeat from frontend";
@@ -1420,13 +1455,13 @@ void* TaskWorkerPool::_report_tablet_worker_thread_callback(void* arg_this) {
         request.__set_tablet_max_compaction_score(max_compaction_score);
 
         TMasterResult result;
-        status = worker_pool_this->_agent_server->report_task(request, &result);
+        status = worker_pool_this->_master_client->report(request, &result);
 
         if (status != STARROCKS_SUCCESS) {
             StarRocksMetrics::instance()->report_all_tablets_requests_failed.increment(1);
             LOG(WARNING) << "Fail to report olap table state to "
-                         << worker_pool_this->master_info().network_address.hostname << ":"
-                         << worker_pool_this->master_info().network_address.port << ", err=" << status;
+                         << worker_pool_this->_master_info.network_address.hostname << ":"
+                         << worker_pool_this->_master_info.network_address.port << ", err=" << status;
         }
 
         // wait for notifying until timeout
@@ -1444,7 +1479,7 @@ void* TaskWorkerPool::_report_workgroup_thread_callback(void* arg_this) {
     AgentStatus status = STARROCKS_SUCCESS;
 
     while ((!worker_pool_this->_stopped)) {
-        if (worker_pool_this->master_info().network_address.port == 0) {
+        if (worker_pool_this->_master_info.network_address.port == 0) {
             // port == 0 means not received heartbeat yet
             // sleep a short time and try again
             LOG(INFO) << "Waiting to receive first heartbeat from frontend";
@@ -1457,12 +1492,12 @@ void* TaskWorkerPool::_report_workgroup_thread_callback(void* arg_this) {
         auto workgroups = workgroup::WorkGroupManager::instance()->list_workgroups();
         request.__set_active_workgroups(std::move(workgroups));
         TMasterResult result;
-        status = worker_pool_this->_agent_server->report_task(request, &result);
+        status = worker_pool_this->_master_client->report(request, &result);
 
         if (status != STARROCKS_SUCCESS) {
             StarRocksMetrics::instance()->report_workgroup_requests_failed.increment(1);
-            LOG(WARNING) << "Fail to report workgroup to " << worker_pool_this->master_info().network_address.hostname
-                         << ":" << worker_pool_this->master_info().network_address.port << ", err=" << status;
+            LOG(WARNING) << "Fail to report workgroup to " << worker_pool_this->_master_info.network_address.hostname
+                         << ":" << worker_pool_this->_master_info.network_address.port << ", err=" << status;
         }
         if (result.__isset.workgroup_ops) {
             workgroup::WorkGroupManager::instance()->apply(result.workgroup_ops);
@@ -1509,7 +1544,7 @@ void* TaskWorkerPool::_upload_worker_thread_callback(void* arg_this) {
         finish_task_request.__set_task_status(task_status);
         finish_task_request.__set_tablet_files(tablet_files);
 
-        worker_pool_this->_agent_server->finish_task(finish_task_request);
+        worker_pool_this->_finish_task(finish_task_request);
         worker_pool_this->_remove_task_info(agent_task_req->task_type, agent_task_req->signature);
 
         LOG(INFO) << "Uploaded task signature=" << agent_task_req->signature << " job id=" << upload_request.job_id;
@@ -1555,7 +1590,7 @@ void* TaskWorkerPool::_download_worker_thread_callback(void* arg_this) {
         finish_task_request.__set_task_status(task_status);
         finish_task_request.__set_downloaded_tablet_ids(downloaded_tablet_ids);
 
-        worker_pool_this->_agent_server->finish_task(finish_task_request);
+        worker_pool_this->_finish_task(finish_task_request);
         worker_pool_this->_remove_task_info(agent_task_req->task_type, agent_task_req->signature);
 
         LOG(INFO) << "Downloaded task signature=" << agent_task_req->signature << " job id=" << download_request.job_id;
@@ -1620,7 +1655,7 @@ void* TaskWorkerPool::_make_snapshot_thread_callback(void* arg_this) {
         finish_task_request.__set_snapshot_files(snapshot_files);
         finish_task_request.__set_task_status(task_status);
 
-        worker_pool_this->_agent_server->finish_task(finish_task_request);
+        worker_pool_this->_finish_task(finish_task_request);
         worker_pool_this->_remove_task_info(agent_task_req->task_type, agent_task_req->signature);
     }
     return (void*)nullptr;
@@ -1662,7 +1697,7 @@ void* TaskWorkerPool::_release_snapshot_thread_callback(void* arg_this) {
         finish_task_request.__set_signature(agent_task_req->signature);
         finish_task_request.__set_task_status(task_status);
 
-        worker_pool_this->_agent_server->finish_task(finish_task_request);
+        worker_pool_this->_finish_task(finish_task_request);
         worker_pool_this->_remove_task_info(agent_task_req->task_type, agent_task_req->signature);
     }
     return (void*)nullptr;
@@ -1720,7 +1755,7 @@ void* TaskWorkerPool::_move_dir_thread_callback(void* arg_this) {
         finish_task_request.__set_signature(agent_task_req->signature);
         finish_task_request.__set_task_status(task_status);
 
-        worker_pool_this->_agent_server->finish_task(finish_task_request);
+        worker_pool_this->_finish_task(finish_task_request);
         worker_pool_this->_remove_task_info(agent_task_req->task_type, agent_task_req->signature);
     }
     return (void*)nullptr;
@@ -1746,10 +1781,6 @@ AgentStatus TaskWorkerPool::_move_dir(TTabletId tablet_id, TSchemaHash schema_ha
     }
 
     return STARROCKS_SUCCESS;
-}
-
-const TMasterInfo& TaskWorkerPool::master_info() {
-    return _agent_server->master_info();
 }
 
 } // namespace starrocks
