@@ -164,6 +164,13 @@ public class PrometheusMetricVisitor extends MetricVisitor {
         sb.append(Joiner.on(" ").join(TYPE, JVM_THREAD, "gauge\n"));
         sb.append(JVM_THREAD).append("{type=\"count\"} ").append(threads.getCount()).append("\n");
         sb.append(JVM_THREAD).append("{type=\"peak_count\"} ").append(threads.getPeakCount()).append("\n");
+        sb.append(JVM_THREAD).append("{type=\"new_count\"} ").append(threads.getNewCount()).append("\n");
+        sb.append(JVM_THREAD).append("{type=\"runnable_count\"} ").append(threads.getRunnableCount()).append("\n");
+        sb.append(JVM_THREAD).append("{type=\"blocked_count\"} ").append(threads.getBlockedCount()).append("\n");
+        sb.append(JVM_THREAD).append("{type=\"waiting_count\"} ").append(threads.getWaitingCount()).append("\n");
+        sb.append(JVM_THREAD).append("{type=\"timed_waiting_count\"} ").append(threads.getTimedWaitingCount()).append("\n");
+        sb.append(JVM_THREAD).append("{type=\"terminated_count\"} ").append(threads.getTerminatedCount()).append("\n");
+
         return;
     }
 

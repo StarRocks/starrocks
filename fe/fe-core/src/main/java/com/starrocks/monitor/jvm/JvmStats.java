@@ -45,6 +45,7 @@ import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryPoolMXBean;
 import java.lang.management.MemoryUsage;
 import java.lang.management.RuntimeMXBean;
+import java.lang.management.ThreadInfo;
 import java.lang.management.ThreadMXBean;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -100,7 +101,8 @@ public class JvmStats {
         }
         Mem mem = new Mem(heapCommitted, heapUsed, heapMax, nonHeapCommitted, nonHeapUsed,
                 Collections.unmodifiableList(pools));
-        Threads threads = new Threads(THREAD_MX_BEAN.getThreadCount(), THREAD_MX_BEAN.getPeakThreadCount());
+
+        Threads threads = new Threads(THREAD_MX_BEAN);
 
         List<GarbageCollectorMXBean> gcMxBeans = ManagementFactory.getGarbageCollectorMXBeans();
         GarbageCollector[] collectors = new GarbageCollector[gcMxBeans.size()];
@@ -280,12 +282,17 @@ public class JvmStats {
 
     public static class Threads {
 
-        private final int count;
-        private final int peakCount;
+        private int count;
+        private int peakCount;
+        private int newCount;
+        private int runnableCount;
+        private int blockedCount;
+        private int waitingCount;
+        private int timedWaitingCount;
+        private int terminatedCount;
 
-        public Threads(int count, int peakCount) {
-            this.count = count;
-            this.peakCount = peakCount;
+        public Threads(ThreadMXBean threadMXBean) {
+            init(threadMXBean);
         }
 
         public int getCount() {
@@ -296,11 +303,67 @@ public class JvmStats {
             return peakCount;
         }
 
+        public int getNewCount() {
+            return newCount;
+        }
+
+        public int getRunnableCount() {
+            return runnableCount;
+        }
+
+        public int getBlockedCount() {
+            return blockedCount;
+        }
+
+        public int getWaitingCount() {
+            return waitingCount;
+        }
+
+        public int getTimedWaitingCount() {
+            return timedWaitingCount;
+        }
+
+        public int getTerminatedCount() {
+            return terminatedCount;
+        }
+
         @Override
         public String toString() {
             StringBuilder sb = new StringBuilder();
-            sb.append("count: ").append(count).append(", peak count: ").append(peakCount);
+            sb.append("count: ").append(count)
+                    .append(", peak count: ").append(peakCount)
+                    .append(", new count: ").append(newCount)
+                    .append(", runnable count: ").append(runnableCount)
+                    .append(", blocked count: ").append(blockedCount)
+                    .append(", waiting count: ").append(waitingCount)
+                    .append(", timed waiting count: ").append(timedWaitingCount)
+                    .append(", terminated count: ").append(terminatedCount);
             return sb.toString();
+        }
+
+        private void init(ThreadMXBean threadMXBean) {
+            count = threadMXBean.getThreadCount();
+            peakCount = threadMXBean.getPeakThreadCount();
+
+            long[] threadIds = threadMXBean.getAllThreadIds();
+            for (ThreadInfo threadInfo : threadMXBean.getThreadInfo(threadIds, 0)) {
+                if (threadInfo != null) {
+                    Thread.State state = threadInfo.getThreadState();
+                    if (state.equals(Thread.State.TIMED_WAITING)) {
+                        timedWaitingCount++;
+                    } else if (state.equals(Thread.State.RUNNABLE)) {
+                        runnableCount++;
+                    } else if (state.equals(Thread.State.WAITING)) {
+                        waitingCount++;
+                    } else if (state.equals(Thread.State.NEW)) {
+                        newCount++;
+                    } else if (state.equals(Thread.State.BLOCKED)) {
+                        blockedCount++;
+                    } else if (state.equals(Thread.State.TERMINATED)) {
+                        terminatedCount++;
+                    }
+                }
+            }
         }
     }
 
