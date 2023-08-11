@@ -451,6 +451,7 @@ public class Pipe implements GsonPostProcessable {
                     runningTasks.clear();
                     LOG.info("suspend pipe {} and clear running tasks {}", this, runningTasks);
                 }
+                loadStatus.loadingFiles = 0;
             }
         } finally {
             lock.writeLock().unlock();
