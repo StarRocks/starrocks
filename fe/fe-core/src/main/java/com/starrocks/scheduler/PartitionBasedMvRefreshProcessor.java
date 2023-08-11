@@ -83,6 +83,7 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
@@ -970,7 +971,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Multimap<String, TableRelation> tableRelations =
                 AnalyzerUtils.collectAllTableRelation(queryStatement);
 
-        SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
         for (Map.Entry<String, TableRelation> nameTableRelationEntry : tableRelations.entries()) {
             if (refTableRefreshPartitions.containsKey(nameTableRelationEntry.getKey())) {
                 // set partition names for ref base table
@@ -988,21 +988,26 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 //  non-ref-base-table  : t2.dt
                 // so add partition predicates for select relation when refresh partitions incrementally(eg: dt=20230810):
                 // (select * from t1 join t2 on t1.dt = t2.dt) where t1.dt=20230810
-                Expr partitionPredicates = generatePartitionPredicate(tablePartitionNames, queryStatement, tableRelation,
+                Expr partitionPredicates = generatePartitionPredicate(tablePartitionNames, queryStatement,
                         materializedView.getPartitionInfo());
                 if (partitionPredicates != null) {
                     tableRelation.setPartitionPredicate(partitionPredicates);
-                    Expr orgWhereClause = selectRelation.getWhereClause();
-                    selectRelation.setWhereClause(Expr.compoundOr(Lists.newArrayList(orgWhereClause, partitionPredicates)));
+
+                    QueryRelation queryRelation = queryStatement.getQueryRelation();
+                    if (queryRelation instanceof SelectRelation) {
+                        SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
+                        Expr orgWhereClause = selectRelation.getWhereClause();
+                        selectRelation.setWhereClause(Expr.compoundOr(Lists.newArrayList(orgWhereClause, partitionPredicates)));
+                    }
+                    // TODO: support union relation later.
                 }
-                break;
             }
         }
         return insertStmt;
     }
 
     private Expr generatePartitionPredicate(Set<String> tablePartitionNames, QueryStatement queryStatement,
-                                            TableRelation tableRelation, PartitionInfo mvPartitionInfo)
+                                            PartitionInfo mvPartitionInfo)
             throws AnalysisException {
         SlotRef partitionSlot = MaterializedView.getRefBaseTablePartitionSlotRef(materializedView);
         List<String> columnOutputNames = queryStatement.getQueryRelation().getColumnOutputNames();
