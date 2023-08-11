@@ -58,6 +58,7 @@ jobs:
           (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
         run: |
           echo "pass=true" >> $GITHUB_OUTPUT
+          exit 1
 
       - uses: dorny/paths-filter@v2
         id: thirdparty-checker
