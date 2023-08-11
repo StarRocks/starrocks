@@ -1151,7 +1151,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         ExecPlan execPlan = mvContext.getExecPlan();
         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
         Assert.assertTrue(plan.contains("PARTITION PREDICATES: 5: par_date >= '2020-01-01', 5: par_date < '2020-01-03'"));
-        Assert.assertTrue(plan.contains("partitions=3/6"));
+        Assert.assertTrue(plan.contains("partitions=3/7"));
     }
 
     @Test
@@ -1646,6 +1646,73 @@ public class PartitionBasedMvRefreshProcessorTest {
     @Test
     public void testPartitionPruneNonRefBaseTable1() throws Exception {
         starRocksAssert.useDatabase("test")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`partition_prune_non_ref_tables1`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "PARTITION BY (`k1`)\n" +
+                        "DISTRIBUTED BY HASH(`k1`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT t1.k1, sum(t1.k2) as sum1, avg(t2.k2) as avg1 FROM tbl4 as t1 join " +
+                        "tbl5 t2 on t1.k1=t2.dt group by t1.k1");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("partition_prune_non_ref_tables1"));
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        // run 1
+        {
+            // just refresh to avoid dirty data
+            taskRun.executeTaskRun();
+        }
+
+        // run 2
+        {
+            // base table partition insert data
+            String insertSql = "insert into tbl4 partition(p4) values('2022-04-01', 3, 10);";
+            new StmtExecutor(connectContext, insertSql).execute();
+
+            taskRun.executeTaskRun();
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                    taskRun.getProcessor();
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            Assert.assertFalse(plan.contains("partitions=5/5"));
+            Assert.assertTrue(plan.contains("partitions=1/5\n" +
+                    "     rollup: tbl5"));
+            Assert.assertTrue(plan.contains("partitions=1/5\n" +
+                    "     rollup: tbl4"));
+        }
+
+        // run 3
+        {
+            // TODO: non-ref base table partition's updated will cause the materialized view's refresh all partitions
+            String insertSql = "insert into tbl5 partition(p4) values('2022-04-01', '2021-04-01 00:02:11', 3, 10);";
+            new StmtExecutor(connectContext, insertSql).execute();
+
+            taskRun.executeTaskRun();
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                    taskRun.getProcessor();
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            System.out.println(plan);
+            Assert.assertTrue(plan.contains("partitions=5/5\n" +
+                    "     rollup: tbl5"));
+            Assert.assertTrue(plan.contains("partitions=5/5\n" +
+                    "     rollup: tbl4"));
+        }
+        starRocksAssert.dropMaterializedView("partition_prune_non_ref_tables1");
+    }
+
+    @Test
+    public void testPartitionPruneNonRefBaseTable2() throws Exception {
+        // partition column with alias
+        starRocksAssert.useDatabase("test")
                 .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`partition_prune_non_ref_tables2`\n" +
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY (`k11`)\n" +
@@ -1710,7 +1777,7 @@ public class PartitionBasedMvRefreshProcessorTest {
     }
 
     @Test
-    public void testPartitionPruneNonRefBaseTable2() throws Exception {
+    public void testHivePartitionPruneNonRefBaseTable1() throws Exception {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test`.`hive_partition_prune_non_ref_tables2`\n" +
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
@@ -1828,7 +1895,7 @@ public class PartitionBasedMvRefreshProcessorTest {
     }
 
     @Test
-    public void testPartitionPruneNonRefBaseTable3() throws Exception {
+    public void testHivePartitionPruneNonRefBaseTable2() throws Exception {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test`.`hive_partition_prune_non_ref_tables1`\n" +
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
