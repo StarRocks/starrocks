@@ -19,6 +19,8 @@
 #include "exec/vectorized/schema_scanner.h"
 #include "gen_cpp/FrontendService_types.h"
 
+#include "common/compiler_util.h"
+
 namespace starrocks {
 
 class SchemaBeConfigsScanner : public vectorized::SchemaScanner {
@@ -26,8 +28,24 @@ public:
     SchemaBeConfigsScanner();
     ~SchemaBeConfigsScanner() override;
 
+<<<<<<< HEAD:be/src/exec/vectorized/schema_scanner/schema_be_configs_scanner.h
     Status start(RuntimeState* state) override;
     Status get_next(vectorized::ChunkPtr* chunk, bool* eos) override;
+=======
+    char* malloc(uint64_t size) override {
+        // Return nullptr if size is 0, otherwise debug-enabled jemalloc would fail non-zero size assertion.
+        // See https://github.com/jemalloc/jemalloc/issues/2514
+        if (UNLIKELY(size == 0)) {
+            return nullptr;
+        }
+        auto p = static_cast<char*>(std::malloc(size));
+        if (UNLIKELY(p == nullptr)) {
+            LOG(WARNING) << "malloc failed, size=" << size;
+            throw std::bad_alloc();
+        }
+        return p;
+    }
+>>>>>>> 0e4994e572 ([BugFix] Avoid jemalloc non-zero assertion failure (#29062)):be/src/formats/orc/orc_memory_pool.cpp
 
 private:
     Status fill_chunk(vectorized::ChunkPtr* chunk);
