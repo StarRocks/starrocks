@@ -417,10 +417,10 @@ public class AnalyzerUtils {
         return tables;
     }
 
-    public static Multimap<String, TableRelation> collectAllTableRelation(StatementBase statementBase) {
-        Multimap<String, TableRelation> tableRelations = ArrayListMultimap.create();
-        new AnalyzerUtils.TableRelationCollector(tableRelations).visit(statementBase);
-        return tableRelations;
+    public static Multimap<String, List<TableRelation>> collectAllTableRelation(StatementBase statementBase) {
+        Multimap<String, List<TableRelation>> tblMapToTableRelations = ArrayListMultimap.create();
+        new AnalyzerUtils.TableRelationCollector(tblMapToTableRelations).visit(statementBase);
+        return tblMapToTableRelations;
     }
 
     public static List<TableRelation> collectTableRelations(StatementBase statementBase) {
@@ -596,17 +596,17 @@ public class AnalyzerUtils {
 
     private static class TableRelationCollector extends TableCollector {
 
-        private final Multimap<String, TableRelation> tableRelations;
+        private final Multimap<String, List<TableRelation>> tblMapToTableRelations;
 
-        public TableRelationCollector(Multimap<String, TableRelation> tableRelations) {
+        public TableRelationCollector(Multimap<String, List<TableRelation>> tblMapToTableRelations) {
             super(null);
-            this.tableRelations = tableRelations;
+            this.tblMapToTableRelations = tblMapToTableRelations;
         }
 
         @Override
         public Void visitTable(TableRelation node, Void context) {
             String tblName = node.getTable() != null ? node.getTable().getName() : node.getName().getTbl();
-            tableRelations.put(tblName, node);
+            tblMapToTableRelations.put(tblName, node);
             return null;
         }
     }

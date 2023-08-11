@@ -44,6 +44,9 @@ import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatisticsMetaManager;
@@ -61,8 +64,10 @@ import org.junit.Test;
 
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -188,6 +193,12 @@ public class PartitionBasedMvRefreshProcessorTest {
                         "refresh deferred manual\n" +
                         "properties('replication_num' = '1')\n" +
                         "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;")
+                .withMaterializedView("create materialized view test.mv_join_itself\n" +
+                        "partition by k1 \n" +
+                        "distributed by hash(k2) buckets 10\n" +
+                        "refresh manual\n" +
+                        "properties('replication_num' = '1')\n" +
+                        "as select a.k1, b.k2 from tbl1  as a join tbl1 as b on a.k2 = a.k2;")
                 .withMaterializedView("create materialized view test.mv2\n" +
                         "partition by date_trunc('month',k1) \n" +
                         "distributed by hash(k2) buckets 10\n" +
@@ -1156,6 +1167,27 @@ public class PartitionBasedMvRefreshProcessorTest {
         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
         Assert.assertTrue(plan.contains("PARTITION PREDICATES: 5: par_date >= '2020-01-01', 5: par_date < '2020-01-03'"));
         Assert.assertTrue(plan.contains("partitions=3/6"));
+    }
+
+    @Test
+    public void testGenerateInsertStmt() throws Exception {
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_join_itself"));
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(new HashMap<>()).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                taskRun.getProcessor();
+        Set<String> materializedViewPartitions = new HashSet<>();
+        Map<String, Set<String>> sourceTablePartitions = new HashMap<>();
+        materializedViewPartitions.add("p2");
+        sourceTablePartitions.computeIfAbsent("tbl1", k -> new HashSet<>()).add("p2");
+        InsertStmt insertStmt = processor.generateInsertStmt(materializedViewPartitions, sourceTablePartitions, materializedView);
+        SelectRelation selectRelation = (SelectRelation) insertStmt.getQueryStatement().getQueryRelation();
+        JoinRelation joinRelation = (JoinRelation) selectRelation.getRelation();
+        Assert.assertEquals(1, ((TableRelation) joinRelation.getLeft()).getPartitionNames().getPartitionNames().size());
+        Assert.assertEquals(1, ((TableRelation) joinRelation.getRight()).getPartitionNames().getPartitionNames().size());
     }
 
     @Test

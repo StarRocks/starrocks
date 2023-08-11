@@ -965,22 +965,24 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Analyzer.analyze(insertStmt, ctx);
         // after analyze, we could get the table meta info of the tableRelation.
         QueryStatement queryStatement = insertStmt.getQueryStatement();
-        Multimap<String, TableRelation> tableRelations =
+        Multimap<String, List<TableRelation>> tblMapToTableRelations =
                 AnalyzerUtils.collectAllTableRelation(queryStatement);
-        for (Map.Entry<String, TableRelation> nameTableRelationEntry : tableRelations.entries()) {
+        for (Map.Entry<String, List<TableRelation>> nameTableRelationEntry : tblMapToTableRelations.entries()) {
             if (refTableRefreshPartitions.containsKey(nameTableRelationEntry.getKey())) {
                 Set<String> tablePartitionNames = refTableRefreshPartitions.get(nameTableRelationEntry.getKey());
-                TableRelation tableRelation = nameTableRelationEntry.getValue();
-                tableRelation.setPartitionNames(
-                        new PartitionNames(false, tablePartitionNames == null ? null :
-                                new ArrayList<>(tablePartitionNames)));
+                List<TableRelation> tableRelations = nameTableRelationEntry.getValue();
+                for (TableRelation tableRelation : tableRelations) {
+                    tableRelation.setPartitionNames(
+                            new PartitionNames(false, tablePartitionNames == null ? null :
+                                    new ArrayList<>(tablePartitionNames)));
 
-                // generate partition predicate for external table because it can not use partition names
-                // to scan partial partitions
-                Table table = tableRelation.getTable();
-                if (tablePartitionNames != null && !table.isNativeTableOrMaterializedView()) {
-                    generatePartitionPredicate(tablePartitionNames, queryStatement, tableRelation,
-                            materializedView.getPartitionInfo());
+                    // generate partition predicate for external table because it can not use partition names
+                    // to scan partial partitions
+                    Table table = tableRelation.getTable();
+                    if (tablePartitionNames != null && !table.isNativeTableOrMaterializedView()) {
+                        generatePartitionPredicate(tablePartitionNames, queryStatement, tableRelation,
+                                materializedView.getPartitionInfo());
+                    }
                 }
             }
         }
