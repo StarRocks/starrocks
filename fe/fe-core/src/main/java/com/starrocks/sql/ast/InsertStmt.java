@@ -82,6 +82,7 @@ public class InsertStmt extends DmlStmt {
     private Map<String, String> properties;
     private boolean enablePartialUpdate = false;
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
+    private String mergeCondition;
 
     /**
      * `true` means that it's created by CTAS statement
@@ -98,6 +99,7 @@ public class InsertStmt extends DmlStmt {
         this.queryStatement = queryStatement;
         this.targetColumnNames = cols;
         this.isOverwrite = isOverwrite;
+        this.properties = properties;
     }
 
     // Ctor for CreateTableAsSelectStmt
@@ -234,6 +236,14 @@ public class InsertStmt extends DmlStmt {
 
     public void setPartialUpdateMode(TPartialUpdateMode mode) {
         this.partialUpdateMode = mode;
+    }
+
+    public String getMergeCondition() {
+        return mergeCondition;
+    }
+
+    public void setMergeCondition(String mergeCondition) {
+        this.mergeCondition = mergeCondition;
     }
 
     @Override

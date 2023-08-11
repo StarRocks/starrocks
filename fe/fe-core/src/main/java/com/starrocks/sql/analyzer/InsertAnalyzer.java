@@ -65,6 +65,12 @@ import static com.starrocks.sql.common.UnsupportedException.unsupportedException
 
 public class InsertAnalyzer {
 
+    // Supported properties
+    public static final String PARTIAL_UPDATE = "partial_update";
+    public static final String PARTIAL_UPDATE_MODE = "partial_update_mode";
+    public static final String MERGE_CONDITION = "merge_condition";
+
+    // TODO: unsupported properties
     public static final String TIMEOUT_PROPERTY = "timeout";
     public static final String MAX_FILTER_RATIO_PROPERTY = "max_filter_ratio";
     public static final String LOAD_DELETE_FLAG_PROPERTY = "load_delete_flag";
@@ -73,27 +79,14 @@ public class InsertAnalyzer {
     public static final String STRICT_MODE = "strict_mode";
     public static final String TIMEZONE = "timezone";
     public static final String PRIORITY = "priority";
-    public static final String MERGE_CONDITION = "merge_condition";
     public static final String CASE_SENSITIVE = "case_sensitive";
     public static final String LOG_REJECTED_RECORD_NUM = "log_rejected_record_num";
     public static final String SPARK_LOAD_SUBMIT_TIMEOUT = "spark_load_submit_timeout";
-    public static final String PARTIAL_UPDATE = "partial_update";
-    public static final String PARTIAL_UPDATE_MODE = "partial_update_mode";
 
     private static final ImmutableSet<String> PROPERTIES_SET = new ImmutableSet.Builder<String>()
-            .add(TIMEOUT_PROPERTY)
-            .add(MAX_FILTER_RATIO_PROPERTY)
-            .add(LOAD_DELETE_FLAG_PROPERTY)
-            .add(LOAD_MEM_LIMIT)
-            .add(STRICT_MODE)
-            .add(VERSION)
-            .add(TIMEZONE)
             .add(PARTIAL_UPDATE)
-            .add(PRIORITY)
-            .add(CASE_SENSITIVE)
-            .add(LOG_REJECTED_RECORD_NUM)
             .add(PARTIAL_UPDATE_MODE)
-            .add(SPARK_LOAD_SUBMIT_TIMEOUT)
+            .add(MERGE_CONDITION)
             .build();
 
     public static void analyze(InsertStmt insertStmt, ConnectContext session) {
@@ -119,12 +112,7 @@ public class InsertAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
         }
 
-        // check properties
-        try {
-            checkProperties(insertStmt, insertStmt.getProperties());
-        } catch (DdlException e) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_PROPERTY, e.getMessage());
-        }
+
 
         Database database = MetaUtils.getDatabase(catalogName, dbName);
         Table table = MetaUtils.getTable(catalogName, dbName, tableName);
@@ -309,6 +297,13 @@ public class InsertAnalyzer {
         if (session.getDumpInfo() != null) {
             session.getDumpInfo().addTable(database.getFullName(), table);
         }
+
+        // check properties
+        try {
+            checkProperties(insertStmt, insertStmt.getProperties());
+        } catch (DdlException e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_PROPERTY, e.getMessage());
+        }
     }
 
     private static void checkProperties(InsertStmt insertStmt, Map<String, String> properties) throws DdlException {
@@ -333,16 +328,29 @@ public class InsertAnalyzer {
         String partialUpdateMode = properties.get(PARTIAL_UPDATE_MODE);
         if (partialUpdateMode != null) {
             TPartialUpdateMode mode = TPartialUpdateMode.UNKNOWN_MODE;
-            if (partialUpdateMode.equals("column")) {
-                mode = TPartialUpdateMode.COLUMN_MODE;
-            } else if (partialUpdateMode.equals("auto")) {
-                mode = TPartialUpdateMode.AUTO_MODE;
-            } else if (partialUpdateMode.equals("row")) {
-                mode = TPartialUpdateMode.ROW_MODE;
+            switch (partialUpdateMode) {
+                case "column":
+                    mode = TPartialUpdateMode.COLUMN_UPSERT_MODE;
+                    break;
+                case "auto":
+                    mode = TPartialUpdateMode.AUTO_MODE;
+                    break;
+                case "row":
+                    mode = TPartialUpdateMode.ROW_MODE;
+                    break;
             }
             insertStmt.setPartialUpdateMode(mode);
         }
 
+        // merge condition
+        String mergeCondition = properties.get(MERGE_CONDITION);
+        if (mergeCondition != null) {
+            OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
+            Load.checkMergeCondition(mergeCondition, olapTable, false);
+            insertStmt.setMergeCondition(mergeCondition);
+        }
+
+        // load_mem_Limit
         final String loadMemProperty = properties.get(LOAD_MEM_LIMIT);
         if (loadMemProperty != null) {
             try {

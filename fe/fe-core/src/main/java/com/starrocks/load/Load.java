@@ -650,8 +650,13 @@ public class Load {
     }
 
     public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs,
-             List<Boolean> missAutoIncrementColumn) throws UserException {
+                                                      List<Boolean> missAutoIncrementColumn) throws UserException {
         Set<String> specified = columnExprs.stream().map(desc -> desc.getColumnName()).collect(Collectors.toSet());
+        return getPartialUpateColumns(tbl, specified, missAutoIncrementColumn);
+    }
+
+    public static List<Column> getPartialUpateColumns(Table tbl, Set<String> specified,
+                                                      List<Boolean> missAutoIncrementColumn) throws UserException {
         List<Column> ret = new ArrayList<>();
         for (Column col : tbl.getBaseSchema()) {
             if (specified.contains(col.getName())) {

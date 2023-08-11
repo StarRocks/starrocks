@@ -872,4 +872,75 @@ public class InsertPlanTest extends PlanTestBase {
                 "         NULL\n";
         Assert.assertEquals(expected, actualRes);
     }
+
+    @Test
+    public void testInsertPartialUpdate() throws Exception {
+        String tableName = "ti1";
+        starRocksAssert.dropTableIfExists(tableName);
+        starRocksAssert.withTable("CREATE TABLE `ti1` (\n" +
+                "  `k1` bigint NOT NULL COMMENT \"\",\n" +
+                "  `v1` bigint NULL COMMENT \"\",\n" +
+                "  `v2` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(k1)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+        starRocksAssert.withTable("CREATE TABLE `ti2` (\n" +
+                "  `k1` bigint NOT NULL COMMENT \"\",\n" +
+                "  `v1` bigint NULL COMMENT \"\",\n" +
+                "  `v2` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(k1)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+        // Default Partial update
+        {
+            String explainString = getInsertExecPlan("insert into ti1 (k1, v1) " +
+                    "properties('partial_update'= 'true') " +
+                    "select k1, v1 from ti1");
+            assertContains(explainString, "PARTIAL_UPDATE_MODE: ROW_MODE");
+        }
+
+        // Partial update with mode
+        {
+            String explainString = getInsertExecPlan("insert into ti1 (k1, v1) " +
+                    "properties('partial_update'= 'true', 'partial_update_mode'='column') " +
+                    "select k1, v1 from ti1");
+            assertContains(explainString, "PARTIAL_UPDATE_MODE: COLUMN_UPSERT_MODE");
+        }
+
+        // Illegal partial update
+        {
+            Assert.assertThrows(SemanticException.class,
+                    () -> getInsertExecPlan("insert into ti1 " +
+                            "properties('partial_update'= 'true') " +
+                            "select * from ti1"));
+            Assert.assertThrows(SemanticException.class,
+                    () -> getInsertExecPlan("insert into ti2 (k1, v1) " +
+                            "properties('partial_update'= 'true') " +
+                            "select k1, v1 from ti1"));
+        }
+
+        // Merge condition
+        {
+            String explainString = getInsertExecPlan("insert into ti1 (k1, v1) " +
+                    "properties('merge_condition'= 'v2') " +
+                    "select k1, v1 from ti1");
+            assertContains(explainString, "PARTIAL_UPDATE_MODE: ROW_MODE");
+        }
+        // Illegal Merge condition
+        {
+            Assert.assertThrows(SemanticException.class,
+                    () -> getInsertExecPlan("insert into ti1 (k1, v1) " +
+                            "properties('merge_condition'= 'k1') " +
+                            "select k1, v1 from ti1"));
+        }
+    }
 }

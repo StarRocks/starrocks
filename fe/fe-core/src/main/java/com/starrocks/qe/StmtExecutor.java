@@ -1667,7 +1667,12 @@ public class StmtExecutor {
                 OlapTableSink dataSink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
                 dataSink.init(context.getExecutionId(), transactionId, database.getId(),
                         ConnectContext.get().getSessionVariable().getQueryTimeoutS());
-                dataSink.complete();
+                if (stmt instanceof InsertStmt) {
+                    InsertStmt insertStmt = (InsertStmt) stmt;
+                    dataSink.complete(insertStmt.getMergeCondition());
+                } else {
+                    dataSink.complete();
+                }
             }
 
             coord = getCoordinatorFactory().createInsertScheduler(
