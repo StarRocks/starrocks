@@ -30,19 +30,22 @@ ORCHdfsFileStream::ORCHdfsFileStream(RandomAccessFile* file, uint64_t length, io
         : _file(file), _length(length), _cache_buffer(0), _cache_offset(0), _sb_stream(sb_stream) {}
 
 void ORCHdfsFileStream::prepareCache(PrepareCacheScope scope, uint64_t offset, uint64_t length) {
-    const size_t cache_max_size = config::orc_file_cache_max_size;
-    if (length > cache_max_size) return;
-    if (canUseCacheBuffer(offset, length)) return;
-
-    // If this stripe is small, probably other stripes are also small
-    // we combine those reads into one, and try to read several stripes in one shot.
+    size_t cache_max_size = config::orc_file_cache_max_size;
+    if (scope == PrepareCacheScope::READ_FULL_ROW_INDEX) {
+        cache_max_size = config::orc_row_index_cache_max_size;
+    }
     if (scope == PrepareCacheScope::READ_FULL_STRIPE) {
-        length = std::min(_length - offset, cache_max_size);
+        cache_max_size = config::orc_stripe_cache_max_size;
     }
 
+    if (length > cache_max_size) return;
+    if (canUseCacheBuffer(offset, length)) return;
+    if (scope == PrepareCacheScope::READ_FULL_STRIPE && _tiny_stripe_read) {
+        length = computeCacheFullStripeSize(offset, length);
+    }
     _cache_buffer.resize(length);
     _cache_offset = offset;
-    doRead(_cache_buffer.data(), length, offset, true);
+    doRead(_cache_buffer.data(), length, offset);
 }
 
 bool ORCHdfsFileStream::canUseCacheBuffer(uint64_t offset, uint64_t length) {
@@ -58,7 +61,7 @@ void ORCHdfsFileStream::read(void* buf, uint64_t length, uint64_t offset) {
         size_t idx = offset - _cache_offset;
         memcpy(buf, _cache_buffer.data() + idx, length);
     } else {
-        doRead(buf, length, offset, false);
+        doRead(buf, length, offset);
     }
 }
 
@@ -66,7 +69,7 @@ const std::string& ORCHdfsFileStream::getName() const {
     return _file->filename();
 }
 
-void ORCHdfsFileStream::doRead(void* buf, uint64_t length, uint64_t offset, bool direct) {
+void ORCHdfsFileStream::doRead(void* buf, uint64_t length, uint64_t offset) {
     if (buf == nullptr) {
         throw orc::ParseError("Buffer is null");
     }
@@ -94,6 +97,43 @@ void ORCHdfsFileStream::setIORanges(std::vector<IORange>& io_ranges) {
     if (!st.ok()) {
         auto msg = strings::Substitute("Failed to setIORanges $0: $1", _file->filename(), st.to_string());
         throw orc::ParseError(msg);
+    }
+}
+
+uint64_t ORCHdfsFileStream::computeCacheFullStripeSize(uint64_t offset, uint64_t length) {
+    uint64_t from = _last_stripe_index;
+    while (from < _stripes.size()) {
+        if (_stripes[from].offset == offset) {
+            break;
+        }
+        from += 1;
+    }
+    _last_stripe_index = from;
+    DCHECK(from != _stripes.size());
+    if (from == _stripes.size()) {
+        return 0;
+    }
+
+    uint64_t to = from + 1;
+    while (to < _stripes.size()) {
+        uint64_t gap = _stripes[to].offset - _stripes[to - 1].offset - _stripes[to - 1].length;
+        uint64_t total = _stripes[to].offset + _stripes[to].length - _stripes[from].offset;
+        if (gap > config::io_coalesce_read_max_distance_size) break;
+        if (total > config::orc_stripe_cache_max_size) break;
+        to += 1;
+    }
+    to -= 1;
+    return _stripes[to].offset + _stripes[to].length - _stripes[from].offset;
+}
+
+void ORCHdfsFileStream::setStripes(std::vector<StripeInformation>&& stripes) {
+    _stripes = std::move(stripes);
+    _tiny_stripe_read = true;
+    for (const StripeInformation& s : _stripes) {
+        if (s.length > config::orc_stripe_cache_max_size) {
+            _tiny_stripe_read = false;
+            break;
+        }
     }
 }
 

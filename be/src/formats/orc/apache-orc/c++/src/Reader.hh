@@ -315,6 +315,7 @@ public:
     uint64_t getNumberOfStripes() const override;
 
     std::unique_ptr<StripeInformation> getStripe(uint64_t) const override;
+    const orc::proto::StripeInformation& getStripeInOrcFormat(uint64_t stripeIndex) const override;
 
     uint64_t getNumberOfStripeStatistics() const override;
 
