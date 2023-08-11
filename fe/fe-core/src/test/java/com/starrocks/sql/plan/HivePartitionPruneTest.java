@@ -12,13 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.DdlException;
+import com.starrocks.planner.HdfsScanNode;
+import com.starrocks.planner.ScanNode;
 import com.starrocks.server.GlobalStateMgr;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.util.List;
 
 public class HivePartitionPruneTest extends ConnectorPlanTestBase {
     @Before
@@ -118,5 +122,36 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
         assertContains(plan, "PARTITION PREDICATES: (abs(4: par_col) = 1) OR (abs(4: par_col) = 2)\n" +
                 "     NO EVAL-PARTITION PREDICATES: (abs(4: par_col) = 1) OR (abs(4: par_col) = 2)\n" +
                 "     partitions=3/3");
+    }
+
+    @Test
+    public void testHivePartitionPredicatesPrune() throws Exception {
+        String sql = "select a.l_orderkey,\n" +
+                "    b.l_partkey\n" +
+                "from (\n" +
+                "        select l_orderkey,\n" +
+                "            l_partkey\n" +
+                "        from lineitem_mul_par2\n" +
+                "        where l_shipdate = '1998-01-01'\n" +
+                "            and l_returnflag = 'R'\n" +
+                "        limit 10\n" +
+                "    ) a\n" +
+                "    join (\n" +
+                "        select l_orderkey,\n" +
+                "            l_partkey\n" +
+                "        from lineitem_mul_par2\n" +
+                "        where l_shipdate = '1998-01-01'\n" +
+                "            and l_returnflag = 'A'\n" +
+                "        limit 10\n" +
+                "    ) b on a.l_orderkey = b.l_orderkey";
+        ExecPlan plan = getExecPlan(sql);
+        List<ScanNode> scanNodes = plan.getScanNodes();
+        Assert.assertEquals(scanNodes.size(), 2);
+        HdfsScanNode node0 = (HdfsScanNode) scanNodes.get(0);
+        HdfsScanNode node1 = (HdfsScanNode) scanNodes.get(1);
+        Assert.assertEquals(node0.getScanNodePredicates().getSelectedPartitionIds().size(), 1);
+        Assert.assertEquals(node1.getScanNodePredicates().getSelectedPartitionIds().size(), 1);
+        Assert.assertFalse(node0.getScanNodePredicates().getSelectedPartitionIds().equals(
+                node1.getScanNodePredicates().getSelectedPartitionIds()));
     }
 }
