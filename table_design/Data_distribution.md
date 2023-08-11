@@ -3,7 +3,7 @@
 建表时，您需要通过设置分区和分桶，指定数据分布方式，并且建议您合理设置分区和分桶，实现数据均匀的分布。数据分布是指数据划分为子集，并按一定规则均衡地分布在不同节点上，能够有效裁剪数据扫描量，最大限度地利用集群的并发性能，从而提升查询性能。
 > **说明**
 >
-> 自 2.5.7 版本起，StarRocks 支持自动设置分桶数量。
+> 自 2.5.7 版本起，您在建表和新增分区时可以不设置分桶数量 (BUCKETS)。StarRocks 默认自动设置分桶数量，如果自动设置分桶数量后性能未能达到预期，并且您比较熟悉分桶机制，则您也可以[手动设置分桶数量](#确定分桶数量)。
 
 ## 数据分布概览
 
@@ -361,7 +361,7 @@ DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 10;
 
 - 建表时如何设置分桶数量
   
-  - 自动设置分桶数量
+  - 方式一：自动设置分桶数量
 
     自 2.5.7 版本起， StarRocks 能够自动设置分桶数量。假设 BE 数量为 X，StarRocks 推断分桶数量的策略如下：
     > 如果需要启用该功能，则您需要执行 `ADMIN SET FRONTEND CONFIG ("enable_auto_tablet_distribution" = "true");` 以开启该 FE 动态参数。
@@ -386,6 +386,8 @@ DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 10;
     
     如果需要开启该功能，则您需要确保 FE 动态参数 `enable_auto_tablet_distribution` 为 `true`。
     建表后，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW%20PARTITIONS.md) 来查看 StarRock 为分区自动设置的分桶数量。
+
+    > 如您的表单个分区原始数据规模预计超过100GB，建议您使用下述方式手动设置分桶数量。
 
   - 方式二：手动设置分桶数量
 
