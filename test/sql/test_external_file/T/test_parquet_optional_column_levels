@@ -18,4 +18,8 @@ PROPERTIES
 select * from opt_col_levels where c0 = 403350;
 select * from opt_col_levels where c0 = 403376;
 
+select * from opt_col_levels where current_role() = 'root' and c0 = 403376;
+
+select * from opt_col_levels where current_role() != 'root' and c0 = 403376;
+
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_parquet_optional_column_levels/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
