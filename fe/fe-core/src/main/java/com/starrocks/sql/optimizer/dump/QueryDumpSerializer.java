@@ -44,8 +44,7 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
 
     @Override
     public JsonElement serialize(QueryDumpInfo dumpInfo, Type type, JsonSerializationContext jsonSerializationContext) {
-        JsonObject dumpJson = new JsonObject();
-        serializeSensitiveContent(dumpInfo, dumpJson);
+        JsonObject dumpJson = serializeSensitiveContent(dumpInfo);
 
         // session variables
         try {
@@ -79,11 +78,12 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         return dumpJson;
     }
 
-    private void serializeSensitiveContent(QueryDumpInfo dumpInfo, JsonObject dumpJson) {
+    private JsonObject serializeSensitiveContent(QueryDumpInfo dumpInfo) {
+        JsonObject dumpJson = new JsonObject();
         if (dumpInfo.isDesensitizedInfo()) {
             try {
                 desensitizeContent(dumpInfo, dumpJson);
-                return;
+                return dumpJson;
             } catch (Throwable e) {
                 LOG.info("failed to desensitize content, use the original content", e);
                 dumpJson = new JsonObject();
@@ -163,6 +163,7 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             tableColumnStatistics.add(entry.getKey(), columnStatistics);
         }
         dumpJson.add("column_statistics", tableColumnStatistics);
+        return dumpJson;
     }
 
     private void desensitizeContent(QueryDumpInfo dumpInfo, JsonObject dumpJson) {
