@@ -1,4 +1,20 @@
+<<<<<<< HEAD
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+=======
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+>>>>>>> 511b5f5b8e ([BugFix] Fix un-groupby column in having subquery bug (#28828))
 
 package com.starrocks.sql.plan;
 
@@ -1856,5 +1872,18 @@ public class SubqueryTest extends PlanTestBase {
                 " else null end end from tmp a;";
         Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
         assertContains(pair.first, "CTEAnchor(cteid=2)");
+    }
+
+    @Test
+    public void testHavingSubqueryNoGroupMode() {
+        String sql = "select v3 from t0 group by v2 having 1 > (select v4 from t1 where t0.v1 = t1.v5)";
+        long sqlMode = connectContext.getSessionVariable().getSqlMode();
+        try {
+            connectContext.getSessionVariable().setSqlMode(0);
+            Assert.assertThrows("must be an aggregate expression or appear in GROUP BY clause", SemanticException.class,
+                    () -> getFragmentPlan(sql));
+        } finally {
+            connectContext.getSessionVariable().setSqlMode(sqlMode);
+        }
     }
 }
