@@ -1067,7 +1067,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             List<Expr> partitionPredicates = MvUtils.convertList(outputPartitionSlot, sourceTablePartitionList);
             return Expr.compoundOr(partitionPredicates);
         } else {
-            // throw
+            LOG.warn("Generate partition predicate failed: " +
+                    "partition slot {} is not supported yet: {}", partitionSlot, mvPartitionInfo);
             return null;
         }
     }
