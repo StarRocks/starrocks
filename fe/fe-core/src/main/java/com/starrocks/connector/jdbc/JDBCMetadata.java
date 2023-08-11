@@ -35,7 +35,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class JDBCMetadata implements ConnectorMetadata {
 
@@ -44,7 +43,6 @@ public class JDBCMetadata implements ConnectorMetadata {
     private Map<String, String> properties;
     private String catalogName;
     private JDBCSchemaResolver schemaResolver;
-    private static ConcurrentHashMap<JDBCTableName, Integer> tableIdCache = new ConcurrentHashMap();
 
     public JDBCMetadata(Map<String, String> properties, String catalogName) {
         this.properties = properties;
@@ -118,12 +116,12 @@ public class JDBCMetadata implements ConnectorMetadata {
                 return null;
             }
             JDBCTableName tableKey = JDBCTableName.of(catalogName, dbName, tblName);
-            if (tableIdCache.containsKey(tableKey)) {
-                return schemaResolver.getTable(tableIdCache.get(tableKey),
+            if (JDBCTableIdCache.getTableIdCache().containsKey(tableKey)) {
+                return schemaResolver.getTable(JDBCTableIdCache.getTableIdCache().get(tableKey),
                         tblName, fullSchema, partitionColumns, dbName, catalogName, properties);
             } else {
                 Integer tableId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt();
-                tableIdCache.put(tableKey, tableId);
+                JDBCTableIdCache.getTableIdCache().put(tableKey, tableId);
                 return schemaResolver.getTable(tableId, tblName, fullSchema, partitionColumns, dbName, catalogName, properties);
             }
         } catch (SQLException | DdlException e) {
