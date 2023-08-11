@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.dump;
 
 import com.google.common.collect.Lists;
@@ -46,6 +45,50 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
     @Override
     public JsonElement serialize(QueryDumpInfo dumpInfo, Type type, JsonSerializationContext jsonSerializationContext) {
         JsonObject dumpJson = new JsonObject();
+        serializeSensitiveContent(dumpInfo, dumpJson);
+
+        // session variables
+        try {
+            dumpJson.addProperty("session_variables", dumpInfo.getSessionVariable().getJsonString());
+        } catch (IOException e) {
+            LOG.warn("serialize session variables failed. " + e);
+        }
+
+        // BE number
+        ConnectContext ctx = ConnectContext.get();
+        long beNum = ctx.getAliveBackendNumber();
+        dumpJson.addProperty("be_number", beNum);
+        // backend core stat
+        JsonObject backendCoreStat = new JsonObject();
+        backendCoreStat.addProperty("numOfHardwareCoresPerBe",
+                GsonUtils.GSON.toJson(BackendCoreStat.getNumOfHardwareCoresPerBe()));
+        backendCoreStat.addProperty("cachedAvgNumOfHardwareCores",
+                BackendCoreStat.getCachedAvgNumOfHardwareCores());
+        dumpJson.add("be_core_stat", backendCoreStat);
+        // exception
+        JsonArray exceptions = new JsonArray();
+        for (String ex : dumpInfo.getExceptionList()) {
+            exceptions.add(ex);
+        }
+        dumpJson.add("exception", exceptions);
+        // version
+        if (!FeConstants.runningUnitTest) {
+            dumpJson.addProperty("version", Version.STARROCKS_VERSION);
+            dumpJson.addProperty("commit_version", Version.STARROCKS_COMMIT_HASH);
+        }
+        return dumpJson;
+    }
+
+    private void serializeSensitiveContent(QueryDumpInfo dumpInfo, JsonObject dumpJson) {
+        if (dumpInfo.isDesensitizedInfo()) {
+            try {
+                desensitizeContent(dumpInfo, dumpJson);
+                return;
+            } catch (Throwable e) {
+                LOG.info("failed to desensitize content, use the original content", e);
+                dumpJson = new JsonObject();
+            }
+        }
         // statement
         dumpJson.addProperty("statement", dumpInfo.getOriginStmt());
         // resource
@@ -109,12 +152,7 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             }
             dumpJson.add("view_meta", viewMetaData);
         }
-        // session variables
-        try {
-            dumpJson.addProperty("session_variables", dumpInfo.getSessionVariable().getJsonString());
-        } catch (IOException e) {
-            LOG.warn("serialize session variables failed. " + e);
-        }
+
         // column statistics
         JsonObject tableColumnStatistics = new JsonObject();
         for (Map.Entry<String, Map<String, ColumnStatistic>> entry : dumpInfo.getTableStatisticsMap().entrySet()) {
@@ -125,28 +163,65 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             tableColumnStatistics.add(entry.getKey(), columnStatistics);
         }
         dumpJson.add("column_statistics", tableColumnStatistics);
-        // BE number
-        ConnectContext ctx = ConnectContext.get();
-        long beNum = ctx.getAliveBackendNumber();
-        dumpJson.addProperty("be_number", beNum);
-        // backend core stat
-        JsonObject backendCoreStat = new JsonObject();
-        backendCoreStat.addProperty("numOfHardwareCoresPerBe",
-                GsonUtils.GSON.toJson(BackendCoreStat.getNumOfHardwareCoresPerBe()));
-        backendCoreStat.addProperty("cachedAvgNumOfHardwareCores",
-                BackendCoreStat.getCachedAvgNumOfHardwareCores());
-        dumpJson.add("be_core_stat", backendCoreStat);
-        // exception
-        JsonArray exceptions = new JsonArray();
-        for (String ex : dumpInfo.getExceptionList()) {
-            exceptions.add(ex);
+    }
+
+    private void desensitizeContent(QueryDumpInfo dumpInfo, JsonObject dumpJson) {
+        DesensitizedInfoCollector collector = new DesensitizedInfoCollector(dumpInfo);
+        collector.init();
+        Map<String, String> dict = collector.getDesensitizedDict();
+        String sql = DesensitizedSQLBuilder.desensitizeSQL(dumpInfo.getStatement(), dict);
+        // statement
+        dumpJson.addProperty("statement", sql);
+        // table meta
+        JsonObject tableMetaData = new JsonObject();
+        List<Pair<String, Table>> tableMetaPairs = Lists.newArrayList(dumpInfo.getTableMap().values());
+        for (Pair<String, com.starrocks.catalog.Table> entry : tableMetaPairs) {
+            String tableName = DesensitizedSQLBuilder.desensitizeDbName(entry.first, dict) + "."
+                    + DesensitizedSQLBuilder.desensitizeTblName(entry.second.getName(), dict);
+            String createTableStmt = DesensitizedSQLBuilder.desensitizeTableDef(entry, dict);
+            tableMetaData.addProperty(tableName, createTableStmt);
         }
-        dumpJson.add("exception", exceptions);
-        // version
-        if (!FeConstants.runningUnitTest) {
-            dumpJson.addProperty("version", Version.STARROCKS_VERSION);
-            dumpJson.addProperty("commit_version", Version.STARROCKS_COMMIT_HASH);
+        dumpJson.add("table_meta", tableMetaData);
+
+        // table row count
+        JsonObject tableRowCount = new JsonObject();
+        for (Map.Entry<String, Map<String, Long>> entry : dumpInfo.getPartitionRowCountMap().entrySet()) {
+            JsonObject partitionRowCount = new JsonObject();
+            for (Map.Entry<String, Long> partitionEntry : entry.getValue().entrySet()) {
+                partitionRowCount.addProperty(partitionEntry.getKey(), partitionEntry.getValue());
+            }
+            String[] splits = entry.getKey().split("\\.");
+            String tableName = DesensitizedSQLBuilder.desensitizeDbName(splits[0], dict) + "."
+                    + DesensitizedSQLBuilder.desensitizeTblName(splits[1], dict);
+            tableRowCount.add(tableName, partitionRowCount);
         }
-        return dumpJson;
+        dumpJson.add("table_row_count", tableRowCount);
+        // view meta
+        if (!dumpInfo.getViewMap().isEmpty()) {
+            JsonObject viewMetaData = new JsonObject();
+            for (Pair<String, View> entry : dumpInfo.getViewMap().values()) {
+                String viewName = DesensitizedSQLBuilder.desensitizeDbName(entry.first, dict) + "."
+                        + DesensitizedSQLBuilder.desensitizeTblName(entry.second.getName(), dict);
+                String viewDef = DesensitizedSQLBuilder.desensitizeViewDef(entry.second,
+                        collector.getDesensitizedDict(), ConnectContext.get());
+                viewMetaData.addProperty(viewName, viewDef);
+            }
+            dumpJson.add("view_meta", viewMetaData);
+        }
+
+        // column statistics
+        JsonObject tableColumnStatistics = new JsonObject();
+        for (Map.Entry<String, Map<String, ColumnStatistic>> entry : dumpInfo.getTableStatisticsMap().entrySet()) {
+            JsonObject columnStatistics = new JsonObject();
+            for (Map.Entry<String, ColumnStatistic> columnEntry : entry.getValue().entrySet()) {
+                columnStatistics.addProperty(
+                        DesensitizedSQLBuilder.desensitizeColName(columnEntry.getKey(), dict),
+                        columnEntry.getValue().toString()
+                );
+            }
+            tableColumnStatistics.add(DesensitizedSQLBuilder.desensitizeTblName(entry.getKey(), dict),
+                    columnStatistics);
+        }
+        dumpJson.add("column_statistics", tableColumnStatistics);
     }
 }

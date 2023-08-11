@@ -696,7 +696,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/reduce_transformation_1"),
                         null, TExplainLevel.NORMAL);
-        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("31:AGGREGATE (update finalize)\n" +
                 "  |  output: multi_distinct_count(212: case)\n" +
                 "  |  group by: 34: cast, 33: cast, 38: handle, 135: concat, 136: case, 36: cast"));
@@ -707,7 +706,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/reduce_transformation_2"),
                         null, TExplainLevel.NORMAL);
-        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("40:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
@@ -720,7 +718,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/reduce_transformation_3"),
                         null, TExplainLevel.NORMAL);
-        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("26:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  colocate: false, reason: \n" +

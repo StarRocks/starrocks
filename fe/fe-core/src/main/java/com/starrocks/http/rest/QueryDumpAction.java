@@ -50,6 +50,9 @@ import org.apache.logging.log4j.Logger;
 public class QueryDumpAction extends RestBaseAction {
     private static final Logger LOG = LogManager.getLogger(QueryDumpAction.class);
     private static final String DB = "db";
+
+    private static final String MOCK = "mock";
+
     private static final Gson GSON = new GsonBuilder()
             .addSerializationExclusionStrategy(new GsonUtils.HiddenAnnotationExclusionStrategy())
             .addDeserializationExclusionStrategy(new GsonUtils.HiddenAnnotationExclusionStrategy())
@@ -71,6 +74,8 @@ public class QueryDumpAction extends RestBaseAction {
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
         ConnectContext context = ConnectContext.get();
         String catalogDbName = request.getSingleParameter(DB);
+        boolean enableMask = request.getSingleParameter(MOCK) == null ? true :
+                "true".equalsIgnoreCase(request.getSingleParameter(MOCK).trim());
 
         if (!Strings.isNullOrEmpty(catalogDbName)) {
             String[] catalogDbNames = catalogDbName.split("\\.");
@@ -112,6 +117,12 @@ public class QueryDumpAction extends RestBaseAction {
 
         DumpInfo dumpInfo = context.getDumpInfo();
         if (dumpInfo != null) {
+            if (enableMask && dumpInfo instanceof QueryDumpInfo) {
+                QueryDumpInfo queryDumpInfo = (QueryDumpInfo) dumpInfo;
+                // TODO support desensitize HMS table
+                queryDumpInfo.setDesensitizedInfo(queryDumpInfo.getResourceSet().isEmpty()
+                        && queryDumpInfo.getHmsTableMap().isEmpty());
+            }
             response.getContent().append(GSON.toJson(dumpInfo, QueryDumpInfo.class));
             sendResult(request, response);
         } else {
