@@ -549,7 +549,7 @@ Buckets reflect how data files are actually organized in StarRocks.
 
     > **NOTICE**
     >
-    > If the raw data size of a partition exceeds 100GB, we recommend that you manually configure the number of buckets using the following method.
+    > If the raw data size of a partition exceeds 100 GB, we recommend that you manually configure the number of buckets using the following Method 2.
 
   - Method 2: manually set the number of buckets
 
