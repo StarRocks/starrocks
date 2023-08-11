@@ -294,6 +294,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(open_random_access_file());
     auto input_stream = std::make_unique<ORCHdfsFileStream>(_file.get(), _file->get_size().value(),
                                                             _shared_buffered_input_stream.get());
+    ORCHdfsFileStream* orc_hdfs_file_stream = input_stream.get();
+
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     std::unique_ptr<orc::Reader> reader;
     try {
@@ -366,6 +368,23 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         _lazy_load_ctx.active_load_slots.size() != 0) {
         _orc_reader->set_lazy_load_context(&_lazy_load_ctx);
     }
+
+    // select out strips we are going to read.
+    {
+        uint64_t stripe_number = reader->getNumberOfStripes();
+        std::vector<ORCHdfsFileStream::StripeInformation> stripes;
+        for (uint64_t idx = 0; idx < stripe_number; idx++) {
+            ORCHdfsFileStream::StripeInformation s;
+            auto stripeInfo = reader->getStripeInOrcFormat(idx);
+            if (_orc_row_reader_filter->filterOnOpeningStripe(idx, &stripeInfo)) continue;
+            s.offset = stripeInfo.offset();
+            s.length = stripeInfo.datalength() + stripeInfo.indexlength() + stripeInfo.footerlength();
+            stripes.emplace_back(s);
+            _stats.stripe_sizes.push_back(s.length);
+        }
+        orc_hdfs_file_stream->setStripes(std::move(stripes));
+    }
+
     RETURN_IF_ERROR(_orc_reader->init(std::move(reader)));
     return Status::OK();
 }
@@ -509,15 +528,26 @@ static const std::string kORCProfileSectionPrefix = "ORC";
 void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* delete_build_timer = nullptr;
     RuntimeProfile::Counter* delete_file_per_scan_counter = nullptr;
+    RuntimeProfile::Counter* stripe_sizes_counter = nullptr;
+    RuntimeProfile::Counter* stripe_number_counter = nullptr;
     RuntimeProfile* root = profile->runtime_profile;
 
     ADD_COUNTER(root, kORCProfileSectionPrefix, TUnit::UNIT);
 
     delete_build_timer = ADD_CHILD_TIMER(root, "DeleteBuildTimer", kORCProfileSectionPrefix);
     delete_file_per_scan_counter = ADD_CHILD_COUNTER(root, "DeleteFilesPerScan", TUnit::UNIT, kORCProfileSectionPrefix);
-
     COUNTER_UPDATE(delete_build_timer, _stats.delete_build_ns);
     COUNTER_UPDATE(delete_file_per_scan_counter, _stats.delete_file_per_scan);
+
+    // we expect to get average stripe size instead of sum.
+    stripe_sizes_counter = root->add_child_counter("StripeSizes", TUnit::BYTES,
+                                                   RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG),
+                                                   kORCProfileSectionPrefix);
+    stripe_number_counter = ADD_CHILD_COUNTER(root, "StripeNumber", TUnit::UNIT, kORCProfileSectionPrefix);
+    for (auto v : _stats.stripe_sizes) {
+        COUNTER_UPDATE(stripe_sizes_counter, v);
+    }
+    COUNTER_UPDATE(stripe_number_counter, _stats.stripe_sizes.size());
 }
 
 } // namespace starrocks
