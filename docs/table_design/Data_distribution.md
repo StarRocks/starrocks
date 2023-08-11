@@ -4,7 +4,12 @@ When you create a table, you must specify the data distribution method by config
 
 > NOTICE
 >
+<<<<<<< HEAD
 > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. However, if the performance does not meet your expectations after StarRocks automatically sets the number of buckets and you are familiar with the bucketing mechanism, you can still [manually set the number of buckets](#determine-the-number-of-buckets).
+=======
+> - Since v3.1, you do not need to specify the bucketing key in the DISTRIBUTED BY clause when creating a table or adding a partition. StarRocks supports random bucketing, which randomly distributes data across all buckets. For more information, see [Random bucketing](#random-bucketing-since-v31).
+> - Since v2.5.7, you can choose not to manually set the number of buckets when you create a table or add a partition. StarRocks can automatically set the number of buckets (BUCKETS). However, if the performance does not meet your expectations after StarRocks automatically sets the number of buckets and you are familiar with the bucketing mechanism, you can still [manually set the number of buckets](#determine-the-number-of-buckets).
+>>>>>>> ae078e808f ([Doc] add-note-for-auto-bucket-number-setting (#29050))
 
 ## Basic concepts
 
@@ -157,7 +162,11 @@ Buckets reflect how data files are organized in StarRocks.
 
 - How to set the number of buckets when creating a table
 
+<<<<<<< HEAD
   - Method 1: automatically set the number of buckets (Recommended)
+=======
+  - Method 1: automatically set the number of buckets
+>>>>>>> ae078e808f ([Doc] add-note-for-auto-bucket-number-setting (#29050))
 
     Since v2.5.7, StarRocks supports automatically setting the number of buckets based on machine resources and data volume for a partition.
 
@@ -175,6 +184,10 @@ Buckets reflect how data files are organized in StarRocks.
     ```
 
     To enable this feature, make sure that the FE dynamic parameter `enable_auto_tablet_distribution` is set to `TRUE`. After a table is created, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW%20PARTITIONS.md) to view the bucket number automatically set by StarRocks for each partition.
+
+    > **NOTICE**
+    >
+    > If the raw data size of a partition exceeds 100 GB, we recommend that you manually configure the number of buckets using the Method 2.
 
   - Method 2: manually set the number of buckets
 
