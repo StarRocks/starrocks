@@ -22,6 +22,7 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "agent/master_info.h"
 #include "common/logging.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/ev_http_server.h"
@@ -109,8 +110,8 @@ TEST_F(SmallFileMgrTest, test_get_file) {
     TMasterInfo info;
     info.__set_network_address(addr);
     info.__set_http_port(real_port);
+    ASSERT_TRUE(update_master_info(info));
     ExecEnv* env = ExecEnv::GetInstance();
-    env->_master_info = &info;
     SmallFileMgr mgr(env, g_download_path);
     Status st = mgr.init();
     ASSERT_TRUE(st.ok());

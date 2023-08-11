@@ -50,7 +50,6 @@ class ThreadPool;
 class PriorityThreadPool;
 class ResultBufferMgr;
 class ResultQueueMgr;
-class TMasterInfo;
 class LoadChannelMgr;
 class WebPageHandler;
 class StreamLoadExecutor;
@@ -97,7 +96,7 @@ public:
     // declarations for classes in scoped_ptrs.
     ~ExecEnv() = default;
 
-    const std::string& token() const;
+    std::string token() const;
     ExternalScanContextMgr* external_scan_context_mgr() { return _external_scan_context_mgr; }
     MetricRegistry* metrics() const { return _metrics; }
     DataStreamMgr* stream_mgr() { return _stream_mgr; }
@@ -147,7 +146,6 @@ public:
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
     starrocks::pipeline::DriverExecutor* driver_executor() { return _driver_executor; }
     starrocks::pipeline::DriverExecutor* wg_driver_executor() { return _wg_driver_executor; }
-    TMasterInfo* master_info() { return _master_info; }
     LoadPathMgr* load_path_mgr() { return _load_path_mgr; }
     BfdParser* bfd_parser() const { return _bfd_parser; }
     BrokerMgr* broker_mgr() const { return _broker_mgr; }
@@ -259,7 +257,6 @@ private:
     pipeline::DriverLimiter* _driver_limiter = nullptr;
     int64_t _max_executor_threads = 0; // Max thread number of executor
 
-    TMasterInfo* _master_info = nullptr;
     LoadPathMgr* _load_path_mgr = nullptr;
 
     workgroup::ScanExecutor* _scan_executor_without_workgroup = nullptr;

@@ -14,6 +14,7 @@
 
 #include "exec/vectorized/schema_scanner/schema_be_txns_scanner.h"
 
+#include "agent/master_info.h"
 #include "exec/vectorized/schema_scanner/schema_helper.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "gutil/strings/substitute.h"
@@ -43,8 +44,8 @@ SchemaBeTxnsScanner::SchemaBeTxnsScanner()
 SchemaBeTxnsScanner::~SchemaBeTxnsScanner() = default;
 
 Status SchemaBeTxnsScanner::start(RuntimeState* state) {
-    auto master_info = ExecEnv::GetInstance()->master_info();
-    _be_id = master_info->__isset.backend_id ? master_info->backend_id : -1;
+    auto master_info = get_master_info();
+    _be_id = master_info.__isset.backend_id ? master_info.backend_id : -1;
     _infos.clear();
     StorageEngine::instance()->txn_manager()->get_txn_infos(_param->txn_id, _param->tablet_id, _infos);
     _cur_idx = 0;

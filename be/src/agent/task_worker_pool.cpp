@@ -34,6 +34,7 @@
 #include <string>
 
 #include "agent/agent_server.h"
+#include "agent/master_info.h"
 #include "common/status.h"
 #include "exec/workgroup/work_group.h"
 #include "fs/fs.h"
@@ -1123,8 +1124,7 @@ void* TaskWorkerPool::_clone_worker_thread_callback(void* arg_this) {
             }
         } else {
             EngineCloneTask engine_task(ExecEnv::GetInstance()->clone_mem_tracker(), clone_req,
-                                        worker_pool_this->master_info(), agent_task_req->signature, &error_msgs,
-                                        &tablet_infos, &status);
+                                        agent_task_req->signature, &error_msgs, &tablet_infos, &status);
             Status res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
             if (!res.ok()) {
                 status_code = TStatusCode::RUNTIME_ERROR;
@@ -1300,11 +1300,12 @@ void* TaskWorkerPool::_report_task_worker_thread_callback(void* arg_this) {
     request.__set_backend(worker_pool_this->_backend);
 
     while ((!worker_pool_this->_stopped)) {
-        if (worker_pool_this->master_info().network_address.port == 0) {
+        auto master_address = get_master_address();
+        if (master_address.port == 0) {
             // port == 0 means not received heartbeat yet
             // sleep a short time and try again
             LOG(INFO) << "Waiting to receive first heartbeat from frontend";
-            sleep(config::sleep_one_second);
+            sleep(1);
             continue;
         }
         std::map<TTaskType::type, std::set<int64_t>> tasks;
@@ -1322,8 +1323,8 @@ void* TaskWorkerPool::_report_task_worker_thread_callback(void* arg_this) {
 
         if (status != STARROCKS_SUCCESS) {
             StarRocksMetrics::instance()->report_task_requests_failed.increment(1);
-            LOG(WARNING) << "Fail to report task to " << worker_pool_this->master_info().network_address.hostname << ":"
-                         << worker_pool_this->master_info().network_address.port << ", err=" << status;
+            LOG(WARNING) << "Fail to report task to " << master_address.hostname << ":" << master_address.port
+                         << ", err=" << status;
         }
 
         sleep(config::report_task_interval_seconds);
@@ -1339,7 +1340,8 @@ void* TaskWorkerPool::_report_disk_state_worker_thread_callback(void* arg_this) 
     request.__set_backend(worker_pool_this->_backend);
 
     while ((!worker_pool_this->_stopped)) {
-        if (worker_pool_this->master_info().network_address.port == 0) {
+        auto master_address = get_master_address();
+        if (master_address.port == 0) {
             // port == 0 means not received heartbeat yet
             // sleep a short time and try again
             LOG(INFO) << "Waiting to receive first heartbeat from frontend";
@@ -1377,8 +1379,8 @@ void* TaskWorkerPool::_report_disk_state_worker_thread_callback(void* arg_this) 
 
         if (status != STARROCKS_SUCCESS) {
             StarRocksMetrics::instance()->report_disk_requests_failed.increment(1);
-            LOG(WARNING) << "Fail to report disk state to " << worker_pool_this->master_info().network_address.hostname
-                         << ":" << worker_pool_this->master_info().network_address.port << ", err=" << status;
+            LOG(WARNING) << "Fail to report disk state to " << master_address.hostname << ":" << master_address.port
+                         << ", err=" << status;
         }
 
         // wait for notifying until timeout
@@ -1397,7 +1399,8 @@ void* TaskWorkerPool::_report_tablet_worker_thread_callback(void* arg_this) {
     AgentStatus status = STARROCKS_SUCCESS;
 
     while ((!worker_pool_this->_stopped)) {
-        if (worker_pool_this->master_info().network_address.port == 0) {
+        auto master_address = get_master_address();
+        if (master_address.port == 0) {
             // port == 0 means not received heartbeat yet
             // sleep a short time and try again
             LOG(INFO) << "Waiting to receive first heartbeat from frontend";
@@ -1424,9 +1427,8 @@ void* TaskWorkerPool::_report_tablet_worker_thread_callback(void* arg_this) {
 
         if (status != STARROCKS_SUCCESS) {
             StarRocksMetrics::instance()->report_all_tablets_requests_failed.increment(1);
-            LOG(WARNING) << "Fail to report olap table state to "
-                         << worker_pool_this->master_info().network_address.hostname << ":"
-                         << worker_pool_this->master_info().network_address.port << ", err=" << status;
+            LOG(WARNING) << "Fail to report olap table state to " << master_address.hostname << ":"
+                         << master_address.port << ", err=" << status;
         }
 
         // wait for notifying until timeout
@@ -1444,7 +1446,8 @@ void* TaskWorkerPool::_report_workgroup_thread_callback(void* arg_this) {
     AgentStatus status = STARROCKS_SUCCESS;
 
     while ((!worker_pool_this->_stopped)) {
-        if (worker_pool_this->master_info().network_address.port == 0) {
+        auto master_address = get_master_address();
+        if (master_address.port == 0) {
             // port == 0 means not received heartbeat yet
             // sleep a short time and try again
             LOG(INFO) << "Waiting to receive first heartbeat from frontend";
@@ -1461,8 +1464,8 @@ void* TaskWorkerPool::_report_workgroup_thread_callback(void* arg_this) {
 
         if (status != STARROCKS_SUCCESS) {
             StarRocksMetrics::instance()->report_workgroup_requests_failed.increment(1);
-            LOG(WARNING) << "Fail to report workgroup to " << worker_pool_this->master_info().network_address.hostname
-                         << ":" << worker_pool_this->master_info().network_address.port << ", err=" << status;
+            LOG(WARNING) << "Fail to report workgroup to " << master_address.hostname << ":" << master_address.port
+                         << ", err=" << status;
         }
         if (result.__isset.workgroup_ops) {
             workgroup::WorkGroupManager::instance()->apply(result.workgroup_ops);
@@ -1746,10 +1749,6 @@ AgentStatus TaskWorkerPool::_move_dir(TTabletId tablet_id, TSchemaHash schema_ha
     }
 
     return STARROCKS_SUCCESS;
-}
-
-const TMasterInfo& TaskWorkerPool::master_info() {
-    return _agent_server->master_info();
 }
 
 } // namespace starrocks

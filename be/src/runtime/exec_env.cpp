@@ -23,6 +23,7 @@
 
 #include <thread>
 
+#include "agent/master_info.h"
 #include "column/column_pool.h"
 #include "common/config.h"
 #include "common/logging.h"
@@ -208,7 +209,6 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
 
-    _master_info = new TMasterInfo();
     _load_path_mgr = new LoadPathMgr(this);
     _broker_mgr = new BrokerMgr(this);
     _bfd_parser = BfdParser::create();
@@ -273,8 +273,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     return Status::OK();
 }
 
-const std::string& ExecEnv::token() const {
-    return _master_info->token;
+std::string ExecEnv::token() const {
+    return get_master_token();
 }
 
 void ExecEnv::add_rf_event(const RfTracePoint& pt) {
@@ -389,7 +389,6 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_broker_mgr);
     SAFE_DELETE(_bfd_parser);
     SAFE_DELETE(_load_path_mgr);
-    SAFE_DELETE(_master_info);
     SAFE_DELETE(_driver_executor);
     SAFE_DELETE(_wg_driver_executor);
     SAFE_DELETE(_driver_limiter);
