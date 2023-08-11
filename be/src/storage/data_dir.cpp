@@ -368,8 +368,8 @@ Status DataDir::load() {
             continue;
         }
         RowsetSharedPtr rowset;
-        Status create_status = RowsetFactory::create_rowset(tablet->tablet_schema(), tablet->schema_hash_path(),
-                                                            rowset_meta, &rowset);
+        Status create_status =
+                RowsetFactory::create_rowset(tablet->tablet_schema(), tablet->schema_hash_path(), rowset_meta, &rowset);
         if (!create_status.ok()) {
             LOG(WARNING) << "Fail to create rowset from rowsetmeta,"
                          << " rowset=" << rowset_meta->rowset_id() << " state=" << rowset_meta->rowset_state();
