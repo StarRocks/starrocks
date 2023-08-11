@@ -81,8 +81,10 @@ public class InsertStmt extends DmlStmt {
     // ======================================= properties =============================
     private Map<String, String> properties;
     private boolean enablePartialUpdate = false;
-    private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
+    private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.UNKNOWN_MODE;
     private String mergeCondition;
+    private double maxFilterRatio = 0.0;
+    private boolean strictMode = false;
 
     /**
      * `true` means that it's created by CTAS statement
@@ -244,6 +246,22 @@ public class InsertStmt extends DmlStmt {
 
     public void setMergeCondition(String mergeCondition) {
         this.mergeCondition = mergeCondition;
+    }
+
+    public double getMaxFilterRatio() {
+        return maxFilterRatio;
+    }
+
+    public void setMaxFilterRatio(double maxFilterRatio) {
+        this.maxFilterRatio = maxFilterRatio;
+    }
+
+    public boolean isStrictMode() {
+        return strictMode;
+    }
+
+    public void setStrictMode(boolean strictMode) {
+        this.strictMode = strictMode;
     }
 
     @Override

@@ -126,7 +126,7 @@ public class OlapTableSink extends DataSink {
     private boolean missAutoIncrementColumn;
     private int autoIncrementSlotId;
     private boolean enableAutomaticPartition;
-    private TPartialUpdateMode partialUpdateMode;
+    private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.UNKNOWN_MODE;
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
                          TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
@@ -629,6 +629,10 @@ public class OlapTableSink extends DataSink {
 
     public boolean missAutoIncrementColumn() {
         return this.missAutoIncrementColumn;
+    }
+
+    public TDataSink gettDataSink() {
+        return tDataSink;
     }
 }
 

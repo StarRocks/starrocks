@@ -87,6 +87,8 @@ public class InsertAnalyzer {
             .add(PARTIAL_UPDATE)
             .add(PARTIAL_UPDATE_MODE)
             .add(MERGE_CONDITION)
+            .add(MAX_FILTER_RATIO_PROPERTY)
+            .add(STRICT_MODE)
             .build();
 
     public static void analyze(InsertStmt insertStmt, ConnectContext session) {
@@ -397,6 +399,7 @@ public class InsertAnalyzer {
                 if (maxFilterRatio < 0.0 || maxFilterRatio > 1.0) {
                     throw new DdlException(MAX_FILTER_RATIO_PROPERTY + " must between 0.0 and 1.0.");
                 }
+                insertStmt.setMaxFilterRatio(maxFilterRatio);
             } catch (NumberFormatException e) {
                 throw new DdlException(MAX_FILTER_RATIO_PROPERTY + " is not a number.");
             }
@@ -413,10 +416,8 @@ public class InsertAnalyzer {
         // strict mode
         final String strictModeProperty = properties.get(STRICT_MODE);
         if (strictModeProperty != null) {
-            if (!strictModeProperty.equalsIgnoreCase("true")
-                    && !strictModeProperty.equalsIgnoreCase("false")) {
-                throw new DdlException(STRICT_MODE + " is not a boolean");
-            }
+            boolean strict = VariableMgr.parseBooleanVariable(strictModeProperty);
+            insertStmt.setStrictMode(strict);
         }
 
         // time zone

@@ -24,10 +24,12 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TExplainLevel;
 import mockit.Expectations;
 import org.apache.iceberg.BaseTable;
@@ -364,6 +366,13 @@ public class InsertPlanTest extends PlanTestBase {
                 "values('2020-06-25', '2020-06-25 00:16:23', 'beijing')";
         explainString = getInsertExecPlan(sql);
         Assert.assertTrue(explainString.contains("<slot 1> : 1: column_0"));
+    }
+
+    public static InsertStmt parseAndAnalyzeInsert(String originStmt) throws Exception {
+        StatementBase stmt = SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode()).get(0);
+        Analyzer.analyze(stmt, connectContext);
+        new InsertPlanner().plan((InsertStmt) stmt, connectContext);
+        return (InsertStmt) stmt;
     }
 
     public static String getInsertExecPlan(String originStmt) throws Exception {
@@ -905,7 +914,7 @@ public class InsertPlanTest extends PlanTestBase {
             String explainString = getInsertExecPlan("insert into ti1 (k1, v1) " +
                     "properties('partial_update'= 'true') " +
                     "select k1, v1 from ti1");
-            assertContains(explainString, "PARTIAL_UPDATE_MODE: ROW_MODE");
+            assertNotContains(explainString, "PARTIAL_UPDATE_MODE: ROW_MODE");
         }
 
         // Partial update with mode
@@ -930,10 +939,11 @@ public class InsertPlanTest extends PlanTestBase {
 
         // Merge condition
         {
-            String explainString = getInsertExecPlan("insert into ti1 (k1, v1) " +
+            InsertStmt stmt = parseAndAnalyzeInsert("insert into ti1 (k1, v1) " +
                     "properties('merge_condition'= 'v2') " +
                     "select k1, v1 from ti1");
-            assertContains(explainString, "PARTIAL_UPDATE_MODE: ROW_MODE");
+            Assert.assertEquals("v2", stmt.getMergeCondition());
+
         }
         // Illegal Merge condition
         {
@@ -942,5 +952,19 @@ public class InsertPlanTest extends PlanTestBase {
                             "properties('merge_condition'= 'k1') " +
                             "select k1, v1 from ti1"));
         }
+
+        // Insert ratio
+        {
+            InsertStmt stmt = parseAndAnalyzeInsert("insert into ti1 " +
+                    "properties('max_filter_ratio'= '0.01') " +
+                    "select * from ti1");
+            Assert.assertEquals(0.01, stmt.getMaxFilterRatio(), 0.001);
+        }
+
+        // unsupported property
+        Assert.assertThrows(SemanticException.class,
+                () -> getInsertExecPlan("insert into ti1 (k1, v1) " +
+                        "properties('timezone'= 'UTC') " +
+                        "select k1, v1 from ti1"));
     }
 }

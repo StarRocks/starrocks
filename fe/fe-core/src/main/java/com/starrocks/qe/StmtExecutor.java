@@ -1778,34 +1778,10 @@ public class StmtExecutor {
                 loadedBytes = Long.parseLong(coord.getLoadCounters().get(LoadJob.LOADED_BYTES));
             }
 
-            // if in strict mode, insert will fail if there are filtered rows
-            if (context.getSessionVariable().getEnableInsertStrict()) {
-                if (filteredRows > 0) {
-                    if (targetTable instanceof ExternalOlapTable) {
-                        ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-                        GlobalStateMgr.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
-                                externalTable.getSourceTableDbId(), transactionId,
-                                externalTable.getSourceTableHost(),
-                                externalTable.getSourceTablePort(),
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
-                                        trackingSql
-                        );
-                    } else if (targetTable instanceof SystemTable || targetTable instanceof IcebergTable) {
-                        // schema table does not need txn
-                    } else {
-                        GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
-                                database.getId(),
-                                transactionId,
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
-                                        trackingSql,
-                                TabletFailInfo.fromThrift(coord.getFailInfos())
-                        );
-                    }
-                    context.getState().setError("Insert has filtered data in strict mode, txn_id = " + transactionId +
-                            " tracking sql = " + trackingSql);
-                    insertError = true;
-                    return;
-                }
+            if (!checkDMLQuality(stmt, database, targetTable, transactionId, loadedRows, filteredRows, trackingSql)) {
+                context.getState().setError("Insert has filtered data in strict mode, txn_id = " + transactionId +
+                        " tracking sql = " + trackingSql);
+                insertError = true;
             }
 
             if (targetTable instanceof ExternalOlapTable) {
@@ -1960,6 +1936,57 @@ public class StmtExecutor {
         sb.append("}");
 
         context.getState().setOk(loadedRows, filteredRows, sb.toString());
+    }
+
+    /**
+     * Check quality of data, according to enable_insert_strict and max_filter_ratio
+     *
+     * @return true if no error
+     */
+    private boolean checkDMLQuality(StatementBase stmt, Database database, Table targetTable,
+                                    long transactionId,
+                                    long loadedRows, long filteredRows,
+                                    String trackingSql) throws UserException {
+        // if in strict mode, insert will fail if there are filtered rows
+        boolean strict = context.getSessionVariable().getEnableInsertStrict();
+        double maxFilterRatio = 0.0;
+        if (stmt instanceof InsertStmt) {
+            InsertStmt insertStmt = (InsertStmt) stmt;
+            strict |= insertStmt.isStrictMode();
+            maxFilterRatio = insertStmt.getMaxFilterRatio();
+        }
+        if (strict && filteredRows > 0) {
+            if (targetTable instanceof ExternalOlapTable) {
+                ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
+                GlobalStateMgr.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
+                        externalTable.getSourceTableDbId(), transactionId,
+                        externalTable.getSourceTableHost(),
+                        externalTable.getSourceTablePort(),
+                        TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
+                                trackingSql
+                );
+            } else if (targetTable instanceof SystemTable || targetTable instanceof IcebergTable) {
+                // schema table does not need txn
+            } else {
+                GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
+                        database.getId(),
+                        transactionId,
+                        TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
+                                trackingSql,
+                        TabletFailInfo.fromThrift(coord.getFailInfos())
+                );
+            }
+            return false;
+        }
+
+        if (maxFilterRatio > 0.0) {
+            double filterRatio = 1.0 * filteredRows / (filteredRows + loadedRows);
+            if (filterRatio > maxFilterRatio) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public String getOriginStmtInString() {
