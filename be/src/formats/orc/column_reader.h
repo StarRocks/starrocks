@@ -154,17 +154,11 @@ public:
     Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
 
 private:
-    void _fill_decimal_column_from_orc_decimal64(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from,
-                                                 size_t size);
+    void _fill_decimal_column_from_orc_decimal64(orc::Decimal64VectorBatch* cvb, Column* col, size_t col_start,
+                                                 size_t from, size_t size);
 
-    void _fill_decimal_column_from_orc_decimal128(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from,
-                                                  size_t size);
-
-    void _fill_decimal_column_with_null_from_orc_decimal64(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col,
-                                                           size_t from, size_t size);
-
-    void _fill_decimal_column_with_null_from_orc_decimal128(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col,
-                                                            size_t from, size_t size);
+    void _fill_decimal_column_from_orc_decimal128(orc::Decimal128VectorBatch* cvb, Column* col, size_t col_start,
+                                                  size_t from, size_t size);
 };
 
 template <LogicalType DecimalType>
