@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.ast.pipe;
 
+import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
@@ -66,6 +67,11 @@ public class DescPipeStmt extends ShowStmt {
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
+    }
+
+    @Override
+    public RedirectStatus getRedirectStatus() {
+        return RedirectStatus.FORWARD_NO_SYNC;
     }
 
     @Override
