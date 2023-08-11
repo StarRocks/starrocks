@@ -740,7 +740,10 @@ public class StmtExecutor {
     }
 
     private void dumpException(Exception e) {
-        context.getDumpInfo().addException(ExceptionUtils.getStackTrace(e));
+        if (context.getDumpInfo() != null) {
+            context.getDumpInfo().addException(ExceptionUtils.getStackTrace(e));
+        }
+
         if (context.shouldDumpQuery() && !context.isHTTPQueryDump()) {
             QueryDumpLog.getQueryDump().log(GsonUtils.GSON.toJson(context.getDumpInfo()));
         }
