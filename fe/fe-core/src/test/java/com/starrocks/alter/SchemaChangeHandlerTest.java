@@ -176,10 +176,14 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         }
 
         //process agg drop key column with replace schema change, expect exception.
-        String dropKeyColStmtStr = "alter table test.sc_agg drop column new_k1";
-        AlterTableStmt dropKeyColStmt = (AlterTableStmt) parseAndAnalyzeStmt(dropKeyColStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(dropKeyColStmt);
-        Assertions.fail();
+        try {
+            String dropKeyColStmtStr = "alter table test.sc_agg drop column new_k1";
+            AlterTableStmt dropKeyColStmt = (AlterTableStmt) parseAndAnalyzeStmt(dropKeyColStmtStr);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(dropKeyColStmt);
+            Assertions.fail();
+        } catch (Exception e) {
+            // ignore
+        }
 
         LOG.info("getIndexIdToSchema 1: {}", tbl.getIndexIdToSchema());
 
