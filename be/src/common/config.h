@@ -1050,6 +1050,14 @@ CONF_mInt32(pindex_major_compaction_num_threads, "0");
 CONF_mInt32(pindex_major_compaction_limit_per_disk, "1");
 // control the persistent index schedule compaction interval
 CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
+// enable use bloom filter for pindex or not
+CONF_mBool(enable_pindex_filter, "true");
+// use bloom filter in pindex can reduce disk io, but in the following scenarios, we should skip the bloom filter
+// 1. The records to be found are in the index, bloom filter is no usage
+// 2. The records to be found is very small but bloom filter is very large, read bloom filter may cost a lot of disk io
+// So the bloom filter bytes should less than the index data we need to scan in disk, and the default strategy is if bloom
+// filter bytes is less or equal than 10% of pindex bytes, we will use bloom filter to filter some records
+CONF_mInt32(max_bf_read_bytes_percent, "10");
 
 // control the local persistent index in shared_data gc/evict interval
 CONF_mInt64(pindex_shared_data_gc_evict_interval_seconds, "18000"); // 5 hour

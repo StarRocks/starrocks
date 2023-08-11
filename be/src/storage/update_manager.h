@@ -140,9 +140,14 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     // Used in UT only
     bool TEST_update_state_exist(Tablet* tablet, Rowset* rowset);
     bool TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt);
+=======
+    bool keep_pindex_bf() { return _keep_pindex_bf; }
+    void set_keep_pindex_bf(bool keep_pindex_bf) { _keep_pindex_bf = keep_pindex_bf; }
+>>>>>>> b29cc56529 (Add bloom filter for persistent index)
 
 private:
     // default 6min
@@ -174,6 +179,8 @@ private:
     std::unique_ptr<ThreadPool> _apply_thread_pool;
     std::unique_ptr<ThreadPool> _get_pindex_thread_pool;
     std::unique_ptr<PersistentIndexCompactionManager> _persistent_index_compaction_mgr;
+
+    bool _keep_pindex_bf = true;
 
     UpdateManager(const UpdateManager&) = delete;
     const UpdateManager& operator=(const UpdateManager&) = delete;
