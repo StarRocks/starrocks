@@ -672,25 +672,50 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
 Status FragmentExecutor::execute(ExecEnv* exec_env) {
     bool prepare_success = false;
-    DeferOp defer([this, &prepare_success]() {
-        if (!prepare_success) {
+    struct {
+        int64_t execute_time = 0;
+        int64_t drivers_total_prepare_time = 0;
+        int64_t drivers_total_submit_time = 0;
+    } profiler;
+
+    DeferOp defer([this, &prepare_success, &profiler]() {
+        if (prepare_success) {
+            auto fragment_ctx = _fragment_ctx;
+            auto* profile = fragment_ctx->runtime_state()->runtime_profile();
+
+            auto* execute_timer = ADD_TIMER(profile, "FragmentInstanceExecuteTime");
+            COUNTER_SET(execute_timer, profiler.execute_time);
+
+            auto* drivers_total_prepare_timer =
+                    ADD_CHILD_TIMER_THESHOLD(profile, "drivers-total-prepare", "FragmentInstanceExecuteTime", 10_ms);
+            COUNTER_SET(drivers_total_prepare_timer, profiler.drivers_total_prepare_time);
+
+            auto* drivers_total_submit_timer =
+                    ADD_CHILD_TIMER_THESHOLD(profile, "drivers-total-submit", "FragmentInstanceExecuteTime", 10_ms);
+            COUNTER_SET(drivers_total_submit_timer, profiler.drivers_total_submit_time);
+        } else {
             _fail_cleanup();
         }
     });
 
-    for (const auto& driver : _fragment_ctx->drivers()) {
-        RETURN_IF_ERROR(driver->prepare(_fragment_ctx->runtime_state()));
+    SCOPED_RAW_TIMER(&profiler.execute_time);
+    {
+        SCOPED_RAW_TIMER(&profiler.drivers_total_prepare_time);
+        for (const auto& driver : _fragment_ctx->drivers()) {
+            RETURN_IF_ERROR(driver->prepare(_fragment_ctx->runtime_state()));
+        }
+        prepare_success = true;
     }
-    prepare_success = true;
-
-    auto* executor =
-            _fragment_ctx->enable_resource_group() ? exec_env->wg_driver_executor() : exec_env->driver_executor();
-    for (const auto& driver : _fragment_ctx->drivers()) {
-        DCHECK(!_fragment_ctx->enable_resource_group() || driver->workgroup() != nullptr);
-        executor->submit(driver.get());
+    {
+        SCOPED_RAW_TIMER(&profiler.drivers_total_submit_time);
+        auto* executor =
+                _fragment_ctx->enable_resource_group() ? exec_env->wg_driver_executor() : exec_env->driver_executor();
+        for (const auto& driver : _fragment_ctx->drivers()) {
+            DCHECK(!_fragment_ctx->enable_resource_group() || driver->workgroup() != nullptr);
+            executor->submit(driver.get());
+        }
+        return Status::OK();
     }
-
-    return Status::OK();
 }
 
 void FragmentExecutor::_fail_cleanup() {
