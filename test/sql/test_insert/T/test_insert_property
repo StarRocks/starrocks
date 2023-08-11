@@ -31,7 +31,7 @@ insert into tab1 (k1, v1) properties('partial_update'='true', 'partial_update_mo
 select * from tab1 where k1 = 100 order by k1;
 
 -- max filter ratio
-insert into tab1 (k1, v4) properties('max_filter_ratio'='0.1', 'partial_update'='true') values (400, 'xxxxxxxxxxxxxx'), (500, 'xxxxxxxxxxxxxxx');
+[UC]insert into tab1 (k1, v4) properties('max_filter_ratio'='0.1', 'partial_update'='true') values (400, 'v4_xx'), (500, 'xxxxxxxxxxxxxxx');
 select * from tab1 where k1 = 400 order by k1;
-insert into tab1 (k1, v4) properties('max_filter_ratio'='0.8', 'partial_update'='true') values (400, 'xxxxxxxxxxxxxx'), (500, 'xxxxxxxxxxxxxxx');
+insert into tab1 (k1, v4) properties('max_filter_ratio'='0.8', 'partial_update'='true') values (400, 'v4_xx'), (500, 'xxxxxxxxxxxxxxx');
 select * from tab1 where k1 = 400 order by k1;

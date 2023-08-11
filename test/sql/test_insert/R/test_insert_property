@@ -7,7 +7,6 @@ CREATE table tab1 (
       v4 varchar(10),
       v5 varchar(10)
 )
-ENGINE=OLAP
 PRIMARY KEY(`k1`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 10
 PROPERTIES (
@@ -40,17 +39,24 @@ select * from tab1 where k1 = 100 order by k1;
 -- result:
 100	None	None	None	None	None
 -- !result
-insert into tab1 (k1, v4) properties('max_filter_ratio'='0.1', 'partial_update'='true') values (400, 'xxxxxxxxxxxxxx'), (500, 'xxxxxxxxxxxxxxx');
+insert into tab1 (k1, v1) properties('partial_update'='true', 'partial_update_mode'='column') values (100, 200);
 -- result:
+-- !result
+select * from tab1 where k1 = 100 order by k1;
+-- result:
+100	None	None	None	None	None
+-- !result
+[UC]insert into tab1 (k1, v4) properties('max_filter_ratio'='0.1', 'partial_update'='true') values (400, 'v4_xx'), (500, 'xxxxxxxxxxxxxxx');
+-- result:
+E: (1064, 'com.starrocks.transaction.TransactionCommitFailedException: filter data in strict mode, tracking sql = select tracking_log from information_schema.load_tracking_logs where job_id=505460')
 -- !result
 select * from tab1 where k1 = 400 order by k1;
 -- result:
 -- !result
-insert into tab1 (k1, v4) properties('max_filter_ratio'='0.8', 'partial_update'='true') values (400, 'xxxxxxxxxxxxxx'), (500, 'xxxxxxxxxxxxxxx');
+insert into tab1 (k1, v4) properties('max_filter_ratio'='0.8', 'partial_update'='true') values (400, 'v4_xx'), (500, 'xxxxxxxxxxxxxxx');
 -- result:
 -- !result
 select * from tab1 where k1 = 400 order by k1;
 -- result:
-400	None	None	None	xxxxxxxxxxxxxx	None
-500	None	None	None	xxxxxxxxxxxxxxx	None
+400	None	None	None	v4_xx	None
 -- !result

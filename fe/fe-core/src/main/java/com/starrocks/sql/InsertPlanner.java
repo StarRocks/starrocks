@@ -616,7 +616,7 @@ public class InsertPlanner {
                     throw new SemanticException("Column:" + targetColumn.getName() + " has unsupported default value:"
                             + targetColumn.getDefaultExpr().getExpr());
                 }
-            } else if (columnIdx < outputColumns.size()) {
+            } else if (columnIdx < outputColumns.size()){
                 columnRefMap.put(outputColumns.get(columnIdx), outputColumns.get(columnIdx));
             }
         }
@@ -631,21 +631,37 @@ public class InsertPlanner {
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
         ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
         List<ScalarOperatorRewriteRule> rewriteRules = Arrays.asList(new FoldConstantsRule());
-        for (int columnIdx = 0; columnIdx < fullSchema.size(); ++columnIdx) {
-            if (columnIdx >= outputColumns.size()) {
-                continue;
+
+        if (insertStatement.isPartialUpdate()) {
+            for (int i = 0; i < insertStatement.getTargetColumnNames().size(); i++) {
+                String name = insertStatement.getTargetColumnNames().get(i);
+                Column column = insertStatement.getTargetTable().getColumn(name);
+                ColumnRefOperator outputColumn = outputColumns.get(i);
+                Type currentType = outputColumn.getType();
+                Type targetType = column.getType();
+                if (!targetType.matchesType(currentType)) {
+                    ColumnRefOperator k = columnRefFactory.create(column.getName(), column.getType(), column.isAllowNull());
+                    ScalarOperator castOperator = new CastOperator(fullSchema.get(i).getType(), outputColumn, true);
+                    columnRefMap.put(k, rewriter.rewrite(castOperator, rewriteRules));
+                    outputColumns.set(i, k);
+                } else {
+                    columnRefMap.put(outputColumns.get(i), outputColumns.get(i));
+                }
             }
-            Type targetType = fullSchema.get(columnIdx).getType();
-            Type currentType = outputColumns.get(columnIdx).getType();
-            if (!targetType.matchesType(currentType)) {
-                Column c = fullSchema.get(columnIdx);
-                ColumnRefOperator k = columnRefFactory.create(c.getName(), c.getType(), c.isAllowNull());
-                ScalarOperator castOperator = new CastOperator(fullSchema.get(columnIdx).getType(),
-                        outputColumns.get(columnIdx), true);
-                columnRefMap.put(k, rewriter.rewrite(castOperator, rewriteRules));
-                outputColumns.set(columnIdx, k);
-            } else {
-                columnRefMap.put(outputColumns.get(columnIdx), outputColumns.get(columnIdx));
+        } else {
+            for (int columnIdx = 0; columnIdx < fullSchema.size(); ++columnIdx) {
+                Type targetType = fullSchema.get(columnIdx).getType();
+                Type currentType = outputColumns.get(columnIdx).getType();
+                if (!targetType.matchesType(currentType)) {
+                    Column c = fullSchema.get(columnIdx);
+                    ColumnRefOperator k = columnRefFactory.create(c.getName(), c.getType(), c.isAllowNull());
+                    ScalarOperator castOperator = new CastOperator(fullSchema.get(columnIdx).getType(),
+                            outputColumns.get(columnIdx), true);
+                    columnRefMap.put(k, rewriter.rewrite(castOperator, rewriteRules));
+                    outputColumns.set(columnIdx, k);
+                } else {
+                    columnRefMap.put(outputColumns.get(columnIdx), outputColumns.get(columnIdx));
+                }
             }
         }
         return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
