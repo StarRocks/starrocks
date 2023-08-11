@@ -58,7 +58,7 @@ public class DesensitizedInfoCollector {
     }
 
     public void init() {
-        desensitizedDict.put("*", "*");
+        fillBuiltInWords();
 
         for (Pair<String, Table> pair : dumpInfo.getTableMap().values()) {
             // desensitized dbName
@@ -87,6 +87,22 @@ public class DesensitizedInfoCollector {
             partitions.keySet().forEach(e -> addIntoDict(e));
         }
         collectStmtDictInfo();
+    }
+
+    private void fillBuiltInWords() {
+        desensitizedDict.put("*", "*");
+
+        // table function default col name
+        desensitizedDict.put("unnest", "unnest");
+        desensitizedDict.put("key", "key");
+        desensitizedDict.put("value", "value");
+        desensitizedDict.put("generate_series", "generate_series");
+        desensitizedDict.put("id", "id");
+        desensitizedDict.put("segments", "segments");
+        desensitizedDict.put("rows", "rows");
+        desensitizedDict.put("size", "size");
+        desensitizedDict.put("overlapped", "overlapped");
+        desensitizedDict.put("delete_predicate", "delete_predicate");
     }
 
     private void addStructFieldNameToDict(StructType type) {
