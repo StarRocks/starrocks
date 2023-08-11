@@ -129,7 +129,13 @@ public:
                 res->append_nulls(1);
             }
         }
+
         if (all_const) {
+            if (!res->is_null(0)) {
+                // map_value is nullable, remove it.
+                auto col = down_cast<NullableColumn*>(res.get())->data_column();
+                return ConstColumn::create(std::move(col), size);
+            }
             return ConstColumn::create(std::move(res), size);
         } else {
             return res;
