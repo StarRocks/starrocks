@@ -99,7 +99,6 @@ public:
         auto& map_keys = map_column->keys_column();
         auto& map_values = map_column->values_column();
         const auto& offsets = map_column->offsets().get_data();
-
         auto res = map_values->clone_empty(); // must be nullable
         res->reserve(dest_size);
         for (size_t i = 0; i < dest_size; i++) {
@@ -130,7 +129,6 @@ public:
                 res->append_nulls(1);
             }
         }
-
         if (all_const) {
             return ConstColumn::create(std::move(res), size);
         } else {
