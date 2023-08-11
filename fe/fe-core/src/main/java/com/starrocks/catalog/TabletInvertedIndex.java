@@ -315,11 +315,14 @@ public class TabletInvertedIndex {
         if (tabletMigrationMap.size() >=
                 Config.tablet_sched_max_migration_task_sent_once
                         - AgentTaskQueue.getTaskNum(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, false)) {
+            LOG.debug("size of tabletMigrationMap + size of running tasks on BE is bigger than {}",
+                    Config.tablet_sched_max_migration_task_sent_once);
             return;
         }
 
         // 3. If the task already running on be, do not send again
         if (AgentTaskQueue.getTask(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, tabletId) != null) {
+            LOG.debug("migrate of tablet:{} is already running on BE", tabletId);
             return;
         }
 
@@ -332,6 +335,7 @@ public class TabletInvertedIndex {
         try {
             OlapTable table = (OlapTable) db.getTable(tabletMeta.getTableId());
             if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
+                LOG.debug("tablet:{} is primary key table, do not support migrate", tabletId);
                 // Currently, primary key table doesn't support tablet migration between local disks.
                 return;
             }
