@@ -992,14 +992,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         materializedView.getPartitionInfo());
                 if (partitionPredicates != null) {
                     tableRelation.setPartitionPredicate(partitionPredicates);
-
                     QueryRelation queryRelation = queryStatement.getQueryRelation();
                     if (queryRelation instanceof SelectRelation) {
                         SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
-                        Expr orgWhereClause = selectRelation.getWhereClause();
-                        selectRelation.setWhereClause(Expr.compoundOr(Lists.newArrayList(orgWhereClause, partitionPredicates)));
+                        selectRelation.setWhereClause(Expr.compoundOr(Lists.newArrayList(selectRelation.getWhereClause(),
+                                partitionPredicates)));
                     }
-                    // TODO: support union relation later.
                 }
             }
         }
@@ -1042,14 +1040,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             sourceTablePartitionRange = MvUtils.mergeRanges(sourceTablePartitionRange);
             List<Expr> partitionPredicates =
                     MvUtils.convertRange(outputPartitionSlot, sourceTablePartitionRange);
-            if (partitionPredicates.isEmpty()) {
-                // range contains the min value could be null value
-                Optional<Range<PartitionKey>> nullRange = sourceTablePartitionRange.stream().
-                        filter(range -> range.lowerEndpoint().isMinValue()).findAny();
-                if (nullRange.isPresent()) {
-                    Expr isNullPredicate = new IsNullPredicate(outputPartitionSlot, false);
-                    partitionPredicates.add(isNullPredicate);
-                }
+            // range contains the min value could be null value
+            Optional<Range<PartitionKey>> nullRange = sourceTablePartitionRange.stream().
+                    filter(range -> range.lowerEndpoint().isMinValue()).findAny();
+            if (nullRange.isPresent()) {
+                Expr isNullPredicate = new IsNullPredicate(outputPartitionSlot, false);
+                partitionPredicates.add(isNullPredicate);
             }
 
             return Expr.compoundOr(partitionPredicates);
@@ -1555,41 +1551,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             }
         }
         return baseTableRefreshPartitionNames;
-    }
-
-    /**
-     * Extract olap table partition name and its partition info from olap scan node.
-     */
-    private Map<String, MaterializedView.BasePartitionInfo> getSelectedPartitionInfos(OlapScanNode olapScanNode) {
-        Map<String, MaterializedView.BasePartitionInfo> partitionInfos = Maps.newHashMap();
-        List<Long> selectedPartitionIds = olapScanNode.getSelectedPartitionIds();
-        OlapTable olapTable = olapScanNode.getOlapTable();
-        for (long partitionId : selectedPartitionIds) {
-            Partition partition = olapTable.getPartition(partitionId);
-            MaterializedView.BasePartitionInfo basePartitionInfo = new MaterializedView.BasePartitionInfo(
-                    partitionId, partition.getVisibleVersion(), partition.getVisibleVersionTime());
-            partitionInfos.put(partition.getName(), basePartitionInfo);
-        }
-        return partitionInfos;
-    }
-
-    /**
-     * Extract hive partition name and its partition info from hdfs scan node.
-     */
-    private Map<String, MaterializedView.BasePartitionInfo> getSelectedPartitionInfos(HdfsScanNode hdfsScanNode,
-                                                                                      BaseTableInfo baseTableInfo) {
-        Map<String, MaterializedView.BasePartitionInfo> partitionInfos = Maps.newHashMap();
-        HiveTable hiveTable = hdfsScanNode.getHiveTable();
-        List<String> selectedPartitionNames = getSelectedPartitionNamesOfHiveTable(hiveTable, hdfsScanNode);
-        List<com.starrocks.connector.PartitionInfo> hivePartitions = GlobalStateMgr.
-                getCurrentState().getMetadataMgr().getPartitions(baseTableInfo.getCatalogName(), hiveTable,
-                        selectedPartitionNames);
-        for (int index = 0; index < selectedPartitionNames.size(); ++index) {
-            long modifiedTime = hivePartitions.get(index).getModifiedTime();
-            partitionInfos.put(selectedPartitionNames.get(index),
-                    new MaterializedView.BasePartitionInfo(-1, modifiedTime, modifiedTime));
-        }
-        return partitionInfos;
     }
 
     /**
