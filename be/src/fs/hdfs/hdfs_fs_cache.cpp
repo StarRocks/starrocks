@@ -106,26 +106,26 @@ Status HdfsFsCache::get_connection(const std::string& namenode, std::shared_ptr<
         }
     }
 
-    for (size_t idx = 0; idx < _cur_client_idx; idx++) {
-        if (_cache_key[idx] == cache_key) {
+    for (size_t idx = 0; idx < _cache_keys.size(); idx++) {
+        if (_cache_keys[idx] == cache_key) {
             hdfs_client = _cache_clients[idx];
             // Found a cache client, return directly
             return Status::OK();
         }
     }
+    const uint32_t max_cache_clients = config::hdfs_client_max_cache_size;
 
     // Not found a cached client, create a new one
     hdfs_client = std::make_shared<HdfsFsClient>();
     hdfs_client->namenode = namenode;
     RETURN_IF_ERROR(create_hdfs_fs_handle(namenode, hdfs_client, options));
-    if (UNLIKELY(_cur_client_idx >= _max_cache_clients)) {
-        uint32_t idx = _rand.Uniform(_max_cache_clients);
-        _cache_key[idx] = cache_key;
+    if (UNLIKELY(_cache_keys.size() >= max_cache_clients)) {
+        uint32_t idx = _rand.Uniform(max_cache_clients);
+        _cache_keys[idx] = cache_key;
         _cache_clients[idx] = hdfs_client;
     } else {
-        _cache_key[_cur_client_idx] = cache_key;
-        _cache_clients[_cur_client_idx] = hdfs_client;
-        _cur_client_idx++;
+        _cache_keys.emplace_back(cache_key);
+        _cache_clients.emplace_back(hdfs_client);
     }
     return Status::OK();
 }
