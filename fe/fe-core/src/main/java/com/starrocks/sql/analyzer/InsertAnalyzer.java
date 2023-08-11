@@ -123,7 +123,14 @@ public class InsertAnalyzer {
                             targetPartitionNames.getPos());
                 }
 
-                for (String partitionName : targetPartitionNames.getPartitionNames()) {
+                List<String> deduplicatePartitionNames =
+                        targetPartitionNames.getPartitionNames().stream().distinct().collect(Collectors.toList());
+                if (deduplicatePartitionNames.size() != targetPartitionNames.getPartitionNames().size()) {
+                    insertStmt.setTargetPartitionNames(new PartitionNames(targetPartitionNames.isTemp(),
+                            deduplicatePartitionNames, targetPartitionNames.getPartitionColNames(),
+                            targetPartitionNames.getPartitionColValues(), targetPartitionNames.getPos()));
+                }
+                for (String partitionName : deduplicatePartitionNames) {
                     if (Strings.isNullOrEmpty(partitionName)) {
                         throw new SemanticException("there are empty partition name", targetPartitionNames.getPos());
                     }
