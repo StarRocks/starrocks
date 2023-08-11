@@ -15,13 +15,10 @@
 
 package com.starrocks.connector.jdbc;
 
-import com.google.common.collect.Lists;
 import com.mockrunner.mock.jdbc.MockResultSet;
-import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCResource;
-import com.starrocks.catalog.JDBCTable;
-import com.starrocks.catalog.Table;
-import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.connector.PartitionInfo;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -30,18 +27,19 @@ import org.junit.Test;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static com.starrocks.catalog.JDBCResource.DRIVER_CLASS;
 
 
-public class JDBCMetadataTest {
+public class MysqlSchemaResolverTest {
 
     @Mocked
     DriverManager driverManager;
@@ -50,13 +48,13 @@ public class JDBCMetadataTest {
     Connection connection;
 
     @Mocked
-    JDBCTableIdCache jdbcTableIdCache;
+    PreparedStatement preparedStatement;
 
     private Map<String, String> properties;
     private MockResultSet dbResult;
     private MockResultSet tableResult;
     private MockResultSet columnResult;
-    private Map<JDBCTableName, Integer> tableIdCache;
+    private MockResultSet partitionsResult;
 
     @Before
     public void setUp() throws SQLException {
@@ -71,6 +69,10 @@ public class JDBCMetadataTest {
         columnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 2, 0, 0));
         columnResult.addColumn("COLUMN_NAME", Arrays.asList("a", "b", "c", "d"));
         columnResult.addColumn("IS_NULLABLE", Arrays.asList("YES", "NO", "NO", "NO"));
+        partitionsResult = new MockResultSet("partitions");
+        partitionsResult.addColumn("PARTITION_DESCRIPTION", Arrays.asList("'20230810'"));
+        partitionsResult.addColumn("PARTITION_EXPRESSION", Arrays.asList("`d`"));
+        partitionsResult.addColumn("CREATE_TIME", Arrays.asList(new Date(1691596800L)));
         properties = new HashMap<>();
         properties.put(DRIVER_CLASS, "com.mysql.cj.jdbc.Driver");
         properties.put(JDBCResource.URI, "jdbc:mysql://127.0.0.1:3306");
@@ -78,8 +80,6 @@ public class JDBCMetadataTest {
         properties.put(JDBCResource.PASSWORD, "123456");
         properties.put(JDBCResource.CHECK_SUM, "xxxx");
         properties.put(JDBCResource.DRIVER_URL, "xxxx");
-        tableIdCache = new ConcurrentHashMap<>();
-        tableIdCache.put(JDBCTableName.of("catalog", "test", "tbl1"), 100000);
 
         new Expectations() {
             {
@@ -87,69 +87,19 @@ public class JDBCMetadataTest {
                 result = connection;
                 minTimes = 0;
 
-                connection.getMetaData().getCatalogs();
-                result = dbResult;
+                preparedStatement.executeQuery();
+                result = partitionsResult;
                 minTimes = 0;
-
-                connection.getMetaData().getTables("test", null, null,
-                        new String[] {"TABLE", "VIEW"});
-                result = tableResult;
-                minTimes = 0;
-
-                connection.getMetaData().getColumns("test", null, "tbl1", "%");
-                result = columnResult;
-                minTimes = 0;
-
-                Deencapsulation.invoke(jdbcTableIdCache, "getTableIdCache");
-                result = tableIdCache;
-                minTimes = 0;
-
             }
         };
     }
 
-
     @Test
-    public void testListDatabaseNames() {
+    public void testListPartitionNames() {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
-            List<String> result = jdbcMetadata.listDbNames();
-            List<String> expectResult = Lists.newArrayList("test");
-            Assert.assertEquals(expectResult, result);
-        } catch (Exception e) {
-            Assert.fail();
-        }
-    }
-
-    @Test
-    public void testGetDb() {
-        try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
-            Database db = jdbcMetadata.getDb("test");
-            Assert.assertEquals("test", db.getOriginName());
-        } catch (Exception e) {
-            Assert.fail();
-        }
-    }
-
-    @Test
-    public void testListTableNames() {
-        try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
-            List<String> result = jdbcMetadata.listTableNames("test");
-            List<String> expectResult = Lists.newArrayList("tbl1", "tbl2", "tbl3");
-            Assert.assertEquals(expectResult, result);
-        } catch (Exception e) {
-            Assert.fail();
-        }
-    }
-
-    @Test
-    public void testGetTable() {
-        try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
-            Table table = jdbcMetadata.getTable("test", "tbl1");
-            Assert.assertTrue(table instanceof JDBCTable);
+            List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1");
+            Assert.assertTrue(partitionNames.size() > 0);
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();
@@ -157,11 +107,55 @@ public class JDBCMetadataTest {
     }
 
     @Test
-    public void testCacheTableId() {
+    public void testListPartitionColumns() {
         try {
+            new Expectations() {
+                {
+                    connection.getMetaData().getColumns("test", null, "tbl1", "%");
+                    result = columnResult;
+                    minTimes = 0;
+                }
+            };
+
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
-            Table table1 = jdbcMetadata.getTable("test", "tbl1");
-            Assert.assertTrue(table1.getId() == 100000);
+
+            JDBCSchemaResolver schemaResolver = new MysqlSchemaResolver();
+            List<String> cols = schemaResolver.listPartitionColumns(connection, "test", "tbl1");
+            System.out.println("schemaResolver testListPartitionColumns : " + cols);
+            System.out.println("schemaResolver testListPartitionColumns fullSchema: " +
+                    jdbcMetadata.getTable("test", "tbl1").getFullSchema());
+
+            List<Column> partitionColumns = jdbcMetadata.listPartitionColumns("test", "tbl1",
+                    jdbcMetadata.getTable("test", "tbl1").getFullSchema());
+            System.out.println("schemaResolver testListPartitionColumns partitionColumns : " + partitionColumns);
+            Assert.assertTrue(partitionColumns.size() > 0);
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testGetPartitions() {
+        try {
+            new Expectations() {
+                {
+                    connection.getMetaData().getColumns("test", null, "tbl1", "%");
+                    result = columnResult;
+                    minTimes = 0;
+                }
+            };
+
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+
+            JDBCSchemaResolver schemaResolver = new MysqlSchemaResolver();
+            List<Partition> partitionlls = schemaResolver.getPartitions(connection, jdbcMetadata.getTable("test", "tbl1"));
+            System.out.println("schemaResolver testGetPartitions : " + partitionlls);
+
+            List<PartitionInfo> partitions = jdbcMetadata.getPartitions(
+                    jdbcMetadata.getTable("test", "tbl1"), Arrays.asList("20230810"));
+            System.out.println("testGetPartitions:" + partitions);
+            Assert.assertTrue(partitions.size() > 0);
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();
