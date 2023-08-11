@@ -2,7 +2,14 @@
 
 When you create a table, you must specify the data distribution method by configuring the number of partitions and the number of tablets in a table. An appropriate data distribution method helps evenly distribute data across the nodes of your StarRocks cluster, reduces table scans, makes full use of the concurrency of the cluster, thereby improving query performance.
 
+<<<<<<< HEAD
 ## Basic concepts
+=======
+> **NOTE**
+>
+> - Since v3.1, you do not need to specify the bucketing key in the DISTRIBUTED BY clause when creating a table or adding a partition. StarRocks supports random bucketing, which randomly distributes data across all buckets. For more information, see [Random bucketing](#random-bucketing-since-v31).
+> - Since v2.5.7, you can choose not to manually set the number of buckets when you create a table or add a partition. StarRocks can automatically set the number of buckets (BUCKETS). However, if the performance does not meet your expectations after StarRocks automatically sets the number of buckets and you are familiar with the bucketing mechanism, you can still [manually set the number of buckets](#determine-the-number-of-buckets).
+>>>>>>> ae078e808f ([Doc] add-note-for-auto-bucket-number-setting (#29050))
 
 Before you dive into the details of designing and managing data distribution, familiarize yourself with the following concepts:
 
@@ -164,7 +171,11 @@ If you intend to set the number of buckets, StarRocks 2.4 and later versions sup
 
 > Note: You cannot modify the number of tablets for an existing partition. You can only modify the number of tablets when you add a partition.
 
+<<<<<<< HEAD
 ## Manage  partitions
+=======
+  - Method 1: automatically set the number of buckets
+>>>>>>> ae078e808f ([Doc] add-note-for-auto-bucket-number-setting (#29050))
 
 ### Create partitions
 
@@ -181,7 +192,15 @@ You can partition a table in threes ways by using `PARTITION BY RANGE` clause:
   )
   ```
 
+<<<<<<< HEAD
 - Partition a table by specifying values of a fixed range. For more information, see CREATE TABLE.
+=======
+    > **NOTICE**
+    >
+    > If the raw data size of a partition exceeds 100 GB, we recommend that you manually configure the number of buckets using the Method 2.
+
+  - Method 2: manually set the number of buckets
+>>>>>>> ae078e808f ([Doc] add-note-for-auto-bucket-number-setting (#29050))
 
   ```SQL
   PARTITION BY RANGE (k1, k2, k3, ...)
