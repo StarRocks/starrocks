@@ -56,7 +56,6 @@ public:
 
 private:
     std::mutex _lock;
-    uint32_t _cur_client_idx{0};
     std::vector<std::string> _cache_keys;
     std::vector<std::shared_ptr<HdfsFsClient>> _cache_clients;
     Random _rand{(uint32_t)time(nullptr)};

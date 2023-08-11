@@ -119,7 +119,7 @@ Status HdfsFsCache::get_connection(const std::string& namenode, std::shared_ptr<
     hdfs_client = std::make_shared<HdfsFsClient>();
     hdfs_client->namenode = namenode;
     RETURN_IF_ERROR(create_hdfs_fs_handle(namenode, hdfs_client, options));
-    if (UNLIKELY(_cur_client_idx >= max_cache_clients)) {
+    if (UNLIKELY(_cache_keys.size() >= max_cache_clients)) {
         uint32_t idx = _rand.Uniform(max_cache_clients);
         _cache_keys[idx] = cache_key;
         _cache_clients[idx] = hdfs_client;
