@@ -8,11 +8,11 @@ The window function is a special class of built-in functions. Similar to the agg
 
 Syntax of the window function:
 
-~~~SQL
+```SQL
 function(args) OVER(partition_by_clause order_by_clause [window_clause])
 partition_by_clause ::= PARTITION BY expr [, expr ...]
 order_by_clause ::= ORDER BY expr [ASC | DESC] [, expr [ASC | DESC] ...]
-~~~
+```
 
 ### Functions
 
@@ -21,6 +21,8 @@ Currently supported functions include:
 * MIN(), MAX(), COUNT(), SUM(), AVG()
 * FIRST_VALUE(), LAST_VALUE(), LEAD(), LAG()
 * ROW_NUMBER(), RANK(), DENSE_RANK(), QUALIFY()
+* NTILE()
+* VARIANCE(), VAR_SAMP(), STD(), STDDEV_SAMP(), COVAR_SAMP(), COVAR_POP(), CORR()
 
 ### PARTITION BY clause
 
@@ -28,17 +30,17 @@ The Partition By clause is similar to Group By. It groups the input rows by one 
 
 ### ORDER BY clause
 
-The `Order By` clause is basically the same as the outer `Order By`. It defines the order of the input rows. If`Partition By` is specified, `Order By` defines the order within each Partition grouping. The only difference is that `Order By n` (n is a positive integer) in the `OVER` clause is equivalent to no operation, whereas the n in the outer `Order By` indicates sorting by the nth column.
+The `Order By` clause is basically the same as the outer `Order By`. It defines the order of the input rows. If `Partition By` is specified, `Order By` defines the order within each Partition grouping. The only difference is that `Order By n` (n is a positive integer) in the `OVER` clause is equivalent to no operation, whereas `n` in the outer `Order By` indicates sorting by the nth column.
 
 Example:
 
 This example shows adding an id column to the select list with values of 1, 2, 3, etc., sorted by the `date_and_time` column in the events table.
 
-~~~SQL
+```SQL
 SELECT row_number() OVER (ORDER BY date_and_time) AS id,
     c1, c2, c3, c4
 FROM events;
-~~~
+```
 
 ### Window clause
 
@@ -46,15 +48,15 @@ The window clause is used to specify a range of rows for operations (the precedi
 
 Syntax:
 
-~~~SQL
+```SQL
 ROWS BETWEEN [ { m | UNBOUNDED } PRECEDING | CURRENT ROW] [ AND [CURRENT ROW | { UNBOUNDED | n } FOLLOWING] ]
-~~~
+```
 
 Example:
 
 Suppose we have the following stock data, the stock symbol is JDR, and the closing price is the daily closing price.
 
-~~~SQL
+```SQL
 create table stock_ticker (
     stock_symbol string,
     closing_price decimal(8,2),
@@ -65,11 +67,11 @@ create table stock_ticker (
 select *
 from stock_ticker
 order by stock_symbol, closing_date
-~~~
+```
 
 The raw data was shown as follows:
 
-~~~Plain Text
+```Plain Text
 +--------------+---------------+---------------------+
 | stock_symbol | closing_price | closing_date        |
 +--------------+---------------+---------------------+
@@ -81,11 +83,11 @@ The raw data was shown as follows:
 | JDR          | 14.75         | 2014-10-07 00:00:00 |
 | JDR          | 13.98         | 2014-10-08 00:00:00 |
 +--------------+---------------+---------------------+
-~~~
+```
 
 This query uses the window function to generate the moving_average column whose value is the 3-day (previous day, current day, and next day) average stock price. The first day does not have the value of its previous day, and the last day does not have the value of the day after, so these two rows only calculate the average value of two days. Here `Partition By` does not take effect, because all the data is JDR data. However, if there is other stock information, `Partition By` will ensure that the window function is operated within each Partition.
 
-~~~SQL
+```SQL
 select stock_symbol, closing_date, closing_price,
     avg(closing_price)
         over (partition by stock_symbol
@@ -93,11 +95,11 @@ select stock_symbol, closing_date, closing_price,
               rows between 1 preceding and 1 following
         ) as moving_average
 from stock_ticker;
-~~~
+```
 
 The following data is obtained:
 
-~~~Plain Text
+```Plain Text
 +--------------+---------------------+---------------+----------------+
 | stock_symbol | closing_date        | closing_price | moving_average |
 +--------------+---------------------+---------------+----------------+
@@ -109,7 +111,7 @@ The following data is obtained:
 | JDR          | 2014-10-07 00:00:00 | 14.75         | 14.25          |
 | JDR          | 2014-10-08 00:00:00 | 13.98         | 14.36          |
 +--------------+---------------------+---------------+----------------+
-~~~
+```
 
 ## Function Examples
 
@@ -119,15 +121,15 @@ This section describes the window functions supported in StarRocks.
 
 Syntax:
 
-~~~SQL
-AVG(expression) [OVER (*analytic_clause*)]
-~~~
+```SQL
+AVG(expr) [OVER (*analytic_clause*)]
+```
 
 Example:
 
 Calculate the x-average of the current row and each row before and after it.
 
-~~~SQL
+```SQL
 select x, property,
     avg(x)
         over (
@@ -137,9 +139,9 @@ select x, property,
         ) as 'moving average'
 from int_t
 where property in ('odd','even');
-~~~
+```
 
-~~~Plain Text
+```Plain Text
 +----+----------+----------------+
 | x  | property | moving average |
 +----+----------+----------------+
@@ -154,21 +156,21 @@ where property in ('odd','even');
 | 7  | odd      | 7              |
 | 9  | odd      | 8              |
 +----+----------+----------------+
-~~~
+```
 
 ### COUNT()
 
 Syntax:
 
-~~~SQL
-COUNT(expression) [OVER (analytic_clause)]
-~~~
+```SQL
+COUNT(expr) [OVER (analytic_clause)]
+```
 
 Example:
 
 Count the occurrence of x from the current row to the first row.
 
-~~~SQL
+```SQL
 select x, property,
     count(x)
         over (
@@ -177,9 +179,9 @@ select x, property,
             rows between unbounded preceding and current row
         ) as 'cumulative total'
 from int_t where property in ('odd','even');
-~~~
+```
 
-~~~Plain Text
+```Plain Text
 +----+----------+------------------+
 | x  | property | cumulative count |
 +----+----------+------------------+
@@ -194,7 +196,7 @@ from int_t where property in ('odd','even');
 | 7  | odd      | 4                |
 | 9  | odd      | 5                |
 +----+----------+------------------+
-~~~
+```
 
 ### DENSE_RANK()
 
@@ -202,13 +204,13 @@ The DENSE_RANK() function is used to represent rankings. Unlike RANK(), DENSE_RA
 
 Syntax:
 
-~~~SQL
+```SQL
 DENSE_RANK() OVER(partition_by_clause order_by_clause)
-~~~
+```
 
 The following example shows the ranking of column x according to the property column grouping.
 
-~~~SQL
+```SQL
 select x, y,
     dense_rank()
         over (
@@ -216,9 +218,9 @@ select x, y,
             order by y
         ) as `rank`
 from int_t;
-~~~
+```
 
-~~~Plain Text
+```Plain Text
 +---+---+------+
 | x | y | rank |
 +---+---+------+
@@ -232,7 +234,7 @@ from int_t;
 | 3 | 1 | 1    |
 | 3 | 2 | 2    |
 +---+---+------+
-~~~
+```
 
 ### NTILE
 
@@ -245,9 +247,9 @@ About the size of the bucket:
 
 Syntax:
 
-~~~~SQL
+```~SQL
 NTILE (num_buckets) OVER (partition_by_clause order_by_clause)
-~~~~
+```~
 
 `num_buckets`: Number of the buckets to be created. The value must be a constant positive integer whose maximum is `2^63 - 1`.
 
@@ -259,7 +261,7 @@ Example:
 
 The following example divides all rows in the partition into 2 buckets.
 
-~~~~sql
+```~sql
 select id, x, y,
     ntile(2)
         over (
@@ -267,9 +269,9 @@ select id, x, y,
             order by y
         ) as bucket_id
 from t1;
-~~~~
+```~
 
-~~~~Plain Text
+```~Plain Text
 +------+------+------+-----------+
 | id   | x    | y    | bucket_id |
 +------+------+------+-----------+
@@ -284,7 +286,7 @@ from t1;
 |    9 |    2 |   88 |         2 |
 |   10 |    3 |   99 |         1 |
 +------+------+------+-----------+
-~~~~
+```~
 
 As the above example shown, when `num_buckets` is `2`:
 
@@ -300,9 +302,9 @@ FIRST_VALUE() returns the **first** value of the window range.
 
 Syntax:
 
-~~~SQL
+```SQL
 FIRST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [window_clause])
-~~~
+```
 
 `IGNORE NULLS` is supported from v2.5.0. It is used to determine whether NULL values of `expr` are eliminated from the calculation. By default, NULL values are included, which means NULL is returned if the first value in the filtered result is NULL. If you specify IGNORE NULLS, the first non-null value in the filtered result is returned. If all the values are NULL, NULL is returned even if you specify IGNORE NULLS.
 
@@ -310,12 +312,12 @@ Example:
 
 We have the following data:
 
-~~~SQL
+```SQL
  select name, country, greeting
  from mail_merge;
- ~~~
+ ```
 
-~~~Plain Text
+```Plain Text
 +---------+---------+--------------+
 | name    | country | greeting     |
 +---------+---------+--------------+
@@ -326,11 +328,11 @@ We have the following data:
 | Bjorn   | Sweden  | Hej          |
 | Mats    | Sweden  | Tja          |
 +---------+---------+--------------+
-~~~
+```
 
 Use FIRST_VALUE() to return the first greeting value in each grouping, based on the country grouping.
 
-~~~SQL
+```SQL
 select country, name,
     first_value(greeting)
         over (
@@ -338,9 +340,9 @@ select country, name,
             order by name, greeting
         ) as greeting
 from mail_merge;
-~~~
+```
 
-~~~Plain Text
+```Plain Text
 +---------+---------+-----------+
 | country | name    | greeting  |
 +---------+---------+-----------+
@@ -351,7 +353,7 @@ from mail_merge;
 | USA     | John    | Hi        |
 | USA     | Pete    | Hi        |
 +---------+---------+-----------+
-~~~
+```
 
 ### LAG()
 
@@ -366,10 +368,10 @@ Returns the value of the row that lags the current row by `offset` rows. This fu
 
 Syntax:
 
-~~~SQL
+```SQL
 LAG(expr [IGNORE NULLS] [, offset[, default]])
 OVER([<partition_by_clause>] [<order_by_clause>])
-~~~
+```
 
 Parameters:
 
@@ -382,7 +384,7 @@ Example 1: IGNORE NULLS is not specified
 
 Create a table and insert values:
 
-~~~SQL
+```SQL
 CREATE TABLE test_tbl (col_1 INT, col_2 INT)
 DISTRIBUTED BY HASH(col_1);
 
@@ -397,13 +399,13 @@ INSERT INTO test_tbl VALUES
     (8, 5),
     (9, NULL),
     (10, NULL);
-~~~
+```
 
 Query data from this table, where `offset` is 2, which means traversing the previous two rows; `default` is 0, which means 0 is returned if no matching rows are found.
 
 Output:
 
-~~~Plain
+```Plain
 SELECT col_1, col_2, LAG(col_2,2,0) OVER (ORDER BY col_1) 
 FROM test_tbl ORDER BY col_1;
 +-------+-------+---------------------------------------------+
@@ -420,7 +422,7 @@ FROM test_tbl ORDER BY col_1;
 |     9 |  NULL |                                           6 |
 |    10 |  NULL |                                           5 |
 +-------+-------+---------------------------------------------+
-~~~
+```
 
 For the first two rows, no previous two rows exist and the default value 0 is returned.
 
@@ -430,7 +432,7 @@ Example 2: IGNORE NULLS is specified
 
 Use the preceding table and parameter settings.
 
-~~~SQL
+```SQL
 SELECT col_1, col_2, LAG(col_2 IGNORE NULLS,2,0) OVER (ORDER BY col_1) 
 FROM test_tbl ORDER BY col_1;
 +-------+-------+---------------------------------------------+
@@ -447,7 +449,7 @@ FROM test_tbl ORDER BY col_1;
 |     9 |  NULL |                                           6 |
 |    10 |  NULL |                                           6 |
 +-------+-------+---------------------------------------------+
-~~~
+```
 
 For rows 1 to 4, the system cannot find two non-NULL values for each of them in the previous rows and the default value 0 is returned.
 
@@ -459,15 +461,15 @@ LAST_VALUE() returns the **last** value of the window range. It is the opposite 
 
 Syntax:
 
-~~~SQL
+```SQL
 LAST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [window_clause])
-~~~
+```
 
 `IGNORE NULLS` is supported from v2.5.0. It is used to determine whether NULL values of `expr` are eliminated from the calculation. By default, NULL values are included, which means NULL is returned if the last value in the filtered result is NULL. If you specify IGNORE NULLS, the last non-null value in the filtered result is returned. If all the values are NULL, NULL is returned even if you specify IGNORE NULLS.
 
 Use the data from the example:
 
-~~~SQL
+```SQL
 select country, name,
     last_value(greeting)
         over (
@@ -475,9 +477,9 @@ select country, name,
             order by name, greeting
         ) as greeting
 from mail_merge;
-~~~
+```
 
-~~~Plain Text
+```Plain Text
 +---------+---------+--------------+
 | country | name    | greeting     |
 +---------+---------+--------------+
@@ -488,7 +490,7 @@ from mail_merge;
 | USA     | John    | Hello        |
 | USA     | Pete    | Hello        |
 +---------+---------+--------------+
-~~~
+```
 
 ### LEAD()
 
@@ -498,10 +500,10 @@ Data types that can be queried by `lead()` are the same as those supported by [l
 
 Syntax
 
-~~~sql
+```sql
 LEAD(expr [IGNORE NULLS] [, offset[, default]])
 OVER([<partition_by_clause>] [<order_by_clause>])
-~~~
+```
 
 Parameters:
 
@@ -514,7 +516,7 @@ Example 1: IGNORE NULLS is not specified
 
 Create a table and insert values:
 
-~~~SQL
+```SQL
 CREATE TABLE test_tbl (col_1 INT, col_2 INT)
 DISTRIBUTED BY HASH(col_1);
 
@@ -529,13 +531,13 @@ INSERT INTO test_tbl VALUES
     (8, 5),
     (9, NULL),
     (10, NULL);
-~~~
+```
 
 Query data from this table, where `offset` is 2, which means traversing the subsequent two rows; `default` is 0, which means 0 is returned if no matching rows are found.
 
 Output:
 
-~~~Plain
+```Plain
 SELECT col_1, col_2, LEAD(col_2,2,0) OVER (ORDER BY col_1) 
 FROM test_tbl ORDER BY col_1;
 +-------+-------+----------------------------------------------+
@@ -552,7 +554,7 @@ FROM test_tbl ORDER BY col_1;
 |     9 |  NULL |                                            0 |
 |    10 |  NULL |                                            0 |
 +-------+-------+----------------------------------------------+
-~~~
+```
 
 For the first row, the value two rows forward is NULL and NULL is returned because NULL values are allowed.
 
@@ -562,7 +564,7 @@ Example 2: IGNORE NULLS is specified
 
 Use the preceding table and parameter settings.
 
-~~~SQL
+```SQL
 SELECT col_1, col_2, LEAD(col_2 IGNORE NULLS,2,0) OVER (ORDER BY col_1) 
 FROM test_tbl ORDER BY col_1;
 +-------+-------+----------------------------------------------+
@@ -579,7 +581,7 @@ FROM test_tbl ORDER BY col_1;
 |     9 |  NULL |                                            0 |
 |    10 |  NULL |                                            0 |
 +-------+-------+----------------------------------------------+
-~~~
+```
 
 For rows 7 to 10, the system cannot find two non-null values in the subsequent rows and the default value 0 is returned.
 
@@ -591,15 +593,15 @@ Returns the maximum value of the specified rows in the current window.
 
 Syntax
 
-~~~SQL
-MAX(expression) [OVER (analytic_clause)]
-~~~
+```SQL
+MAX(expr) [OVER (analytic_clause)]
+```
 
 Example:
 
 Calculate the maximum value of rows from the first row to the row after the current row.
 
-~~~SQL
+```SQL
 select x, property,
     max(x)
         over (
@@ -608,9 +610,9 @@ select x, property,
         ) as 'local maximum'
 from int_t
 where property in ('prime','square');
-~~~
+```
 
-~~~Plain Text
+```Plain Text
 +---+----------+---------------+
 | x | property | local maximum |
 +---+----------+---------------+
@@ -622,13 +624,13 @@ where property in ('prime','square');
 | 4 | square   | 9             |
 | 9 | square   | 9             |
 +---+----------+---------------+
-~~~
+```
 
 From StarRocks 2.4 onwards, you can specify the row range as `rows between n preceding and n following`, which means you can capture `n` rows before the current row and `n` rows after the current row.
 
 Example statement:
 
-~~~sql
+```sql
 select x, property,
     max(x)
         over (
@@ -636,7 +638,7 @@ select x, property,
             rows between 3 preceding and 2 following) as 'local maximum'
 from int_t
 where property in ('prime','square');
-~~~
+```
 
 ### MIN()
 
@@ -644,15 +646,15 @@ Returns the minimum value of the specified rows in the current window.
 
 Syntax:
 
-~~~SQL
-MIN(expression) [OVER (analytic_clause)]
-~~~
+```SQL
+MIN(expr) [OVER (analytic_clause)]
+```
 
 Example:
 
 Calculate the minimum value of rows from the first row to the row after the current row.
 
-~~~SQL
+```SQL
 select x, property,
     min(x)
         over (
@@ -661,9 +663,9 @@ select x, property,
         ) as 'local minimum'
 from int_t
 where property in ('prime','square');
-~~~
+```
 
-~~~Plain Text
+```Plain Text
 +---+----------+---------------+
 | x | property | local minimum |
 +---+----------+---------------+
@@ -675,13 +677,13 @@ where property in ('prime','square');
 | 4 | square   | 1             |
 | 1 | square   | 1             |
 +---+----------+---------------+
-~~~
+```
 
 From StarRocks 2.4 onwards, you can specify the row range as `rows between n preceding and n following`, which means you can capture `n` rows before the current row and `n` rows after the current row.
 
 Example statement:
 
-~~~sql
+```sql
 select x, property,
     min(x)
     over (
@@ -689,7 +691,7 @@ select x, property,
           rows between 3 preceding and 2 following) as 'local minimum'
 from int_t
 where property in ('prime','square');
-~~~
+```
 
 ### RANK()
 
@@ -697,20 +699,20 @@ The RANK() function is used to represent rankings. Unlike DENSE_RANK(), RANK() w
 
 Syntax:
 
-~~~SQL
+```SQL
 RANK() OVER(partition_by_clause order_by_clause)
-~~~
+```
 
 Example:
 
 Ranking according to column x:
 
-~~~SQL
+```SQL
 select x, y, rank() over(partition by x order by y) as `rank`
 from int_t;
-~~~
+```
 
-~~~Plain Text
+```Plain Text
 +---+---+------+
 | x | y | rank |
 +---+---+------+
@@ -724,7 +726,7 @@ from int_t;
 | 3 | 1 | 1    |
 | 3 | 2 | 3    |
 +---+---+------+
-~~~
+```
 
 ### ROW_NUMBER()
 
@@ -732,18 +734,18 @@ Returns a continuously increasing integer starting from 1 for each row of a Part
 
 Syntax:
 
-~~~SQL
+```SQL
 ROW_NUMBER() OVER(partition_by_clause order_by_clause)
-~~~
+```
 
 Example:
 
-~~~SQL
+```SQL
 select x, y, row_number() over(partition by x order by y) as `rank`
 from int_t;
-~~~
+```
 
-~~~Plain Text
+```Plain Text
 +---+---+------+
 | x | y | rank |
 +---+---+------+
@@ -757,7 +759,7 @@ from int_t;
 | 3 | 1 | 2    |
 | 3 | 2 | 3    |
 +---+---+------+
-~~~
+```
 
 ### QUALIFY()
 
@@ -767,7 +769,7 @@ QUALIFY simplifies the writing of SELECT statements.
 
 Before QUALIFY is used, a SELECT statement may go like this:
 
-~~~SQL
+```SQL
 SELECT *
 FROM (SELECT DATE,
              PROVINCE_CODE,
@@ -775,28 +777,28 @@ FROM (SELECT DATE,
              ROW_NUMBER() OVER(PARTITION BY PROVINCE_CODE ORDER BY TOTAL_SCORE) AS SCORE_ROWNUMBER
       FROM example_table) T1
 WHERE T1.SCORE_ROWNUMBER = 1;
-~~~
+```
 
 After QUALIFY is used, the statement is shortened to:
 
-~~~SQL
+```SQL
 SELECT DATE, PROVINCE_CODE, TOTAL_SCORE
 FROM example_table 
 QUALIFY ROW_NUMBER() OVER(PARTITION BY PROVINCE_CODE ORDER BY TOTAL_SCORE) = 1;
-~~~
+```
 
 QUALIFY supports only the following three window functions: ROW_NUMBER(), RANK(), and DENSE_RANK().
 
 **Syntax:**
 
-~~~SQL
+```SQL
 SELECT <column_list>
 FROM <data_source>
 [GROUP BY ...]
 [HAVING ...]
 QUALIFY <window_function>
 [ ... ]
-~~~
+```
 
 **Parameters:**
 
@@ -808,7 +810,7 @@ QUALIFY <window_function>
 
 **Examples:**
 
-~~~SQL
+```SQL
 -- Create a table.
 CREATE TABLE sales_record (
    city_id INT,
@@ -833,11 +835,11 @@ select * from sales_record order by city_id;
 |       3 | fruit  |    87 |
 |       4 | drinks |    98 |
 +---------+--------+-------+
-~~~
+```
 
 Example 1: Obtain records whose row number is greater than 1 from the table.
 
-~~~SQL
+```SQL
 SELECT city_id, item, sales
 FROM sales_record
 QUALIFY row_number() OVER (ORDER BY city_id) > 1;
@@ -848,11 +850,11 @@ QUALIFY row_number() OVER (ORDER BY city_id) > 1;
 |       3 | fruit  |    87 |
 |       4 | drinks |    98 |
 +---------+--------+-------+
-~~~
+```
 
 Example 2: Obtain records whose row number is 1 from each partition of the table. The table is divided into two partitions by `item` and the first row in each partition is returned.
 
-~~~SQL
+```SQL
 SELECT city_id, item, sales
 FROM sales_record 
 QUALIFY ROW_NUMBER() OVER (PARTITION BY item ORDER BY city_id) = 1
@@ -864,11 +866,11 @@ ORDER BY city_id;
 |       2 | drinks |    70 |
 +---------+--------+-------+
 2 rows in set (0.01 sec)
-~~~
+```
 
 Example 3: Obtain records whose sales rank No.1 from each partition of the table. The table is divided into two partitions by `item` and the row with the highest sales in each partition is returned.
 
-~~~SQL
+```SQL
 SELECT city_id, item, sales
 FROM sales_record
 QUALIFY RANK() OVER (PARTITION BY item ORDER BY sales DESC) = 1
@@ -879,7 +881,7 @@ ORDER BY city_id;
 |       1 | fruit  |    95 |
 |       4 | drinks |    98 |
 +---------+--------+-------+
-~~~
+```
 
 **Usage notes:**
 
@@ -899,15 +901,15 @@ The execution order of clauses in a query with QUALIFY is evaluated in the follo
 
 Syntax:
 
-~~~SQL
-SUM(expression) [OVER (analytic_clause)]
-~~~
+```SQL
+SUM(expr) [OVER (analytic_clause)]
+```
 
 Example:
 
 Group by property and calculate the sum of the **current, preceding, and following rows** within the group.
 
-~~~SQL
+```SQL
 select x, property,
     sum(x)
         over (
@@ -916,9 +918,9 @@ select x, property,
             rows between 1 preceding and 1 following
         ) as 'moving total'
 from int_t where property in ('odd','even');
-~~~
+```
 
-~~~Plain Text
+```Plain Text
 +----+----------+--------------+
 | x  | property | moving total |
 +----+----------+--------------+
@@ -932,4 +934,354 @@ from int_t where property in ('odd','even');
 | 5  | odd      | 15           |
 | 7  | odd      | 21           |
 +----+----------+--------------+
-~~~
+```
+
+### VARIANCE, VAR_POP, VARIANCE_POP
+
+Returns the population variance of an expression. VAR_POP and VARIANCE_POP are aliases of VARIANCE. These functions can be used as window functions since v2.5.10.
+
+**Syntax:**
+
+```SQL
+VARIANCE(expr) [OVER (partition_by_clause)]
+```
+
+> **NOTE**
+>
+> VARIANCE() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
+
+**Parameters:**
+
+If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
+
+**Examples:**
+
+Suppose table `agg` has the following data:
+
+```plaintext
+mysql> select * from agg;
++------+-------+-------+
+| no   | k     | v     |
++------+-------+-------+
+|    1 | 10.00 |  NULL |
+|    2 | 10.00 | 11.00 |
+|    2 | 20.00 | 22.00 |
+|    2 | 25.00 |  NULL |
+|    2 | 30.00 | 35.00 |
++------+-------+-------+
+```
+
+Use the VARIANCE() function.
+
+```plaintext
+mysql> select variance(k) over (partition by no) FROM agg;
++-------------------------------------+
+| variance(k) OVER (PARTITION BY no ) |
++-------------------------------------+
+|                                   0 |
+|                             54.6875 |
+|                             54.6875 |
+|                             54.6875 |
+|                             54.6875 |
++-------------------------------------+
+```
+
+### VAR_SAMP, VARIANCE_SAMP
+
+Returns the sample variance of an expression. These functions can be used as window functions since v2.5.10.
+
+**Syntax:**
+
+```sql
+VAR_SAMP(expr) [OVER (partition_by_clause)]
+```
+
+> **NOTE**
+>
+> VAR_SAMP() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
+
+**Parameters:**
+
+If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
+
+**Examples:**
+
+Suppose table `agg` has the following data:
+
+```plaintext
+mysql> select * from agg;
++------+-------+-------+
+| no   | k     | v     |
++------+-------+-------+
+|    1 | 10.00 |  NULL |
+|    2 | 10.00 | 11.00 |
+|    2 | 20.00 | 22.00 |
+|    2 | 25.00 |  NULL |
+|    2 | 30.00 | 35.00 |
++------+-------+-------+
+```
+
+Use the VAR_SAMP() window function.
+
+```plaintext
+mysql> select VAR_SAMP(k) over (partition by no) FROM agg;
++-------------------------------------+
+| var_samp(k) OVER (PARTITION BY no ) |
++-------------------------------------+
+|                                   0 |
+|                   72.91666666666667 |
+|                   72.91666666666667 |
+|                   72.91666666666667 |
+|                   72.91666666666667 |
++-------------------------------------+
+```
+
+### STD, STDDEV, STDDEV_POP
+
+Returns the standard deviation of an expression. These functions can be used as window functions since v2.5.10.
+
+**Syntax:**
+
+```sql
+STD(expr) [OVER (partition_by_clause)]
+```
+
+> **NOTE**
+>
+> STD() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
+
+**Parameters:**
+
+If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
+
+**Examples:**
+
+Suppose table `agg` has the following data:
+
+```plaintext
+mysql> select * from agg;
++------+-------+-------+
+| no   | k     | v     |
++------+-------+-------+
+|    1 | 10.00 |  NULL |
+|    2 | 10.00 | 11.00 |
+|    2 | 20.00 | 22.00 |
+|    2 | 25.00 |  NULL |
+|    2 | 30.00 | 35.00 |
++------+-------+-------+
+```
+
+Use the STD() window function.
+
+```plaintext
+mysql> select STD(k) over (partition by no) FROM agg;
++--------------------------------+
+| std(k) OVER (PARTITION BY no ) |
++--------------------------------+
+|                              0 |
+|               7.39509972887452 |
+|               7.39509972887452 |
+|               7.39509972887452 |
+|               7.39509972887452 |
++--------------------------------+
+```
+
+### STDDEV_SAMP
+
+Returns the sample standard deviation of an expression. This function can be used as a window function since v2.5.10.
+
+**Syntax:**
+
+```sql
+STDDEV_SAMP(expr) [OVER (partition_by_clause)]
+```
+
+> **NOTE**
+>
+> STDDEV_SAMP() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
+
+**Parameters:**
+
+If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
+
+**Examples:**
+
+Suppose table `agg` has the following data:
+
+```plaintext
+mysql> select * from agg;
++------+-------+-------+
+| no   | k     | v     |
++------+-------+-------+
+|    1 | 10.00 |  NULL |
+|    2 | 10.00 | 11.00 |
+|    2 | 20.00 | 22.00 |
+|    2 | 25.00 |  NULL |
+|    2 | 30.00 | 35.00 |
++------+-------+-------+
+```
+
+Use the STDDEV_SAMP() window function.
+
+```plaintext
+mysql> select STDDEV_SAMP(k) over (partition by no) FROM agg;
++----------------------------------------+
+| stddev_samp(k) OVER (PARTITION BY no ) |
++----------------------------------------+
+|                                      0 |
+|                      8.539125638299666 |
+|                      8.539125638299666 |
+|                      8.539125638299666 |
+|                      8.539125638299666 |
++----------------------------------------+
+```
+
+### COVAR_SAMP
+
+Returns the sample covariance of two expressions. This function is supported from v2.5.10. It is also an aggregate function.
+
+**Syntax:**
+
+```sql
+COVAR_SAMP(expr1,expr2) [OVER (partition_by_clause)]
+```
+
+> **NOTE**
+>
+> COVAR_SAMP() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
+
+**Parameters:**
+
+If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
+
+**Examples:**
+
+Suppose table `agg` has the following data:
+
+```plaintext
+mysql> select * from agg;
++------+-------+-------+
+| no   | k     | v     |
++------+-------+-------+
+|    1 | 10.00 |  NULL |
+|    2 | 10.00 | 11.00 |
+|    2 | 20.00 | 22.00 |
+|    2 | 25.00 |  NULL |
+|    2 | 30.00 | 35.00 |
++------+-------+-------+
+```
+
+Use the COVAR_SAMP() window function.
+
+```plaintext
+mysql> select COVAR_SAMP(k, v) over (partition by no) FROM agg;
++------------------------------------------+
+| covar_samp(k, v) OVER (PARTITION BY no ) |
++------------------------------------------+
+|                                     NULL |
+|                       119.99999999999999 |
+|                       119.99999999999999 |
+|                       119.99999999999999 |
+|                       119.99999999999999 |
++------------------------------------------+
+```
+
+### COVAR_POP
+
+Returns the population covariance of two expressions. This function is supported from v2.5.10. It is also an aggregate function.
+
+**Syntax:**
+
+```sql
+COVAR_POP(expr1, expr2) [OVER (partition_by_clause)]
+```
+
+> **NOTE**
+>
+> COVAR_POP() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
+
+**Parameters:**
+
+If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
+
+**Examples:**
+
+Suppose table `agg` has the following data:
+
+```plaintext
+mysql> select * from agg;
++------+-------+-------+
+| no   | k     | v     |
++------+-------+-------+
+|    1 | 10.00 |  NULL |
+|    2 | 10.00 | 11.00 |
+|    2 | 20.00 | 22.00 |
+|    2 | 25.00 |  NULL |
+|    2 | 30.00 | 35.00 |
++------+-------+-------+
+```
+
+Use the COVAR_POP() window function.
+
+```plaintext
+mysql> select COVAR_POP(k, v) over (partition by no) FROM agg;
++-----------------------------------------+
+| covar_pop(k, v) OVER (PARTITION BY no ) |
++-----------------------------------------+
+|                                    NULL |
+|                       79.99999999999999 |
+|                       79.99999999999999 |
+|                       79.99999999999999 |
+|                       79.99999999999999 |
++-----------------------------------------+
+```
+
+### CORR
+
+Returns the Pearson correlation coefficient between two expressions. This function is supported from v2.5.10. It is also an aggregate function.
+
+**Syntax:**
+
+```sql
+CORR(expr1, expr2) [OVER (partition_by_clause)]
+```
+
+> **NOTE**
+>
+> CORR() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
+
+**Parameters:**
+
+If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
+
+**Examples:**
+
+Suppose table `agg` has the following data:
+
+```plaintext
+mysql> select * from agg;
++------+-------+-------+
+| no   | k     | v     |
++------+-------+-------+
+|    1 | 10.00 |  NULL |
+|    2 | 10.00 | 11.00 |
+|    2 | 20.00 | 22.00 |
+|    2 | 25.00 |  NULL |
+|    2 | 30.00 | 35.00 |
++------+-------+-------+
+```
+
+Use the CORR() window function.
+
+```plaintext
+mysql> select CORR(k, v) over (partition by no) FROM agg;
++------------------------------------+
+| corr(k, v) OVER (PARTITION BY no ) |
++------------------------------------+
+|                               NULL |
+|                 0.9988445981121532 |
+|                 0.9988445981121532 |
+|                 0.9988445981121532 |
+|                 0.9988445981121532 |
++------------------------------------+
+```

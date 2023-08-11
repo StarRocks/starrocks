@@ -753,7 +753,9 @@ CONF_Int64(object_storage_request_timeout_ms, "-1");
 
 // orc reader
 CONF_Bool(enable_orc_late_materialization, "true");
-// orc reader, if RowGroup/Stripe/File size is less than this value, read all data.
+CONF_Int32(orc_row_index_cache_max_size, "1048576");
+CONF_Int32(orc_stripe_cache_max_size, "8388608");
+CONF_Bool(enable_orc_libdeflate_decompression, "true");
 CONF_Int32(orc_file_cache_max_size, "8388608");
 CONF_Int32(orc_natural_read_size, "8388608");
 CONF_mBool(orc_coalesce_read_enable, "true");
@@ -775,11 +777,13 @@ CONF_mDouble(scan_use_query_mem_ratio, "0.25");
 CONF_Double(connector_scan_use_query_mem_ratio, "0.3");
 
 // hdfs hedged read
-CONF_mBool(hdfs_client_enable_hedged_read, "false");
+CONF_Bool(hdfs_client_enable_hedged_read, "false");
 // dfs.client.hedged.read.threadpool.size
 CONF_Int32(hdfs_client_hedged_read_threadpool_size, "128");
 // dfs.client.hedged.read.threshold.millis
 CONF_Int32(hdfs_client_hedged_read_threshold_millis, "2500");
+CONF_Int32(hdfs_client_max_cache_size, "8");
+CONF_Int32(hdfs_client_io_read_retry, "0");
 
 // Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
 // Once logging is enabled in your application, the SDK will generate log files in your current working directory
