@@ -27,8 +27,10 @@ jobs:
       github.event.workflow_run.event == 'pull_request'
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         max-retries: [1, 2, 3]
+    continue-on-error: true
     outputs:
       PR_NUMBER: ${{ steps.pr_details.outputs.PR_NUMBER }}
       HEAD_SHA: ${{ steps.pr_details.outputs.HEAD_SHA }}
@@ -312,3 +314,26 @@ jobs:
           commit: ${{ github.event.workflow_run.head_sha }}
           token: ${{ secrets.GITHUB_TOKEN }}
           report_paths: 'admit-result/*.xml'
+
+  NOTIFICATION:
+    runs-on: [ self-hosted, quick ]
+    needs: INFO
+    env:
+      PR_ID: ${{ needs.INFO.outputs.PR_NUMBER }}
+      WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+      FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+      FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+    steps:
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: NOTIFY
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          sh ./bin/notify.sh
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
