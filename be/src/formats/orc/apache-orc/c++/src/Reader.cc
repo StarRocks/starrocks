@@ -428,6 +428,10 @@ void RowReaderImpl::loadStripeIndex() {
 
     // obtain row indexes for selected columns
     uint64_t offset = currentStripeInfo.offset();
+
+    // usually row index size is small.
+    uint64_t rowIndexSize = currentStripeInfo.indexlength();
+    contents->stream->prepareCache(InputStream::PrepareCacheScope::READ_FULL_ROW_INDEX, offset, rowIndexSize);
     for (int i = 0; i < currentStripeFooter.streams_size(); ++i) {
         const proto::Stream& pbStream = currentStripeFooter.streams(i);
         uint64_t colId = pbStream.column();
@@ -592,6 +596,13 @@ std::unique_ptr<StripeInformation> ReaderImpl::getStripe(uint64_t stripeIndex) c
             stripeInfo.offset(), stripeInfo.indexlength(), stripeInfo.datalength(), stripeInfo.footerlength(),
             stripeInfo.numberofrows(), contents->stream.get(), *contents->pool, contents->compression,
             contents->blockSize, contents->readerMetrics));
+}
+
+const orc::proto::StripeInformation& ReaderImpl::getStripeInOrcFormat(uint64_t stripeIndex) const {
+    if (stripeIndex > getNumberOfStripes()) {
+        throw std::logic_error("stripe index out of range");
+    }
+    return footer->stripes(static_cast<int>(stripeIndex));
 }
 
 FileVersion ReaderImpl::getFormatVersion() const {
@@ -1048,13 +1059,11 @@ void RowReaderImpl::startNextStripe() {
             }
         }
 
+        contents->stream->prepareCache(InputStream::PrepareCacheScope::READ_FULL_STRIPE, currentStripeInfo.offset(),
+                                       stripeSize);
         if (streamIORangesEnabled) {
             contents->stream->clearIORanges();
-        } else {
-            contents->stream->prepareCache(InputStream::PrepareCacheScope::READ_FULL_STRIPE, currentStripeInfo.offset(),
-                                           stripeSize);
         }
-
         currentStripeFooter = getStripeFooter(currentStripeInfo, *contents);
         rowsInCurrentStripe = currentStripeInfo.numberofrows();
         if (streamIORangesEnabled) {

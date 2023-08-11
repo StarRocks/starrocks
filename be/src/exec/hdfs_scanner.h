@@ -76,6 +76,7 @@ struct HdfsScanStats {
     // ORC only!
     int64_t delete_build_ns = 0;
     int64_t delete_file_per_scan = 0;
+    std::vector<int64_t> stripe_sizes;
 };
 
 class HdfsParquetProfile;
