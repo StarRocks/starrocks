@@ -294,6 +294,7 @@ public class PipeManagerTest {
 
     @Test
     public void executePipe() throws Exception {
+        mockRepoExecutor();
         String sql = "create pipe p3 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         PipeManager pm = ctx.getGlobalStateMgr().getPipeManager();
@@ -305,14 +306,9 @@ public class PipeManagerTest {
         p1.schedule();
         p1.schedule();
         FilePipeSource source = (FilePipeSource) p1.getPipeSource();
-        /*
-        FileListRepoInMemory repo = source.getFileListRepo();
-        Assert.assertEquals(1, repo.size());
-        List<PipeFile> files = repo.listFiles();
-        Assert.assertEquals(
-                Lists.newArrayList(new PipeFile("file1", 1024, FileListRepo.PipeFileState.LOADED)),
-                files);
-         */
+
+        FileListRepo repo = source.getFileListRepo();
+        Assert.assertEquals(1, repo.listFilesByState(FileListRepo.PipeFileState.LOADED).size());
     }
 
     @Test
