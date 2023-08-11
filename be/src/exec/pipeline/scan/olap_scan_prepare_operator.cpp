@@ -22,7 +22,7 @@ namespace starrocks::pipeline {
 /// OlapScanPrepareOperator
 OlapScanPrepareOperator::OlapScanPrepareOperator(OperatorFactory* factory, int32_t id, const string& name,
                                                  int32_t plan_node_id, int32_t driver_sequence, OlapScanContextPtr ctx)
-        : SourceOperator(factory, id, name, plan_node_id, driver_sequence), _ctx(std::move(ctx)) {
+        : SourceOperator(factory, id, name, plan_node_id, true, driver_sequence), _ctx(std::move(ctx)) {
     _ctx->ref();
 }
 

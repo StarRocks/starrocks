@@ -301,6 +301,11 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
                 "QuerySpillBytes", TUnit::BYTES,
                 RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
         query_spill_bytes->set(query_ctx->get_spill_bytes());
+        // Add execution wall time
+        auto* query_exec_wall_time = profile->add_counter(
+                "QueryExecutionWallTime", TUnit::TIME_NS,
+                RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::SKIP_FIRST_MERGE));
+        query_exec_wall_time->set(query_ctx->lifetime());
     }
 
     auto params = ExecStateReporter::create_report_exec_status_params(query_ctx, fragment_ctx, profile, status, done);

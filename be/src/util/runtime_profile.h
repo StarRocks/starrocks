@@ -422,7 +422,7 @@ public:
 
     // Adds a string to the runtime profile.  If a value already exists for 'key',
     // the value will be updated.
-    void add_info_string(const std::string& key, const std::string& value);
+    void add_info_string(const std::string& key, const std::string& value = "");
 
     // Creates and returns a new EventSequence (owned by the runtime
     // profile) - unless a timer with the same 'key' already exists, in

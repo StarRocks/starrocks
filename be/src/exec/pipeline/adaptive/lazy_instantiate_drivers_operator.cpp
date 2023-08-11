@@ -25,7 +25,7 @@ namespace starrocks::pipeline {
 LazyInstantiateDriversOperator::LazyInstantiateDriversOperator(OperatorFactory* factory, int32_t id,
                                                                int32_t plan_node_id, const int32_t driver_sequence,
                                                                const PipelineGroupMap& unready_pipeline_group_mapping)
-        : SourceOperator(factory, id, "lazy_instantiate_drivers", plan_node_id, driver_sequence) {
+        : SourceOperator(factory, id, "lazy_instantiate_drivers", plan_node_id, true, driver_sequence) {
     std::vector<PipelineGroup> unready_pipeline_groups;
     unready_pipeline_groups.reserve(unready_pipeline_groups.size());
     for (const auto& [leader_source_op, pipes] : unready_pipeline_group_mapping) {

@@ -50,7 +50,6 @@ public:
     std::vector<ChunkPtr> fetch_results(const EpochInfo& epoch_info);
 
     size_t next_operator_id() { return _pipeline_context->next_operator_id(); }
-    size_t next_plan_node_id() { return _pipeline_context->next_pseudo_plan_node_id(); }
     uint32_t next_pipeline_id() { return _pipeline_context->next_pipe_id(); }
 
 protected:

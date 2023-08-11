@@ -21,7 +21,8 @@
 namespace starrocks::query_cache {
 MultilaneOperator::MultilaneOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence, size_t num_lanes,
                                      pipeline::Operators&& processors, bool can_passthrough)
-        : pipeline::Operator(factory, factory->id(), factory->get_raw_name(), factory->plan_node_id(), driver_sequence),
+        : pipeline::Operator(factory, factory->id(), factory->get_raw_name(), factory->plan_node_id(), true,
+                             driver_sequence),
           _num_lanes(num_lanes),
           _can_passthrough(can_passthrough) {
     DCHECK_EQ(processors.size(), _num_lanes);
@@ -147,18 +148,18 @@ Status MultilaneOperator::_finish(starrocks::RuntimeState* state,
 }
 Status MultilaneOperator::set_finishing(starrocks::RuntimeState* state) {
     return _finish(
-            state, [](pipeline::OperatorPtr & op, RuntimeState * state) -> auto { return op->set_finishing(state); });
+            state, [](pipeline::OperatorPtr & op, RuntimeState * state) -> auto{ return op->set_finishing(state); });
 }
 Status MultilaneOperator::set_finished(RuntimeState* state) {
     _passthrough_chunk = nullptr;
     return _finish(
-            state, [](pipeline::OperatorPtr & op, RuntimeState * state) -> auto { return op->set_finished(state); });
+            state, [](pipeline::OperatorPtr & op, RuntimeState * state) -> auto{ return op->set_finished(state); });
 }
 
 Status MultilaneOperator::set_cancelled(RuntimeState* state) {
     _passthrough_chunk = nullptr;
     return _finish(
-            state, [](pipeline::OperatorPtr & op, RuntimeState * state) -> auto { return op->set_cancelled(state); });
+            state, [](pipeline::OperatorPtr & op, RuntimeState * state) -> auto{ return op->set_cancelled(state); });
 }
 
 Status MultilaneOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
@@ -212,7 +213,7 @@ StatusOr<ChunkPtr> MultilaneOperator::_pull_chunk_from_lane(RuntimeState* state,
     auto need_send_eof = !passthrough_mode && processor_is_finished && !lane.eof_sent;
     auto need_send_chunk = !processor_is_finished && lane.processor->has_output();
 
-    auto create_eof_chunk = [&lane]() -> auto {
+    auto create_eof_chunk = [&lane]() -> auto{
         auto eof_chunk = std::make_shared<Chunk>();
         eof_chunk->owner_info().set_owner_id(lane.lane_owner, true);
         eof_chunk->owner_info().set_passthrough(false);

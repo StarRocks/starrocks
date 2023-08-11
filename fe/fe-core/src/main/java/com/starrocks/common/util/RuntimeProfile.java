@@ -49,6 +49,7 @@ import com.starrocks.thrift.TRuntimeProfileNode;
 import com.starrocks.thrift.TRuntimeProfileTree;
 import com.starrocks.thrift.TUnit;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang3.tuple.Triple;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -527,6 +528,10 @@ public class RuntimeProfile {
         return localTimePercent;
     }
 
+    public boolean containsInfoString(String key) {
+        return infoStrings.containsKey(key);
+    }
+
     // Returns the value to which the specified key is mapped;
     // or null if this map contains no mapping for the key.
     public String getInfoString(String key) {
@@ -719,7 +724,7 @@ public class RuntimeProfile {
             mergedProfile.addChild(mergedChild);
         }
         if (missingParallelism) {
-            mergedProfile.addInfoString("IsIntegrated", "False");
+            mergedProfile.addInfoString("NonIntegrated", "");
         }
 
         return mergedProfile;
@@ -803,8 +808,12 @@ public class RuntimeProfile {
             // 2. info String
             for (Map.Entry<String, String> infoPair : profile.getInfoStrings().entrySet()) {
                 String key = infoPair.getKey();
-                builder.append(prefix).append("   - ").append(key).append(": ")
-                        .append(profile.getInfoString(key)).append("\n");
+                String value = infoPair.getValue();
+                builder.append(prefix).append("   - ").append(key);
+                if (StringUtils.isNotBlank(value)) {
+                    builder.append(": ").append(profile.getInfoString(key));
+                }
+                builder.append("\n");
             }
 
             // 3. counters

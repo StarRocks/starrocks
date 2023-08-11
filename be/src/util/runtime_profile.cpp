@@ -980,22 +980,23 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool,
 
     // merge children
     {
-        for (auto i = 0; i < profiles[0]->_children.size(); i++) {
-            auto& first_child_pair = profiles[0]->_children[0];
+        size_t max_child_size = 0;
+        for (auto profile : profiles) {
+            max_child_size = std::max(max_child_size, profile->_children.size());
+        }
+        for (size_t i = 0; i < max_child_size; i++) {
             std::vector<RuntimeProfile*> sub_profiles;
+            bool indent = false;
             for (auto profile : profiles) {
-                if (i >= profile->num_children()) {
-                    LOG(WARNING) << "find non-isomorphic children, profile_name=" << merged_profile->name()
-                                 << ", children_names=" << merged_profile->get_children_name_string()
-                                 << ", another profile_name=" << profile->name()
-                                 << ", another children_names=" << profile->get_children_name_string();
+                if (i >= profile->_children.size()) {
                     continue;
                 }
-                auto* child = profile->get_child(i);
-                sub_profiles.push_back(child);
+                auto& kv = profile->_children[i];
+                sub_profiles.push_back(kv.first);
+                indent = kv.second;
             }
             auto* merged_child = merge_isomorphic_profiles(obj_pool, sub_profiles);
-            merged_profile->add_child(merged_child, first_child_pair.second, nullptr);
+            merged_profile->add_child(merged_child, indent, nullptr);
         }
     }
 
