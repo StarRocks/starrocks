@@ -496,7 +496,10 @@ public class Pipe implements GsonPostProcessable {
         this.runningTasks = new HashMap<>();
         this.lock = new ReentrantReadWriteLock();
         pipeSource.initPipeId(id);
-        processProperties();
+        try {
+            processProperties();
+        } catch (Exception ignored) {
+        }
     }
 
     public String toJson() {

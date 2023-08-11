@@ -81,7 +81,7 @@ public class InsertStmt extends DmlStmt {
     // ======================================= properties =============================
     private Map<String, String> properties;
     private boolean enablePartialUpdate = false;
-    private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.UNKNOWN_MODE;
+    private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
     private String mergeCondition;
     private double maxFilterRatio = 0.0;
     private boolean strictMode = false;

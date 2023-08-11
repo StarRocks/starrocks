@@ -346,12 +346,15 @@ public class InsertPlanner {
         }
 
         // 4. Add OP column for primary key table
+        // TODO
+        /*
         if (isPrimaryKey) {
             SlotDescriptor slotDesc = descriptorTable.addSlotDescriptor(tupleDesc);
             slotDesc.setIsMaterialized(true);
             slotDesc.setColumn(new Column(Load.LOAD_OP_COLUMN, Type.TINYINT));
             slotDesc.setIsNullable(false);
         }
+        */
 
         descriptorTable.computeMemLayout();
         return globalDicts;

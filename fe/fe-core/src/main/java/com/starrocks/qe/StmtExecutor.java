@@ -1887,7 +1887,7 @@ public class StmtExecutor {
             } catch (Exception abortTxnException) {
                 LOG.warn("errors when cancel insert load job {}", jobId);
             }
-            throw new UserException(t.getMessage());
+            throw new UserException(t);
         } finally {
             if (insertError) {
                 try {
