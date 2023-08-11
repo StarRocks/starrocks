@@ -153,6 +153,14 @@ public class CostModel {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
             if (node.getTable().isMaterializedView()) {
+                // If materialized view force rewrite is enabled, hack the materialized view
+                // as zero so can be chosen by the optimizer.
+                ConnectContext ctx = ConnectContext.get();
+                SessionVariable sessionVariable = ctx.getSessionVariable();
+                if (sessionVariable.isEnableMaterializedViewForceRewrite()) {
+                    return CostEstimate.zero();
+                }
+
                 Statistics groupStatistics = context.getGroupStatistics();
                 Statistics mvStatistics = context.getStatistics();
                 // only adjust cost for mv scan operator when group statistics is unknown and mv group expression
