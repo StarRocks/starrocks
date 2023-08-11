@@ -245,6 +245,11 @@ public:
         }
         timer.stop();
 
+        // update compaction metric
+        float divided = 1000 * 1000 * 1000;
+        StarRocksMetrics::instance()->update_compaction_task_cost_time.set_value(timer.elapsed_time() / divided);
+        StarRocksMetrics::instance()->update_compaction_task_rate.set_value(total_input_size /
+                                                                            (timer.elapsed_time() / divided));
         StarRocksMetrics::instance()->update_compaction_deltas_total.increment(rowsets.size());
         StarRocksMetrics::instance()->update_compaction_bytes_total.increment(total_input_size);
         StarRocksMetrics::instance()->update_compaction_outputs_total.increment(1);

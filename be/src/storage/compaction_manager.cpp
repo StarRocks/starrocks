@@ -146,6 +146,11 @@ void CompactionManager::update_candidates(std::vector<CompactionCandidate> candi
             bool has_erase = false;
             for (auto& candidate : candidates) {
                 if (candidate.tablet->tablet_id() == iter->tablet->tablet_id()) {
+                    if (iter->type == CompactionType::BASE_COMPACTION) {
+                        StarRocksMetrics::instance()->wait_base_compaction_task_num.decrement(1);
+                    } else {
+                        StarRocksMetrics::instance()->wait_cumulative_compaction_task_num.decrement(1);
+                    }
                     iter = _compaction_candidates.erase(iter);
                     has_erase = true;
                     break;
@@ -159,6 +164,11 @@ void CompactionManager::update_candidates(std::vector<CompactionCandidate> candi
             if (candidate.tablet->enable_compaction()) {
                 VLOG(1) << "update candidate " << candidate.tablet->tablet_id() << " type "
                         << starrocks::to_string(candidate.type) << " score " << candidate.score;
+                if (candidate.type == CompactionType::BASE_COMPACTION) {
+                    StarRocksMetrics::instance()->wait_base_compaction_task_num.increment(1);
+                } else {
+                    StarRocksMetrics::instance()->wait_cumulative_compaction_task_num.increment(1);
+                }
                 _compaction_candidates.emplace(std::move(candidate));
             }
         }
@@ -170,6 +180,11 @@ void CompactionManager::remove_candidate(int64_t tablet_id) {
     std::lock_guard lg(_candidates_mutex);
     for (auto iter = _compaction_candidates.begin(); iter != _compaction_candidates.end();) {
         if (tablet_id == iter->tablet->tablet_id()) {
+            if (iter->type == CompactionType::BASE_COMPACTION) {
+                StarRocksMetrics::instance()->wait_base_compaction_task_num.decrement(1);
+            } else {
+                StarRocksMetrics::instance()->wait_cumulative_compaction_task_num.decrement(1);
+            }
             iter = _compaction_candidates.erase(iter);
             break;
         } else {
@@ -267,6 +282,11 @@ bool CompactionManager::pick_candidate(CompactionCandidate* candidate) {
             *candidate = *iter;
             _compaction_candidates.erase(iter);
             _last_score = candidate->score;
+            if (candidate->type == CompactionType::BASE_COMPACTION) {
+                StarRocksMetrics::instance()->wait_base_compaction_task_num.decrement(1);
+            } else {
+                StarRocksMetrics::instance()->wait_cumulative_compaction_task_num.decrement(1);
+            }
             return true;
         }
         iter++;
@@ -347,10 +367,12 @@ bool CompactionManager::register_task(CompactionTask* compaction_task) {
     }
     if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
         _data_dir_to_cumulative_task_num_map[data_dir]++;
-        _cumulative_compaction_concurrency++;
+        StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
+        StarRocksMetrics::instance()->running_cumulative_compaction_task_num.increment(1);
     } else {
         _data_dir_to_base_task_num_map[data_dir]++;
-        _base_compaction_concurrency++;
+        StarRocksMetrics::instance()->base_compaction_request_total.increment(1);
+        StarRocksMetrics::instance()->running_base_compaction_task_num.increment(1);
     }
     return true;
 }
@@ -366,10 +388,10 @@ void CompactionManager::unregister_task(CompactionTask* compaction_task) {
         DataDir* data_dir = tablet->data_dir();
         if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
             _data_dir_to_cumulative_task_num_map[data_dir]--;
-            _cumulative_compaction_concurrency--;
+            StarRocksMetrics::instance()->running_cumulative_compaction_task_num.decrement(1);
         } else {
             _data_dir_to_base_task_num_map[data_dir]--;
-            _base_compaction_concurrency--;
+            StarRocksMetrics::instance()->running_base_compaction_task_num.decrement(1);
         }
     }
 }
