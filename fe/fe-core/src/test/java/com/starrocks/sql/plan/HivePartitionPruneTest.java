@@ -124,6 +124,7 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
                 "     partitions=3/3");
     }
 
+    @Test
     public void testHivePartitionPredicatesPrune() throws Exception {
         String sql = "select a.l_orderkey,\n" +
                 "    b.l_partkey\n" +
