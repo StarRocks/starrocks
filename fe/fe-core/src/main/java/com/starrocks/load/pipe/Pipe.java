@@ -41,6 +41,7 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.PipeAnalyzer;
+import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -468,6 +469,14 @@ public class Pipe implements GsonPostProcessable {
 
         } finally {
             lock.writeLock().unlock();
+        }
+    }
+
+    public void retry(AlterPipeClauseRetry retry) {
+        if (retry.isRetryAll()) {
+            getPipeSource().retryErrorFiles();
+        } else {
+            getPipeSource().retryFailedFile(retry.getFile());
         }
     }
 

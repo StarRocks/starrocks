@@ -153,6 +153,18 @@ public class FilePipeSource implements GsonPostProcessable {
         fileListRepo.updateFileState(piece.getFiles(), state, null);
     }
 
+    public void retryErrorFiles() {
+        List<PipeFileRecord> errorFiles = fileListRepo.listFilesByState(FileListRepo.PipeFileState.ERROR);
+        if (CollectionUtils.isNotEmpty(errorFiles)) {
+            fileListRepo.updateFileState(errorFiles, FileListRepo.PipeFileState.UNLOADED, null);
+            LOG.info("pipe {} retry error files: {}", pipeId, errorFiles);
+        }
+    }
+
+    public void retryFailedFile(String fileName) {
+        throw new UnsupportedOperationException("retry file not supported");
+    }
+
     public void setAutoIngest(boolean autoIngest) {
         this.autoIngest = autoIngest;
     }

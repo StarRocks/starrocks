@@ -38,6 +38,7 @@ import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendServiceImpl;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
@@ -64,7 +65,6 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -315,7 +315,6 @@ public class PipeManagerTest {
          */
     }
 
-    @Ignore("flaky")
     @Test
     public void executeError() throws Exception {
         mockRepoExecutor();
@@ -366,6 +365,15 @@ public class PipeManagerTest {
         p3.schedule();
         Assert.assertEquals(Pipe.FAILED_TASK_THRESHOLD + 1, p3.getFailedTaskExecutionCount());
         Assert.assertEquals(Pipe.State.ERROR, p3.getState());
+
+        // retry all
+        {
+            AlterPipeStmt alter = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser("alter pipe p3 retry all", ctx);
+            p3.retry((AlterPipeClauseRetry) alter.getAlterPipeClause());
+            List<PipeFileRecord> unloadedFiles =
+                    p3.getPipeSource().getFileListRepo().listFilesByState(FileListRepo.PipeFileState.UNLOADED);
+            Assert.assertEquals(1, unloadedFiles.size());
+        }
     }
 
     @Test
@@ -705,5 +713,10 @@ public class PipeManagerTest {
             Assert.assertTrue(pipe.isRecovered());
             Assert.assertTrue(pipe.isRunnable());
         }
+    }
+
+    @Test
+    public void testRetry() {
+
     }
 }
