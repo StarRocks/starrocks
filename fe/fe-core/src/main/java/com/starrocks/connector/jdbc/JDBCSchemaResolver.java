@@ -68,15 +68,15 @@ public abstract class JDBCSchemaResolver {
         return new JDBCTable(id, name, schema, partitionColumns, dbName, catalogName, properties);
     }
 
-    public List<String> listPartitionNames(Connection connection, String databaseName, String tableName) {
+    public List<String> listPartitionNames(Connection connection, String databaseName, String tableName) throws SQLException {
         return Lists.newArrayList();
     }
 
-    public List<String> listPartitionColumns(Connection connection, String databaseName, String tableName) {
+    public List<String> listPartitionColumns(Connection connection, String databaseName, String tableName) throws SQLException {
         return Lists.newArrayList();
     }
 
-    public List<Partition> getPartitions(Connection connection, Table table) {
+    public List<Partition> getPartitions(Connection connection, Table table) throws SQLException {
         return Lists.newArrayList();
     }
 
