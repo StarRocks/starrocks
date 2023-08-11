@@ -615,7 +615,7 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
         TStatus task_status;
 
         TFinishTaskRequest finish_task_request;
-        finish_task_request.__set_backend(BackendOptions::get_localBackend());
+        finish_task_request.__set_backend(worker_pool_this->_backend);
         finish_task_request.__set_task_type(agent_task_req->task_type);
         finish_task_request.__set_signature(agent_task_req->signature);
 
