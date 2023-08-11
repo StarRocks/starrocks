@@ -220,8 +220,10 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
                         columnEntry.getValue().toString()
                 );
             }
-            tableColumnStatistics.add(DesensitizedSQLBuilder.desensitizeTblName(entry.getKey(), dict),
-                    columnStatistics);
+            String[] splits = entry.getKey().split("\\.");
+            String tableName = DesensitizedSQLBuilder.desensitizeDbName(splits[0], dict) + "."
+                    + DesensitizedSQLBuilder.desensitizeTblName(splits[1], dict);
+            tableColumnStatistics.add(tableName, columnStatistics);
         }
         dumpJson.add("column_statistics", tableColumnStatistics);
     }
