@@ -21,13 +21,11 @@
 
 #include "agent/heartbeat_server.h"
 
-#include <fmt/format.h>
 #include <thrift/TProcessor.h>
 
 #include <ctime>
 #include <fstream>
 
-#include "agent/master_info.h"
 #include "common/status.h"
 #include "gen_cpp/HeartbeatService.h"
 #include "runtime/heartbeat_flags.h"
@@ -44,13 +42,12 @@ using apache::thrift::transport::TProcessor;
 
 namespace starrocks {
 
-HeartbeatServer::HeartbeatServer() : _olap_engine(StorageEngine::instance()) {}
+HeartbeatServer::HeartbeatServer(TMasterInfo* master_info) : _master_info(master_info), _epoch(0) {
+    _olap_engine = StorageEngine::instance();
+}
 
-void HeartbeatServer::init_cluster_id_or_die() {
-    auto info = get_master_info();
-    info.cluster_id = _olap_engine->effective_cluster_id();
-    bool r = update_master_info(info);
-    CHECK(r) << "Fail to update master info";
+void HeartbeatServer::init_cluster_id() {
+    _master_info->cluster_id = _olap_engine->effective_cluster_id();
 }
 
 void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMasterInfo& master_info) {
@@ -61,37 +58,11 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
                           << ", counter:" << google::COUNTER;
 
     // do heartbeat
-    StatusOr<CmpResult> res = compare_master_info(master_info);
-    res.status().to_thrift(&heartbeat_result.status);
-    if (!res.ok()) {
-        MasterInfoPtr ptr;
-        if (get_master_info(&ptr)) {
-            LOG(WARNING) << "Fail to handle heartbeat: " << res.status() << " cached master info: " << *ptr
-                         << " received master info: " << master_info;
-        } else {
-            LOG(WARNING) << "Fail to handle heartbeat: " << res.status();
-        }
-    } else if (*res == kNeedUpdate) {
-        LOG(INFO) << "Updating master info: " << master_info;
-        bool r = update_master_info(master_info);
-        LOG_IF(WARNING, !r) << "Fail to update master info, maybe the master info has been updated by another thread "
-                               "with a larger epoch";
-    } else if (*res == kNeedUpdateAndReport) {
-        LOG(INFO) << "Updating master info: " << master_info;
-        bool r = update_master_info(master_info);
-        LOG_IF(WARNING, !r) << "Fail to update master info, maybe the master info has been updated by another thread "
-                               "with a larger epoch";
-        if (r) {
-            LOG(INFO) << "Master FE is changed or restarted. report tablet and disk info immediately";
-            _olap_engine->trigger_report();
-        }
-    } else {
-        DCHECK_EQ(kUnchanged, *res);
-        // nothing to do
-    }
+    Status st = _heartbeat(master_info);
+    st.to_thrift(&heartbeat_result.status);
 
-    static auto num_hardware_cores = (int32_t)std::thread::hardware_concurrency();
-    if (res.ok()) {
+    static int32_t num_hardware_cores = std::thread::hardware_concurrency();
+    if (st.ok()) {
         heartbeat_result.backend_info.__set_be_port(config::be_port);
         heartbeat_result.backend_info.__set_http_port(config::webserver_port);
         heartbeat_result.backend_info.__set_be_rpc_port(-1);
@@ -101,29 +72,8 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
     }
 }
 
-StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const TMasterInfo& master_info) {
-    static const char* LOCALHOST = "127.0.0.1";
-
-    MasterInfoPtr curr_master_info;
-    if (!get_master_info(&curr_master_info)) {
-        return Status::InternalError("Fail to get local master info");
-    }
-
-    if (master_info.epoch < curr_master_info->epoch) {
-        return Status::InternalError("Out-dated epoch");
-    }
-
-    if (master_info.__isset.token && curr_master_info->__isset.token && master_info.token != curr_master_info->token) {
-        return Status::InternalError("Unmatched token");
-    }
-
-    if (curr_master_info->cluster_id != -1 && curr_master_info->cluster_id != master_info.cluster_id) {
-        return Status::InternalError("Unmatched cluster id");
-    }
-
-    if ((master_info.network_address.hostname == LOCALHOST) && (master_info.backend_ip != LOCALHOST)) {
-        return Status::InternalError("FE heartbeat with localhost ip but BE is not deployed on the same machine");
-    }
+Status HeartbeatServer::_heartbeat(const TMasterInfo& master_info) {
+    std::lock_guard<std::mutex> lk(_hb_mtx);
 
     if (master_info.__isset.backend_ip) {
         if (master_info.backend_ip != BackendOptions::get_localhost()) {
@@ -136,10 +86,71 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
     }
 
     // Check cluster id
-    if (curr_master_info->cluster_id == -1) {
-        LOG(INFO) << "Received first heartbeat. updating cluster id";
+    if (_master_info->cluster_id == -1) {
+        LOG(INFO) << "get first heartbeat. update cluster id";
         // write and update cluster id
-        RETURN_IF_ERROR(_olap_engine->set_cluster_id(master_info.cluster_id));
+        auto st = _olap_engine->set_cluster_id(master_info.cluster_id);
+        if (!st.ok()) {
+            LOG(WARNING) << "fail to set cluster id. status=" << st.get_error_msg();
+            return Status::InternalError("fail to set cluster id.");
+        } else {
+            std::string LOCALHOST = "127.0.0.1";
+            if ((master_info.network_address.hostname == LOCALHOST) && (master_info.backend_ip != LOCALHOST)) {
+                std::stringstream ss;
+                ss << "FE heartbeat with localhost ip but BE is not deployed on the same machine "
+                   << master_info.backend_ip;
+                return Status::InternalError(ss.str());
+            } else {
+                _master_info->cluster_id = master_info.cluster_id;
+                LOG(INFO) << "record cluster id. host: " << master_info.network_address.hostname
+                          << ". port: " << master_info.network_address.port
+                          << ". cluster id: " << master_info.cluster_id;
+            }
+        }
+    } else {
+        if (_master_info->cluster_id != master_info.cluster_id) {
+            LOG(WARNING) << "ignore invalid cluster id: " << master_info.cluster_id;
+            return Status::InternalError("invalid cluster id. ignore.");
+        }
+    }
+
+    bool need_report = false;
+    if (_master_info->network_address.hostname != master_info.network_address.hostname ||
+        _master_info->network_address.port != master_info.network_address.port) {
+        if (master_info.epoch > _epoch) {
+            _master_info->network_address.hostname = master_info.network_address.hostname;
+            _master_info->network_address.port = master_info.network_address.port;
+            _epoch = master_info.epoch;
+            need_report = true;
+            LOG(INFO) << "master change. new master host: " << _master_info->network_address.hostname
+                      << ". port: " << _master_info->network_address.port << ". epoch: " << _epoch;
+        } else {
+            LOG(WARNING) << "epoch is not greater than local. ignore heartbeat. host: "
+                         << _master_info->network_address.hostname << " port: " << _master_info->network_address.port
+                         << " local epoch: " << _epoch << " received epoch: " << master_info.epoch;
+            return Status::InternalError("epoch is not greater than local. ignore heartbeat.");
+        }
+    } else {
+        // when Master FE restarted, host and port remains the same, but epoch will be increased.
+        if (master_info.epoch > _epoch) {
+            _epoch = master_info.epoch;
+            need_report = true;
+            LOG(INFO) << "master restarted. epoch: " << _epoch;
+        }
+    }
+
+    if (master_info.__isset.token) {
+        if (!_master_info->__isset.token) {
+            _master_info->__set_token(master_info.token);
+            LOG(INFO) << "get token.  token: " << _master_info->token;
+        } else if (_master_info->token != master_info.token) {
+            LOG(WARNING) << "invalid token. local_token:" << _master_info->token << ". token:" << master_info.token;
+            return Status::InternalError("invalid token.");
+        }
+    }
+
+    if (master_info.__isset.http_port) {
+        _master_info->__set_http_port(master_info.http_port);
     }
 
     if (master_info.__isset.heartbeat_flags) {
@@ -147,23 +158,32 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
         heartbeat_flags->update(master_info.heartbeat_flags);
     }
 
-    if (curr_master_info->network_address != master_info.network_address) {
-        return kNeedUpdateAndReport;
+    if (master_info.__isset.backend_id) {
+        _master_info->__set_backend_id(master_info.backend_id);
     }
-    if (*curr_master_info != master_info) {
-        return kNeedUpdate;
+
+    if (need_report) {
+        LOG(INFO) << "Master FE is changed or restarted. report tablet and disk info immediately";
+        _olap_engine->trigger_report();
     }
-    return kUnchanged;
+
+    return Status::OK();
 }
 
-StatusOr<std::unique_ptr<ThriftServer>> create_heartbeat_server(ExecEnv* exec_env, uint32_t server_port,
-                                                                uint32_t worker_thread_num) {
-    auto* heartbeat_server = new HeartbeatServer();
-    heartbeat_server->init_cluster_id_or_die();
+AgentStatus create_heartbeat_server(ExecEnv* exec_env, uint32_t server_port, ThriftServer** thrift_server,
+                                    uint32_t worker_thread_num, TMasterInfo* local_master_info) {
+    HeartbeatServer* heartbeat_server = new (nothrow) HeartbeatServer(local_master_info);
+    if (heartbeat_server == nullptr) {
+        return STARROCKS_ERROR;
+    }
+
+    heartbeat_server->init_cluster_id();
 
     std::shared_ptr<HeartbeatServer> handler(heartbeat_server);
     std::shared_ptr<TProcessor> server_processor(new HeartbeatServiceProcessor(handler));
-    return std::make_unique<ThriftServer>("heartbeat", server_processor, server_port, exec_env->metrics(),
-                                          worker_thread_num);
+    string server_name("heartbeat");
+    *thrift_server =
+            new ThriftServer(server_name, server_processor, server_port, exec_env->metrics(), worker_thread_num);
+    return STARROCKS_SUCCESS;
 }
 } // namespace starrocks

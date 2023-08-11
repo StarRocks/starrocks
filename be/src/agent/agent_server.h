@@ -33,13 +33,14 @@ namespace starrocks {
 class MasterServerClient;
 class TaskWorkerPool;
 class TFinishTaskRequest;
+class TMasterInfo;
 class TMasterResult;
 class TReportRequest;
 
 // Each method corresponds to one RPC from FE Master, see BackendService.
 class AgentServer {
 public:
-    explicit AgentServer(ExecEnv* exec_env);
+    explicit AgentServer(ExecEnv* exec_env, const TMasterInfo& master_info);
     ~AgentServer();
 
     // Receive agent task from FE master
@@ -57,12 +58,16 @@ public:
 
     AgentStatus report_task(const TReportRequest& request, TMasterResult* result);
 
+    const TMasterInfo& master_info() const { return _master_info; }
+
     AgentServer(const AgentServer&) = delete;
     const AgentServer& operator=(const AgentServer&) = delete;
 
 private:
     // Not Owned
     ExecEnv* _exec_env;
+    // Reference to the ExecEnv::_master_info
+    const TMasterInfo& _master_info;
     std::unique_ptr<MasterServerClient> _master_client;
 
     std::unique_ptr<TaskWorkerPool> _create_tablet_workers;

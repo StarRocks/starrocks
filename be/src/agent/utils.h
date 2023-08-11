@@ -31,7 +31,7 @@ namespace starrocks {
 
 class MasterServerClient {
 public:
-    explicit MasterServerClient(FrontendServiceClientCache* client_cache);
+    MasterServerClient(const TMasterInfo& master_info, FrontendServiceClientCache* client_cache);
     virtual ~MasterServerClient() = default;
 
     // Reprot finished task to the master server
@@ -56,6 +56,8 @@ public:
     const MasterServerClient& operator=(const MasterServerClient&) = delete;
 
 private:
+    // Not ownder. Reference to the ExecEnv::_master_info
+    const TMasterInfo& _master_info;
     FrontendServiceClientCache* _client_cache;
 };
 

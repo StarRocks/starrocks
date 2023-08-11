@@ -26,7 +26,6 @@
 #include <filesystem>
 #include <set>
 
-#include "agent/master_info.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gen_cpp/BackendService.h"
@@ -60,14 +59,15 @@ const uint32_t DOWNLOAD_FILE_MAX_RETRY = 3;
 const uint32_t LIST_REMOTE_FILE_TIMEOUT = 15;
 const uint32_t GET_LENGTH_TIMEOUT = 10;
 
-EngineCloneTask::EngineCloneTask(MemTracker* mem_tracker, const TCloneReq& clone_req, int64_t signature,
-                                 std::vector<string>* error_msgs, std::vector<TTabletInfo>* tablet_infos,
-                                 AgentStatus* res_status)
+EngineCloneTask::EngineCloneTask(MemTracker* mem_tracker, const TCloneReq& clone_req, const TMasterInfo& master_info,
+                                 int64_t signature, std::vector<string>* error_msgs,
+                                 std::vector<TTabletInfo>* tablet_infos, AgentStatus* res_status)
         : _clone_req(clone_req),
           _error_msgs(error_msgs),
           _tablet_infos(tablet_infos),
           _res_status(res_status),
-          _signature(signature) {
+          _signature(signature),
+          _master_info(master_info) {
     _mem_tracker = std::make_unique<MemTracker>(-1, "clone task", mem_tracker);
 }
 
@@ -318,7 +318,7 @@ Status EngineCloneTask::_clone_copy(DataDir& data_dir, const string& local_data_
                                     const std::vector<Version>* missed_versions,
                                     const std::vector<int64_t>* missing_version_ranges) {
     std::string local_path = local_data_path + "/";
-    std::string token = get_master_token();
+    const auto& token = _master_info.token;
 
     int timeout_s = 0;
     if (_clone_req.__isset.timeout_s) {

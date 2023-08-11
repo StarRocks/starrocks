@@ -14,7 +14,6 @@
 
 #include "exec/vectorized/schema_scanner/schema_be_configs_scanner.h"
 
-#include "agent/master_info.h"
 #include "exec/vectorized/schema_scanner/schema_helper.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "gutil/strings/substitute.h"
@@ -38,8 +37,8 @@ SchemaBeConfigsScanner::SchemaBeConfigsScanner()
 SchemaBeConfigsScanner::~SchemaBeConfigsScanner() = default;
 
 Status SchemaBeConfigsScanner::start(RuntimeState* state) {
-    auto master_info = get_master_info();
-    _be_id = master_info.__isset.backend_id ? master_info.backend_id : -1;
+    auto master_info = ExecEnv::GetInstance()->master_info();
+    _be_id = master_info->__isset.backend_id ? master_info->backend_id : -1;
     _infos.clear();
     for (const auto& it : *(config::full_conf_map)) {
         auto& info = _infos.emplace_back();
