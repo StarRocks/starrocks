@@ -914,7 +914,12 @@ public class InsertPlanTest extends PlanTestBase {
             String explainString = getInsertExecPlan("insert into ti1 (k1, v1) " +
                     "properties('partial_update'= 'true') " +
                     "select k1, v1 from ti1");
-            assertNotContains(explainString, "PARTIAL_UPDATE_MODE: ROW_MODE");
+            assertContains(explainString, "OLAP TABLE SINK\n" +
+                    "    TABLE: ti1\n" +
+                    "    TUPLE ID: 1\n" +
+                    "    RANDOM\n" +
+                    "    PARTIAL_UPDATE_MODE: ROW_MODE\n" +
+                    "  0:OlapScanNode");
         }
 
         // Partial update with mode

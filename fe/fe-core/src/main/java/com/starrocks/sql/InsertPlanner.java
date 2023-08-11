@@ -423,6 +423,7 @@ public class InsertPlanner {
                                             InsertStmt insertStatement, List<ColumnRefOperator> outputColumns) {
         List<Column> baseSchema = insertStatement.getTargetTable().getBaseSchema();
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
+        boolean partialUpdate = insertStatement.isPartialUpdate();
 
         for (int columnIdx = 0; columnIdx < baseSchema.size(); ++columnIdx) {
             if (needToSkip(insertStatement, columnIdx)) {
@@ -439,7 +440,7 @@ public class InsertPlanner {
                         logicalPlan.getOutputColumn().get(columnIdx));
             } else {
                 int idx = insertStatement.getTargetColumnNames().indexOf(targetColumn.getName().toLowerCase());
-                if (idx == -1) {
+                if (idx == -1 && !partialUpdate) {
                     ScalarOperator scalarOperator;
                     Column.DefaultValueType defaultValueType = targetColumn.getDefaultValueType();
                     if (defaultValueType == Column.DefaultValueType.NULL || targetColumn.isAutoIncrement()) {
@@ -463,6 +464,8 @@ public class InsertPlanner {
 
                     outputColumns.add(col);
                     columnRefMap.put(col, scalarOperator);
+                } else if (idx == -1) {
+                    // skip this column for partial update
                 } else {
                     outputColumns.add(logicalPlan.getOutputColumn().get(idx));
                     columnRefMap.put(logicalPlan.getOutputColumn().get(idx), logicalPlan.getOutputColumn().get(idx));
@@ -518,8 +521,10 @@ public class InsertPlanner {
                 outputColumns.add(columnRefOperator);
                 columnRefMap.put(columnRefOperator, scalarOperator);
             } else if (baseSchema.contains(fullSchema.get(columnIdx))) {
-                ColumnRefOperator columnRefOperator = outputColumns.get(columnIdx);
-                columnRefMap.put(columnRefOperator, columnRefOperator);
+                if (columnIdx < outputColumns.size()) {
+                    ColumnRefOperator columnRefOperator = outputColumns.get(columnIdx);
+                    columnRefMap.put(columnRefOperator, columnRefOperator);
+                }
             }
         }
 
@@ -532,6 +537,7 @@ public class InsertPlanner {
         Set<Column> baseSchema = Sets.newHashSet(insertStatement.getTargetTable().getBaseSchema());
         List<Column> fullSchema = insertStatement.getTargetTable().getFullSchema();
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
+        boolean isPartialUpdate = insertStatement.isPartialUpdate();
 
         for (int columnIdx = 0; columnIdx < fullSchema.size(); ++columnIdx) {
             Column targetColumn = fullSchema.get(columnIdx);
@@ -595,7 +601,7 @@ public class InsertPlanner {
             }
 
             // columnIdx >= outputColumns.size() mean this is a new add schema change column
-            if (columnIdx >= outputColumns.size()) {
+            if (columnIdx >= outputColumns.size() && !isPartialUpdate) {
                 ColumnRefOperator columnRefOperator = columnRefFactory.create(
                         targetColumn.getName(), targetColumn.getType(), targetColumn.isAllowNull());
                 outputColumns.add(columnRefOperator);
@@ -610,7 +616,7 @@ public class InsertPlanner {
                     throw new SemanticException("Column:" + targetColumn.getName() + " has unsupported default value:"
                             + targetColumn.getDefaultExpr().getExpr());
                 }
-            } else {
+            } else if (columnIdx < outputColumns.size()) {
                 columnRefMap.put(outputColumns.get(columnIdx), outputColumns.get(columnIdx));
             }
         }
@@ -626,7 +632,12 @@ public class InsertPlanner {
         ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
         List<ScalarOperatorRewriteRule> rewriteRules = Arrays.asList(new FoldConstantsRule());
         for (int columnIdx = 0; columnIdx < fullSchema.size(); ++columnIdx) {
-            if (!fullSchema.get(columnIdx).getType().matchesType(outputColumns.get(columnIdx).getType())) {
+            if (columnIdx >= outputColumns.size()) {
+                continue;
+            }
+            Type targetType = fullSchema.get(columnIdx).getType();
+            Type currentType = outputColumns.get(columnIdx).getType();
+            if (!targetType.matchesType(currentType)) {
                 Column c = fullSchema.get(columnIdx);
                 ColumnRefOperator k = columnRefFactory.create(c.getName(), c.getType(), c.isAllowNull());
                 ScalarOperator castOperator = new CastOperator(fullSchema.get(columnIdx).getType(),
