@@ -55,22 +55,22 @@ public class PhysicalTopNOperator extends PhysicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(sortPhase, orderSpec);
+        return Objects.hash(super.hashCode(), sortPhase, orderSpec);
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (!(obj instanceof PhysicalTopNOperator)) {
-            return false;
-        }
-
-        PhysicalTopNOperator rhs = (PhysicalTopNOperator) obj;
-        if (this == rhs) {
+    public boolean equals(Object o) {
+        if (this == o) {
             return true;
         }
 
-        return sortPhase.equals(rhs.sortPhase) &&
-                orderSpec.equals(rhs.orderSpec);
+        if (!super.equals(o)) {
+            return false;
+        }
+        PhysicalTopNOperator that = (PhysicalTopNOperator) o;
+
+        return offset == that.offset && isSplit == that.isSplit && sortPhase == that.sortPhase
+                && orderSpec.equals(that.orderSpec);
     }
 
     @Override

@@ -112,13 +112,13 @@ public class LogicalTopNOperator extends LogicalOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
+
         if (!super.equals(o)) {
             return false;
         }
+
         LogicalTopNOperator that = (LogicalTopNOperator) o;
+
         return offset == that.offset && Objects.equals(orderByElements, that.orderByElements) &&
                 sortPhase == that.sortPhase;
     }
@@ -128,6 +128,9 @@ public class LogicalTopNOperator extends LogicalOperator {
         return Objects.hash(super.hashCode(), sortPhase, orderByElements, offset);
     }
 
+    public static Builder builder() {
+        return new Builder();
+    }
     public static class Builder
             extends LogicalOperator.Builder<LogicalTopNOperator, LogicalTopNOperator.Builder> {
         private List<Ordering> orderByElements;

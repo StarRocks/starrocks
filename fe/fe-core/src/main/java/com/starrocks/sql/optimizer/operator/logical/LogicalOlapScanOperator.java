@@ -125,12 +125,11 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
+
         if (!super.equals(o)) {
             return false;
         }
+
         LogicalOlapScanOperator that = (LogicalOlapScanOperator) o;
         return selectedIndexId == that.selectedIndexId &&
                 Objects.equals(hashDistributionSpec, that.hashDistributionSpec) &&
@@ -142,8 +141,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), hashDistributionSpec, selectedIndexId, selectedPartitionId,
-                partitionNames,
+        return Objects.hash(super.hashCode(), selectedIndexId, selectedPartitionId,
                 selectedTabletId, hintsTabletIds);
     }
 
