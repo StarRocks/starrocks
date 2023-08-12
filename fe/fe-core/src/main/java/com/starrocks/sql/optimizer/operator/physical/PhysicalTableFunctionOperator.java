@@ -86,6 +86,6 @@ public class PhysicalTableFunctionOperator extends PhysicalOperator {
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(super.hashCode(), fn, fnResultColumnRefSet);
+        return Objects.hashCode(super.hashCode(), fn, fnResultColumnRefSet);
     }
 }
