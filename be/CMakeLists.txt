@@ -808,7 +808,6 @@ set(STARROCKS_DEPENDENCIES
     avro
     serdes
     fiu
-    libdeflate
     ${LLVM_LIBRARIES}
     ${WL_END_GROUP}
 )
