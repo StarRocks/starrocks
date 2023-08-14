@@ -770,12 +770,13 @@ public class OlapScanNode extends ScanNode {
                     }
                 } else {
                     for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
-                        if (!col.isKey()) {
-                            break;
-                        }
                         TColumn tColumn = col.toThrift();
                         col.setIndexFlag(tColumn, olapTable.getIndexes());
                         columnsDesc.add(tColumn);
+
+                        if (!col.isKey()) {
+                            continue;
+                        }
 
                         keyColumnNames.add(col.getName());
                         keyColumnTypes.add(col.getPrimitiveType().toThrift());
