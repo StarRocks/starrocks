@@ -151,6 +151,9 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [avg](/sql-reference/sql-functions/aggregate-functions/avg.md)| 用于返回选中字段的平均值。 |
 |  [bitmap](/sql-reference/sql-functions/aggregate-functions/bitmap.md)| 通过 bitmap 函数实现聚合。 |
 |  [bitmap_agg](/sql-reference/sql-functions/bitmap-functions/bitmap_agg.md)| 将一列中的多行非 NULL 数值合并成一行 BITMAP 值，即多行转一行。 |
+| [corr](/sql-reference/sql-functions/aggregate-functions/corr.md) | 返回两个随机变量的皮尔逊相关系数. |
+| [covar_pop](/sql-reference/sql-functions/aggregate-functions/covar_pop.md)| 返回两个随机变量的总体协方差。 |
+| [covar_samp](/sql-reference/sql-functions/aggregate-functions/covar_samp.md)| 返回两个随机变量的样本协方差。 |
 |  [count](/sql-reference/sql-functions/aggregate-functions/count.md)| 返回满足条件的行数。 |
 |  [group_concat](/sql-reference/sql-functions/string-functions/group_concat.md)| 将结果集中的多行结果连接成一个字符串。|
 |  [grouping](/sql-reference/sql-functions/aggregate-functions/grouping.md)| 判断一个列是否为聚合列，如果是聚合列则返回 0，否则返回 1。|
@@ -393,8 +396,10 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
+| [catalog](/sql-reference/sql-functions/utility-functions/catalog.md)| 查询当前会话所在的 Catalog。 |
 |  [current_role](/sql-reference/sql-functions/utility-functions/current_role.md)| 获取当前用户激活的角色。  |
 |  [current_version](/sql-reference/sql-functions/utility-functions/current_version.md)| 获取当前 StarRocks 的版本 |
+| [database](/sql-reference/sql-functions/utility-functions/database.md)| 查询当前会话所在的数据库。 |
 |  [host_name](/sql-reference/sql-functions/utility-functions/host_name.md)| 获取计算所在节点的主机名。|
 |  [isnull](/sql-reference/sql-functions/utility-functions/isnull.md)| 判断输入值是否为 NULL。|
 |  [last_query_id](/sql-reference/sql-functions/utility-functions/last_query_id.md)| 返回最近一次执行的查询的 ID。|

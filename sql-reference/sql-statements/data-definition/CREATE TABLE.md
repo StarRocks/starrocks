@@ -143,6 +143,8 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
 可选值：`mysql`，`elasticsearch`，`hive`，`jdbc`(2.3 及以后)，`iceberg`，`hudi`（2.2 及以后）。如果指定了可选值，则创建的是对应类型的外部表 (external table)，在建表时需要使用 CREATE EXTERNAL TABLE。更多信息，参见[外部表](../../../data_source/External_table.md)。
 
+**从 3.0 版本起，对于查询 Hive、Iceberg、Hudi 和 JDBC 数据源的场景，推荐使用 Catalog 直接查询，不再推荐外部表的方式。具体参见 [Hive catalog](../../../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../../../data_source/catalog/iceberg_catalog.md)、[Hudi catalog](../../../data_source/catalog/hudi_catalog.md) 和 [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md)。**
+
 1. 如果是 mysql，则需要在 properties 提供以下信息：
 
     ```sql
@@ -562,8 +564,8 @@ PROPERTIES (
 
 如果您的 StarRocks 集群有多数据副本，可以在建表时在 `PROPERTIES` 中设置 `replicated_storage` 参数来指定数据在多副本间的写入和同步方式。
 
-* 设置为 `true`（默认值）表示 single leader replication，即数据只写入到主副本 (primary replica)，由主副本同步数据到从副本 (secondary replica)。该模式能有效降低多副本写入带来的 CPU 成本。该模式从 2.5 版本开始支持。
-* 设置为 `false` 表示 leaderless replication，即数据直接写入到多个副本，不区分主从副本。该模式 CPU 成本比较高。
+* 设置为 `true`（3.0 及后续版本的默认值）表示 single leader replication，即数据只写入到主副本 (primary replica)，由主副本同步数据到从副本 (secondary replica)。该模式能有效降低多副本写入带来的 CPU 成本。该模式从 2.5 版本开始支持。
+* 设置为 `false`（2.5 版本的默认值）表示 leaderless replication，即数据直接写入到多个副本，不区分主从副本。该模式 CPU 成本比较高。
 
 默认配置在绝大部分场景下能获得更好的写入性能，如果要修改已有表的多副本写入和同步方式，可执行 ALTER TABLE 命令，举例：
 
