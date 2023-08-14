@@ -26,6 +26,7 @@
 #include "formats/parquet/page_reader.h"
 #include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"
+#include "simd/batch_run_counter.h"
 #include "util/compression/block_compression.h"
 
 namespace starrocks {
@@ -79,19 +80,32 @@ public:
     }
 
     Status decode_values(size_t n, const uint8_t* is_nulls, ColumnContentType content_type, Column* dst) {
-        size_t idx = 0;
-        while (idx < n) {
-            bool is_null = is_nulls[idx++];
-            size_t run = 1;
-            while (idx < n && is_nulls[idx] == is_null) {
-                idx++;
-                run++;
-            }
-            if (is_null) {
-                dst->append_nulls(run);
+        BatchRunCounter<32> batch_run(is_nulls, 0, n);
+        BatchCount batch = batch_run.next_batch();
+        int index = 0;
+        while (batch.length > 0) {
+            if (batch.AllSet()) {
+                dst->append_nulls(batch.length);
+            } else if (batch.NoneSet()) {
+                RETURN_IF_ERROR(_cur_decoder->next_batch(batch.length, content_type, dst));
             } else {
-                RETURN_IF_ERROR(_cur_decoder->next_batch(run, content_type, dst));
+                size_t idx = 0;
+                while (idx < batch.length) {
+                    bool is_null = is_nulls[index + idx++];
+                    size_t run = 1;
+                    while (idx < batch.length && is_nulls[index + idx] == is_null) {
+                        idx++;
+                        run++;
+                    }
+                    if (is_null) {
+                        dst->append_nulls(run);
+                    } else {
+                        RETURN_IF_ERROR(_cur_decoder->next_batch(run, content_type, dst));
+                    }
+                }
             }
+            index += batch.length;
+            batch = batch_run.next_batch();
         }
         return Status::OK();
     }
