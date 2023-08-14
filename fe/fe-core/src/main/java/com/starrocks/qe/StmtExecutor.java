@@ -1479,7 +1479,10 @@ public class StmtExecutor {
                                          long beginTimeInNanoSecond) throws Exception {
         try {
             handleDMLStmt(execPlan, stmt);
-            // TODO: Support write profile even dml aborted.
+        } catch (Throwable t) {
+            LOG.warn("DML statement(" + originStmt.originStmt + ") process failed.", t);
+            throw t;
+        } finally {
             if (context.getSessionVariable().isEnableProfile()) {
                 writeProfile(execPlan, beginTimeInNanoSecond);
                 if (parsedStmt.isExplain() &&
@@ -1487,10 +1490,6 @@ public class StmtExecutor {
                     handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan), profile, null));
                 }
             }
-        } catch (Throwable t) {
-            LOG.warn("DML statement(" + originStmt.originStmt + ") process failed.", t);
-            throw t;
-        } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
         }
     }
