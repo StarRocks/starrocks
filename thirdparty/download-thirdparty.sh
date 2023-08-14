@@ -174,6 +174,7 @@ UNZIP_CMD="unzip"
 SUFFIX_TGZ="\.(tar\.gz|tgz)$"
 SUFFIX_XZ="\.tar\.xz$"
 SUFFIX_ZIP="\.zip$"
+SUFFIX_BZ2="\.bz2$"
 # temporary directory for unpacking
 # package is unpacked in tmp_dir and then renamed.
 mkdir -p $TP_SOURCE_DIR/tmp_dir
@@ -204,6 +205,13 @@ do
         elif [[ "${!NAME}" =~ $SUFFIX_ZIP ]]; then
             if ! $UNZIP_CMD "$TP_SOURCE_DIR/${!NAME}" -d $TP_SOURCE_DIR/tmp_dir; then
                 echo "Failed to unzip ${!NAME}"
+                exit 1
+            fi
+        elif [[ "${!NAME}" =~ $SUFFIX_BZ2 ]]; then
+            echo "$TP_SOURCE_DIR/${!NAME}"
+            echo "$TP_SOURCE_DIR/${!SOURCE}"
+            if ! $TAR_CMD jxvf "$TP_SOURCE_DIR/${!NAME}" -C $TP_SOURCE_DIR/tmp_dir; then
+                echo "Failed to untar ${!NAME}"
                 exit 1
             fi
         else
@@ -383,6 +391,15 @@ if [ ! -f $PATCHED_MARK ] && [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.9.179" ]; th
 else
     echo "$AWS_SDK_CPP_SOURCE not patched"
 fi
+
+# patch jemalloc_hook
+cd $TP_SOURCE_DIR/$JEMALLOC_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $JEMALLOC_SOURCE = "jemalloc-5.2.1" ]; then
+    patch -p0 < $TP_PATCH_DIR/jemalloc_hook.patch
+    touch $PATCHED_MARK
+fi
+cd -
+echo "Finished patching $JEMALLOC_SOURCE"
 
 cd -
 
