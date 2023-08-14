@@ -24,7 +24,7 @@ Returns the name of the current catalog as a string.
 
 Example 1: The current catalog is StarRocks internal catalog `default_catalog`.
 
-```Haskell
+```plaintext
 select catalog();
 +-----------------+
 | CATALOG()       |
@@ -36,7 +36,7 @@ select catalog();
 
 Example 2: The current catalog is an external catalog `hudi_catalog`.
 
-```Haskell
+```sql
 -- Switch to an external catalog.
 set catalog hudi_catalog;
 
