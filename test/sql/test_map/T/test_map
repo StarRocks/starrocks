@@ -20,3 +20,9 @@ select * from map_top_n order by c2["key1"] limit 2,10;
 select * from map_top_n order by c2["key1"] limit 3,10;
 select * from map_top_n order by c2["key1"] limit 4,10;
 select * from map_top_n order by c2["key1"] limit 5,10;
+
+select element_at(map{'a':1,'b':2},'a');
+select map{'a':1,'b':2}['a'];
+select map{'a':NULL,'b':2}['a'];
+select map{}['a'];
+select c2["key1"] from map_top_n;
