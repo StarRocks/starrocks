@@ -73,9 +73,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
         FeConstants.runningUnitTest = true;
         Config.enable_experimental_mv = true;
-        UtFrameUtils.createMinStarRocksCluster();
 
-        connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setEnableQueryCache(false);
@@ -87,7 +85,6 @@ public class MaterializedViewTestBase extends PlanTestBase {
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
         FeConstants.runningUnitTest = true;
-        starRocksAssert = new StarRocksAssert(connectContext);
 
         new MockUp<MaterializedView>() {
             @Mock
