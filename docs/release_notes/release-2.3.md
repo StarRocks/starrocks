@@ -1,5 +1,39 @@
 # StarRocks version 2.3
 
+## 2.3.16
+
+Release date: August 4, 2023
+
+### Bug Fixes
+
+Fixed the following issue:
+
+FE memory leak caused by blocked LabelCleaner threads. [#28311](https://github.com/StarRocks/starrocks/pull/28311) [#28636](https://github.com/StarRocks/starrocks/pull/28636)
+
+## 2.3.15
+
+Release date: July 31, 2023
+
+## Improvements
+
+- Optimized tablet scheduling logic to prevent tablets remaining pending for a long period or an FE crashing under certain circumstances. [#21647](https://github.com/StarRocks/starrocks/pull/21647) [#23062](https://github.com/StarRocks/starrocks/pull/23062) [#25785](https://github.com/StarRocks/starrocks/pull/25785)
+- Optimized the scheduling logic of TabletChecker to prevent the checker from repeatedly scheduling tablets that are not repaired. [#27648](https://github.com/StarRocks/starrocks/pull/27648)
+- The partition metadata records visibleTxnId, which corresponds to the visible version. When versions of replicas for a tablet are not consistent, it is easier to trace the transaction that created this version . [#27924](https://github.com/StarRocks/starrocks/pull/27924)
+
+### Bug Fixes
+
+Fixed the following issue:
+
+- Incorrect table-level scan statistics in FE cause inaccurate metrics for table queries and loading. [#28022](https://github.com/StarRocks/starrocks/pull/28022)
+- BEs may crash if the Join key is a large BINARY column. [#25084](https://github.com/StarRocks/starrocks/pull/25084)
+- An aggregate operator may trigger thread safety issues in certain scenarios, causing BEs to crash. [#26092](https://github.com/StarRocks/starrocks/pull/26092)
+- The version number for a tablet is inconsistent between the BE and FE after data is restored. [#26518](https://github.com/StarRocks/starrocks/pull/26518/files)
+- Partitions can not be automatically created for recovered tables. [#26813](https://github.com/StarRocks/starrocks/pull/26813)
+- The loading transaction remains in a pending state and the DDL statements hang when the strict mode is enabled for loading data by using INSERT INTO, and data to be loaded do not satisfy the quality requirement.
+- Some INSERT jobs return `[42000][1064] Dict Decode failed, Dict can't take cover all key :0` if low-cardinality optimization is enabled. [#27395](https://github.com/StarRocks/starrocks/pull/27395)
+- In certain cases, the INSERT INTO SELECT operation times out when the Pipeline is not enabled.
+- The query returns no data when the query condition is `WHERE partition_column < xxx` and the value in `xxx` is only premise to hour, not to minute and second, for example, `2023-7-21 22`.
+
 ## 2.3.14
 
 Release date: June 28, 2023
