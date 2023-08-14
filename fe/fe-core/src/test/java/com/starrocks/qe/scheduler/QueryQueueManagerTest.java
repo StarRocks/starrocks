@@ -209,9 +209,6 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         final int concurrencyLimit = 3;
         final int numPendingCoordinators = concurrencyLimit * 5 + 1;
 
-        mockNeedCheckQueue();
-        mockEnableQueue();
-
         GlobalVariable.setEnableQueryQueueSelect(true);
         GlobalVariable.setQueryQueueConcurrencyLimit(concurrencyLimit);
         GlobalVariable.setQueryQueueMaxQueuedQueries(numPendingCoordinators);
@@ -303,9 +300,6 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         final int numGroupPendingCoords = concurrencyLimit * 5 + 1;
         // Each group and non-group has `numGroupPendingCoords` coordinators.
         final int numPendingCoords = numGroupPendingCoords * (numGroups + 1);
-
-        mockNeedCheckQueue();
-        mockEnableQueue();
 
         GlobalVariable.setEnableQueryQueueSelect(true);
         GlobalVariable.setQueryQueueConcurrencyLimit(concurrencyLimit);
@@ -401,9 +395,6 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         // Each group and non-group has `numGroupPendingCoords` coordinators.
         final int numPendingCoords = numGroupPendingCoords * (numGroups + 1);
 
-        mockNeedCheckQueue();
-        mockEnableQueue();
-
         GlobalVariable.setEnableQueryQueueSelect(true);
         GlobalVariable.setQueryQueueConcurrencyLimit(0);
         GlobalVariable.setQueryQueueMaxQueuedQueries(numPendingCoords);
@@ -483,9 +474,6 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         final int concurrencyLimit = 3;
         final int pendingTimeoutSecond = 2;
 
-        mockNeedCheckQueue();
-        mockEnableQueue();
-
         GlobalVariable.setEnableQueryQueueSelect(true);
         GlobalVariable.setQueryQueueConcurrencyLimit(concurrencyLimit);
         GlobalVariable.setQueryQueuePendingTimeoutSecond(pendingTimeoutSecond);
@@ -542,9 +530,6 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     public void testAllocatedSlotTimeout() throws Exception {
         final int concurrencyLimit = 3;
 
-        mockNeedCheckQueue();
-        mockEnableQueue();
-
         GlobalVariable.setEnableQueryQueueSelect(true);
         GlobalVariable.setQueryQueueConcurrencyLimit(concurrencyLimit);
 
@@ -581,9 +566,6 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             }
         });
 
-        mockNeedCheckQueue();
-        mockEnableQueue();
-
         GlobalVariable.setEnableQueryQueueSelect(true);
 
         DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
@@ -594,9 +576,6 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     @Test
     public void testLeaderChangeWhenPending() throws Exception {
         final int concurrencyLimit = 3;
-
-        mockNeedCheckQueue();
-        mockEnableQueue();
 
         GlobalVariable.setEnableQueryQueueSelect(true);
         GlobalVariable.setQueryQueueConcurrencyLimit(concurrencyLimit);
@@ -657,9 +636,6 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     @Test
     public void testFinishSlotRequirementForCancelledQuery() throws Exception {
         final int concurrencyLimit = 3;
-
-        mockNeedCheckQueue();
-        mockEnableQueue();
 
         GlobalVariable.setEnableQueryQueueSelect(true);
         GlobalVariable.setQueryQueueConcurrencyLimit(concurrencyLimit);
@@ -768,9 +744,6 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     public void testFinishSlotRequirementFailed() throws Exception {
         final int concurrencyLimit = 3;
 
-        mockNeedCheckQueue();
-        mockEnableQueue();
-
         GlobalVariable.setEnableQueryQueueSelect(true);
         GlobalVariable.setQueryQueueConcurrencyLimit(concurrencyLimit);
 
@@ -828,9 +801,6 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     public void testFrontendDead() throws Exception {
         final int concurrencyLimit = 3;
 
-        mockNeedCheckQueue();
-        mockEnableQueue();
-
         GlobalVariable.setEnableQueryQueueSelect(true);
         GlobalVariable.setQueryQueueConcurrencyLimit(concurrencyLimit);
 
@@ -880,9 +850,6 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         final int cpuUsagePermilleLimit = 10;
         final double memUsagePctLimit = 0.1;
 
-        mockNeedCheckQueue();
-        mockEnableQueue();
-
         GlobalVariable.setEnableQueryQueueSelect(true);
         GlobalVariable.setQueryQueueConcurrencyLimit(concurrencyLimit);
         GlobalVariable.setQueryQueueCpuUsedPermilleLimit(cpuUsagePermilleLimit);
@@ -907,9 +874,6 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         final int concurrencyLimit = 3;
         final int cpuUsagePermilleLimit = 10;
         final double memUsagePctLimit = 0.1;
-
-        mockNeedCheckQueue();
-        mockEnableQueue();
 
         GlobalVariable.setEnableQueryQueueSelect(true);
         GlobalVariable.setQueryQueueConcurrencyLimit(concurrencyLimit);
@@ -963,9 +927,6 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         final int cpuUsagePermilleLimit = 10;
         final double memUsagePctLimit = 0.1;
 
-        mockNeedCheckQueue();
-        mockEnableQueue();
-
         GlobalVariable.setEnableQueryQueueSelect(true);
         GlobalVariable.setQueryQueueConcurrencyLimit(concurrencyLimit);
         GlobalVariable.setQueryQueueCpuUsedPermilleLimit(cpuUsagePermilleLimit);
@@ -1017,9 +978,6 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         final int concurrencyLimit = 3;
         final int cpuUsagePermilleLimit = 10;
         final double memUsagePctLimit = 0.1;
-
-        mockNeedCheckQueue();
-        mockEnableQueue();
 
         GlobalVariable.setEnableQueryQueueSelect(true);
         GlobalVariable.setQueryQueueConcurrencyLimit(concurrencyLimit);
@@ -1074,9 +1032,6 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         final int concurrencyLimit = 3;
         final int cpuUsagePermilleLimit = 10;
         final double memUsagePctLimit = 0.1;
-
-        mockNeedCheckQueue();
-        mockEnableQueue();
 
         GlobalVariable.setEnableQueryQueueSelect(true);
         GlobalVariable.setQueryQueueConcurrencyLimit(concurrencyLimit);
