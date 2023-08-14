@@ -296,6 +296,8 @@ public:
 
     bool limit_exceeded() const { return _limit >= 0 && _limit < consumption(); }
 
+    bool limit_exceeded_by_ratio(int64_t ratio) const { return _limit >= 0 && (_limit * ratio / 100) < consumption(); }
+
     void set_limit(int64_t limit) { _limit = limit; }
 
     int64_t limit() const { return _limit; }

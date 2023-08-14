@@ -510,6 +510,7 @@ PARALLEL_TEST(PersistentIndexTest, test_fixlen_mutable_index_wal) {
 PARALLEL_TEST(PersistentIndexTest, test_l0_max_file_size) {
     int64_t l0_max_file_size = config::l0_max_file_size;
     config::l0_max_file_size = 200000;
+    config::l0_max_mem_usage = 10240;
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_flush_l0_max_file_size";
     const std::string kIndexFile = "./PersistentIndexTest_test_flush_l0_max_file_size/index.l0.0.0";
@@ -584,6 +585,133 @@ PARALLEL_TEST(PersistentIndexTest, test_l0_max_file_size) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 
     config::l0_max_file_size = l0_max_file_size;
+}
+
+PARALLEL_TEST(PersistentIndexTest, test_l0_max_memory_usage) {
+    FileSystem* fs = FileSystem::Default();
+    const std::string kPersistentIndexDir = "./PersistentIndexTest_test_l0_max_memory_usage";
+    const std::string kIndexFile = "./PersistentIndexTest_test_l0_max_memory_usage/index.l0.0.0";
+    bool created;
+    ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
+
+    using Key = std::string;
+    PersistentIndexMetaPB index_meta;
+    const int N = 1000;
+    int64_t total_size = 0;
+    vector<Key> keys(N);
+    vector<Slice> key_slices(N);
+    vector<IndexValue> values(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = "test_varlen_" + std::to_string(i);
+        values[i] = i;
+        key_slices[i] = Slice(keys[i].data(), keys[i].size());
+        total_size += keys[i].size() + 8;
+    }
+
+    {
+        ASSIGN_OR_ABORT(auto wfile, FileSystem::Default()->new_writable_file(kIndexFile));
+        ASSERT_OK(wfile->close());
+    }
+
+    EditVersion version(0, 0);
+    index_meta.set_key_size(0);
+    index_meta.set_size(0);
+    version.to_pb(index_meta.mutable_version());
+    MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
+    IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
+    version.to_pb(snapshot_meta->mutable_version());
+
+    const int64_t old_l0_max_mem_usage = config::l0_max_mem_usage;
+    std::vector<IndexValue> old_values(N);
+    PersistentIndex index(kPersistentIndexDir);
+    config::l0_max_mem_usage = 100;
+    for (auto t = 0; t < 100; ++t) {
+        ASSERT_OK(index.load(index_meta));
+        ASSERT_OK(index.prepare(EditVersion(t + 1, 0), N));
+        ASSERT_OK(index.upsert(N, key_slices.data(), values.data(), old_values.data()));
+        ASSERT_OK(index.commit(&index_meta));
+        ASSERT_OK(index.on_commited());
+        ASSERT_TRUE(index.memory_usage() <= config::l0_max_mem_usage);
+        for (int i = 0; i < N; i++) {
+            keys[i] = "test_varlen_" + std::to_string(i + (t + 1) * N);
+            total_size += keys[i].size() + 8;
+        }
+        if (total_size > 3 * config::l0_max_mem_usage) {
+            // increase l0 limit
+            config::l0_max_mem_usage *= 10;
+        }
+    }
+    config::l0_max_mem_usage = old_l0_max_mem_usage;
+
+    ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
+}
+
+PARALLEL_TEST(PersistentIndexTest, test_l0_min_memory_usage) {
+    FileSystem* fs = FileSystem::Default();
+    const std::string kPersistentIndexDir = "./PersistentIndexTest_test_l0_min_memory_usage";
+    const std::string kIndexFile = "./PersistentIndexTest_test_l0_min_memory_usage/index.l0.0.0";
+    bool created;
+    ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
+
+    using Key = std::string;
+    PersistentIndexMetaPB index_meta;
+    const int N = 1000;
+    int64_t total_size = 0;
+    vector<Key> keys(N);
+    vector<Slice> key_slices(N);
+    vector<IndexValue> values(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = "test_varlen_" + std::to_string(i);
+        values[i] = i;
+        key_slices[i] = Slice(keys[i].data(), keys[i].size());
+        total_size += keys[i].size() + 8;
+    }
+
+    {
+        ASSIGN_OR_ABORT(auto wfile, FileSystem::Default()->new_writable_file(kIndexFile));
+        ASSERT_OK(wfile->close());
+    }
+
+    auto manager = StorageEngine::instance()->update_manager();
+    // set memory tracker limit
+    manager->mem_tracker()->set_limit(1);
+    manager->mem_tracker()->consume(2);
+
+    EditVersion version(0, 0);
+    index_meta.set_key_size(0);
+    index_meta.set_size(0);
+    version.to_pb(index_meta.mutable_version());
+    MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
+    IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
+    version.to_pb(snapshot_meta->mutable_version());
+
+    const int64_t old_l0_min_mem_usage = config::l0_min_mem_usage;
+    const int64_t old_l0_max_mem_usage = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 1000000000000;
+    std::vector<IndexValue> old_values(N);
+    PersistentIndex index(kPersistentIndexDir);
+    config::l0_min_mem_usage = 100;
+    for (auto t = 0; t < 100; ++t) {
+        ASSERT_OK(index.load(index_meta));
+        ASSERT_OK(index.prepare(EditVersion(t + 1, 0), N));
+        ASSERT_OK(index.upsert(N, key_slices.data(), values.data(), old_values.data()));
+        ASSERT_OK(index.commit(&index_meta));
+        ASSERT_OK(index.on_commited());
+        ASSERT_TRUE(index.memory_usage() <= config::l0_min_mem_usage);
+        for (int i = 0; i < N; i++) {
+            keys[i] = "test_varlen_" + std::to_string(i + (t + 1) * N);
+            total_size += keys[i].size() + 8;
+        }
+        if (total_size > 3 * config::l0_min_mem_usage) {
+            // increase l0 limit
+            config::l0_min_mem_usage *= 10;
+        }
+    }
+    config::l0_min_mem_usage = old_l0_min_mem_usage;
+    config::l0_max_mem_usage = old_l0_max_mem_usage;
+    manager->mem_tracker()->set_limit(-1);
+
+    ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
 PARALLEL_TEST(PersistentIndexTest, test_small_varlen_mutable_index_snapshot) {
@@ -1610,9 +1738,8 @@ PARALLEL_TEST(PersistentIndexTest, test_flush_l1_advance) {
 }
 
 PARALLEL_TEST(PersistentIndexTest, test_multi_l2_tmp_l1) {
-    config::l0_max_mem_usage = 10240;
+    config::l0_max_mem_usage = 1024;
     config::max_tmp_l1_num = 10;
-    config::l0_l1_merge_ratio = 3;
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_multi_l2_tmp_l1";
     const std::string kIndexFile = "./PersistentIndexTest_test_multi_l2_tmp_l1/index.l0.0.0";
@@ -1743,8 +1870,7 @@ PARALLEL_TEST(PersistentIndexTest, test_multi_l2_tmp_l1) {
 }
 
 PARALLEL_TEST(PersistentIndexTest, test_multi_l2_not_tmp_l1) {
-    config::l0_max_mem_usage = 10240; // 10KB
-    config::l0_l1_merge_ratio = 3;
+    config::l0_max_mem_usage = 1 * 1024 * 1024; // 1MB
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_multi_l2_not_tmp_l1";
     const std::string kIndexFile = "./PersistentIndexTest_test_multi_l2_not_tmp_l1/index.l0.0.0";
@@ -1754,7 +1880,7 @@ PARALLEL_TEST(PersistentIndexTest, test_multi_l2_not_tmp_l1) {
     using Key = std::string;
     PersistentIndexMetaPB index_meta;
     // total size
-    const int N = 1000000;
+    const int N = 100000;
     // upsert size
     const int M = 1000;
     // K means each step size
@@ -1844,8 +1970,7 @@ PARALLEL_TEST(PersistentIndexTest, test_multi_l2_not_tmp_l1) {
 }
 
 PARALLEL_TEST(PersistentIndexTest, test_multi_l2_not_tmp_l1_fixlen) {
-    config::l0_max_mem_usage = 10240; // 10KB
-    config::l0_l1_merge_ratio = 3;
+    config::l0_max_mem_usage = 1 * 1024 * 1024; // 1MB
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_multi_l2_not_tmp_l1_fixlen";
     const std::string kIndexFile = "./PersistentIndexTest_test_multi_l2_not_tmp_l1_fixlen/index.l0.0.0";
@@ -1855,7 +1980,7 @@ PARALLEL_TEST(PersistentIndexTest, test_multi_l2_not_tmp_l1_fixlen) {
     using Key = uint64_t;
     PersistentIndexMetaPB index_meta;
     // total size
-    const int N = 1000000;
+    const int N = 100000;
     // upsert size
     const int M = 1000;
     // K means each step size
