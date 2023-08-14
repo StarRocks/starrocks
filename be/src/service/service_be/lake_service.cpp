@@ -87,15 +87,18 @@ static int get_num_vacuum_active_tasks(void*) {
     return tp ? tp->active_threads() : 0;
 }
 
+
+static bvar::Adder<int64_t> g_publish_version_failed_tasks("lake_publish_version_failed_tasks");
+static bvar::LatencyRecorder g_publish_tablet_version_latency("lake_publish_tablet_version");
+static bvar::LatencyRecorder g_publish_tablet_version_queuing_latency("lake_putlish_tablet_version_queuing");
+#ifndef BE_TEST
 static bvar::PassiveStatus<int> g_publish_version_queued_tasks("lake_publish_version_queued_tasks",
                                                                get_num_publish_queued_tasks, nullptr);
 static bvar::PassiveStatus<int> g_publish_version_active_tasks("lake_publish_version_active_tasks",
                                                                get_num_publish_active_tasks, nullptr);
-static bvar::Adder<int64_t> g_publish_version_failed_tasks("lake_publish_version_failed_tasks");
-static bvar::LatencyRecorder g_publish_tablet_version_latency("lake_publish_tablet_version");
-static bvar::LatencyRecorder g_publish_tablet_version_queuing_latency("lake_putlish_tablet_version_queuing");
 static bvar::PassiveStatus<int> g_vacuum_queued_tasks("lake_vacuum_queued_tasks", get_num_vacuum_queued_tasks, nullptr);
 static bvar::PassiveStatus<int> g_vacuum_active_tasks("lake_vacuum_active_tasks", get_num_vacuum_active_tasks, nullptr);
+#endif
 
 using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
 
