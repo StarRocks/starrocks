@@ -1158,7 +1158,7 @@ std::unique_ptr<SeekableInputStream> createDecompressor(CompressionKind kind,
             return std::unique_ptr<SeekableInputStream>(
                     new ZlibDecompressionStream(std::move(input), blockSize, pool, metrics));
         }
-#elif
+#else
         return std::unique_ptr<SeekableInputStream>(
                 new ZlibDecompressionStream(std::move(input), blockSize, pool, metrics));
 #endif
