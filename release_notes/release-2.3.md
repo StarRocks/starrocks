@@ -1,5 +1,39 @@
 # StarRocks version 2.3
 
+## 2.3.16
+
+发布日期： 2023 年 8 月 4 日
+
+### 问题修复
+
+修复了如下问题：
+
+- LabelCleaner 线程卡死导致 FE 内存泄漏。[#28311](https://github.com/StarRocks/starrocks/pull/28311) [#28636](https://github.com/StarRocks/starrocks/pull/28636)
+
+## 2.3.15
+
+发布日期： 2023 年 7 月 31 日
+
+### 功能优化
+
+- 优化 Tablet 调度逻辑，避免某些情况下 Tablet 长时间处于挂起状态或者 FE crash。[#21647](https://github.com/StarRocks/starrocks/pull/21647) [#23062](https://github.com/StarRocks/starrocks/pull/23062) [#25785](https://github.com/StarRocks/starrocks/pull/25785)
+- 优化 TabletChecker 的调度逻辑，避免重复调度暂时无法修复的 Tablet。[#27648](https://github.com/StarRocks/starrocks/pull/27648)
+- 分区元信息里面会记录 visibleTxnId，对应 visible version，方便在 Tablet 副本版本号不一致时，追踪当时创建这个版本的 txn。[#27924](https://github.com/StarRocks/starrocks/pull/27924)
+
+### 问题修复
+
+修复了如下问题：
+
+- FE 中表级别 scan 统计信息错误，导致表查询和导入的 metrics 信息不正确。[#28022](https://github.com/StarRocks/starrocks/pull/28022)
+- 当 Join 列是 BINARY 类型且过大时 BE 会 crash。[#25084](https://github.com/StarRocks/starrocks/pull/25084)
+- Aggregate 算子在某些情况下会触发线程安全问题，导致 BE crash。[#26092](https://github.com/StarRocks/starrocks/pull/26092)
+- [RESTORE](../sql-reference/sql-statements/data-definition/RESTORE.md) 后同一个 Tablet 在 BE 和 FE 上的 version 不一致。[#26518](https://github.com/StarRocks/starrocks/pull/26518/files)
+- [RECOVER](../sql-reference/sql-statements/data-definition/RECOVER.md) 的表自动创建分区失败。[#26813](https://github.com/StarRocks/starrocks/pull/26813)
+- 严格模式下，INSERT INTO 的数据存在质量问题，导入事务会一直处于 pending 状态，导致 DDL 语句卡住。[#27140](https://github.com/StarRocks/starrocks/pull/27140)
+- 低基数优化开启时，某些情况下 INSERT INTO 导入任务报错 `[42000][1064] Dict Decode failed, Dict can't take cover all key :0`。[#27395](https://github.com/StarRocks/starrocks/pull/27395)
+- 某些情况下 INSERT INTO SELECT 在 Pipeline 未开启时执行超时。[#26594](https://github.com/StarRocks/starrocks/pull/26594)
+- 如果查询条件为 `WHERE partition_column < xxx`，并且所使用的分区列值仅精确至小时，没有精确至分秒，例如 `2023-7-21 22`，则返回数据为空。[#27780](https://github.com/StarRocks/starrocks/pull/27780)
+
 ## 2.3.14
 
 发布日期： 2023 年 6 月 28 日
